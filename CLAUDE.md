@@ -10,15 +10,17 @@ KetoCare — платформа сопровождения кетогенной 
 
 ## Текущее состояние
 
-Идёт **этап 1 «Фундамент»** (раздел 15 ТЗ). Реализовано и покрыто тестами:
+**Этап 1 «Фундамент» (раздел 15 ТЗ) завершён.** Реализовано и покрыто тестами:
 
 - `packages/keto_engine` — verify/solve/scale, 35 provisional-эталонов, property-тесты, покрытие 100%.
 - `packages/core` — все 31 таблица раздела 4.2, Alembic-миграции с сидом справочников, репозитории (`access`, `prescriptions`, `products`, `patients`, `users`, `audit`).
-- `apps/api` — JWT + TOTP, RBAC-зависимости, `/auth`, `/patients`, `/prescriptions`, `/products`, `/calc`.
+- `apps/api` — JWT + TOTP, RBAC-зависимости, приглашения, `/auth`, `/patients`, `/prescriptions`, `/products` (включая CSV-импорт), `/calc`. 17 ручек.
 - `packages/api-client` — генерируется из OpenAPI (`make openapi`).
 - `Makefile`, `infra/docker-compose.dev.yml`, `.github/workflows/ci.yml`.
 
-Не начато (следующее по разделу 15): CSV-импорт продуктов и приглашения (`/auth/invitations`) — остаток этапа 1; далее этап 2 (`packages/ui`, `apps/web`). `apps/bot` и `apps/worker` — только каркас, без логики: они относятся к этапам 3–4, не наполнять их «заодно» (правило 10 ниже).
+Тестов: 110 (`make test`), `make lint` зелёный.
+
+**Следующее по разделу 15 — этап 2 «Веб-кабинеты»**, начиная с `packages/ui` (токены дизайн-системы, базовые компоненты), затем каркас SPA. `apps/bot` и `apps/worker` — только каркас, без логики: они относятся к этапам 3–4, не наполнять их «заодно» (правило 10 ниже).
 
 ## Команды
 
