@@ -26,14 +26,18 @@ api: ## Запустить API локально (uvicorn с автопереза
 	@# X-Forwarded-For (по умолчанию доверяя 127.0.0.1), и приложение увидит уже
 	@# подменённый адрес — ключ ограничения частоты и audit_log.ip станут
 	@# управляемыми клиентом. Доверенные прокси задаются через TRUSTED_PROXY_IPS.
-	uv run uvicorn api.main:app --reload --app-dir apps/api/src --no-proxy-headers
+	uv run uvicorn api.main:app --reload --app-dir apps/api/src --no-proxy-headers --port $${API_PORT:-8001}
+
+.PHONY: web
+web: ## Запустить веб-кабинет (Vite); /api проксируется на API_PROXY_TARGET
+	pnpm --filter @ketocare/web run dev
 
 .PHONY: down
 down: ## Остановить окружение
 	$(COMPOSE) down
 
 .PHONY: test
-test: ## Все тесты (pytest + vitest)
+test: openapi ## Все тесты (pytest + vitest; сначала генерирует api-client)
 	uv run pytest
 	@if [ -d node_modules ]; then pnpm -r --if-present run test; else \
 		echo "node_modules нет — vitest пропущен (запустите pnpm install)"; fi
@@ -43,7 +47,7 @@ test-engine: ## Только эталонные тесты keto_engine
 	uv run pytest packages/keto_engine -v
 
 .PHONY: lint
-lint: ## Линтеры и проверка типов
+lint: openapi ## Линтеры и проверка типов (сначала генерирует api-client)
 	uv run ruff check apps packages
 	uv run ruff format --check apps packages
 	uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api

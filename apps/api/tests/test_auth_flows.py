@@ -233,3 +233,45 @@ class TestRateLimiting:
         error = response.json()["error"]
         assert error["code"] == "rate_limited"
         assert isinstance(error["message"], str) and error["message"]
+
+
+class TestTotpSetupIdempotency:
+    """Повторный вызов /totp/setup обязан вернуть тот же секрет-кандидат.
+
+    Иначе пользователь, перезагрузивший страницу после сканирования QR (или любой
+    повторный вызов — двойной клик, повторный запуск эффекта в React), получил бы
+    новый секрет, а код из приложения перестал бы подходить к сохранённому в базе.
+    """
+
+    async def test_repeated_setup_returns_same_secret(
+        self, client, session, make_user, auth_headers
+    ):
+        secret = pyotp.random_base32()
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
+        headers = auth_headers(doctor)
+        body = {"current_code": pyotp.TOTP(secret).now()}
+
+        first = await client.post("/api/v1/auth/totp/setup", json=body, headers=headers)
+        second = await client.post("/api/v1/auth/totp/setup", json=body, headers=headers)
+
+        assert first.status_code == 200 and second.status_code == 200
+        assert first.json()["secret"] == second.json()["secret"]
+
+    async def test_code_from_first_response_still_verifies_after_second_call(
+        self, client, session, make_user, auth_headers
+    ):
+        """Именно этот сценарий ломался: показанный пользователю секрет расходился
+        с сохранённым, и правильный код отклонялся."""
+        doctor = await make_user(UserRole.DOCTOR)
+        headers = auth_headers(doctor)
+
+        first = await client.post("/api/v1/auth/totp/setup", json={}, headers=headers)
+        shown_secret = first.json()["secret"]
+        await client.post("/api/v1/auth/totp/setup", json={}, headers=headers)
+
+        verified = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": pyotp.TOTP(shown_secret).now()},
+            headers=headers,
+        )
+        assert verified.status_code == 200, verified.text

@@ -37,6 +37,12 @@ jobs:
         run: uv run ruff format --check apps packages
       - name: mypy
         run: uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api
+      - name: Сгенерировать api-client
+        # packages/api-client/src/generated/ в .gitignore, поэтому на чистом
+        # checkout его нет, и tsc не нашёл бы типов схемы.
+        run: |
+          uv run python apps/api/scripts/export_openapi.py apps/api/openapi.json
+          pnpm --filter @ketocare/api-client run generate
       - name: prettier + tsc
         run: |
           pnpm -r --if-present run format:check
@@ -47,6 +53,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -54,7 +63,12 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
+      - run: uv sync --all-packages
       - run: pnpm install --frozen-lockfile
+      - name: Сгенерировать api-client
+        run: |
+          uv run python apps/api/scripts/export_openapi.py apps/api/openapi.json
+          pnpm --filter @ketocare/api-client run generate
       - run: pnpm -r --if-present run test
 
   engine:
