@@ -1,0 +1,30 @@
+name: solve_feasible_with_protein_and_carbs
+provisional: true
+operation: solve
+input:
+  ingredients:
+  - product_id: olive_oil
+    kcal: 884
+    fat: 100.0
+    protein: 0.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: chicken_breast
+    kcal: 165
+    fat: 3.6
+    protein: 31.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: spinach
+    kcal: 23
+    fat: 0.4
+    protein: 2.9
+    carbs: 3.6
+    fiber: 2.2
+  targets:
+    ratio: 2.8
+    kcal: 700
+    protein_min_g: 25
+    carbs_max_g: 6
+expected:
+  infeasible: false

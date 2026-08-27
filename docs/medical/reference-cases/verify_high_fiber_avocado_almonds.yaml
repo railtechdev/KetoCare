@@ -1,0 +1,33 @@
+name: verify_high_fiber_avocado_almonds
+provisional: true
+operation: verify
+note: высокая клетчатка (авокадо+миндаль) — total carbs включает клетчатку (net_carbs
+  не влияет на verify)
+input:
+  ingredients:
+  - product_id: avocado
+    kcal: 160
+    fat: 14.7
+    protein: 2.0
+    carbs: 8.5
+    fiber: 6.7
+  - product_id: almonds
+    kcal: 579
+    fat: 49.9
+    protein: 21.2
+    carbs: 21.6
+    fiber: 12.5
+  items:
+  - product_id: avocado
+    grams: 100.0
+  - product_id: almonds
+    grams: 30.0
+expected:
+  kcal: 360.39
+  fat_g: 29.67
+  protein_g: 8.36
+  carbs_g: 14.98
+  fiber_g: 10.45
+  ratio: 1.271208
+tolerance:
+  abs: 1.0e-06

@@ -1,0 +1,25 @@
+name: solve_infeasible_ratio_unreachable_low_fat
+provisional: true
+operation: solve
+note: ненулевой, но слишком малый жир относительно белка/углеводов -> только тривиальное
+  x=0
+input:
+  ingredients:
+  - product_id: chicken_breast
+    kcal: 165
+    fat: 3.6
+    protein: 31.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: broccoli
+    kcal: 34
+    fat: 0.4
+    protein: 2.8
+    carbs: 6.6
+    fiber: 2.6
+  targets:
+    ratio: 4.0
+    kcal: 300
+expected:
+  infeasible: true
+  reason_contains: недостижимо соотношение

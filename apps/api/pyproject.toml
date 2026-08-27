@@ -1,0 +1,34 @@
+[project]
+name = "ketocare-api"
+version = "0.1.0"
+description = "FastAPI backend KetoCare"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "pyjwt>=2.9",
+    "pyotp>=2.9",
+    "python-multipart>=0.0.12",
+    "email-validator>=2.2",
+    "structlog>=24.4",
+    "slowapi>=0.1.9",
+    "ketocare-core",
+    "keto-engine",
+]
+
+[tool.uv.sources]
+ketocare-core = { workspace = true }
+keto-engine = { workspace = true }
+
+[dependency-groups]
+test = [
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/api"]

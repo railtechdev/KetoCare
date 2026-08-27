@@ -1,0 +1,24 @@
+name: verify_single_ingredient_butter
+provisional: true
+operation: verify
+note: один ингредиент
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  items:
+  - product_id: butter
+    grams: 20.0
+expected:
+  kcal: 146.78
+  fat_g: 16.22
+  protein_g: 0.18
+  carbs_g: 0.02
+  fiber_g: 0.0
+  ratio: 81.1
+tolerance:
+  abs: 1.0e-06

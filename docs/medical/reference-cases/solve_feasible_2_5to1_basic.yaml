@@ -1,0 +1,28 @@
+name: solve_feasible_2_5to1_basic
+provisional: true
+operation: solve
+input:
+  ingredients:
+  - product_id: olive_oil
+    kcal: 884
+    fat: 100.0
+    protein: 0.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: salmon
+    kcal: 208
+    fat: 13.4
+    protein: 20.4
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: avocado
+    kcal: 160
+    fat: 14.7
+    protein: 2.0
+    carbs: 8.5
+    fiber: 6.7
+  targets:
+    ratio: 2.5
+    kcal: 450
+expected:
+  infeasible: false

@@ -1,0 +1,40 @@
+name: verify_ratio_4to1_butter_chicken_broccoli
+provisional: true
+operation: verify
+note: R≈4:1 на масле/курице/брокколи
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: chicken_breast
+    kcal: 165
+    fat: 3.6
+    protein: 31.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: broccoli
+    kcal: 34
+    fat: 0.4
+    protein: 2.8
+    carbs: 6.6
+    fiber: 2.6
+  items:
+  - product_id: butter
+    grams: 58.0
+  - product_id: chicken_breast
+    grams: 50.0
+  - product_id: broccoli
+    grams: 30.0
+expected:
+  kcal: 516.222
+  fat_g: 48.958
+  protein_g: 16.862
+  carbs_g: 2.038
+  fiber_g: 0.78
+  ratio: 2.59037
+tolerance:
+  abs: 1.0e-06

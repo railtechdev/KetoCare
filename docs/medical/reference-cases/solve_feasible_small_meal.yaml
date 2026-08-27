@@ -1,0 +1,29 @@
+name: solve_feasible_small_meal
+provisional: true
+operation: solve
+note: маленький перекус
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: egg_white
+    kcal: 52
+    fat: 0.2
+    protein: 10.9
+    carbs: 0.7
+    fiber: 0.0
+  - product_id: cucumber
+    kcal: 15
+    fat: 0.1
+    protein: 0.7
+    carbs: 3.6
+    fiber: 0.5
+  targets:
+    ratio: 3.0
+    kcal: 150
+expected:
+  infeasible: false

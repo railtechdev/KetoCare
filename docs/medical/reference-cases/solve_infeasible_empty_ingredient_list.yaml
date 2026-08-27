@@ -1,0 +1,12 @@
+name: solve_infeasible_empty_ingredient_list
+provisional: true
+operation: solve
+note: пустой список продуктов
+input:
+  ingredients: []
+  targets:
+    ratio: 4.0
+    kcal: 400
+expected:
+  infeasible: true
+  reason_contains: пуст

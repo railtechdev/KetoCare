@@ -1,0 +1,25 @@
+name: solve_infeasible_no_fat_source
+provisional: true
+operation: solve
+note: синтетические продукты с fat=0.0 -> R=4:1 в принципе недостижим ни при каких
+  массах
+input:
+  ingredients:
+  - product_id: zero_fat_protein
+    kcal: 100
+    fat: 0.0
+    protein: 20.0
+    carbs: 5.0
+    fiber: 0.0
+  - product_id: zero_fat_carb
+    kcal: 100
+    fat: 0.0
+    protein: 2.0
+    carbs: 20.0
+    fiber: 1.0
+  targets:
+    ratio: 4.0
+    kcal: 400
+expected:
+  infeasible: true
+  reason_contains: жировой компонент

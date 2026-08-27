@@ -1,0 +1,21 @@
+{
+  "name": "@ketocare/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript-клиент KetoCare, генерируется из OpenAPI (make openapi). Ручной fetch во фронтенде не используется.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../apps/api/openapi.json -o src/generated/schema.d.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.4"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.4.4",
+    "typescript": "^5.7.2"
+  }
+}

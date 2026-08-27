@@ -1,0 +1,32 @@
+name: verify_zero_carbs_salmon_oliveoil
+provisional: true
+operation: verify
+note: нулевые углеводы, только жир+белок
+input:
+  ingredients:
+  - product_id: salmon
+    kcal: 208
+    fat: 13.4
+    protein: 20.4
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: olive_oil
+    kcal: 884
+    fat: 100.0
+    protein: 0.0
+    carbs: 0.0
+    fiber: 0.0
+  items:
+  - product_id: salmon
+    grams: 80.0
+  - product_id: olive_oil
+    grams: 25.0
+expected:
+  kcal: 386.76
+  fat_g: 35.72
+  protein_g: 16.32
+  carbs_g: 0.0
+  fiber_g: 0.0
+  ratio: 2.188725
+tolerance:
+  abs: 1.0e-06

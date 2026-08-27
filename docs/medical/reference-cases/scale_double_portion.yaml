@@ -1,0 +1,41 @@
+name: scale_double_portion
+provisional: true
+operation: scale
+note: порция x2
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: chicken_breast
+    kcal: 165
+    fat: 3.6
+    protein: 31.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: broccoli
+    kcal: 34
+    fat: 0.4
+    protein: 2.8
+    carbs: 6.6
+    fiber: 2.6
+  recipe_items:
+  - product_id: butter
+    grams: 40.0
+  - product_id: chicken_breast
+    grams: 50.0
+  - product_id: broccoli
+    grams: 35.0
+  factor: 2.0
+expected:
+  kcal: 772.36
+  fat_g: 68.76
+  protein_g: 33.68
+  carbs_g: 4.7
+  fiber_g: 1.82
+  ratio: 1.791558
+tolerance:
+  abs: 1.0e-06

@@ -1,0 +1,40 @@
+name: verify_ratio_2_5to1_oliveoil_salmon_avocado
+provisional: true
+operation: verify
+note: R≈2.5:1 на оливковом масле/лососе/авокадо
+input:
+  ingredients:
+  - product_id: olive_oil
+    kcal: 884
+    fat: 100.0
+    protein: 0.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: salmon
+    kcal: 208
+    fat: 13.4
+    protein: 20.4
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: avocado
+    kcal: 160
+    fat: 14.7
+    protein: 2.0
+    carbs: 8.5
+    fiber: 6.7
+  items:
+  - product_id: olive_oil
+    grams: 30.0
+  - product_id: salmon
+    grams: 60.0
+  - product_id: avocado
+    grams: 20.0
+expected:
+  kcal: 426.18
+  fat_g: 40.98
+  protein_g: 12.64
+  carbs_g: 1.7
+  fiber_g: 1.34
+  ratio: 2.857741
+tolerance:
+  abs: 1.0e-06
