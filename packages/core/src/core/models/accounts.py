@@ -24,7 +24,9 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    invited_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
     last_login_at: Mapped[datetime | None]
 
 
@@ -35,7 +37,7 @@ class Patient(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     birth_date: Mapped[date] = mapped_column(Date, nullable=False)
     sex: Mapped[Sex] = mapped_column(pg_enum(Sex, "patient_sex"), nullable=False)
     height_cm: Mapped[float | None] = mapped_column(Numeric(5, 1))
-    allergies: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    allergies: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     notes: Mapped[str | None]
 
 

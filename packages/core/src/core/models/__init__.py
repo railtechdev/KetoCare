@@ -1,0 +1,74 @@
+"""SQLAlchemy-модели KetoCare (раздел 4 ТЗ)."""
+
+from .accounts import (
+    DoctorPatient,
+    Invitation,
+    LinkCode,
+    ParentPatient,
+    Patient,
+    TelegramAccount,
+    User,
+)
+from .ai_audit import AiConversation, AiJob, AuditLog, DoctorSummary
+from .base import Base
+from .clinical import ClinicalNote, MedicalProfile, Medication, Prescription
+from .content import (
+    CustomDish,
+    Product,
+    ProductCategory,
+    ProductRevision,
+    Recipe,
+    RecipeIngredient,
+)
+from .diary import (
+    KetoneLog,
+    KetoneMethodDict,
+    MealLog,
+    MedicationLog,
+    Menu,
+    MenuItem,
+    SeizureLog,
+    SeizureType,
+    SideEffectLog,
+    WeightLog,
+)
+
+__all__ = [
+    "Base",
+    # accounts
+    "User",
+    "Patient",
+    "ParentPatient",
+    "DoctorPatient",
+    "Invitation",
+    "TelegramAccount",
+    "LinkCode",
+    # clinical
+    "MedicalProfile",
+    "Prescription",
+    "Medication",
+    "ClinicalNote",
+    # content
+    "ProductCategory",
+    "Product",
+    "ProductRevision",
+    "Recipe",
+    "RecipeIngredient",
+    "CustomDish",
+    # diary
+    "SeizureType",
+    "KetoneMethodDict",
+    "SeizureLog",
+    "KetoneLog",
+    "WeightLog",
+    "MedicationLog",
+    "MealLog",
+    "SideEffectLog",
+    "Menu",
+    "MenuItem",
+    # ai/audit
+    "AiJob",
+    "AiConversation",
+    "DoctorSummary",
+    "AuditLog",
+]

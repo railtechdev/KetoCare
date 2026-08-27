@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String
+from sqlalchemy import TIMESTAMP, ForeignKey, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,15 +23,27 @@ class MedicalProfile(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDele
     diagnosis: Mapped[str | None]
     epilepsy_type: Mapped[str | None]
     onset_age_months: Mapped[int | None] = mapped_column(Integer)
-    genetics: Mapped[dict | None] = mapped_column(JSONB)  # {gene, variant, interpretation}
+    genetics: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB
+    )  # {gene, variant, interpretation}
     comorbidities: Mapped[str | None]
 
 
-class Prescription(Base, UUIDPkMixin, CreatedAtMixin):
+class Prescription(Base, UUIDPkMixin):
     """Append-only (правило 2, CLAUDE.md): изменение назначения — новая строка,
     UPDATE/DELETE запрещены на уровне репозитория."""
 
     __tablename__ = "prescriptions"
+
+    # НЕ CreatedAtMixin: там server_default=now(), а now() в PostgreSQL — это время
+    # НАЧАЛА ТРАНЗАКЦИИ, одинаковое для всех строк, вставленных в одной транзакции.
+    # Активное назначение определяется как "последнее по created_at" (раздел 4.2 ТЗ),
+    # то есть при совпадении меток порядок недетерминирован — а это ratio, по которому
+    # семья кормит ребёнка. clock_timestamp() возвращает реальное время на момент
+    # вставки строки и различается даже внутри одной транзакции.
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("clock_timestamp()"), nullable=False
+    )
 
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False

@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 import yaml
+from reference_cases_path import REFERENCE_CASES_DIR
 
 from keto_engine import (
     DishResult,
@@ -24,8 +25,6 @@ from keto_engine import (
     verify,
 )
 from keto_engine.constants import GRAM_ROUNDING, KCAL_TOLERANCE_FRACTION, RATIO_TOLERANCE
-
-from .conftest import REFERENCE_CASES_DIR
 
 
 def _load_cases() -> list[tuple[str, dict[str, Any]]]:

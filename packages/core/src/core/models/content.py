@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -23,6 +24,13 @@ class ProductCategory(Base, UUIDPkMixin):
 
 class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "products"
+    __table_args__ = (
+        Index(
+            "ix_products_name_ru_fts",
+            text("to_tsvector('russian', name_ru)"),
+            postgresql_using="gin",
+        ),
+    )
 
     name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
     name_uz: Mapped[str | None] = mapped_column(String(255))
@@ -49,15 +57,22 @@ class ProductRevision(Base, UUIDPkMixin):
     product_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False
     )
-    snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     changed_by: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
-    changed_at: Mapped[object]  # datetime, см. Base.type_annotation_map
+    changed_at: Mapped[datetime]
 
 
 class Recipe(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "recipes"
+    __table_args__ = (
+        Index(
+            "ix_recipes_title_fts",
+            text("to_tsvector('russian', title)"),
+            postgresql_using="gin",
+        ),
+    )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[RecipeCategory] = mapped_column(
@@ -70,7 +85,9 @@ class Recipe(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     status: Mapped[RecipeStatus] = mapped_column(
         pg_enum(RecipeStatus, "recipe_status"), nullable=False, default=RecipeStatus.DRAFT
     )
-    computed: Mapped[dict | None] = mapped_column(JSONB)  # {kcal, fat, protein, carbs, ratio}
+    computed: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB
+    )  # {kcal, fat, protein, carbs, ratio}
     engine_version: Mapped[str | None] = mapped_column(String(32))
     author_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
@@ -97,6 +114,8 @@ class CustomDish(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMi
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    ingredients: Mapped[list] = mapped_column(JSONB, nullable=False)  # [{product_id, grams}]
-    computed: Mapped[dict | None] = mapped_column(JSONB)
+    ingredients: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False
+    )  # [{product_id, grams}]
+    computed: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     engine_version: Mapped[str | None] = mapped_column(String(32))

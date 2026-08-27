@@ -54,6 +54,10 @@ check_untyped_defs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Пакеты тестов в разных workspace-членах называются одинаково (`tests`), из-за чего
+# в классическом prepend-режиме их conftest.py конфликтуют по имени модуля.
+addopts = "--import-mode=importlib"
+consider_namespace_packages = true
 testpaths = [
     "apps/api/tests",
     "apps/worker/tests",

@@ -29,3 +29,6 @@ dist/
 /infra/backups/
 apps/api/openapi.json
 packages/api-client/src/generated/
+
+# Локальные оверрайды docker compose (напр., другие порты при конфликте на машине разработчика)
+infra/docker-compose.override.yml
