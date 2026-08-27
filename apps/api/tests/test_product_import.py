@@ -27,17 +27,18 @@ class TestValidFiles:
         assert report.ok, report.errors
         assert report.total_rows == 1
         row = report.valid_rows[0]
-        assert row["name_ru"] == "Масло сливочное"
-        assert row["fat_100g"] == 81.1
-        assert row["verified_at"].isoformat() == "2026-01-01"
+        assert row.line == 2, "данные начинаются со 2-й строки (1-я — заголовок)"
+        assert row.values["name_ru"] == "Масло сливочное"
+        assert row.values["fat_100g"] == 81.1
+        assert row.values["verified_at"].isoformat() == "2026-01-01"
 
     def test_comma_decimal_separator_accepted(self) -> None:
         """Excel в русской локали пишет дробную часть через запятую; чтобы запятая
         не спорила с разделителем колонок, такие поля он заключает в кавычки."""
         report = parse_csv(_csv('Творог,Молочное,121,"5,0",17.0,"1,8",0,USDA,SR28,2026-01-01'))
         assert report.ok, report.errors
-        assert report.valid_rows[0]["fat_100g"] == 5.0
-        assert report.valid_rows[0]["carbs_100g"] == 1.8
+        assert report.valid_rows[0].values["fat_100g"] == 5.0
+        assert report.valid_rows[0].values["carbs_100g"] == 1.8
 
     def test_utf8_bom_handled(self) -> None:
         content = _csv(GOOD_ROW).decode("utf-8").encode("utf-8-sig")
@@ -45,7 +46,7 @@ class TestValidFiles:
 
     def test_optional_columns_absent(self) -> None:
         report = parse_csv(_csv(GOOD_ROW))
-        assert report.valid_rows[0]["name_uz"] is None
+        assert report.valid_rows[0].values["name_uz"] is None
 
 
 class TestStructuralErrors:
@@ -114,3 +115,44 @@ class TestRowValidation:
         report = parse_csv(_csv(",Жиры,x,y,1,1,0,USDA,SR28,bad-date"))
         columns = {e.column for e in report.errors}
         assert {"name_ru", "kcal_100g", "fat_100g", "verified_at"} <= columns
+
+
+class TestDuplicatesWithinFile:
+    """Одно название дважды в одном файле — тоже дубль: две записи с одним именем
+    и разными значениями создают риск выбрать «не тот» продукт при расчёте меню."""
+
+    def test_same_name_twice_reported(self) -> None:
+        report = parse_csv(
+            _csv(
+                "Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01",
+                "Курица,Мясо,165,3.6,31,0,0,USDA,SR28,2026-01-01",
+                "Масло,Жиры,900,99,0,0,0,Другой,v2,2026-01-01",
+            )
+        )
+        assert len(report.valid_rows) == 2, "вторая запись с тем же именем отбрасывается"
+        assert any("уже встречается в строке 2" in e.message for e in report.errors), report.errors
+
+    def test_duplicate_detection_is_case_insensitive(self) -> None:
+        report = parse_csv(
+            _csv(
+                "Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01",
+                "масло,Жиры,700,80,1,0,0,USDA,SR28,2026-01-01",
+            )
+        )
+        assert len(report.valid_rows) == 1
+        assert report.errors
+
+
+class TestLineNumbersWithGaps:
+    def test_duplicate_line_number_correct_after_invalid_rows(self) -> None:
+        """valid_rows не сплошной: строки с ошибками в него не попадают. Номер
+        строки должен браться из самой строки, а не из позиции в списке."""
+        report = parse_csv(
+            _csv(
+                "Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01",  # строка 2
+                "Плохой,Жиры,нечисло,1,1,1,0,USDA,SR28,2026-01-01",  # строка 3 — ошибка
+                "Курица,Мясо,165,3.6,31,0,0,USDA,SR28,2026-01-01",  # строка 4
+            )
+        )
+        lines = [row.line for row in report.valid_rows]
+        assert lines == [2, 4], f"номера строк должны быть реальными, получено {lines}"

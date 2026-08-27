@@ -1,7 +1,7 @@
 """Изолированное расчётное ядро KetoCare (раздел 6 ТЗ). Никаких импортов из core/api."""
 
 from .constants import ENGINE_VERSION
-from .engine import scale, solve, verify, within_tolerance
+from .engine import max_non_fat_grams, scale, solve, verify, within_tolerance
 from .types import (
     DishResult,
     InfeasibleError,
@@ -19,6 +19,7 @@ __all__ = [
     "ItemAmount",
     "SolveResult",
     "Targets",
+    "max_non_fat_grams",
     "scale",
     "solve",
     "verify",

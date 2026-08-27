@@ -20,6 +20,14 @@ dev: ## Поднять окружение (postgres, redis) и применит�
 	$(MAKE) migrate
 	@echo "Готово. API: uv run uvicorn api.main:app --reload --app-dir apps/api/src"
 
+.PHONY: api
+api: ## Запустить API локально (uvicorn с автоперезагрузкой)
+	@# --no-proxy-headers обязателен: иначе uvicorn сам перепишет адрес клиента из
+	@# X-Forwarded-For (по умолчанию доверяя 127.0.0.1), и приложение увидит уже
+	@# подменённый адрес — ключ ограничения частоты и audit_log.ip станут
+	@# управляемыми клиентом. Доверенные прокси задаются через TRUSTED_PROXY_IPS.
+	uv run uvicorn api.main:app --reload --app-dir apps/api/src --no-proxy-headers
+
 .PHONY: down
 down: ## Остановить окружение
 	$(COMPOSE) down

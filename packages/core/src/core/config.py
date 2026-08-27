@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     ai_daily_budget_usd: float = 10.0
     ai_user_daily_limit: int = 30
 
+    # Список IP обратных прокси, которым можно доверять заголовок X-Forwarded-For.
+    # Пусто по умолчанию: без явной настройки XFF игнорируется и берётся адрес
+    # непосредственного пира. Иначе клиент подделывает заголовок и обходит
+    # ограничение частоты (ключ лимита становится произвольным), а audit_log.ip
+    # заполняется значением, которое выбрал сам атакующий.
+    trusted_proxy_ips: str = ""
+
     web_origin: str = "http://localhost:5173"
     miniapp_origin: str = "http://localhost:5174"
 
@@ -43,3 +50,8 @@ def get_settings() -> Settings:
     encode/decode JWT (иначе .env перечитывается с диска на каждый запрос)."""
 
     return Settings()  # type: ignore[call-arg]
+
+
+def trusted_proxies() -> frozenset[str]:
+    raw = get_settings().trusted_proxy_ips
+    return frozenset(part.strip() for part in raw.split(",") if part.strip())

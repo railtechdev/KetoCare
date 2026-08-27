@@ -148,5 +148,10 @@ async def find_duplicate_names(session: AsyncSession, *, names: list[str]) -> se
     if not names:
         return set()
 
-    rows = await session.scalars(select(Product.name_ru).where(Product.name_ru.in_(names)))
-    return set(rows)
+    # Сравнение регистронезависимое: name_ru — обычный String, не CITEXT, поэтому
+    # «Масло» и «масло» иначе считались бы разными продуктами.
+    folded = [name.casefold().strip() for name in names]
+    rows = await session.scalars(
+        select(Product.name_ru).where(func.lower(func.trim(Product.name_ru)).in_(folded))
+    )
+    return {name.casefold().strip() for name in rows}

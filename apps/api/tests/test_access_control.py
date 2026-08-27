@@ -257,3 +257,46 @@ class TestInactiveUser:
         parent = await make_user(UserRole.PARENT, is_active=False)
         response = await client.get("/api/v1/patients", headers=auth_headers(parent))
         assert response.status_code == 401
+
+
+class TestPrescriptionArithmeticFeasibility:
+    """Назначение, невыполнимое арифметически, отклоняется.
+
+    Это не медицинское правило (правило 1 CLAUDE.md), а тождество: при соотношении R
+    и калорийности K на белки с углеводами приходится ровно K/(9R+4) грамм. Цель по
+    белку выше этой величины недостижима ни при каком наборе продуктов, а назначения
+    append-only — ошибочную строку нельзя исправить, только перекрыть новой.
+    """
+
+    async def test_impossible_protein_target_rejected(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        # R=4, K=1000 -> максимум белков+углеводов = 25 г; просим 60 г белка
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json={**VALID_PRESCRIPTION, "ratio": 4.0, "kcal_per_day": 1000, "protein_g": 60.0},
+            headers=auth_headers(doctor),
+        )
+        assert response.status_code == 422
+        error = response.json()["error"]
+        assert error["code"] == "validation_error"
+        assert "25.0" in error["message"], error["message"]
+
+    async def test_feasible_prescription_still_accepted(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Проверка не должна мешать нормальным назначениям."""
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json={**VALID_PRESCRIPTION, "ratio": 4.0, "kcal_per_day": 1200, "protein_g": 25.0},
+            headers=auth_headers(doctor),
+        )
+        assert response.status_code == 201, response.text

@@ -36,4 +36,6 @@ MIN_INGREDIENT_GRAMS = 2.0
 # решений для HiGHS); не требует TODO(med) и не публикуется в API как клинический параметр.
 DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 
-ENGINE_VERSION = "0.1.0"
+# 0.2.0 — добавлена max_non_fat_grams(); поведение verify/solve/scale не изменилось,
+# поэтому результаты, сохранённые с 0.1.0, остаются действительными (semver minor).
+ENGINE_VERSION = "0.2.0"

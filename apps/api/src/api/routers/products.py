@@ -148,32 +148,43 @@ async def import_products(
     # Дубли — не ошибка формата, но импортировать их молча нельзя: одинаковое имя
     # с разными значениями означает риск выбрать «не тот» продукт при расчёте меню.
     existing = await products_repo.find_duplicate_names(
-        session, names=[row["name_ru"] for row in report.valid_rows]
+        session, names=[row.values["name_ru"] for row in report.valid_rows]
     )
     if existing:
-        duplicates = [
+        # Номер строки берётся из самой строки, а не из позиции в списке:
+        # valid_rows не сплошной (строки с ошибками в него не попали), поэтому
+        # нумерация по индексу приписала бы дубль не той строке файла.
+        errors.extend(
             ImportRowError(
-                line=line,
+                line=row.line,
                 column="name_ru",
-                message=f"Продукт «{row['name_ru']}» уже есть в базе — строка пропущена.",
+                message=f"Продукт «{row.values['name_ru']}» уже есть в базе — строка пропущена.",
             )
-            for line, row in enumerate(report.valid_rows, start=2)
-            if row["name_ru"] in existing
+            for row in report.valid_rows
+            if row.values["name_ru"].casefold().strip() in existing
+        )
+        report.valid_rows = [
+            row
+            for row in report.valid_rows
+            if row.values["name_ru"].casefold().strip() not in existing
         ]
-        errors.extend(duplicates)
-        report.valid_rows = [r for r in report.valid_rows if r["name_ru"] not in existing]
 
     if dry_run or not report.ok:
-        # report.ok учитывает только ошибки разбора: файл с невалидными строками
-        # не импортируется вовсе. Дубли же лишь исключают свои строки.
+        # `dry_run` в ответе отражает то, что запросил клиент. Файл с ошибками
+        # разбора не импортируется целиком (частичный импорт базы продуктов хуже
+        # отказа), но выдавать отказ за превью нельзя: интерфейс, ориентирующийся
+        # на флаг, зациклится на «предпросмотр готов, нажмите импорт».
         return ProductImportReport(
-            total_rows=report.total_rows, imported=0, errors=errors, dry_run=True
+            total_rows=report.total_rows, imported=0, errors=errors, dry_run=dry_run
         )
 
     imported = 0
     for row in report.valid_rows:
-        category = await products_repo.get_or_create_category(session, name_ru=row.pop("category"))
-        await products_repo.create(session, changed_by=user.id, category_id=category.id, **row)
+        values = dict(row.values)
+        category = await products_repo.get_or_create_category(
+            session, name_ru=values.pop("category")
+        )
+        await products_repo.create(session, changed_by=user.id, category_id=category.id, **values)
         imported += 1
 
     await audit_repo.write_audit_log(

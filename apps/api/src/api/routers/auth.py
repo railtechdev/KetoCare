@@ -15,7 +15,8 @@ from core.repositories import audit as audit_repo
 from core.repositories import invitations as invitations_repo
 from core.repositories import users as users_repo
 
-from ..deps.auth import CurrentUserDep, SessionDep, TotpSetupUserDep, client_ip, require_roles
+from ..client_address import client_address
+from ..deps.auth import CurrentUserDep, SessionDep, TotpSetupUserDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, limiter
 from ..schemas import (
@@ -35,11 +36,11 @@ from ..security import (
     create_token,
     decode_token,
     generate_totp_secret,
-    hash_password,
+    hash_password_async,
     totp_provisioning_uri,
-    verify_password,
+    verify_password_async,
     verify_totp,
-    waste_password_verification,
+    waste_password_verification_async,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -79,18 +80,19 @@ async def login(
     # задержке можно перебирать существующие учётные записи. Для отсутствующего
     # пользователя argon2 всё равно прогоняется вхолостую.
     if user is None:
-        waste_password_verification()
+        await waste_password_verification_async()
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
-    password_ok = verify_password(user.password_hash, payload.password)
+    password_ok = await verify_password_async(user.password_hash, payload.password)
     if not password_ok or not user.is_active:
-        await audit_repo.write_audit_log(
-            session,
+        # Отдельная транзакция: запрос завершится исключением, и сессия ручки
+        # будет откатана — обычная запись аудита пропала бы вместе с ней.
+        await audit_repo.write_audit_log_independent(
             user_id=user.id,
             action="login_failed",
             entity="users",
             entity_id=user.id,
-            ip=client_ip(request),
+            ip=client_address(request),
         )
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
@@ -108,13 +110,12 @@ async def login(
     if needs_totp:
         assert user.totp_secret is not None
         if not payload.totp_code or not verify_totp(user.totp_secret, payload.totp_code):
-            await audit_repo.write_audit_log(
-                session,
+            await audit_repo.write_audit_log_independent(
                 user_id=user.id,
                 action="login_failed_totp",
                 entity="users",
                 entity_id=user.id,
-                ip=client_ip(request),
+                ip=client_address(request),
             )
             raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
 
@@ -127,12 +128,13 @@ async def login(
         action="login",
         entity="users",
         entity_id=user.id,
-        ip=client_ip(request),
+        ip=client_address(request),
     )
     return LoginResponse(status="ok", tokens=tokens)
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Обновить пару токенов")
+@limiter.limit(AUTH_RATE_LIMIT)
 async def refresh(
     payload: RefreshRequest, request: Request, response: Response, session: SessionDep
 ) -> TokenPair:
@@ -166,8 +168,12 @@ async def logout(response: Response) -> None:
 
 
 @router.post("/totp/setup", response_model=TotpSetupResponse, summary="Начать настройку 2FA")
+@limiter.limit(AUTH_RATE_LIMIT)
 async def totp_setup(
-    payload: TotpSetupRequest, user: TotpSetupUserDep, session: SessionDep
+    payload: TotpSetupRequest,
+    request: Request,
+    user: TotpSetupUserDep,
+    session: SessionDep,
 ) -> TotpSetupResponse:
     """Выдаёт секрет-кандидат. Действующий второй фактор не меняется до
     подтверждения кодом на /auth/totp/verify."""
@@ -189,6 +195,18 @@ async def totp_setup(
     secret = generate_totp_secret()
     db_user.totp_pending_secret = secret
     await session.flush()
+
+    # Запрос нового секрета — операция с учётной записью (правило 7 CLAUDE.md):
+    # без этой записи попытки подменить второй фактор, не доведённые до verify,
+    # не оставляли бы следа в аудите.
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="totp_setup_requested",
+        entity="users",
+        entity_id=user.id,
+        ip=client_address(request),
+    )
 
     return TotpSetupResponse(
         secret=secret, provisioning_uri=totp_provisioning_uri(secret, email=db_user.email)
@@ -227,7 +245,7 @@ async def totp_verify(
         action="totp_enabled",
         entity="users",
         entity_id=user.id,
-        ip=client_ip(request),
+        ip=client_address(request),
     )
 
     tokens = _issue_tokens(db_user)
@@ -278,7 +296,10 @@ async def create_invitation(
     status_code=201,
     summary="Принять приглашение и создать учётную запись",
 )
-async def accept_invitation(payload: InvitationAccept, session: SessionDep) -> UserRead:
+@limiter.limit(AUTH_RATE_LIMIT)
+async def accept_invitation(
+    payload: InvitationAccept, request: Request, session: SessionDep
+) -> UserRead:
     # Атомарный claim: проверка и отметка о принятии — один UPDATE, поэтому два
     # параллельных запроса с одним токеном не создадут двух пользователей.
     invitation = await invitations_repo.claim(session, payload.token)
@@ -295,7 +316,7 @@ async def accept_invitation(payload: InvitationAccept, session: SessionDep) -> U
         role=invitation.role,
         full_name=payload.full_name,
         email=invitation.email,
-        password_hash=hash_password(payload.password),
+        password_hash=await hash_password_async(payload.password),
         phone=payload.phone,
     )
 

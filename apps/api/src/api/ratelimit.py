@@ -1,7 +1,7 @@
 """Ограничение частоты запросов (раздел 11 ТЗ: `/auth/*` — 5/мин/IP).
 
 Без него `POST /auth/login` открыт для перебора пароля и шестизначного TOTP-кода
-(окно valid_window=1 расширяет его до 90 секунд).
+(`valid_window=1` расширяет окно до 90 секунд).
 """
 
 from __future__ import annotations
@@ -11,24 +11,30 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 
+from core.config import get_settings
+
+from .client_address import client_address
 from .errors import ErrorCode, error_response
 
 AUTH_RATE_LIMIT = "5/minute"
 
 
 def _client_key(request: Request) -> str:
-    """Ключ лимита — IP клиента. За обратным прокси берётся первый элемент
-    X-Forwarded-For (nginx обязан его перезаписывать, иначе значение подделывается)."""
+    """Ключ лимита — адрес клиента (см. client_address: X-Forwarded-For учитывается
+    только от доверенного прокси, иначе лимит обходится подменой заголовка)."""
 
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return get_remote_address(request)
+    return client_address(request) or "unknown"
 
 
-limiter = Limiter(key_func=_client_key, default_limits=[])
+def _build_limiter() -> Limiter:
+    # Счётчики в Redis, а не в памяти процесса: при нескольких воркерах или
+    # репликах in-memory лимит умножается на их число (5/мин превращается в
+    # 20/мин на четырёх воркерах) и обнуляется при каждом перезапуске.
+    return Limiter(key_func=_client_key, storage_uri=get_settings().redis_url, default_limits=[])
+
+
+limiter = _build_limiter()
 
 
 def register_rate_limiting(app: FastAPI) -> None:

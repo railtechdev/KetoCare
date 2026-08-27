@@ -44,9 +44,22 @@ class RowError:
 
 
 @dataclass(slots=True)
+class ValidRow:
+    """Разобранная строка вместе с её номером в файле.
+
+    Номер хранится явно: `valid_rows` не сплошной — строки с ошибками в него не
+    попадают, поэтому позиция в списке не совпадает с номером строки в CSV, и
+    нумерация «по индексу» приписывала бы ошибки не тем строкам.
+    """
+
+    line: int
+    values: dict[str, Any]
+
+
+@dataclass(slots=True)
 class ImportReport:
     total_rows: int = 0
-    valid_rows: list[dict[str, Any]] = field(default_factory=list)
+    valid_rows: list[ValidRow] = field(default_factory=list)
     errors: list[RowError] = field(default_factory=list)
 
     @property
@@ -83,12 +96,43 @@ def parse_csv(content: bytes) -> ImportReport:
         if row_errors:
             report.errors.extend(row_errors)
         else:
-            report.valid_rows.append(parsed)
+            report.valid_rows.append(ValidRow(line=line_no, values=parsed))
 
     if report.total_rows == 0:
         report.errors.append(RowError(1, None, "В файле нет строк с данными."))
 
+    _flag_duplicates_within_file(report)
     return report
+
+
+def _flag_duplicates_within_file(report: ImportReport) -> None:
+    """Одно и то же название дважды в одном файле — тоже дубль.
+
+    Проверка существующих в базе имён этот случай не ловит (в базе их ещё нет),
+    а импортировать две записи с одним названием и разными значениями нельзя:
+    при составлении меню будет выбран «не тот» продукт.
+    Сравнение регистронезависимое — «Масло» и «масло» это один продукт.
+    """
+
+    seen: dict[str, int] = {}
+    kept: list[ValidRow] = []
+
+    for row in report.valid_rows:
+        key = row.values["name_ru"].casefold().strip()
+        first_line = seen.get(key)
+        if first_line is not None:
+            report.errors.append(
+                RowError(
+                    row.line,
+                    "name_ru",
+                    f"Название «{row.values['name_ru']}» уже встречается в строке {first_line}.",
+                )
+            )
+            continue
+        seen[key] = row.line
+        kept.append(row)
+
+    report.valid_rows = kept
 
 
 def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any], list[RowError]]:

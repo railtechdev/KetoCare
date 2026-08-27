@@ -89,21 +89,35 @@ def register_exception_handlers(app: FastAPI) -> None:
         code, message = _map_status(exc.status_code)
         return error_response(code, message, status_code=exc.status_code)
 
-    @app.exception_handler(Exception)
-    async def _unhandled_error(request: Request, exc: Exception) -> JSONResponse:
-        """Без этого хендлера непойманная ошибка уходит как plain-text
-        `Internal Server Error`: фронт не сможет её разобрать, а код `internal`
-        из раздела 5.1 ТЗ был бы недостижим. Детали исключения наружу не отдаются —
-        только в лог."""
 
-        logger.exception(
-            "unhandled_error", path=request.url.path, method=request.method, error=str(exc)
-        )
-        return error_response(
-            ErrorCode.INTERNAL,
-            "Внутренняя ошибка сервера. Попробуйте позже.",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+def register_unhandled_error_middleware(app: FastAPI) -> None:
+    """Превращает непойманное исключение в ответ формата раздела 5.1 ТЗ.
+
+    Реализовано middleware, а не `@app.exception_handler(Exception)`: обработчик
+    для `Exception` вызывается Starlette из `ServerErrorMiddleware`, который стоит
+    снаружи пользовательских middleware, поэтому его ответ не проходит через CORS —
+    браузер увидел бы ошибку CORS вместо тела с кодом `internal`. Middleware же
+    регистрируется внутри CORS (см. порядок в main.create_app).
+    """
+
+    @app.middleware("http")
+    async def _unhandled_error(request: Request, call_next: Any) -> Any:
+        try:
+            return await call_next(request)
+        except Exception:
+            # Только тип исключения и путь: str(exc) у ошибок SQLAlchemy содержит
+            # текст SQL вместе с параметрами — то есть argon2-хеши, totp_secret,
+            # хеши токенов приглашений и ФИО пациентов утекли бы в логи.
+            logger.exception(
+                "unhandled_error",
+                path=request.url.path,
+                method=request.method,
+            )
+            return error_response(
+                ErrorCode.INTERNAL,
+                "Внутренняя ошибка сервера. Попробуйте позже.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 def _format_validation_errors(exc: RequestValidationError) -> list[dict[str, Any]]:

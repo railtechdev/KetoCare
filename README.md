@@ -67,7 +67,8 @@ make lint                 # ruff + mypy + prettier + tsc
 | `make makemigration m="..."` | Создать миграцию по изменениям моделей |
 | `make openapi` | Выгрузить `openapi.json` и перегенерировать `packages/api-client` |
 
-Запуск API: `uv run uvicorn api.main:app --reload --app-dir apps/api/src`; Swagger — `/api/v1/docs`.
+Запуск API: `make api` (Swagger — `/api/v1/docs`). За обратным прокси заполните
+`TRUSTED_PROXY_IPS` — см. [`infra/nginx/README.md`](infra/nginx/README.md).
 
 Если порты 5432/6379 заняты другими проектами, переопределите их:
 `POSTGRES_PORT=5434 REDIS_PORT=6381 make dev` (и укажите те же порты в `.env`).

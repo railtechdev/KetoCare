@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
 
-from .errors import register_exception_handlers
+from .errors import register_exception_handlers, register_unhandled_error_middleware
 from .ratelimit import register_rate_limiting
 from .routers import auth, calc, patients, prescriptions, products
 
@@ -25,6 +25,13 @@ def create_app() -> FastAPI:
         docs_url=f"{API_PREFIX}/docs",
     )
 
+    # Порядок важен: add_middleware добавляет слой снаружи предыдущих, поэтому
+    # CORS регистрируется ПОСЛЕДНИМ и оказывается самым внешним — только так его
+    # заголовки попадают в ответы, сформированные обработчиком 500 и лимитером.
+    register_exception_handlers(app)
+    register_unhandled_error_middleware(app)
+    register_rate_limiting(app)
+
     # CORS только для доменов web и miniapp (раздел 11 ТЗ)
     app.add_middleware(
         CORSMiddleware,
@@ -33,9 +40,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    register_exception_handlers(app)
-    register_rate_limiting(app)
 
     v1 = APIRouter(prefix=API_PREFIX)
     v1.include_router(auth.router)

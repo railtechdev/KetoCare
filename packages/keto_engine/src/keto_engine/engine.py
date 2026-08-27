@@ -83,6 +83,24 @@ def within_tolerance(dish: DishResult, targets: Targets) -> tuple[bool, bool]:
     return ratio_within, kcal_within
 
 
+def max_non_fat_grams(ratio: float, kcal: float) -> float:
+    """Максимум суммы белков и углеводов (г), совместимый с соотношением и калорийностью.
+
+    Тождество, а не медицинское правило: из определения соотношения F = R·(P+C) и
+    коэффициентов Атуотера kcal = 9F + 4(P+C) следует
+    kcal = (9R + 4)·(P+C), то есть P+C = kcal / (9R + 4).
+
+    Назначение, требующее больше белка, чем эта величина, невыполнимо ни при каком
+    наборе продуктов — сколько бы их ни перебирал solve().
+    """
+
+    if ratio <= 0 or kcal <= 0:
+        raise ValueError("Соотношение и калорийность должны быть положительными")
+
+    denominator = ratio * constants.KCAL_PER_G_FAT + constants.KCAL_PER_G_PROTEIN
+    return kcal / denominator
+
+
 def _default_bounds(
     ingredients: Sequence[Ingredient], targets: Targets
 ) -> list[tuple[float, float | None]]:

@@ -23,20 +23,6 @@ from ..errors import ApiError, ErrorCode
 from ..security import decode_token
 
 
-def client_ip(request: Request) -> str | None:
-    """IP клиента для `audit_log.ip` (раздел 4.2 ТЗ).
-
-    За обратным прокси реальный адрес приходит в X-Forwarded-For; берётся первый
-    элемент — он ближе всего к клиенту. Заголовок подделывается клиентом, поэтому
-    nginx обязан его перезаписывать (см. infra/nginx).
-    """
-
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or None
-    return request.client.host if request.client else None
-
-
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with get_sessionmaker()() as session:
         try:

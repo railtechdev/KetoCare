@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import Any, Literal
 
 import jwt
 import pyotp
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
+from starlette.concurrency import run_in_threadpool
 
 from core.config import get_settings
 from core.models.enums import UserRole
@@ -43,6 +45,21 @@ def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
+async def hash_password_async(password: str) -> str:
+    """argon2 по умолчанию — 64 МиБ и ~50-100 мс CPU. В event loop это остановило бы
+    весь воркер, поэтому в обработчиках запросов используется threadpool."""
+
+    return await run_in_threadpool(hash_password, password)
+
+
+async def verify_password_async(password_hash: str, password: str) -> bool:
+    return await run_in_threadpool(verify_password, password_hash, password)
+
+
+async def waste_password_verification_async() -> None:
+    await run_in_threadpool(waste_password_verification)
+
+
 def verify_password(password_hash: str, password: str) -> bool:
     try:
         return _hasher.verify(password_hash, password)
@@ -50,16 +67,20 @@ def verify_password(password_hash: str, password: str) -> bool:
         return False
 
 
-# Хеш заведомо несуществующего пароля: сверка с ним занимает столько же времени,
-# сколько обычная проверка, поэтому «нет такого пользователя» и «неверный пароль»
-# отвечают за одинаковое время и по таймингу не различаются.
-_DUMMY_HASH = _hasher.hash("dummy-password-for-constant-time-comparison")
+@lru_cache(maxsize=1)
+def _dummy_hash() -> str:
+    """Хеш заведомо несуществующего пароля: сверка с ним стоит столько же, сколько
+    обычная проверка, поэтому «нет такого пользователя» и «неверный пароль» не
+    различаются по времени ответа. Считается при первом обращении, а не на импорте
+    модуля — иначе полный argon2 (64 МиБ) выполнялся бы при каждом старте процесса."""
+
+    return _hasher.hash("dummy-password-for-constant-time-comparison")
 
 
 def waste_password_verification() -> None:
     """Выполняет фиктивную проверку argon2, чтобы уравнять время ответа."""
 
-    verify_password(_DUMMY_HASH, "not-the-password")
+    verify_password(_dummy_hash(), "not-the-password")
 
 
 def needs_rehash(password_hash: str) -> bool:

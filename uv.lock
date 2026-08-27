@@ -1037,7 +1037,7 @@ wheels = [
 
 [[package]]
 name = "keto-engine"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/keto_engine" }
 dependencies = [
     { name = "scipy" },
@@ -1125,6 +1125,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "structlog" },
 ]
 
 [package.dev-dependencies]
@@ -1140,6 +1141,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
+    { name = "structlog", specifier = ">=24.4" },
 ]
 
 [package.metadata.requires-dev]
