@@ -31,6 +31,12 @@ async def list_patients(
     patient_ids = await access_repo.list_accessible_patient_ids(
         session, user_id=user.id, role=user.role
     )
+
+    # Токен Mini App выдаётся на конкретного пациента (раздел 5.2 ТЗ) — список
+    # обязан сужаться так же, как и ручки с {patient_id}, иначе scope протекает.
+    if user.patient_scope is not None:
+        patient_ids = [pid for pid in patient_ids if pid == user.patient_scope]
+
     items, total = await patients_repo.list_for_ids(
         session, patient_ids=patient_ids, limit=limit, offset=offset
     )
@@ -46,6 +52,14 @@ async def create_patient(
 
     if user.role is not UserRole.PARENT:
         raise ApiError(ErrorCode.FORBIDDEN, "Профиль ребёнка создаёт родитель.")
+
+    # Scope-токен ограничен одним уже привязанным пациентом; создание нового
+    # ребёнка вышло бы за его пределы.
+    if user.patient_scope is not None:
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Добавить ребёнка можно только в веб-кабинете.",
+        )
 
     patient = await patients_repo.create(
         session,

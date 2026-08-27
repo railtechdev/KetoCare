@@ -29,7 +29,9 @@ REQUIRED_COLUMNS = (
 OPTIONAL_COLUMNS = ("name_uz", "name_en")
 
 # Физиологичные границы значений на 100 г — отсекают явные ошибки ввода
-# (перепутанные колонки, значения в кДж вместо ккал).
+# (перепутанные колонки, значения в кДж вместо ккал). 100 г макронутриентов на
+# 100 г продукта — верхняя граница по определению; предел калорийности опирается
+# на проверку аномалий из раздела 10.1 ТЗ.
 _MACRO_MAX = 100.0
 _KCAL_MAX = 1000.0
 
@@ -154,6 +156,10 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
                 )
             )
 
+    # TODO(med): подтвердить у медицинской команды — клетчатка считается частью общих
+    # углеводов (согласуется с NET_CARBS_DEFAULT=False в keto_engine/constants.py).
+    # В части источников данных клетчатка приводится отдельно от углеводов, и тогда
+    # это правило отклонит корректные строки. См. docs/medical/OPEN_QUESTIONS.md.
     fiber = parsed.get("fiber_100g")
     carbs = parsed.get("carbs_100g")
     if isinstance(fiber, float) and isinstance(carbs, float) and fiber > carbs:

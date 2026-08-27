@@ -145,7 +145,27 @@ async def import_products(
         ImportRowError(line=e.line, column=e.column, message=e.message) for e in report.errors
     ]
 
+    # Дубли — не ошибка формата, но импортировать их молча нельзя: одинаковое имя
+    # с разными значениями означает риск выбрать «не тот» продукт при расчёте меню.
+    existing = await products_repo.find_duplicate_names(
+        session, names=[row["name_ru"] for row in report.valid_rows]
+    )
+    if existing:
+        duplicates = [
+            ImportRowError(
+                line=line,
+                column="name_ru",
+                message=f"Продукт «{row['name_ru']}» уже есть в базе — строка пропущена.",
+            )
+            for line, row in enumerate(report.valid_rows, start=2)
+            if row["name_ru"] in existing
+        ]
+        errors.extend(duplicates)
+        report.valid_rows = [r for r in report.valid_rows if r["name_ru"] not in existing]
+
     if dry_run or not report.ok:
+        # report.ok учитывает только ошибки разбора: файл с невалидными строками
+        # не импортируется вовсе. Дубли же лишь исключают свои строки.
         return ProductImportReport(
             total_rows=report.total_rows, imported=0, errors=errors, dry_run=True
         )
@@ -165,5 +185,5 @@ async def import_products(
     )
 
     return ProductImportReport(
-        total_rows=report.total_rows, imported=imported, errors=[], dry_run=False
+        total_rows=report.total_rows, imported=imported, errors=errors, dry_run=False
     )

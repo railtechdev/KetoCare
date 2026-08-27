@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from starlette.concurrency import run_in_threadpool
 
 from keto_engine import InfeasibleError, scale, solve, verify, within_tolerance
 
@@ -59,7 +60,10 @@ async def solve_dish(payload: SolveRequest, _: CurrentUserDep) -> SolveResponse:
     targets = calc_service.to_targets(payload.targets)
 
     try:
-        result = solve(list(ingredients.values()), targets)
+        # solve() синхронный и вычислительно тяжёлый (LP через HiGHS, а при
+        # неразрешимости ещё несколько LP для диагностики). В event loop он
+        # заблокировал бы весь воркер, поэтому уходит в threadpool.
+        result = await run_in_threadpool(solve, list(ingredients.values()), targets)
     except InfeasibleError as exc:
         raise ApiError(ErrorCode.INFEASIBLE_CALCULATION, exc.reason) from exc
 

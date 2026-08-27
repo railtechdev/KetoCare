@@ -8,6 +8,7 @@ from datetime import date
 
 import pytest
 
+from core.models.clinical import AppendOnlyViolationError
 from core.models.enums import Sex, UserRole
 from core.repositories import access, audit, patients, prescriptions, products, users
 
@@ -255,3 +256,37 @@ class TestAuditLog:
         assert entry.before == {"fat_100g": 5.0}
         assert entry.after == {"fat_100g": 5.5}
         assert entry.created_at is not None
+
+
+class TestAppendOnlyEnforcement:
+    """Append-only обеспечивается не только отсутствием методов в репозитории,
+    но и защитой на уровне ORM: любая случайная мутация в будущем коде упадёт."""
+
+    async def _make_prescription(self, session):
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        return await prescriptions.create(
+            session,
+            patient_id=patient.id,
+            ratio=4.0,
+            kcal_per_day=1200,
+            protein_g=25.0,
+            carbs_limit_g=10.0,
+            meals_per_day=3,
+            author_id=doctor.id,
+            effective_from=date(2026, 1, 1),
+        )
+
+    async def test_update_of_existing_prescription_raises(self, session):
+        prescription = await self._make_prescription(session)
+
+        prescription.ratio = 2.0
+        with pytest.raises(AppendOnlyViolationError):
+            await session.flush()
+
+    async def test_delete_of_prescription_raises(self, session):
+        prescription = await self._make_prescription(session)
+
+        await session.delete(prescription)
+        with pytest.raises(AppendOnlyViolationError):
+            await session.flush()

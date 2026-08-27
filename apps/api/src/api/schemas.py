@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -33,9 +33,39 @@ class TokenPair(BaseModel):
     token_type: str = "bearer"
 
 
+class LoginResponse(BaseModel):
+    """Вход завершается либо парой токенов, либо требованием настроить 2FA.
+
+    Второй случай — не ошибка: приглашённому врачу/диетологу/админу 2FA
+    обязательна (раздел 5.2 ТЗ), но настроить её до первого входа негде.
+    `totp_setup_token` даёт доступ только к /auth/totp/setup и /auth/totp/verify.
+    """
+
+    status: Literal["ok", "totp_setup_required"]
+    tokens: TokenPair | None = None
+    totp_setup_token: str | None = None
+
+
+class RefreshRequest(BaseModel):
+    """Токен передаётся в теле (или берётся из httpOnly cookie), но не в URL:
+    query-параметры оседают в логах nginx, истории браузера и Referer."""
+
+    refresh_token: str | None = None
+
+
+class TotpSetupRequest(BaseModel):
+    current_code: str | None = Field(
+        default=None, description="Обязателен, если 2FA уже настроена (смена второго фактора)"
+    )
+
+
 class TotpSetupResponse(BaseModel):
     secret: str
     provisioning_uri: str
+
+
+class TotpVerifyRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
 
 
 # --- patients -------------------------------------------------------------

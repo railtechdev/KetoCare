@@ -135,3 +135,18 @@ async def get_or_create_category(session: AsyncSession, *, name_ru: str) -> Prod
     session.add(category)
     await session.flush()
     return category
+
+
+async def find_duplicate_names(session: AsyncSession, *, names: list[str]) -> set[str]:
+    """Какие из имён уже есть в базе продуктов.
+
+    База продуктов — вход для расчёта диеты: два продукта с одинаковым названием и
+    разными значениями создают риск выбрать «не тот» при составлении меню, поэтому
+    импорт сообщает о совпадениях, а не молча плодит дубли.
+    """
+
+    if not names:
+        return set()
+
+    rows = await session.scalars(select(Product.name_ru).where(Product.name_ru.in_(names)))
+    return set(rows)

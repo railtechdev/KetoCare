@@ -116,18 +116,82 @@ class TestAcceptInvitation:
         )
         assert response.status_code == 422
 
-    async def test_accepted_user_can_log_in(self, client, session, make_user, auth_headers):
-        """Роль doctor требует 2FA, поэтому без настроенного TOTP вход закрыт —
-        это ожидаемое поведение раздела 5.2 ТЗ, а не ошибка."""
+    async def test_accepted_doctor_can_complete_first_login(
+        self, client, session, make_user, auth_headers
+    ):
+        """Приглашённый врач должен суметь дойти до рабочей сессии.
+
+        2FA для роли doctor обязательна (раздел 5.2 ТЗ), но настроить её до
+        первого входа негде — поэтому login отдаёт `totp_setup_required` и
+        краткоживущий токен, которым завершается настройка. Раньше здесь был
+        тупик: 403 «настройте 2FA» при единственной ручке настройки, требующей
+        уже действующей сессии.
+        """
+        import pyotp
+
         token = await self._invite(client, session, make_user, auth_headers)
         await client.post(
             "/api/v1/auth/invitations/accept",
             json={"token": token, "full_name": "Врач", "password": STRONG_PASSWORD},
         )
 
-        response = await client.post(
+        first = await client.post(
             "/api/v1/auth/login",
             json={"email": "acc@example.com", "password": STRONG_PASSWORD},
         )
-        assert response.status_code == 403
-        assert "двухфактор" in response.json()["error"]["message"].lower()
+        assert first.status_code == 200, first.text
+        body = first.json()
+        assert body["status"] == "totp_setup_required"
+        assert body["tokens"] is None, "рабочие токены до настройки 2FA не выдаются"
+        setup_token = body["totp_setup_token"]
+
+        setup = await client.post(
+            "/api/v1/auth/totp/setup",
+            json={},
+            headers={"Authorization": f"Bearer {setup_token}"},
+        )
+        assert setup.status_code == 200, setup.text
+        secret = setup.json()["secret"]
+
+        verify = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": pyotp.TOTP(secret).now()},
+            headers={"Authorization": f"Bearer {setup_token}"},
+        )
+        assert verify.status_code == 200, verify.text
+        assert verify.json()["access_token"], "после подтверждения выдаётся рабочая сессия"
+
+        second = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "acc@example.com",
+                "password": STRONG_PASSWORD,
+                "totp_code": pyotp.TOTP(secret).now(),
+            },
+        )
+        assert second.status_code == 200
+        assert second.json()["status"] == "ok"
+
+    async def test_setup_token_cannot_access_other_endpoints(
+        self, client, session, make_user, auth_headers
+    ):
+        """Токен настройки 2FA не должен работать как обычный access-токен."""
+        import uuid as _uuid
+
+        token = await self._invite(client, session, make_user, auth_headers)
+        await client.post(
+            "/api/v1/auth/invitations/accept",
+            json={"token": token, "full_name": "Врач", "password": STRONG_PASSWORD},
+        )
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "acc@example.com", "password": STRONG_PASSWORD},
+        )
+        setup_token = login.json()["totp_setup_token"]
+        headers = {"Authorization": f"Bearer {setup_token}"}
+
+        assert (await client.get("/api/v1/patients", headers=headers)).status_code == 401
+        assert (
+            await client.get(f"/api/v1/patients/{_uuid.uuid4()}", headers=headers)
+        ).status_code == 401
+        assert (await client.get("/api/v1/products", headers=headers)).status_code == 401

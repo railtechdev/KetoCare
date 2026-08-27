@@ -61,15 +61,10 @@ async def create_prescription(
     session: SessionDep,
     user: PatientAccessDep,
 ) -> PrescriptionRead:
-    if payload.carbs_limit_g > payload.protein_g * 20:
-        # Защита от очевидной опечатки: углеводный лимит на порядок выше белковой цели
-        # почти наверняка ошибка ввода, а не назначение.
-        raise ApiError(
-            ErrorCode.VALIDATION_ERROR,
-            "Углеводный лимит выглядит несоразмерно большим относительно цели по белку — проверьте значения.",
-            details={"carbs_limit_g": payload.carbs_limit_g, "protein_g": payload.protein_g},
-        )
-
+    # Диапазоны значений проверяет схема PrescriptionCreate по разделу 8.3 ТЗ
+    # (ratio 1.0-5.0, kcal 500-3000). Дополнительных правил соотношения полей
+    # между собой здесь нет: медицинские правила не выдумываются (правило 1
+    # CLAUDE.md). Вопрос о правдоподобности сочетаний — в OPEN_QUESTIONS.md.
     prescription = await prescriptions_repo.create(
         session,
         patient_id=patient_id,

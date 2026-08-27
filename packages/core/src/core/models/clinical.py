@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import TIMESTAMP, ForeignKey, Integer, Numeric, String, event, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -58,6 +58,25 @@ class Prescription(Base, UUIDPkMixin):
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     effective_from: Mapped[date] = mapped_column(nullable=False)
+
+
+class AppendOnlyViolationError(RuntimeError):
+    """Попытка изменить или удалить строку append-only таблицы."""
+
+
+@event.listens_for(Prescription, "before_update", propagate=True)
+def _forbid_prescription_update(_mapper: object, _connection: object, target: Prescription) -> None:
+    raise AppendOnlyViolationError(
+        "prescriptions — append-only (правило 4 CLAUDE.md): изменение назначения оформляется "
+        "новой строкой через repositories.prescriptions.create(), а не UPDATE существующей."
+    )
+
+
+@event.listens_for(Prescription, "before_delete", propagate=True)
+def _forbid_prescription_delete(_mapper: object, _connection: object, target: Prescription) -> None:
+    raise AppendOnlyViolationError(
+        "prescriptions — append-only (правило 4 CLAUDE.md): удаление назначений запрещено."
+    )
 
 
 class Medication(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):

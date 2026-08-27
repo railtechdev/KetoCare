@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import get_settings
 
 from .errors import register_exception_handlers
+from .ratelimit import register_rate_limiting
 from .routers import auth, calc, patients, prescriptions, products
 
 API_PREFIX = "/api/v1"
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     )
 
     register_exception_handlers(app)
+    register_rate_limiting(app)
 
     v1 = APIRouter(prefix=API_PREFIX)
     v1.include_router(auth.router)

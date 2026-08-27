@@ -9,6 +9,11 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Верхняя граница размера задачи. Блюдо из сотни ингредиентов нереалистично,
+# а без предела один запрос со списком на десятки тысяч позиций занял бы решатель
+# надолго (LP решается синхронно).
+MAX_INGREDIENTS = 100
+
 
 class IngredientIn(BaseModel):
     """Пищевая ценность на 100 г."""
@@ -37,7 +42,9 @@ class TargetsIn(BaseModel):
     kcal: Annotated[float, Field(gt=0, le=5000)]
     protein_min_g: Annotated[float, Field(ge=0)] | None = None
     carbs_max_g: Annotated[float, Field(ge=0)] | None = None
-    per_ingredient_bounds: dict[str, tuple[float, float | None]] | None = None
+    per_ingredient_bounds: (
+        Annotated[dict[str, tuple[float, float | None]], Field(max_length=MAX_INGREDIENTS)] | None
+    ) = None
     net_carbs: bool = False
 
 
@@ -60,8 +67,8 @@ class DishOut(BaseModel):
 class VerifyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ingredients: list[IngredientIn] = Field(min_length=1)
-    items: list[ItemIn] = Field(min_length=1)
+    ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
+    items: list[ItemIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     targets: TargetsIn | None = Field(
         default=None, description="Если задано — ответ включает соответствие допускам"
     )
@@ -76,7 +83,7 @@ class VerifyResponse(BaseModel):
 class SolveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ingredients: list[IngredientIn] = Field(min_length=1)
+    ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     targets: TargetsIn
 
 
@@ -89,8 +96,8 @@ class SolveResponse(BaseModel):
 class ScaleRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ingredients: list[IngredientIn] = Field(min_length=1)
-    items: list[ItemIn] = Field(min_length=1)
+    ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
+    items: list[ItemIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     factor: Annotated[float, Field(gt=0, le=100)]
 
 

@@ -19,6 +19,7 @@ from sqlalchemy.pool import NullPool
 
 from api.deps.auth import get_session
 from api.main import create_app
+from api.ratelimit import limiter
 from api.security import create_token, hash_password
 from core.models.enums import Sex, UserRole
 from core.repositories import patients as patients_repo
@@ -48,6 +49,17 @@ async def session() -> AsyncIterator[AsyncSession]:
         await transaction.rollback()
         await connection.close()
         await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Лимитер /auth/* хранит счётчики в памяти процесса, поэтому без сброса
+    они переносятся между тестами (все ходят с 127.0.0.1) и роняют посторонние
+    сценарии. Сам лимит проверяется отдельным тестом в test_auth_flows.py."""
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest_asyncio.fixture

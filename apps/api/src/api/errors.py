@@ -9,10 +9,13 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
+import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+logger = structlog.get_logger(__name__)
 
 
 class ErrorCode(StrEnum):
@@ -85,6 +88,22 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code, message = _map_status(exc.status_code)
         return error_response(code, message, status_code=exc.status_code)
+
+    @app.exception_handler(Exception)
+    async def _unhandled_error(request: Request, exc: Exception) -> JSONResponse:
+        """Без этого хендлера непойманная ошибка уходит как plain-text
+        `Internal Server Error`: фронт не сможет её разобрать, а код `internal`
+        из раздела 5.1 ТЗ был бы недостижим. Детали исключения наружу не отдаются —
+        только в лог."""
+
+        logger.exception(
+            "unhandled_error", path=request.url.path, method=request.method, error=str(exc)
+        )
+        return error_response(
+            ErrorCode.INTERNAL,
+            "Внутренняя ошибка сервера. Попробуйте позже.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 def _format_validation_errors(exc: RequestValidationError) -> list[dict[str, Any]]:

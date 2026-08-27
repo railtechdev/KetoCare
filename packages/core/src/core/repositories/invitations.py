@@ -11,7 +11,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Invitation
@@ -40,23 +40,28 @@ async def create(session: AsyncSession, *, email: str, role: UserRole, token: st
     return invitation
 
 
-async def get_valid_by_token(session: AsyncSession, token: str) -> Invitation | None:
-    """Возвращает приглашение только если оно не принято и не истекло."""
+async def claim(session: AsyncSession, token: str) -> Invitation | None:
+    """Атомарно помечает приглашение принятым и возвращает его.
 
-    stmt = select(Invitation).where(Invitation.token_hash == hash_token(token))
-    invitation: Invitation | None = await session.scalar(stmt)
+    Проверка «не принято и не истекло» и сама отметка выполняются одним UPDATE
+    с условием `accepted_at IS NULL`: при двух параллельных запросах с одним
+    токеном строку получит ровно один, второй увидит None. Раздельные
+    get + update допускали бы гонку (оба проходят проверку).
+    """
 
-    if invitation is None or invitation.accepted_at is not None:
-        return None
-    if invitation.expires_at <= datetime.now(UTC):
-        return None
-    return invitation
-
-
-async def mark_accepted(session: AsyncSession, *, invitation: Invitation) -> Invitation:
-    invitation.accepted_at = datetime.now(UTC)
-    await session.flush()
-    return invitation
+    now = datetime.now(UTC)
+    stmt = (
+        update(Invitation)
+        .where(
+            Invitation.token_hash == hash_token(token),
+            Invitation.accepted_at.is_(None),
+            Invitation.expires_at > now,
+        )
+        .values(accepted_at=now)
+        .returning(Invitation)
+    )
+    result: Invitation | None = await session.scalar(stmt)
+    return result
 
 
 async def get(session: AsyncSession, invitation_id: uuid.UUID) -> Invitation | None:

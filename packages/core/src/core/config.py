@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Annotated
 
 from pydantic import Field
@@ -36,5 +37,9 @@ class Settings(BaseSettings):
     tz: str = "Asia/Tashkent"
 
 
+@lru_cache
 def get_settings() -> Settings:
+    """Кешируется: значения читаются из окружения один раз, а не на каждый
+    encode/decode JWT (иначе .env перечитывается с диска на каждый запрос)."""
+
     return Settings()  # type: ignore[call-arg]

@@ -23,6 +23,20 @@ from ..errors import ApiError, ErrorCode
 from ..security import decode_token
 
 
+def client_ip(request: Request) -> str | None:
+    """IP клиента для `audit_log.ip` (раздел 4.2 ТЗ).
+
+    За обратным прокси реальный адрес приходит в X-Forwarded-For; берётся первый
+    элемент — он ближе всего к клиенту. Заголовок подделывается клиентом, поэтому
+    nginx обязан его перезаписывать (см. infra/nginx).
+    """
+
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or None
+    return request.client.host if request.client else None
+
+
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with get_sessionmaker()() as session:
         try:
@@ -124,3 +138,33 @@ async def require_patient_access(
 
 
 PatientAccessDep = Annotated[CurrentUser, Depends(require_patient_access)]
+
+
+async def get_totp_setup_user(request: Request, session: SessionDep) -> CurrentUser:
+    """Пользователь, которому разрешено настраивать 2FA.
+
+    Принимает либо обычный access-токен (смена уже настроенного второго фактора),
+    либо краткоживущий `totp_setup`-токен, выданный /auth/login тому, кому 2FA
+    обязательна, но ещё не настроена. Этот токен не подходит ни к одной другой
+    ручке: остальные зависимости требуют `expected_type="access"`.
+    """
+
+    token = _bearer_token(request)
+    try:
+        payload = decode_token(token, expected_type="access")
+    except ApiError:
+        payload = decode_token(token, expected_type="totp_setup")
+
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+
+    user = await users_repo.get(session, user_id)
+    if user is None or not user.is_active:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Учётная запись недоступна.")
+
+    return CurrentUser(id=user.id, role=user.role)
+
+
+TotpSetupUserDep = Annotated[CurrentUser, Depends(get_totp_setup_user)]

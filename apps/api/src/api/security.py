@@ -22,11 +22,21 @@ from .errors import ApiError, ErrorCode
 
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
 REFRESH_TOKEN_TTL = timedelta(days=30)
+# Токен первичной настройки 2FA: выдаётся после проверки пароля пользователю,
+# которому 2FA обязательна, но ещё не настроена. Даёт доступ ТОЛЬКО к
+# /auth/totp/setup и /auth/totp/verify, поэтому живёт недолго.
+TOTP_SETUP_TOKEN_TTL = timedelta(minutes=10)
 _ALGORITHM = "HS256"
 
 _hasher = PasswordHasher()
 
-TokenType = Literal["access", "refresh"]
+TokenType = Literal["access", "refresh", "totp_setup"]
+
+_TTL_BY_TYPE: dict[str, timedelta] = {
+    "access": ACCESS_TOKEN_TTL,
+    "refresh": REFRESH_TOKEN_TTL,
+    "totp_setup": TOTP_SETUP_TOKEN_TTL,
+}
 
 
 def hash_password(password: str) -> str:
@@ -38,6 +48,18 @@ def verify_password(password_hash: str, password: str) -> bool:
         return _hasher.verify(password_hash, password)
     except (VerifyMismatchError, VerificationError):
         return False
+
+
+# Хеш заведомо несуществующего пароля: сверка с ним занимает столько же времени,
+# сколько обычная проверка, поэтому «нет такого пользователя» и «неверный пароль»
+# отвечают за одинаковое время и по таймингу не различаются.
+_DUMMY_HASH = _hasher.hash("dummy-password-for-constant-time-comparison")
+
+
+def waste_password_verification() -> None:
+    """Выполняет фиктивную проверку argon2, чтобы уравнять время ответа."""
+
+    verify_password(_DUMMY_HASH, "not-the-password")
 
 
 def needs_rehash(password_hash: str) -> bool:
@@ -54,7 +76,7 @@ def create_token(
     """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ)."""
 
     now = datetime.now(UTC)
-    ttl = ACCESS_TOKEN_TTL if token_type == "access" else REFRESH_TOKEN_TTL
+    ttl = _TTL_BY_TYPE[token_type]
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "role": role.value,

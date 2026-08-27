@@ -23,6 +23,11 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     phone: Mapped[str | None] = mapped_column(String(32))
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     totp_secret: Mapped[str | None] = mapped_column(String(64))
+    # Секрет-кандидат: заполняется на /auth/totp/setup и становится действующим
+    # только после /auth/totp/verify с валидным кодом. Пока подтверждения не было,
+    # действующий totp_secret не трогается — иначе один вызов setup мог бы
+    # отобрать второй фактор у владельца учётной записи.
+    totp_pending_secret: Mapped[str | None] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     invited_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id")

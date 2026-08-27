@@ -5,22 +5,30 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response
+import uuid
 
+from fastapi import APIRouter, Depends, Request, Response
+
+from core.models import User
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import invitations as invitations_repo
 from core.repositories import users as users_repo
 
-from ..deps.auth import CurrentUserDep, SessionDep, require_roles
+from ..deps.auth import CurrentUserDep, SessionDep, TotpSetupUserDep, client_ip, require_roles
 from ..errors import ApiError, ErrorCode
+from ..ratelimit import AUTH_RATE_LIMIT, limiter
 from ..schemas import (
     InvitationAccept,
     InvitationCreate,
     InvitationCreated,
     LoginRequest,
+    LoginResponse,
+    RefreshRequest,
     TokenPair,
+    TotpSetupRequest,
     TotpSetupResponse,
+    TotpVerifyRequest,
     UserRead,
 )
 from ..security import (
@@ -31,6 +39,7 @@ from ..security import (
     totp_provisioning_uri,
     verify_password,
     verify_totp,
+    waste_password_verification,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -51,53 +60,101 @@ def _set_auth_cookies(response: Response, tokens: TokenPair) -> None:
     )
 
 
-@router.post("/login", response_model=TokenPair, summary="Вход по паролю (+ TOTP)")
-async def login(payload: LoginRequest, response: Response, session: SessionDep) -> TokenPair:
-    user = await users_repo.get_by_email(session, payload.email)
-
-    # Одинаковое сообщение для несуществующего пользователя и неверного пароля —
-    # чтобы по ответу нельзя было перебирать существующие email.
-    if user is None or not verify_password(user.password_hash, payload.password):
-        raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
-
-    if not user.is_active:
-        raise ApiError(ErrorCode.FORBIDDEN, "Учётная запись отключена.")
-
-    if user.role in ROLES_REQUIRING_TOTP or user.totp_secret:
-        if not user.totp_secret:
-            raise ApiError(
-                ErrorCode.FORBIDDEN,
-                "Для этой роли нужно настроить двухфакторную аутентификацию.",
-            )
-        if not payload.totp_code or not verify_totp(user.totp_secret, payload.totp_code):
-            raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
-
-    tokens = TokenPair(
+def _issue_tokens(user: User) -> TokenPair:
+    return TokenPair(
         access_token=create_token(user_id=user.id, role=user.role, token_type="access"),
         refresh_token=create_token(user_id=user.id, role=user.role, token_type="refresh"),
     )
+
+
+@router.post("/login", response_model=LoginResponse, summary="Вход по паролю (+ TOTP)")
+@limiter.limit(AUTH_RATE_LIMIT)
+async def login(
+    payload: LoginRequest, request: Request, response: Response, session: SessionDep
+) -> LoginResponse:
+    user = await users_repo.get_by_email(session, payload.email)
+
+    # Один и тот же 401 и одно и то же время ответа для «нет такого email»,
+    # «неверный пароль» и «учётная запись отключена»: иначе по ответу или по
+    # задержке можно перебирать существующие учётные записи. Для отсутствующего
+    # пользователя argon2 всё равно прогоняется вхолостую.
+    if user is None:
+        waste_password_verification()
+        raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
+
+    password_ok = verify_password(user.password_hash, payload.password)
+    if not password_ok or not user.is_active:
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="login_failed",
+            entity="users",
+            entity_id=user.id,
+            ip=client_ip(request),
+        )
+        raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
+
+    needs_totp = user.role in ROLES_REQUIRING_TOTP or user.totp_secret is not None
+
+    if needs_totp and user.totp_secret is None:
+        # Приглашённому врачу/диетологу/админу 2FA обязательна, но настроить её
+        # до первого входа негде. Пароль уже проверен, поэтому выдаём токен,
+        # действующий только для /auth/totp/setup и /auth/totp/verify.
+        return LoginResponse(
+            status="totp_setup_required",
+            totp_setup_token=create_token(user_id=user.id, role=user.role, token_type="totp_setup"),
+        )
+
+    if needs_totp:
+        assert user.totp_secret is not None
+        if not payload.totp_code or not verify_totp(user.totp_secret, payload.totp_code):
+            await audit_repo.write_audit_log(
+                session,
+                user_id=user.id,
+                action="login_failed_totp",
+                entity="users",
+                entity_id=user.id,
+                ip=client_ip(request),
+            )
+            raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
+
+    tokens = _issue_tokens(user)
     _set_auth_cookies(response, tokens)
 
     await audit_repo.write_audit_log(
-        session, user_id=user.id, action="login", entity="users", entity_id=user.id
+        session,
+        user_id=user.id,
+        action="login",
+        entity="users",
+        entity_id=user.id,
+        ip=client_ip(request),
     )
-    return tokens
+    return LoginResponse(status="ok", tokens=tokens)
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Обновить пару токенов")
-async def refresh(response: Response, session: SessionDep, refresh_token: str) -> TokenPair:
-    payload = decode_token(refresh_token, expected_type="refresh")
+async def refresh(
+    payload: RefreshRequest, request: Request, response: Response, session: SessionDep
+) -> TokenPair:
+    """Токен берётся из тела или из httpOnly cookie — но никогда из query-строки:
+    URL оседает в логах nginx, истории браузера и заголовке Referer."""
 
-    import uuid as _uuid
+    token = payload.refresh_token or request.cookies.get("refresh_token")
+    if not token:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Токен обновления не передан.")
 
-    user = await users_repo.get(session, _uuid.UUID(payload["sub"]))
+    claims = decode_token(token, expected_type="refresh")
+
+    try:
+        user_id = uuid.UUID(claims["sub"])
+    except (KeyError, ValueError) as exc:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+
+    user = await users_repo.get(session, user_id)
     if user is None or not user.is_active:
         raise ApiError(ErrorCode.UNAUTHORIZED, "Учётная запись недоступна.")
 
-    tokens = TokenPair(
-        access_token=create_token(user_id=user.id, role=user.role, token_type="access"),
-        refresh_token=create_token(user_id=user.id, role=user.role, token_type="refresh"),
-    )
+    tokens = _issue_tokens(user)
     _set_auth_cookies(response, tokens)
     return tokens
 
@@ -109,21 +166,73 @@ async def logout(response: Response) -> None:
 
 
 @router.post("/totp/setup", response_model=TotpSetupResponse, summary="Начать настройку 2FA")
-async def totp_setup(user: CurrentUserDep, session: SessionDep) -> TotpSetupResponse:
+async def totp_setup(
+    payload: TotpSetupRequest, user: TotpSetupUserDep, session: SessionDep
+) -> TotpSetupResponse:
+    """Выдаёт секрет-кандидат. Действующий второй фактор не меняется до
+    подтверждения кодом на /auth/totp/verify."""
+
     db_user = await users_repo.get(session, user.id)
     if db_user is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
 
+    # Смена уже настроенной 2FA требует текущего кода: иначе угнанный access-токен
+    # позволил бы молча заменить второй фактор и вытеснить владельца.
+    if db_user.totp_secret is not None and not (
+        payload.current_code and verify_totp(db_user.totp_secret, payload.current_code)
+    ):
+        raise ApiError(
+            ErrorCode.UNAUTHORIZED,
+            "Чтобы сменить второй фактор, введите текущий код подтверждения.",
+        )
+
     secret = generate_totp_secret()
-    db_user.totp_secret = secret
+    db_user.totp_pending_secret = secret
     await session.flush()
 
-    await audit_repo.write_audit_log(
-        session, user_id=user.id, action="totp_setup", entity="users", entity_id=user.id
-    )
     return TotpSetupResponse(
         secret=secret, provisioning_uri=totp_provisioning_uri(secret, email=db_user.email)
     )
+
+
+@router.post("/totp/verify", response_model=TokenPair, summary="Подтвердить и включить 2FA")
+@limiter.limit(AUTH_RATE_LIMIT)
+async def totp_verify(
+    payload: TotpVerifyRequest,
+    request: Request,
+    response: Response,
+    user: TotpSetupUserDep,
+    session: SessionDep,
+) -> TokenPair:
+    """Активирует секрет-кандидат и завершает вход: после первичной настройки
+    пользователь сразу получает рабочую пару токенов."""
+
+    db_user = await users_repo.get(session, user.id)
+    if db_user is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+
+    if db_user.totp_pending_secret is None:
+        raise ApiError(ErrorCode.CONFLICT, "Сначала запросите настройку через /auth/totp/setup.")
+
+    if not verify_totp(db_user.totp_pending_secret, payload.code):
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
+
+    db_user.totp_secret = db_user.totp_pending_secret
+    db_user.totp_pending_secret = None
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="totp_enabled",
+        entity="users",
+        entity_id=user.id,
+        ip=client_ip(request),
+    )
+
+    tokens = _issue_tokens(db_user)
+    _set_auth_cookies(response, tokens)
+    return tokens
 
 
 @router.post(
@@ -170,7 +279,9 @@ async def create_invitation(
     summary="Принять приглашение и создать учётную запись",
 )
 async def accept_invitation(payload: InvitationAccept, session: SessionDep) -> UserRead:
-    invitation = await invitations_repo.get_valid_by_token(session, payload.token)
+    # Атомарный claim: проверка и отметка о принятии — один UPDATE, поэтому два
+    # параллельных запроса с одним токеном не создадут двух пользователей.
+    invitation = await invitations_repo.claim(session, payload.token)
     if invitation is None:
         # Не разделяем "нет такого токена" / "истёк" / "уже принят" — иначе токены
         # можно перебирать, определяя, какие из них существуют.
@@ -187,7 +298,6 @@ async def accept_invitation(payload: InvitationAccept, session: SessionDep) -> U
         password_hash=hash_password(payload.password),
         phone=payload.phone,
     )
-    await invitations_repo.mark_accepted(session, invitation=invitation)
 
     await audit_repo.write_audit_log(
         session,
