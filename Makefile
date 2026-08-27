@@ -35,7 +35,8 @@ down: ## Остановить окружение
 .PHONY: test
 test: ## Все тесты (pytest + vitest)
 	uv run pytest
-	@if [ -d node_modules ]; then pnpm -r --if-present run test; fi
+	@if [ -d node_modules ]; then pnpm -r --if-present run test; else \
+		echo "node_modules нет — vitest пропущен (запустите pnpm install)"; fi
 
 .PHONY: test-engine
 test-engine: ## Только эталонные тесты keto_engine

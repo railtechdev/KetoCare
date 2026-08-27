@@ -1,0 +1,62 @@
+/* Токены дизайн-системы KetoCare (раздел 8.2 ТЗ).
+ *
+ * Значения заданы ТЗ и не подбираются на глаз. Тема переопределяется
+ * подстановкой CSS-переменных: Mini App маппит в них themeParams Telegram
+ * (раздел 9 ТЗ), поэтому компоненты обязаны читать только переменные,
+ * а не хардкодить цвета.
+ */
+
+:root {
+  /* Палитра раздела 8.2 */
+  --kc-bg: #faf7f2; /* молочно-бежевый */
+  --kc-surface: #ffffff;
+  --kc-accent: #2e5e4e; /* шалфейный */
+  --kc-text: #2b2b2b; /* графит */
+  --kc-danger: #b4483e;
+  --kc-warning: #c98a2b;
+  --kc-success: #3e7c4f;
+
+  /* Производные: текст на цветных подложках. Проверяются тестом contrast.test.ts
+     на требование раздела 8.2 (контраст >= 4.5:1).
+     На accent/danger/success белый даёт 7.4 / 5.3 / 5.0. На warning белый даёт
+     только 2.9 — поэтому там графитовый (4.8). Цвета подложек заданы ТЗ и не
+     подбираются; подстраивается именно текст поверх них. */
+  --kc-on-accent: #ffffff;
+  --kc-on-danger: #ffffff;
+  --kc-on-warning: #2b2b2b;
+  --kc-on-success: #ffffff;
+
+  --kc-text-muted: #5c5c5c;
+  --kc-border: #e6e0d8;
+
+  --kc-radius: 12px;
+
+  /* Мягкие тени (раздел 8.2) */
+  --kc-shadow-sm: 0 1px 2px rgb(43 43 43 / 6%);
+  --kc-shadow: 0 2px 8px rgb(43 43 43 / 8%);
+
+  --kc-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Минимальная тач-цель в интерфейсе родителя (раздел 8.2) */
+  --kc-touch-target: 44px;
+}
+
+/* Тёмная тема обязательна для Mini App (раздел 9 ТЗ). */
+[data-theme="dark"] {
+  --kc-bg: #1c1b19;
+  --kc-surface: #262523;
+  --kc-accent: #7fb79f;
+  --kc-text: #f2efe9;
+  --kc-danger: #e8897f;
+  --kc-warning: #e0b166;
+  --kc-success: #8cc79a;
+
+  /* На светлых акцентах тёмной темы белый текст контраст не даёт — нужен тёмный */
+  --kc-on-accent: #1c1b19;
+  --kc-on-danger: #1c1b19;
+  --kc-on-warning: #1c1b19;
+  --kc-on-success: #1c1b19;
+
+  --kc-text-muted: #b3aea6;
+  --kc-border: #3a3835;
+}

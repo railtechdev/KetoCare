@@ -30,6 +30,16 @@ class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
             text("to_tsvector('russian', name_ru)"),
             postgresql_using="gin",
         ),
+        # Уникальность по нормализованному названию. Приложение и так отклоняет дубли
+        # при импорте, но проверка «прочитать, затем вставить» не защищает от двух
+        # одновременных импортов — а две записи с одним названием и разными
+        # значениями означают риск выбрать «не тот» продукт при расчёте меню.
+        # Функциональный индекс, потому что name_ru — String, а не CITEXT.
+        Index(
+            "uq_products_name_ru_normalized",
+            text("lower(btrim(name_ru))"),
+            unique=True,
+        ),
     )
 
     name_ru: Mapped[str] = mapped_column(String(255), nullable=False)

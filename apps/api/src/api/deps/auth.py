@@ -126,6 +126,29 @@ async def require_patient_access(
 PatientAccessDep = Annotated[CurrentUser, Depends(require_patient_access)]
 
 
+async def accessible_patient_ids(user: CurrentUserDep, session: SessionDep) -> list[uuid.UUID]:
+    """Идентификаторы пациентов, доступных текущему пользователю.
+
+    Зависимость для КОЛЛЕКЦИОННЫХ ручек — тех, что не принимают `{patient_id}` и
+    потому не проходят через `require_patient_access` (списки дневников, отчёты,
+    выгрузки — всё, что появляется на этапах 2-4). Сужение по `patient_scope`
+    выполняется здесь один раз: если бы каждая такая ручка фильтровала сама,
+    достаточно было бы забыть об этом в одной, чтобы токен Mini App увидел чужих
+    детей — молча, без ошибки.
+
+    Админ получает пустой список: клинических данных он не видит (раздел 5.1 ТЗ).
+    """
+
+    ids = await access_repo.list_accessible_patient_ids(session, user_id=user.id, role=user.role)
+
+    if user.patient_scope is not None:
+        return [pid for pid in ids if pid == user.patient_scope]
+    return ids
+
+
+AccessiblePatientsDep = Annotated[list[uuid.UUID], Depends(accessible_patient_ids)]
+
+
 async def get_totp_setup_user(request: Request, session: SessionDep) -> CurrentUser:
     """Пользователь, которому разрешено настраивать 2FA.
 

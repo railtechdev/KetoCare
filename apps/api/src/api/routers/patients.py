@@ -8,10 +8,9 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Query
 
 from core.models.enums import UserRole
-from core.repositories import access as access_repo
 from core.repositories import patients as patients_repo
 
-from ..deps.auth import CurrentUserDep, PatientAccessDep, SessionDep
+from ..deps.auth import AccessiblePatientsDep, CurrentUserDep, PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page, PatientCreate, PatientRead
 
@@ -20,22 +19,13 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 
 @router.get("", response_model=Page[PatientRead], summary="Доступные пациенты")
 async def list_patients(
-    user: CurrentUserDep,
+    patient_ids: AccessiblePatientsDep,
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[PatientRead]:
-    """Список ограничен связями пользователя; админ получает пустой список
-    (у него нет доступа к клиническим данным, раздел 5.1 ТЗ)."""
-
-    patient_ids = await access_repo.list_accessible_patient_ids(
-        session, user_id=user.id, role=user.role
-    )
-
-    # Токен Mini App выдаётся на конкретного пациента (раздел 5.2 ТЗ) — список
-    # обязан сужаться так же, как и ручки с {patient_id}, иначе scope протекает.
-    if user.patient_scope is not None:
-        patient_ids = [pid for pid in patient_ids if pid == user.patient_scope]
+    """Область видимости целиком определяется зависимостью `accessible_patient_ids`
+    (связи пользователя + сужение по patient_scope), а не логикой этой ручки."""
 
     items, total = await patients_repo.list_for_ids(
         session, patient_ids=patient_ids, limit=limit, offset=offset

@@ -1,0 +1,178 @@
+/* Стили компонентов дизайн-системы. Читают только токены из tokens.css —
+ * иначе Mini App не смог бы перекрасить их через themeParams Telegram
+ * (раздел 9 ТЗ). */
+
+.kc-ratio-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: calc(var(--kc-radius) / 2);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.kc-ratio-badge--ok {
+  background: var(--kc-success);
+  color: var(--kc-on-success);
+}
+
+.kc-ratio-badge--off {
+  background: var(--kc-danger);
+  color: var(--kc-on-danger);
+}
+
+.kc-ratio-badge--neutral,
+.kc-ratio-badge--unknown {
+  background: var(--kc-surface);
+  color: var(--kc-text-muted);
+  border-color: var(--kc-border);
+}
+
+.kc-macro-bar__track {
+  display: flex;
+  overflow: hidden;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--kc-border);
+}
+
+.kc-macro-bar__segment--fat {
+  background: var(--kc-accent);
+}
+.kc-macro-bar__segment--protein {
+  background: var(--kc-warning);
+}
+.kc-macro-bar__segment--carbs {
+  background: var(--kc-danger);
+}
+
+.kc-macro-bar__legend {
+  display: flex;
+  gap: 16px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--kc-text);
+}
+
+.kc-macro-bar__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kc-macro-bar__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.kc-macro-bar__swatch--fat {
+  background: var(--kc-accent);
+}
+.kc-macro-bar__swatch--protein {
+  background: var(--kc-warning);
+}
+.kc-macro-bar__swatch--carbs {
+  background: var(--kc-danger);
+}
+
+.kc-macro-bar__grams {
+  color: var(--kc-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.kc-warning-banner {
+  padding: 12px 16px;
+  border-radius: var(--kc-radius);
+  border-left: 4px solid;
+  background: var(--kc-surface);
+  box-shadow: var(--kc-shadow-sm);
+  color: var(--kc-text);
+}
+
+.kc-warning-banner--info {
+  border-left-color: var(--kc-accent);
+}
+.kc-warning-banner--warning {
+  border-left-color: var(--kc-warning);
+}
+.kc-warning-banner--danger {
+  border-left-color: var(--kc-danger);
+}
+
+.kc-warning-banner__title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.kc-warning-banner__body {
+  margin: 0;
+}
+
+.kc-diary-card {
+  padding: 16px;
+  border-radius: var(--kc-radius);
+  background: var(--kc-surface);
+  box-shadow: var(--kc-shadow);
+  color: var(--kc-text);
+}
+
+.kc-diary-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.kc-diary-card__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.kc-diary-card__time {
+  color: var(--kc-text-muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.kc-diary-card__body {
+  margin-top: 8px;
+}
+
+.kc-diary-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.kc-diary-card__source {
+  font-size: 12px;
+  color: var(--kc-text-muted);
+}
+
+.kc-diary-card__source--ai {
+  color: var(--kc-warning);
+  font-weight: 600;
+}
+
+/* Крупные тач-цели в интерфейсе родителя (раздел 8.2 ТЗ) */
+.kc-diary-card__actions button,
+.kc-diary-card__actions a {
+  min-height: var(--kc-touch-target);
+  min-width: var(--kc-touch-target);
+}
+
+/* Видимый фокус обязателен для доступности (раздел 8.2 ТЗ) */
+:where(.kc-diary-card, .kc-warning-banner) :focus-visible,
+.kc-ratio-badge:focus-visible {
+  outline: 2px solid var(--kc-accent);
+  outline-offset: 2px;
+}

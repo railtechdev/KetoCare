@@ -223,3 +223,39 @@ class TestCsvImportEndpoint:
 
         found, total = await products_repo.search(session, q="масло")
         assert total == 1, "второй записи с тем же названием быть не должно"
+
+
+class TestProductNameUniqueness:
+    """Уникальность названия обеспечена индексом в БД, а не только проверкой в коде:
+    «прочитать, затем вставить» не защищает от двух одновременных импортов."""
+
+    async def test_database_rejects_duplicate_name_case_insensitively(
+        self, client, session, make_user, auth_headers
+    ):
+        from sqlalchemy.exc import IntegrityError
+
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+
+        created = await client.post(
+            "/api/v1/products", json=_product_payload(category.id), headers=auth_headers(admin)
+        )
+        assert created.status_code == 201
+
+        # В обход API — как это сделал бы конкурирующий импорт
+        session.add(
+            Product(
+                name_ru="  масло сливочное  ",
+                category_id=category.id,
+                kcal_100g=900,
+                fat_100g=99,
+                protein_100g=0,
+                carbs_100g=0,
+                fiber_100g=0,
+                source="Другой",
+                source_version="v2",
+                verified_at=date(2026, 1, 1),
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.flush()
