@@ -1,0 +1,101 @@
+"""Пароли, JWT и TOTP (раздел 5.2, 11 ТЗ).
+
+Пароли — argon2id. Access-токен 15 мин, refresh — 30 дней.
+Роль и user_id — в claims.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
+
+import jwt
+import pyotp
+from argon2 import PasswordHasher
+from argon2.exceptions import VerificationError, VerifyMismatchError
+
+from core.config import get_settings
+from core.models.enums import UserRole
+
+from .errors import ApiError, ErrorCode
+
+ACCESS_TOKEN_TTL = timedelta(minutes=15)
+REFRESH_TOKEN_TTL = timedelta(days=30)
+_ALGORITHM = "HS256"
+
+_hasher = PasswordHasher()
+
+TokenType = Literal["access", "refresh"]
+
+
+def hash_password(password: str) -> str:
+    return _hasher.hash(password)
+
+
+def verify_password(password_hash: str, password: str) -> bool:
+    try:
+        return _hasher.verify(password_hash, password)
+    except (VerifyMismatchError, VerificationError):
+        return False
+
+
+def needs_rehash(password_hash: str) -> bool:
+    return _hasher.check_needs_rehash(password_hash)
+
+
+def create_token(
+    *,
+    user_id: uuid.UUID,
+    role: UserRole,
+    token_type: TokenType,
+    patient_scope: uuid.UUID | None = None,
+) -> str:
+    """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ)."""
+
+    now = datetime.now(UTC)
+    ttl = ACCESS_TOKEN_TTL if token_type == "access" else REFRESH_TOKEN_TTL
+    payload: dict[str, Any] = {
+        "sub": str(user_id),
+        "role": role.value,
+        "type": token_type,
+        "iat": int(now.timestamp()),
+        "exp": int((now + ttl).timestamp()),
+        "jti": uuid.uuid4().hex,
+    }
+    if patient_scope is not None:
+        payload["patient_scope"] = str(patient_scope)
+
+    return jwt.encode(payload, get_settings().secret_key, algorithm=_ALGORITHM)
+
+
+def decode_token(token: str, *, expected_type: TokenType) -> dict[str, Any]:
+    try:
+        payload: dict[str, Any] = jwt.decode(
+            token, get_settings().secret_key, algorithms=[_ALGORITHM]
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise ApiError(
+            ErrorCode.UNAUTHORIZED, "Срок действия сессии истёк, войдите заново."
+        ) from exc
+    except jwt.PyJWTError as exc:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+
+    if payload.get("type") != expected_type:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.")
+
+    return payload
+
+
+def generate_totp_secret() -> str:
+    return pyotp.random_base32()
+
+
+def verify_totp(secret: str, code: str) -> bool:
+    """valid_window=1 — допускает соседний 30-секундный интервал (рассинхрон часов)."""
+
+    return pyotp.TOTP(secret).verify(code, valid_window=1)
+
+
+def totp_provisioning_uri(secret: str, *, email: str) -> str:
+    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="KetoCare")

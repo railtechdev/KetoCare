@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# JWT подписывается HS256: ключ короче 32 байт слабее самого хеша (RFC 7518 §3.2).
+# Токен даёт доступ к клиническим данным ребёнка, поэтому длина проверяется на старте,
+# а не остаётся предупреждением в логах.
+SECRET_KEY_MIN_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -11,7 +19,7 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
 
-    secret_key: str
+    secret_key: Annotated[str, Field(min_length=SECRET_KEY_MIN_LENGTH)]
     bot_token: str = ""
     bot_api_token: str = ""
 

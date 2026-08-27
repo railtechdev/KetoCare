@@ -10,25 +10,40 @@ KetoCare — платформа сопровождения кетогенной 
 
 ## Текущее состояние
 
-Репозиторий содержит **только документацию** — кода, Makefile, монорепо-каркаса ещё нет. Первая задача по ТЗ (раздел 15, этап 1.1) — каркас монорепо, Makefile, `docker-compose.dev`, CI-скелет. Всё описанное ниже — целевое состояние из ТЗ, а не то, что уже существует; перед использованием команды проверяй, что она уже реализована.
+Идёт **этап 1 «Фундамент»** (раздел 15 ТЗ). Реализовано и покрыто тестами:
+
+- `packages/keto_engine` — verify/solve/scale, 35 provisional-эталонов, property-тесты, покрытие 100%.
+- `packages/core` — все 31 таблица раздела 4.2, Alembic-миграции с сидом справочников, репозитории (`access`, `prescriptions`, `products`, `patients`, `users`, `audit`).
+- `apps/api` — JWT + TOTP, RBAC-зависимости, `/auth`, `/patients`, `/prescriptions`, `/products`, `/calc`.
+- `packages/api-client` — генерируется из OpenAPI (`make openapi`).
+- `Makefile`, `infra/docker-compose.dev.yml`, `.github/workflows/ci.yml`.
+
+Не начато (следующее по разделу 15): CSV-импорт продуктов и приглашения (`/auth/invitations`) — остаток этапа 1; далее этап 2 (`packages/ui`, `apps/web`). `apps/bot` и `apps/worker` — только каркас, без логики: они относятся к этапам 3–4, не наполнять их «заодно» (правило 10 ниже).
 
 ## Команды
 
 Единая точка входа — Makefile в корне. Использовать именно эти команды, а не вызывать инструменты напрямую:
 
 ```
-make dev          # docker compose dev: postgres, redis + hot-reload процессы
+make dev          # docker compose dev: postgres, redis, затем миграции
 make test         # pytest + vitest
 make test-engine  # только эталонные тесты keto_engine (обязательный отдельный job в CI)
-make lint         # ruff check + ruff format --check + mypy + eslint + prettier --check + tsc --noEmit
+make coverage-engine  # покрытие keto_engine с порогом 100%
+make lint         # ruff check + ruff format --check + mypy + prettier --check + tsc --noEmit
 make fix          # автоисправление форматирования
 make migrate      # alembic upgrade head
 make makemigration m="описание"   # alembic revision --autogenerate
 make openapi      # выгрузка openapi.json + регенерация packages/api-client
-make e2e          # playwright (требует запущенный make dev)
+make e2e          # playwright — появляется на этапе 5 ТЗ, сейчас заглушка
 ```
 
 Один эталонный кейс движка: `uv run pytest packages/keto_engine -k <имя_кейса>`; один тест API: `uv run pytest apps/api -k <имя>`; один vitest: `pnpm --filter <workspace> test -t "<имя>"`.
+
+Интеграционные тесты (`packages/core/tests`, `apps/api/tests`) требуют поднятый postgres: сначала `make dev`. Каждый тест идёт во внешней транзакции с откатом, поэтому БД между тестами чистая. Если порты заняты — `POSTGRES_PORT=5434 REDIS_PORT=6381 make dev` и те же порты в `.env`.
+
+Локальный запуск API: `uv run uvicorn api.main:app --reload --app-dir apps/api/src`, Swagger — `/api/v1/docs`.
+
+`eslint` в `make lint` появится вместе с `apps/web` на этапе 2; сейчас JS-часть проверяется prettier + tsc.
 
 Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `packages/keto_engine`, `packages/core`). JS-часть — **pnpm workspaces** (`apps/web`, `apps/miniapp`, `packages/ui`, `packages/api-client`).
 
