@@ -139,3 +139,44 @@ class UserRead(BaseModel):
     phone: str | None
     is_active: bool
     created_at: datetime
+
+
+# --- invitations ----------------------------------------------------------
+
+
+class InvitationCreate(BaseModel):
+    email: EmailStr
+    role: UserRole
+
+
+class InvitationCreated(BaseModel):
+    """`token` возвращается один раз — в БД лежит только его хеш."""
+
+    id: uuid.UUID
+    email: str
+    role: UserRole
+    token: str
+    expires_at: datetime
+
+
+class InvitationAccept(BaseModel):
+    token: str
+    full_name: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=12, max_length=128)
+    phone: str | None = None
+
+
+# --- product import -------------------------------------------------------
+
+
+class ImportRowError(BaseModel):
+    line: int
+    column: str | None
+    message: str
+
+
+class ProductImportReport(BaseModel):
+    total_rows: int
+    imported: int
+    errors: list[ImportRowError]
+    dry_run: bool

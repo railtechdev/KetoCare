@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, File, Path, Query, UploadFile
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
@@ -16,7 +16,15 @@ from core.repositories import products as products_repo
 
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
-from ..schemas import Page, ProductCreate, ProductRead, ProductUpdate
+from ..schemas import (
+    ImportRowError,
+    Page,
+    ProductCreate,
+    ProductImportReport,
+    ProductRead,
+    ProductUpdate,
+)
+from ..services.product_import import parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -101,3 +109,61 @@ async def update_product(
         after=ProductRead.model_validate(updated).model_dump(mode="json"),
     )
     return ProductRead.model_validate(updated)
+
+
+# 5 МБ: база продуктов — тысячи строк, а не десятки тысяч; ограничение защищает
+# воркер от разбора произвольно большого файла в памяти.
+MAX_IMPORT_BYTES = 5 * 1024 * 1024
+
+
+@router.post(
+    "/import",
+    response_model=ProductImportReport,
+    summary="Импорт продуктов из CSV (с превью)",
+    dependencies=[Depends(require_roles(UserRole.ADMIN))],
+)
+async def import_products(
+    user: CurrentUserDep,
+    session: SessionDep,
+    file: Annotated[UploadFile, File()],
+    dry_run: bool = True,
+) -> ProductImportReport:
+    """`dry_run=true` (по умолчанию) — только превью и построчный отчёт об ошибках.
+
+    Запись выполняется единой транзакцией: файл с ошибками не импортируется частично.
+    """
+
+    content = await file.read()
+    if len(content) > MAX_IMPORT_BYTES:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Файл больше {MAX_IMPORT_BYTES // (1024 * 1024)} МБ.",
+        )
+
+    report = parse_csv(content)
+    errors = [
+        ImportRowError(line=e.line, column=e.column, message=e.message) for e in report.errors
+    ]
+
+    if dry_run or not report.ok:
+        return ProductImportReport(
+            total_rows=report.total_rows, imported=0, errors=errors, dry_run=True
+        )
+
+    imported = 0
+    for row in report.valid_rows:
+        category = await products_repo.get_or_create_category(session, name_ru=row.pop("category"))
+        await products_repo.create(session, changed_by=user.id, category_id=category.id, **row)
+        imported += 1
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="import",
+        entity="products",
+        after={"imported": imported, "filename": file.filename},
+    )
+
+    return ProductImportReport(
+        total_rows=report.total_rows, imported=imported, errors=[], dry_run=False
+    )

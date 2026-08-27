@@ -19,7 +19,7 @@ async def _make_user(session, role: UserRole, email: str | None = None):
         session,
         role=role,
         full_name=f"Тест {role.value}",
-        email=email or f"{role.value}-{uuid.uuid4().hex[:8]}@example.test",
+        email=email or f"{role.value}-{uuid.uuid4().hex[:8]}@example.com",
         password_hash="argon2-placeholder",
     )
 

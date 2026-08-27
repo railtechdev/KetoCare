@@ -75,7 +75,7 @@ def make_user(session: AsyncSession):
             session,
             role=role,
             full_name=f"Тест {role.value}",
-            email=f"{role.value}-{uuid.uuid4().hex[:10]}@example.test",
+            email=f"{role.value}-{uuid.uuid4().hex[:10]}@example.com",
             password_hash=hash_password(TEST_PASSWORD),
         )
         user.totp_secret = totp_secret

@@ -5,19 +5,29 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import invitations as invitations_repo
 from core.repositories import users as users_repo
 
-from ..deps.auth import CurrentUserDep, SessionDep
+from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
-from ..schemas import LoginRequest, TokenPair, TotpSetupResponse
+from ..schemas import (
+    InvitationAccept,
+    InvitationCreate,
+    InvitationCreated,
+    LoginRequest,
+    TokenPair,
+    TotpSetupResponse,
+    UserRead,
+)
 from ..security import (
     create_token,
     decode_token,
     generate_totp_secret,
+    hash_password,
     totp_provisioning_uri,
     verify_password,
     verify_totp,
@@ -114,3 +124,77 @@ async def totp_setup(user: CurrentUserDep, session: SessionDep) -> TotpSetupResp
     return TotpSetupResponse(
         secret=secret, provisioning_uri=totp_provisioning_uri(secret, email=db_user.email)
     )
+
+
+@router.post(
+    "/invitations",
+    response_model=InvitationCreated,
+    status_code=201,
+    summary="Пригласить пользователя",
+    dependencies=[Depends(require_roles(UserRole.ADMIN))],
+)
+async def create_invitation(
+    payload: InvitationCreate, user: CurrentUserDep, session: SessionDep
+) -> InvitationCreated:
+    existing = await users_repo.get_by_email(session, payload.email)
+    if existing is not None:
+        raise ApiError(ErrorCode.CONFLICT, "Пользователь с таким email уже существует.")
+
+    token = invitations_repo.generate_token()
+    invitation = await invitations_repo.create(
+        session, email=payload.email, role=payload.role, token=token
+    )
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="invite",
+        entity="invitations",
+        entity_id=invitation.id,
+        after={"email": payload.email, "role": payload.role.value},
+    )
+
+    return InvitationCreated(
+        id=invitation.id,
+        email=invitation.email,
+        role=invitation.role,
+        token=token,
+        expires_at=invitation.expires_at,
+    )
+
+
+@router.post(
+    "/invitations/accept",
+    response_model=UserRead,
+    status_code=201,
+    summary="Принять приглашение и создать учётную запись",
+)
+async def accept_invitation(payload: InvitationAccept, session: SessionDep) -> UserRead:
+    invitation = await invitations_repo.get_valid_by_token(session, payload.token)
+    if invitation is None:
+        # Не разделяем "нет такого токена" / "истёк" / "уже принят" — иначе токены
+        # можно перебирать, определяя, какие из них существуют.
+        raise ApiError(ErrorCode.NOT_FOUND, "Приглашение недействительно или истекло.")
+
+    if await users_repo.get_by_email(session, invitation.email) is not None:
+        raise ApiError(ErrorCode.CONFLICT, "Пользователь с таким email уже существует.")
+
+    user = await users_repo.create(
+        session,
+        role=invitation.role,
+        full_name=payload.full_name,
+        email=invitation.email,
+        password_hash=hash_password(payload.password),
+        phone=payload.phone,
+    )
+    await invitations_repo.mark_accepted(session, invitation=invitation)
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="accept_invitation",
+        entity="users",
+        entity_id=user.id,
+        after={"email": user.email, "role": user.role.value},
+    )
+    return UserRead.model_validate(user)

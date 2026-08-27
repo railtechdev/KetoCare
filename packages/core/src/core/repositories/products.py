@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Product, ProductRevision
+from ..models import Product, ProductCategory, ProductRevision
 
 _SNAPSHOT_FIELDS = (
     "name_ru",
@@ -120,3 +120,18 @@ async def list_revisions(session: AsyncSession, *, product_id: uuid.UUID) -> lis
         .order_by(ProductRevision.changed_at.desc())
     )
     return list(await session.scalars(stmt))
+
+
+async def get_or_create_category(session: AsyncSession, *, name_ru: str) -> ProductCategory:
+    """Категория из CSV задаётся именем: справочник небольшой и ведётся админом."""
+
+    existing = await session.scalar(
+        select(ProductCategory).where(ProductCategory.name_ru == name_ru)
+    )
+    if existing is not None:
+        return existing
+
+    category = ProductCategory(name_ru=name_ru, sort=0)
+    session.add(category)
+    await session.flush()
+    return category
