@@ -28,12 +28,20 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def create(session: AsyncSession, *, email: str, role: UserRole, token: str) -> Invitation:
+async def create(
+    session: AsyncSession,
+    *,
+    email: str,
+    role: UserRole,
+    token: str,
+    created_by: uuid.UUID | None = None,
+) -> Invitation:
     invitation = Invitation(
         email=email,
         role=role,
         token_hash=hash_token(token),
         expires_at=datetime.now(UTC) + INVITATION_TTL,
+        created_by=created_by,
     )
     session.add(invitation)
     await session.flush()

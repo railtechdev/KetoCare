@@ -23,6 +23,7 @@ from .routers import (
     prescriptions,
     products,
     recipes,
+    staff,
 )
 
 API_PREFIX = "/api/v1"
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     v1.include_router(recipes.router)
     v1.include_router(clinical.router)
     v1.include_router(dictionaries.router)
+    v1.include_router(staff.router)
     v1.include_router(admin.router)
     app.include_router(v1)
 

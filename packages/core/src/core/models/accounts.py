@@ -78,6 +78,13 @@ class Invitation(Base, UUIDPkMixin, CreatedAtMixin):
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
     accepted_at: Mapped[datetime | None]
+    # Кто пригласил. Раздел 4.2 задаёт `invited_by` у пользователя, но заполнить
+    # его при принятии приглашения было нечем: сама заявка автора не хранила.
+    # А для семьи это не просто след — пригласивший специалист становится ведущим
+    # для её ребёнка (ADR-0003).
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
 
 class TelegramAccount(Base, UUIDPkMixin):

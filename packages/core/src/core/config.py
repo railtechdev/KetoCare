@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Путь до .env считается от этого файла, а не от текущего каталога. Относительный
+# ".env" работал только при запуске из корня: `make migrate` и `make makemigration`
+# делают `cd packages/core`, и alembic падал на «database_url: Field required» —
+# то есть схему БД нельзя было изменить документированной командой.
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # JWT подписывается HS256: ключ короче 32 байт слабее самого хеша (RFC 7518 §3.2).
 # Токен даёт доступ к клиническим данным ребёнка, поэтому длина проверяется на старте,
@@ -15,7 +22,9 @@ SECRET_KEY_MIN_LENGTH = 32
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Два пути: сначала корень репозитория (разработка), затем ".env" рядом с
+    # рабочим каталогом (контейнер, где файл монтируется в WORKDIR).
+    model_config = SettingsConfigDict(env_file=(_REPO_ROOT / ".env", ".env"), extra="ignore")
 
     database_url: str
     redis_url: str

@@ -59,10 +59,56 @@ async def link_parent(
 async def link_doctor(
     session: AsyncSession, *, doctor_id: uuid.UUID, patient_id: uuid.UUID
 ) -> DoctorPatient:
+    """Идемпотентна: повторная привязка возвращает существующую связь.
+
+    Уникальный индекс по паре не даёт создать дубль, но падать на повторе нечем:
+    «врач уже ведёт этого пациента» — это состояние, которого добивался вызов, а
+    не конфликт.
+    """
+
+    existing = await session.scalar(
+        select(DoctorPatient).where(
+            DoctorPatient.doctor_id == doctor_id,
+            DoctorPatient.patient_id == patient_id,
+        )
+    )
+    if existing is not None:
+        return existing
+
     link = DoctorPatient(doctor_id=doctor_id, patient_id=patient_id)
     session.add(link)
     await session.flush()
     return link
+
+
+async def unlink_doctor(
+    session: AsyncSession, *, doctor_id: uuid.UUID, patient_id: uuid.UUID
+) -> bool:
+    """Снимает ведение. Клинические данные не затрагиваются — только доступ.
+
+    Возвращает False, если такой связи не было: вызывающая сторона отличает
+    «нечего снимать» от «сняли».
+    """
+
+    link = await session.scalar(
+        select(DoctorPatient).where(
+            DoctorPatient.doctor_id == doctor_id,
+            DoctorPatient.patient_id == patient_id,
+        )
+    )
+    if link is None:
+        return False
+
+    await session.delete(link)
+    await session.flush()
+    return True
+
+
+async def list_doctor_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> list[uuid.UUID]:
+    """Идентификаторы специалистов, ведущих пациента."""
+
+    stmt = select(DoctorPatient.doctor_id).where(DoctorPatient.patient_id == patient_id)
+    return list(await session.scalars(stmt))
 
 
 async def list_for_ids(

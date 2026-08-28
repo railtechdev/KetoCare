@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import func, select
@@ -53,6 +54,19 @@ async def list_all(
     items = list(await session.scalars(stmt))
     total = await session.scalar(select(func.count()).select_from(User))
     return items, int(total or 0)
+
+
+async def list_active_by_roles(session: AsyncSession, *, roles: Sequence[UserRole]) -> list[User]:
+    """Активные учётные записи указанных ролей, по алфавиту.
+
+    Нужна справочником персонала: чтобы передать пациента коллеге, врач должен
+    коллегу выбрать. Клинических данных здесь нет — имя, роль, идентификатор.
+    """
+
+    stmt = (
+        select(User).where(User.role.in_(roles), User.is_active.is_(True)).order_by(User.full_name)
+    )
+    return list(await session.scalars(stmt))
 
 
 async def update(session: AsyncSession, *, user: User, **fields: Any) -> User:

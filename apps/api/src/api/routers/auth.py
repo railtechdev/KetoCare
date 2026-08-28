@@ -259,23 +259,40 @@ async def totp_verify(
     return tokens
 
 
+# Кто кого приглашает (ADR-0003): администратор заводит персонал, врач и диетолог —
+# семьи. Разделение не косметическое: специалист, пригласивший родителя, становится
+# ведущим для его ребёнка (см. routers/patients.py), поэтому приглашение семьи от
+# администратора оставило бы пациента без врача, а «взять» пациента врач не может —
+# такой ручки нет намеренно.
+INVITER_ROLES = (UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIETITIAN)
+STAFF_ROLES = (UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIETITIAN)
+
+
 @router.post(
     "/invitations",
     response_model=InvitationCreated,
     status_code=201,
     summary="Пригласить пользователя",
-    dependencies=[Depends(require_roles(UserRole.ADMIN))],
+    dependencies=[Depends(require_roles(*INVITER_ROLES))],
 )
 async def create_invitation(
     payload: InvitationCreate, user: CurrentUserDep, session: SessionDep
 ) -> InvitationCreated:
+    if user.role is UserRole.ADMIN and payload.role is UserRole.PARENT:
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Семью приглашает её врач или диетолог: он же становится ведущим специалистом.",
+        )
+    if user.role is not UserRole.ADMIN and payload.role in STAFF_ROLES:
+        raise ApiError(ErrorCode.FORBIDDEN, "Сотрудников приглашает администратор.")
+
     existing = await users_repo.get_by_email(session, payload.email)
     if existing is not None:
         raise ApiError(ErrorCode.CONFLICT, "Пользователь с таким email уже существует.")
 
     token = invitations_repo.generate_token()
     invitation = await invitations_repo.create(
-        session, email=payload.email, role=payload.role, token=token
+        session, email=payload.email, role=payload.role, token=token, created_by=user.id
     )
 
     await audit_repo.write_audit_log(
@@ -324,6 +341,9 @@ async def accept_invitation(
         email=invitation.email,
         password_hash=await hash_password_async(payload.password),
         phone=payload.phone,
+        # След от приглашения к учётной записи. Для семьи он определяет ведущего
+        # специалиста её ребёнка (ADR-0003), поэтому теряться не должен.
+        invited_by=invitation.created_by,
     )
 
     await audit_repo.write_audit_log(

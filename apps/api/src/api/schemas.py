@@ -80,6 +80,24 @@ class PatientCreate(BaseModel):
     notes: str | None = None
 
 
+class PatientUpdate(BaseModel):
+    """Правка профиля ребёнка.
+
+    Дата рождения и пол не меняются: это не «данные, которые уточняют», а
+    идентичность записи, и их правка тихо переписала бы возраст во всех уже
+    сделанных расчётах и отчётах. Ошибка в них — повод завести профиль заново
+    (раздел 5.3 ТЗ прямых указаний не даёт, решение зафиксировано здесь).
+
+    Рост и аллергии меняются обязательно: ребёнок растёт, а аллергии уточняются
+    по ходу терапии — и то и другое влияет на назначение и на состав меню.
+    """
+
+    full_name: str = Field(min_length=1, max_length=255)
+    height_cm: float | None = Field(default=None, gt=0, le=250)
+    allergies: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+
 class PatientRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -185,6 +203,24 @@ class UserRead(BaseModel):
     phone: str | None
     is_active: bool
     created_at: datetime
+
+
+class ColleagueRead(BaseModel):
+    """Специалист в справочнике персонала.
+
+    Без почты и телефона: чтобы передать пациента коллеге, достаточно имени и
+    роли, а контакты сотрудников — не то, что нужно раздавать по всей клинике.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    role: UserRole
+    full_name: str
+
+
+class PatientDoctorAdd(BaseModel):
+    doctor_id: uuid.UUID
 
 
 # --- invitations ----------------------------------------------------------
