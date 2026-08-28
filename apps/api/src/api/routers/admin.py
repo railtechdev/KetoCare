@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from core.models import KetoneMethodDict, SeizureType
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
-from core.repositories import dictionaries as dictionaries_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
@@ -109,21 +108,10 @@ async def list_audit_log(
 # Раздел 4.2 ТЗ: `seizure_types` и `ketone_methods` "наполняются миграцией-сидом;
 # правятся админом". Ручки разведены по путям, а не по параметру `{dictionary}`:
 # так они попадают в OpenAPI и в сгенерированный клиент под собственными именами.
-
-
-@router.get(
-    "/dictionaries/seizure-types",
-    response_model=Page[DictionaryEntryRead],
-    summary="Типы приступов",
-)
-async def list_seizure_types(
-    session: SessionDep,
-    page: PaginationDep,
-) -> Page[DictionaryEntryRead]:
-    items, total = await dictionaries_repo.list_entries(
-        session, SeizureType, limit=page.limit, offset=page.offset
-    )
-    return Page(items=[DictionaryEntryRead.model_validate(e) for e in items], total=total)
+#
+# Здесь только правка. Чтение — в `routers/dictionaries.py` и доступно всем
+# аутентифицированным: без списка типов приступов семья не может записать
+# приступ. Второй копии выборки не заводим — админка читает ту же ручку.
 
 
 @router.post(
@@ -180,21 +168,6 @@ async def delete_seizure_type(
         session, SeizureType, entry_id=entry_id, actor=user, ip=client_address(request)
     )
     return Response(status_code=204)
-
-
-@router.get(
-    "/dictionaries/ketone-methods",
-    response_model=Page[DictionaryEntryRead],
-    summary="Методы измерения кетонов",
-)
-async def list_ketone_methods(
-    session: SessionDep,
-    page: PaginationDep,
-) -> Page[DictionaryEntryRead]:
-    items, total = await dictionaries_repo.list_entries(
-        session, KetoneMethodDict, limit=page.limit, offset=page.offset
-    )
-    return Page(items=[DictionaryEntryRead.model_validate(e) for e in items], total=total)
 
 
 @router.post(

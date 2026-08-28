@@ -1,8 +1,9 @@
 import * as Tabs from "@radix-ui/react-tabs";
-import { WarningBanner } from "@ketocare/ui";
+import { WarningBanner, cn } from "@ketocare/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { FIELD_CONTROL } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { useCurrentPatientId } from "../patients/usePatients";
@@ -209,8 +210,8 @@ function TargetsFields({
 }) {
   const { t } = useTranslation("calculator");
 
-  const field =
-    "min-h-touch w-full rounded-lg border border-line bg-surface px-3 py-2 tabular-nums";
+  // tabular-nums: цифры в полях цели не должны прыгать при вводе.
+  const field = cn(FIELD_CONTROL, "tabular-nums");
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">

@@ -29,6 +29,10 @@ USERS_URL = "/api/v1/admin/users"
 AUDIT_URL = "/api/v1/admin/audit-log"
 SEIZURE_TYPES_URL = "/api/v1/admin/dictionaries/seizure-types"
 KETONE_METHODS_URL = "/api/v1/admin/dictionaries/ketone-methods"
+# Чтение справочников вынесено из `/admin`: список типов приступов нужен семье,
+# чтобы вообще записать приступ (см. routers/dictionaries.py).
+READ_SEIZURE_TYPES_URL = "/api/v1/dictionaries/seizure-types"
+READ_KETONE_METHODS_URL = "/api/v1/dictionaries/ketone-methods"
 
 NON_ADMIN_ROLES = [UserRole.DOCTOR, UserRole.DIETITIAN, UserRole.PARENT]
 
@@ -56,13 +60,13 @@ async def _audit_entries(session: AsyncSession, *, entity: str) -> list[AuditLog
 
 
 class TestAccessControl:
-    @pytest.mark.parametrize("url", [USERS_URL, AUDIT_URL, SEIZURE_TYPES_URL, KETONE_METHODS_URL])
+    @pytest.mark.parametrize("url", [USERS_URL, AUDIT_URL])
     async def test_requires_authentication(self, client, url):
         response = await client.get(url)
         assert response.status_code == 401
 
     @pytest.mark.parametrize("role", NON_ADMIN_ROLES)
-    @pytest.mark.parametrize("url", [USERS_URL, AUDIT_URL, SEIZURE_TYPES_URL, KETONE_METHODS_URL])
+    @pytest.mark.parametrize("url", [USERS_URL, AUDIT_URL])
     async def test_only_admin_reads(self, client, session, make_user, auth_headers, role, url):
         user = await make_user(role)
         response = await client.get(url, headers=auth_headers(user))
@@ -385,12 +389,30 @@ class TestDictionaries:
     async def test_lists_seeded_values(self, client, session, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)
 
-        seizures = await client.get(f"{SEIZURE_TYPES_URL}?limit=200", headers=auth_headers(admin))
+        seizures = await client.get(
+            f"{READ_SEIZURE_TYPES_URL}?limit=200", headers=auth_headers(admin)
+        )
         assert seizures.status_code == 200, seizures.text
         assert seizures.json()["total"] >= 1
 
-        ketones = await client.get(KETONE_METHODS_URL, headers=auth_headers(admin))
+        ketones = await client.get(READ_KETONE_METHODS_URL, headers=auth_headers(admin))
         assert {item["name_ru"] for item in ketones.json()["items"]} >= {"Кровь", "Моча"}
+
+    @pytest.mark.parametrize("url", [READ_SEIZURE_TYPES_URL, READ_KETONE_METHODS_URL])
+    async def test_reading_requires_authentication(self, client, url):
+        assert (await client.get(url)).status_code == 401
+
+    @pytest.mark.parametrize("role", NON_ADMIN_ROLES)
+    @pytest.mark.parametrize("url", [READ_SEIZURE_TYPES_URL, READ_KETONE_METHODS_URL])
+    async def test_every_role_reads_dictionaries(
+        self, client, session, make_user, auth_headers, role, url
+    ):
+        # Без списка типов приступов семья не может сохранить запись о приступе
+        # (раздел 7.3 ТЗ), а врач видит в дневнике идентификатор вместо названия.
+        # Правка при этом остаётся за админом — проверяется test_only_admin_writes.
+        user = await make_user(role)
+        response = await client.get(url, headers=auth_headers(user))
+        assert response.status_code == 200, response.text
 
     async def test_create_update_delete_cycle(self, client, session, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)

@@ -1,0 +1,116 @@
+{
+  "title": "Дневники",
+  "noPatient": "Дневники доступны, когда выбран ребёнок.",
+  "tabsLabel": "Виды записей",
+  "tabs": {
+    "seizures": "Приступы",
+    "ketones": "Кетоны",
+    "weight": "Вес",
+    "medications": "Лекарства",
+    "meals": "Еда",
+    "side-effects": "Самочувствие"
+  },
+  "period": {
+    "legend": "Период",
+    "week": "Неделя",
+    "month": "Месяц",
+    "custom": "Произвольный",
+    "from": "С даты",
+    "to": "По дату",
+    "invalid": "Укажите обе даты: начало периода не может быть позже конца."
+  },
+  "chart": {
+    "ketonesCaption": "Кетоны за выбранный период",
+    "weightCaption": "Вес за выбранный период",
+    "unitKetones": "ммоль/л",
+    "unitWeight": "кг",
+    "empty": "За выбранный период измерений нет.",
+    "markersUnavailable": "Маркеры смены назначения не загрузились: на графике их нет.",
+    "marker": "№{{version}}"
+  },
+  "form": {
+    "addTitle": "Новая запись",
+    "editTitle": "Изменение записи",
+    "add": "Добавить",
+    "save": "Сохранить",
+    "saving": "Сохраняем…",
+    "cancel": "Отмена",
+    "next": "Далее",
+    "back": "Назад",
+    "step": "Шаг {{current}} из {{total}}",
+    "occurredAt": "Дата и время",
+    "occurredAtInvalid": "Укажите дату и время события.",
+    "saved": "Запись сохранена"
+  },
+  "list": {
+    "loading": "Загружаем записи…",
+    "empty": "За выбранный период записей нет.",
+    "truncated": "Показаны последние {{shown}} записей из {{total}}. Сузьте период, чтобы увидеть остальные.",
+    "edit": "Изменить",
+    "editAria": "Изменить запись «{{title}}»",
+    "delete": "Удалить",
+    "deleteAria": "Удалить запись «{{title}}»",
+    "deleting": "Удаляем…",
+    "confirmDelete": "Удалить запись?",
+    "confirmYes": "Да, удалить",
+    "confirmNo": "Отмена"
+  },
+  "seizures": {
+    "type": "Тип приступа",
+    "typePlaceholder": "Выберите тип",
+    "typeRequired": "Выберите тип приступа.",
+    "typesUnavailable": {
+      "title": "Добавить приступ пока нельзя",
+      "body": "Справочник типов приступов ещё не открыт семье, а без типа запись сохранить нельзя. Уже сохранённые записи можно изменить или удалить."
+    },
+    "duration": "Длительность, секунды",
+    "durationInvalid": "Длительность — целое число секунд.",
+    "count": "Число приступов",
+    "countInvalid": "Число приступов — целое, не меньше 1.",
+    "description": "Описание",
+    "triggers": "Возможные причины",
+    "unknownType": "Приступ",
+    "durationValue": "Длительность: {{value}} с",
+    "countValue": "Приступов: {{value}}",
+    "triggersValue": "Возможные причины: {{value}}"
+  },
+  "ketones": {
+    "value": "Кетоны, ммоль/л",
+    "valueInvalid": "Значение от {{min}} до {{max}} ммоль/л.",
+    "method": "Метод измерения",
+    "methodBlood": "Кровь",
+    "methodUrine": "Моча",
+    "cardTitle": "{{value}} ммоль/л"
+  },
+  "weight": {
+    "value": "Вес, кг",
+    "valueInvalid": "Вес от {{min}} до {{max}} кг.",
+    "height": "Рост, см",
+    "heightInvalid": "Рост — положительное число сантиметров.",
+    "cardTitle": "{{value}} кг",
+    "heightValue": "Рост: {{value}} см"
+  },
+  "medications": {
+    "drug": "Препарат",
+    "drugPlaceholder": "Выберите препарат",
+    "drugRequired": "Выберите препарат.",
+    "taken": "Принято",
+    "notTaken": "Пропущено",
+    "none": "Врач ещё не назначил препараты — отмечать пока нечего.",
+    "unknownDrug": "Препарат",
+    "option": "{{name}}, {{dose}}"
+  },
+  "meals": {
+    "freeText": "Что съел ребёнок",
+    "freeTextPlaceholder": "Например: омлет на сливочном масле, 120 г",
+    "freeTextRequired": "Опишите приём пищи.",
+    "cardTitle": "Приём пищи",
+    "fromMenu": "Из меню на день"
+  },
+  "sideEffects": {
+    "symptom": "Симптом",
+    "symptomPlaceholder": "Например: сонливость",
+    "symptomRequired": "Укажите симптом.",
+    "description": "Описание"
+  }
+}

@@ -25,12 +25,17 @@ from core.models.enums import Sex, UserRole
 from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
 
-DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    os.environ.get(
-        "DATABASE_URL", "postgresql+asyncpg://ketocare:ketocare@localhost:5432/ketocare"
-    ),
-)
+# Молчаливого запасного адреса здесь нет намеренно. Раньше им был
+# `localhost:5432`, и на машине, где этот порт занимает база другого проекта,
+# прогон выполнял бы DDL в чужой базе — от этого спасла только неподошедшая
+# пара логина и пароля. Адрес берётся из `.env` (см. conftest.py в корне) или
+# из окружения CI, и его отсутствие — это отказ, а не тихая подстановка.
+DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "Не задан адрес тестовой БД: заполните DATABASE_URL в .env "
+        "(см. .env.example) или задайте TEST_DATABASE_URL в окружении."
+    )
 
 TEST_PASSWORD = "correct horse battery staple"
 

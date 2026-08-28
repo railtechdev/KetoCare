@@ -1,16 +1,16 @@
 import { useParams } from "@tanstack/react-router";
 
-import { CalculatorPage } from "../features/calculator/CalculatorPage";
-import { ProductsPage } from "../features/products/ProductsPage";
+import { useSession } from "../features/auth/useSession";
 import { SectionPlaceholder } from "./SectionPlaceholder";
+import { SECTION_SCREENS } from "./sections";
 
 /** Компонент маршрута раздела: сопоставляет параметр пути с экраном. */
 export function SectionRoute() {
   const { section } = useParams({ from: "/app/$section" });
+  const { session } = useSession();
 
-  if (section === "calculator") return <CalculatorPage />;
-  if (section === "products") return <ProductsPage />;
+  const screen = SECTION_SCREENS[section];
+  if (screen) return screen(session?.role);
 
-  // Остальные разделы наполняются пп. 10-14 раздела 15 ТЗ
   return <SectionPlaceholder section={section} />;
 }

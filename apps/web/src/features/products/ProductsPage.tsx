@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { FormError } from "../../components/FormError";
 import { api, errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { FIELD_CONTROL } from "../../components/Field";
 
 interface ProductRow {
   id: string;
@@ -88,7 +89,7 @@ export function ProductsPage() {
           value={query}
           placeholder={t("search.placeholder")}
           onChange={(event) => setQuery(event.target.value)}
-          className="min-h-touch w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-ink"
+          className={FIELD_CONTROL}
         />
       </div>
 

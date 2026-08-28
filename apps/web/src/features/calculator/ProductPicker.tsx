@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useProductSearch, type ProductOption } from "./useProducts";
+import { FIELD_CONTROL } from "../../components/Field";
 
 interface Props {
   onPick: (product: ProductOption) => void;
@@ -47,7 +48,7 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={isOpen ? `${listId}-${activeIndex}` : undefined}
-        className="min-h-touch w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-ink"
+        className={FIELD_CONTROL}
         placeholder={t("searchPlaceholder")}
         value={query}
         onChange={(event) => {

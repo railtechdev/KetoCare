@@ -15,6 +15,7 @@ from .routers import (
     calc,
     clinical,
     custom_dishes,
+    dictionaries,
     logs,
     menus,
     overview,
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     v1.include_router(overview.router)
     v1.include_router(recipes.router)
     v1.include_router(clinical.router)
+    v1.include_router(dictionaries.router)
     v1.include_router(admin.router)
     app.include_router(v1)
 

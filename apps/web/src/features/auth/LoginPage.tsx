@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -17,7 +16,6 @@ export function LoginPage() {
   const { t } = useTranslation("auth");
   const { signIn } = useSession();
   const login = useLoginMutation();
-  const navigate = useNavigate();
 
   /** Токен первичной настройки 2FA, если сервер её потребовал. */
   const [setupToken, setSetupToken] = useState<string | null>(null);
@@ -45,11 +43,9 @@ export function LoginPage() {
         return;
       }
       if (data.tokens?.access_token) {
+        // Переход в кабинет делает guard маршрута: App перевычисляет его,
+        // как только в контексте появляется сессия.
         signIn(data.tokens.access_token);
-        // Роутер не перевычисляет beforeLoad сам при смене контекста, поэтому
-        // после входа переход задаётся явно — иначе пользователь остаётся на
-        // форме входа, уже будучи аутентифицированным.
-        void navigate({ to: "/app" });
       }
     } catch {
       // 2FA настроена и обязательна — показываем поле кода, не теряя ввод.
