@@ -15,11 +15,25 @@ description: Разработка UI в apps/web (SPA) и apps/miniapp — эк�
 ## UI
 
 - Компоненты — из `packages/ui`; новый общий компонент клади туда, не в apps/web.
-- Только токены темы (CSS-переменные), значения из ТЗ §11: фон #FAF7F2, поверхность #FFFFFF,
-  акцент #2E5E4E, текст #2B2B2B, danger #B4483E, warning #C98A2B, success #3E7C4F.
-  Радиус 12 px, шрифт Inter. Хардкод цветов в компонентах — ошибка ревью.
-- Обязательные готовые компоненты: RatioBadge, MacroBar, TrendChart (с маркерами
-  смены назначения), DiaryEntryCard, WarningBanner, DataTable.
+- Стилизация — Tailwind 4 (ТЗ §3). Тема задана в `packages/ui/src/styles/tokens.css`
+  блоком `@theme`: значения оттуда становятся и CSS-переменными, и утилитами
+  (`--color-accent` → `bg-accent`/`text-accent`). Палитра из ТЗ §8.2: фон #FAF7F2,
+  поверхность #FFFFFF, акцент #2E5E4E, текст #2B2B2B, danger #B4483E, warning #C98A2B,
+  success #3E7C4F; радиус 12 px, шрифт Inter.
+- Пользуйся утилитами темы (`bg-surface`, `text-ink`, `rounded-kc`), не литеральными
+  цветами: Mini App перекрашивает интерфейс, подставляя themeParams Telegram в те же
+  переменные. Хардкод цвета в компоненте — ошибка ревью.
+- Текст на цветной подложке бери из парного токена (`text-on-accent`, `text-on-warning`),
+  а не «белый по умолчанию»: на warning белый даёт контраст 2.9 при требуемых 4.5.
+  Контраст обеих тем проверяет `packages/ui/src/styles/contrast.test.ts`.
+- Обязательные общие компоненты (ТЗ §8.2): RatioBadge, MacroBar, WarningBanner,
+  DiaryEntryCard — готовы; TrendChart (с маркерами смены назначения) и DataTable
+  добавляются вместе с экранами, которые их используют (recharts и
+  @tanstack/react-table уже установлены).
+- `RatioBadge` принимает вердикт о допуске от сервера (`ratio_within_tolerance`),
+  а НЕ считает его сам: `RATIO_TOLERANCE` — медицинская константа ядра, её копия
+  в TypeScript со временем разойдётся, и интерфейс покажет «в норме» там, где ядро
+  считает иначе.
 - Родительский интерфейс: тач-цели ≥ 44px, ≤ 3 поля на экран формы.
 - Доступность: focus-visible, aria-метки, контраст ≥ 4.5:1.
 

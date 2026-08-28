@@ -59,6 +59,9 @@ asyncio_mode = "auto"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 testpaths = [
+    # Защитные хуки — код, который ломается молча: сбой в них не роняет сборку,
+    # а просто перестаёт блокировать. Поэтому они под тестом наравне с остальным.
+    ".claude/hooks/tests",
     "apps/api/tests",
     "apps/worker/tests",
     "packages/keto_engine/tests",
