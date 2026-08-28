@@ -486,3 +486,59 @@ class TestPatientProfileUpdate:
         )
         assert entry is not None
         assert entry.after["allergies"] == ["молоко"]
+
+
+class TestOwnProfile:
+    @pytest.mark.parametrize(
+        "role", [UserRole.PARENT, UserRole.DOCTOR, UserRole.DIETITIAN, UserRole.ADMIN]
+    )
+    async def test_every_role_reads_own_profile(self, client, make_user, auth_headers, role):
+        user = await make_user(role)
+
+        response = await client.get("/api/v1/users/me", headers=auth_headers(user))
+
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == str(user.id)
+        assert "password_hash" not in response.json()
+        assert "totp_secret" not in response.json()
+
+    async def test_requires_authentication(self, client):
+        assert (await client.get("/api/v1/users/me")).status_code == 401
+
+    async def test_updates_own_name_and_phone(self, client, make_user, auth_headers):
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.patch(
+            "/api/v1/users/me",
+            json={"full_name": "Дилноза Каримова", "phone": "+998901234567"},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["full_name"] == "Дилноза Каримова"
+        assert response.json()["phone"] == "+998901234567"
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"full_name": "Кто-то", "role": "admin"},
+            {"full_name": "Кто-то", "is_active": False},
+            {"full_name": "Кто-то", "email": "new@example.com"},
+        ],
+    )
+    async def test_cannot_change_role_activity_or_email(
+        self, client, make_user, auth_headers, body
+    ):
+        # Повысить себе права, выключить себя или сменить логин через свой
+        # профиль нельзя: схема отвергает лишние поля целиком.
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.patch("/api/v1/users/me", json=body, headers=auth_headers(user))
+        assert response.status_code == 422
+
+    async def test_empty_name_rejected(self, client, make_user, auth_headers):
+        user = await make_user(UserRole.PARENT)
+        response = await client.patch(
+            "/api/v1/users/me", json={"full_name": "   "}, headers=auth_headers(user)
+        )
+        assert response.status_code == 422

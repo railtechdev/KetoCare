@@ -1,66 +1,99 @@
-import { Outlet, useNavigate } from "@tanstack/react-router";
+import {
+  Button,
+  Separator,
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+  Toaster,
+  TooltipProvider,
+} from "@ketocare/ui";
+import { Outlet } from "@tanstack/react-router";
+import { Activity, Menu } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SectionLink } from "../components/SectionLink";
 import { SECTIONS_BY_ROLE } from "../features/auth/roles";
 import { useSession } from "../features/auth/useSession";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
+import { SidebarNav } from "./SidebarNav";
+import { UserMenu } from "./UserMenu";
 
 /**
  * Каркас кабинета. Один билд на три роли (раздел 8.1 ТЗ): недоступные разделы
  * не рендерятся, но это только UX — доступ проверяет сервер.
+ *
+ * На узком экране навигация уезжает в шторку: родитель заполняет дневник с
+ * телефона, и это основной сценарий, а не запасной.
  */
 export function AppLayout() {
   const { t } = useTranslation();
-  const { session, signOut } = useSession();
-  const navigate = useNavigate();
+  const { session } = useSession();
+  const [navOpen, setNavOpen] = useState(false);
 
   if (session === null) return null;
 
   const sections = SECTIONS_BY_ROLE[session.role];
 
   return (
-    <div className="min-h-screen">
-      <header className="flex items-center gap-4 border-b border-border bg-card px-6 py-3 shadow-kc-sm">
-        <span className="text-lg font-bold text-primary">{t("app.name")}</span>
-        <span className="rounded-full border border-border bg-background px-2.5 py-0.5 text-sm text-muted-foreground">
-          {t(`roles.${session.role}`)}
-        </span>
-        <div className="mr-auto">
-          {session.role === "parent" && <PatientSwitcher />}
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            void signOut().then(() => navigate({ to: "/login" }));
-          }}
-          className="min-h-touch rounded-lg border border-border px-4 text-foreground"
-        >
-          {t("nav.logout")}
-        </button>
-      </header>
+    <TooltipProvider>
+      <div className="min-h-screen bg-background">
+        <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-6 border-r border-sidebar-border bg-sidebar p-4 lg:flex">
+          <Brand />
+          <SidebarNav sections={sections} />
+        </aside>
 
-      <div className="grid items-start gap-6 p-6 md:grid-cols-[220px_1fr]">
-        <nav aria-label={t("app.name")}>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
-            {sections.map((section) => (
-              <li key={section}>
-                <SectionLink
-                  section={section}
-                  className="flex min-h-touch items-center rounded-lg px-3 text-foreground no-underline hover:bg-card"
-                  activeProps={{ className: "bg-card font-semibold" }}
+        <div className="lg:pl-64">
+          <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-card px-4 sm:px-6">
+            <Sheet open={navOpen} onOpenChange={setNavOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="lg:hidden"
+                  aria-label={t("nav.openMenu")}
                 >
-                  {t(`nav.${section}`)}
-                </SectionLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
+                  <Menu aria-hidden="true" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-4">
+                <SheetTitle className="sr-only">{t("app.name")}</SheetTitle>
+                <Brand />
+                <Separator className="my-4" />
+                <SidebarNav
+                  sections={sections}
+                  onNavigate={() => setNavOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
 
-        <main className="min-h-[60vh] rounded-xl bg-card p-6 shadow-kc-sm">
-          <Outlet />
-        </main>
+            <div className="mr-auto">
+              {session.role === "parent" && <PatientSwitcher />}
+            </div>
+
+            <UserMenu session={session} />
+          </header>
+
+          <main className="p-4 sm:p-6">
+            <Outlet />
+          </main>
+        </div>
+
+        <Toaster position="bottom-right" />
       </div>
+    </TooltipProvider>
+  );
+}
+
+function Brand() {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+        <Activity aria-hidden="true" className="size-5" />
+      </span>
+      <span className="text-lg font-bold text-foreground">{t("app.name")}</span>
     </div>
   );
 }

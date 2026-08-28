@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ROLES, SECTIONS_BY_ROLE } from "../features/auth/roles";
-import { PENDING_SECTIONS, SECTION_SCREENS } from "./sections";
+import { PENDING_SECTIONS, SECTION_ICONS, SECTION_SCREENS } from "./sections";
 
 const ALL_SECTIONS = [
   ...new Set(ROLES.flatMap((role) => SECTIONS_BY_ROLE[role])),
@@ -38,5 +38,14 @@ describe("разделы кабинета", () => {
       expect(SECTIONS_BY_ROLE[role][0]).toBeDefined();
       expect(SECTION_SCREENS).toHaveProperty(SECTIONS_BY_ROLE[role][0]!);
     }
+  });
+
+  it("у каждого раздела есть значок", () => {
+    // Раздел без значка оставляет дырку в навигации — заметно только глазами,
+    // поэтому проверяется здесь.
+    const missing = ALL_SECTIONS.filter(
+      (section) => !(section in SECTION_ICONS),
+    );
+    expect(missing).toEqual([]);
   });
 });

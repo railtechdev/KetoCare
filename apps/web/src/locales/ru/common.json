@@ -27,7 +27,10 @@
     "audit": "Аудит",
     "logout": "Выйти",
     "patient": "Ребёнок",
-    "patientPlaceholder": "Выберите ребёнка"
+    "patientPlaceholder": "Выберите ребёнка",
+    "openMenu": "Открыть меню",
+    "account": "Учётная запись",
+    "profile": "Мой профиль"
   },
   "errors": {
     "unexpected": "Что-то пошло не так. Попробуйте ещё раз.",

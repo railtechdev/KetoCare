@@ -11,6 +11,7 @@ import homeRu from "../locales/ru/home.json";
 import invitationsRu from "../locales/ru/invitations.json";
 import menuRu from "../locales/ru/menu.json";
 import productsRu from "../locales/ru/products.json";
+import profileRu from "../locales/ru/profile.json";
 import recipesRu from "../locales/ru/recipes.json";
 import settingsRu from "../locales/ru/settings.json";
 
@@ -34,6 +35,7 @@ export const resources = {
     invitations: invitationsRu,
     menu: menuRu,
     products: productsRu,
+    profile: profileRu,
     recipes: recipesRu,
     settings: settingsRu,
   },

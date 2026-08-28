@@ -156,6 +156,9 @@ export {
 } from "./components/ui/sheet";
 export { Skeleton } from "./components/ui/skeleton";
 export { Toaster } from "./components/ui/sonner";
+/* Всплывающие сообщения вызываются через toast() — приложениям не нужно знать,
+   что под ним sonner. */
+export { toast } from "sonner";
 export {
   Table,
   TableBody,

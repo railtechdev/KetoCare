@@ -4,11 +4,31 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 from core.models.enums import Sex, UserRole
+
+
+def _required(max_length: int) -> Any:
+    """Непустая строка с обрезкой пробелов по краям.
+
+    `Field(min_length=1)` пропускает строку из одних пробелов: длина у неё не
+    нулевая. Так в базу попадало имя из пробелов — пустая строка вместо ребёнка
+    в списке пациентов. Обрезка выполняется до проверки длины, поэтому «   »
+    отвергается, а «  Аня  » сохраняется как «Аня».
+    """
+
+    return StringConstraints(strip_whitespace=True, min_length=1, max_length=max_length)
+
+
+#: Имя человека, название продукта, заголовок рецепта.
+RequiredName = Annotated[str, _required(255)]
+#: Короткое обязательное поле: версия источника данных и подобное.
+RequiredShortText = Annotated[str, _required(64)]
+#: Длинный обязательный текст: заметка врача.
+RequiredLongText = Annotated[str, _required(10000)]
 
 
 class Page[T](BaseModel):
@@ -72,7 +92,7 @@ class TotpVerifyRequest(BaseModel):
 
 
 class PatientCreate(BaseModel):
-    full_name: str = Field(min_length=1, max_length=255)
+    full_name: RequiredName
     birth_date: date
     sex: Sex
     height_cm: float | None = Field(default=None, gt=0, le=250)
@@ -92,7 +112,7 @@ class PatientUpdate(BaseModel):
     по ходу терапии — и то и другое влияет на назначение и на состав меню.
     """
 
-    full_name: str = Field(min_length=1, max_length=255)
+    full_name: RequiredName
     height_cm: float | None = Field(default=None, gt=0, le=250)
     allergies: list[str] = Field(default_factory=list)
     notes: str | None = None
@@ -145,7 +165,7 @@ class PrescriptionRead(BaseModel):
 
 
 class ProductBase(BaseModel):
-    name_ru: str = Field(min_length=1, max_length=255)
+    name_ru: RequiredName
     name_uz: str | None = None
     name_en: str | None = None
     category_id: uuid.UUID
@@ -154,8 +174,8 @@ class ProductBase(BaseModel):
     protein_100g: Annotated[float, Field(ge=0, le=100)]
     carbs_100g: Annotated[float, Field(ge=0, le=100)]
     fiber_100g: Annotated[float, Field(ge=0, le=100)]
-    source: str = Field(min_length=1, max_length=255)
-    source_version: str = Field(min_length=1, max_length=64)
+    source: RequiredName
+    source_version: RequiredShortText
     verified_at: date
 
 
@@ -205,6 +225,21 @@ class UserRead(BaseModel):
     created_at: datetime
 
 
+class MeUpdate(BaseModel):
+    """Правка собственного профиля.
+
+    Роль и активность здесь недоступны намеренно: повышать себе права нельзя, а
+    выключать себя — незачем. Их меняет администратор через `/admin/users`.
+    Почта не меняется: она же логин, и её смена — отдельная процедура с
+    подтверждением владения адресом, которой в продукте пока нет.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: RequiredName
+    phone: str | None = Field(default=None, max_length=32)
+
+
 class ColleagueRead(BaseModel):
     """Специалист в справочнике персонала.
 
@@ -243,7 +278,7 @@ class InvitationCreated(BaseModel):
 
 class InvitationAccept(BaseModel):
     token: str
-    full_name: str = Field(min_length=1, max_length=255)
+    full_name: RequiredName
     password: str = Field(min_length=12, max_length=128)
     phone: str | None = None
 
@@ -275,7 +310,7 @@ class DishIngredientIn(BaseModel):
 
 
 class CustomDishWrite(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
+    title: RequiredName
     ingredients: list[DishIngredientIn] = Field(min_length=1, max_length=100)
 
 

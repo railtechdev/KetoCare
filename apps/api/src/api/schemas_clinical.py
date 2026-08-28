@@ -12,6 +12,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .schemas import RequiredLongText, RequiredName
+
 # --- medical profile ------------------------------------------------------
 
 
@@ -63,9 +65,9 @@ class MedicalProfileRead(BaseModel):
 class MedicationWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    drug_name: str = Field(min_length=1, max_length=255)
-    dose: str = Field(min_length=1, max_length=255)
-    frequency: str = Field(min_length=1, max_length=255)
+    drug_name: RequiredName
+    dose: RequiredName
+    frequency: RequiredName
     started_at: date
     stopped_at: date | None = Field(
         default=None, description="Последний день приёма; пусто — препарат принимается"
@@ -100,7 +102,7 @@ class MedicationRead(BaseModel):
 class ClinicalNoteCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(min_length=1, max_length=10000)
+    text: RequiredLongText
 
 
 class ClinicalNoteRead(BaseModel):

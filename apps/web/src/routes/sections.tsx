@@ -1,3 +1,21 @@
+import {
+  Bot,
+  Calculator,
+  CalendarDays,
+  ClipboardList,
+  FileText,
+  Home,
+  ListTree,
+  NotebookPen,
+  Salad,
+  ScrollText,
+  Settings,
+  ShoppingBasket,
+  UserCog,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { ReactElement } from "react";
 
 import { AdminPage } from "../features/admin/AdminPage";
@@ -10,6 +28,7 @@ import { PatientGate } from "../features/patients/PatientGate";
 import { MenuPage } from "../features/menu/MenuPage";
 import { ProductsPage } from "../features/products/ProductsPage";
 import { RecipesPage } from "../features/recipes/RecipesPage";
+import { ProfilePage } from "../features/profile/ProfilePage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 
 /**
@@ -45,6 +64,7 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
   dictionaries: () => <AdminPage section="dictionaries" />,
   audit: () => <AdminPage section="audit" />,
   settings: () => <SettingsPage />,
+  profile: () => <ProfilePage />,
 };
 
 /**
@@ -58,3 +78,28 @@ export const PENDING_SECTIONS: readonly string[] = [
   "assistant",
   "summaries",
 ];
+
+/**
+ * Значок раздела в навигации.
+ *
+ * Лежит рядом с сопоставлением «раздел → экран», а не в разметке навигации:
+ * иначе новый раздел получал бы экран и оставался без значка, и в меню
+ * появлялась дырка. Тест требует значок для каждого раздела ролевой таблицы.
+ */
+export const SECTION_ICONS: Record<string, LucideIcon> = {
+  home: Home,
+  calculator: Calculator,
+  products: ShoppingBasket,
+  recipes: Salad,
+  menu: CalendarDays,
+  diary: NotebookPen,
+  reports: FileText,
+  assistant: Bot,
+  settings: Settings,
+  patients: Users,
+  summaries: ClipboardList,
+  users: UserCog,
+  dictionaries: ListTree,
+  audit: ScrollText,
+  profile: UserRound,
+};

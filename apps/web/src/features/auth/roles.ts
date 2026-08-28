@@ -15,6 +15,14 @@ export function isRole(value: unknown): value is Role {
  * Это UX, а не безопасность: доступ проверяет сервер (правило 5 CLAUDE.md).
  * Здесь только чтобы не показывать заведомо недоступные пункты меню.
  */
+/**
+ * Разделы, доступные по адресу, но не показываемые в боковой навигации.
+ *
+ * Свой профиль открывается из меню пользователя в шапке — так его ищут. В
+ * боковом списке он занимал бы место наравне с рабочими разделами.
+ */
+export const SIDEBAR_HIDDEN_SECTIONS: readonly string[] = ["profile"];
+
 export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
   parent: [
     "home",
@@ -26,8 +34,9 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
     "reports",
     "assistant",
     "settings",
+    "profile",
   ],
-  doctor: ["patients", "summaries"],
-  dietitian: ["patients", "products", "recipes"],
-  admin: ["users", "products", "recipes", "dictionaries", "audit"],
+  doctor: ["patients", "summaries", "profile"],
+  dietitian: ["patients", "products", "recipes", "profile"],
+  admin: ["users", "products", "recipes", "dictionaries", "audit", "profile"],
 };

@@ -14,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.models.enums import UserRole
 
+from .schemas import RequiredName
+
 # Поля учётной записи, которые не могут стать null: в БД они NOT NULL.
 _NOT_NULLABLE_USER_FIELDS = ("full_name", "role", "is_active")
 
@@ -28,7 +30,7 @@ class AdminUserUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    full_name: RequiredName | None = None
     phone: str | None = Field(default=None, max_length=32)
     role: UserRole | None = None
     is_active: bool | None = None
@@ -59,7 +61,7 @@ class DictionaryEntryRead(BaseModel):
 class DictionaryEntryCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name_ru: str = Field(min_length=1, max_length=255)
+    name_ru: RequiredName
     sort: Annotated[int, Field(ge=0, le=10_000)] = 0
 
 
