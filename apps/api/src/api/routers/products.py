@@ -8,13 +8,14 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Path, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Path, UploadFile
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import products as products_repo
 
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
+from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import (
     ImportRowError,
@@ -35,13 +36,12 @@ _EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN)
 async def search_products(
     session: SessionDep,
     _: CurrentUserDep,
+    page: PaginationDep,
     q: str | None = None,
     category_id: uuid.UUID | None = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[ProductRead]:
     items, total = await products_repo.search(
-        session, q=q, category_id=category_id, limit=limit, offset=offset
+        session, q=q, category_id=category_id, limit=page.limit, offset=page.offset
     )
     return Page(items=[ProductRead.model_validate(p) for p in items], total=total)
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
@@ -17,6 +17,7 @@ from core.repositories import prescriptions as prescriptions_repo
 from keto_engine import max_non_fat_grams
 
 from ..deps.auth import PatientAccessDep, SessionDep, require_roles
+from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page, PrescriptionCreate, PrescriptionRead
 
@@ -28,11 +29,10 @@ async def list_prescriptions(
     patient_id: Annotated[uuid.UUID, Path()],
     session: SessionDep,
     _: PatientAccessDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    page: PaginationDep,
 ) -> Page[PrescriptionRead]:
     items, total = await prescriptions_repo.list_history(
-        session, patient_id=patient_id, limit=limit, offset=offset
+        session, patient_id=patient_id, limit=page.limit, offset=page.offset
     )
     return Page(items=[PrescriptionRead.model_validate(p) for p in items], total=total)
 

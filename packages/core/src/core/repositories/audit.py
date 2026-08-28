@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 import structlog
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AuditLog
@@ -40,6 +42,47 @@ async def write_audit_log(
     session.add(entry)
     await session.flush()
     return entry
+
+
+async def list_entries(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID | None = None,
+    entity: str | None = None,
+    action: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[AuditLog], int]:
+    """Журнал только читается: ручек изменения и удаления у него нет.
+
+    Границы периода включают обе даты (`>=` / `<=`): администратор задаёт их как
+    отрезок, а не как полуинтервал.
+    """
+
+    conditions: list[ColumnElement[bool]] = []
+    if user_id is not None:
+        conditions.append(AuditLog.user_id == user_id)
+    if entity is not None:
+        conditions.append(AuditLog.entity == entity)
+    if action is not None:
+        conditions.append(AuditLog.action == action)
+    if created_from is not None:
+        conditions.append(AuditLog.created_at >= created_from)
+    if created_to is not None:
+        conditions.append(AuditLog.created_at <= created_to)
+
+    stmt = (
+        select(AuditLog)
+        .where(*conditions)
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    items = list(await session.scalars(stmt))
+    total = await session.scalar(select(func.count()).select_from(AuditLog).where(*conditions))
+    return items, int(total or 0)
 
 
 async def write_audit_log_independent(

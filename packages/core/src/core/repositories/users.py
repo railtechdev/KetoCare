@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,3 +53,16 @@ async def list_all(
     items = list(await session.scalars(stmt))
     total = await session.scalar(select(func.count()).select_from(User))
     return items, int(total or 0)
+
+
+async def update(session: AsyncSession, *, user: User, **fields: Any) -> User:
+    """Применяет уже проверенный набор изменений к учётной записи.
+
+    Какие поля вообще можно менять и кому — решает вызывающая сторона: репозиторий
+    не знает про роли. Пустой `fields` допустим и означает «ничего не менять».
+    """
+
+    for key, value in fields.items():
+        setattr(user, key, value)
+    await session.flush()
+    return user

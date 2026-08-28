@@ -9,12 +9,13 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, Response
+from fastapi import APIRouter, Path, Response
 
 from core.models import CustomDish
 from core.repositories import custom_dishes as dishes_repo
 
 from ..deps.auth import PatientAccessDep, SessionDep
+from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import CustomDishRead, CustomDishWrite, Page
 from ..services.dishes import compute_dish, duplicate_product_ids
@@ -37,11 +38,10 @@ async def list_dishes(
     patient_id: Annotated[uuid.UUID, Path()],
     session: SessionDep,
     _: PatientAccessDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    page: PaginationDep,
 ) -> Page[CustomDishRead]:
     items, total = await dishes_repo.list_for_patient(
-        session, patient_id=patient_id, limit=limit, offset=offset
+        session, patient_id=patient_id, limit=page.limit, offset=page.offset
     )
     return Page(items=[CustomDishRead.model_validate(d) for d in items], total=total)
 

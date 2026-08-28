@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import CustomDish, Product
+from ..models import CustomDish
 
 
 async def get(session: AsyncSession, dish_id: uuid.UUID) -> CustomDish | None:
@@ -87,16 +87,3 @@ async def soft_delete(session: AsyncSession, *, dish: CustomDish) -> CustomDish:
     dish.deleted_at = datetime.now(UTC)
     await session.flush()
     return dish
-
-
-async def get_products_by_ids(
-    session: AsyncSession, *, product_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, Product]:
-    """Продукты для пересчёта состава. Возвращает словарь — вызывающая сторона
-    сама решает, что делать с отсутствующими идентификаторами."""
-
-    if not product_ids:
-        return {}
-
-    rows = await session.scalars(select(Product).where(Product.id.in_(product_ids)))
-    return {product.id: product for product in rows}

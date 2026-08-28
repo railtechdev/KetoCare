@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -155,3 +156,19 @@ async def find_duplicate_names(session: AsyncSession, *, names: list[str]) -> se
         select(Product.name_ru).where(func.lower(func.trim(Product.name_ru)).in_(folded))
     )
     return {name.casefold().strip() for name in rows}
+
+
+async def get_by_ids(
+    session: AsyncSession, *, product_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, Product]:
+    """Продукты по идентификаторам — для пересчёта состава блюд, рецептов и меню.
+
+    Отсутствующие идентификаторы просто не попадают в результат: решает,
+    что с ними делать, вызывающая сторона (обычно это 422 с перечнем).
+    """
+
+    if not product_ids:
+        return {}
+
+    rows = await session.scalars(select(Product).where(Product.id.in_(list(product_ids))))
+    return {product.id: product for product in rows}

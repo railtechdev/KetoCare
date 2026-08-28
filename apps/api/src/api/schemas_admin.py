@@ -1,0 +1,103 @@
+"""Схемы админских ручек `/admin` (раздел 5.3 ТЗ).
+
+Учётные записи читаются общей схемой `UserRead` из `schemas.py` — в ней нет ни
+`password_hash`, ни `totp_secret`, ни связей с пациентами.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Annotated, Any, Self
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from core.models.enums import UserRole
+
+# Поля учётной записи, которые не могут стать null: в БД они NOT NULL.
+_NOT_NULLABLE_USER_FIELDS = ("full_name", "role", "is_active")
+
+
+class AdminUserUpdate(BaseModel):
+    """PATCH: меняются только переданные поля.
+
+    `phone` — единственное поле, которое можно осмысленно сбросить в null; для
+    остальных явный `null` отвергается, иначе запрос вида `{"full_name": null}`
+    упирался бы в NOT NULL уже в базе и возвращал 500 вместо понятной ошибки.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str | None = Field(default=None, max_length=32)
+    role: UserRole | None = None
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _check_changes(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("Укажите хотя бы одно поле для изменения.")
+
+        empty = [
+            field
+            for field in _NOT_NULLABLE_USER_FIELDS
+            if field in self.model_fields_set and getattr(self, field) is None
+        ]
+        if empty:
+            raise ValueError(f"Поля нельзя очистить: {', '.join(empty)}.")
+        return self
+
+
+class DictionaryEntryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name_ru: str
+    sort: int
+
+
+class DictionaryEntryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name_ru: str = Field(min_length=1, max_length=255)
+    sort: Annotated[int, Field(ge=0, le=10_000)] = 0
+
+
+class DictionaryEntryUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name_ru: str | None = Field(default=None, min_length=1, max_length=255)
+    sort: Annotated[int, Field(ge=0, le=10_000)] | None = None
+
+    @model_validator(mode="after")
+    def _check_changes(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("Укажите хотя бы одно поле для изменения.")
+        if any(getattr(self, field) is None for field in self.model_fields_set):
+            raise ValueError("Поля справочника нельзя очистить.")
+        return self
+
+
+class AuditLogRead(BaseModel):
+    """Запись журнала аудита.
+
+    `before`/`after` отдаются не для всех сущностей: журнал общий, а админ к
+    клиническим данным доступа не имеет (раздел 5.1 ТЗ). Скрытая нагрузка
+    помечается `payload_hidden`, чтобы отсутствие данных не выглядело как
+    отсутствие записи о них.
+
+    Собирается только через `services.admin.audit_entry_to_schema`: `from_attributes`
+    здесь намеренно нет, иначе `model_validate(строка_журнала)` отдал бы нагрузку
+    в обход этой проверки.
+    """
+
+    id: uuid.UUID
+    user_id: uuid.UUID | None
+    action: str
+    entity: str
+    entity_id: uuid.UUID | None
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+    payload_hidden: bool
+    ip: str | None
+    created_at: datetime

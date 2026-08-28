@@ -9,7 +9,20 @@ from core.config import get_settings
 
 from .errors import register_exception_handlers, register_unhandled_error_middleware
 from .ratelimit import register_rate_limiting
-from .routers import auth, calc, custom_dishes, patients, prescriptions, products
+from .routers import (
+    admin,
+    auth,
+    calc,
+    clinical,
+    custom_dishes,
+    logs,
+    menus,
+    overview,
+    patients,
+    prescriptions,
+    products,
+    recipes,
+)
 
 API_PREFIX = "/api/v1"
 
@@ -48,6 +61,12 @@ def create_app() -> FastAPI:
     v1.include_router(products.router)
     v1.include_router(custom_dishes.router)
     v1.include_router(calc.router)
+    v1.include_router(logs.router)
+    v1.include_router(menus.router)
+    v1.include_router(overview.router)
+    v1.include_router(recipes.router)
+    v1.include_router(clinical.router)
+    v1.include_router(admin.router)
     app.include_router(v1)
 
     @app.get("/health", tags=["service"], summary="Проверка живости")
