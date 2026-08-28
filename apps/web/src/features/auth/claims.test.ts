@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { readTokenClaims } from "./session";
+import { readTokenClaims } from "./claims";
 
 function makeToken(payload: Record<string, unknown>): string {
   const encode = (value: object) =>

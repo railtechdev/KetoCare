@@ -36,7 +36,7 @@ make dev          # docker compose dev: postgres, redis, затем миграц
 make test         # pytest + vitest
 make test-engine  # только эталонные тесты keto_engine (обязательный отдельный job в CI)
 make coverage-engine  # покрытие keto_engine с порогом 100%
-make lint         # ruff check + ruff format --check + mypy + prettier --check + tsc --noEmit
+make lint         # ruff check + ruff format --check + mypy + prettier --check + eslint + tsc --noEmit
 make fix          # автоисправление форматирования
 make migrate      # alembic upgrade head
 make makemigration m="описание"   # alembic revision --autogenerate
@@ -49,8 +49,6 @@ make e2e          # playwright — появляется на этапе 5 ТЗ, 
 Интеграционные тесты (`packages/core/tests`, `apps/api/tests`) требуют поднятый postgres: сначала `make dev`. Каждый тест идёт во внешней транзакции с откатом, поэтому БД между тестами чистая. Если порты заняты — `POSTGRES_PORT=5434 REDIS_PORT=6381 make dev` и те же порты в `.env`.
 
 Локальный запуск API: `make api` (именно так — цель передаёт `--no-proxy-headers`, иначе uvicorn подменит адрес клиента из `X-Forwarded-For` и ключ лимита с `audit_log.ip` станут управляемыми клиентом; см. `infra/nginx/README.md`). Swagger — `/api/v1/docs`.
-
-`eslint` в `make lint` появится вместе с `apps/web` на этапе 2; сейчас JS-часть проверяется prettier + tsc.
 
 Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `packages/keto_engine`, `packages/core`). JS-часть — **pnpm workspaces** (`apps/web`, `apps/miniapp`, `packages/ui`, `packages/api-client`).
 
@@ -90,6 +88,12 @@ Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `
 - **ADR:** любое отступление от ТЗ фиксируется в `docs/adr/NNN-название.md` (контекст → решение → последствия) и упоминается в PR.
 - **Ошибки API:** `{"error": {"code", "message" (ru), "details"}}`; коды `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `infeasible_calculation`, `rate_limited`, `internal`. Пагинация — `?limit=&offset=`, ответ `{"items": [...], "total": n}`.
 - **Секреты** — только в `.env` (в `.gitignore`), с фиктивным зеркалом в `.env.example` (полный список переменных — раздел 12 ТЗ).
+
+## Инструментарий агента (`.claude/`)
+
+- **Хуки** (`.claude/settings.json` + `.claude/hooks/`): `protect-paths.sh` и `protect-bash.sh` блокируют правки `docs/medical/*` (кроме `OPEN_QUESTIONS.md`), уже закоммиченных миграций в `packages/core/migrations/versions/` и `.env` — и через Edit/Write, и через shell. Список защищённых путей — в `lib-protected.sh`, дублировать его в других скриптах не нужно. `autoformat.sh` прогоняет ruff/prettier по изменённому файлу (рукописный markdown в `docs/` не трогает).
+- **Скиллы** (`.claude/skills/`): `keto-engine`, `reference-cases`, `db-migrations`, `api-endpoint`, `frontend-feature`, `bot-scenario`, `ai-worker` — процедуры и инварианты по каждой зоне. Подхватываются автоматически по описанию; при расхождении скилла с кодом источник правды — код и ТЗ, скилл правится.
+- **Сабагент** `safety-reviewer` — чек-лист клинических и security-инвариантов по дифу; запускать перед закрытием задачи, особенно при изменениях в доступах, `keto_engine`, AI-вызовах и схеме БД.
 
 ## Definition of Done
 

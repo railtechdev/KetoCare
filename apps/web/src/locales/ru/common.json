@@ -1,7 +1,8 @@
 {
   "app": {
     "name": "KetoCare",
-    "loading": "Загрузка…"
+    "loading": "Загрузка…",
+    "sectionComingSoon": "Раздел появится на следующем шаге разработки."
   },
   "roles": {
     "parent": "Родитель",

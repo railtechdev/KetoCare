@@ -49,17 +49,17 @@ function contrastRatio(a: string, b: string): number {
 const MIN_CONTRAST = 4.5;
 
 describe.each([
-  ["светлая тема", ":root"],
+  ["светлая тема", "@theme"],
   ["тёмная тема", '[data-theme="dark"]'],
 ])("%s", (_name, selector) => {
   const block = themeBlock(selector);
 
   it("текст на фоне и на поверхности читаем", () => {
     expect(
-      contrastRatio(token(block, "kc-text"), token(block, "kc-bg")),
+      contrastRatio(token(block, "color-ink"), token(block, "color-canvas")),
     ).toBeGreaterThanOrEqual(MIN_CONTRAST);
     expect(
-      contrastRatio(token(block, "kc-text"), token(block, "kc-surface")),
+      contrastRatio(token(block, "color-ink"), token(block, "color-surface")),
     ).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 
@@ -67,8 +67,8 @@ describe.each([
     "текст на цветной подложке %s читаем",
     (role) => {
       const ratio = contrastRatio(
-        token(block, `kc-on-${role}`),
-        token(block, `kc-${role}`),
+        token(block, `color-on-${role}`),
+        token(block, `color-${role}`),
       );
       expect(ratio).toBeGreaterThanOrEqual(MIN_CONTRAST);
     },
@@ -76,7 +76,7 @@ describe.each([
 
   it("приглушённый текст читаем на фоне", () => {
     expect(
-      contrastRatio(token(block, "kc-text-muted"), token(block, "kc-bg")),
+      contrastRatio(token(block, "color-muted"), token(block, "color-canvas")),
     ).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 });

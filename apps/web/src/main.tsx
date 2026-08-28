@@ -3,7 +3,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "@ketocare/ui/styles.css";
-import "./styles/app.css";
 
 import { App } from "./App";
 import "./lib/i18n";

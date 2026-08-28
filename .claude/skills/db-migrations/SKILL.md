@@ -11,12 +11,11 @@ Alembic живёт в `packages/core`: конфиг `packages/core/alembic.ini`
 ## Порядок
 
 1. Правь модели в `packages/core/src/core/models/` (не сырой SQL).
-2. `make makemigration m="краткое описание"`; пока Makefile не заведён —
-   `cd packages/core && uv run alembic revision --autogenerate -m "..."`.
+2. `make makemigration m="краткое описание"` (под капотом —
+   `cd packages/core && uv run alembic revision --autogenerate -m "..."`).
 3. Открой сгенерированный файл и проверь руками: enum-типы, server_default,
    naming convention индексов, отсутствие случайных drop.
-4. `make migrate` (или `uv run alembic upgrade head`) на чистой БД И на БД с сидами —
-   оба прогона должны пройти.
+4. `make migrate` на чистой БД И на БД с сидами — оба прогона должны пройти.
 5. Повторный autogenerate не должен давать нового диффа (пустая ревизия = модели и
    схема сошлись). Пустую ревизию удали.
 

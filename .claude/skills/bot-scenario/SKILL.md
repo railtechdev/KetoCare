@@ -7,10 +7,10 @@ description: Telegram-бот apps/bot на aiogram 3 — FSM-сценарии в
 
 ## Архитектура
 
-- aiogram 3: Router на сценарий, StatesGroup, файл = сценарий (`scenarios/seizure.py`).
+- aiogram 3: Router на сценарий, StatesGroup, файл = сценарий (`apps/bot/src/bot/scenarios/seizure.py`).
 - Бот НЕ ходит в БД. Только API с сервисным токеном (env BOT_API_TOKEN),
-  от имени привязанного parent_id. Клиент API — один модуль `bot/src/api.py`.
-- Все тексты — ТОЛЬКО в `bot/src/texts.py` (согласуются с мед. командой).
+  от имени привязанного parent_id. Клиент API — один модуль `apps/bot/src/bot/api.py`.
+- Все тексты — ТОЛЬКО в `apps/bot/src/bot/texts.py` (согласуются с мед. командой).
   Строка в хендлере = ошибка ревью.
 
 ## Шаблон сценария

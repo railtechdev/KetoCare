@@ -1,4 +1,5 @@
 import { cn } from "../lib/cn";
+import { formatRatio } from "../lib/format";
 
 export interface RatioBadgeProps {
   /** Фактическое кетосоотношение блюда, напр. 3.87 */
@@ -16,10 +17,15 @@ export interface RatioBadgeProps {
   className?: string;
 }
 
-/** Формат раздела 8.2 ТЗ: «3.9 : 1». */
-export function formatRatio(ratio: number): string {
-  return `${ratio.toFixed(1)} : 1`;
-}
+const BASE =
+  "inline-flex items-center rounded-md border border-transparent px-2.5 py-0.5 " +
+  "font-semibold tabular-nums whitespace-nowrap";
+
+const BY_STATE = {
+  ok: "bg-success text-on-success",
+  off: "bg-danger text-on-danger",
+  neutral: "bg-surface text-muted border-line",
+} as const;
 
 export function RatioBadge({
   ratio,
@@ -29,7 +35,8 @@ export function RatioBadge({
   if (ratio === null) {
     return (
       <span
-        className={cn("kc-ratio-badge kc-ratio-badge--unknown", className)}
+        className={cn(BASE, BY_STATE.neutral, className)}
+        data-state="unknown"
         aria-label="Соотношение не определено"
       >
         — : 1
@@ -49,7 +56,7 @@ export function RatioBadge({
 
   return (
     <span
-      className={cn("kc-ratio-badge", `kc-ratio-badge--${state}`, className)}
+      className={cn(BASE, BY_STATE[state], className)}
       data-state={state}
       aria-label={label}
     >

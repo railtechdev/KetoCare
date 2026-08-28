@@ -56,13 +56,15 @@ lint: openapi ## Линтеры и проверка типов (сначала �
 		pnpm -r --if-present run lint; \
 		pnpm -r --if-present run typecheck; \
 	fi
-	@# eslint подключается вместе с apps/web и apps/miniapp на этапе 2 ТЗ
 
 .PHONY: fix
 fix: ## Автоисправление форматирования
 	uv run ruff check --fix apps packages
 	uv run ruff format apps packages
-	@if [ -d node_modules ]; then pnpm exec prettier --write . >/dev/null && echo "prettier: ok"; fi
+	@if [ -d node_modules ]; then \
+		pnpm exec prettier --write . >/dev/null && echo "prettier: ok"; \
+		pnpm -r --if-present exec eslint src --fix >/dev/null && echo "eslint: ok"; \
+	fi
 
 .PHONY: migrate
 migrate: ## Применить миграции (alembic upgrade head)

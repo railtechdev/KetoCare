@@ -1,27 +1,25 @@
+import { RouterProvider } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import { LoginForm } from "./features/auth/LoginForm";
-import { SessionProvider, useSession } from "./features/auth/session";
-import { AppLayout } from "./layouts/AppLayout";
+import { SessionProvider } from "./features/auth/session";
+import { useSession } from "./features/auth/useSession";
+import { router } from "./router";
 
 function Shell() {
   const { t } = useTranslation();
   const { session, restoring } = useSession();
 
+  // Роутер не монтируется, пока сессия восстанавливается из refresh-cookie:
+  // иначе guard'ы увидели бы session === null и увели на /login того, кто уже вошёл.
   if (restoring) {
-    return <p role="status">{t("app.loading")}</p>;
+    return (
+      <p role="status" className="p-6 text-muted">
+        {t("app.loading")}
+      </p>
+    );
   }
 
-  if (session === null) {
-    return <LoginForm />;
-  }
-
-  return (
-    <AppLayout>
-      {/* Экраны разделов подключаются следующими задачами этапа 2 (пп. 10-14 ТЗ) */}
-      <p>{t("app.name")}</p>
-    </AppLayout>
-  );
+  return <RouterProvider router={router} context={{ session }} />;
 }
 
 export function App() {

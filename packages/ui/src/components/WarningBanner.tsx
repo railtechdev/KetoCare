@@ -19,6 +19,12 @@ const ROLE_BY_LEVEL: Record<WarningLevel, "status" | "alert"> = {
   danger: "alert",
 };
 
+const BORDER_BY_LEVEL: Record<WarningLevel, string> = {
+  info: "border-l-accent",
+  warning: "border-l-warning",
+  danger: "border-l-danger",
+};
+
 /** Баннер предупреждения (раздел 8.3 ТЗ: выход за допуски в меню). */
 export function WarningBanner({
   level = "warning",
@@ -29,15 +35,15 @@ export function WarningBanner({
   return (
     <div
       className={cn(
-        "kc-warning-banner",
-        `kc-warning-banner--${level}`,
+        "rounded-kc border-l-4 bg-surface px-4 py-3 text-ink shadow-kc-sm",
+        BORDER_BY_LEVEL[level],
         className,
       )}
       role={ROLE_BY_LEVEL[level]}
       data-level={level}
     >
-      {title && <p className="kc-warning-banner__title">{title}</p>}
-      <div className="kc-warning-banner__body">{children}</div>
+      {title && <p className="mb-1 font-semibold">{title}</p>}
+      <div>{children}</div>
     </div>
   );
 }

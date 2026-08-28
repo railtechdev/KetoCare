@@ -22,9 +22,9 @@ repository из packages/core (доступ к БД). SQL/ORM-запросов �
    выгрузки, привязка Telegram) — запись в audit_log с before/after.
 5. Мутации клинических записей — мягкое удаление, проверка владения записью.
 6. Тесты: happy path + 403 (чужой пациент) + 422 (валидация). Интеграционные, через httpx.
-7. `make openapi` — перегенерируй packages/api-client; убедись что web/miniapp компилируются.
-   Пока Makefile не заведён — выгрузи openapi.json из приложения и перегенерируй клиент
-   тем же способом, что описан в README, а не правь `packages/api-client/src/generated/` руками.
+7. `make openapi` — перегенерируй packages/api-client; убедись что web/miniapp компилируются
+   (`make lint` и `make test` сами вызывают openapi). Файлы в
+   `packages/api-client/src/generated/` руками не правятся — они генерируемые.
 8. Ответы `/calc/*` включают `engine_version`; бизнес-логики расчётов в API нет —
    только вызов keto_engine.
 

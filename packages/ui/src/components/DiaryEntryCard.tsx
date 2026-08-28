@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "../lib/cn";
+import { formatOccurredAt } from "../lib/format";
 
 export interface DiaryEntryCardProps {
   title: string;
@@ -23,16 +24,6 @@ const SOURCE_LABEL: Record<
   ai_parsed: "Распознано ИИ",
 };
 
-export function formatOccurredAt(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(value);
-}
-
 /** Карточка записи дневника (раздел 8.2 ТЗ). */
 export function DiaryEntryCard({
   title,
@@ -43,33 +34,41 @@ export function DiaryEntryCard({
   className,
 }: DiaryEntryCardProps) {
   return (
-    <article className={cn("kc-diary-card", className)}>
-      <header className="kc-diary-card__header">
-        <h3 className="kc-diary-card__title">{title}</h3>
+    <article
+      className={cn("rounded-kc bg-surface p-4 text-ink shadow-kc", className)}
+    >
+      <header className="flex items-baseline justify-between gap-3">
+        <h3 className="m-0 text-base font-semibold">{title}</h3>
         <time
-          className="kc-diary-card__time"
+          className="text-sm whitespace-nowrap text-muted tabular-nums"
           dateTime={occurredAt.toISOString()}
         >
           {formatOccurredAt(occurredAt)}
         </time>
       </header>
 
-      {children && <div className="kc-diary-card__body">{children}</div>}
+      {children && <div className="mt-2">{children}</div>}
 
-      <footer className="kc-diary-card__footer">
+      <footer className="mt-3 flex items-center justify-between gap-3">
         {source && (
           // Помечается только распознанное ИИ: пользователю важно знать, что запись
           // разобрана автоматически и её стоит перепроверить (раздел 10.3 ТЗ).
           <span
             className={cn(
-              "kc-diary-card__source",
-              source === "ai_parsed" && "kc-diary-card__source--ai",
+              "text-xs text-muted",
+              source === "ai_parsed" && "font-semibold text-warning",
             )}
+            data-source={source}
           >
             {SOURCE_LABEL[source]}
           </span>
         )}
-        {actions && <div className="kc-diary-card__actions">{actions}</div>}
+        {/* Тач-цели действий не меньше 44 px (раздел 8.2 ТЗ) */}
+        {actions && (
+          <div className="flex gap-2 [&_a]:min-h-touch [&_button]:min-h-touch">
+            {actions}
+          </div>
+        )}
       </footer>
     </article>
   );

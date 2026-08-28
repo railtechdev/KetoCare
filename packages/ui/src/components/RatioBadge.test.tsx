@@ -1,14 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { RatioBadge, formatRatio } from "./RatioBadge";
-
-describe("formatRatio", () => {
-  it("форматирует по разделу 8.2 ТЗ: «3.9 : 1»", () => {
-    expect(formatRatio(3.87)).toBe("3.9 : 1");
-    expect(formatRatio(4)).toBe("4.0 : 1");
-  });
-});
+import { RatioBadge } from "./RatioBadge";
 
 describe("RatioBadge", () => {
   it("показывает соответствие назначению, когда сервер его сообщил", () => {

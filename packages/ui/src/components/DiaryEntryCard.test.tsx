@@ -21,21 +21,20 @@ describe("DiaryEntryCard", () => {
   it("помечает записи, разобранные ИИ", () => {
     // Родителю важно видеть, что запись распознана автоматически и её стоит
     // перепроверить (раздел 10.3 ТЗ: подтверждение перед сохранением).
-    const { container } = render(
+    render(
       <DiaryEntryCard title="Обед" occurredAt={OCCURRED} source="ai_parsed" />,
     );
-    expect(screen.getByText("Распознано ИИ")).toBeInTheDocument();
-    expect(
-      container.querySelector(".kc-diary-card__source--ai"),
-    ).not.toBeNull();
+    const badge = screen.getByText("Распознано ИИ");
+    expect(badge).toHaveAttribute("data-source", "ai_parsed");
+    // Выделяется цветом предупреждения, а не как обычный источник
+    expect(badge.className).toContain("text-warning");
   });
 
   it("обычный источник не помечается как ИИ", () => {
-    const { container } = render(
-      <DiaryEntryCard title="Обед" occurredAt={OCCURRED} source="bot" />,
-    );
-    expect(screen.getByText("Бот")).toBeInTheDocument();
-    expect(container.querySelector(".kc-diary-card__source--ai")).toBeNull();
+    render(<DiaryEntryCard title="Обед" occurredAt={OCCURRED} source="bot" />);
+    const badge = screen.getByText("Бот");
+    expect(badge).toHaveAttribute("data-source", "bot");
+    expect(badge.className).not.toContain("text-warning");
   });
 
   it("рендерит содержимое и действия", () => {

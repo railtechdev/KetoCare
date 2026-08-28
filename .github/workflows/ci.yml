@@ -43,9 +43,10 @@ jobs:
         run: |
           uv run python apps/api/scripts/export_openapi.py apps/api/openapi.json
           pnpm --filter @ketocare/api-client run generate
-      - name: prettier + tsc
+      - name: prettier + eslint + tsc
         run: |
           pnpm -r --if-present run format:check
+          pnpm -r --if-present run lint
           pnpm -r --if-present run typecheck
 
   vitest:

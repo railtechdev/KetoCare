@@ -1,6 +1,7 @@
 export { cn } from "./lib/cn";
+export { formatRatio, formatOccurredAt } from "./lib/format";
 
-export { RatioBadge, formatRatio } from "./components/RatioBadge";
+export { RatioBadge } from "./components/RatioBadge";
 export type { RatioBadgeProps } from "./components/RatioBadge";
 
 export { MacroBar } from "./components/MacroBar";
@@ -12,5 +13,5 @@ export type {
   WarningLevel,
 } from "./components/WarningBanner";
 
-export { DiaryEntryCard, formatOccurredAt } from "./components/DiaryEntryCard";
+export { DiaryEntryCard } from "./components/DiaryEntryCard";
 export type { DiaryEntryCardProps } from "./components/DiaryEntryCard";
