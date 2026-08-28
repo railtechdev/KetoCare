@@ -66,7 +66,9 @@ export function DataTable<TData>({
   });
 
   if (data.length === 0) {
-    return <div className={cn("text-muted", className)}>{emptyState}</div>;
+    return (
+      <div className={cn("text-muted-foreground", className)}>{emptyState}</div>
+    );
   }
 
   const pageCount = table.getPageCount();
@@ -80,7 +82,7 @@ export function DataTable<TData>({
           <caption className="sr-only">{caption}</caption>
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-line">
+              <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => {
                   const sortable = header.column.getCanSort();
                   const direction = header.column.getIsSorted();
@@ -98,7 +100,7 @@ export function DataTable<TData>({
                             ? "descending"
                             : undefined
                       }
-                      className="px-3 py-2 text-sm font-semibold text-muted"
+                      className="px-3 py-2 text-sm font-semibold text-muted-foreground"
                     >
                       {sortable ? (
                         // Своего aria-label у кнопки нет: её доступным именем
@@ -137,7 +139,7 @@ export function DataTable<TData>({
 
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-b border-line last:border-0">
+              <tr key={row.id} className="border-b border-border last:border-0">
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-3 py-2">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -155,11 +157,14 @@ export function DataTable<TData>({
             type="button"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-            className="min-h-touch rounded-lg border border-line px-3 disabled:opacity-50"
+            className="min-h-touch rounded-lg border border-border px-3 disabled:opacity-50"
           >
             {labels.previousPage}
           </button>
-          <span role="status" className="text-sm text-muted tabular-nums">
+          <span
+            role="status"
+            className="text-sm text-muted-foreground tabular-nums"
+          >
             {labels.pageStatus(
               table.getState().pagination.pageIndex + 1,
               pageCount,
@@ -169,7 +174,7 @@ export function DataTable<TData>({
             type="button"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-            className="min-h-touch rounded-lg border border-line px-3 disabled:opacity-50"
+            className="min-h-touch rounded-lg border border-border px-3 disabled:opacity-50"
           >
             {labels.nextPage}
           </button>

@@ -62,7 +62,7 @@ export function AcceptInvitePage() {
   if (token === "") {
     return (
       <Shell title={t("accept.title")}>
-        <p className="m-0 text-muted">{t("accept.noToken")}</p>
+        <p className="m-0 text-muted-foreground">{t("accept.noToken")}</p>
       </Shell>
     );
   }
@@ -70,11 +70,11 @@ export function AcceptInvitePage() {
   if (done) {
     return (
       <Shell title={t("accept.doneTitle")}>
-        <p className="m-0 text-muted">{t("accept.doneBody")}</p>
+        <p className="m-0 text-muted-foreground">{t("accept.doneBody")}</p>
         <button
           type="button"
           onClick={() => void navigate({ to: "/login" })}
-          className="mt-4 min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent"
+          className="mt-4 min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
         >
           {t("accept.toLogin")}
         </button>
@@ -84,7 +84,7 @@ export function AcceptInvitePage() {
 
   return (
     <Shell title={t("accept.title")}>
-      <p className="mt-0 mb-6 text-muted">{t("accept.intro")}</p>
+      <p className="mt-0 mb-6 text-muted-foreground">{t("accept.intro")}</p>
 
       <form
         onSubmit={handleSubmit((values) => {
@@ -157,7 +157,7 @@ function Shell({
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
-      <section className="w-full max-w-md rounded-kc bg-surface p-8 shadow-kc">
+      <section className="w-full max-w-md rounded-xl bg-card p-8 shadow-kc">
         <h1 className="mb-2 text-2xl font-semibold">{title}</h1>
         {children}
       </section>

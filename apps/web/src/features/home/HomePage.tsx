@@ -37,7 +37,7 @@ export function HomePage({ patientId }: { patientId: string }) {
       <header>
         <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
         {dateLabel !== null && (
-          <p className="m-0 mt-1 text-muted">
+          <p className="m-0 mt-1 text-muted-foreground">
             {t("date", { date: dateLabel })}
           </p>
         )}
@@ -46,7 +46,7 @@ export function HomePage({ patientId }: { patientId: string }) {
       <QuickActions />
 
       {loading && (
-        <p role="status" className="m-0 text-muted">
+        <p role="status" className="m-0 text-muted-foreground">
           {t("loading")}
         </p>
       )}

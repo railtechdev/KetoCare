@@ -39,7 +39,7 @@ export function AdminPage({ section }: { section?: string }) {
     <section className="flex flex-col gap-6">
       <header>
         <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-        <p className="mt-1 mb-0 text-muted">{t("intro")}</p>
+        <p className="mt-1 mb-0 text-muted-foreground">{t("intro")}</p>
       </header>
 
       <Tabs.Root
@@ -50,13 +50,13 @@ export function AdminPage({ section }: { section?: string }) {
       >
         <Tabs.List
           aria-label={t("tabsLabel")}
-          className="flex flex-wrap gap-2 border-b border-line"
+          className="flex flex-wrap gap-2 border-b border-border"
         >
           {ADMIN_SECTIONS.map((value) => (
             <Tabs.Trigger
               key={value}
               value={value}
-              className="min-h-touch px-4 text-ink data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold"
+              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
             >
               {t(`tabs.${value}`)}
             </Tabs.Trigger>

@@ -137,7 +137,7 @@ export function ProductForm({
         <legend className="mb-2 text-base font-semibold">
           {t("products.form.origin")}
         </legend>
-        <p className="mt-0 mb-3 text-sm text-muted">
+        <p className="mt-0 mb-3 text-sm text-muted-foreground">
           {t("products.form.originHint")}
         </p>
 
@@ -171,7 +171,7 @@ export function ProductForm({
             <input
               id={activeId}
               type="checkbox"
-              className="size-5 accent-accent"
+              className="size-5 accent-primary"
               {...register("isActive")}
             />
             {t("products.form.isActive")}
@@ -186,7 +186,7 @@ export function ProductForm({
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-touch max-w-48 flex-1 rounded-lg border border-line px-4 text-ink"
+          className="min-h-touch max-w-48 flex-1 rounded-lg border border-border px-4 text-foreground"
         >
           {t("common:actions.cancel")}
         </button>

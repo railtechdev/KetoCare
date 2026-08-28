@@ -93,7 +93,7 @@ export function ProductsPage() {
         />
       </div>
 
-      <p className="m-0 text-sm text-muted">{t("per100g")}</p>
+      <p className="m-0 text-sm text-muted-foreground">{t("per100g")}</p>
 
       {products.isError && (
         <FormError>
@@ -102,7 +102,7 @@ export function ProductsPage() {
       )}
 
       {products.isLoading ? (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("loading")}
         </p>
       ) : (

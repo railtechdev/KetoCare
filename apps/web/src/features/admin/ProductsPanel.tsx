@@ -67,7 +67,7 @@ export function ProductsPanel() {
                 categoryId: row.original.category_id,
               }))
             }
-            className="min-h-touch text-accent underline"
+            className="min-h-touch text-primary underline"
           >
             {categoryNames.get(row.original.category_id) ??
               t("products.columns.unknownCategory")}
@@ -120,7 +120,7 @@ export function ProductsPanel() {
           row.original.is_active ? (
             <span className="text-success">{t("products.status.active")}</span>
           ) : (
-            <span className="text-muted italic">
+            <span className="text-muted-foreground italic">
               {t("products.status.inactive")}
             </span>
           ),
@@ -136,7 +136,7 @@ export function ProductsPanel() {
               setSavedName(null);
               setView({ kind: "form", product: row.original });
             }}
-            className="min-h-touch rounded-lg border border-line px-3 text-ink"
+            className="min-h-touch rounded-lg border border-border px-3 text-foreground"
           >
             {t("products.edit")}
           </button>
@@ -169,7 +169,9 @@ export function ProductsPanel() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="m-0 text-lg font-semibold">{t("products.title")}</h2>
-          <p className="mt-1 mb-0 text-muted">{t("products.intro")}</p>
+          <p className="mt-1 mb-0 text-muted-foreground">
+            {t("products.intro")}
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -179,14 +181,14 @@ export function ProductsPanel() {
               setSavedName(null);
               setView({ kind: "form", product: null });
             }}
-            className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent"
+            className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
           >
             {t("products.create")}
           </button>
           <button
             type="button"
             onClick={() => setView({ kind: "import" })}
-            className="min-h-touch rounded-lg border border-line px-4 text-ink"
+            className="min-h-touch rounded-lg border border-border px-4 text-foreground"
           >
             {t("products.importCsv")}
           </button>
@@ -221,7 +223,7 @@ export function ProductsPanel() {
             onClick={() =>
               setFilters((current) => ({ ...current, categoryId: "" }))
             }
-            className="min-h-touch rounded-lg border border-line px-4 text-ink"
+            className="min-h-touch rounded-lg border border-border px-4 text-foreground"
           >
             {t("products.filters.clearCategory", {
               id:
@@ -245,7 +247,7 @@ export function ProductsPanel() {
       )}
 
       {products.isLoading ? (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("products.loading")}
         </p>
       ) : (
@@ -263,7 +265,7 @@ export function ProductsPanel() {
       )}
 
       {products.data !== undefined && products.data.total > rows.length && (
-        <p className="m-0 text-sm text-muted">
+        <p className="m-0 text-sm text-muted-foreground">
           {t("table.truncated", {
             shown: rows.length,
             total: products.data.total,

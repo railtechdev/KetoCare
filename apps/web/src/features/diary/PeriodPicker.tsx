@@ -52,7 +52,7 @@ export function PeriodPicker({
               onChange={() => onPresetChange(value)}
               className="peer sr-only"
             />
-            <span className="flex min-h-touch items-center rounded-lg border border-line px-4 text-ink peer-checked:border-accent peer-checked:bg-accent peer-checked:font-semibold peer-checked:text-on-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
+            <span className="flex min-h-touch items-center rounded-lg border border-border px-4 text-foreground peer-checked:border-primary peer-checked:bg-primary peer-checked:font-semibold peer-checked:text-primary-foreground peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary">
               {t(`period.${value}`)}
             </span>
           </label>
@@ -96,7 +96,7 @@ export function PeriodPicker({
       )}
 
       {invalid && (
-        <p id={errorId} role="alert" className="mt-2 text-sm text-danger">
+        <p id={errorId} role="alert" className="mt-2 text-sm text-destructive">
           {t("period.invalid")}
         </p>
       )}

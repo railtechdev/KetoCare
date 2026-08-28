@@ -37,13 +37,13 @@ export function DictionariesPanel() {
       >
         <Tabs.List
           aria-label={t("dictionaries.tabsLabel")}
-          className="flex flex-wrap gap-2 border-b border-line"
+          className="flex flex-wrap gap-2 border-b border-border"
         >
           {DICTIONARY_KINDS.map((value) => (
             <Tabs.Trigger
               key={value}
               value={value}
-              className="min-h-touch px-4 text-ink data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold"
+              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
             >
               {t(`dictionaries.kinds.${value}`)}
             </Tabs.Trigger>
@@ -107,7 +107,7 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
               resetUpdate();
               setEditing({ kind: "entry", entry: row.original });
             }}
-            className="min-h-touch rounded-lg border border-line px-3 text-ink"
+            className="min-h-touch rounded-lg border border-border px-3 text-foreground"
           >
             {t("dictionaries.edit")}
           </button>
@@ -126,7 +126,7 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
             create.reset();
             setEditing({ kind: "create" });
           }}
-          className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent"
+          className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
         >
           {t("dictionaries.create")}
         </button>
@@ -176,7 +176,7 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
       )}
 
       {entries.isLoading ? (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("dictionaries.loading")}
         </p>
       ) : (

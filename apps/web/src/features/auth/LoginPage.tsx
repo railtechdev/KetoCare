@@ -58,7 +58,7 @@ export function LoginPage() {
       <form
         onSubmit={onSubmit}
         noValidate
-        className="w-full max-w-md rounded-kc bg-surface p-8 shadow-kc"
+        className="w-full max-w-md rounded-xl bg-card p-8 shadow-kc"
       >
         <h1 className="mb-6 text-2xl font-semibold">{t("login.title")}</h1>
 

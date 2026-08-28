@@ -50,7 +50,7 @@ export function DishResultView({
 
       {/* Версия движка показывается рядом с результатом: расчёт, сделанный разными
           версиями ядра, может отличаться, и это должно быть видно. */}
-      <p className="text-xs text-muted">
+      <p className="text-xs text-muted-foreground">
         {t("engineVersion", { version: dish.engine_version })}
       </p>
     </section>

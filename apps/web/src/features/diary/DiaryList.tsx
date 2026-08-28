@@ -32,7 +32,7 @@ export function DiaryList({
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   if (logs.length === 0) {
-    return <p className="m-0 text-muted">{emptyState}</p>;
+    return <p className="m-0 text-muted-foreground">{emptyState}</p>;
   }
 
   return (
@@ -181,7 +181,7 @@ function DiaryEntry({
 
 function Details({ lines }: { lines: string[] }) {
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-ink">
+    <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-foreground">
       {lines.map((line, index) => (
         <li key={`${index}-${line}`}>{line}</li>
       ))}
@@ -208,18 +208,18 @@ function EntryActions({
 }) {
   const { t } = useTranslation("diary");
 
-  const action = "rounded-lg border border-line px-3 text-sm font-semibold";
+  const action = "rounded-lg border border-border px-3 text-sm font-semibold";
 
   if (confirming) {
     return (
       <>
-        <span className="text-sm text-danger" role="alert">
+        <span className="text-sm text-destructive" role="alert">
           {t("list.confirmDelete")}
         </span>
         <button
           type="button"
           onClick={onConfirmDelete}
-          className="rounded-lg bg-danger px-3 text-sm font-semibold text-on-danger"
+          className="rounded-lg bg-destructive px-3 text-sm font-semibold text-destructive-foreground"
         >
           {t("list.confirmYes")}
         </button>
@@ -245,7 +245,7 @@ function EntryActions({
         onClick={onAskDelete}
         disabled={deleting}
         aria-label={t("list.deleteAria", { title })}
-        className={`${action} text-danger disabled:opacity-60`}
+        className={`${action} text-destructive disabled:opacity-60`}
       >
         {deleting ? t("list.deleting") : t("list.delete")}
       </button>

@@ -21,7 +21,7 @@ export function SaveDishForm({ patientId, rows }: Props) {
   const [title, setTitle] = useState("");
 
   if (patientId === null) {
-    return <p className="text-muted">{t("save.noPatient")}</p>;
+    return <p className="text-muted-foreground">{t("save.noPatient")}</p>;
   }
 
   if (save.isSuccess) {
@@ -68,7 +68,7 @@ export function SaveDishForm({ patientId, rows }: Props) {
       <button
         type="submit"
         disabled={save.isPending || title.trim() === "" || rows.length === 0}
-        className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent disabled:opacity-60"
+        className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
       >
         {save.isPending ? t("save.saving") : t("save.action")}
       </button>

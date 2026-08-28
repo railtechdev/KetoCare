@@ -74,10 +74,10 @@ export function TotpSetupPanel({ setupToken }: Props) {
       <form
         onSubmit={onSubmit}
         noValidate
-        className="w-full max-w-md rounded-kc bg-surface p-8 shadow-kc"
+        className="w-full max-w-md rounded-xl bg-card p-8 shadow-kc"
       >
         <h1 className="mb-2 text-2xl font-semibold">{t("totpSetup.title")}</h1>
-        <p className="mb-6 text-muted">{t("totpSetup.intro")}</p>
+        <p className="mb-6 text-muted-foreground">{t("totpSetup.intro")}</p>
 
         {setup.data?.qrSvg && (
           <div
@@ -95,7 +95,7 @@ export function TotpSetupPanel({ setupToken }: Props) {
             <span className="mb-1.5 block text-sm font-medium">
               {t("totpSetup.secretLabel")}
             </span>
-            <code className="mb-4 block rounded-lg border border-line bg-canvas px-3 py-2.5 font-mono break-all">
+            <code className="mb-4 block rounded-lg border border-border bg-background px-3 py-2.5 font-mono break-all">
               {setup.data.secret}
             </code>
           </>

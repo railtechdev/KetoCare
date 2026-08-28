@@ -75,12 +75,12 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
       <h2 className="m-0 text-lg font-semibold">
         {t("products.import.title")}
       </h2>
-      <p className="m-0 text-muted">{t("products.import.intro")}</p>
+      <p className="m-0 text-muted-foreground">{t("products.import.intro")}</p>
 
       {/* Список колонок повторяет REQUIRED_COLUMNS из
           apps/api/src/api/services/product_import.py — это подсказка к формату
           файла, сами колонки проверяет сервер. */}
-      <p className="m-0 text-sm text-muted">
+      <p className="m-0 text-sm text-muted-foreground">
         {t("products.import.formatHint")}
       </p>
 
@@ -97,7 +97,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
           type="file"
           accept=".csv,text/csv"
           onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
-          className="min-h-touch w-full max-w-md rounded-lg border border-line bg-surface px-3 py-2.5 text-ink"
+          className="min-h-touch w-full max-w-md rounded-lg border border-border bg-card px-3 py-2.5 text-foreground"
         />
       </div>
 
@@ -108,7 +108,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
           onClick={() => {
             if (file !== null) importProducts.mutate({ file, dryRun: true });
           }}
-          className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent disabled:opacity-60"
+          className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
         >
           {importProducts.isPending
             ? t("products.import.checking")
@@ -118,7 +118,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
         <button
           type="button"
           onClick={onDone}
-          className="min-h-touch rounded-lg border border-line px-4 text-ink"
+          className="min-h-touch rounded-lg border border-border px-4 text-foreground"
         >
           {t("products.import.backToList")}
         </button>
@@ -149,7 +149,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
 
           {report.dry_run ? (
             <>
-              <p className="m-0 text-sm text-muted">
+              <p className="m-0 text-sm text-muted-foreground">
                 {t("products.import.preview.note")}
               </p>
               <div>
@@ -160,7 +160,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
                     if (file !== null)
                       importProducts.mutate({ file, dryRun: false });
                   }}
-                  className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent disabled:opacity-60"
+                  className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
                 >
                   {t("products.import.confirm")}
                 </button>
@@ -210,7 +210,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
                   pickFile(null);
                   if (fileInput.current !== null) fileInput.current.value = "";
                 }}
-                className="min-h-touch rounded-lg border border-line px-4 text-ink"
+                className="min-h-touch rounded-lg border border-border px-4 text-foreground"
               >
                 {t("products.import.another")}
               </button>

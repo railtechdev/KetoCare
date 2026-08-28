@@ -15,7 +15,7 @@ export function AuditPayload({ entry }: { entry: AuditEntry }) {
   // видит факт («кто, что, когда»), но не содержимое (раздел 5.1 ТЗ).
   if (entry.payload_hidden) {
     return (
-      <span className="text-sm text-muted italic">
+      <span className="text-sm text-muted-foreground italic">
         {t("audit.payload.hidden")}
       </span>
     );
@@ -23,7 +23,9 @@ export function AuditPayload({ entry }: { entry: AuditEntry }) {
 
   if (entry.before === null && entry.after === null) {
     return (
-      <span className="text-sm text-muted">{t("audit.payload.none")}</span>
+      <span className="text-sm text-muted-foreground">
+        {t("audit.payload.none")}
+      </span>
     );
   }
 
@@ -48,10 +50,10 @@ export function JsonDetails({
 }) {
   return (
     <details className="text-sm">
-      <summary className="flex min-h-touch cursor-pointer items-center text-accent">
+      <summary className="flex min-h-touch cursor-pointer items-center text-primary">
         {label}
       </summary>
-      <pre className="m-0 mt-1 max-h-64 max-w-sm overflow-auto rounded-kc border border-line bg-canvas p-2 text-xs">
+      <pre className="m-0 mt-1 max-h-64 max-w-sm overflow-auto rounded-xl border border-border bg-background p-2 text-xs">
         {JSON.stringify(value, null, 2)}
       </pre>
     </details>

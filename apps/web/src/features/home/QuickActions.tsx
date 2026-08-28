@@ -18,7 +18,7 @@ export function QuickActions() {
           <li key={section}>
             <SectionLink
               section={section}
-              className="flex min-h-touch items-center justify-center rounded-kc bg-accent px-4 text-center font-semibold text-on-accent no-underline shadow-kc-sm"
+              className="flex min-h-touch items-center justify-center rounded-xl bg-primary px-4 text-center font-semibold text-primary-foreground no-underline shadow-kc-sm"
             >
               {t(`quickActions.${section}`)}
             </SectionLink>

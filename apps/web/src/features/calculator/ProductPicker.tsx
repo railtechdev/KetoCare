@@ -86,7 +86,7 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-line bg-surface shadow-kc"
+          className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-border bg-card shadow-kc"
         >
           {options.map((product, index) => (
             <li
@@ -95,7 +95,7 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
               role="option"
               aria-selected={index === activeIndex}
               className={`min-h-touch cursor-pointer px-3 py-2 ${
-                index === activeIndex ? "bg-canvas" : ""
+                index === activeIndex ? "bg-background" : ""
               }`}
               onMouseDown={(event) => {
                 // mouseDown, а не click: click срабатывает после blur поля,
@@ -106,7 +106,7 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
               onMouseEnter={() => setActiveIndex(index)}
             >
               <span>{product.name}</span>
-              <span className="ml-2 text-sm text-muted tabular-nums">
+              <span className="ml-2 text-sm text-muted-foreground tabular-nums">
                 {t("per100g", {
                   kcal: product.kcal.toFixed(0),
                   fat: product.fat.toFixed(1),

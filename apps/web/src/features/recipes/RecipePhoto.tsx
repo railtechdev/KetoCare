@@ -30,7 +30,7 @@ export function RecipePhoto({ src, className }: Props) {
     return (
       <span
         className={cn(
-          "flex items-center justify-center bg-canvas text-sm text-muted",
+          "flex items-center justify-center bg-background text-sm text-muted-foreground",
           className,
         )}
       >

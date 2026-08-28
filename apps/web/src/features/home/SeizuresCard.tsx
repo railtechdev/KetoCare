@@ -21,11 +21,11 @@ export function SeizuresCard({ seizures }: { seizures: SeizuresToday }) {
         <span className="text-3xl font-semibold tabular-nums">
           {seizures.count}
         </span>
-        <span className="text-muted">
+        <span className="text-muted-foreground">
           {t("seizures.unit", { count: seizures.count })}
         </span>
       </p>
-      <p className="m-0 mt-1 text-sm text-muted">
+      <p className="m-0 mt-1 text-sm text-muted-foreground">
         {t("seizures.entries", { count: seizures.entries })}
       </p>
     </Panel>

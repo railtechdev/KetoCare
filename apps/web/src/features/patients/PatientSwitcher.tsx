@@ -19,7 +19,7 @@ export function PatientSwitcher() {
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-muted" htmlFor={id}>
+      <label className="text-sm text-muted-foreground" htmlFor={id}>
         {t("nav.patient")}
       </label>
       <select

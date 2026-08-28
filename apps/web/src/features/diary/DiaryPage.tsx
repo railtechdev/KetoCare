@@ -56,13 +56,13 @@ export function DiaryPage({ patientId }: { patientId: string }) {
       >
         <Tabs.List
           aria-label={t("tabsLabel")}
-          className="flex flex-wrap gap-2 border-b border-line"
+          className="flex flex-wrap gap-2 border-b border-border"
         >
           {DIARY_KINDS.map((value) => (
             <Tabs.Trigger
               key={value}
               value={value}
-              className="min-h-touch px-4 text-ink data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold"
+              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
             >
               {t(`tabs.${value}`)}
             </Tabs.Trigger>
@@ -258,13 +258,13 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
       )}
 
       {total > items.length && (
-        <p className="m-0 text-sm text-muted">
+        <p className="m-0 text-sm text-muted-foreground">
           {t("list.truncated", { shown: items.length, total })}
         </p>
       )}
 
       {logs.isLoading ? (
-        <p role="status" className="m-0 text-muted">
+        <p role="status" className="m-0 text-muted-foreground">
           {t("list.loading")}
         </p>
       ) : (

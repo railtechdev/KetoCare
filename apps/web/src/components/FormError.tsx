@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 export function FormError({ children }: { children: ReactNode }) {
   return (
     <p
-      className="mb-4 rounded-lg bg-danger px-3 py-2.5 text-sm text-on-danger"
+      className="mb-4 rounded-lg bg-destructive px-3 py-2.5 text-sm text-destructive-foreground"
       role="alert"
     >
       {children}

@@ -30,7 +30,7 @@ export function PatientGate({
 
   if (isPending) {
     return (
-      <p role="status" className="m-0 text-muted">
+      <p role="status" className="m-0 text-muted-foreground">
         {t("patientGate.loading")}
       </p>
     );
@@ -58,7 +58,7 @@ export function PatientGate({
         <p className="m-0">{t("patientGate.noneBody")}</p>
         <SectionLink
           section="settings"
-          className="mt-2 inline-flex min-h-touch items-center text-accent"
+          className="mt-2 inline-flex min-h-touch items-center text-primary"
         >
           {t("patientGate.addChild")}
         </SectionLink>

@@ -79,7 +79,7 @@ export function ChildForm({
             <option value="m">{t("child.sex.m")}</option>
             <option value="f">{t("child.sex.f")}</option>
           </SelectField>
-          <p className="mt-0 mb-4 text-sm text-muted">
+          <p className="mt-0 mb-4 text-sm text-muted-foreground">
             {t("child.immutableHint")}
           </p>
         </>
@@ -123,7 +123,7 @@ export function ChildForm({
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-touch rounded-lg border border-line px-4 text-ink"
+            className="min-h-touch rounded-lg border border-border px-4 text-foreground"
           >
             {t("common:actions.cancel")}
           </button>

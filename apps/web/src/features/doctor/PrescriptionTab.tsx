@@ -139,7 +139,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
 
       {canWrite && (
         <Panel title={t("prescription.formTitle")}>
-          <p className="mt-0 mb-4 text-sm text-muted">
+          <p className="mt-0 mb-4 text-sm text-muted-foreground">
             {t("prescription.formHint")}
           </p>
 
@@ -162,7 +162,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
 
       <Panel title={t("prescription.historyTitle")}>
         {history.isPending && (
-          <p role="status" className="m-0 text-muted">
+          <p role="status" className="m-0 text-muted-foreground">
             {t("prescription.loading")}
           </p>
         )}

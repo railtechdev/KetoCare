@@ -176,7 +176,7 @@ export function MedicalProfileForm({
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-touch rounded-lg border border-line px-4 font-semibold"
+            className="min-h-touch rounded-lg border border-border px-4 font-semibold"
           >
             {t("actions.cancel")}
           </button>

@@ -121,7 +121,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
   return (
     <Panel title={t("medications.title")}>
       {medications.isPending && (
-        <p role="status" className="m-0 text-muted">
+        <p role="status" className="m-0 text-muted-foreground">
           {t("medications.loading")}
         </p>
       )}
@@ -156,7 +156,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
         <button
           type="button"
           onClick={() => setForm({ mode: "create" })}
-          className="mt-4 min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent"
+          className="mt-4 min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
         >
           {t("medications.add")}
         </button>
@@ -184,19 +184,19 @@ function MedicationActions({
 }) {
   const { t } = useTranslation("doctor");
   const action =
-    "min-h-touch rounded-lg border border-line px-3 text-sm font-semibold";
+    "min-h-touch rounded-lg border border-border px-3 text-sm font-semibold";
 
   if (confirming) {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-danger" role="alert">
+        <span className="text-sm text-destructive" role="alert">
           {t("medications.confirmDelete")}
         </span>
         <button
           type="button"
           onClick={onConfirmDelete}
           disabled={deleting}
-          className="min-h-touch rounded-lg bg-danger px-3 text-sm font-semibold text-on-danger disabled:opacity-60"
+          className="min-h-touch rounded-lg bg-destructive px-3 text-sm font-semibold text-destructive-foreground disabled:opacity-60"
         >
           {t("actions.yes")}
         </button>
@@ -224,7 +224,7 @@ function MedicationActions({
         type="button"
         onClick={onAskDelete}
         aria-label={t("medications.deleteAria", { name: medication.drug_name })}
-        className={`${action} text-danger`}
+        className={`${action} text-destructive`}
       >
         {t("actions.delete")}
       </button>

@@ -127,7 +127,7 @@ export function MedicationForm({
         />
       </div>
 
-      <p className="mt-0 mb-4 text-sm text-muted">
+      <p className="mt-0 mb-4 text-sm text-muted-foreground">
         {t("medications.stoppedHint")}
       </p>
 
@@ -144,7 +144,7 @@ export function MedicationForm({
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-touch rounded-lg border border-line px-4 font-semibold"
+          className="min-h-touch rounded-lg border border-border px-4 font-semibold"
         >
           {t("actions.cancel")}
         </button>

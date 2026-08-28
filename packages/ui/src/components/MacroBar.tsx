@@ -17,9 +17,9 @@ interface Segment {
 }
 
 const SEGMENT_COLORS = {
-  fat: "bg-accent",
+  fat: "bg-primary",
   protein: "bg-warning",
-  carbs: "bg-danger",
+  carbs: "bg-destructive",
 } as const;
 
 /**
@@ -57,7 +57,7 @@ export function MacroBar({
   return (
     <div className={cn("w-full", className)}>
       <div
-        className="flex h-3 overflow-hidden rounded-full bg-line"
+        className="flex h-3 overflow-hidden rounded-full bg-border"
         role="img"
         aria-label={segments
           .map((s) => `${s.label} ${s.grams.toFixed(1)} г`)
@@ -78,7 +78,7 @@ export function MacroBar({
           })}
       </div>
 
-      <ul className="mt-2 flex list-none flex-wrap gap-4 p-0 text-sm text-ink">
+      <ul className="mt-2 flex list-none flex-wrap gap-4 p-0 text-sm text-foreground">
         {segments.map((segment) => (
           <li key={segment.key} className="flex items-center gap-1.5">
             <span
@@ -87,7 +87,7 @@ export function MacroBar({
             />
             <span>{segment.label}</span>
             {showGrams && (
-              <span className="text-muted tabular-nums">
+              <span className="text-muted-foreground tabular-nums">
                 {segment.grams.toFixed(1)} г
               </span>
             )}

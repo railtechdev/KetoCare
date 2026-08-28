@@ -24,7 +24,7 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
   if (day === null) {
     return (
       <Panel title={t("day.title")}>
-        <p className="m-0 text-muted">{t("day.empty")}</p>
+        <p className="m-0 text-muted-foreground">{t("day.empty")}</p>
       </Panel>
     );
   }
@@ -60,7 +60,9 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
       />
 
       {verdict.unavailable ? (
-        <p className="m-0 mt-4 text-sm text-muted">{t("day.noPrescription")}</p>
+        <p className="m-0 mt-4 text-sm text-muted-foreground">
+          {t("day.noPrescription")}
+        </p>
       ) : issues.length > 0 ? (
         <WarningBanner
           className="mt-4"
@@ -80,7 +82,7 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
       )}
 
       {verdict.kcalBelowTarget && targetKcal !== null && (
-        <p className="m-0 mt-3 text-sm text-muted">
+        <p className="m-0 mt-3 text-sm text-muted-foreground">
           {t("day.kcalBelowTarget", {
             value: totals.kcal.toFixed(0),
             target: targetKcal.toFixed(0),
@@ -91,7 +93,7 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
       {/* Версия ядра показывается рядом с числами: итоги, посчитанные разными
           версиями, могут отличаться, и это должно быть видно. */}
       {day.engine_version && (
-        <p className="m-0 mt-3 text-xs text-muted">
+        <p className="m-0 mt-3 text-xs text-muted-foreground">
           {t("day.engineVersion", { version: day.engine_version })}
         </p>
       )}

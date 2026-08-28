@@ -46,12 +46,12 @@ export function MenuSlotSection({
   return (
     <section
       aria-label={slotName}
-      className="rounded-kc bg-surface p-4 shadow-kc-sm"
+      className="rounded-xl bg-card p-4 shadow-kc-sm"
     >
       <h2 className="m-0 text-lg font-semibold">{slotName}</h2>
 
       {items.length === 0 ? (
-        <p className="mt-2 mb-0 text-muted">{t("slot.empty")}</p>
+        <p className="mt-2 mb-0 text-muted-foreground">{t("slot.empty")}</p>
       ) : (
         <ul className="mt-3 mb-0 flex list-none flex-col gap-2 p-0">
           {items.map((item) => {
@@ -62,12 +62,12 @@ export function MenuSlotSection({
             return (
               <li
                 key={item.id}
-                className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2"
+                className="flex flex-wrap items-center gap-3 rounded-lg border border-border px-3 py-2"
               >
                 <label className="flex min-h-touch items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    className="size-5 accent-accent"
+                    className="size-5 accent-primary"
                     checked={item.eaten}
                     aria-label={t("item.eatenFor", { name: title })}
                     onChange={(event) =>
@@ -80,16 +80,16 @@ export function MenuSlotSection({
                 <span
                   className={cn(
                     "flex-1",
-                    item.eaten && "text-muted line-through",
+                    item.eaten && "text-muted-foreground line-through",
                   )}
                 >
                   {title}
                 </span>
 
-                <span className="text-sm text-muted">
+                <span className="text-sm text-muted-foreground">
                   {t(`item.${item.recipe_id !== null ? "recipe" : "custom"}`)}
                 </span>
-                <span className="text-sm text-muted tabular-nums">
+                <span className="text-sm text-muted-foreground tabular-nums">
                   {t("item.portion", {
                     factor: formatPortionFactor(item.portion_factor),
                   })}
@@ -100,7 +100,7 @@ export function MenuSlotSection({
                   onClick={() => onRemove(item.id)}
                   disabled={!canRemove || pending}
                   aria-label={t("item.remove", { name: title })}
-                  className="min-h-touch min-w-touch rounded-lg border border-line px-3 text-ink disabled:opacity-60"
+                  className="min-h-touch min-w-touch rounded-lg border border-border px-3 text-foreground disabled:opacity-60"
                 >
                   ×
                 </button>
@@ -127,7 +127,7 @@ export function MenuSlotSection({
           onClick={() => setAdding(true)}
           disabled={pending}
           aria-label={t("slot.addTo", { slot: slotName })}
-          className="mt-3 min-h-touch rounded-lg border border-accent px-4 font-semibold text-accent disabled:opacity-60"
+          className="mt-3 min-h-touch rounded-lg border border-primary px-4 font-semibold text-primary disabled:opacity-60"
         >
           {t("slot.add")}
         </button>

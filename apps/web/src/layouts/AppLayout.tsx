@@ -21,9 +21,9 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center gap-4 border-b border-line bg-surface px-6 py-3 shadow-kc-sm">
-        <span className="text-lg font-bold text-accent">{t("app.name")}</span>
-        <span className="rounded-full border border-line bg-canvas px-2.5 py-0.5 text-sm text-muted">
+      <header className="flex items-center gap-4 border-b border-border bg-card px-6 py-3 shadow-kc-sm">
+        <span className="text-lg font-bold text-primary">{t("app.name")}</span>
+        <span className="rounded-full border border-border bg-background px-2.5 py-0.5 text-sm text-muted-foreground">
           {t(`roles.${session.role}`)}
         </span>
         <div className="mr-auto">
@@ -34,7 +34,7 @@ export function AppLayout() {
           onClick={() => {
             void signOut().then(() => navigate({ to: "/login" }));
           }}
-          className="min-h-touch rounded-lg border border-line px-4 text-ink"
+          className="min-h-touch rounded-lg border border-border px-4 text-foreground"
         >
           {t("nav.logout")}
         </button>
@@ -47,8 +47,8 @@ export function AppLayout() {
               <li key={section}>
                 <SectionLink
                   section={section}
-                  className="flex min-h-touch items-center rounded-lg px-3 text-ink no-underline hover:bg-surface"
-                  activeProps={{ className: "bg-surface font-semibold" }}
+                  className="flex min-h-touch items-center rounded-lg px-3 text-foreground no-underline hover:bg-card"
+                  activeProps={{ className: "bg-card font-semibold" }}
                 >
                   {t(`nav.${section}`)}
                 </SectionLink>
@@ -57,7 +57,7 @@ export function AppLayout() {
           </ul>
         </nav>
 
-        <main className="min-h-[60vh] rounded-kc bg-surface p-6 shadow-kc-sm">
+        <main className="min-h-[60vh] rounded-xl bg-card p-6 shadow-kc-sm">
           <Outlet />
         </main>
       </div>

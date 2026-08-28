@@ -150,7 +150,7 @@ function FormShell({
     <form
       noValidate
       onSubmit={onSubmit}
-      className="rounded-kc bg-surface p-4 shadow-kc"
+      className="rounded-xl bg-card p-4 shadow-kc"
     >
       <h3 className="mt-0 mb-3 text-base font-semibold">
         {editing ? t("form.editTitle") : t("form.addTitle")}
@@ -181,7 +181,7 @@ function SecondaryButton({
     <button
       type="button"
       onClick={onClick}
-      className="min-h-touch rounded-lg border border-line px-4 font-semibold text-ink"
+      className="min-h-touch rounded-lg border border-border px-4 font-semibold text-foreground"
     >
       {children}
     </button>
@@ -290,7 +290,7 @@ function SeizureForm({
             <button
               type="button"
               onClick={() => void goToSecondStep()}
-              className="min-h-touch flex-1 rounded-lg bg-accent px-4 font-semibold text-on-accent"
+              className="min-h-touch flex-1 rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
             >
               {t("form.next")}
             </button>
@@ -316,7 +316,7 @@ function SeizureForm({
         )
       }
     >
-      <p className="mt-0 mb-3 text-sm text-muted">
+      <p className="mt-0 mb-3 text-sm text-muted-foreground">
         {t("form.step", { current: step, total: 2 })}
       </p>
 
@@ -584,7 +584,7 @@ function MedicationForm({
   });
 
   if (medications.length === 0) {
-    return <p className="text-muted">{t("medications.none")}</p>;
+    return <p className="text-muted-foreground">{t("medications.none")}</p>;
   }
 
   return (
@@ -626,7 +626,7 @@ function MedicationForm({
       <label className="mb-4 flex min-h-touch items-center gap-3 text-sm font-medium">
         <input
           type="checkbox"
-          className="size-5 accent-accent"
+          className="size-5 accent-primary"
           {...register("taken")}
         />
         {t("medications.taken")}

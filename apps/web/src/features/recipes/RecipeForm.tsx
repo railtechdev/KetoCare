@@ -99,7 +99,9 @@ export function RecipeForm({
           label={t("form.photoPath")}
           {...register("photoPath")}
         />
-        <p className="mt-0 mb-4 text-sm text-muted">{t("form.photoHint")}</p>
+        <p className="mt-0 mb-4 text-sm text-muted-foreground">
+          {t("form.photoHint")}
+        </p>
       </fieldset>
 
       <fieldset className="m-0 border-0 p-0">
@@ -157,7 +159,9 @@ export function RecipeForm({
         </div>
 
         {compositionEmpty ? (
-          <p className="mt-3 mb-0 text-muted">{t("form.emptyComposition")}</p>
+          <p className="mt-3 mb-0 text-muted-foreground">
+            {t("form.emptyComposition")}
+          </p>
         ) : (
           <ul className="mt-3 mb-0 flex list-none flex-col gap-2 p-0">
             {ingredients.fields.map((field, index) => {
@@ -184,12 +188,14 @@ export function RecipeForm({
                     aria-describedby={
                       gramsError ? `${gramsId}-error` : undefined
                     }
-                    className="min-h-touch w-24 rounded-lg border border-line bg-surface px-3 py-2 text-right tabular-nums"
+                    className="min-h-touch w-24 rounded-lg border border-border bg-card px-3 py-2 text-right tabular-nums"
                     {...register(`ingredients.${index}.grams`, {
                       valueAsNumber: true,
                     })}
                   />
-                  <span className="text-muted">{t("form.gramsUnit")}</span>
+                  <span className="text-muted-foreground">
+                    {t("form.gramsUnit")}
+                  </span>
 
                   <button
                     type="button"
@@ -197,7 +203,7 @@ export function RecipeForm({
                     aria-label={t("form.removeIngredient", {
                       name: field.name,
                     })}
-                    className="min-h-touch min-w-touch rounded-lg border border-line px-3 text-ink"
+                    className="min-h-touch min-w-touch rounded-lg border border-border px-3 text-foreground"
                   >
                     ×
                   </button>
@@ -205,7 +211,7 @@ export function RecipeForm({
                   {gramsError && (
                     <p
                       id={`${gramsId}-error`}
-                      className="w-full text-sm text-danger"
+                      className="w-full text-sm text-destructive"
                     >
                       {t("form.errors.grams")}
                     </p>
@@ -220,13 +226,15 @@ export function RecipeForm({
           <p
             id={compositionErrorId}
             role="alert"
-            className="mt-2 mb-0 text-sm text-danger"
+            className="mt-2 mb-0 text-sm text-destructive"
           >
             {t("form.errors.ingredients")}
           </p>
         )}
 
-        <p className="mt-2 mb-0 text-sm text-muted">{t("form.computedHint")}</p>
+        <p className="mt-2 mb-0 text-sm text-muted-foreground">
+          {t("form.computedHint")}
+        </p>
       </fieldset>
 
       <fieldset className="m-0 border-0 p-0">
@@ -262,7 +270,7 @@ export function RecipeForm({
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-touch rounded-lg border border-line px-4 text-ink"
+          className="min-h-touch rounded-lg border border-border px-4 text-foreground"
         >
           {t("actions.cancel")}
         </button>

@@ -14,7 +14,7 @@ export function DayNavigator({ date, onChange }: Props) {
   const inputId = useId();
 
   const button =
-    "min-h-touch min-w-touch rounded-lg border border-line px-4 text-ink";
+    "min-h-touch min-w-touch rounded-lg border border-border px-4 text-foreground";
 
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -40,7 +40,7 @@ export function DayNavigator({ date, onChange }: Props) {
             // выбранный день не меняется, иначе запрос ушёл бы с пустой датой.
             if (isIsoDate(event.target.value)) onChange(event.target.value);
           }}
-          className="min-h-touch rounded-lg border border-line bg-surface px-3 py-2 text-ink"
+          className="min-h-touch rounded-lg border border-border bg-card px-3 py-2 text-foreground"
         />
       </div>
 
@@ -61,7 +61,9 @@ export function DayNavigator({ date, onChange }: Props) {
         {t("day.today")}
       </button>
 
-      <p className="m-0 self-center text-muted">{formatDayLabel(date)}</p>
+      <p className="m-0 self-center text-muted-foreground">
+        {formatDayLabel(date)}
+      </p>
     </div>
   );
 }

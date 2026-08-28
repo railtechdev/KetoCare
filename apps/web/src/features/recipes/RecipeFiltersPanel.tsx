@@ -120,12 +120,16 @@ export function RecipeFiltersPanel({
         </div>
       </div>
 
-      <p id={hintId} className="mt-2 mb-0 text-sm text-muted">
+      <p id={hintId} className="mt-2 mb-0 text-sm text-muted-foreground">
         {t("filters.ratioHint")}
       </p>
 
       {rangeInvalid && (
-        <p id={errorId} role="alert" className="mt-1 mb-0 text-sm text-danger">
+        <p
+          id={errorId}
+          role="alert"
+          className="mt-1 mb-0 text-sm text-destructive"
+        >
           {t("filters.rangeInvalid")}
         </p>
       )}
@@ -133,7 +137,7 @@ export function RecipeFiltersPanel({
       <button
         type="button"
         onClick={onReset}
-        className="mt-3 min-h-touch rounded-lg border border-line px-4 text-ink"
+        className="mt-3 min-h-touch rounded-lg border border-border px-4 text-foreground"
       >
         {t("filters.reset")}
       </button>

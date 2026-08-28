@@ -20,7 +20,7 @@ export function DishRows({
   const { t } = useTranslation("calculator");
 
   if (rows.length === 0) {
-    return <p className="text-muted">{t("emptyComposition")}</p>;
+    return <p className="text-muted-foreground">{t("emptyComposition")}</p>;
   }
 
   return (
@@ -43,15 +43,15 @@ export function DishRows({
             onChange={(event) =>
               onChangeGrams(row.product.id, Number(event.target.value))
             }
-            className="min-h-touch w-24 rounded-lg border border-line bg-surface px-3 py-2 text-right tabular-nums read-only:bg-canvas read-only:text-muted"
+            className="min-h-touch w-24 rounded-lg border border-border bg-card px-3 py-2 text-right tabular-nums read-only:bg-background read-only:text-muted-foreground"
           />
-          <span className="text-muted">{t("gramsUnit")}</span>
+          <span className="text-muted-foreground">{t("gramsUnit")}</span>
 
           <button
             type="button"
             onClick={() => onRemove(row.product.id)}
             aria-label={t("removeProduct", { name: row.product.name })}
-            className="min-h-touch min-w-touch rounded-lg border border-line px-3 text-ink"
+            className="min-h-touch min-w-touch rounded-lg border border-border px-3 text-foreground"
           >
             ×
           </button>

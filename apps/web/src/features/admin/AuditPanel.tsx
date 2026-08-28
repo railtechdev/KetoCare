@@ -72,7 +72,7 @@ export function AuditPanel() {
         header: t("audit.columns.user"),
         cell: ({ row }) =>
           row.original.user_id === null ? (
-            <span className="text-muted">{t("audit.noUser")}</span>
+            <span className="text-muted-foreground">{t("audit.noUser")}</span>
           ) : (
             <span title={row.original.user_id} className="tabular-nums">
               {shortId(row.original.user_id)}
@@ -129,7 +129,7 @@ export function AuditPanel() {
   return (
     <div className="flex flex-col gap-4">
       <h2 className="m-0 text-lg font-semibold">{t("audit.title")}</h2>
-      <p className="m-0 text-muted">{t("audit.intro")}</p>
+      <p className="m-0 text-muted-foreground">{t("audit.intro")}</p>
 
       <fieldset className="m-0 grid gap-4 border-0 p-0 sm:grid-cols-2 lg:grid-cols-3">
         <legend className="sr-only">{t("audit.filters.legend")}</legend>
@@ -151,7 +151,7 @@ export function AuditPanel() {
             className={FIELD_CONTROL}
           />
           {userIdInvalid && (
-            <p id="audit-user-error" className="mt-1 text-sm text-danger">
+            <p id="audit-user-error" className="mt-1 text-sm text-destructive">
               {t("audit.filters.userInvalid")}
             </p>
           )}
@@ -234,7 +234,7 @@ export function AuditPanel() {
             className={FIELD_CONTROL}
           />
           {rangeInvalid && (
-            <p id="audit-to-error" className="mt-1 text-sm text-danger">
+            <p id="audit-to-error" className="mt-1 text-sm text-destructive">
               {t("audit.filters.rangeInvalid")}
             </p>
           )}
@@ -247,7 +247,7 @@ export function AuditPanel() {
               setFilters(EMPTY_AUDIT_FILTERS);
               setOffset(0);
             }}
-            className="min-h-touch w-full rounded-lg border border-line px-4 text-ink"
+            className="min-h-touch w-full rounded-lg border border-border px-4 text-foreground"
           >
             {t("audit.filters.reset")}
           </button>
@@ -261,7 +261,7 @@ export function AuditPanel() {
       )}
 
       {auditLog.isLoading ? (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("audit.loading")}
         </p>
       ) : (
@@ -290,11 +290,14 @@ export function AuditPanel() {
             type="button"
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - AUDIT_PAGE_SIZE))}
-            className="min-h-touch rounded-lg border border-line px-3 text-ink disabled:opacity-50"
+            className="min-h-touch rounded-lg border border-border px-3 text-foreground disabled:opacity-50"
           >
             {t("table.previousPage")}
           </button>
-          <span role="status" className="text-sm text-muted tabular-nums">
+          <span
+            role="status"
+            className="text-sm text-muted-foreground tabular-nums"
+          >
             {t("audit.pagination.range", {
               from: offset + 1,
               to: offset + rows.length,
@@ -305,7 +308,7 @@ export function AuditPanel() {
             type="button"
             disabled={offset + rows.length >= total}
             onClick={() => setOffset(offset + AUDIT_PAGE_SIZE)}
-            className="min-h-touch rounded-lg border border-line px-3 text-ink disabled:opacity-50"
+            className="min-h-touch rounded-lg border border-border px-3 text-foreground disabled:opacity-50"
           >
             {t("table.nextPage")}
           </button>

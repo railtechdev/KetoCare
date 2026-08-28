@@ -54,7 +54,9 @@ export function TrendChart({
   className,
 }: TrendChartProps) {
   if (points.length === 0) {
-    return <div className={cn("text-muted", className)}>{emptyState}</div>;
+    return (
+      <div className={cn("text-muted-foreground", className)}>{emptyState}</div>
+    );
   }
 
   // Recharts работает с числами: даты переводим в миллисекунды и форматируем на осях.

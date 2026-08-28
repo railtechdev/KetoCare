@@ -10,7 +10,7 @@ export function SectionPlaceholder({ section }: { section: string }) {
   return (
     <section>
       <h1 className="m-0 text-xl font-semibold">{t(`nav.${section}`)}</h1>
-      <p className="mt-2 text-muted">{t("app.sectionComingSoon")}</p>
+      <p className="mt-2 text-muted-foreground">{t("app.sectionComingSoon")}</p>
     </section>
   );
 }

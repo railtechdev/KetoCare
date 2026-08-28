@@ -21,7 +21,7 @@ interface Props {
 }
 
 const SECONDARY_BUTTON =
-  "min-h-touch rounded-lg border border-line px-4 text-ink";
+  "min-h-touch rounded-lg border border-border px-4 text-foreground";
 
 /** Карточка рецепта: состав, приготовление и показатели, посчитанные ядром. */
 export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
@@ -46,7 +46,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
     return (
       <section className="flex flex-col gap-4">
         {backButton}
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("detail.loading")}
         </p>
       </section>
@@ -73,10 +73,10 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
 
       <header className="flex flex-col gap-2">
         <h1 className="m-0 text-xl font-semibold">{data.title}</h1>
-        <p className="m-0 flex flex-wrap items-center gap-2 text-sm text-muted">
+        <p className="m-0 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>{t(`categories.${data.category}`)}</span>
           {canEdit && (
-            <span className="rounded-full border border-line px-2 py-0.5">
+            <span className="rounded-full border border-border px-2 py-0.5">
               {t(`status.${data.status}`)}
             </span>
           )}
@@ -85,7 +85,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
 
       <RecipePhoto
         src={data.photo_path}
-        className="h-56 w-full max-w-xl rounded-kc"
+        className="h-56 w-full max-w-xl rounded-xl"
       />
 
       <section
@@ -95,7 +95,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
         <h2 className="m-0 text-lg font-semibold">{t("detail.nutrition")}</h2>
 
         {computed === null ? (
-          <p className="m-0 text-muted">{t("detail.noComputed")}</p>
+          <p className="m-0 text-muted-foreground">{t("detail.noComputed")}</p>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-4">
@@ -105,7 +105,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
               <span className="tabular-nums">
                 {t("detail.kcal", { value: computed.kcal.toFixed(0) })}
               </span>
-              <span className="text-muted tabular-nums">
+              <span className="text-muted-foreground tabular-nums">
                 {t("detail.fiber", { value: formatGrams(computed.fiber) })}
               </span>
             </div>
@@ -118,14 +118,14 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
           </>
         )}
 
-        <p className="m-0 flex flex-wrap gap-4 text-sm text-muted tabular-nums">
+        <p className="m-0 flex flex-wrap gap-4 text-sm text-muted-foreground tabular-nums">
           <span>{t("detail.yield", { grams: formatGrams(data.yield_g) })}</span>
           <span>{t("detail.servings", { value: data.servings })}</span>
         </p>
 
         {/* Версия ядра видна рядом с показателями: расчёты разных версий могут
             отличаться, и понять это нужно до того, как по рецепту накормят. */}
-        <p className="m-0 text-xs text-muted">
+        <p className="m-0 text-xs text-muted-foreground">
           {data.engine_version === null
             ? t("detail.engineVersionUnknown")
             : t("detail.engineVersion", { version: data.engine_version })}
@@ -138,9 +138,11 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
         </h2>
 
         {data.ingredients.length === 0 ? (
-          <p className="m-0 text-muted">{t("detail.compositionEmpty")}</p>
+          <p className="m-0 text-muted-foreground">
+            {t("detail.compositionEmpty")}
+          </p>
         ) : productNames.isLoading ? (
-          <p role="status" className="m-0 text-muted">
+          <p role="status" className="m-0 text-muted-foreground">
             {t("detail.loadingProducts")}
           </p>
         ) : (
@@ -148,13 +150,13 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
             {data.ingredients.map((ingredient) => (
               <li
                 key={ingredient.product_id}
-                className="flex items-baseline justify-between gap-4 border-b border-line pb-1"
+                className="flex items-baseline justify-between gap-4 border-b border-border pb-1"
               >
                 <span>
                   {productNames.byId[ingredient.product_id] ??
                     t("detail.unknownProduct")}
                 </span>
-                <span className="text-muted tabular-nums">
+                <span className="text-muted-foreground tabular-nums">
                   {t("detail.grams", { value: formatGrams(ingredient.grams) })}
                 </span>
               </li>
@@ -187,7 +189,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                 type="button"
                 disabled={publish.isPending}
                 onClick={() => publish.mutate(data.id)}
-                className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent disabled:opacity-60"
+                className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
               >
                 {publish.isPending
                   ? t("actions.publishing")
@@ -218,7 +220,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                   onClick={() =>
                     remove.mutate(data.id, { onSuccess: () => onBack() })
                   }
-                  className="min-h-touch rounded-lg bg-danger px-4 font-semibold text-on-danger disabled:opacity-60"
+                  className="min-h-touch rounded-lg bg-destructive px-4 font-semibold text-destructive-foreground disabled:opacity-60"
                 >
                   {t("actions.confirmDelete.confirm")}
                 </button>

@@ -44,7 +44,7 @@ export function ProductEditor({
       <button
         type="button"
         onClick={onCancel}
-        className="min-h-touch self-start rounded-lg border border-line px-4 text-ink"
+        className="min-h-touch self-start rounded-lg border border-border px-4 text-foreground"
       >
         {t("products.backToList")}
       </button>

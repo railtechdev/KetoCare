@@ -35,12 +35,15 @@ export function DiaryEntryCard({
 }: DiaryEntryCardProps) {
   return (
     <article
-      className={cn("rounded-kc bg-surface p-4 text-ink shadow-kc", className)}
+      className={cn(
+        "rounded-xl bg-card p-4 text-foreground shadow-kc",
+        className,
+      )}
     >
       <header className="flex items-baseline justify-between gap-3">
         <h3 className="m-0 text-base font-semibold">{title}</h3>
         <time
-          className="text-sm whitespace-nowrap text-muted tabular-nums"
+          className="text-sm whitespace-nowrap text-muted-foreground tabular-nums"
           dateTime={occurredAt.toISOString()}
         >
           {formatOccurredAt(occurredAt)}
@@ -55,7 +58,7 @@ export function DiaryEntryCard({
           // разобрана автоматически и её стоит перепроверить (раздел 10.3 ТЗ).
           <span
             className={cn(
-              "text-xs text-muted",
+              "text-xs text-muted-foreground",
               source === "ai_parsed" && "font-semibold text-warning",
             )}
             data-source={source}

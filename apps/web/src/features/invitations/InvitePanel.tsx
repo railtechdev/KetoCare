@@ -49,9 +49,9 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
     invite.data === undefined ? null : invitationLink(invite.data.token);
 
   return (
-    <section className="rounded-kc border border-line p-4">
+    <section className="rounded-xl border border-border p-4">
       <h3 className="mt-0 mb-1 text-base font-semibold">{t("title")}</h3>
-      <p className="mt-0 mb-4 text-sm text-muted">{t("intro")}</p>
+      <p className="mt-0 mb-4 text-sm text-muted-foreground">{t("intro")}</p>
 
       <form
         onSubmit={handleSubmit((values) => {
@@ -102,7 +102,7 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
           <p className="m-0">
             {t("ready.body", { email: invite.data?.email })}
           </p>
-          <code className="mt-2 block rounded-lg border border-line bg-canvas px-3 py-2.5 break-all">
+          <code className="mt-2 block rounded-lg border border-border bg-background px-3 py-2.5 break-all">
             {link}
           </code>
           <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -113,7 +113,7 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
                   .writeText(link)
                   .then(() => setCopied(true));
               }}
-              className="min-h-touch rounded-lg border border-line px-4 text-ink"
+              className="min-h-touch rounded-lg border border-border px-4 text-foreground"
             >
               {t("ready.copy")}
             </button>
@@ -123,7 +123,7 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
               </span>
             )}
           </div>
-          <p className="mt-2 mb-0 text-sm text-muted">
+          <p className="mt-2 mb-0 text-sm text-muted-foreground">
             {t("ready.oncePerToken")}
           </p>
         </WarningBanner>

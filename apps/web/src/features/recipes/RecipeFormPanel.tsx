@@ -42,7 +42,7 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
   if (recipeId !== null) {
     if (recipe.isLoading || productNames.isLoading) {
       return (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("form.loading")}
         </p>
       );

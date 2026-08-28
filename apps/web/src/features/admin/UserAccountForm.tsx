@@ -61,12 +61,12 @@ export function UserAccountForm({
       onSubmit={handleSubmit((values) =>
         onSubmit({ role: values.role, is_active: values.isActive }),
       )}
-      className="rounded-kc border border-line p-4"
+      className="rounded-xl border border-border p-4"
     >
       <h3 className="mt-0 mb-1 text-base font-semibold">
         {t("users.form.title", { name: user.full_name })}
       </h3>
-      <p className="mt-0 mb-4 text-sm text-muted">{user.email}</p>
+      <p className="mt-0 mb-4 text-sm text-muted-foreground">{user.email}</p>
 
       {error !== null && error !== undefined && (
         <FormError>
@@ -94,7 +94,7 @@ export function UserAccountForm({
         <input
           id={activeId}
           type="checkbox"
-          className="size-5 accent-accent"
+          className="size-5 accent-primary"
           {...register("isActive")}
         />
         {t("users.form.isActive")}
@@ -107,7 +107,7 @@ export function UserAccountForm({
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-touch max-w-48 flex-1 rounded-lg border border-line px-4 text-ink"
+          className="min-h-touch max-w-48 flex-1 rounded-lg border border-border px-4 text-foreground"
         >
           {t("common:actions.cancel")}
         </button>

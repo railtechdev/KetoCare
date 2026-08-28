@@ -68,7 +68,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
 
       <>
         {menu.isLoading && (
-          <p role="status" className="text-muted">
+          <p role="status" className="text-muted-foreground">
             {t("loading")}
           </p>
         )}
@@ -98,13 +98,13 @@ export function MenuPage({ patientId }: { patientId: string }) {
         )}
 
         {upsert.isPending && (
-          <p role="status" className="m-0 text-muted">
+          <p role="status" className="m-0 text-muted-foreground">
             {t("day.saving")}
           </p>
         )}
 
         {items.length === 0 && !menu.isLoading && !menu.isError && (
-          <p className="m-0 text-muted">{t("day.empty")}</p>
+          <p className="m-0 text-muted-foreground">{t("day.empty")}</p>
         )}
 
         <div className="flex flex-col gap-4">
@@ -127,7 +127,9 @@ export function MenuPage({ patientId }: { patientId: string }) {
         </div>
 
         {items.length === 1 && (
-          <p className="m-0 text-sm text-muted">{t("item.lastOne")}</p>
+          <p className="m-0 text-sm text-muted-foreground">
+            {t("item.lastOne")}
+          </p>
         )}
 
         {/* key по дате: форма перечитывает дату-источник по умолчанию и

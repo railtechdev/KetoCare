@@ -33,7 +33,7 @@ function Shell() {
   // иначе guard'ы увидели бы session === null и увели на /login того, кто уже вошёл.
   if (restoring) {
     return (
-      <p role="status" className="p-6 text-muted">
+      <p role="status" className="p-6 text-muted-foreground">
         {t("app.loading")}
       </p>
     );

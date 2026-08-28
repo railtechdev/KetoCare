@@ -35,7 +35,7 @@ interface FieldBaseProps {
  * копии успели разойтись в отступах и цвете текста.
  */
 export const FIELD_CONTROL =
-  "min-h-touch w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-ink";
+  "min-h-touch w-full rounded-lg border border-border bg-card px-3 py-2.5 text-foreground";
 
 function errorIdOf(id: string | undefined, error: ReactNode) {
   return error ? `${id}-error` : undefined;
@@ -49,7 +49,7 @@ function controlProps(
 ) {
   return {
     id,
-    className: cn(FIELD_CONTROL, error && "border-danger", className),
+    className: cn(FIELD_CONTROL, error && "border-destructive", className),
     "aria-invalid": error ? true : undefined,
     "aria-describedby": errorIdOf(id, error),
   } as const;
@@ -68,7 +68,7 @@ function FieldShell({
       </label>
       {children}
       {error && (
-        <p id={errorIdOf(id, error)} className="mt-1 text-sm text-danger">
+        <p id={errorIdOf(id, error)} className="mt-1 text-sm text-destructive">
           {error}
         </p>
       )}

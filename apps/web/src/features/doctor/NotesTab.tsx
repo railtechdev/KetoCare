@@ -80,12 +80,14 @@ export function NotesTab({ patientId }: { patientId: string }) {
 
       <Panel title={t("notes.listTitle")}>
         {notes.isPending && (
-          <p role="status" className="m-0 text-muted">
+          <p role="status" className="m-0 text-muted-foreground">
             {t("notes.loading")}
           </p>
         )}
 
-        {forbidden && <p className="m-0 text-muted">{t("notes.forbidden")}</p>}
+        {forbidden && (
+          <p className="m-0 text-muted-foreground">{t("notes.forbidden")}</p>
+        )}
 
         {notes.isError && !forbidden && (
           <FormError>
@@ -95,7 +97,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
 
         {notes.data !== undefined &&
           (items.length === 0 ? (
-            <p className="m-0 text-muted">{t("notes.empty")}</p>
+            <p className="m-0 text-muted-foreground">{t("notes.empty")}</p>
           ) : (
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {items.map((note) => (
@@ -118,7 +120,7 @@ function NoteItem({ note, own }: { note: ClinicalNote; own: boolean }) {
   const createdAt = formatTimestamp(note.created_at);
 
   return (
-    <article className="rounded-kc border border-line p-3">
+    <article className="rounded-xl border border-border p-3">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <span className="text-sm font-semibold">
           {/* Имени автора сервер не отдаёт — только идентификатор, поэтому
@@ -127,7 +129,7 @@ function NoteItem({ note, own }: { note: ClinicalNote; own: boolean }) {
         </span>
         {createdAt !== null && (
           <time
-            className="text-sm whitespace-nowrap text-muted tabular-nums"
+            className="text-sm whitespace-nowrap text-muted-foreground tabular-nums"
             dateTime={note.created_at}
           >
             {createdAt}

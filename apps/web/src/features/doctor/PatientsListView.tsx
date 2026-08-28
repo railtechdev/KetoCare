@@ -102,7 +102,7 @@ export function PatientsListView({
         header: t("list.columns.ratio"),
         cell: ({ row }) =>
           row.original.ratio === null ? (
-            <span className="text-sm text-muted">
+            <span className="text-sm text-muted-foreground">
               {t("list.noPrescription")}
             </span>
           ) : (
@@ -135,7 +135,7 @@ export function PatientsListView({
             type="button"
             onClick={() => onOpen(row.original.patient)}
             aria-label={t("list.openAria", { name: row.original.name })}
-            className="min-h-touch rounded-lg border border-line px-3 text-sm font-semibold text-accent"
+            className="min-h-touch rounded-lg border border-border px-3 text-sm font-semibold text-primary"
           >
             {t("list.open")}
           </button>
@@ -149,7 +149,7 @@ export function PatientsListView({
     <section className="flex flex-col gap-4">
       <header>
         <h1 className="m-0 text-xl font-semibold">{t("list.title")}</h1>
-        <p className="mt-1 mb-0 text-muted">{t("list.intro")}</p>
+        <p className="mt-1 mb-0 text-muted-foreground">{t("list.intro")}</p>
       </header>
 
       {/* Пригласивший семью специалист становится ведущим для её ребёнка, как
@@ -181,7 +181,7 @@ export function PatientsListView({
       )}
 
       {patients.isPending ? (
-        <p role="status" className="m-0 text-muted">
+        <p role="status" className="m-0 text-muted-foreground">
           {t("list.loading")}
         </p>
       ) : (
@@ -189,12 +189,14 @@ export function PatientsListView({
           {/* Флаги появляются по мере ответов на сводки: строка без сводки
               показывает прочерк, а не «данных нет» — это разные утверждения. */}
           {overviews.pending && (
-            <p role="status" className="m-0 text-sm text-muted">
+            <p role="status" className="m-0 text-sm text-muted-foreground">
               {t("list.flagsLoading")}
             </p>
           )}
           {overviews.failed && (
-            <p className="m-0 text-sm text-muted">{t("list.flagsFailed")}</p>
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("list.flagsFailed")}
+            </p>
           )}
 
           <DataTable
@@ -225,7 +227,7 @@ function AgeCell({ months }: { months: number | null }) {
   const { t } = useTranslation("doctor");
 
   if (months === null) {
-    return <span className="text-muted">—</span>;
+    return <span className="text-muted-foreground">—</span>;
   }
 
   return (

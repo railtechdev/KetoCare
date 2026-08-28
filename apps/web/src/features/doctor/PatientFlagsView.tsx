@@ -8,7 +8,7 @@ const BADGE =
 /**
  * Флаги строки списка пациентов (раздел 8.3 ТЗ).
  *
- * Цвета берутся из токенов темы с парным цветом текста (`text-on-danger`,
+ * Цвета берутся из токенов темы с парным цветом текста (`text-destructive-foreground`,
  * `text-on-warning`): контраст этих пар проверяется в packages/ui, а «белым по
  * умолчанию» на предупреждении он падает до 2.9 при требуемых 4.5.
  */
@@ -17,7 +17,7 @@ export function PatientFlagsView({ flags }: { flags: PatientFlags | null }) {
 
   if (flags === null) {
     return (
-      <span className="text-sm text-muted" aria-hidden="true">
+      <span className="text-sm text-muted-foreground" aria-hidden="true">
         —
       </span>
     );
@@ -28,7 +28,7 @@ export function PatientFlagsView({ flags }: { flags: PatientFlags | null }) {
   if (flags.staleData) {
     badges.push({
       key: "stale",
-      className: "bg-danger text-on-danger",
+      className: "bg-destructive text-destructive-foreground",
       label:
         flags.daysSinceLastReading === null
           ? t("flags.noReadingsEver")
@@ -45,7 +45,9 @@ export function PatientFlagsView({ flags }: { flags: PatientFlags | null }) {
   }
 
   if (badges.length === 0) {
-    return <span className="text-sm text-muted">{t("flags.none")}</span>;
+    return (
+      <span className="text-sm text-muted-foreground">{t("flags.none")}</span>
+    );
   }
 
   return (
@@ -71,7 +73,7 @@ export function PatientFlagsLegend() {
   const { t } = useTranslation("doctor");
 
   return (
-    <dl className="m-0 grid gap-1 text-sm text-muted sm:grid-cols-[auto_1fr] sm:gap-x-3">
+    <dl className="m-0 grid gap-1 text-sm text-muted-foreground sm:grid-cols-[auto_1fr] sm:gap-x-3">
       <dt className="font-semibold">{t("flags.legend.noReadingsTerm")}</dt>
       <dd className="m-0">
         {t("flags.legend.noReadings", { days: NO_DATA_FLAG_DAYS })}

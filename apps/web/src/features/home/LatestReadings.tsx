@@ -37,7 +37,7 @@ export function LatestReadings({ ketone, weight }: Props) {
             <p className="m-0 text-2xl font-semibold tabular-nums">
               {t("ketone.value", { value: ketone.value })}
             </p>
-            <p className="m-0 mt-1 text-sm text-muted">
+            <p className="m-0 mt-1 text-sm text-muted-foreground">
               {t(`ketone.method.${ketone.method}`)}
             </p>
           </DiaryEntryCard>
@@ -72,9 +72,9 @@ function ReadingPlaceholder({
   message: string;
 }) {
   return (
-    <article className="rounded-kc bg-surface p-4 text-ink shadow-kc">
+    <article className="rounded-xl bg-card p-4 text-foreground shadow-kc">
       <h3 className="m-0 text-base font-semibold">{title}</h3>
-      <p className="m-0 mt-2 text-muted">{message}</p>
+      <p className="m-0 mt-2 text-muted-foreground">{message}</p>
     </article>
   );
 }

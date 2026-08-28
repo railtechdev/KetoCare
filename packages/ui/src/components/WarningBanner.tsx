@@ -35,7 +35,7 @@ export function WarningBanner({
   return (
     <div
       className={cn(
-        "rounded-kc border-l-4 bg-surface px-4 py-3 text-ink shadow-kc-sm",
+        "rounded-xl border-l-4 bg-card px-4 py-3 text-foreground shadow-kc-sm",
         BORDER_BY_LEVEL[level],
         className,
       )}

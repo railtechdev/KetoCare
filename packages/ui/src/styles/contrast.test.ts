@@ -54,29 +54,56 @@ describe.each([
 ])("%s", (_name, selector) => {
   const block = themeBlock(selector);
 
-  it("текст на фоне и на поверхности читаем", () => {
+  it.each([
+    ["background", "foreground"],
+    ["card", "card-foreground"],
+    ["popover", "popover-foreground"],
+    ["secondary", "secondary-foreground"],
+    ["accent", "accent-foreground"],
+    ["sidebar", "sidebar-foreground"],
+  ])("текст на подложке %s читаем", (surface, text) => {
     expect(
-      contrastRatio(token(block, "color-ink"), token(block, "color-canvas")),
-    ).toBeGreaterThanOrEqual(MIN_CONTRAST);
-    expect(
-      contrastRatio(token(block, "color-ink"), token(block, "color-surface")),
+      contrastRatio(
+        token(block, `color-${text}`),
+        token(block, `color-${surface}`),
+      ),
     ).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 
-  it.each(["accent", "danger", "warning", "success"])(
-    "текст на цветной подложке %s читаем",
-    (role) => {
-      const ratio = contrastRatio(
-        token(block, `color-on-${role}`),
-        token(block, `color-${role}`),
-      );
-      expect(ratio).toBeGreaterThanOrEqual(MIN_CONTRAST);
-    },
-  );
-
-  it("приглушённый текст читаем на фоне", () => {
+  it.each([
+    ["primary", "primary-foreground"],
+    ["destructive", "destructive-foreground"],
+    ["warning", "on-warning"],
+    ["success", "on-success"],
+    ["sidebar-primary", "sidebar-primary-foreground"],
+  ])("текст на цветной подложке %s читаем", (surface, text) => {
     expect(
-      contrastRatio(token(block, "color-muted"), token(block, "color-canvas")),
+      contrastRatio(
+        token(block, `color-${text}`),
+        token(block, `color-${surface}`),
+      ),
+    ).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  });
+
+  it("приглушённый текст читаем и на фоне, и на карточке", () => {
+    // Приглушённый текст — самое частое, что становится нечитаемым при смене
+    // палитры: он ходит по обеим подложкам, а проверяют обычно одну.
+    for (const surface of ["background", "card", "muted"]) {
+      expect(
+        contrastRatio(
+          token(block, "color-muted-foreground"),
+          token(block, `color-${surface}`),
+        ),
+      ).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    }
+  });
+
+  it("выбранный пункт боковой навигации читаем", () => {
+    expect(
+      contrastRatio(
+        token(block, "color-sidebar-accent-foreground"),
+        token(block, "color-sidebar-accent"),
+      ),
     ).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 });

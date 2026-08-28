@@ -24,19 +24,19 @@ export function ProductRevisions({ productId }: { productId: string }) {
     revisions.data !== undefined && revisions.data.total > entries.length;
 
   return (
-    <section className="rounded-kc border border-line p-4">
+    <section className="rounded-xl border border-border p-4">
       <h3 className="mt-0 mb-3 text-base font-semibold">
         {t("products.revisions.title")}
       </h3>
 
       {revisions.isError && (
-        <p role="alert" className="m-0 text-danger">
+        <p role="alert" className="m-0 text-destructive">
           {errorMessageOf(revisions.error) ?? t("common:errors.unexpected")}
         </p>
       )}
 
       {revisions.isLoading && (
-        <p role="status" className="m-0 text-muted">
+        <p role="status" className="m-0 text-muted-foreground">
           {t("products.revisions.loading")}
         </p>
       )}
@@ -51,18 +51,20 @@ export function ProductRevisions({ productId }: { productId: string }) {
       )}
 
       {!revisions.isLoading && !revisions.isError && entries.length === 0 && (
-        <p className="m-0 text-muted">{t("products.revisions.empty")}</p>
+        <p className="m-0 text-muted-foreground">
+          {t("products.revisions.empty")}
+        </p>
       )}
 
       <ol className="m-0 flex list-none flex-col gap-3 p-0">
         {entries.map((entry) => (
           <li
             key={entry.id}
-            className="border-b border-line pb-3 last:border-0"
+            className="border-b border-border pb-3 last:border-0"
           >
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <time
-                className="text-sm text-muted tabular-nums"
+                className="text-sm text-muted-foreground tabular-nums"
                 dateTime={entry.created_at}
               >
                 {formatOccurredAt(new Date(entry.created_at))}
@@ -72,7 +74,7 @@ export function ProductRevisions({ productId }: { productId: string }) {
                   defaultValue: entry.action,
                 })}
               </span>
-              <span className="text-sm text-muted">
+              <span className="text-sm text-muted-foreground">
                 {entry.user_id === null
                   ? t("audit.noUser")
                   : t("products.revisions.author", {

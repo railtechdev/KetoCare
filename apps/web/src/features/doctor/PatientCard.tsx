@@ -47,17 +47,17 @@ export function PatientCard({
         <button
           type="button"
           onClick={onBack}
-          className="min-h-touch rounded-lg border border-line px-3 text-sm font-semibold"
+          className="min-h-touch rounded-lg border border-border px-3 text-sm font-semibold"
         >
           {t("card.back")}
         </button>
       </div>
 
-      <header className="rounded-kc bg-surface p-4 text-ink shadow-kc">
+      <header className="rounded-xl bg-card p-4 text-foreground shadow-kc">
         <h1 className="m-0 text-xl font-semibold">{patient.full_name}</h1>
 
         <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
-          <dt className="text-muted">{t("card.birthDate")}</dt>
+          <dt className="text-muted-foreground">{t("card.birthDate")}</dt>
           <dd className="m-0 tabular-nums">
             {birthDate === null
               ? "—"
@@ -72,17 +72,17 @@ export function PatientCard({
                   })}
           </dd>
 
-          <dt className="text-muted">{t("card.sex")}</dt>
+          <dt className="text-muted-foreground">{t("card.sex")}</dt>
           <dd className="m-0">{t(`card.sexValue.${patient.sex}`)}</dd>
 
-          <dt className="text-muted">{t("card.height")}</dt>
+          <dt className="text-muted-foreground">{t("card.height")}</dt>
           <dd className="m-0 tabular-nums">
             {patient.height_cm === null
               ? "—"
               : t("card.heightValue", { value: patient.height_cm })}
           </dd>
 
-          <dt className="text-muted">{t("card.allergies")}</dt>
+          <dt className="text-muted-foreground">{t("card.allergies")}</dt>
           <dd className="m-0">
             {patient.allergies.length === 0
               ? t("card.noAllergies")
@@ -94,13 +94,13 @@ export function PatientCard({
       <Tabs.Root defaultValue="summary">
         <Tabs.List
           aria-label={t("card.tabsLabel")}
-          className="flex flex-wrap gap-2 border-b border-line"
+          className="flex flex-wrap gap-2 border-b border-border"
         >
           {tabs.map((tab) => (
             <Tabs.Trigger
               key={tab}
               value={tab}
-              className="min-h-touch px-4 text-ink data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold"
+              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
             >
               {t(`card.tabs.${tab}`)}
             </Tabs.Trigger>

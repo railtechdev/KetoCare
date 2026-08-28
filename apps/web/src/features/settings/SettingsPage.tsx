@@ -42,11 +42,11 @@ export function SettingsPage() {
     <section className="flex flex-col gap-6">
       <header>
         <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-        <p className="m-0 mt-1 text-muted">{t("children.intro")}</p>
+        <p className="m-0 mt-1 text-muted-foreground">{t("children.intro")}</p>
       </header>
 
       {patients.isPending && (
-        <p role="status" className="m-0 text-muted">
+        <p role="status" className="m-0 text-muted-foreground">
           {t("children.loading")}
         </p>
       )}
@@ -58,7 +58,7 @@ export function SettingsPage() {
       )}
 
       {!patients.isPending && children.length === 0 && (
-        <p className="m-0 text-muted">{t("children.empty")}</p>
+        <p className="m-0 text-muted-foreground">{t("children.empty")}</p>
       )}
 
       {children.length > 0 && (
@@ -66,18 +66,18 @@ export function SettingsPage() {
           {children.map((child) => (
             <li
               key={child.id}
-              className="flex flex-wrap items-center gap-4 rounded-kc border border-line p-4"
+              className="flex flex-wrap items-center gap-4 rounded-xl border border-border p-4"
             >
               <span className="font-semibold">{child.full_name}</span>
-              <span className="text-sm text-muted">
+              <span className="text-sm text-muted-foreground">
                 {t("children.birthDate", { date: child.birth_date })}
               </span>
-              <span className="text-sm text-muted">
+              <span className="text-sm text-muted-foreground">
                 {child.height_cm === null
                   ? t("children.noHeight")
                   : t("children.height", { value: child.height_cm })}
               </span>
-              <span className="text-sm text-muted">
+              <span className="text-sm text-muted-foreground">
                 {child.allergies.length === 0
                   ? t("children.noAllergies")
                   : t("children.allergies", {
@@ -87,7 +87,7 @@ export function SettingsPage() {
               <button
                 type="button"
                 onClick={() => setView({ kind: "edit", child })}
-                className="ml-auto min-h-touch rounded-lg border border-line px-4 text-ink"
+                className="ml-auto min-h-touch rounded-lg border border-border px-4 text-foreground"
               >
                 {t("children.edit")}
               </button>
@@ -100,7 +100,7 @@ export function SettingsPage() {
         <button
           type="button"
           onClick={() => setView({ kind: "add" })}
-          className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent"
+          className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
         >
           {t("child.add")}
         </button>

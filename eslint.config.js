@@ -38,6 +38,14 @@ export default tseslint.config(
     },
   },
   {
+    // Компоненты shadcn/ui скопированы командой `shadcn add` и обновляются ею же.
+    // Править их руками нельзя — следующее обновление затрёт правку, — поэтому
+    // претензия к гранулярности fast refresh здесь снимается. Настоящие ошибки
+    // (неиспользуемые переменные, типы) проверяются как везде.
+    files: ["packages/ui/src/components/ui/**"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
+  {
     // В тестах допускаются вспомогательные утверждения о типах
     files: ["**/*.test.{ts,tsx}"],
     rules: { "@typescript-eslint/no-non-null-assertion": "off" },

@@ -54,10 +54,10 @@ export function CopyDayForm({ patientId, date }: Props) {
   return (
     <section
       aria-label={t("copy.title")}
-      className="rounded-kc bg-surface p-4 shadow-kc-sm"
+      className="rounded-xl bg-card p-4 shadow-kc-sm"
     >
       <h2 className="m-0 text-lg font-semibold">{t("copy.title")}</h2>
-      <p className="mt-2 text-muted">{t("copy.hint")}</p>
+      <p className="mt-2 text-muted-foreground">{t("copy.hint")}</p>
 
       <form onSubmit={(event) => void onSubmit(event)} noValidate>
         <Field

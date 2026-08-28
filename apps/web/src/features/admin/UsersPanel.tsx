@@ -51,7 +51,9 @@ export function UsersPanel() {
         cell: ({ row }) => (
           <span
             className={
-              row.original.is_active ? "text-success" : "text-muted italic"
+              row.original.is_active
+                ? "text-success"
+                : "text-muted-foreground italic"
             }
           >
             {row.original.is_active
@@ -75,7 +77,9 @@ export function UsersPanel() {
         enableSorting: false,
         cell: ({ row }) =>
           row.original.id === currentUserId ? (
-            <span className="text-sm text-muted">{t("users.self")}</span>
+            <span className="text-sm text-muted-foreground">
+              {t("users.self")}
+            </span>
           ) : (
             <button
               type="button"
@@ -83,7 +87,7 @@ export function UsersPanel() {
                 resetUpdate();
                 setEditingId(row.original.id);
               }}
-              className="min-h-touch rounded-lg border border-line px-3 text-ink"
+              className="min-h-touch rounded-lg border border-border px-3 text-foreground"
             >
               {t("users.edit")}
             </button>
@@ -96,7 +100,7 @@ export function UsersPanel() {
   return (
     <div className="flex flex-col gap-4">
       <h2 className="m-0 text-lg font-semibold">{t("users.title")}</h2>
-      <p className="m-0 text-muted">{t("users.intro")}</p>
+      <p className="m-0 text-muted-foreground">{t("users.intro")}</p>
 
       {/* Администратор заводит персонал; семью приглашает её врач или диетолог,
           он же становится ведущим специалистом (ADR-0003). */}
@@ -134,7 +138,7 @@ export function UsersPanel() {
       )}
 
       {users.isLoading ? (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("users.loading")}
         </p>
       ) : (
@@ -152,7 +156,7 @@ export function UsersPanel() {
       )}
 
       {users.data !== undefined && users.data.total > rows.length && (
-        <p className="m-0 text-sm text-muted">
+        <p className="m-0 text-sm text-muted-foreground">
           {t("table.truncated", {
             shown: rows.length,
             total: users.data.total,

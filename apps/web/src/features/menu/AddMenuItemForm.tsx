@@ -77,7 +77,7 @@ export function AddMenuItemForm({
     <form
       onSubmit={(event) => void onSubmit(event)}
       noValidate
-      className="mt-3 flex flex-col gap-3 rounded-kc border border-line p-4"
+      className="mt-3 flex flex-col gap-3 rounded-xl border border-border p-4"
     >
       <DishPicker
         patientId={patientId}
@@ -90,7 +90,7 @@ export function AddMenuItemForm({
         invalid={errors.dishKey !== undefined}
       />
       {errors.dishKey && (
-        <p id={dishErrorId} className="text-sm text-danger">
+        <p id={dishErrorId} className="text-sm text-destructive">
           {t("picker.required")}
         </p>
       )}
@@ -112,7 +112,7 @@ export function AddMenuItemForm({
         }
         {...register("portionFactor", { valueAsNumber: true })}
       />
-      <p id={factorHintId} className="-mt-2 text-sm text-muted">
+      <p id={factorHintId} className="-mt-2 text-sm text-muted-foreground">
         {t("add.factorHint")}
       </p>
 
@@ -124,7 +124,7 @@ export function AddMenuItemForm({
           type="button"
           onClick={onCancel}
           aria-label={t("slot.cancelIn", { slot: t(`slots.${slot}`) })}
-          className="min-h-touch rounded-lg border border-line px-4 text-ink"
+          className="min-h-touch rounded-lg border border-border px-4 text-foreground"
         >
           {t("slot.cancel")}
         </button>

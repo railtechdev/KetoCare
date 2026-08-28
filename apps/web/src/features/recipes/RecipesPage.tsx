@@ -93,14 +93,14 @@ export function RecipesPage() {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-          <p className="mt-1 mb-0 text-muted">{t("intro")}</p>
+          <p className="mt-1 mb-0 text-muted-foreground">{t("intro")}</p>
         </div>
 
         {canEdit && (
           <button
             type="button"
             onClick={() => setView({ kind: "form", recipeId: null })}
-            className="min-h-touch rounded-lg bg-accent px-4 font-semibold text-on-accent"
+            className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
           >
             {t("actions.create")}
           </button>
@@ -121,7 +121,7 @@ export function RecipesPage() {
       )}
 
       {recipes.isLoading ? (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-muted-foreground">
           {t("list.loading")}
         </p>
       ) : (

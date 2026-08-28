@@ -23,8 +23,8 @@ const BASE =
 
 const BY_STATE = {
   ok: "bg-success text-on-success",
-  off: "bg-danger text-on-danger",
-  neutral: "bg-surface text-muted border-line",
+  off: "bg-destructive text-destructive-foreground",
+  neutral: "bg-card text-muted-foreground border-border",
 } as const;
 
 export function RatioBadge({

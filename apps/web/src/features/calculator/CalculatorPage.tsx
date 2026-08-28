@@ -89,12 +89,12 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
           resetResults();
         }}
       >
-        <Tabs.List className="flex gap-2 border-b border-line">
+        <Tabs.List className="flex gap-2 border-b border-border">
           {(["verify", "solve", "scale"] as const).map((value) => (
             <Tabs.Trigger
               key={value}
               value={value}
-              className="min-h-touch px-4 text-ink data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold"
+              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
             >
               {t(`tabs.${value}`)}
             </Tabs.Trigger>
@@ -103,7 +103,9 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
 
         {(["verify", "solve", "scale"] as const).map((value) => (
           <Tabs.Content key={value} value={value} className="pt-4">
-            <p className="mt-0 text-muted">{t(`tabHint.${value}`)}</p>
+            <p className="mt-0 text-muted-foreground">
+              {t(`tabHint.${value}`)}
+            </p>
           </Tabs.Content>
         ))}
       </Tabs.Root>
@@ -155,7 +157,7 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
             step={0.1}
             value={factor}
             onChange={(event) => setFactor(Number(event.target.value))}
-            className="min-h-touch w-40 rounded-lg border border-line bg-surface px-3 py-2 tabular-nums"
+            className="min-h-touch w-40 rounded-lg border border-border bg-card px-3 py-2 tabular-nums"
           />
         </div>
       )}
@@ -164,7 +166,7 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         type="button"
         onClick={run}
         disabled={rows.length === 0 || active.isPending}
-        className="min-h-touch w-full max-w-xs rounded-lg bg-accent px-4 font-semibold text-on-accent disabled:opacity-60"
+        className="min-h-touch w-full max-w-xs rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
       >
         {active.isPending ? t("calculating") : t("calculate")}
       </button>
@@ -255,7 +257,7 @@ function TargetsFields({
               htmlFor="protein-min"
             >
               {t("targets.proteinMin")}{" "}
-              <span className="font-normal text-muted">
+              <span className="font-normal text-muted-foreground">
                 ({t("targets.optional")})
               </span>
             </label>
@@ -281,7 +283,7 @@ function TargetsFields({
               htmlFor="carbs-max"
             >
               {t("targets.carbsMax")}{" "}
-              <span className="font-normal text-muted">
+              <span className="font-normal text-muted-foreground">
                 ({t("targets.optional")})
               </span>
             </label>

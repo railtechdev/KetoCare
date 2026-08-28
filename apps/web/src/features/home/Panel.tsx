@@ -13,7 +13,7 @@ export function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-kc bg-surface p-4 text-ink shadow-kc">
+    <section className="rounded-xl bg-card p-4 text-foreground shadow-kc">
       <h2 className="m-0 text-base font-semibold">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>

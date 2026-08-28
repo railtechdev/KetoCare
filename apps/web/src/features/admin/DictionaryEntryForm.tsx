@@ -61,7 +61,7 @@ export function DictionaryEntryForm({
       onSubmit={handleSubmit((values) =>
         onSubmit({ name_ru: values.nameRu.trim(), sort: values.sort }),
       )}
-      className="rounded-kc border border-line p-4"
+      className="rounded-xl border border-border p-4"
     >
       <h3 className="mt-0 mb-4 text-base font-semibold">
         {mode === "create"
@@ -99,7 +99,7 @@ export function DictionaryEntryForm({
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-touch max-w-48 flex-1 rounded-lg border border-line px-4 text-ink"
+          className="min-h-touch max-w-48 flex-1 rounded-lg border border-border px-4 text-foreground"
         >
           {t("common:actions.cancel")}
         </button>

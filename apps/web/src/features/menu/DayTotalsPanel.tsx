@@ -19,10 +19,10 @@ export function DayTotalsPanel({ totals, engineVersion, tolerance }: Props) {
     return (
       <section
         aria-label={t("totals.title")}
-        className="rounded-kc bg-surface p-4 shadow-kc-sm"
+        className="rounded-xl bg-card p-4 shadow-kc-sm"
       >
         <h2 className="m-0 text-lg font-semibold">{t("totals.title")}</h2>
-        <p className="mt-2 mb-0 text-muted">{t("totals.none")}</p>
+        <p className="mt-2 mb-0 text-muted-foreground">{t("totals.none")}</p>
       </section>
     );
   }
@@ -32,7 +32,7 @@ export function DayTotalsPanel({ totals, engineVersion, tolerance }: Props) {
   return (
     <section
       aria-label={t("totals.title")}
-      className="flex flex-col gap-4 rounded-kc bg-surface p-4 shadow-kc-sm"
+      className="flex flex-col gap-4 rounded-xl bg-card p-4 shadow-kc-sm"
     >
       <h2 className="m-0 text-lg font-semibold">{t("totals.title")}</h2>
 
@@ -59,13 +59,13 @@ export function DayTotalsPanel({ totals, engineVersion, tolerance }: Props) {
       )}
 
       {verdict.kcalBelowTarget && (
-        <p className="m-0 text-sm text-muted">
+        <p className="m-0 text-sm text-muted-foreground">
           {t("offTolerance.kcalBelowTarget")}
         </p>
       )}
 
       {verdict.unavailable && (
-        <p className="m-0 text-sm text-muted">
+        <p className="m-0 text-sm text-muted-foreground">
           {t("totals.verdictUnavailable")}
         </p>
       )}
@@ -73,7 +73,7 @@ export function DayTotalsPanel({ totals, engineVersion, tolerance }: Props) {
       {/* Версия ядра показывается рядом с итогами: расчёт, сделанный разными
           версиями, может отличаться, и это должно быть видно. */}
       {engineVersion !== null && (
-        <p className="m-0 text-xs text-muted">
+        <p className="m-0 text-xs text-muted-foreground">
           {t("totals.engineVersion", { version: engineVersion })}
         </p>
       )}

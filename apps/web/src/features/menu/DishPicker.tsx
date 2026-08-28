@@ -72,8 +72,8 @@ export function DishPicker({
         aria-activedescendant={isOpen ? `${listId}-${activeIndex}` : undefined}
         aria-invalid={invalid ? true : undefined}
         aria-describedby={errorId}
-        className={`min-h-touch w-full rounded-lg border bg-surface px-3 py-2.5 text-ink ${
-          invalid ? "border-danger" : "border-line"
+        className={`min-h-touch w-full rounded-lg border bg-card px-3 py-2.5 text-foreground ${
+          invalid ? "border-destructive" : "border-border"
         }`}
         placeholder={t("picker.placeholder")}
         value={query}
@@ -120,7 +120,7 @@ export function DishPicker({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-line bg-surface shadow-kc"
+          className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-border bg-card shadow-kc"
         >
           {options.map((option, index) => (
             <li
@@ -129,7 +129,7 @@ export function DishPicker({
               role="option"
               aria-selected={index === activeIndex}
               className={`min-h-touch cursor-pointer px-3 py-2 ${
-                index === activeIndex ? "bg-canvas" : ""
+                index === activeIndex ? "bg-background" : ""
               }`}
               onMouseDown={(event) => {
                 // mouseDown, а не click: click срабатывает после blur поля,
@@ -140,10 +140,10 @@ export function DishPicker({
               onMouseEnter={() => setActiveIndex(index)}
             >
               <span>{option.title}</span>
-              <span className="ml-2 text-sm text-muted">
+              <span className="ml-2 text-sm text-muted-foreground">
                 {t(`item.${option.kind}`)}
               </span>
-              <span className="ml-2 text-sm text-muted tabular-nums">
+              <span className="ml-2 text-sm text-muted-foreground tabular-nums">
                 {option.kcal === null
                   ? t("picker.noTotals")
                   : t("picker.totals", {
@@ -153,7 +153,7 @@ export function DishPicker({
                     })}
               </span>
               {option.servings !== null && (
-                <span className="ml-2 text-sm text-muted tabular-nums">
+                <span className="ml-2 text-sm text-muted-foreground tabular-nums">
                   {t("picker.servings", { count: option.servings })}
                 </span>
               )}
@@ -163,12 +163,12 @@ export function DishPicker({
       )}
 
       {isError && (
-        <p className="mt-1 text-sm text-danger" role="alert">
+        <p className="mt-1 text-sm text-destructive" role="alert">
           {errorMessageOf(error) ?? t("picker.failed")}
         </p>
       )}
 
-      <p className="mt-1 text-sm text-muted">
+      <p className="mt-1 text-sm text-muted-foreground">
         {value !== null
           ? t(`item.${value.kind}`)
           : query.trim().length >= 2 && !isFetching && !isOpen
