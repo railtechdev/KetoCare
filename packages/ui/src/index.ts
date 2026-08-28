@@ -15,3 +15,13 @@ export type {
 
 export { DiaryEntryCard } from "./components/DiaryEntryCard";
 export type { DiaryEntryCardProps } from "./components/DiaryEntryCard";
+
+export { DataTable } from "./components/DataTable";
+export type { DataTableProps, DataTableLabels } from "./components/DataTable";
+
+export { TrendChart } from "./components/TrendChart";
+export type {
+  TrendChartProps,
+  TrendPoint,
+  PrescriptionMarker,
+} from "./components/TrendChart";
