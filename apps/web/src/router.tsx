@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 
 import { LoginPage } from "./features/auth/LoginPage";
+import { AcceptInvitePage } from "./features/invitations/AcceptInvitePage";
 import { SECTIONS_BY_ROLE, type Role } from "./features/auth/roles";
 import type { Session } from "./features/auth/claims";
 import { AppLayout } from "./layouts/AppLayout";
@@ -44,6 +45,21 @@ const loginRoute = createRoute({
  * на каждом запросе (правило 5 CLAUDE.md). Здесь — чтобы неаутентифицированный
  * пользователь не видел пустой каркас вместо формы входа.
  */
+/**
+ * Принятие приглашения — публичный маршрут: пользователя, который по нему
+ * приходит, ещё не существует. Проверять токен здесь нечем и незачем, это
+ * делает сервер.
+ */
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invite",
+  validateSearch: (search: Record<string, unknown>): { token?: string } => {
+    const token = search.token;
+    return typeof token === "string" && token !== "" ? { token } : {};
+  },
+  component: AcceptInvitePage,
+});
+
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/app",
@@ -109,6 +125,7 @@ const sectionRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
+  inviteRoute,
   appRoute.addChildren([appIndexRoute, sectionRoute]),
 ]);
 

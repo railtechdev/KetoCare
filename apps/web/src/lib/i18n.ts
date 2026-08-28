@@ -8,6 +8,7 @@ import commonRu from "../locales/ru/common.json";
 import diaryRu from "../locales/ru/diary.json";
 import doctorRu from "../locales/ru/doctor.json";
 import homeRu from "../locales/ru/home.json";
+import invitationsRu from "../locales/ru/invitations.json";
 import menuRu from "../locales/ru/menu.json";
 import productsRu from "../locales/ru/products.json";
 import recipesRu from "../locales/ru/recipes.json";
@@ -30,6 +31,7 @@ export const resources = {
     diary: diaryRu,
     doctor: doctorRu,
     home: homeRu,
+    invitations: invitationsRu,
     menu: menuRu,
     products: productsRu,
     recipes: recipesRu,

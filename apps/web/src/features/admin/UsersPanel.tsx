@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
+import { InvitePanel } from "../invitations/InvitePanel";
+import type { Role } from "../invitations/useInvitations";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { UserAccountForm } from "./UserAccountForm";
@@ -18,6 +20,8 @@ import type { AdminUser } from "./types";
  * (иначе последний администратор может лишить систему администрирования), а
  * интерфейс не предлагает того, что заведомо не пройдёт.
  */
+const STAFF_ROLES: readonly Role[] = ["doctor", "dietitian", "admin"];
+
 export function UsersPanel() {
   const { t } = useTranslation("admin");
   const { session } = useSession();
@@ -93,6 +97,10 @@ export function UsersPanel() {
     <div className="flex flex-col gap-4">
       <h2 className="m-0 text-lg font-semibold">{t("users.title")}</h2>
       <p className="m-0 text-muted">{t("users.intro")}</p>
+
+      {/* Администратор заводит персонал; семью приглашает её врач или диетолог,
+          он же становится ведущим специалистом (ADR-0003). */}
+      <InvitePanel roles={STAFF_ROLES} />
 
       {users.isError && (
         <FormError>

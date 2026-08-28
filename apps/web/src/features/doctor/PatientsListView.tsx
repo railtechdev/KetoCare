@@ -13,6 +13,8 @@ import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import type { Patient } from "./types";
 import { FIELD_CONTROL } from "../../components/Field";
+import { InvitePanel } from "../invitations/InvitePanel";
+import type { Role } from "../invitations/useInvitations";
 
 interface PatientRow {
   patient: Patient;
@@ -25,6 +27,8 @@ interface PatientRow {
 }
 
 /** Список пациентов врача с флагами (раздел 8.3 ТЗ, «Врач / Пациенты»). */
+const FAMILY_ROLES: readonly Role[] = ["parent"];
+
 export function PatientsListView({
   onOpen,
 }: {
@@ -147,6 +151,11 @@ export function PatientsListView({
         <h1 className="m-0 text-xl font-semibold">{t("list.title")}</h1>
         <p className="mt-1 mb-0 text-muted">{t("list.intro")}</p>
       </header>
+
+      {/* Пригласивший семью специалист становится ведущим для её ребёнка, как
+          только родитель заведёт профиль (ADR-0003). Другого способа получить
+          пациента у врача нет: «взять» чужого пациента нельзя. */}
+      <InvitePanel roles={FAMILY_ROLES} />
 
       <div className="max-w-md">
         <label

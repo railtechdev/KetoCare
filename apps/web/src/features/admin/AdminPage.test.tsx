@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -180,7 +180,11 @@ describe("AdminPage — учётные записи", () => {
     renderPage("users");
     await user.click(await screen.findByRole("button", { name: "Изменить" }));
 
-    await user.selectOptions(screen.getByLabelText("Роль"), "doctor");
+    // Поле роли есть и в форме правки, и в панели приглашения — ищем в нужной.
+    const form = within(
+      screen.getByRole("button", { name: "Сохранить" }).closest("form")!,
+    );
+    await user.selectOptions(form.getByLabelText("Роль"), "doctor");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(api.PATCH).toHaveBeenCalledWith(
