@@ -66,6 +66,10 @@ fix: ## Автоисправление форматирования
 		pnpm -r --if-present exec eslint src --fix >/dev/null && echo "eslint: ok"; \
 	fi
 
+.PHONY: seed-demo
+seed-demo: ## Наполнить локальную БД демо-данными (учётки, продукты, две недели дневника)
+	uv run python infra/scripts/seed_demo.py
+
 .PHONY: migrate
 migrate: ## Применить миграции (alembic upgrade head)
 	cd packages/core && uv run --project ../.. alembic upgrade head
