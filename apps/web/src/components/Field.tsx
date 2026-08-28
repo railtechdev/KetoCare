@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "@ketocare/ui";
 
@@ -8,14 +8,18 @@ interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: ReactNode;
 }
 
-/** Поле формы с подписью и доступным сообщением об ошибке. */
-export function Field({
-  label,
-  error,
-  id,
-  className,
-  ...inputProps
-}: FieldProps) {
+/**
+ * Поле формы с подписью и доступным сообщением об ошибке.
+ *
+ * forwardRef обязателен: `register()` из react-hook-form передаёт `ref`, а
+ * функциональный компонент в React 18 не получает его пропом — ref молча
+ * терялся, библиотека не видела инпут и считала поле пустым даже при
+ * заполненном значении.
+ */
+export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
+  { label, error, id, className, ...inputProps },
+  ref,
+) {
   const errorId = error ? `${id}-error` : undefined;
 
   return (
@@ -24,6 +28,7 @@ export function Field({
         {label}
       </label>
       <input
+        ref={ref}
         id={id}
         className={cn(
           "min-h-touch w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-ink",
@@ -41,4 +46,4 @@ export function Field({
       )}
     </div>
   );
-}
+});

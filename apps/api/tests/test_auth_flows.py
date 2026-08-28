@@ -275,3 +275,35 @@ class TestTotpSetupIdempotency:
             headers=headers,
         )
         assert verified.status_code == 200, verified.text
+
+
+class TestRefreshRateLimit:
+    """Обновление сессии не должно попадать под антибрутфорс-лимит входа.
+
+    SPA вызывает /auth/refresh при каждой загрузке страницы; со строгим лимитом
+    пары перезагрузок хватало, чтобы запереть пользователя на минуту, а за одним
+    NAT под лимит попадали все сразу.
+    """
+
+    async def test_repeated_refresh_not_locked_out(self, client, session, make_user):
+        parent = await make_user(UserRole.PARENT)
+        login = await client.post(
+            "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
+        )
+        token = login.json()["tokens"]["refresh_token"]
+
+        statuses = [
+            (await client.post("/api/v1/auth/refresh", json={"refresh_token": token})).status_code
+            for _ in range(10)
+        ]
+        assert 429 not in statuses, f"обновление сессии заблокировано лимитом: {statuses}"
+
+    async def test_login_still_strictly_limited(self, client, session, make_user):
+        """Послабление касается только refresh: подбор пароля по-прежнему ограничен."""
+        parent = await make_user(UserRole.PARENT)
+        payload = {"email": parent.email, "password": "wrong-password"}
+
+        statuses = [
+            (await client.post("/api/v1/auth/login", json=payload)).status_code for _ in range(7)
+        ]
+        assert 429 in statuses

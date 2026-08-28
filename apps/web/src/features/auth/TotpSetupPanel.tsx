@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import QRCode from "qrcode";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -27,6 +28,7 @@ export function TotpSetupPanel({ setupToken }: Props) {
   const { t } = useTranslation("auth");
   const { signIn } = useSession();
   const verify = useTotpVerifyMutation(setupToken);
+  const navigate = useNavigate();
 
   // useQuery, а не useEffect: гонки и повторные вызовы ведёт Query.
   // Сама ручка идемпотентна (повторный вызов возвращает тот же секрет-кандидат),
@@ -64,7 +66,10 @@ export function TotpSetupPanel({ setupToken }: Props) {
 
   const onSubmit = handleSubmit(async (values) => {
     const data = await verify.mutateAsync(values.code).catch(() => null);
-    if (data?.access_token) signIn(data.access_token);
+    if (data?.access_token) {
+      signIn(data.access_token);
+      void navigate({ to: "/app" });
+    }
   });
 
   return (

@@ -172,7 +172,7 @@ class TestProductRevisions:
         product = await products.create(
             session,
             changed_by=admin.id,
-            name_ru="Масло сливочное",
+            name_ru=f"Масло сливочное {uuid.uuid4().hex[:8]}",
             category_id=category_id,
             kcal_100g=717,
             fat_100g=81.1,
@@ -186,7 +186,7 @@ class TestProductRevisions:
 
         revisions = await products.list_revisions(session, product_id=product.id)
         assert len(revisions) == 1
-        assert revisions[0].snapshot["name_ru"] == "Масло сливочное"
+        assert revisions[0].snapshot["name_ru"].startswith("Масло сливочное")
         assert revisions[0].changed_by == admin.id
 
     async def test_update_appends_revision_with_new_state(self, session):
@@ -196,7 +196,7 @@ class TestProductRevisions:
         product = await products.create(
             session,
             changed_by=admin.id,
-            name_ru="Творог 5%",
+            name_ru=f"Творог 5% {uuid.uuid4().hex[:8]}",
             category_id=category_id,
             kcal_100g=121,
             fat_100g=5.0,
@@ -219,7 +219,7 @@ class TestProductRevisions:
         await products.create(
             session,
             changed_by=admin.id,
-            name_ru="Брокколи свежая",
+            name_ru=f"Брокколи свежая {uuid.uuid4().hex[:8]}",
             category_id=category_id,
             kcal_100g=34,
             fat_100g=0.4,

@@ -18,7 +18,7 @@ from core.repositories import users as users_repo
 from ..client_address import client_address
 from ..deps.auth import CurrentUserDep, SessionDep, TotpSetupUserDep, require_roles
 from ..errors import ApiError, ErrorCode
-from ..ratelimit import AUTH_RATE_LIMIT, limiter
+from ..ratelimit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
 from ..schemas import (
     InvitationAccept,
     InvitationCreate,
@@ -134,7 +134,7 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Обновить пару токенов")
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(REFRESH_RATE_LIMIT)
 async def refresh(
     payload: RefreshRequest, request: Request, response: Response, session: SessionDep
 ) -> TokenPair:

@@ -14,7 +14,13 @@ from keto_engine import (
     solve,
     verify,
 )
-from keto_engine.engine import _diagnose_infeasibility, _max_achievable_kcal
+from keto_engine.constants import RATIO_TOLERANCE
+from keto_engine.engine import (
+    _candidate_is_valid,
+    _diagnose_infeasibility,
+    _max_achievable_kcal,
+    _repair_rounding,
+)
 
 
 def test_scale_rejects_non_positive_factor() -> None:
@@ -114,3 +120,101 @@ class TestMaxNonFatGrams:
     def test_non_positive_arguments_rejected(self, ratio: float, kcal: float) -> None:
         with pytest.raises(ValueError):
             max_non_fat_grams(ratio, kcal)
+
+
+class TestRoundingRepair:
+    """Округление масс до грамма не должно выводить соотношение за допуск.
+
+    Раздел 6.4 ТЗ требует, чтобы `verify(solve(x))` всегда был в допусках. LP
+    решает задачу точно, но округление результата ломало это на небольших
+    приёмах пищи — случай ниже найден property-тестом.
+    """
+
+    def test_small_meal_stays_within_tolerance(self) -> None:
+        fat_source = Ingredient("fat", kcal=86 * 9, fat=86.0, protein=0.0, carbs=0.0)
+        lean_source = Ingredient("lean", kcal=117.0, fat=0.0, protein=10.75, carbs=19.5)
+        targets = Targets(ratio=4.0, kcal=200.0)
+
+        result = solve([fat_source, lean_source], targets)
+
+        # Наивное округление точного решения (23.26 / 16.53) дало бы 23/17 г
+        # и соотношение 3.85 — мимо допуска ±0.15.
+        assert result.ratio_within_tolerance
+        assert result.kcal_within_tolerance
+
+        dish = verify([(item.ingredient, item.grams) for item in result.dish.items])
+        assert dish.ratio is not None
+        assert abs(dish.ratio - targets.ratio) <= RATIO_TOLERANCE
+
+    def test_repair_keeps_masses_whole_grams(self) -> None:
+        """Починка не должна возвращать дробные массы: их нельзя отмерить."""
+        fat_source = Ingredient("fat", kcal=86 * 9, fat=86.0, protein=0.0, carbs=0.0)
+        lean_source = Ingredient("lean", kcal=117.0, fat=0.0, protein=10.75, carbs=19.5)
+
+        result = solve([fat_source, lean_source], Targets(ratio=4.0, kcal=200.0))
+        for item in result.dish.items:
+            assert item.grams == pytest.approx(round(item.grams))
+
+    def test_repair_respects_ingredient_bounds(self) -> None:
+        """Подбор рядом с решением не имеет права выйти за заданные границы масс."""
+        fat_source = Ingredient("fat", kcal=86 * 9, fat=86.0, protein=0.0, carbs=0.0)
+        lean_source = Ingredient("lean", kcal=117.0, fat=0.0, protein=10.75, carbs=19.5)
+        targets = Targets(ratio=4.0, kcal=200.0, per_ingredient_bounds={"fat": (0.0, 23.0)})
+
+        result = solve([fat_source, lean_source], targets)
+        used = {item.ingredient.product_id: item.grams for item in result.dish.items}
+        assert used.get("fat", 0.0) <= 23.0
+
+
+class TestRepairInternals:
+    """Ветки починки округления, недостижимые через обычный solve()."""
+
+    FAT = Ingredient("fat", kcal=86 * 9, fat=86.0, protein=0.0, carbs=0.0)
+    LEAN = Ingredient("lean", kcal=117.0, fat=0.0, protein=10.75, carbs=19.5)
+
+    def test_candidate_rejected_below_lower_bound(self) -> None:
+        targets = Targets(ratio=4.0, kcal=200.0, per_ingredient_bounds={"fat": (30.0, 60.0)})
+        assert not _candidate_is_valid([10.0, 16.0], [self.FAT, self.LEAN], targets)
+
+    def test_candidate_rejected_above_upper_bound(self) -> None:
+        targets = Targets(ratio=4.0, kcal=200.0, per_ingredient_bounds={"fat": (0.0, 20.0)})
+        assert not _candidate_is_valid([25.0, 16.0], [self.FAT, self.LEAN], targets)
+
+    def test_candidate_rejected_when_all_masses_negligible(self) -> None:
+        """Массы ниже минимальной реалистичной дают пустое блюдо."""
+        targets = Targets(ratio=4.0, kcal=200.0)
+        assert not _candidate_is_valid([0.0, 0.0], [self.FAT, self.LEAN], targets)
+
+    def test_candidate_rejected_outside_kcal_corridor(self) -> None:
+        targets = Targets(ratio=4.0, kcal=200.0)
+        assert not _candidate_is_valid([100.0, 60.0], [self.FAT, self.LEAN], targets)
+
+    def test_candidate_rejected_below_protein_minimum(self) -> None:
+        targets = Targets(ratio=4.0, kcal=200.0, protein_min_g=50.0)
+        assert not _candidate_is_valid([23.0, 16.0], [self.FAT, self.LEAN], targets)
+
+    def test_candidate_rejected_above_carbs_limit(self) -> None:
+        targets = Targets(ratio=4.0, kcal=200.0, carbs_max_g=0.5)
+        assert not _candidate_is_valid([23.0, 16.0], [self.FAT, self.LEAN], targets)
+
+    def test_repair_returns_input_when_nothing_can_move_ratio(self) -> None:
+        """У продукта, чьё собственное соотношение равно целевому, сдвиг массы
+        не меняет R — двигать нечего, возвращается исходное решение."""
+        neutral = Ingredient("neutral", kcal=0.0, fat=40.0, protein=10.0, carbs=0.0)
+        base = [10.0]
+        assert _repair_rounding(base, [neutral], Targets(ratio=4.0, kcal=200.0)) == base
+
+    def test_repair_returns_best_effort_when_tolerance_unreachable(self) -> None:
+        """Если в допуск не попадает ни один кандидат, возвращается ближайший,
+        а не исходный: показать «почти верное» лучше, чем заведомо худшее."""
+        targets = Targets(ratio=4.0, kcal=200.0)
+        repaired = _repair_rounding([23.0, 17.0], [self.FAT, self.LEAN], targets)
+        assert repaired != [23.0, 17.0]
+
+    def test_repair_skips_candidates_without_defined_ratio(self) -> None:
+        """Кандидат из одних жиров даёт ratio=None (нет белков и углеводов) и
+        должен пропускаться, а не ронять подбор."""
+        pure_fat = Ingredient("pure_fat", kcal=900.0, fat=100.0, protein=0.0, carbs=0.0)
+        targets = Targets(ratio=4.0, kcal=200.0)
+        result = _repair_rounding([22.0, 2.0], [pure_fat, self.LEAN], targets)
+        assert isinstance(result, list)

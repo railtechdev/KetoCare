@@ -9,7 +9,7 @@ from core.config import get_settings
 
 from .errors import register_exception_handlers, register_unhandled_error_middleware
 from .ratelimit import register_rate_limiting
-from .routers import auth, calc, patients, prescriptions, products
+from .routers import auth, calc, custom_dishes, patients, prescriptions, products
 
 API_PREFIX = "/api/v1"
 
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     v1.include_router(patients.router)
     v1.include_router(prescriptions.router)
     v1.include_router(products.router)
+    v1.include_router(custom_dishes.router)
     v1.include_router(calc.router)
     app.include_router(v1)
 

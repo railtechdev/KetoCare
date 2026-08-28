@@ -210,3 +210,39 @@ class ProductImportReport(BaseModel):
     imported: int
     errors: list[ImportRowError]
     dry_run: bool
+
+
+# --- custom dishes --------------------------------------------------------
+
+
+class DishIngredientIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: uuid.UUID
+    grams: Annotated[float, Field(gt=0, le=5000)]
+
+
+class CustomDishWrite(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    ingredients: list[DishIngredientIn] = Field(min_length=1, max_length=100)
+
+
+class DishComputed(BaseModel):
+    kcal: float
+    fat: float
+    protein: float
+    carbs: float
+    fiber: float
+    ratio: float | None
+
+
+class CustomDishRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    patient_id: uuid.UUID
+    title: str
+    ingredients: list[DishIngredientIn]
+    computed: DishComputed | None
+    engine_version: str | None
+    created_at: datetime

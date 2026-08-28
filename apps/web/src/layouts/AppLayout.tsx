@@ -1,4 +1,4 @@
-import { Link, Outlet } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { SECTIONS_BY_ROLE } from "../features/auth/roles";
@@ -11,6 +11,7 @@ import { useSession } from "../features/auth/useSession";
 export function AppLayout() {
   const { t } = useTranslation();
   const { session, signOut } = useSession();
+  const navigate = useNavigate();
 
   if (session === null) return null;
 
@@ -25,7 +26,9 @@ export function AppLayout() {
         </span>
         <button
           type="button"
-          onClick={() => void signOut()}
+          onClick={() => {
+            void signOut().then(() => navigate({ to: "/login" }));
+          }}
           className="min-h-touch rounded-lg border border-line px-4 text-ink"
         >
           {t("nav.logout")}

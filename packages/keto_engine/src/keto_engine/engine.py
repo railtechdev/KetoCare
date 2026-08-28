@@ -12,12 +12,19 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from itertools import product
 
 import numpy as np
 from scipy.optimize import OptimizeResult, linprog
 
 from . import constants
 from .types import DishResult, InfeasibleError, Ingredient, ItemAmount, SolveResult, Targets
+
+# Сколько продуктов двигаем при починке округления и на сколько шагов.
+# 4 продукта по 5 вариантов — 625 комбинаций, каждая считается арифметикой;
+# больше не нужно: на соотношение заметно влияют единицы ингредиентов.
+_MAX_REPAIR_INGREDIENTS = 4
+_REPAIR_RADIUS = 2
 
 
 def _fmt_ratio(ratio: float) -> str:
@@ -290,6 +297,98 @@ def _diagnose_infeasibility(ingredients: Sequence[Ingredient], targets: Targets)
     )
 
 
+def _candidate_is_valid(
+    grams: Sequence[float], ingredients: Sequence[Ingredient], targets: Targets
+) -> bool:
+    """Кандидат допустим: массы в границах и калорийность в коридоре."""
+
+    bounds = _default_bounds(ingredients, targets)
+    for value, (lo, hi) in zip(grams, bounds, strict=True):
+        if value < 0 or value < lo - 1e-9:
+            return False
+        if hi is not None and value > hi + 1e-9:
+            return False
+
+    items = [
+        (ing, g)
+        for ing, g in zip(ingredients, grams, strict=True)
+        if g >= constants.MIN_INGREDIENT_GRAMS
+    ]
+    if not items:
+        return False
+
+    dish = verify(items)
+    tol = constants.KCAL_TOLERANCE_FRACTION
+    if abs(dish.kcal - targets.kcal) > targets.kcal * tol:
+        return False
+
+    if targets.protein_min_g is not None and dish.protein_g < targets.protein_min_g - 1e-9:
+        return False
+    return not (targets.carbs_max_g is not None and dish.carbs_g > targets.carbs_max_g + 1e-9)
+
+
+def _repair_rounding(
+    grams: Sequence[float], ingredients: Sequence[Ingredient], targets: Targets
+) -> list[float]:
+    """Подбирает целочисленные массы рядом с округлённым решением.
+
+    LP решает задачу точно, но массы затем округляются до `GRAM_ROUNDING`, и на
+    небольших приёмах пищи это сдвигает соотношение за допуск: при 4:1 и 200 ккал
+    решение 23.26/16.53 г округляется в 23/17 г — соотношение 3.85 вместо 4.0,
+    хотя рядом есть 24/17 (4.01), укладывающееся и в допуск, и в коридор
+    калорийности. Раздел 6.4 ТЗ требует, чтобы `verify(solve(x))` был в допусках;
+    без этого шага требование нарушается.
+
+    Перебираются небольшие целочисленные сдвиги у продуктов, сильнее всего
+    влияющих на соотношение: у остальных сдвиг на грамм почти не двигает R.
+    """
+
+    step = constants.GRAM_ROUNDING
+    base = list(grams)
+
+    # Влияние грамма продукта на соотношение: d(F - R·(P+C)) / dm
+    influence = [
+        (abs(ing.fat - targets.ratio * (ing.protein + ing.carbs)), index)
+        for index, ing in enumerate(ingredients)
+    ]
+    influence.sort(reverse=True)
+    movable = [index for weight, index in influence[:_MAX_REPAIR_INGREDIENTS] if weight > 1e-9]
+    if not movable:
+        return base
+
+    deltas = [d * step for d in range(-_REPAIR_RADIUS, _REPAIR_RADIUS + 1)]
+
+    best: list[float] | None = None
+    best_error = float("inf")
+
+    for combo in product(deltas, repeat=len(movable)):
+        candidate = list(base)
+        for index, delta in zip(movable, combo, strict=True):
+            candidate[index] = max(base[index] + delta, 0.0)
+
+        if not _candidate_is_valid(candidate, ingredients, targets):
+            continue
+
+        items = [
+            (ing, g)
+            for ing, g in zip(ingredients, candidate, strict=True)
+            if g >= constants.MIN_INGREDIENT_GRAMS
+        ]
+        dish = verify(items)
+        if dish.ratio is None:
+            continue
+
+        error = abs(dish.ratio - targets.ratio)
+        if error < best_error:
+            best_error, best = error, candidate
+
+        if error <= constants.RATIO_TOLERANCE:
+            # Достаточно любого решения в допуске — дальше искать нечего.
+            return candidate
+
+    return best if best is not None else base
+
+
 def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
     """Подбирает массы продуктов под цели. Бросает `InfeasibleError`, если задача неразрешима."""
 
@@ -305,10 +404,22 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
 
     grams = result.x[: len(ingredients)]
     rounding = constants.GRAM_ROUNDING
-    rounded = np.round(grams / rounding) * rounding
+    rounded = [float(g) for g in np.round(grams / rounding) * rounding]
+
+    # Округление до грамма может вывести соотношение за допуск — тогда ищем
+    # ближайшую целочисленную комбинацию, которая в допуск укладывается.
+    probe = [
+        (ing, g)
+        for ing, g in zip(ingredients, rounded, strict=True)
+        if g >= constants.MIN_INGREDIENT_GRAMS
+    ]
+    if probe:
+        ratio_ok, _ = within_tolerance(verify(probe), targets)
+        if not ratio_ok:
+            rounded = _repair_rounding(rounded, ingredients, targets)
 
     items = [
-        (ing, float(g))
+        (ing, g)
         for ing, g in zip(ingredients, rounded, strict=True)
         if g >= constants.MIN_INGREDIENT_GRAMS
     ]

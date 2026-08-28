@@ -1,6 +1,6 @@
 [project]
 name = "keto-engine"
-version = "0.2.0"
+version = "0.3.0"
 description = "Изолированное расчётное ядро KetoCare: проверка, подбор и пересчёт блюд по кетогенному соотношению"
 requires-python = ">=3.12"
 dependencies = [

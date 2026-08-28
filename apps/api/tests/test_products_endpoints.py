@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 import pytest
@@ -26,9 +27,10 @@ async def _category(session) -> ProductCategory:
     return category
 
 
-def _product_payload(category_id) -> dict:
+def _product_payload(category_id, name: str | None = None) -> dict:
     return {
-        "name_ru": "Масло сливочное",
+        # Уникально: на products есть уникальный индекс по нормализованному имени
+        "name_ru": name or f"Масло сливочное {uuid.uuid4().hex[:8]}",
         "category_id": str(category_id),
         "kcal_100g": 717,
         "fat_100g": 81.1,
@@ -124,8 +126,13 @@ class TestProductWrites:
 
 
 class TestCsvImportEndpoint:
-    def _file(self, *rows: str) -> dict:
-        content = ("\n".join([CSV_HEADER, *rows]) + "\n").encode("utf-8")
+    def _file(self, *rows: str, suffix: str | None = None) -> dict:
+        # Названия уникальны в пределах прогона: уникальный индекс на products
+        # иначе столкнётся с данными, уже лежащими в базе разработчика.
+        # Тест на дубли передаёт один suffix в оба импорта, чтобы имя совпало.
+        suffix = suffix or uuid.uuid4().hex[:8]
+        unique_rows = [row.replace(",", f" {suffix},", 1) for row in rows]
+        content = ("\n".join([CSV_HEADER, *unique_rows]) + "\n").encode("utf-8")
         return {"file": ("products.csv", content, "text/csv")}
 
     async def test_non_admin_forbidden(self, client, session, make_user, auth_headers):
@@ -203,25 +210,26 @@ class TestCsvImportEndpoint:
         """Дубль с расходящимися значениями — риск выбрать «не тот» продукт в меню,
         поэтому импорт сообщает о совпадении, а не создаёт вторую запись."""
         admin = await make_user(UserRole.ADMIN)
-        rows = ("Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01",)
+        shared = uuid.uuid4().hex[:8]
 
         first = await client.post(
             "/api/v1/products/import?dry_run=false",
-            files=self._file(*rows),
+            files=self._file("Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01", suffix=shared),
             headers=auth_headers(admin),
         )
         assert first.json()["imported"] == 1
 
+        # То же название, другие значения — именно этот случай опасен при расчёте меню
         second = await client.post(
             "/api/v1/products/import?dry_run=false",
-            files=self._file("Масло,Жиры,900,99,0,0,0,ДругойИсточник,v2,2026-01-01"),
+            files=self._file("Масло,Жиры,900,99,0,0,0,ДругойИсточник,v2,2026-01-01", suffix=shared),
             headers=auth_headers(admin),
         )
         body = second.json()
         assert body["imported"] == 0
         assert any("уже есть в базе" in e["message"] for e in body["errors"]), body["errors"]
 
-        found, total = await products_repo.search(session, q="масло")
+        found, total = await products_repo.search(session, q=f"Масло {shared}")
         assert total == 1, "второй записи с тем же названием быть не должно"
 
 
@@ -243,9 +251,11 @@ class TestProductNameUniqueness:
         assert created.status_code == 201
 
         # В обход API — как это сделал бы конкурирующий импорт
+        created_name = created.json()["name_ru"]
         session.add(
             Product(
-                name_ru="  масло сливочное  ",
+                # Тот же продукт в другом регистре и с пробелами
+                name_ru=f"  {created_name.upper()}  ",
                 category_id=category.id,
                 kcal_100g=900,
                 fat_100g=99,
