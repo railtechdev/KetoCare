@@ -69,24 +69,28 @@ export function TrendChart({
       <figcaption className="sr-only">{caption}</figcaption>
 
       {/* Цвета берутся из токенов темы: Mini App перекрашивает интерфейс,
-          подставляя themeParams Telegram в те же переменные. */}
+          подставляя themeParams Telegram в те же переменные.
+          Имена сверяются тестом: Recharts не умеет ругаться на несуществующую
+          переменную — она просто раскрывается в пустую строку, и сетка с осями
+          рисуются невидимыми. Именно так и случилось после переименования
+          токенов под словарь кита. */}
       <ResponsiveContainer width="100%" height={260}>
         <LineChart
           data={data}
           margin={{ top: 8, right: 8, bottom: 8, left: 0 }}
         >
-          <CartesianGrid stroke="var(--color-line)" strokeDasharray="3 3" />
+          <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis
             dataKey="ts"
             type="number"
             domain={["dataMin", "dataMax"]}
             scale="time"
             tickFormatter={(ts: number) => formatDate(new Date(ts))}
-            stroke="var(--color-muted)"
+            stroke="var(--color-muted-foreground)"
             fontSize={12}
           />
           <YAxis
-            stroke="var(--color-muted)"
+            stroke="var(--color-muted-foreground)"
             fontSize={12}
             width={48}
             label={{
@@ -100,10 +104,10 @@ export function TrendChart({
             labelFormatter={(ts) => formatDate(new Date(Number(ts)))}
             formatter={(value: number) => [`${value} ${unit}`, ""]}
             contentStyle={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-line)",
-              borderRadius: "var(--radius-kc)",
-              color: "var(--color-ink)",
+              background: "var(--color-card)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius)",
+              color: "var(--color-foreground)",
             }}
           />
 
@@ -120,7 +124,7 @@ export function TrendChart({
           <Line
             type="monotone"
             dataKey="value"
-            stroke="var(--color-accent)"
+            stroke="var(--color-chart-1)"
             strokeWidth={2}
             dot={{ r: 3 }}
             isAnimationActive={false}

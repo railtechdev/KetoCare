@@ -10,6 +10,7 @@ interface Props {
   activeProps?: LinkProps["activeProps"];
   /** Вид дневника, который нужно открыть сразу (для быстрых действий главной) */
   diaryKind?: string;
+  onClick?: () => void;
 }
 
 /**
@@ -29,6 +30,7 @@ export function SectionLink({
   className,
   activeProps,
   diaryKind,
+  onClick,
 }: Props) {
   return (
     <Link
@@ -39,6 +41,7 @@ export function SectionLink({
       search={(previous) => ({ ...previous, kind: diaryKind })}
       className={className}
       activeProps={activeProps}
+      onClick={onClick}
     >
       {children}
     </Link>

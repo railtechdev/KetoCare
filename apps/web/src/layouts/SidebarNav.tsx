@@ -40,11 +40,16 @@ export function SidebarNav({
                     className:
                       "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
                   }}
+                  // Закрытие мобильной шторки висит на самой ссылке, а не на
+                  // подписи внутри неё: тап по значку мимо текста не попадал в
+                  // обработчик, и шторка оставалась открытой поверх раздела, в
+                  // который пользователь только что перешёл.
+                  onClick={onNavigate}
                 >
                   {Icon && (
                     <Icon aria-hidden="true" className="size-5 shrink-0" />
                   )}
-                  <span onClick={onNavigate}>{t(`nav.${section}`)}</span>
+                  <span>{t(`nav.${section}`)}</span>
                 </SectionLink>
               </li>
             );

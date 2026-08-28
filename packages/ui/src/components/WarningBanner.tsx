@@ -19,10 +19,16 @@ const ROLE_BY_LEVEL: Record<WarningLevel, "status" | "alert"> = {
   danger: "alert",
 };
 
+/**
+ * Цветная полоса слева — единственный признак уровня, помимо роли для
+ * скринридера. После перехода на словарь кита `danger` и `accent` перестали
+ * существовать как цвета, и самое тревожное сообщение осталось вообще без
+ * полосы: неразрешимый расчёт выглядел спокойнее обычного предупреждения.
+ */
 const BORDER_BY_LEVEL: Record<WarningLevel, string> = {
-  info: "border-l-accent",
+  info: "border-l-primary",
   warning: "border-l-warning",
-  danger: "border-l-danger",
+  danger: "border-l-destructive",
 };
 
 /** Баннер предупреждения (раздел 8.3 ТЗ: выход за допуски в меню). */
