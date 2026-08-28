@@ -10,7 +10,6 @@ import { useTranslation } from "react-i18next";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
-import { useCurrentPatientId } from "../patients/usePatients";
 import { DiaryForm } from "./DiaryForm";
 import { DiaryList } from "./DiaryList";
 import { PeriodPicker } from "./PeriodPicker";
@@ -43,19 +42,9 @@ import {
  * или произвольно; кетоны и вес дополнительно показываются графиком с маркерами
  * смены назначения. Свои записи можно изменить и мягко удалить.
  */
-export function DiaryPage() {
+export function DiaryPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("diary");
-  const patientId = useCurrentPatientId();
   const [kind, setKind] = useState<DiaryKind>("seizures");
-
-  if (patientId === null) {
-    return (
-      <section className="flex flex-col gap-6">
-        <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-        <p className="m-0 text-muted">{t("noPatient")}</p>
-      </section>
-    );
-  }
 
   return (
     <section className="flex flex-col gap-6">

@@ -1,8 +1,10 @@
-import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { Outlet, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
+import { SectionLink } from "../components/SectionLink";
 import { SECTIONS_BY_ROLE } from "../features/auth/roles";
 import { useSession } from "../features/auth/useSession";
+import { PatientSwitcher } from "../features/patients/PatientSwitcher";
 
 /**
  * Каркас кабинета. Один билд на три роли (раздел 8.1 ТЗ): недоступные разделы
@@ -21,9 +23,12 @@ export function AppLayout() {
     <div className="min-h-screen">
       <header className="flex items-center gap-4 border-b border-line bg-surface px-6 py-3 shadow-kc-sm">
         <span className="text-lg font-bold text-accent">{t("app.name")}</span>
-        <span className="mr-auto rounded-full border border-line bg-canvas px-2.5 py-0.5 text-sm text-muted">
+        <span className="rounded-full border border-line bg-canvas px-2.5 py-0.5 text-sm text-muted">
           {t(`roles.${session.role}`)}
         </span>
+        <div className="mr-auto">
+          {session.role === "parent" && <PatientSwitcher />}
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -40,14 +45,13 @@ export function AppLayout() {
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {sections.map((section) => (
               <li key={section}>
-                <Link
-                  to="/app/$section"
-                  params={{ section }}
+                <SectionLink
+                  section={section}
                   className="flex min-h-touch items-center rounded-lg px-3 text-ink no-underline hover:bg-surface"
                   activeProps={{ className: "bg-surface font-semibold" }}
                 >
                   {t(`nav.${section}`)}
-                </Link>
+                </SectionLink>
               </li>
             ))}
           </ul>

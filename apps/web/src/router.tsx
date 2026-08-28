@@ -76,9 +76,20 @@ const appIndexRoute = createRoute({
  * Один параметризованный маршрут вместо набора статических: список разделов
  * зависит от роли, и генерация путей строками обходила бы типизацию роутера.
  */
+export interface SectionSearch {
+  /** Выбранный ребёнок. В адресе, а не в состоянии: ссылка на экран должна
+      однозначно говорить, о ком она, — иначе присланная врачу или второму
+      родителю ссылка откроет данные другого ребёнка. */
+  patient?: string;
+}
+
 const sectionRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "$section",
+  validateSearch: (search: Record<string, unknown>): SectionSearch => {
+    const patient = search.patient;
+    return typeof patient === "string" && patient !== "" ? { patient } : {};
+  },
   beforeLoad: ({ context, params }) => {
     const role = context.session?.role;
     if (!role) return;

@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { FIELD_CONTROL } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
-import { useCurrentPatientId } from "../patients/usePatients";
 import { DishResultView, type DishView } from "./DishResultView";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
@@ -24,9 +23,8 @@ type Mode = "verify" | "solve" | "scale";
 const DEFAULT_TARGETS: TargetsInput = { ratio: 4, kcal: 400 };
 
 /** Калькулятор: три режима из раздела 8.3 ТЗ. */
-export function CalculatorPage() {
+export function CalculatorPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("calculator");
-  const patientId = useCurrentPatientId();
 
   const [mode, setMode] = useState<Mode>("verify");
   const [rows, setRows] = useState<DishRow[]>([]);

@@ -6,9 +6,11 @@ import { CalculatorPage } from "../features/calculator/CalculatorPage";
 import { DiaryPage } from "../features/diary/DiaryPage";
 import { DoctorPatientsPage } from "../features/doctor/DoctorPatientsPage";
 import { HomePage } from "../features/home/HomePage";
+import { PatientGate } from "../features/patients/PatientGate";
 import { MenuPage } from "../features/menu/MenuPage";
 import { ProductsPage } from "../features/products/ProductsPage";
 import { RecipesPage } from "../features/recipes/RecipesPage";
+import { SettingsPage } from "../features/settings/SettingsPage";
 
 /**
  * Экран раздела. Роль — аргумент, потому что один и тот же ключ раздела
@@ -21,10 +23,20 @@ import { RecipesPage } from "../features/recipes/RecipesPage";
 export type SectionScreen = (role: Role | undefined) => ReactElement;
 
 export const SECTION_SCREENS: Record<string, SectionScreen> = {
-  home: () => <HomePage />,
-  calculator: () => <CalculatorPage />,
-  menu: () => <MenuPage />,
-  diary: () => <DiaryPage />,
+  home: () => (
+    <PatientGate render={(patientId) => <HomePage patientId={patientId} />} />
+  ),
+  calculator: () => (
+    <PatientGate
+      render={(patientId) => <CalculatorPage patientId={patientId} />}
+    />
+  ),
+  menu: () => (
+    <PatientGate render={(patientId) => <MenuPage patientId={patientId} />} />
+  ),
+  diary: () => (
+    <PatientGate render={(patientId) => <DiaryPage patientId={patientId} />} />
+  ),
   recipes: () => <RecipesPage />,
   patients: () => <DoctorPatientsPage />,
   products: (role) =>
@@ -32,6 +44,7 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
   users: () => <AdminPage section="users" />,
   dictionaries: () => <AdminPage section="dictionaries" />,
   audit: () => <AdminPage section="audit" />,
+  settings: () => <SettingsPage />,
 };
 
 /**
@@ -43,6 +56,5 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
 export const PENDING_SECTIONS: readonly string[] = [
   "reports",
   "assistant",
-  "settings",
   "summaries",
 ];

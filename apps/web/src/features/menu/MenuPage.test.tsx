@@ -105,7 +105,7 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <MenuPage />
+      <MenuPage patientId="p1" />
     </QueryClientProvider>,
   );
 }

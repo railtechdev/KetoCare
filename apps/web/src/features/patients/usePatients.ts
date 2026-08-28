@@ -20,10 +20,3 @@ export function usePatients() {
     },
   });
 }
-
-/** Единственный ребёнок родителя выбирается сам — выбирать не из чего. */
-export function useCurrentPatientId(): string | null {
-  const { data } = usePatients();
-  const items = data?.items ?? [];
-  return items.length === 1 ? (items[0]?.id ?? null) : null;
-}

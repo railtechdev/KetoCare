@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
-import { useCurrentPatientId, usePatients } from "../patients/usePatients";
+import { usePatients } from "../patients/usePatients";
 import { DayTotalsCard } from "./DayTotalsCard";
 import { LatestReadings } from "./LatestReadings";
 import { PrescriptionCard } from "./PrescriptionCard";
@@ -20,11 +20,10 @@ import { usePatientOverview } from "../patients/overview";
  * которым определяется, чей это кабинет: адреса сводки без идентификатора
  * ребёнка не существует.
  */
-export function HomePage() {
+export function HomePage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("home");
 
   const patients = usePatients();
-  const patientId = useCurrentPatientId();
   const overview = usePatientOverview(patientId);
 
   const loading =
