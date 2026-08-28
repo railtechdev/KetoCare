@@ -78,11 +78,17 @@ async def list_audit_log(
     page: PaginationDep,
     user_id: uuid.UUID | None = None,
     entity: Annotated[str | None, Query(max_length=128)] = None,
+    entity_id: uuid.UUID | None = None,
     action: Annotated[str | None, Query(max_length=128)] = None,
     created_from: Annotated[datetime | None, Query(alias="from")] = None,
     created_to: Annotated[datetime | None, Query(alias="to")] = None,
 ) -> Page[AuditLogRead]:
-    """Только чтение: журнал не правится и не удаляется — иначе он не доказательство."""
+    """Только чтение: журнал не правится и не удаляется — иначе он не доказательство.
+
+    `entity_id` нужен для истории правок одной позиции: без него интерфейс тянул
+    страницу журнала целиком и отбирал строки у себя, то есть история продукта
+    обрывалась там, где кончалась страница.
+    """
 
     if created_from is not None and created_to is not None and created_from > created_to:
         raise ApiError(
@@ -94,6 +100,7 @@ async def list_audit_log(
         session,
         user_id=user_id,
         entity=entity,
+        entity_id=entity_id,
         action=action,
         created_from=created_from,
         created_to=created_to,

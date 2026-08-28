@@ -34,33 +34,28 @@ export function useAuditLog(
 /**
  * История ревизий позиции справочника продуктов (раздел 8.3 ТЗ).
  *
- * Источник — тот же журнал аудита: `POST/PUT /products` пишут в него `before`
- * и `after` карточки. Фильтра по `entity_id` у ручки нет, поэтому отбор идёт
- * по загруженной странице записей о продуктах; когда записей больше, чем
- * помещается в страницу, экран сообщает, что история показана не полностью, —
- * молча обрезанная история хуже отсутствующей.
+ * Источник — тот же журнал аудита: `POST/PUT /products` пишут в него `before` и
+ * `after` карточки. Отбор делает сервер по `entity_id`; пока этого параметра не
+ * было, экран тянул страницу журнала целиком и отбирал строки у себя, то есть
+ * история обрывалась там, где кончалась страница.
  */
 export function useProductRevisions(productId: string) {
   return useQuery({
     queryKey: ["admin", "audit", "products", productId],
     queryFn: async () => {
-      const query = {
-        entity: PRODUCTS_AUDIT_ENTITY,
-        limit: MAX_PAGE_SIZE,
-        offset: 0,
-      };
-
       const { data, error } = await api.GET("/api/v1/admin/audit-log", {
-        params: { query },
+        params: {
+          query: {
+            entity: PRODUCTS_AUDIT_ENTITY,
+            entity_id: productId,
+            limit: MAX_PAGE_SIZE,
+            offset: 0,
+          },
+        },
       });
       if (error || !data) throw error ?? new Error("Empty revisions response");
 
-      return {
-        entries: data.items.filter((entry) => entry.entity_id === productId),
-        /** Записей о продуктах просмотрено — из скольких всего */
-        scanned: data.items.length,
-        total: data.total,
-      };
+      return { entries: data.items, total: data.total };
     },
   });
 }

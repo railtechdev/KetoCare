@@ -156,6 +156,22 @@ class ProductRead(ProductBase):
     is_active: bool
 
 
+class ProductCategoryRead(BaseModel):
+    """Категория продукта.
+
+    Нужна отдельной ручкой, потому что `ProductRead` несёт только `category_id`:
+    без списка категория в форме продукта задавалась бы идентификатором, а завести
+    продукт в новую категорию было бы нельзя вовсе — CSV-импорт при этом принимает
+    название и создаёт категорию сам.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name_ru: str
+    sort: int
+
+
 # --- users / admin --------------------------------------------------------
 
 

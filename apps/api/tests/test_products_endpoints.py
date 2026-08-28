@@ -43,6 +43,25 @@ def _product_payload(category_id, name: str | None = None) -> dict:
     }
 
 
+class TestCategories:
+    async def test_lists_categories_for_any_authenticated_role(
+        self, client, session, make_user, auth_headers
+    ):
+        # Без списка категорий продукт заводится только копированием UUID, а в
+        # новую категорию — не заводится вовсе: POST /products требует
+        # category_id, тогда как CSV-импорт принимает название.
+        category = await _category(session)
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.get("/api/v1/products/categories", headers=auth_headers(parent))
+
+        assert response.status_code == 200, response.text
+        assert {c["name_ru"] for c in response.json()} >= {category.name_ru}
+
+    async def test_requires_authentication(self, client):
+        assert (await client.get("/api/v1/products/categories")).status_code == 401
+
+
 class TestProductWrites:
     async def test_admin_creates_product_with_revision_and_audit(
         self, client, session, make_user, auth_headers

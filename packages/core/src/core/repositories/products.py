@@ -123,6 +123,14 @@ async def list_revisions(session: AsyncSession, *, product_id: uuid.UUID) -> lis
     return list(await session.scalars(stmt))
 
 
+async def list_categories(session: AsyncSession) -> list[ProductCategory]:
+    """Порядок — по `sort`, затем по названию: `sort` задаёт администратор и
+    дубликаты в нём допустимы, а порядок в справочнике должен быть устойчивым."""
+
+    stmt = select(ProductCategory).order_by(ProductCategory.sort, ProductCategory.name_ru)
+    return list(await session.scalars(stmt))
+
+
 async def get_or_create_category(session: AsyncSession, *, name_ru: str) -> ProductCategory:
     """Категория из CSV задаётся именем: справочник небольшой и ведётся админом."""
 

@@ -12,12 +12,12 @@ import {
   useCreateProductMutation,
   useUpdateProductMutation,
 } from "./useAdminProducts";
-import type { Product } from "./types";
+import type { Product, ProductCategory } from "./types";
 
 interface Props {
   /** `null` — заведение новой позиции */
   product: Product | null;
-  categoryIds: readonly string[];
+  categories: readonly ProductCategory[];
   /** Сохранённая позиция — возвращается, чтобы список подтвердил, что записано */
   onSaved: (product: Product) => void;
   onCancel: () => void;
@@ -30,7 +30,7 @@ interface Props {
  */
 export function ProductEditor({
   product,
-  categoryIds,
+  categories,
   onSaved,
   onCancel,
 }: Props) {
@@ -56,7 +56,7 @@ export function ProductEditor({
             ? EMPTY_PRODUCT_FORM_VALUES
             : toProductFormValues(product)
         }
-        categoryIds={categoryIds}
+        categories={categories}
         pending={create.isPending || update.isPending}
         error={create.error ?? update.error}
         onCancel={onCancel}

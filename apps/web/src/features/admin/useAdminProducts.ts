@@ -26,6 +26,25 @@ export const EMPTY_PRODUCT_FILTERS: ProductFilters = { q: "", categoryId: "" };
  * Ручка та же, что у родительского справочника, поэтому ключ начинается с
  * `['products']`: правка продукта инвалидирует оба экрана разом.
  */
+/**
+ * Справочник категорий продуктов.
+ *
+ * Меняется правкой справочника, а не ходом работы, поэтому кэшируется надолго.
+ * Пока ручки не было, категория задавалась идентификатором: в таблице стоял
+ * обрезанный UUID, а завести продукт в новую категорию было нельзя вовсе.
+ */
+export function useProductCategories() {
+  return useQuery({
+    queryKey: ["products", "categories"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/products/categories", {});
+      if (error || !data) throw error ?? new Error("Empty categories response");
+      return data;
+    },
+  });
+}
+
 export function useAdminProducts(filters: ProductFilters) {
   const query = {
     q: filters.q.trim() || undefined,

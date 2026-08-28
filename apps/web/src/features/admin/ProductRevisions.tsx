@@ -18,9 +18,10 @@ export function ProductRevisions({ productId }: { productId: string }) {
   const revisions = useProductRevisions(productId);
 
   const entries = revisions.data?.entries ?? [];
+  // Отбор по позиции делает сервер, поэтому «показано не всё» может означать
+  // только выход за размер страницы — а правок одной карточки столько не бывает.
   const incomplete =
-    revisions.data !== undefined &&
-    revisions.data.total > revisions.data.scanned;
+    revisions.data !== undefined && revisions.data.total > entries.length;
 
   return (
     <section className="rounded-kc border border-line p-4">
@@ -43,7 +44,7 @@ export function ProductRevisions({ productId }: { productId: string }) {
       {incomplete && (
         <WarningBanner level="info" className="mb-3">
           {t("products.revisions.incomplete", {
-            scanned: revisions.data?.scanned ?? 0,
+            shown: entries.length,
             total: revisions.data?.total ?? 0,
           })}
         </WarningBanner>

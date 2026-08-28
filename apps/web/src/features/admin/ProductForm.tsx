@@ -3,17 +3,18 @@ import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
 import { productFormSchema, type ProductFormValues } from "./productSchemas";
+import type { ProductCategory } from "./types";
 
 interface Props {
   mode: "create" | "edit";
   defaultValues: DefaultValues<ProductFormValues>;
   /** Идентификаторы категорий, уже встречающиеся в справочнике — для подсказки */
-  categoryIds: readonly string[];
+  categories: readonly ProductCategory[];
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
@@ -35,7 +36,7 @@ const NUTRIENTS = ["kcal", "fat", "protein", "carbs", "fiber"] as const;
 export function ProductForm({
   mode,
   defaultValues,
-  categoryIds,
+  categories,
   pending,
   error,
   onSubmit,
@@ -53,7 +54,6 @@ export function ProductForm({
     defaultValues,
   });
 
-  const categoryListId = `${ids}-categories`;
   const activeId = `${ids}-active`;
 
   return (
@@ -96,22 +96,19 @@ export function ProductForm({
           {...register("nameEn")}
         />
 
-        <Field
+        <SelectField
           id={`${ids}-category`}
-          label={t("products.form.categoryId")}
-          list={categoryListId}
-          autoComplete="off"
+          label={t("products.form.category")}
           error={errors.categoryId && t("products.form.errors.categoryId")}
           {...register("categoryId")}
-        />
-        {/* Названий категорий API не отдаёт, поэтому подсказка — это
-            идентификаторы, уже использованные в справочнике: так новый продукт
-            попадает в существующую категорию, а не заводит её двойник. */}
-        <datalist id={categoryListId}>
-          {categoryIds.map((categoryId) => (
-            <option key={categoryId} value={categoryId} />
+        >
+          <option value="">{t("products.form.categoryPlaceholder")}</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name_ru}
+            </option>
           ))}
-        </datalist>
+        </SelectField>
       </fieldset>
 
       <fieldset className="m-0 border-0 p-0">

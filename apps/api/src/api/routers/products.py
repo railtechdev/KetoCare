@@ -20,6 +20,7 @@ from ..errors import ApiError, ErrorCode
 from ..schemas import (
     ImportRowError,
     Page,
+    ProductCategoryRead,
     ProductCreate,
     ProductImportReport,
     ProductRead,
@@ -44,6 +45,18 @@ async def search_products(
         session, q=q, category_id=category_id, limit=page.limit, offset=page.offset
     )
     return Page(items=[ProductRead.model_validate(p) for p in items], total=total)
+
+
+# Объявлено до "/{product_id}": иначе FastAPI сопоставит "categories" с путевым
+# параметром и ответит 422 «не UUID».
+@router.get(
+    "/categories",
+    response_model=list[ProductCategoryRead],
+    summary="Категории продуктов",
+)
+async def list_categories(session: SessionDep, _: CurrentUserDep) -> list[ProductCategoryRead]:
+    categories = await products_repo.list_categories(session)
+    return [ProductCategoryRead.model_validate(c) for c in categories]
 
 
 @router.get("/{product_id}", response_model=ProductRead, summary="Карточка продукта")

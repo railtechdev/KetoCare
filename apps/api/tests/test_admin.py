@@ -301,6 +301,35 @@ class TestAuditLog:
         assert all(i["entity"] == "users" and i["action"] == "update" for i in items)
         assert any(i["entity_id"] == str(target.id) for i in items)
 
+    async def test_filters_by_entity_id(self, client, session, make_user, auth_headers):
+        # История правок одной позиции: без этого фильтра интерфейс тянул страницу
+        # журнала целиком и отбирал строки у себя — то есть история обрывалась
+        # там, где кончалась страница.
+        admin = await make_user(UserRole.ADMIN)
+        target = await make_user(UserRole.PARENT)
+        other = await make_user(UserRole.PARENT)
+
+        for user in (target, other):
+            await client.patch(
+                f"{USERS_URL}/{user.id}", json={"is_active": False}, headers=auth_headers(admin)
+            )
+
+        response = await client.get(
+            AUDIT_URL, params={"entity_id": str(target.id)}, headers=auth_headers(admin)
+        )
+
+        assert response.status_code == 200, response.text
+        items = response.json()["items"]
+        assert items, "запись об изменении должна попасть в журнал"
+        assert {i["entity_id"] for i in items} == {str(target.id)}
+
+    async def test_rejects_non_uuid_entity_id(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        response = await client.get(
+            AUDIT_URL, params={"entity_id": "не-uuid"}, headers=auth_headers(admin)
+        )
+        assert response.status_code == 422
+
     async def test_filters_by_period(self, client, session, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)
         target = await make_user(UserRole.PARENT)

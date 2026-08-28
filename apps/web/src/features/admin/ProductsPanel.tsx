@@ -8,14 +8,14 @@ import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
-import { shortId } from "./format";
+import { FIELD_CONTROL } from "../../components/Field";
+import type { Product } from "./types";
 import {
   EMPTY_PRODUCT_FILTERS,
   useAdminProducts,
+  useProductCategories,
   type ProductFilters,
 } from "./useAdminProducts";
-import type { Product } from "./types";
-import { FIELD_CONTROL } from "../../components/Field";
 
 type View =
   | { kind: "list" }
@@ -44,12 +44,11 @@ export function ProductsPanel() {
 
   const rows = useMemo(() => products.data?.items ?? [], [products.data]);
 
-  // Названий категорий API не отдаёт — только идентификаторы. Те, что уже
-  // встречаются в справочнике, идут подсказкой в форму: без них новая позиция
-  // легко заводит категорию-двойник.
-  const categoryIds = useMemo(
-    () => [...new Set(rows.map((product) => product.category_id))],
-    [rows],
+  const categories = useProductCategories();
+  const categoryNames = useMemo(
+    () =>
+      new Map((categories.data ?? []).map((c) => [c.id, c.name_ru] as const)),
+    [categories.data],
   );
 
   const columns = useMemo<ColumnDef<Product, unknown>[]>(
@@ -68,9 +67,10 @@ export function ProductsPanel() {
                 categoryId: row.original.category_id,
               }))
             }
-            className="min-h-touch text-accent tabular-nums underline"
+            className="min-h-touch text-accent underline"
           >
-            {shortId(row.original.category_id)}
+            {categoryNames.get(row.original.category_id) ??
+              t("products.columns.unknownCategory")}
           </button>
         ),
       },
@@ -143,7 +143,7 @@ export function ProductsPanel() {
         ),
       },
     ],
-    [t],
+    [t, categoryNames],
   );
 
   if (view.kind === "import") {
@@ -154,7 +154,7 @@ export function ProductsPanel() {
     return (
       <ProductEditor
         product={view.product}
-        categoryIds={categoryIds}
+        categories={categories.data ?? []}
         onSaved={(product) => {
           setSavedName(product.name_ru);
           setView({ kind: "list" });
@@ -224,7 +224,9 @@ export function ProductsPanel() {
             className="min-h-touch rounded-lg border border-line px-4 text-ink"
           >
             {t("products.filters.clearCategory", {
-              id: shortId(filters.categoryId),
+              id:
+                categoryNames.get(filters.categoryId) ??
+                t("products.columns.unknownCategory"),
             })}
           </button>
         )}

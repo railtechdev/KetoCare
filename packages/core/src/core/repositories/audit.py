@@ -49,6 +49,7 @@ async def list_entries(
     *,
     user_id: uuid.UUID | None = None,
     entity: str | None = None,
+    entity_id: uuid.UUID | None = None,
     action: str | None = None,
     created_from: datetime | None = None,
     created_to: datetime | None = None,
@@ -66,6 +67,8 @@ async def list_entries(
         conditions.append(AuditLog.user_id == user_id)
     if entity is not None:
         conditions.append(AuditLog.entity == entity)
+    if entity_id is not None:
+        conditions.append(AuditLog.entity_id == entity_id)
     if action is not None:
         conditions.append(AuditLog.action == action)
     if created_from is not None:
