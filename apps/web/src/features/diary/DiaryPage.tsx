@@ -1,4 +1,5 @@
 import * as Tabs from "@radix-ui/react-tabs";
+import { useSearch } from "@tanstack/react-router";
 import {
   TrendChart,
   type PrescriptionMarker,
@@ -44,7 +45,14 @@ import {
  */
 export function DiaryPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("diary");
-  const [kind, setKind] = useState<DiaryKind>("seizures");
+  const search = useSearch({ from: "/app/$section" });
+
+  // Вид берётся из адреса, если он там есть: быстрая кнопка главной открывает
+  // нужную вкладку сразу, и родителю не нужно её искать. Дальше вкладка
+  // переключается состоянием — адрес при этом не переписывается, чтобы кнопка
+  // «назад» вела на предыдущий экран, а не на предыдущую вкладку.
+  const requested = DIARY_KINDS.find((value) => value === search.kind);
+  const [kind, setKind] = useState<DiaryKind>(requested ?? "seizures");
 
   return (
     <section className="flex flex-col gap-6">
