@@ -3,6 +3,7 @@ import { initReactI18next } from "react-i18next";
 
 import authRu from "../locales/ru/auth.json";
 import calculatorRu from "../locales/ru/calculator.json";
+import productsRu from "../locales/ru/products.json";
 import commonRu from "../locales/ru/common.json";
 
 /**
@@ -18,6 +19,7 @@ export const resources = {
     common: commonRu,
     auth: authRu,
     calculator: calculatorRu,
+    products: productsRu,
   },
 } as const;
 
@@ -26,7 +28,7 @@ void i18n.use(initReactI18next).init({
   lng: "ru",
   fallbackLng: "ru",
   defaultNS,
-  ns: ["common", "auth", "calculator"],
+  ns: ["common", "auth", "calculator", "products"],
   interpolation: { escapeValue: false },
 });
 
