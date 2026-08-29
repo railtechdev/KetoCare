@@ -3,11 +3,21 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
+// Единственный `.env` в проекте лежит в корне монорепозитория — оттуда его берут
+// и Makefile, и Python-приложения. `process.cwd()` здесь — это `apps/web`
+// (`pnpm --filter` запускает vite в каталоге пакета), и корневой файл не читался:
+// `WEB_PORT` молча терялся, vite брал 5173, находил его занятым соседним проектом
+// и уезжал на 5174. Настроенным окружение при этом выглядело — просто не работало.
+const rootDir = fileURLToPath(new URL("../../", import.meta.url));
+
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  const env = loadEnv(mode, rootDir, "");
 
   return {
     plugins: [react(), tailwindcss()],
+    // envDir — для собственной загрузки переменных vite (`import.meta.env`).
+    // Без него loadEnv выше и клиентские переменные читали бы разные файлы.
+    envDir: rootDir,
     resolve: {
       alias: {
         "@ui": fileURLToPath(new URL("../../packages/ui/src", import.meta.url)),
