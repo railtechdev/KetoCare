@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from http import HTTPStatus
 from typing import Any
 
 import structlog
@@ -87,7 +88,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code, message = _map_status(exc.status_code)
-        return error_response(code, message, status_code=exc.status_code)
+        return error_response(code, _custom_detail(exc) or message, status_code=exc.status_code)
 
 
 def register_unhandled_error_middleware(app: FastAPI) -> None:
@@ -118,6 +119,28 @@ def register_unhandled_error_middleware(app: FastAPI) -> None:
                 "Внутренняя ошибка сервера. Попробуйте позже.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+def _custom_detail(exc: StarletteHTTPException) -> str | None:
+    """Текст из `HTTPException(..., detail="...")`, если его написал человек.
+
+    Брать `detail` безоговорочно нельзя: когда своего текста нет, Starlette
+    подставляет туда стандартную фразу статуса по-английски (404 → `Not Found`),
+    а раздел 5.1 ТЗ требует сообщение на русском. Поэтому `detail` считается
+    своим, только если он отличается от фразы по умолчанию.
+
+    Без этого авторский текст пропадал молча: `HTTPException(404, "Рецепт не
+    найден")` доезжал до клиента как обезличенное «Запись не найдена».
+    """
+    detail = exc.detail
+    if not isinstance(detail, str) or not detail.strip():
+        return None
+    try:
+        default_phrase = HTTPStatus(exc.status_code).phrase
+    except ValueError:
+        # Нестандартный код: фразы по умолчанию для него нет, значит текст свой.
+        return detail
+    return None if detail == default_phrase else detail
 
 
 def _format_validation_errors(exc: RequestValidationError) -> list[dict[str, Any]]:
