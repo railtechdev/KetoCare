@@ -36,9 +36,11 @@ export function SectionLink({
     <Link
       to="/app/$section"
       params={{ section }}
-      // Вид дневника задаётся только там, где он нужен: иначе переход в другой
-      // раздел тащил бы за собой чужой параметр.
-      search={(previous) => ({ ...previous, kind: diaryKind })}
+      // Выбранный ребёнок переносится, состояние другого экрана — нет:
+      // вкладка и вид записей принадлежат тому разделу, из которого уходим, и
+      // на новом означали бы уже другое (`?tab=verify` калькулятора приезжал
+      // на главную). Вид дневника задаётся явно там, где он нужен.
+      search={(previous) => ({ ...previous, tab: undefined, kind: diaryKind })}
       className={className}
       activeProps={activeProps}
       onClick={onClick}

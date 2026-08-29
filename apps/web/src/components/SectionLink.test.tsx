@@ -29,4 +29,15 @@ describe("ссылки на разделы кабинета", () => {
 
     expect(offenders.map((path) => path.slice(SRC.length + 1))).toEqual([]);
   });
+
+  it("не тащат вкладку прошлого раздела в новый", () => {
+    // `?tab=verify` калькулятора приезжал на главную и оставался в адресе:
+    // вкладка принадлежит своему экрану и на другом означает уже не то.
+    const source = readFileSync(
+      join(SRC, "components", "SectionLink.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("tab: undefined");
+  });
 });
