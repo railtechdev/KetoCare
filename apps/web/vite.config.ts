@@ -11,12 +11,21 @@ import { defineConfig, loadEnv } from "vite";
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, rootDir, "");
+  // Читаются ровно две нужные переменные, а не весь файл (третий аргумент —
+  // список префиксов, сверка по началу строки). В корневом `.env` лежат
+  // SECRET_KEY, BOT_TOKEN, ANTHROPIC_API_KEY и строка подключения к БД; им
+  // нечего делать в объекте конфигурации, даже если сейчас он никуда не
+  // подставляется. Одна будущая правка вида `define: env` — и они в бандле.
+  const env = loadEnv(mode, rootDir, ["WEB_PORT", "API_PROXY_TARGET"]);
 
   return {
     plugins: [react(), tailwindcss()],
     // envDir — для собственной загрузки переменных vite (`import.meta.env`).
     // Без него loadEnv выше и клиентские переменные читали бы разные файлы.
+    //
+    // `envPrefix` намеренно оставлен дефолтным (`VITE_`): в клиентский бандл
+    // и в подстановку по `index.html` попадают только переменные с этим
+    // префиксом. Расширить его здесь — значит открыть корневой `.env` наружу.
     envDir: rootDir,
     resolve: {
       alias: {

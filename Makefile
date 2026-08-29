@@ -56,14 +56,25 @@ setup: ## Подготовить свежий клон: зависимости, 
 		echo "Нет ни pnpm, ни corepack. Нужен Node 20+ — corepack входит в поставку."; \
 		exit 1; \
 	fi
-	pnpm install
+	@# --frozen-lockfile как в CI: иначе `make setup` на свежем клоне может молча
+	@# переписать pnpm-lock.yaml, и расхождение всплывёт уже на PR.
+	pnpm install --frozen-lockfile
 	@# `.env` только создаётся, и только когда его нет: существующий файл не
 	@# трогаем — там уже могут быть настоящие токены (правило 7).
 	@if [ -f $(ENV_FILE) ]; then \
 		echo "$(ENV_FILE) уже есть — оставляю как есть."; \
 	else \
-		sed "s|^SECRET_KEY=.*|SECRET_KEY=$$(uv run python -c 'import secrets; print(secrets.token_urlsafe(48))')|" \
-			.env.example > $(ENV_FILE); \
+		key=$$(uv run python -c 'import secrets; print(secrets.token_urlsafe(48))'); \
+		if [ -z "$$key" ]; then \
+			echo "Не удалось сгенерировать SECRET_KEY — $(ENV_FILE) не создан."; \
+			exit 1; \
+		fi; \
+		: '  umask — файл под боевые токены не должен быть доступен на чтение'; \
+		: '  всей машине. Значение подставляет awk из окружения, а не sed из'; \
+		: '  аргумента: аргументы видны в `ps aux` любому пользователю.'; \
+		( umask 077; SECRET_KEY_VALUE="$$key" awk \
+			'$$0 ~ /^SECRET_KEY=/ { print "SECRET_KEY=" ENVIRON["SECRET_KEY_VALUE"]; next } { print }' \
+			.env.example > $(ENV_FILE) ); \
 		echo "Создан $(ENV_FILE) из .env.example, SECRET_KEY сгенерирован."; \
 		echo "BOT_TOKEN и ANTHROPIC_API_KEY остались фиктивными — впишите свои, когда дойдёт до бота и ИИ."; \
 	fi

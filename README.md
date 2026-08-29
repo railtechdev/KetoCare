@@ -91,7 +91,7 @@ make lint                 # ruff + mypy + prettier + tsc
 |---|---|---|
 | postgres | порт в `DATABASE_URL` | 5432 |
 | redis | порт в `REDIS_URL` | 6379 |
-| API | `API_PORT`, и тот же порт в `API_PROXY_TARGET` | 8001 |
+| API | порт в `API_PROXY_TARGET` | 8001 |
 | Кабинет | `WEB_PORT` (и `WEB_ORIGIN`) | 5173 |
 
 Дефолты 5432/6379 часто заняты другими проектами. `make dev` проверяет порты
