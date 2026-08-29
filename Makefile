@@ -193,6 +193,13 @@ fix: ## Автоисправление форматирования
 		&& echo "eslint: ok"; \
 	fi
 
+.PHONY: bot
+bot: check-env ## Запустить Telegram-бота (aiogram, long polling)
+	@# `python -m bot.main`, а не консольный скрипт: точка входа у бота одна и
+	@# лежит в модуле. Нужны поднятые redis (состояния FSM и секреты привязок) и
+	@# API по BOT_API_BASE_URL — то есть сначала `make dev` и `make api`.
+	uv run python -m bot.main
+
 .PHONY: worker
 worker: ## Запустить ARQ-воркер (PDF-отчёты)
 	# `python -m arq`, а не консольный скрипт `arq`: у скрипта в .venv/bin

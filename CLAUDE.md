@@ -43,8 +43,15 @@ KetoCare — платформа сопровождения кетогенной 
 ([ADR-0008](docs/adr/0008-report-jobs.md)). PDF требует системных pango и cairo —
 см. `apps/worker/README.md`.
 
-**Следующее по разделу 15** — этап 3 (Telegram: `apps/bot`, п. 15-17), затем этап 4 (AI,
-п. 18-21). `apps/bot` — только каркас, без логики: не наполнять его «заодно» (правило 9 ниже).
+Идёт **этап 3 «Telegram»** (раздел 15, п. 15-17). Готово: привязка чата к ребёнку
+(коды, отвязка, журнал привязок) и двухключевая аутентификация бота
+([ADR-0009](docs/adr/0009-telegram-bot-authentication.md)); `apps/bot` — привязка через
+`/start <код>`, главное меню и FSM-сценарии кетонов, веса и самочувствия.
+
+Не сделано и почему: сценарий «Приступ» ждёт ответа медкоманды (вопрос 23 в
+`docs/medical/OPEN_QUESTIONS.md` — шкала длительности у бота теряет пороги ILAE 10 и
+30 минут); «Еда → свободный текст» — это `POST /ai/parse`, то есть п. 19 **этапа 4**.
+Дальше по п. 15-17: еда из меню, лекарства, напоминания воркера, `apps/miniapp`.
 
 **Открытые темы, вынесенные решениями:** вложенные маршруты второго уровня (`/app/patients/$id` и т. п.), сводка ошибок формы (правило П8 канона), подсистема файлов и фото ([ADR-0004](docs/adr/0004-files-and-attachments.md)), клинические разрывы ([AUDIT_CLINICAL_COVERAGE.md](docs/AUDIT_CLINICAL_COVERAGE.md)).
 
@@ -55,6 +62,7 @@ KetoCare — платформа сопровождения кетогенной 
 ```
 make setup        # свежий клон: uv sync --all-packages, pnpm (через corepack), .env из .env.example
 make dev          # docker compose dev: postgres, redis, затем миграции
+make bot          # Telegram-бот (aiogram, long polling); нужны make dev и make api
 make test         # pytest + vitest
 make test-engine  # только эталонные тесты keto_engine (обязательный отдельный job в CI)
 make coverage-engine  # покрытие keto_engine с порогом 100%
