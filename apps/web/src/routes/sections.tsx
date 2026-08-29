@@ -28,6 +28,7 @@ import { PatientGate } from "../features/patients/PatientGate";
 import { MenuPage } from "../features/menu/MenuPage";
 import { ProductsPage } from "../features/products/ProductsPage";
 import { RecipesPage } from "../features/recipes/RecipesPage";
+import { ReportsPage } from "../features/reports/ReportsPage";
 import { ProfilePage } from "../features/profile/ProfilePage";
 import { ChildPage } from "../features/child/ChildPage";
 
@@ -57,6 +58,9 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
     <PatientGate render={(patientId) => <DiaryPage patientId={patientId} />} />
   ),
   recipes: () => <RecipesPage />,
+  reports: () => (
+    <PatientGate render={(patientId) => <ReportsPage patientId={patientId} />} />
+  ),
   patients: () => <DoctorPatientsPage />,
   products: (role) =>
     role === "admin" ? <AdminPage section="products" /> : <ProductsPage />,

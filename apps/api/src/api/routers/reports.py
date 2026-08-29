@@ -1,7 +1,8 @@
 """`/reports` — отчёт по пациенту за период (раздел 5.3 ТЗ, раздел 15 п. 14).
 
-Форматы: `json` — для экрана, `csv` — для выгрузки в чужие инструменты, `pdf` —
-задачей воркера `render_report` с поллингом `GET /reports/jobs/{id}` и
+Форматы: `json` — для экрана, `csv` — для выгрузки в чужие инструменты. PDF
+заказывается отдельной ручкой `POST /report/pdf` (она создаёт ресурс — задачу),
+собирает его воркер, а забирается он поллингом `GET /reports/jobs/{id}` и
 скачиванием `GET /reports/jobs/{id}/file` (раздел 7.5 ТЗ, ADR-0008).
 
 Доступ — `require_patient_access`, как у любых данных пациента. CSV дополнительно
@@ -48,7 +49,11 @@ MAX_PERIOD_DAYS = 400
 @router.get(
     "/report",
     summary="Отчёт по пациенту за период",
+    # Ответ зависит от формата (модель, задача или файл), поэтому единой
+    # `response_model` нет. Схема отчёта объявлена явно: иначе она не попадает
+    # в OpenAPI, а вместе с ней и в типы сгенерированного клиента.
     response_model=None,
+    responses={200: {"model": PatientReport}},
 )
 async def get_report(
     patient_id: Annotated[uuid.UUID, Path()],
@@ -56,20 +61,9 @@ async def get_report(
     user: PatientAccessDep,
     period_from: Annotated[date, Query(alias="from")],
     period_to: Annotated[date, Query(alias="to")],
-    report_format: Annotated[Literal["json", "csv", "pdf"], Query(alias="format")] = "json",
-) -> PatientReport | ReportJobRead | Response:
-    if period_to < period_from:
-        raise ApiError(
-            ErrorCode.VALIDATION_ERROR,
-            "Конец периода раньше его начала.",
-            details={"field": "to"},
-        )
-    if (period_to - period_from).days + 1 > MAX_PERIOD_DAYS:
-        raise ApiError(
-            ErrorCode.VALIDATION_ERROR,
-            f"Период длиннее {MAX_PERIOD_DAYS} дней; выберите отрезок покороче.",
-            details={"field": "to"},
-        )
+    report_format: Annotated[Literal["json", "csv"], Query(alias="format")] = "json",
+) -> PatientReport | Response:
+    _check_period(period_from, period_to)
 
     if report_format == "csv" and user.role is not UserRole.DOCTOR:
         # Тот же код, что и у чужого пациента: по ответу нельзя отличить
@@ -91,29 +85,6 @@ async def get_report(
     if report_format == "json":
         return report
 
-    if report_format == "pdf":
-        # PDF собирает воркер: weasyprint долгий, и держать на нём веб-процесс
-        # нельзя (раздел 10.1 ТЗ). Ручка возвращает идентификатор задачи.
-        job = await jobs_repo.create(
-            session,
-            patient_id=patient.id,
-            requested_by=user.id,
-            period_start=period_from,
-            period_end=period_to,
-        )
-        await _audit_export(
-            session,
-            user_id=user.id,
-            patient_id=patient.id,
-            report_format="pdf",
-            period_from=period_from,
-            period_to=period_to,
-        )
-        # Данные отчёта уезжают в задачу готовыми: воркер не собирает их заново,
-        # иначе отчёт на экране и отчёт в PDF однажды разойдутся (ADR-0008).
-        await queue_service.enqueue("render_report", str(job.id), report.model_dump(mode="json"))
-        return ReportJobRead.model_validate(job)
-
     await _audit_export(
         session,
         user_id=user.id,
@@ -134,6 +105,76 @@ async def get_report(
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+@router.post(
+    "/report/pdf",
+    response_model=ReportJobRead,
+    status_code=202,
+    summary="Заказать сборку PDF-отчёта",
+)
+async def request_pdf_report(
+    patient_id: Annotated[uuid.UUID, Path()],
+    session: SessionDep,
+    user: PatientAccessDep,
+    period_from: Annotated[date, Query(alias="from")],
+    period_to: Annotated[date, Query(alias="to")],
+) -> ReportJobRead:
+    """Создаёт задачу сборки и возвращает её идентификатор.
+
+    POST, а не `GET ?format=pdf` из раздела 5.3 ТЗ: запрос создаёт ресурс и не
+    идемпотентен — предзагрузка браузера или двойное нажатие плодили бы
+    одинаковые задачи рендера. Расхождение с ТЗ зафиксировано в ADR-0008.
+    """
+
+    _check_period(period_from, period_to)
+
+    patient = await patients_repo.get(session, patient_id)
+    if patient is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
+
+    report = await reports_service.build_report(
+        session,
+        patient=patient,
+        period_from=period_from,
+        period_to=period_to,
+        generated_at=datetime.now(UTC),
+    )
+
+    job = await jobs_repo.create(
+        session,
+        patient_id=patient.id,
+        requested_by=user.id,
+        period_start=period_from,
+        period_end=period_to,
+    )
+    await _audit_export(
+        session,
+        user_id=user.id,
+        patient_id=patient.id,
+        report_format="pdf",
+        period_from=period_from,
+        period_to=period_to,
+    )
+    # Данные отчёта уезжают в задачу готовыми: воркер не собирает их заново,
+    # иначе отчёт на экране и отчёт в PDF однажды разойдутся (ADR-0008).
+    await queue_service.enqueue("render_report", str(job.id), report.model_dump(mode="json"))
+    return ReportJobRead.model_validate(job)
+
+
+def _check_period(period_from: date, period_to: date) -> None:
+    if period_to < period_from:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Конец периода раньше его начала.",
+            details={"field": "to"},
+        )
+    if (period_to - period_from).days + 1 > MAX_PERIOD_DAYS:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Период длиннее {MAX_PERIOD_DAYS} дней; выберите отрезок покороче.",
+            details={"field": "to"},
+        )
 
 
 async def _audit_export(

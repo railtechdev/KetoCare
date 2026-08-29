@@ -59,6 +59,13 @@ async def _ketone(session, patient, *, at: datetime, value: float):
     return log
 
 
+def _pdf_url(patient_id, to: date = PERIOD_TO) -> str:
+    return (
+        f"/api/v1/patients/{patient_id}/report/pdf"
+        f"?from={PERIOD_FROM.isoformat()}&to={to.isoformat()}"
+    )
+
+
 def _url(patient_id, fmt: str = "json", to: date = PERIOD_TO) -> str:
     return (
         f"/api/v1/patients/{patient_id}/report"
@@ -216,7 +223,11 @@ class TestCsvExport:
         rows = await session.scalar(
             select(func.count())
             .select_from(AuditLog)
-            .where(AuditLog.entity == "reports", AuditLog.action == "export")
+            .where(
+                AuditLog.entity == "reports",
+                AuditLog.action == "export",
+                AuditLog.entity_id == patient.id,
+            )
         )
         assert rows == 1
 
@@ -230,7 +241,9 @@ class TestCsvExport:
         await client.get(_url(patient.id), headers=auth_headers(doctor))
 
         rows = await session.scalar(
-            select(func.count()).select_from(AuditLog).where(AuditLog.entity == "reports")
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.entity == "reports", AuditLog.entity_id == patient.id)
         )
         assert rows == 0
 
@@ -280,9 +293,9 @@ class TestPdfJob:
         monkeypatch.setattr(queue_service, "enqueue", fake_enqueue)
 
         doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
-        response = await client.get(_url(patient.id, "pdf"), headers=auth_headers(doctor))
+        response = await client.post(_pdf_url(patient.id), headers=auth_headers(doctor))
 
-        assert response.status_code == 200, response.text
+        assert response.status_code == 202, response.text
         body = response.json()
         assert body["status"] == "queued"
         assert enqueued and enqueued[0][0] == "render_report"
@@ -297,12 +310,16 @@ class TestPdfJob:
         monkeypatch.setattr(queue_service, "enqueue", lambda *a, **k: _noop())
 
         doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
-        await client.get(_url(patient.id, "pdf"), headers=auth_headers(doctor))
+        await client.post(_pdf_url(patient.id), headers=auth_headers(doctor))
 
         rows = await session.scalar(
             select(func.count())
             .select_from(AuditLog)
-            .where(AuditLog.entity == "reports", AuditLog.action == "export")
+            .where(
+                AuditLog.entity == "reports",
+                AuditLog.action == "export",
+                AuditLog.entity_id == patient.id,
+            )
         )
         assert rows == 1
 

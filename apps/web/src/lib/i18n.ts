@@ -14,6 +14,7 @@ import menuRu from "../locales/ru/menu.json";
 import productsRu from "../locales/ru/products.json";
 import profileRu from "../locales/ru/profile.json";
 import recipesRu from "../locales/ru/recipes.json";
+import reportsRu from "../locales/ru/reports.json";
 import childRu from "../locales/ru/child.json";
 
 /**
@@ -39,6 +40,7 @@ export const resources = {
     products: productsRu,
     profile: profileRu,
     recipes: recipesRu,
+    reports: reportsRu,
     child: childRu,
   },
 } as const;
