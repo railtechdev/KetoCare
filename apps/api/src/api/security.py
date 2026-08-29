@@ -34,6 +34,11 @@ _hasher = PasswordHasher()
 
 TokenType = Literal["access", "refresh", "totp_setup"]
 
+# Канал, которому выдан токен. Значение по умолчанию `web` в payload не пишется:
+# токены, выпущенные до появления признака, читаются как web — а web и есть
+# самый ограниченный вариант в том смысле, что он не даёт никаких послаблений.
+Channel = Literal["web", "bot"]
+
 _TTL_BY_TYPE: dict[str, timedelta] = {
     "access": ACCESS_TOKEN_TTL,
     "refresh": REFRESH_TOKEN_TTL,
@@ -94,6 +99,7 @@ def create_token(
     token_type: TokenType,
     patient_scope: uuid.UUID | None = None,
     password_changed_at: datetime | None = None,
+    channel: Channel = "web",
 ) -> str:
     """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ).
 
@@ -101,6 +107,13 @@ def create_token(
     пароля, отвергается при следующей же проверке. Так требование раздела 11
     «ревокация сессий при смене пароля» выполняется без хранилища выданных
     токенов.
+
+    `channel` попадает в claim `chan` и говорит, откуда токен взялся. Токен
+    канала `bot` — не полноценная сессия родителя: он выдаётся автоматике по
+    секрету привязки, а не человеку по паролю, поэтому ему закрыты обновление
+    сессии, настройка второго фактора и всё, что не нужно сценариям раздела 7
+    (ADR-0009). Без этого признака отличить его от сессии человека было бы
+    нечем, и утёкший токен бота отмывался бы в постоянную сессию родителя.
     """
 
     now = datetime.now(UTC)
@@ -117,6 +130,8 @@ def create_token(
         payload["patient_scope"] = str(patient_scope)
     if password_changed_at is not None:
         payload["pwd"] = int(password_changed_at.timestamp())
+    if channel != "web":
+        payload["chan"] = channel
 
     return jwt.encode(payload, get_settings().secret_key, algorithm=_ALGORITHM)
 

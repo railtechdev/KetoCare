@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Numeric, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import BIGINT, CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -93,7 +93,28 @@ class Invitation(Base, UUIDPkMixin, CreatedAtMixin):
 
 
 class TelegramAccount(Base, UUIDPkMixin):
+    """Привязка Telegram-чата к паре «родитель + ребёнок» ([ADR-0009](../../../../../docs/adr/0009-telegram-bot-authentication.md)).
+
+    `chat_id` уникален не глобально, а среди живых привязок: частичный индекс
+    `WHERE revoked_at IS NULL`. Глобальная уникальность делала повторную привязку
+    того же чата после отзыва невозможной как новую строку — оставалось затирать
+    существующую, теряя, кому и к какому ребёнку чат принадлежал раньше. Для
+    клинической системы это потеря журнала (правило 4 в духе), а заодно и способ
+    угнать чужую привязку: `UPDATE ... WHERE chat_id = ...` не спрашивает, чья
+    строка обновляется.
+    """
+
     __tablename__ = "telegram_accounts"
+    __table_args__ = (
+        Index(
+            "uq_telegram_accounts_active_chat",
+            "chat_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+        Index("ix_telegram_accounts_parent_id", "parent_id"),
+        Index("ix_telegram_accounts_patient_id", "patient_id"),
+    )
 
     parent_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
@@ -101,7 +122,12 @@ class TelegramAccount(Base, UUIDPkMixin):
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
     )
-    chat_id: Mapped[int] = mapped_column(BIGINT, unique=True, nullable=False)
+    chat_id: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    # Второй фактор доступа бота. Сам секрет отдаётся боту один раз при привязке и
+    # хранится у бота; в БД — только sha256. Сервисного токена из окружения
+    # недостаточно: он открывает лишь привязку и обмен, но ни одной ручки с
+    # данными пациента (ADR-0009).
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     linked_at: Mapped[datetime] = mapped_column(nullable=False)
     revoked_at: Mapped[datetime | None]
 

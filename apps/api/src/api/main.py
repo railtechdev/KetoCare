@@ -26,6 +26,7 @@ from .routers import (
     recipes,
     reports,
     staff,
+    telegram,
 )
 
 API_PREFIX = "/api/v1"
@@ -76,6 +77,8 @@ def create_app() -> FastAPI:
     v1.include_router(dictionaries.router)
     v1.include_router(staff.router)
     v1.include_router(admin.router)
+    v1.include_router(telegram.router)
+    v1.include_router(telegram.bot_router)
     app.include_router(v1)
 
     @app.get("/health", tags=["service"], summary="Проверка живости")
