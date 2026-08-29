@@ -70,6 +70,7 @@ async def issue_bot_session(
         patient_scope=link.patient_id,
         password_changed_at=parent.password_changed_at,
         channel="bot",
+        binding_id=link.id,
     )
     return BotSession(
         access_token=token,

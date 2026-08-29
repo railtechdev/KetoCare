@@ -93,10 +93,13 @@ async def claim_code(session: AsyncSession, code: str) -> LinkCode | None:
     """
 
     now = datetime.now(UTC)
+    # Регистр приводится к верхнему: алфавит генерации — заглавные буквы и цифры,
+    # а код набирают руками с экрана. Отказ «код недействителен» человеку,
+    # набравшему тот же код строчными, — это ошибка продукта, а не защита.
     stmt = (
         update(LinkCode)
         .where(
-            LinkCode.code == code,
+            LinkCode.code == code.strip().upper(),
             LinkCode.used_at.is_(None),
             LinkCode.expires_at > now,
         )

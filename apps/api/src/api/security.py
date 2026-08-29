@@ -34,9 +34,16 @@ _hasher = PasswordHasher()
 
 TokenType = Literal["access", "refresh", "totp_setup"]
 
-# Канал, которому выдан токен. Значение по умолчанию `web` в payload не пишется:
-# токены, выпущенные до появления признака, читаются как web — а web и есть
-# самый ограниченный вариант в том смысле, что он не даёт никаких послаблений.
+# Канал, которому выдан токен. `web` в payload не пишется — он же и значение по
+# умолчанию для токенов без claim'а `chan`, выпущенных до появления признака.
+#
+# Важно понимать, чем это оборачивается: `web` — самый ПРИВИЛЕГИРОВАННЫЙ канал, а
+# не самый ограниченный. Ему открыты все маршруты, настройка второго фактора и
+# выпуск кодов привязки. Значит забытый `channel=` при выпуске токена нового
+# канала молча даст ему права веб-сессии. Пока каналов два, за этим следит
+# компилятор через `_SOURCE_BY_CHANNEL` в services/logs.py — словарь обязан
+# покрывать весь `Channel`, и добавление значения сюда роняет mypy до того, как
+# новый канал доедет до продакшена.
 Channel = Literal["web", "bot"]
 
 _TTL_BY_TYPE: dict[str, timedelta] = {
@@ -100,6 +107,7 @@ def create_token(
     patient_scope: uuid.UUID | None = None,
     password_changed_at: datetime | None = None,
     channel: Channel = "web",
+    binding_id: uuid.UUID | None = None,
 ) -> str:
     """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ).
 
@@ -132,6 +140,11 @@ def create_token(
         payload["pwd"] = int(password_changed_at.timestamp())
     if channel != "web":
         payload["chan"] = channel
+    if binding_id is not None:
+        # Привязка, по которой выдан токен. Нужна, чтобы отзыв действовал
+        # немедленно: без неё отозванная привязка ещё пятнадцать минут
+        # писала бы в дневник ребёнка по уже выданному токену.
+        payload["tg"] = str(binding_id)
 
     return jwt.encode(payload, get_settings().secret_key, algorithm=_ALGORITHM)
 

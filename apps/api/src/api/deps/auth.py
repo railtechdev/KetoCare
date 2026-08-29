@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_sessionmaker
 from core.models.enums import UserRole
 from core.repositories import access as access_repo
+from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
 from ..errors import ApiError, ErrorCode
@@ -98,6 +99,7 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
         # зависимость, которую надо не забыть навесить на ручку, однажды
         # окажется не навешенной.
         assert_route_allowed_for_bot(request)
+        await _assert_binding_alive(session, payload, user_id=user.id, patient_scope=patient_scope)
 
     return CurrentUser(
         id=user.id,
@@ -105,6 +107,46 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
         patient_scope=patient_scope,
         channel=channel,
     )
+
+
+async def _assert_binding_alive(
+    session: AsyncSession,
+    payload: dict[str, Any],
+    *,
+    user_id: uuid.UUID,
+    patient_scope: uuid.UUID | None,
+) -> None:
+    """Проверяет, что привязка, по которой выдан ботовый токен, ещё жива.
+
+    Без этого отвязка не отвязывала: `revoke` ставит `revoked_at`, но уже
+    выданный access-токен живёт пятнадцать минут и всё это время писал бы в
+    дневник ребёнка. Ровно от этого разрыва в сценарии «потерял телефон →
+    отвязал в кабинете» защита и нужна.
+
+    Запрос выполняется только для канала `bot` — сессии человека его не платят.
+    Он же и причина, по которой `link_id` попадает в токен: иначе привязку
+    пришлось бы искать по родителю и пациенту, а их у семьи может быть
+    несколько, и отзыв одного чата гасил бы все.
+    """
+
+    denied = ApiError(ErrorCode.UNAUTHORIZED, "Привязка отозвана, требуется повторная привязка.")
+
+    raw = payload.get("tg")
+    if not isinstance(raw, str):
+        raise denied
+    try:
+        binding_id = uuid.UUID(raw)
+    except ValueError as exc:
+        raise denied from exc
+
+    link = await telegram_repo.get_active_link(session, binding_id)
+    if link is None:
+        raise denied
+    # Сверка с содержимым токена: подписанные claim'ы и строка в БД должны
+    # описывать одну и ту же привязку. Расхождение означает подделку или
+    # изменение данных под выданным токеном — в обоих случаях отказ.
+    if link.parent_id != user_id or link.patient_id != patient_scope:
+        raise denied
 
 
 def _channel_of(payload: dict[str, Any]) -> Channel:

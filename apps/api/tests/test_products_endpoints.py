@@ -106,8 +106,15 @@ class TestProductWrites:
         revisions = await products_repo.list_revisions(session, product_id=product_id)
         assert len(revisions) == 2
 
+        # Отбор по entity_id обязателен: без него запрос без сортировки и лимита
+        # берёт произвольную строку журнала и цепляет запись постороннего прогона,
+        # оставшуюся в базе разработчика. Тест падал не по своей причине.
         entry = await session.scalar(
-            select(AuditLog).where(AuditLog.entity == "products", AuditLog.action == "update")
+            select(AuditLog).where(
+                AuditLog.entity == "products",
+                AuditLog.action == "update",
+                AuditLog.entity_id == uuid.UUID(product_id),
+            )
         )
         assert entry is not None
         assert entry.before["fat_100g"] == 81.1

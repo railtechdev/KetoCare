@@ -29,17 +29,19 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Request
+from fastapi import APIRouter, Depends, Path, Request
+from sqlalchemy.exc import IntegrityError
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
 
+from ..client_address import client_address
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..deps.bot import verify_bot_service_token
 from ..errors import ApiError, ErrorCode
-from ..ratelimit import AUTH_RATE_LIMIT, limiter
+from ..ratelimit import BOT_RATE_LIMIT, limiter
 from ..schemas_telegram import (
     BotSession,
     BotSessionRequest,
@@ -63,7 +65,7 @@ PatientIdPath = Annotated[uuid.UUID, Path()]
     summary="Выпустить код привязки Telegram",
 )
 async def create_link_code(
-    patient_id: PatientIdPath, session: SessionDep, user: PatientAccessDep
+    patient_id: PatientIdPath, request: Request, session: SessionDep, user: PatientAccessDep
 ) -> LinkCodeCreated:
     if user.role is not UserRole.PARENT:
         # Привязывает бот именно семья: раздел 7 ТЗ описывает бота как канал
@@ -83,6 +85,7 @@ async def create_link_code(
         action="telegram_link_code_issued",
         entity="link_codes",
         entity_id=patient_id,
+        ip=client_address(request),
         after={"expires_at": code.expires_at.isoformat()},
     )
 
@@ -113,6 +116,7 @@ async def list_links(
 async def revoke_link(
     patient_id: PatientIdPath,
     link_id: Annotated[uuid.UUID, Path()],
+    request: Request,
     session: SessionDep,
     user: PatientAccessDep,
 ) -> TelegramLinkRead:
@@ -135,6 +139,7 @@ async def revoke_link(
         action="telegram_unlink",
         entity="telegram_accounts",
         entity_id=revoked.id,
+        ip=client_address(request),
         before={"chat_id": revoked.chat_id, "revoked_at": None},
         after={"chat_id": revoked.chat_id, "revoked_at": revoked.revoked_at.isoformat()},
     )
@@ -146,28 +151,22 @@ async def revoke_link(
     "/link-codes/verify",
     response_model=LinkVerified,
     summary="Погасить код привязки (бот)",
+    dependencies=[Depends(verify_bot_service_token)],
 )
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(BOT_RATE_LIMIT)
 async def verify_link_code(
     payload: LinkCodeVerify, request: Request, session: SessionDep
 ) -> LinkVerified:
     """Гасит код и создаёт привязку.
 
-    Лимит частоты по адресу клиента, как требует раздел 11 ТЗ для `/auth/*`.
-    Ключ по `chat_id` из тела был бы удобнее (у бота один адрес), но он задаётся
-    самим запросом — то есть выбирается тем, кого ограничивают.
+    Проверка сервисного токена — зависимостью, а не первой строкой тела: так она
+    отрабатывает до разбора тела (иначе кривое тело без токена давало бы 422
+    вместо 401) и попадает в OpenAPI, откуда о заголовке узнаёт клиент.
     """
 
-    verify_bot_service_token(request)
-
-    # Атомарное погашение: два одновременных `/start` с одним кодом дадут
-    # привязку ровно одному чату.
-    code = await telegram_repo.claim_code(session, payload.code)
-    if code is None:
-        # Один ответ на «нет такого кода», «истёк» и «уже использован»: иначе
-        # восьмисимвольный код можно перебирать, отличая существующие от несуществующих.
-        raise ApiError(ErrorCode.NOT_FOUND, "Код привязки недействителен или истёк.")
-
+    # Занятость чата проверяется ДО погашения кода. При обратном порядке чужая
+    # привязка сжигала бы код родителя: он получал 409 и должен был просить
+    # новый, ничего не сделав неправильно.
     existing = await telegram_repo.get_active_link_by_chat(session, payload.chat_id)
     if existing is not None:
         # Живая привязка чата не перенацеливается: `UPDATE ... WHERE chat_id`
@@ -178,18 +177,36 @@ async def verify_link_code(
             "Этот чат уже привязан. Сначала отвяжите его в кабинете.",
         )
 
+    # Атомарное погашение: два одновременных `/start` с одним кодом дадут
+    # привязку ровно одному чату.
+    code = await telegram_repo.claim_code(session, payload.code)
+    if code is None:
+        # Один ответ на «нет такого кода», «истёк» и «уже использован»: иначе
+        # восьмисимвольный код можно перебирать, отличая существующие от несуществующих.
+        raise ApiError(ErrorCode.NOT_FOUND, "Код привязки недействителен или истёк.")
+
     patient = await patients_repo.get(session, code.patient_id)
     if patient is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
 
     secret = telegram_repo.generate_binding_secret()
-    link = await telegram_repo.create_link(
-        session,
-        parent_id=code.parent_id,
-        patient_id=code.patient_id,
-        chat_id=payload.chat_id,
-        secret=secret,
-    )
+    try:
+        link = await telegram_repo.create_link(
+            session,
+            parent_id=code.parent_id,
+            patient_id=code.patient_id,
+            chat_id=payload.chat_id,
+            secret=secret,
+        )
+    except IntegrityError as exc:
+        # Проверка занятости выше и вставка ниже — не одна операция: два
+        # одновременных запроса с разными кодами на один чат оба пройдут
+        # проверку. Частичный уникальный индекс их разведёт, но без этого
+        # перехвата второй получил бы 500 вместо внятного отказа.
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Этот чат уже привязан. Сначала отвяжите его в кабинете.",
+        ) from exc
 
     await audit_repo.write_audit_log(
         session,
@@ -197,6 +214,7 @@ async def verify_link_code(
         action="telegram_link",
         entity="telegram_accounts",
         entity_id=link.id,
+        ip=client_address(request),
         after={"chat_id": link.chat_id, "patient_id": str(link.patient_id)},
     )
 
@@ -212,8 +230,9 @@ async def verify_link_code(
     "/bot/session",
     response_model=BotSession,
     summary="Обменять секрет привязки на сессию (бот)",
+    dependencies=[Depends(verify_bot_service_token)],
 )
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(BOT_RATE_LIMIT)
 async def create_bot_session(
     payload: BotSessionRequest, request: Request, session: SessionDep
 ) -> BotSession:
@@ -222,8 +241,6 @@ async def create_bot_session(
     Refresh не выдаётся: бот в любой момент повторит обмен. Так временный доступ
     к чату не превращается в тридцатидневную сессию родителя.
     """
-
-    verify_bot_service_token(request)
 
     token = await telegram_service.issue_bot_session(
         session, link_id=payload.link_id, secret=payload.secret

@@ -15,8 +15,8 @@ import pytest
 from sqlalchemy import select
 
 from core.config import get_settings
-from core.models import AuditLog, LinkCode, TelegramAccount
-from core.models.enums import UserRole
+from core.models import AuditLog, KetoneLog, LinkCode, TelegramAccount
+from core.models.enums import DiarySource, UserRole
 from core.repositories import patients as patients_repo
 
 CHAT_ID = 482913001
@@ -458,3 +458,203 @@ class TestValidation:
             json={"code": "AAAAAAAA", "chat_id": "не число"},
         )
         assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+class TestDiarySource:
+    async def test_bot_entry_is_marked_as_bot(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Раздел 4.2 ТЗ различает web и bot.
+
+        Врач в отчёте должен видеть, записан приступ в кабинете за столом или на
+        бегу в чате. Пока бота не было, `source` был константой `web`; теперь он
+        выводится из канала токена.
+        """
+
+        parent, patient = await _family(session, make_user, make_patient)
+        link = await _link(client, auth_headers, parent, patient)
+        token = await _bot_session(client, link)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/ketones",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "occurred_at": datetime.now(UTC).isoformat(),
+                "value": "3.2",
+                "method": "blood",
+            },
+        )
+        assert response.status_code == 201, response.text
+
+        log = await session.scalar(select(KetoneLog).where(KetoneLog.patient_id == patient.id))
+        assert log is not None
+        assert log.source is DiarySource.BOT
+
+    async def test_web_entry_stays_web(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _family(session, make_user, make_patient)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/ketones",
+            headers=auth_headers(parent),
+            json={
+                "occurred_at": datetime.now(UTC).isoformat(),
+                "value": "2.0",
+                "method": "urine",
+            },
+        )
+        assert response.status_code == 201, response.text
+
+        log = await session.scalar(select(KetoneLog).where(KetoneLog.patient_id == patient.id))
+        assert log is not None
+        assert log.source is DiarySource.WEB
+
+
+@pytest.mark.asyncio
+class TestRevokeStopsIssuedSession:
+    async def test_issued_token_dies_with_the_binding(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Отвязка обязана действовать немедленно, а не через 15 минут.
+
+        Сценарий «потерял телефон → отвязал в кабинете» бессмыслен, если уже
+        выданный токен продолжает писать в дневник ребёнка до истечения срока.
+        """
+
+        parent, patient = await _family(session, make_user, make_patient)
+        link = await _link(client, auth_headers, parent, patient)
+        token = await _bot_session(client, link)
+
+        # Токен работает, пока привязка жива.
+        before = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/weight",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"occurred_at": datetime.now(UTC).isoformat(), "weight_kg": "18.4"},
+        )
+        assert before.status_code == 201, before.text
+
+        await client.post(
+            f"/api/v1/patients/{patient.id}/telegram/{link['link_id']}/revoke",
+            headers=auth_headers(parent),
+        )
+
+        after = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/weight",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"occurred_at": datetime.now(UTC).isoformat(), "weight_kg": "18.5"},
+        )
+        assert after.status_code == 401, after.text
+
+
+@pytest.mark.asyncio
+class TestLinksListing:
+    async def test_parent_sees_own_links(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _family(session, make_user, make_patient)
+        link = await _link(client, auth_headers, parent, patient)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/telegram", headers=auth_headers(parent)
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 1
+        assert body[0]["id"] == link["link_id"]
+        assert body[0]["chat_id"] == CHAT_ID
+        assert body[0]["revoked_at"] is None
+
+    async def test_other_parent_forbidden(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, patient = await _family(session, make_user, make_patient)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/telegram", headers=auth_headers(stranger)
+        )
+        assert response.status_code == 403
+
+    async def test_admin_has_no_access(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Правило 2: админ к клиническим данным доступа не имеет."""
+
+        _, patient = await _family(session, make_user, make_patient)
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/telegram", headers=auth_headers(admin)
+        )
+        assert response.status_code == 403
+
+    async def test_revoke_forbidden_for_other_parent(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """403 от `require_patient_access` — не путать с 404 от сверки принадлежности."""
+
+        parent, patient = await _family(session, make_user, make_patient)
+        link = await _link(client, auth_headers, parent, patient)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/telegram/{link['link_id']}/revoke",
+            headers=auth_headers(stranger),
+        )
+        assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+class TestCodeInput:
+    async def test_code_is_case_insensitive(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Код набирают руками с экрана; строчные буквы — не повод для отказа."""
+
+        parent, patient = await _family(session, make_user, make_patient)
+        code = await _issue_code(client, auth_headers, parent, patient)
+
+        response = await client.post(
+            "/api/v1/auth/link-codes/verify",
+            headers=bot_headers(),
+            json={"code": code.lower(), "chat_id": CHAT_ID},
+        )
+        assert response.status_code == 200, response.text
+
+    async def test_busy_chat_does_not_burn_the_code(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Чужая привязка не должна сжигать код родителя.
+
+        Занятость чата проверяется до погашения, поэтому тот же код проходит,
+        как только чат освободили.
+        """
+
+        victim_parent, victim_patient = await _family(
+            session, make_user, make_patient, name="Жертва"
+        )
+        victim_link = await _link(client, auth_headers, victim_parent, victim_patient)
+
+        parent, patient = await _family(session, make_user, make_patient, name="Свой")
+        code = await _issue_code(client, auth_headers, parent, patient)
+
+        busy = await client.post(
+            "/api/v1/auth/link-codes/verify",
+            headers=bot_headers(),
+            json={"code": code, "chat_id": CHAT_ID},
+        )
+        assert busy.status_code == 409
+
+        await client.post(
+            f"/api/v1/patients/{victim_patient.id}/telegram/{victim_link['link_id']}/revoke",
+            headers=auth_headers(victim_parent),
+        )
+
+        retry = await client.post(
+            "/api/v1/auth/link-codes/verify",
+            headers=bot_headers(),
+            json={"code": code, "chat_id": CHAT_ID},
+        )
+        assert retry.status_code == 200, "код не должен был сгореть из-за чужой привязки"
