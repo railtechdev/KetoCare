@@ -1,13 +1,4 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  FormFooter,
-  toast,
-} from "@ketocare/ui";
+import { FormFooter, Section, toast } from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -37,7 +28,7 @@ export function SaveDishForm({ patientId, rows }: Props) {
   }
 
   return (
-    <Card>
+    <Section title={t("save.action")} description={t("save.description")}>
       <form
         className="flex flex-col gap-block"
         onSubmit={(event) => {
@@ -59,37 +50,29 @@ export function SaveDishForm({ patientId, rows }: Props) {
           );
         }}
       >
-        <CardHeader>
-          <CardTitle className="text-card-title">{t("save.action")}</CardTitle>
-          <CardDescription>{t("save.description")}</CardDescription>
-        </CardHeader>
+        <Field
+          id="dish-title"
+          label={t("save.title")}
+          required
+          width="wide"
+          value={title}
+          placeholder={t("save.placeholder")}
+          onChange={(event) => setTitle(event.target.value)}
+        />
 
-        <CardContent className="flex flex-col gap-block">
-          <Field
-            id="dish-title"
-            label={t("save.title")}
-            required
-            value={title}
-            placeholder={t("save.placeholder")}
-            onChange={(event) => setTitle(event.target.value)}
-          />
+        {save.isError && (
+          <FormError>
+            {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
 
-          {save.isError && (
-            <FormError>
-              {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
-            </FormError>
-          )}
-        </CardContent>
-
-        <CardFooter>
-          <FormFooter
-            submitLabel={t("save.submit")}
-            pendingLabel={t("save.saving")}
-            pending={save.isPending}
-            disabled={title.trim() === "" || rows.length === 0}
-          />
-        </CardFooter>
+        <FormFooter
+          submitLabel={t("save.submit")}
+          pendingLabel={t("save.saving")}
+          pending={save.isPending}
+          disabled={title.trim() === "" || rows.length === 0}
+        />
       </form>
-    </Card>
+    </Section>
   );
 }

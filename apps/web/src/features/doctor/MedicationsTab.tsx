@@ -1,13 +1,10 @@
 import {
   AsyncSection,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   ConfirmDialog,
   DataTable,
   EmptyState,
+  Section,
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -101,126 +98,115 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
     const mutation = editing === null ? create : update;
 
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-card-title">
-            {editing === null
-              ? t("medications.createTitle")
-              : t("medications.editTitle")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MedicationForm
-            medication={editing}
-            pending={mutation.isPending}
-            error={mutation.error}
-            onCancel={() => setForm(null)}
-            onSubmit={(body) => {
-              if (editing === null) {
-                create.mutate(body, {
+      <Section
+        title={
+          editing === null
+            ? t("medications.createTitle")
+            : t("medications.editTitle")
+        }
+      >
+        <MedicationForm
+          medication={editing}
+          pending={mutation.isPending}
+          error={mutation.error}
+          onCancel={() => setForm(null)}
+          onSubmit={(body) => {
+            if (editing === null) {
+              create.mutate(body, {
+                onSuccess: () => {
+                  toast.success(t("medications.created"));
+                  setForm(null);
+                },
+              });
+            } else {
+              update.mutate(
+                { medicationId: editing.id, body },
+                {
                   onSuccess: () => {
-                    toast.success(t("medications.created"));
+                    toast.success(t("medications.updated"));
                     setForm(null);
                   },
-                });
-              } else {
-                update.mutate(
-                  { medicationId: editing.id, body },
-                  {
-                    onSuccess: () => {
-                      toast.success(t("medications.updated"));
-                      setForm(null);
-                    },
-                  },
-                );
-              }
-            }}
-          />
-        </CardContent>
-      </Card>
+                },
+              );
+            }
+          }}
+        />
+      </Section>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-card-title">
-          {t("medications.title")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-block">
-        <AsyncSection
-          loading={medications.isPending}
-          skeleton={<TableSkeleton label={t("medications.loading")} rows={3} />}
-          error={
-            medications.isError
-              ? {
-                  title: t("medications.loadError"),
-                  description:
-                    errorMessageOf(medications.error) ??
-                    t("common:errors.unexpected"),
-                }
-              : null
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void medications.refetch()}
-          isEmpty={items.length === 0}
-          empty={
-            <EmptyState
-              icon={Pill}
-              title={t("medications.empty")}
-              description={t("medications.emptyDescription")}
-              action={
-                canWrite ? (
-                  <Button
-                    type="button"
-                    onClick={() => setForm({ mode: "create" })}
-                  >
-                    <Plus aria-hidden="true" />
-                    {t("medications.add")}
-                  </Button>
-                ) : undefined
+    <Section title={t("medications.title")}>
+      <AsyncSection
+        loading={medications.isPending}
+        skeleton={<TableSkeleton label={t("medications.loading")} rows={3} />}
+        error={
+          medications.isError
+            ? {
+                title: t("medications.loadError"),
+                description:
+                  errorMessageOf(medications.error) ??
+                  t("common:errors.unexpected"),
               }
-            />
-          }
-        >
-          <DataTable
-            columns={columns}
-            data={items}
-            caption={t("medications.caption")}
-            emptyState={null}
-            labels={{
-              previousPage: t("table.previousPage"),
-              nextPage: t("table.nextPage"),
-              pageStatus: (page, total) =>
-                t("table.pageStatus", { page, total }),
-            }}
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void medications.refetch()}
+        isEmpty={items.length === 0}
+        empty={
+          <EmptyState
+            icon={Pill}
+            title={t("medications.empty")}
+            description={t("medications.emptyDescription")}
+            action={
+              canWrite ? (
+                <Button
+                  type="button"
+                  onClick={() => setForm({ mode: "create" })}
+                >
+                  <Plus aria-hidden="true" />
+                  {t("medications.add")}
+                </Button>
+              ) : undefined
+            }
           />
-        </AsyncSection>
+        }
+      >
+        <DataTable
+          columns={columns}
+          data={items}
+          caption={t("medications.caption")}
+          emptyState={null}
+          labels={{
+            previousPage: t("table.previousPage"),
+            nextPage: t("table.nextPage"),
+            pageStatus: (page, total) => t("table.pageStatus", { page, total }),
+          }}
+        />
+      </AsyncSection>
 
-        {/* Ошибка удаления — не ошибка загрузки: повторять нечего, врач решает
-            заново. Поэтому она остаётся сообщением действия. */}
-        {remove.isError && (
-          <FormError>
-            {errorMessageOf(remove.error) ?? t("common:errors.unexpected")}
-          </FormError>
-        )}
+      {/* Ошибка удаления — не ошибка загрузки: повторять нечего, врач решает
+          заново. Поэтому она остаётся сообщением действия. */}
+      {remove.isError && (
+        <FormError>
+          {errorMessageOf(remove.error) ?? t("common:errors.unexpected")}
+        </FormError>
+      )}
 
-        {/* Условие прежнее — только роль. Добавленная проверка на непустой
-            список отнимала возможность назначить препарат ровно тогда, когда
-            список не загрузился. */}
-        {canWrite && (
-          <Button
-            type="button"
-            className="self-start"
-            onClick={() => setForm({ mode: "create" })}
-          >
-            <Plus aria-hidden="true" />
-            {t("medications.add")}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      {/* Условие прежнее — только роль. Добавленная проверка на непустой
+          список отнимала возможность назначить препарат ровно тогда, когда
+          список не загрузился. */}
+      {canWrite && (
+        <Button
+          type="button"
+          className="self-start"
+          onClick={() => setForm({ mode: "create" })}
+        >
+          <Plus aria-hidden="true" />
+          {t("medications.add")}
+        </Button>
+      )}
+    </Section>
   );
 }
 

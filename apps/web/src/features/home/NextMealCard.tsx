@@ -102,7 +102,7 @@ export function NextMealCard({ patientId }: { patientId: string }) {
             <Badge variant="secondary">
               {t(`nextMeal.slots.${next.meal_slot}`)}
             </Badge>
-            <span className="min-w-0 text-section-title font-semibold break-words">
+            <span className="min-w-0 text-card-title font-semibold break-words">
               {titles[next.id] ?? t("nextMeal.unknownDish")}
             </span>
             <span className="text-sm text-muted-foreground tabular-nums">

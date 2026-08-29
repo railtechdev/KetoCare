@@ -3,20 +3,18 @@ import {
   Button,
   DataTable,
   EmptyState,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ListOrdered, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { SelectField } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
+import { useSectionTab } from "../../routes/useSectionTab";
 import { DictionaryEntryForm } from "./DictionaryEntryForm";
-import { SectionHeading } from "./SectionHeading";
+import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
 import {
   DICTIONARY_KINDS,
@@ -36,37 +34,38 @@ import type { DictionaryEntry } from "./types";
  */
 export function DictionariesPanel() {
   const { t } = useTranslation("admin");
-  const [kind, setKind] = useState<DictionaryKind>("seizure-types");
+  const selectId = useId();
+
+  // Справочник выбирается переключателем, а не второй полосой вкладок:
+  // админка уже открыта вкладкой, а вкладки не вкладываются в вкладки —
+  // две одинаковые полосы подряд читаются как одна (правило П29).
+  const [kind, setKind] = useSectionTab<DictionaryKind>(
+    "kind",
+    DICTIONARY_KINDS,
+    "seizure-types",
+  );
 
   return (
     <div className="flex flex-col gap-block">
-      <SectionHeading title={t("dictionaries.title")} />
+      <SubPageHeader title={t("dictionaries.title")} />
 
-      <Tabs
+      <SelectField
+        id={selectId}
+        label={t("dictionaries.tabsLabel")}
+        width="medium"
         value={kind}
-        onValueChange={(value) => setKind(value as DictionaryKind)}
-        className="gap-block"
+        onChange={(event) => setKind(event.target.value as DictionaryKind)}
       >
-        {/* Вкладки второго уровня — линейным вариантом кита: иначе два
-            одинаковых переключателя подряд читаются как один. */}
-        <div className="-mx-1 overflow-x-auto px-1 pb-1">
-          <TabsList variant="line" aria-label={t("dictionaries.tabsLabel")}>
-            {DICTIONARY_KINDS.map((value) => (
-              <TabsTrigger key={value} value={value}>
-                {t(`dictionaries.kinds.${value}`)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-
         {DICTIONARY_KINDS.map((value) => (
-          <TabsContent key={value} value={value}>
-            {/* Свой экземпляр на справочник: состояние правки не должно
-                переезжать со вкладки на вкладку. */}
-            <DictionaryEditor kind={value} />
-          </TabsContent>
+          <option key={value} value={value}>
+            {t(`dictionaries.kinds.${value}`)}
+          </option>
         ))}
-      </Tabs>
+      </SelectField>
+
+      {/* Свой экземпляр на справочник: состояние правки не должно переезжать
+          с одного справочника на другой. */}
+      <DictionaryEditor key={kind} kind={kind} />
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { InvitePanel } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
-import { SectionHeading } from "./SectionHeading";
+import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
 import { UserAccountForm } from "./UserAccountForm";
 import { useAdminUsers, useUpdateUserMutation } from "./useAdminUsers";
@@ -109,7 +109,7 @@ export function UsersPanel() {
 
   return (
     <div className="flex flex-col gap-block">
-      <SectionHeading title={t("users.title")} intro={t("users.intro")} />
+      <SubPageHeader title={t("users.title")} intro={t("users.intro")} />
 
       {/* Администратор заводит персонал; семью приглашает её врач или диетолог,
           он же становится ведущим специалистом (ADR-0003). */}

@@ -198,6 +198,54 @@ describe("MenuPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("приёмы пищи — один блок с заголовками третьего уровня", async () => {
+    // Раньше каждый приём был отдельной карточкой на 190 px, и пустой день
+    // занимал 1782 px до появления первого блюда (docs/AUDIT_UI_LAYOUT.md).
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Приёмы пищи" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Завтрак" }),
+    ).toBeInTheDocument();
+  });
+
+  it("добавление блюда открывается панелью с названием приёма пищи", async () => {
+    // Правило П32: форма не занимает высоту постоянно и открывается там, где
+    // понятно, в какой приём пищи добавляют.
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить блюдо в приём «Обед»",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: /Обед/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("у пустого дня одно пустое состояние, а не два", async () => {
+    // Правило П27: раньше «Итоги появятся, когда будет хотя бы одно блюдо» и
+    // «На этот день меню ещё не составлено» шли подряд — 332 px на одну мысль.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? { data: { ...MENU, items: [], totals: null } }
+          : respond(path),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText(menuRu.day.empty as string),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(menuRu.totals.none as string)).toBeNull();
+  });
+
   it("удаление позиции подтверждается диалогом с названием блюда", async () => {
     const user = userEvent.setup();
     renderPage();

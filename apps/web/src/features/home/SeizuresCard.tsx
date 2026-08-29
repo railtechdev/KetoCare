@@ -18,7 +18,7 @@ export function SeizuresCard({ seizures }: { seizures: SeizuresToday }) {
       {/* Ноль выводится наравне с любым другим числом: «сегодня приступов не
           было» — такой же результат дня, как и их количество. */}
       <p className="m-0 flex items-baseline gap-field">
-        <span className="text-page-title font-semibold tabular-nums">
+        <span className="text-metric font-semibold tabular-nums">
           {seizures.count}
         </span>
         <span className="text-muted-foreground">

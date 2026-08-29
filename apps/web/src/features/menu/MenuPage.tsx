@@ -1,16 +1,17 @@
-import { AsyncSection, EmptyState, toast } from "@ketocare/ui";
-import { UtensilsCrossed } from "lucide-react";
+import { AsyncSection, Button, FormSheet, Section, toast } from "@ketocare/ui";
+import { CopyPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
+import { AddMenuItemForm } from "./AddMenuItemForm";
 import { CopyDayForm } from "./CopyDayForm";
 import { DayNavigator } from "./DayNavigator";
 import { DayTotalsPanel } from "./DayTotalsPanel";
+import { MealSlotGroup } from "./MealSlotGroup";
 import { MenuSkeleton } from "./MenuSkeleton";
-import { MenuSlotSection } from "./MenuSlotSection";
 import { todayIso } from "./dates";
 import { useMenuItemTitles } from "./useDishCatalog";
 import {
@@ -32,10 +33,18 @@ import {
  * День сохраняется целиком: любая правка состава уходит на сервер тем же PUT, а
  * итоги дня приходят из ответа. Считать их на клиенте нельзя — кетосоотношение
  * не аддитивно, и сумма показателей блюд не равна показателям дня.
+ *
+ * Порядок блоков: чем день заканчивается (итоги) — только когда есть что
+ * считать, дальше сам день. Копирование дня и добавление блюда открываются
+ * панелями: первое — редкое действие, второму нужен контекст приёма пищи, и ни
+ * одно из них не должно занимать высоту постоянно (правила П27, П31, П32).
  */
 export function MenuPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("menu");
   const [date, setDate] = useState(todayIso);
+  /** Приём пищи, в который добавляют блюдо; `null` — панель закрыта */
+  const [addingSlot, setAddingSlot] = useState<MealSlot | null>(null);
+  const [copying, setCopying] = useState(false);
 
   const menu = useMenuQuery(patientId, date);
   const upsert = useUpsertMenuMutation(patientId);
@@ -45,17 +54,6 @@ export function MenuPage({ patientId }: { patientId: string }) {
 
   const items = useMemo(() => menu.data?.items ?? [], [menu.data]);
   const titles = useMenuItemTitles(patientId, items);
-
-  // Пустое состояние дня. Оно же уходит в `empty` у AsyncSection: день без
-  // позиций рисуется вместе с приёмами пищи (иначе в них нечем добавить первое
-  // блюдо), поэтому один и тот же блок нужен и как подсказка над составом.
-  const emptyDayState = (
-    <EmptyState
-      icon={UtensilsCrossed}
-      title={t("day.emptyTitle")}
-      description={t("day.empty")}
-    />
-  );
 
   function addItem(input: {
     slot: MealSlot;
@@ -84,7 +82,20 @@ export function MenuPage({ patientId }: { patientId: string }) {
   }
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")}>
+    <PageLayout
+      title={t("title")}
+      intro={t("intro")}
+      actions={
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setCopying(true)}
+        >
+          <CopyPlus aria-hidden="true" />
+          {t("copy.title")}
+        </Button>
+      }
+    >
       <DayNavigator date={date} onChange={setDate} />
 
       {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
@@ -107,14 +118,19 @@ export function MenuPage({ patientId }: { patientId: string }) {
         // ещё нет, сервер отдаёт как `null`, и это уже ответ: экран рисует
         // приёмы пищи, чтобы в них можно было добавить блюдо.
         isEmpty={menu.data === undefined}
-        empty={emptyDayState}
+        empty={null}
       >
-        <DayTotalsPanel
-          totals={menu.data?.totals ?? null}
-          engineVersion={menu.data?.engine_version ?? null}
-          tolerance={tolerance}
-          targets={targets}
-        />
+        {/* Итогов у пустого дня нет, и говорить об этом отдельным блоком не
+            нужно: о пустом дне говорит подпись блока приёмов пищи. Раньше два
+            блока подряд сообщали одно и то же на 332 px (правило П27). */}
+        {items.length > 0 && (
+          <DayTotalsPanel
+            totals={menu.data?.totals ?? null}
+            engineVersion={menu.data?.engine_version ?? null}
+            tolerance={tolerance}
+            targets={targets}
+          />
+        )}
 
         {/* Ошибка отправки, а не загрузки: повторять нечего, состав дня
             остался прежним (правило П16 канона). */}
@@ -130,32 +146,33 @@ export function MenuPage({ patientId }: { patientId: string }) {
           </FormError>
         )}
 
-        {upsert.isPending && (
-          <p role="status" className="m-0 text-muted-foreground">
-            {t("day.saving")}
-          </p>
-        )}
-
-        {items.length === 0 && emptyDayState}
-
-        <div className="flex flex-col gap-block">
+        <Section
+          title={t("meals.title")}
+          description={items.length === 0 ? t("day.empty") : undefined}
+          contentClassName="gap-0 divide-y divide-border"
+        >
           {MEAL_SLOTS.map((slot) => (
-            <MenuSlotSection
+            <MealSlotGroup
               key={slot}
               slot={slot}
               items={items.filter((item) => item.meal_slot === slot)}
               titles={titles}
-              patientId={patientId}
               canRemove={items.length > 1}
               pending={upsert.isPending}
-              onAdd={addItem}
+              onAdd={() => setAddingSlot(slot)}
               onRemove={removeItem}
               onToggleEaten={(itemId, value) =>
                 eaten.mutate({ itemId, eaten: value })
               }
             />
           ))}
-        </div>
+        </Section>
+
+        {upsert.isPending && (
+          <p role="status" className="m-0 text-sm text-muted-foreground">
+            {t("day.saving")}
+          </p>
+        )}
 
         {items.length === 1 && (
           <p className="m-0 text-sm text-muted-foreground">
@@ -164,9 +181,46 @@ export function MenuPage({ patientId }: { patientId: string }) {
         )}
       </AsyncSection>
 
+      <FormSheet
+        open={addingSlot !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddingSlot(null);
+        }}
+        title={
+          addingSlot === null
+            ? t("slot.add")
+            : t("slot.addTo", { slot: t(`slots.${addingSlot}`) })
+        }
+      >
+        {addingSlot !== null && (
+          <AddMenuItemForm
+            patientId={patientId}
+            slot={addingSlot}
+            pending={upsert.isPending}
+            onAdd={(input) => {
+              addItem({ slot: addingSlot, ...input });
+              setAddingSlot(null);
+            }}
+            onCancel={() => setAddingSlot(null)}
+          />
+        )}
+      </FormSheet>
+
       {/* key по дате: форма перечитывает дату-источник по умолчанию и
           не предлагает скопировать день сам в себя после перехода. */}
-      <CopyDayForm key={date} patientId={patientId} date={date} />
+      <FormSheet
+        open={copying}
+        onOpenChange={setCopying}
+        title={t("copy.title")}
+        description={t("copy.hint")}
+      >
+        <CopyDayForm
+          key={date}
+          patientId={patientId}
+          date={date}
+          onCopied={() => setCopying(false)}
+        />
+      </FormSheet>
     </PageLayout>
   );
 }

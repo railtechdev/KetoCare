@@ -1,13 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  FormFooter,
-} from "@ketocare/ui";
+import { FormFooter, Section } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -93,60 +85,50 @@ export function UserAccountForm({
         focusKey={submitCount}
       />
 
-      <Card>
-        <CardHeader>
-          {/* `CardTitle` кита — это div; уровень заголовка задаётся ролью, иначе
-              из формы пропадает точка навигации по заголовкам. */}
-          <CardTitle role="heading" aria-level={3} className="text-card-title">
-            {t("users.form.title", { name: user.full_name })}
-          </CardTitle>
-          <CardDescription>{user.email}</CardDescription>
-        </CardHeader>
+      <Section
+        title={t("users.form.title", { name: user.full_name })}
+        description={user.email}
+      >
+        {error !== null && error !== undefined && (
+          <FormError>
+            {errorMessageOf(error) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
 
-        <CardContent className="flex flex-col gap-block">
-          {error !== null && error !== undefined && (
-            <FormError>
-              {errorMessageOf(error) ?? t("common:errors.unexpected")}
-            </FormError>
-          )}
+        <SelectField
+          id={roleId}
+          label={t("users.form.role")}
+          error={roleError}
+          {...register("role")}
+        >
+          {ROLES.map((role) => (
+            <option key={role} value={role}>
+              {t(`common:roles.${role}`)}
+            </option>
+          ))}
+        </SelectField>
 
-          <SelectField
-            id={roleId}
-            label={t("users.form.role")}
-            error={roleError}
-            {...register("role")}
-          >
-            {ROLES.map((role) => (
-              <option key={role} value={role}>
-                {t(`common:roles.${role}`)}
-              </option>
-            ))}
-          </SelectField>
-
-          <label
-            htmlFor={activeId}
-            className="flex min-h-touch items-center gap-field text-sm font-medium"
-          >
-            <input
-              id={activeId}
-              type="checkbox"
-              className="size-5 accent-primary"
-              {...register("isActive")}
-            />
-            {t("users.form.isActive")}
-          </label>
-        </CardContent>
-
-        <CardFooter>
-          <FormFooter
-            submitLabel={t("common:actions.save")}
-            pendingLabel={t("common:actions.saving")}
-            pending={pending}
-            cancelLabel={t("common:actions.cancel")}
-            onCancel={onCancel}
+        <label
+          htmlFor={activeId}
+          className="flex min-h-touch items-center gap-field text-sm font-medium"
+        >
+          <input
+            id={activeId}
+            type="checkbox"
+            className="size-5 accent-primary"
+            {...register("isActive")}
           />
-        </CardFooter>
-      </Card>
+          {t("users.form.isActive")}
+        </label>
+
+        <FormFooter
+          submitLabel={t("common:actions.save")}
+          pendingLabel={t("common:actions.saving")}
+          pending={pending}
+          cancelLabel={t("common:actions.cancel")}
+          onCancel={onCancel}
+        />
+      </Section>
     </form>
   );
 }

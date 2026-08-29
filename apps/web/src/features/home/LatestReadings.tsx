@@ -46,7 +46,7 @@ export function LatestReadings({ ketone, weight }: Props) {
             title={t("ketone.title")}
             occurredAt={new Date(ketone.occurred_at)}
           >
-            <p className="m-0 text-page-title font-semibold tabular-nums">
+            <p className="m-0 text-metric font-semibold tabular-nums">
               {t("ketone.value", { value: ketone.value })}
             </p>
             <p className="m-0 mt-1 text-sm text-muted-foreground">
@@ -68,7 +68,7 @@ export function LatestReadings({ ketone, weight }: Props) {
             title={t("weight.title")}
             occurredAt={new Date(weight.occurred_at)}
           >
-            <p className="m-0 text-page-title font-semibold tabular-nums">
+            <p className="m-0 text-metric font-semibold tabular-nums">
               {t("weight.value", { value: weight.weight_kg })}
             </p>
           </DiaryEntryCard>

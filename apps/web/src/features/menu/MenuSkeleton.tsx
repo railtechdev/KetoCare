@@ -20,10 +20,13 @@ export function MenuSkeleton() {
       aria-busy="true"
       aria-label={t("common:app.loading")}
     >
-      <Skeleton className="h-48 w-full rounded-xl" />
-      {MEAL_SLOTS.map((slot) => (
-        <Skeleton key={slot} className="h-32 w-full rounded-xl" />
-      ))}
+      <Skeleton className="h-40 w-full rounded-xl" />
+      {/* Приёмы пищи — один блок, а не четыре карточки: скелетон повторяет
+          реальную раскладку, иначе экран прыгает после загрузки (правило П15). */}
+      <Skeleton
+        className="w-full rounded-xl"
+        style={{ height: `${MEAL_SLOTS.length * 72 + 56}px` }}
+      />
     </div>
   );
 }

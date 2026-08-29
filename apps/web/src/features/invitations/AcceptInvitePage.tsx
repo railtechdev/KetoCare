@@ -171,7 +171,9 @@ function Shell({
     <div className="flex min-h-screen items-center justify-center p-screen">
       <Card className="w-full max-w-form">
         <CardHeader>
-          <CardTitle className="text-page-title">{title}</CardTitle>
+          <CardTitle className="text-page-title">
+            <h1 className="m-0 font-semibold">{title}</h1>
+          </CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
         {children && <CardContent>{children}</CardContent>}

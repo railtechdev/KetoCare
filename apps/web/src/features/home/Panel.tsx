@@ -1,19 +1,13 @@
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  cn,
-} from "@ketocare/ui";
 import type { ReactNode } from "react";
 
+import { Section } from "@ketocare/ui";
+
 /**
- * Блок сводки — тонкая обёртка над `Card` кита.
+ * Блок сводки главной.
  *
- * Своей разметки здесь нет намеренно: единственное, что она добавляет, — общий
- * для всех блоков заголовок и отступ, чтобы блоки главной читались одним рядом.
- * Оформление берётся у кита и обновляется вместе с ним.
+ * Существует только ради подписи действия справа и общего вида блоков главной;
+ * всё остальное берётся у `Section` из `packages/ui` — единственного способа
+ * выделить блок внутри экрана (правило П23 канона). Своей разметки здесь нет.
  */
 export function Panel({
   title,
@@ -28,12 +22,8 @@ export function Panel({
   children: ReactNode;
 }) {
   return (
-    <Card className={cn("gap-block", className)}>
-      <CardHeader>
-        <CardTitle className="text-card-title">{title}</CardTitle>
-        {action && <CardAction>{action}</CardAction>}
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+    <Section title={title} action={action} className={className}>
+      {children}
+    </Section>
   );
 }

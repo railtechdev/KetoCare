@@ -1,4 +1,4 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ketocare/ui";
+import { Tabs, TabsBar, TabsContent } from "@ketocare/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -45,17 +45,16 @@ export function AdminPage({ section }: { section?: string }) {
         }}
         className="gap-block"
       >
-        {/* Четыре подписи не помещаются в 360 px, поэтому полоса вкладок
-            прокручивается внутри себя, а не растягивает страницу. */}
-        <div className="-mx-1 overflow-x-auto px-1 pb-1">
-          <TabsList aria-label={t("tabsLabel")}>
-            {ADMIN_SECTIONS.map((value) => (
-              <TabsTrigger key={value} value={value}>
-                {t(`tabs.${value}`)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
+        {/* Оформление полосы вкладок — общее для приложения: на шесть наборов
+            вкладок приходилось четыре разных набора классов и три ответа на
+            «что делать, когда не помещаются» (правило П29). */}
+        <TabsBar
+          label={t("tabsLabel")}
+          items={ADMIN_SECTIONS.map((value) => ({
+            value,
+            label: t(`tabs.${value}`),
+          }))}
+        />
 
         {/* Содержимое неактивной вкладки не монтируется, поэтому запросы уходят
             только за открытым подразделом. */}

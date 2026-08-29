@@ -11,7 +11,7 @@ import {
   FormErrorSummary,
   type FormErrorSummaryItem,
 } from "./FormErrorSummary";
-import { SectionHeading } from "./SectionHeading";
+import { SubPageHeader } from "../../components/SubPageHeader";
 import { productFormSchema, type ProductFormValues } from "./productSchemas";
 import type { ProductCategory } from "./types";
 
@@ -132,7 +132,7 @@ export function ProductForm({
         focusKey={submitCount}
       />
 
-      <SectionHeading
+      <SubPageHeader
         title={
           mode === "create"
             ? t("products.form.createTitle")

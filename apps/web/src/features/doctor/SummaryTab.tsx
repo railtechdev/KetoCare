@@ -2,14 +2,13 @@ import {
   Button,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   EmptyState,
   ErrorState,
+  formatOccurredAt,
   MacroBar,
   RatioBadge,
+  Section,
   WarningBanner,
-  formatOccurredAt,
 } from "@ketocare/ui";
 import { CalendarOff, ClipboardList, FileText, Lock } from "lucide-react";
 import { useState } from "react";
@@ -83,188 +82,158 @@ function OverviewPanels({ data }: { data: PatientOverview }) {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-card-title">
-            {t("summary.prescription.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {prescription === null ? (
-            <EmptyState
-              icon={ClipboardList}
-              title={t("summary.prescription.empty")}
-              description={t("summary.prescription.emptyDescription")}
-            />
-          ) : (
-            <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
-              <dt className="text-muted-foreground">{t("fields.ratio")}</dt>
-              <dd className="m-0">
-                {/* Вердикт о допуске здесь не показывается: это сама цель
-                    назначения, а не измерение, которое с ней сравнивают. */}
-                <RatioBadge ratio={prescription.ratio} />
-              </dd>
-
-              <dt className="text-muted-foreground">{t("fields.kcal")}</dt>
-              <dd className="m-0 tabular-nums">
-                {t("units.kcalPerDay", { value: prescription.kcal_per_day })}
-              </dd>
-
-              <dt className="text-muted-foreground">{t("fields.protein")}</dt>
-              <dd className="m-0 tabular-nums">
-                {t("units.gramsPerDay", { value: prescription.protein_g })}
-              </dd>
-
-              <dt className="text-muted-foreground">
-                {t("fields.carbsLimit")}
-              </dt>
-              <dd className="m-0 tabular-nums">
-                {t("units.gramsPerDay", { value: prescription.carbs_limit_g })}
-              </dd>
-
-              <dt className="text-muted-foreground">{t("fields.meals")}</dt>
-              <dd className="m-0 tabular-nums">{prescription.meals_per_day}</dd>
-
-              <dt className="text-muted-foreground">
-                {t("fields.effectiveFrom")}
-              </dt>
-              <dd className="m-0 tabular-nums">
-                {formatIsoDate(prescription.effective_from) ?? "—"}
-              </dd>
-
-              {prescription.restrictions !== null && (
-                <>
-                  <dt className="text-muted-foreground">
-                    {t("fields.restrictions")}
-                  </dt>
-                  <dd className="m-0">{prescription.restrictions}</dd>
-                </>
-              )}
-            </dl>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-card-title">
-            {t("summary.day.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {day === null ? (
-            <EmptyState
-              icon={CalendarOff}
-              title={t("summary.day.empty")}
-              description={t("summary.day.emptyDescription")}
-            />
-          ) : (
-            <div className="flex flex-col gap-block">
-              <div className="flex flex-wrap items-center gap-block">
-                {/* Вердикт о соответствии приходит от сервера: допуски — константы
-                    расчётного ядра, на клиенте их копии нет (правило 2 CLAUDE.md). */}
-                <RatioBadge
-                  ratio={day.totals.ratio}
-                  withinTolerance={tolerance?.ratio_within_tolerance}
-                />
-                <span className="tabular-nums">
-                  {t("units.kcal", { value: day.totals.kcal.toFixed(0) })}
-                </span>
-              </div>
-
-              <MacroBar
-                fatG={day.totals.fat}
-                proteinG={day.totals.protein}
-                carbsG={day.totals.carbs}
-              />
-
-              {verdict.unavailable ? (
-                <p className="m-0 text-sm text-muted-foreground">
-                  {t("summary.day.noPrescription")}
-                </p>
-              ) : verdict.ratioOffTolerance ? (
-                <WarningBanner
-                  level="warning"
-                  title={t("summary.day.offTitle")}
-                >
-                  {t("summary.day.offRatio")}
-                </WarningBanner>
-              ) : (
-                <p role="status" className="m-0 text-sm text-success">
-                  {t("summary.day.within")}
-                </p>
-              )}
-
-              {verdict.kcalBelowTarget && (
-                <p className="m-0 text-sm text-muted-foreground">
-                  {t("summary.day.kcalBelowTarget", {
-                    value: day.totals.kcal.toFixed(0),
-                    target: prescription?.kcal_per_day ?? 0,
-                  })}
-                </p>
-              )}
-
-              {day.engine_version && (
-                <p className="m-0 text-xs text-muted-foreground">
-                  {t("units.engineVersion", { version: day.engine_version })}
-                </p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-card-title">
-            {t("summary.readings.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Section title={t("summary.prescription.title")}>
+        {prescription === null ? (
+          <EmptyState
+            icon={ClipboardList}
+            title={t("summary.prescription.empty")}
+            description={t("summary.prescription.emptyDescription")}
+          />
+        ) : (
           <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
-            <dt className="text-muted-foreground">
-              {t("summary.readings.ketone")}
-            </dt>
+            <dt className="text-muted-foreground">{t("fields.ratio")}</dt>
             <dd className="m-0">
-              {data.last_ketone == null
-                ? t("summary.readings.noKetone")
-                : t("summary.readings.ketoneValue", {
-                    value: data.last_ketone.value,
-                    method: t(
-                      `summary.readings.method.${data.last_ketone.method}`,
-                    ),
-                    at: formatOccurredAt(
-                      new Date(data.last_ketone.occurred_at),
-                    ),
-                  })}
+              {/* Вердикт о допуске здесь не показывается: это сама цель
+                  назначения, а не измерение, которое с ней сравнивают. */}
+              <RatioBadge ratio={prescription.ratio} />
             </dd>
 
-            <dt className="text-muted-foreground">
-              {t("summary.readings.weight")}
-            </dt>
-            <dd className="m-0">
-              {data.last_weight == null
-                ? t("summary.readings.noWeight")
-                : t("summary.readings.weightValue", {
-                    value: data.last_weight.weight_kg,
-                    at: formatOccurredAt(
-                      new Date(data.last_weight.occurred_at),
-                    ),
-                  })}
+            <dt className="text-muted-foreground">{t("fields.kcal")}</dt>
+            <dd className="m-0 tabular-nums">
+              {t("units.kcalPerDay", { value: prescription.kcal_per_day })}
             </dd>
 
+            <dt className="text-muted-foreground">{t("fields.protein")}</dt>
+            <dd className="m-0 tabular-nums">
+              {t("units.gramsPerDay", { value: prescription.protein_g })}
+            </dd>
+
+            <dt className="text-muted-foreground">{t("fields.carbsLimit")}</dt>
+            <dd className="m-0 tabular-nums">
+              {t("units.gramsPerDay", { value: prescription.carbs_limit_g })}
+            </dd>
+
+            <dt className="text-muted-foreground">{t("fields.meals")}</dt>
+            <dd className="m-0 tabular-nums">{prescription.meals_per_day}</dd>
+
             <dt className="text-muted-foreground">
-              {t("summary.readings.seizures")}
+              {t("fields.effectiveFrom")}
             </dt>
             <dd className="m-0 tabular-nums">
-              {t("summary.readings.seizuresValue", {
-                count: data.seizures_today.count,
-                entries: data.seizures_today.entries,
-              })}
+              {formatIsoDate(prescription.effective_from) ?? "—"}
             </dd>
+
+            {prescription.restrictions !== null && (
+              <>
+                <dt className="text-muted-foreground">
+                  {t("fields.restrictions")}
+                </dt>
+                <dd className="m-0">{prescription.restrictions}</dd>
+              </>
+            )}
           </dl>
-        </CardContent>
-      </Card>
+        )}
+      </Section>
+
+      <Section title={t("summary.day.title")}>
+        {day === null ? (
+          <EmptyState
+            icon={CalendarOff}
+            title={t("summary.day.empty")}
+            description={t("summary.day.emptyDescription")}
+          />
+        ) : (
+          <div className="flex flex-col gap-block">
+            <div className="flex flex-wrap items-center gap-block">
+              {/* Вердикт о соответствии приходит от сервера: допуски — константы
+                  расчётного ядра, на клиенте их копии нет (правило 2 CLAUDE.md). */}
+              <RatioBadge
+                ratio={day.totals.ratio}
+                withinTolerance={tolerance?.ratio_within_tolerance}
+              />
+              <span className="tabular-nums">
+                {t("units.kcal", { value: day.totals.kcal.toFixed(0) })}
+              </span>
+            </div>
+
+            <MacroBar
+              fatG={day.totals.fat}
+              proteinG={day.totals.protein}
+              carbsG={day.totals.carbs}
+            />
+
+            {verdict.unavailable ? (
+              <p className="m-0 text-sm text-muted-foreground">
+                {t("summary.day.noPrescription")}
+              </p>
+            ) : verdict.ratioOffTolerance ? (
+              <WarningBanner level="warning" title={t("summary.day.offTitle")}>
+                {t("summary.day.offRatio")}
+              </WarningBanner>
+            ) : (
+              <p role="status" className="m-0 text-sm text-success">
+                {t("summary.day.within")}
+              </p>
+            )}
+
+            {verdict.kcalBelowTarget && (
+              <p className="m-0 text-sm text-muted-foreground">
+                {t("summary.day.kcalBelowTarget", {
+                  value: day.totals.kcal.toFixed(0),
+                  target: prescription?.kcal_per_day ?? 0,
+                })}
+              </p>
+            )}
+
+            {day.engine_version && (
+              <p className="m-0 text-xs text-muted-foreground">
+                {t("units.engineVersion", { version: day.engine_version })}
+              </p>
+            )}
+          </div>
+        )}
+      </Section>
+
+      <Section title={t("summary.readings.title")}>
+        <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+          <dt className="text-muted-foreground">
+            {t("summary.readings.ketone")}
+          </dt>
+          <dd className="m-0">
+            {data.last_ketone == null
+              ? t("summary.readings.noKetone")
+              : t("summary.readings.ketoneValue", {
+                  value: data.last_ketone.value,
+                  method: t(
+                    `summary.readings.method.${data.last_ketone.method}`,
+                  ),
+                  at: formatOccurredAt(new Date(data.last_ketone.occurred_at)),
+                })}
+          </dd>
+
+          <dt className="text-muted-foreground">
+            {t("summary.readings.weight")}
+          </dt>
+          <dd className="m-0">
+            {data.last_weight == null
+              ? t("summary.readings.noWeight")
+              : t("summary.readings.weightValue", {
+                  value: data.last_weight.weight_kg,
+                  at: formatOccurredAt(new Date(data.last_weight.occurred_at)),
+                })}
+          </dd>
+
+          <dt className="text-muted-foreground">
+            {t("summary.readings.seizures")}
+          </dt>
+          <dd className="m-0 tabular-nums">
+            {t("summary.readings.seizuresValue", {
+              count: data.seizures_today.count,
+              entries: data.seizures_today.entries,
+            })}
+          </dd>
+        </dl>
+      </Section>
     </>
   );
 }
@@ -292,62 +261,57 @@ function MedicalProfilePanel({ patientId }: { patientId: string }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-card-title">{t("profile.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-block">
-        {profile.isPending && (
-          <LinesSkeleton label={t("profile.loading")} lines={4} />
-        )}
+    <Section title={t("profile.title")}>
+      {profile.isPending && (
+        <LinesSkeleton label={t("profile.loading")} lines={4} />
+      )}
 
-        {forbidden && (
-          <EmptyState
-            icon={Lock}
-            title={t("profile.forbidden")}
-            description={t("profile.forbiddenDescription")}
-          />
-        )}
+      {forbidden && (
+        <EmptyState
+          icon={Lock}
+          title={t("profile.forbidden")}
+          description={t("profile.forbiddenDescription")}
+        />
+      )}
 
-        {profile.isError && !notFilled && !forbidden && (
-          <ErrorState
-            title={t("profile.loadError")}
-            description={
-              errorMessageOf(profile.error) ?? t("common:errors.unexpected")
-            }
-            retryLabel={t("common:actions.retry")}
-            onRetry={() => void profile.refetch()}
-          />
-        )}
+      {profile.isError && !notFilled && !forbidden && (
+        <ErrorState
+          title={t("profile.loadError")}
+          description={
+            errorMessageOf(profile.error) ?? t("common:errors.unexpected")
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void profile.refetch()}
+        />
+      )}
 
-        {notFilled && (
-          <EmptyState
-            icon={FileText}
-            title={t("profile.empty")}
-            description={t("profile.emptyDescription")}
-            action={
-              <Button type="button" onClick={() => setEditing(true)}>
-                {t("profile.fill")}
-              </Button>
-            }
-          />
-        )}
-
-        {profile.data !== undefined && (
-          <>
-            <ProfileValues profile={profile.data} />
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start"
-              onClick={() => setEditing(true)}
-            >
-              {t("profile.edit")}
+      {notFilled && (
+        <EmptyState
+          icon={FileText}
+          title={t("profile.empty")}
+          description={t("profile.emptyDescription")}
+          action={
+            <Button type="button" onClick={() => setEditing(true)}>
+              {t("profile.fill")}
             </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          }
+        />
+      )}
+
+      {profile.data !== undefined && (
+        <>
+          <ProfileValues profile={profile.data} />
+          <Button
+            type="button"
+            variant="outline"
+            className="self-start"
+            onClick={() => setEditing(true)}
+          >
+            {t("profile.edit")}
+          </Button>
+        </>
+      )}
+    </Section>
   );
 }
 

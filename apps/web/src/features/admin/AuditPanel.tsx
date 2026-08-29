@@ -22,7 +22,7 @@ import {
   type AuditFilters,
 } from "./auditFilters";
 import { shortId } from "./format";
-import { SectionHeading } from "./SectionHeading";
+import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
 import { useAuditLog } from "./useAuditLog";
 import type { AuditEntry } from "./types";
@@ -141,7 +141,7 @@ export function AuditPanel() {
 
   return (
     <div className="flex flex-col gap-block">
-      <SectionHeading title={t("audit.title")} intro={t("audit.intro")} />
+      <SubPageHeader title={t("audit.title")} intro={t("audit.intro")} />
 
       <fieldset className="m-0 grid gap-block border-0 p-0 sm:grid-cols-2 lg:grid-cols-3">
         <legend className="sr-only">{t("audit.filters.legend")}</legend>

@@ -1,14 +1,8 @@
-import {
-  Card,
-  CardContent,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@ketocare/ui";
+import { Card, CardContent, Tabs, TabsBar, TabsContent } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
 import { MedicationsTab } from "./MedicationsTab";
 import { NotesTab } from "./NotesTab";
@@ -45,6 +39,12 @@ export function PatientCard({
   const tabs: readonly TabKey[] = clinicalAllowed
     ? TABS
     : TABS.filter((tab) => tab !== "notes");
+
+  // Вкладка — в адресе (правило П30): врач пересылает коллеге ссылку на
+  // назначение пациента, а не «откройте карту и перейдите на вторую вкладку».
+  // Список допустимых значений — уже отфильтрованный по роли: `?tab=notes` у
+  // диетолога откроет сводку, а не заведомый 403.
+  const [tab, setTab] = useSectionTab<TabKey>("tab", tabs, "summary");
 
   const months = ageInMonths(patient.birth_date, new Date());
   const birthDate = formatIsoDate(patient.birth_date);
@@ -95,24 +95,14 @@ export function PatientCard({
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="summary">
-        {/* Пять вкладок в 360 px не помещаются в строку, поэтому список
-            переносится, а не уезжает в горизонтальный скролл. */}
-        <TabsList
-          aria-label={t("card.tabsLabel")}
-          variant="line"
-          className="w-full flex-wrap justify-start gap-1 border-b border-border group-data-[orientation=horizontal]/tabs:h-auto"
-        >
-          {tabs.map((tab) => (
-            <TabsTrigger
-              key={tab}
-              value={tab}
-              className="min-h-touch flex-none px-4"
-            >
-              {t(`card.tabs.${tab}`)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as TabKey)}>
+        <TabsBar
+          label={t("card.tabsLabel")}
+          items={tabs.map((value) => ({
+            value,
+            label: t(`card.tabs.${value}`),
+          }))}
+        />
 
         <TabsContent value="summary" className="pt-screen">
           <SummaryTab patient={patient} clinicalAllowed={clinicalAllowed} />

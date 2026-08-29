@@ -13,13 +13,14 @@ import {
   FormFooter,
   MacroBar,
   RatioBadge,
+  Section,
   Skeleton,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  WarningBanner,
   toast,
+  WarningBanner,
 } from "@ketocare/ui";
 import { Inbox } from "lucide-react";
 
@@ -174,20 +175,5 @@ export function UiShowcase() {
         </Tabs>
       </Section>
     </PageLayout>
-  );
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-block">
-      <h2 className="m-0 text-section-title font-semibold">{title}</h2>
-      {children}
-    </section>
   );
 }

@@ -1,14 +1,11 @@
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   ConfirmDialog,
   ErrorState,
   MacroBar,
   RatioBadge,
+  Section,
   Skeleton,
   toast,
 } from "@ketocare/ui";
@@ -191,130 +188,85 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
         className="h-56 w-full max-w-xl rounded-xl"
       />
 
-      <section aria-label={t("detail.nutrition")}>
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <h2 className="m-0 text-section-title font-semibold">
-                {t("detail.nutrition")}
-              </h2>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="flex flex-col gap-block">
-            {computed === null ? (
-              <p className="m-0 text-muted-foreground">
-                {t("detail.noComputed")}
-              </p>
-            ) : (
-              <>
-                <div className="flex flex-wrap items-center gap-block">
-                  {/* Без вердикта о допуске: соотношение рецепта — характеристика
+      <Section title={t("detail.nutrition")}>
+        {computed === null ? (
+          <p className="m-0 text-muted-foreground">{t("detail.noComputed")}</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-block">
+              {/* Без вердикта о допуске: соотношение рецепта — характеристика
                       блюда, а не соответствие назначению конкретного ребёнка. */}
-                  <RatioBadge ratio={computed.ratio} />
-                  <span className="tabular-nums">
-                    {t("detail.kcal", { value: computed.kcal.toFixed(0) })}
-                  </span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {t("detail.fiber", { value: formatGrams(computed.fiber) })}
-                  </span>
-                </div>
-
-                <MacroBar
-                  fatG={computed.fat}
-                  proteinG={computed.protein}
-                  carbsG={computed.carbs}
-                />
-              </>
-            )}
-
-            <p className="m-0 flex flex-wrap gap-block text-sm text-muted-foreground tabular-nums">
-              <span>
-                {t("detail.yield", { grams: formatGrams(data.yield_g) })}
+              <RatioBadge ratio={computed.ratio} />
+              <span className="tabular-nums">
+                {t("detail.kcal", { value: computed.kcal.toFixed(0) })}
               </span>
-              <span>{t("detail.servings", { value: data.servings })}</span>
-            </p>
+              <span className="text-muted-foreground tabular-nums">
+                {t("detail.fiber", { value: formatGrams(computed.fiber) })}
+              </span>
+            </div>
 
-            {/* Версия ядра видна рядом с показателями: расчёты разных версий могут
+            <MacroBar
+              fatG={computed.fat}
+              proteinG={computed.protein}
+              carbsG={computed.carbs}
+            />
+          </>
+        )}
+
+        <p className="m-0 flex flex-wrap gap-block text-sm text-muted-foreground tabular-nums">
+          <span>{t("detail.yield", { grams: formatGrams(data.yield_g) })}</span>
+          <span>{t("detail.servings", { value: data.servings })}</span>
+        </p>
+
+        {/* Версия ядра видна рядом с показателями: расчёты разных версий могут
                 отличаться, и понять это нужно до того, как по рецепту накормят. */}
-            <p className="m-0 text-xs text-muted-foreground">
-              {data.engine_version === null
-                ? t("detail.engineVersionUnknown")
-                : t("detail.engineVersion", { version: data.engine_version })}
+        <p className="m-0 text-xs text-muted-foreground">
+          {data.engine_version === null
+            ? t("detail.engineVersionUnknown")
+            : t("detail.engineVersion", { version: data.engine_version })}
+        </p>
+      </Section>
+
+      <Section title={t("detail.composition")}>
+        {data.ingredients.length === 0 ? (
+          <p className="m-0 text-muted-foreground">
+            {t("detail.compositionEmpty")}
+          </p>
+        ) : productNames.isLoading ? (
+          <div className="flex flex-col gap-field">
+            <p role="status" className="sr-only">
+              {t("detail.loadingProducts")}
             </p>
-          </CardContent>
-        </Card>
-      </section>
+            {data.ingredients.map((ingredient) => (
+              <Skeleton key={ingredient.product_id} className="h-6 w-full" />
+            ))}
+          </div>
+        ) : (
+          <ul className="m-0 flex max-w-xl list-none flex-col gap-field p-0">
+            {data.ingredients.map((ingredient) => (
+              <li
+                key={ingredient.product_id}
+                className="flex items-baseline justify-between gap-block border-b border-border pb-1"
+              >
+                <span>
+                  {productNames.byId[ingredient.product_id] ??
+                    t("detail.unknownProduct")}
+                </span>
+                <span className="text-muted-foreground tabular-nums">
+                  {t("detail.grams", {
+                    value: formatGrams(ingredient.grams),
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
-      <section aria-label={t("detail.composition")}>
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <h2 className="m-0 text-section-title font-semibold">
-                {t("detail.composition")}
-              </h2>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            {data.ingredients.length === 0 ? (
-              <p className="m-0 text-muted-foreground">
-                {t("detail.compositionEmpty")}
-              </p>
-            ) : productNames.isLoading ? (
-              <div className="flex flex-col gap-field">
-                <p role="status" className="sr-only">
-                  {t("detail.loadingProducts")}
-                </p>
-                {data.ingredients.map((ingredient) => (
-                  <Skeleton
-                    key={ingredient.product_id}
-                    className="h-6 w-full"
-                  />
-                ))}
-              </div>
-            ) : (
-              <ul className="m-0 flex max-w-xl list-none flex-col gap-field p-0">
-                {data.ingredients.map((ingredient) => (
-                  <li
-                    key={ingredient.product_id}
-                    className="flex items-baseline justify-between gap-block border-b border-border pb-1"
-                  >
-                    <span>
-                      {productNames.byId[ingredient.product_id] ??
-                        t("detail.unknownProduct")}
-                    </span>
-                    <span className="text-muted-foreground tabular-nums">
-                      {t("detail.grams", {
-                        value: formatGrams(ingredient.grams),
-                      })}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section aria-label={t("detail.instructions")}>
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <h2 className="m-0 text-section-title font-semibold">
-                {t("detail.instructions")}
-              </h2>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            {/* Переносы строк заданы автором рецепта — они и есть шаги готовки. */}
-            <p className="m-0 max-w-2xl whitespace-pre-line">
-              {data.instructions}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
+      <Section title={t("detail.instructions")}>
+        {/* Переносы строк заданы автором рецепта — они и есть шаги готовки. */}
+        <p className="m-0 max-w-2xl whitespace-pre-line">{data.instructions}</p>
+      </Section>
     </PageLayout>
   );
 }

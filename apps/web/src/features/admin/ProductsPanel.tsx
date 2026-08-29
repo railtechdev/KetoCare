@@ -14,7 +14,7 @@ import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
-import { SectionHeading } from "./SectionHeading";
+import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
 import { Field } from "../../components/Field";
 import type { Product } from "./types";
@@ -172,7 +172,7 @@ export function ProductsPanel() {
 
   return (
     <div className="flex flex-col gap-block">
-      <SectionHeading
+      <SubPageHeader
         title={t("products.title")}
         intro={t("products.intro")}
         actions={

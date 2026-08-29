@@ -4,15 +4,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  FormFooter,
-  toast,
-} from "@ketocare/ui";
+import { FormFooter, Section, toast } from "@ketocare/ui";
 
 import { Field, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
@@ -110,100 +102,94 @@ export function MedicalProfileForm({
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-card-title">{t("profile.title")}</CardTitle>
-        <CardDescription>{t("profile.formHint")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          noValidate
-          className="flex flex-col gap-block"
-          onSubmit={handleSubmit((values) =>
-            save.mutate(toBody(values), {
-              onSuccess: () => {
-                toast.success(t("profile.saved"));
-                onDone();
-              },
-            }),
-          )}
-        >
-          <TextAreaField
-            id={`${ids}-diagnosis`}
-            rows={3}
-            optional
-            label={t("profile.fields.diagnosis")}
-            {...register("diagnosis")}
-          />
+    <Section title={t("profile.title")} description={t("profile.formHint")}>
+      <form
+        noValidate
+        className="flex flex-col gap-block"
+        onSubmit={handleSubmit((values) =>
+          save.mutate(toBody(values), {
+            onSuccess: () => {
+              toast.success(t("profile.saved"));
+              onDone();
+            },
+          }),
+        )}
+      >
+        <TextAreaField
+          id={`${ids}-diagnosis`}
+          rows={3}
+          optional
+          label={t("profile.fields.diagnosis")}
+          {...register("diagnosis")}
+        />
+
+        <Field
+          id={`${ids}-epilepsy-type`}
+          optional
+          label={t("profile.fields.epilepsyType")}
+          {...register("epilepsyType")}
+        />
+
+        <Field
+          id={`${ids}-onset`}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          step={1}
+          optional
+          label={t("profile.fields.onset")}
+          error={errors.onsetAgeMonths && t("profile.errors.onset")}
+          {...register("onsetAgeMonths", { valueAsNumber: true })}
+        />
+
+        <fieldset className="m-0 flex flex-col gap-block border-0 p-0">
+          <legend className="mb-2 p-0 text-sm font-semibold">
+            {t("profile.fields.genetics")}
+          </legend>
 
           <Field
-            id={`${ids}-epilepsy-type`}
+            id={`${ids}-gene`}
             optional
-            label={t("profile.fields.epilepsyType")}
-            {...register("epilepsyType")}
+            label={t("profile.fields.gene")}
+            {...register("gene")}
           />
-
           <Field
-            id={`${ids}-onset`}
-            type="number"
-            inputMode="numeric"
-            min={0}
-            step={1}
+            id={`${ids}-variant`}
             optional
-            label={t("profile.fields.onset")}
-            error={errors.onsetAgeMonths && t("profile.errors.onset")}
-            {...register("onsetAgeMonths", { valueAsNumber: true })}
+            label={t("profile.fields.variant")}
+            {...register("variant")}
           />
-
-          <fieldset className="m-0 flex flex-col gap-block border-0 p-0">
-            <legend className="mb-2 p-0 text-sm font-semibold">
-              {t("profile.fields.genetics")}
-            </legend>
-
-            <Field
-              id={`${ids}-gene`}
-              optional
-              label={t("profile.fields.gene")}
-              {...register("gene")}
-            />
-            <Field
-              id={`${ids}-variant`}
-              optional
-              label={t("profile.fields.variant")}
-              {...register("variant")}
-            />
-            <TextAreaField
-              id={`${ids}-interpretation`}
-              rows={3}
-              optional
-              label={t("profile.fields.interpretation")}
-              {...register("interpretation")}
-            />
-          </fieldset>
-
           <TextAreaField
-            id={`${ids}-comorbidities`}
+            id={`${ids}-interpretation`}
             rows={3}
             optional
-            label={t("profile.fields.comorbidities")}
-            {...register("comorbidities")}
+            label={t("profile.fields.interpretation")}
+            {...register("interpretation")}
           />
+        </fieldset>
 
-          {save.isError && (
-            <FormError>
-              {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
-            </FormError>
-          )}
+        <TextAreaField
+          id={`${ids}-comorbidities`}
+          rows={3}
+          optional
+          label={t("profile.fields.comorbidities")}
+          {...register("comorbidities")}
+        />
 
-          <FormFooter
-            submitLabel={t("actions.save")}
-            pendingLabel={t("common:actions.saving")}
-            pending={save.isPending}
-            cancelLabel={t("actions.cancel")}
-            onCancel={onCancel}
-          />
-        </form>
-      </CardContent>
-    </Card>
+        {save.isError && (
+          <FormError>
+            {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
+
+        <FormFooter
+          submitLabel={t("actions.save")}
+          pendingLabel={t("common:actions.saving")}
+          pending={save.isPending}
+          cancelLabel={t("actions.cancel")}
+          onCancel={onCancel}
+        />
+      </form>
+    </Section>
   );
 }

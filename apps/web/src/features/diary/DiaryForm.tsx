@@ -1,15 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  FormFooter,
-  WarningBanner,
-} from "@ketocare/ui";
+import { EmptyState, FormFooter, WarningBanner } from "@ketocare/ui";
 import { Pill } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
@@ -141,15 +131,21 @@ function numberInput(value: number | null): string {
   return value === null ? "" : String(value);
 }
 
+/**
+ * Оболочка формы записи.
+ *
+ * Своей рамки и заголовка у неё нет: форма живёт в панели, открытой действием
+ * шапки, и заголовок даёт панель. Раньше форма стояла раскрытой над списком и
+ * занимала 58 % высоты экрана — родитель приходил посмотреть записи, а получал
+ * ввод (правило П32, `docs/AUDIT_UI_LAYOUT.md`).
+ */
 function FormShell({
-  editing,
   description,
   error,
   onSubmit,
   children,
   footer,
 }: {
-  editing: boolean;
   description?: ReactNode;
   error: unknown;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -159,31 +155,21 @@ function FormShell({
   const { t } = useTranslation("diary");
 
   return (
-    <form noValidate onSubmit={onSubmit}>
-      <Card>
-        <CardHeader>
-          {/* Карточка кита рисует заголовок обычным блоком, а на экране он
-              третьего уровня: уровень задаётся ролью, чтобы структура
-              заголовков осталась читаемой скринридером. */}
-          <CardTitle role="heading" aria-level={3} className="text-card-title">
-            {editing ? t("form.editTitle") : t("form.addTitle")}
-          </CardTitle>
-          {description && <CardDescription>{description}</CardDescription>}
-        </CardHeader>
+    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-block">
+      {description && (
+        <p className="m-0 text-sm text-muted-foreground">{description}</p>
+      )}
 
-        <CardContent className="flex flex-col gap-block">
-          {children}
+      {children}
 
-          {/* Сообщение сервера уже на русском (раздел 5.1 ТЗ) — свой текст запасной */}
-          {error ? (
-            <FormError>
-              {errorMessageOf(error) ?? t("common:errors.unexpected")}
-            </FormError>
-          ) : null}
-        </CardContent>
+      {/* Сообщение сервера уже на русском (раздел 5.1 ТЗ) — свой текст запасной */}
+      {error ? (
+        <FormError>
+          {errorMessageOf(error) ?? t("common:errors.unexpected")}
+        </FormError>
+      ) : null}
 
-        <CardFooter>{footer}</CardFooter>
-      </Card>
+      {footer}
     </form>
   );
 }
@@ -291,7 +277,6 @@ function SeizureForm({
 
   return (
     <FormShell
-      editing={editing !== null}
       description={t("form.step", { current: step, total: 2 })}
       error={error}
       onSubmit={handleFormSubmit}
@@ -419,7 +404,6 @@ function KetoneForm({
 
   return (
     <FormShell
-      editing={editing !== null}
       error={error}
       onSubmit={submit}
       footer={
@@ -501,7 +485,6 @@ function WeightForm({
 
   return (
     <FormShell
-      editing={editing !== null}
       error={error}
       onSubmit={submit}
       footer={
@@ -599,7 +582,6 @@ function MedicationForm({
 
   return (
     <FormShell
-      editing={editing !== null}
       error={error}
       onSubmit={submit}
       footer={
@@ -679,7 +661,6 @@ function MealForm({
 
   return (
     <FormShell
-      editing={editing !== null}
       error={error}
       onSubmit={submit}
       footer={
@@ -744,7 +725,6 @@ function SideEffectForm({
 
   return (
     <FormShell
-      editing={editing !== null}
       error={error}
       onSubmit={submit}
       footer={

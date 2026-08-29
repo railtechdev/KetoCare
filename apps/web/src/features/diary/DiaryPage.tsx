@@ -1,25 +1,25 @@
 import {
+  AsyncSection,
   Button,
   EmptyState,
-  AsyncSection,
   ErrorState,
+  FormSheet,
   Tabs,
+  TabsBar,
   TabsContent,
-  TabsList,
-  TabsTrigger,
   TrendChart,
   WarningBanner,
   toast,
   type PrescriptionMarker,
   type TrendPoint,
 } from "@ketocare/ui";
-import { useSearch } from "@tanstack/react-router";
-import { NotebookPen } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { NotebookPen, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
+import { useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
 import { DiaryForm } from "./DiaryForm";
 import { DiaryList, DiaryListSkeleton } from "./DiaryList";
@@ -52,44 +52,84 @@ import {
  * Вкладка на каждый из шести видов записей; период выбирается неделей, месяцем
  * или произвольно; кетоны и вес дополнительно показываются графиком с маркерами
  * смены назначения. Свои записи можно изменить и мягко удалить.
+ *
+ * Сюда приходят **смотреть**, поэтому первым идёт список, а форма открывается
+ * панелью по действию шапки (правило П32). Раньше форма стояла раскрытой между
+ * фильтром и списком и занимала 58 % высоты экрана.
  */
 export function DiaryPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("diary");
-  const search = useSearch({ from: "/app/$section" });
 
-  // Вид берётся из адреса, если он там есть: быстрая кнопка главной открывает
-  // нужную вкладку сразу, и родителю не нужно её искать. Дальше вкладка
-  // переключается состоянием — адрес при этом не переписывается, чтобы кнопка
-  // «назад» вела на предыдущий экран, а не на предыдущую вкладку.
-  const requested = DIARY_KINDS.find((value) => value === search.kind);
-  const [kind, setKind] = useState<DiaryKind>(requested ?? "seizures");
+  // Вид записей — в адресе, а не в состоянии (правило П30): ссылку можно
+  // переслать, F5 не сбрасывает, а быстрая кнопка главной «Записать кетоны»
+  // открывает нужную вкладку. Раньше параметр адреса до экрана не доходил.
+  const [kind, setKind] = useSectionTab<DiaryKind>(
+    "kind",
+    DIARY_KINDS,
+    "seizures",
+  );
+
+  /** Запись, которую правим; `null` вместе с открытой панелью — новая запись */
+  const [editing, setEditing] = useState<DiaryLog | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+
+  function openNew() {
+    setEditing(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(log: DiaryLog) {
+    setEditing(log);
+    setFormOpen(true);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditing(null);
+  }
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")}>
-      <Tabs value={kind} onValueChange={(value) => setKind(value as DiaryKind)}>
-        {/* Видов шесть, а экран родителя проверяется на 360 px: список вкладок
-            переносится по строкам вместо горизонтального скролла, а высота
-            задаётся содержимым, иначе тач-цель не дотягивает до 44 px. */}
-        <TabsList
-          aria-label={t("tabsLabel")}
-          className="h-auto! w-full flex-wrap justify-start"
-        >
-          {DIARY_KINDS.map((value) => (
-            <TabsTrigger
-              key={value}
-              value={value}
-              className="min-h-touch flex-none"
-            >
-              {t(`tabs.${value}`)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+    <PageLayout
+      title={t("title")}
+      intro={t("intro")}
+      actions={
+        <Button type="button" onClick={openNew}>
+          <Plus aria-hidden="true" />
+          {t("form.addAction")}
+        </Button>
+      }
+    >
+      <Tabs
+        value={kind}
+        onValueChange={(value) => {
+          setKind(value as DiaryKind);
+          // Форма принадлежит виду записей: оставить её открытой при переходе
+          // на другую вкладку значило бы предложить сохранить приступ в
+          // дневник веса.
+          closeForm();
+        }}
+      >
+        <TabsBar
+          label={t("tabsLabel")}
+          items={DIARY_KINDS.map((value) => ({
+            value,
+            label: t(`tabs.${value}`),
+          }))}
+        />
 
         {/* Radix монтирует только активную вкладку: запросы соседних видов
             записей не уходят, пока родитель их не открыл. */}
         {DIARY_KINDS.map((value) => (
           <TabsContent key={value} value={value} className="pt-block">
-            <DiaryTab kind={value} patientId={patientId} />
+            <DiaryTab
+              kind={value}
+              patientId={patientId}
+              editing={editing}
+              formOpen={formOpen}
+              onAdd={openNew}
+              onEdit={openEdit}
+              onCloseForm={closeForm}
+            />
           </TabsContent>
         ))}
       </Tabs>
@@ -97,7 +137,25 @@ export function DiaryPage({ patientId }: { patientId: string }) {
   );
 }
 
-function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
+interface DiaryTabProps {
+  kind: DiaryKind;
+  patientId: string;
+  editing: DiaryLog | null;
+  formOpen: boolean;
+  onAdd: () => void;
+  onEdit: (log: DiaryLog) => void;
+  onCloseForm: () => void;
+}
+
+function DiaryTab({
+  kind,
+  patientId,
+  editing,
+  formOpen,
+  onAdd,
+  onEdit,
+  onCloseForm,
+}: DiaryTabProps) {
   const { t } = useTranslation("diary");
   const { session } = useSession();
 
@@ -106,8 +164,6 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
     toDateInput(new Date(presetRange("week", new Date()).from)),
   );
   const [toInput, setToInput] = useState(() => toDateInput(new Date()));
-  const [editing, setEditing] = useState<DiaryLog | null>(null);
-  const formRef = useRef<HTMLDivElement>(null);
 
   // Границы периода считаются один раз на выбор: пересчёт на каждый рендер менял
   // бы ключ запроса (в нём есть «сейчас») и гонял бы список по кругу.
@@ -193,6 +249,7 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
         onSuccess: () => {
           toast.success(t("form.saved"));
           onSaved();
+          onCloseForm();
         },
       });
       return;
@@ -202,19 +259,11 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
       {
         onSuccess: () => {
           toast.success(t("form.updated"));
-          setEditing(null);
           onSaved();
+          onCloseForm();
         },
       },
     );
-  }
-
-  /** Из пустого списка — сразу к форме: пустое состояние без выхода бесполезно. */
-  function focusForm() {
-    const node = formRef.current;
-    if (node === null) return;
-    node.scrollIntoView({ behavior: "smooth", block: "start" });
-    node.querySelector<HTMLElement>("input, select, textarea")?.focus();
   }
 
   return (
@@ -266,20 +315,6 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
         />
       )}
 
-      <div ref={formRef}>
-        <DiaryForm
-          key={editing?.id ?? "new"}
-          kind={kind}
-          editing={editing}
-          seizureTypes={seizureTypes.data ?? []}
-          medications={medicationOptions}
-          onSubmit={submit}
-          onCancel={() => setEditing(null)}
-          pending={saving.isPending}
-          error={saving.error}
-        />
-      </div>
-
       {total > items.length && (
         <p className="m-0 text-sm text-muted-foreground">
           {t("list.truncated", { shown: items.length, total })}
@@ -309,7 +344,7 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
             title={t("list.emptyTitle")}
             description={t("list.emptyBody")}
             action={
-              <Button type="button" onClick={focusForm}>
+              <Button type="button" onClick={onAdd}>
                 {t("list.emptyAction")}
               </Button>
             }
@@ -326,13 +361,13 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
               // Ошибка добавления относится к прежней попытке — при переходе
               // к правке она снимается вместе с состоянием мутации.
               create.reset();
-              setEditing(log);
+              onEdit(log);
             }}
             onDelete={(logId) =>
               remove.mutate(logId, {
                 onSuccess: () => {
                   toast.success(t("list.deleted"));
-                  if (editing?.id === logId) setEditing(null);
+                  if (editing?.id === logId) onCloseForm();
                 },
                 onError: (error) => {
                   toast.error(
@@ -346,6 +381,27 @@ function DiaryTab({ kind, patientId }: { kind: DiaryKind; patientId: string }) {
           />
         )}
       </AsyncSection>
+
+      <FormSheet
+        open={formOpen}
+        onOpenChange={(open) => {
+          if (!open) onCloseForm();
+        }}
+        title={editing === null ? t("form.addTitle") : t("form.editTitle")}
+        description={t(`tabs.${kind}`)}
+      >
+        <DiaryForm
+          key={editing?.id ?? "new"}
+          kind={kind}
+          editing={editing}
+          seizureTypes={seizureTypes.data ?? []}
+          medications={medicationOptions}
+          onSubmit={submit}
+          onCancel={onCloseForm}
+          pending={saving.isPending}
+          error={saving.error}
+        />
+      </FormSheet>
     </div>
   );
 }

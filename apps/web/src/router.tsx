@@ -100,16 +100,34 @@ export interface SectionSearch {
       однозначно говорить, о ком она, — иначе присланная врачу или второму
       родителю ссылка откроет данные другого ребёнка. */
   patient?: string;
-  /** Вид дневника: быстрая кнопка главной открывает нужную вкладку сразу. */
+  /** Вкладка экрана: параллельные виды одного объекта (правило П30 канона). */
+  tab?: string;
+  /** Разновидность внутри вкладки: вид дневника, выбранный справочник. */
   kind?: string;
+}
+
+/** Непустая строка или ничего: `?tab=` в адресе — то же самое, что его отсутствие. */
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
 }
 
 const sectionRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "$section",
+  // Всё, что экран показывает, должно быть в адресе (правила П1 и П30):
+  // ссылку можно переслать, F5 не сбрасывает выбор. Параметр, не перечисленный
+  // здесь, TanStack Router молча выбрасывает — так `kind` и терялся, из-за чего
+  // быстрые кнопки главной («Записать кетоны») открывали дневник на чужой
+  // вкладке.
   validateSearch: (search: Record<string, unknown>): SectionSearch => {
-    const patient = search.patient;
-    return typeof patient === "string" && patient !== "" ? { patient } : {};
+    const result: SectionSearch = {};
+    const patient = text(search.patient);
+    const tab = text(search.tab);
+    const kind = text(search.kind);
+    if (patient !== undefined) result.patient = patient;
+    if (tab !== undefined) result.tab = tab;
+    if (kind !== undefined) result.kind = kind;
+    return result;
   },
   beforeLoad: ({ context, params }) => {
     const role = context.session?.role;

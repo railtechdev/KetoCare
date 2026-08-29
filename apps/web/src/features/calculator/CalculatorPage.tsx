@@ -1,14 +1,9 @@
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Section,
   Tabs,
+  TabsBar,
   TabsContent,
-  TabsList,
-  TabsTrigger,
   WarningBanner,
 } from "@ketocare/ui";
 import { useState } from "react";
@@ -18,6 +13,7 @@ import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { useSectionTab } from "../../routes/useSectionTab";
 import { DishResultView, type DishView } from "./DishResultView";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
@@ -40,7 +36,9 @@ const DEFAULT_TARGETS: TargetsInput = { ratio: 4, kcal: 400 };
 export function CalculatorPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("calculator");
 
-  const [mode, setMode] = useState<Mode>("verify");
+  // Режим — в адресе (правило П30): ссылку на «подобрать раскладку» можно
+  // переслать, а F5 не возвращает в «проверить».
+  const [mode, setMode] = useSectionTab<Mode>("tab", MODES, "verify");
   const [rows, setRows] = useState<DishRow[]>([]);
   const [targets, setTargets] = useState<TargetsInput>(DEFAULT_TARGETS);
   const [factor, setFactor] = useState(2);
@@ -101,20 +99,10 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
           resetResults();
         }}
       >
-        {/* Высота списка отпущена, чтобы вкладка дотягивала до тач-цели 44 px
-            (правило П20 канона): на телефоне режим переключают пальцем.
-            Снимается она тем же селектором, каким кит её задаёт, — обычный
-            `h-auto` менее специфичен и не действует. */}
-        <TabsList
-          aria-label={t("tabsLabel")}
-          className="w-full group-data-[orientation=horizontal]/tabs:h-auto"
-        >
-          {MODES.map((value) => (
-            <TabsTrigger key={value} value={value} className="min-h-touch">
-              {t(`tabs.${value}`)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <TabsBar
+          label={t("tabsLabel")}
+          items={MODES.map((value) => ({ value, label: t(`tabs.${value}`) }))}
+        />
 
         {MODES.map((value) => (
           <TabsContent key={value} value={value}>
@@ -125,70 +113,63 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         ))}
       </Tabs>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-card-title">
-            {t("composition.title")}
-          </CardTitle>
-          <CardDescription>{t("composition.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-block">
-          <ProductPicker
-            excludeIds={rows.map((r) => r.product.id)}
-            onPick={(product) => {
-              setRows((current) => [...current, { product, grams: 50 }]);
-              resetResults();
-            }}
-          />
-
-          <DishRows
-            rows={mode === "solve" && solvedRows.length > 0 ? solvedRows : rows}
-            readOnlyGrams={mode === "solve" && solvedRows.length > 0}
-            onChangeGrams={(productId, grams) => {
-              setRows((current) =>
-                current.map((row) =>
-                  row.product.id === productId ? { ...row, grams } : row,
-                ),
-              );
-              resetResults();
-            }}
-            onRemove={(productId) => {
-              setRows((current) =>
-                current.filter((row) => row.product.id !== productId),
-              );
-              resetResults();
-            }}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-card-title">{t("params.title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {mode === "scale" ? (
-            <ScaleFields factor={factor} onChange={setFactor} />
-          ) : (
-            <TargetsFields
-              targets={targets}
-              onChange={setTargets}
-              showLimits={mode === "solve"}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      <Button
-        type="button"
-        size="lg"
-        onClick={run}
-        disabled={rows.length === 0 || active.isPending}
-        aria-busy={active.isPending}
-        className="min-h-touch w-full sm:w-auto sm:self-start"
+      <Section
+        title={t("composition.title")}
+        description={t("composition.description")}
       >
-        {active.isPending ? t("calculating") : t("calculate")}
-      </Button>
+        <ProductPicker
+          excludeIds={rows.map((r) => r.product.id)}
+          onPick={(product) => {
+            setRows((current) => [...current, { product, grams: 50 }]);
+            resetResults();
+          }}
+        />
+
+        <DishRows
+          rows={mode === "solve" && solvedRows.length > 0 ? solvedRows : rows}
+          readOnlyGrams={mode === "solve" && solvedRows.length > 0}
+          onChangeGrams={(productId, grams) => {
+            setRows((current) =>
+              current.map((row) =>
+                row.product.id === productId ? { ...row, grams } : row,
+              ),
+            );
+            resetResults();
+          }}
+          onRemove={(productId) => {
+            setRows((current) =>
+              current.filter((row) => row.product.id !== productId),
+            );
+            resetResults();
+          }}
+        />
+      </Section>
+
+      <Section title={t("params.title")}>
+        {mode === "scale" ? (
+          <ScaleFields factor={factor} onChange={setFactor} />
+        ) : (
+          <TargetsFields
+            targets={targets}
+            onChange={setTargets}
+            showLimits={mode === "solve"}
+          />
+        )}
+
+        {/* Кнопка расчёта — внутри блока параметров, а не голой в корне
+            страницы: она действует над тем, что над ней, и была единственным
+            таким местом в приложении (правило П31). */}
+        <Button
+          type="button"
+          size="lg"
+          onClick={run}
+          disabled={rows.length === 0 || active.isPending}
+          aria-busy={active.isPending}
+          className="min-h-touch w-full sm:w-auto sm:self-start"
+        >
+          {active.isPending ? t("calculating") : t("calculate")}
+        </Button>
+      </Section>
 
       {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3 ТЗ):
           сервер возвращает человекочитаемую причину, её и показываем. */}

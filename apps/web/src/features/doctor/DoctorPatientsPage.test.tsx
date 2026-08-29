@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import doctorRu from "../../locales/ru/doctor.json";
+import { SectionRouter } from "../../test/SectionRouter";
 import { SessionProvider } from "../auth/session";
 import { DoctorPatientsPage } from "./DoctorPatientsPage";
 
@@ -143,7 +144,9 @@ function renderPage() {
     return (
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
-          {children}
+          {/* Карта пациента держит вкладку в адресе (правило П30), поэтому
+              экрану нужен роутер — как и в работающем приложении. */}
+          <SectionRouter section="patients">{children}</SectionRouter>
           <Toaster />
         </SessionProvider>
       </QueryClientProvider>

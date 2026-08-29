@@ -1,12 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  FormFooter,
-} from "@ketocare/ui";
+import { FormFooter, Section } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -102,52 +95,46 @@ export function DictionaryEntryForm({
         focusKey={submitCount}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle role="heading" aria-level={3} className="text-card-title">
-            {mode === "create"
-              ? t("dictionaries.form.createTitle")
-              : t("dictionaries.form.editTitle")}
-          </CardTitle>
-        </CardHeader>
+      <Section
+        title={
+          mode === "create"
+            ? t("dictionaries.form.createTitle")
+            : t("dictionaries.form.editTitle")
+        }
+      >
+        {error !== null && error !== undefined && (
+          <FormError>
+            {errorMessageOf(error) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
 
-        <CardContent className="flex flex-col gap-block">
-          {error !== null && error !== undefined && (
-            <FormError>
-              {errorMessageOf(error) ?? t("common:errors.unexpected")}
-            </FormError>
-          )}
+        <Field
+          id={nameId}
+          label={t("dictionaries.form.name")}
+          error={nameError}
+          {...register("nameRu")}
+        />
 
-          <Field
-            id={nameId}
-            label={t("dictionaries.form.name")}
-            error={nameError}
-            {...register("nameRu")}
-          />
+        <Field
+          id={sortId}
+          type="number"
+          step="1"
+          // Порядок вывода — целое, поэтому клавиатура числовая, а не
+          // десятичная: запятая здесь не нужна.
+          inputMode="numeric"
+          label={t("dictionaries.form.sort")}
+          error={sortError}
+          {...register("sort", { valueAsNumber: true })}
+        />
 
-          <Field
-            id={sortId}
-            type="number"
-            step="1"
-            // Порядок вывода — целое, поэтому клавиатура числовая, а не
-            // десятичная: запятая здесь не нужна.
-            inputMode="numeric"
-            label={t("dictionaries.form.sort")}
-            error={sortError}
-            {...register("sort", { valueAsNumber: true })}
-          />
-        </CardContent>
-
-        <CardFooter>
-          <FormFooter
-            submitLabel={t("common:actions.save")}
-            pendingLabel={t("common:actions.saving")}
-            pending={pending}
-            cancelLabel={t("common:actions.cancel")}
-            onCancel={onCancel}
-          />
-        </CardFooter>
-      </Card>
+        <FormFooter
+          submitLabel={t("common:actions.save")}
+          pendingLabel={t("common:actions.saving")}
+          pending={pending}
+          cancelLabel={t("common:actions.cancel")}
+          onCancel={onCancel}
+        />
+      </Section>
     </form>
   );
 }

@@ -1,13 +1,9 @@
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   DataTable,
   EmptyState,
   ErrorState,
   RatioBadge,
+  Section,
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -151,76 +147,64 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   return (
     <div className="flex flex-col gap-block">
       {canWrite && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-card-title">
-              {t("prescription.formTitle")}
-            </CardTitle>
-            <CardDescription>{t("prescription.formHint")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PrescriptionForm
-              // Ключ по идентификатору действующей версии: после сохранения форма
-              // пересоздаётся уже с новыми значениями, иначе врач увидел бы в ней
-              // предыдущее назначение.
-              key={active?.id ?? "first"}
-              defaultValues={prescriptionFormValues(active, new Date())}
-              pending={create.isPending}
-              error={create.error}
-              onSubmit={(values) =>
-                create.mutate(toPrescriptionBody(values), {
-                  onSuccess: (created) => setCreatedId(created.id),
-                })
-              }
-            />
-          </CardContent>
-        </Card>
+        <Section
+          title={t("prescription.formTitle")}
+          description={t("prescription.formHint")}
+        >
+          <PrescriptionForm
+            // Ключ по идентификатору действующей версии: после сохранения форма
+            // пересоздаётся уже с новыми значениями, иначе врач увидел бы в ней
+            // предыдущее назначение.
+            key={active?.id ?? "first"}
+            defaultValues={prescriptionFormValues(active, new Date())}
+            pending={create.isPending}
+            error={create.error}
+            onSubmit={(values) =>
+              create.mutate(toPrescriptionBody(values), {
+                onSuccess: (created) => setCreatedId(created.id),
+              })
+            }
+          />
+        </Section>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-card-title">
-            {t("prescription.historyTitle")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {history.isPending && (
-            <TableSkeleton label={t("prescription.loading")} rows={3} />
-          )}
+      <Section title={t("prescription.historyTitle")}>
+        {history.isPending && (
+          <TableSkeleton label={t("prescription.loading")} rows={3} />
+        )}
 
-          {history.isError && (
-            <ErrorState
-              title={t("prescription.loadError")}
-              description={
-                errorMessageOf(history.error) ?? t("common:errors.unexpected")
-              }
-              retryLabel={t("common:actions.retry")}
-              onRetry={() => void history.refetch()}
-            />
-          )}
+        {history.isError && (
+          <ErrorState
+            title={t("prescription.loadError")}
+            description={
+              errorMessageOf(history.error) ?? t("common:errors.unexpected")
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void history.refetch()}
+          />
+        )}
 
-          {history.data !== undefined && (
-            <DataTable
-              columns={columns}
-              data={versions}
-              caption={t("prescription.caption")}
-              emptyState={
-                <EmptyState
-                  icon={ClipboardList}
-                  title={t("prescription.empty")}
-                  description={t("prescription.emptyDescription")}
-                />
-              }
-              labels={{
-                previousPage: t("table.previousPage"),
-                nextPage: t("table.nextPage"),
-                pageStatus: (page, total) =>
-                  t("table.pageStatus", { page, total }),
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
+        {history.data !== undefined && (
+          <DataTable
+            columns={columns}
+            data={versions}
+            caption={t("prescription.caption")}
+            emptyState={
+              <EmptyState
+                icon={ClipboardList}
+                title={t("prescription.empty")}
+                description={t("prescription.emptyDescription")}
+              />
+            }
+            labels={{
+              previousPage: t("table.previousPage"),
+              nextPage: t("table.nextPage"),
+              pageStatus: (page, total) =>
+                t("table.pageStatus", { page, total }),
+            }}
+          />
+        )}
+      </Section>
     </div>
   );
 }

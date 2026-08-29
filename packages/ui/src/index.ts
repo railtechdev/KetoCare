@@ -16,6 +16,15 @@ export type {
 export { DiaryEntryCard } from "./components/DiaryEntryCard";
 export type { DiaryEntryCardProps } from "./components/DiaryEntryCard";
 
+export { Section } from "./components/Section";
+export type { SectionProps } from "./components/Section";
+
+export { TabsBar } from "./components/TabsBar";
+export type { TabsBarProps, TabsBarItem } from "./components/TabsBar";
+
+export { FormSheet } from "./components/FormSheet";
+export type { FormSheetProps } from "./components/FormSheet";
+
 export { AsyncSection } from "./components/AsyncSection";
 export type { AsyncSectionProps } from "./components/AsyncSection";
 

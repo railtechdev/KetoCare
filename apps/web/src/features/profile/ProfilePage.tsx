@@ -3,12 +3,8 @@ import {
   AsyncSection,
   Avatar,
   AvatarFallback,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   FormFooter,
+  Section,
   Skeleton,
   toast,
 } from "@ketocare/ui";
@@ -115,73 +111,65 @@ export function ProfilePage() {
         empty={null}
       >
         {profile !== undefined && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-card-title">
-                {t("card.title")}
-              </CardTitle>
-              <CardDescription>{t("card.intro")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                onSubmit={handleSubmit((values) => {
-                  update.mutate(
-                    {
-                      full_name: values.fullName,
-                      phone:
-                        values.phone.trim() === "" ? null : values.phone.trim(),
-                    },
-                    { onSuccess: () => toast.success(t("saved")) },
-                  );
-                })}
-                noValidate
-                className="flex flex-col gap-block"
-              >
-                <Field
-                  id="profile-name"
-                  width="wide"
-                  autoComplete="name"
-                  label={t("fields.fullName")}
-                  error={errors.fullName && t("errors.fullName")}
-                  {...register("fullName")}
-                />
+          <Section title={t("card.title")} description={t("card.intro")}>
+            <form
+              onSubmit={handleSubmit((values) => {
+                update.mutate(
+                  {
+                    full_name: values.fullName,
+                    phone:
+                      values.phone.trim() === "" ? null : values.phone.trim(),
+                  },
+                  { onSuccess: () => toast.success(t("saved")) },
+                );
+              })}
+              noValidate
+              className="flex flex-col gap-block"
+            >
+              <Field
+                id="profile-name"
+                width="wide"
+                autoComplete="name"
+                label={t("fields.fullName")}
+                error={errors.fullName && t("errors.fullName")}
+                {...register("fullName")}
+              />
 
-                <Field
-                  id="profile-phone"
-                  width="medium"
-                  type="tel"
-                  autoComplete="tel"
-                  optional
-                  label={t("fields.phone")}
-                  {...register("phone")}
-                />
+              <Field
+                id="profile-phone"
+                width="medium"
+                type="tel"
+                autoComplete="tel"
+                optional
+                label={t("fields.phone")}
+                {...register("phone")}
+              />
 
-                <Field
-                  width="wide"
-                  id="profile-email"
-                  type="email"
-                  label={t("fields.email")}
-                  hint={t("emailHint")}
-                  value={profile.email}
-                  readOnly
-                  disabled
-                />
+              <Field
+                width="wide"
+                id="profile-email"
+                type="email"
+                label={t("fields.email")}
+                hint={t("emailHint")}
+                value={profile.email}
+                readOnly
+                disabled
+              />
 
-                {update.error !== null && (
-                  <FormError>
-                    {errorMessageOf(update.error) ??
-                      t("common:errors.unexpected")}
-                  </FormError>
-                )}
+              {update.error !== null && (
+                <FormError>
+                  {errorMessageOf(update.error) ??
+                    t("common:errors.unexpected")}
+                </FormError>
+              )}
 
-                <FormFooter
-                  submitLabel={t("common:actions.save")}
-                  pendingLabel={t("common:actions.saving")}
-                  pending={update.isPending}
-                />
-              </form>
-            </CardContent>
-          </Card>
+              <FormFooter
+                submitLabel={t("common:actions.save")}
+                pendingLabel={t("common:actions.saving")}
+                pending={update.isPending}
+              />
+            </form>
+          </Section>
         )}
       </AsyncSection>
     </PageLayout>

@@ -1,12 +1,4 @@
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  MacroBar,
-  RatioBadge,
-  WarningBanner,
-} from "@ketocare/ui";
+import { MacroBar, RatioBadge, Section, WarningBanner } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { dayVerdict, type DayTolerance } from "../patients/dayVerdict";
@@ -33,18 +25,14 @@ export function DayTotalsPanel({
 }: Props) {
   const { t } = useTranslation("menu");
 
+  // Пустой день до этого блока не доходит — о нём говорит блок приёмов пищи
+  // (правило П27). Сюда `null` попадает только если сервер не вернул итогов при
+  // непустом меню: это одна строка, а не карточка на 134 px.
   if (totals === null) {
     return (
-      <Card role="region" aria-label={t("totals.title")}>
-        <CardHeader>
-          <CardTitle>
-            <h2 className="m-0 text-section-title">{t("totals.title")}</h2>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="m-0 text-muted-foreground">{t("totals.none")}</p>
-        </CardContent>
-      </Card>
+      <Section title={t("totals.title")}>
+        <p className="m-0 text-sm text-muted-foreground">{t("totals.none")}</p>
+      </Section>
     );
   }
 
@@ -62,95 +50,87 @@ export function DayTotalsPanel({
         };
 
   return (
-    <Card role="region" aria-label={t("totals.title")}>
-      <CardHeader>
-        <CardTitle>
-          <h2 className="m-0 text-section-title">{t("totals.title")}</h2>
-        </CardTitle>
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-block">
-        <div className="flex flex-wrap items-center gap-block">
-          <RatioBadge
-            ratio={totals.ratio}
-            withinTolerance={tolerance?.ratio_within_tolerance}
-          />
-          <span className="tabular-nums">
-            {targets === null
-              ? t("totals.kcal", { value: totals.kcal.toFixed(0) })
-              : t("totals.kcalOfTarget", {
-                  value: totals.kcal.toFixed(0),
-                  target: targets.kcalPerDay.toFixed(0),
-                })}
-          </span>
-        </div>
-
-        <MacroBar
-          fatG={totals.fat}
-          proteinG={totals.protein}
-          carbsG={totals.carbs}
+    <Section title={t("totals.title")}>
+      <div className="flex flex-wrap items-center gap-block">
+        <RatioBadge
+          ratio={totals.ratio}
+          withinTolerance={tolerance?.ratio_within_tolerance}
         />
+        <span className="tabular-nums">
+          {targets === null
+            ? t("totals.kcal", { value: totals.kcal.toFixed(0) })
+            : t("totals.kcalOfTarget", {
+                value: totals.kcal.toFixed(0),
+                target: targets.kcalPerDay.toFixed(0),
+              })}
+        </span>
+      </div>
 
-        {targets !== null && left !== null && (
-          <dl className="m-0 grid gap-block sm:grid-cols-2">
-            <div className="min-w-0">
-              <dt className="text-sm text-muted-foreground">
-                {t("totals.kcalLabel")}
-              </dt>
-              <dd className="m-0 tabular-nums">
-                {left.kcal >= 0
-                  ? t("totals.kcalLeft", { value: AMOUNT.format(left.kcal) })
-                  : t("totals.kcalOver", { value: AMOUNT.format(-left.kcal) })}
-              </dd>
-            </div>
+      <MacroBar
+        fatG={totals.fat}
+        proteinG={totals.protein}
+        carbsG={totals.carbs}
+      />
 
-            <div className="min-w-0">
-              <dt className="text-sm text-muted-foreground">
-                {t("totals.carbsLabel")}
-              </dt>
-              <dd className="m-0 tabular-nums">
-                {t("totals.carbsOfLimit", {
-                  value: AMOUNT.format(totals.carbs),
-                  limit: AMOUNT.format(targets.carbsLimitG),
-                })}
-              </dd>
-              <dd className="m-0 text-sm text-muted-foreground tabular-nums">
-                {left.carbs >= 0
-                  ? t("totals.carbsLeft", { value: AMOUNT.format(left.carbs) })
-                  : t("totals.carbsOver", {
-                      value: AMOUNT.format(-left.carbs),
-                    })}
-              </dd>
-            </div>
-          </dl>
-        )}
+      {targets !== null && left !== null && (
+        <dl className="m-0 grid gap-block sm:grid-cols-2">
+          <div className="min-w-0">
+            <dt className="text-sm text-muted-foreground">
+              {t("totals.kcalLabel")}
+            </dt>
+            <dd className="m-0 tabular-nums">
+              {left.kcal >= 0
+                ? t("totals.kcalLeft", { value: AMOUNT.format(left.kcal) })
+                : t("totals.kcalOver", { value: AMOUNT.format(-left.kcal) })}
+            </dd>
+          </div>
 
-        {verdict.ratioOffTolerance && (
-          <WarningBanner level="warning" title={t("offTolerance.title")}>
-            {t("offTolerance.body")}
-          </WarningBanner>
-        )}
+          <div className="min-w-0">
+            <dt className="text-sm text-muted-foreground">
+              {t("totals.carbsLabel")}
+            </dt>
+            <dd className="m-0 tabular-nums">
+              {t("totals.carbsOfLimit", {
+                value: AMOUNT.format(totals.carbs),
+                limit: AMOUNT.format(targets.carbsLimitG),
+              })}
+            </dd>
+            <dd className="m-0 text-sm text-muted-foreground tabular-nums">
+              {left.carbs >= 0
+                ? t("totals.carbsLeft", { value: AMOUNT.format(left.carbs) })
+                : t("totals.carbsOver", {
+                    value: AMOUNT.format(-left.carbs),
+                  })}
+            </dd>
+          </div>
+        </dl>
+      )}
 
-        {verdict.kcalBelowTarget && (
-          <p className="m-0 text-sm text-muted-foreground">
-            {t("offTolerance.kcalBelowTarget")}
-          </p>
-        )}
+      {verdict.ratioOffTolerance && (
+        <WarningBanner level="warning" title={t("offTolerance.title")}>
+          {t("offTolerance.body")}
+        </WarningBanner>
+      )}
 
-        {verdict.unavailable && (
-          <p className="m-0 text-sm text-muted-foreground">
-            {t("totals.verdictUnavailable")}
-          </p>
-        )}
+      {verdict.kcalBelowTarget && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("offTolerance.kcalBelowTarget")}
+        </p>
+      )}
 
-        {/* Версия ядра показывается рядом с итогами: расчёт, сделанный разными
+      {verdict.unavailable && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("totals.verdictUnavailable")}
+        </p>
+      )}
+
+      {/* Версия ядра показывается рядом с итогами: расчёт, сделанный разными
             версиями, может отличаться, и это должно быть видно. */}
-        {engineVersion !== null && (
-          <p className="m-0 text-xs text-muted-foreground">
-            {t("totals.engineVersion", { version: engineVersion })}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      {engineVersion !== null && (
+        <p className="m-0 text-xs text-muted-foreground">
+          {t("totals.engineVersion", { version: engineVersion })}
+        </p>
+      )}
+    </Section>
   );
 }

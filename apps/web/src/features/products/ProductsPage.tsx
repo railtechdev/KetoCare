@@ -103,16 +103,15 @@ export function ProductsPage() {
 
   return (
     <PageLayout title={t("title")} intro={t("intro")}>
-      <div className="max-w-sm">
-        <Field
-          id="product-search"
-          type="search"
-          label={t("search.label")}
-          value={query}
-          placeholder={t("search.placeholder")}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </div>
+      <Field
+        id="product-search"
+        type="search"
+        label={t("search.label")}
+        width="wide"
+        value={query}
+        placeholder={t("search.placeholder")}
+        onChange={(event) => setQuery(event.target.value)}
+      />
 
       {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
           обновление не должно прятать уже показанную выдачу (П15 канона).

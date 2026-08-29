@@ -72,7 +72,7 @@ export function RecipeForm({
         className="flex flex-col gap-screen"
       >
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-section-title font-semibold">
+          <legend className="mb-block text-card-title font-semibold">
             {t("form.basics")}
           </legend>
 
@@ -109,7 +109,7 @@ export function RecipeForm({
         </fieldset>
 
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-section-title font-semibold">
+          <legend className="mb-block text-card-title font-semibold">
             {t("form.portion")}
           </legend>
 
@@ -138,7 +138,7 @@ export function RecipeForm({
         </fieldset>
 
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-section-title font-semibold">
+          <legend className="mb-block text-card-title font-semibold">
             {t("form.composition")}
           </legend>
 
@@ -249,7 +249,7 @@ export function RecipeForm({
         </fieldset>
 
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-section-title font-semibold">
+          <legend className="mb-block text-card-title font-semibold">
             {t("form.cooking")}
           </legend>
 

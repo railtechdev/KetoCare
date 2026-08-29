@@ -63,7 +63,9 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-screen">
       <Card className="w-full max-w-form">
         <CardHeader>
-          <CardTitle className="text-page-title">{t("login.title")}</CardTitle>
+          <CardTitle className="text-page-title">
+            <h1 className="m-0 font-semibold">{t("login.title")}</h1>
+          </CardTitle>
         </CardHeader>
 
         <CardContent>

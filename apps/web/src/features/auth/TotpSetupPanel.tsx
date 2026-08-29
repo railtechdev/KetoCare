@@ -83,7 +83,7 @@ export function TotpSetupPanel({ setupToken }: Props) {
       <Card className="w-full max-w-form">
         <CardHeader>
           <CardTitle className="text-page-title">
-            {t("totpSetup.title")}
+            <h1 className="m-0 font-semibold">{t("totpSetup.title")}</h1>
           </CardTitle>
           <CardDescription>{t("totpSetup.intro")}</CardDescription>
         </CardHeader>

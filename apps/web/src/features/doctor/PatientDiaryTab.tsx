@@ -1,19 +1,17 @@
 import {
   AsyncSection,
   EmptyState,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   TrendChart,
   type PrescriptionMarker,
   type TrendPoint,
 } from "@ketocare/ui";
 import { CalendarSearch } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { SelectField } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
+import { useSectionTab } from "../../routes/useSectionTab";
 import { DiaryList } from "../diary/DiaryList";
 import { PeriodPicker } from "../diary/PeriodPicker";
 import { CHART_KINDS, DIARY_KINDS, type DiaryKind } from "../diary/diaryApi";
@@ -45,36 +43,38 @@ import { CardsSkeleton } from "./skeletons";
  */
 export function PatientDiaryTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
-  const [kind, setKind] = useState<DiaryKind>("seizures");
+  const selectId = useId();
+
+  // Вид записей — переключателем, а не второй полосой вкладок: карта пациента
+  // уже открыта вкладкой, а вкладки не вкладываются в вкладки (правило П29).
+  // Значение живёт в адресе (П30): ссылка на «кетоны пациента» должна
+  // открываться тем, чем названа.
+  const [kind, setKind] = useSectionTab<DiaryKind>(
+    "kind",
+    DIARY_KINDS,
+    "seizures",
+  );
 
   return (
-    <Tabs value={kind} onValueChange={(value) => setKind(value as DiaryKind)}>
-      {/* Шесть видов записей в строку не помещаются на узком экране, поэтому
-          список переносится, а не уезжает в горизонтальный скролл. */}
-      <TabsList
-        aria-label={t("diary.tabsLabel")}
-        variant="line"
-        className="w-full flex-wrap justify-start gap-1 border-b border-border group-data-[orientation=horizontal]/tabs:h-auto"
+    <div className="flex flex-col gap-block">
+      <SelectField
+        id={selectId}
+        label={t("diary.tabsLabel")}
+        width="medium"
+        value={kind}
+        onChange={(event) => setKind(event.target.value as DiaryKind)}
       >
         {DIARY_KINDS.map((value) => (
-          <TabsTrigger
-            key={value}
-            value={value}
-            className="min-h-touch flex-none px-4"
-          >
+          <option key={value} value={value}>
             {t(`diary.kinds.${value}`)}
-          </TabsTrigger>
+          </option>
         ))}
-      </TabsList>
+      </SelectField>
 
-      {/* Radix монтирует только активную вкладку: запросы соседних видов
-          записей не уходят, пока врач их не открыл. */}
-      {DIARY_KINDS.map((value) => (
-        <TabsContent key={value} value={value} className="pt-block">
-          <DiaryKindView kind={value} patientId={patientId} />
-        </TabsContent>
-      ))}
-    </Tabs>
+      {/* Ключ по виду записей: у каждого вида свой период и свои запросы, и
+          переключение не должно переносить состояние прошлого вида. */}
+      <DiaryKindView key={kind} kind={kind} patientId={patientId} />
+    </div>
   );
 }
 
