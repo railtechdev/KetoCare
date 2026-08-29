@@ -28,6 +28,11 @@ class SeizureType(Base, UUIDPkMixin):
     __tablename__ = "seizure_types"
 
     name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Короткий код типа (A, C, F, FG, M, T, TC, O) из дневника KETO-STEP,
+    # присланного заказчиком: в клетке месячной сетки «Тонико-клонический» не
+    # помещается, «TC» — да (ADR-0007). Необязателен: своего кода у типов вне
+    # того дневника пока нет — вопрос 4 в docs/medical/OPEN_QUESTIONS.md.
+    code: Mapped[str | None] = mapped_column(String(4))
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 

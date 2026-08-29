@@ -62,7 +62,7 @@ fix: ## Автоисправление форматирования
 	uv run ruff check --fix apps packages
 	uv run ruff format apps packages
 	@if [ -d node_modules ]; then \
-		pnpm exec prettier --write . >/dev/null && echo "prettier: ok"; \
+		pnpm -r --if-present exec prettier --write src >/dev/null && echo "prettier: ok"; \
 		pnpm -r --if-present exec eslint src --fix >/dev/null && echo "eslint: ok"; \
 	fi
 

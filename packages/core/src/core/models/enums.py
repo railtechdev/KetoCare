@@ -75,3 +75,18 @@ class AiJobStatus(enum.StrEnum):
 class AiConversationChannel(enum.StrEnum):
     WEB = "web"
     MINIAPP = "miniapp"
+
+
+class IntakeScale(enum.StrEnum):
+    """Шкалы анкеты регистрации (ADR-0007).
+
+    Один справочник на пять шкал вместо пяти таблиц: устроены они одинаково и
+    правятся одним экраном админки. Формулировки вариантов задаёт медицинская
+    команда — вопросы 19-21 в docs/medical/OPEN_QUESTIONS.md.
+    """
+
+    ONSET_AGE = "onset_age"
+    SEIZURE_FREQUENCY = "seizure_frequency"
+    SEIZURE_DURATION = "seizure_duration"
+    AED_SWITCH_COUNT = "aed_switch_count"
+    MEALS_PER_DAY = "meals_per_day"

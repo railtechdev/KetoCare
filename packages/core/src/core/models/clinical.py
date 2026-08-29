@@ -6,12 +6,24 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Integer, Numeric, String, event, text
+from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    Date,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    event,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, SoftDeleteMixin, UpdatedAtMixin, UUIDPkMixin
+from .enums import IntakeScale, pg_enum
 
 
 class MedicalProfile(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
@@ -27,6 +39,12 @@ class MedicalProfile(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDele
         JSONB
     )  # {gene, variant, interpretation}
     comorbidities: Mapped[str | None]
+    # Сколько противоэпилептических препаратов ребёнок сменил, диапазоном
+    # (ADR-0007). Врачебное поле: семья путает названия и число попыток, а от
+    # этого зависит, считается ли эпилепсия фармакорезистентной.
+    aed_switch_count_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
+    )
 
 
 class Prescription(Base, UUIDPkMixin):
@@ -105,3 +123,86 @@ class ClinicalNote(Base, UUIDPkMixin, CreatedAtMixin, SoftDeleteMixin):
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     text: Mapped[str] = mapped_column(nullable=False)
+
+
+class IntakeOption(Base, UUIDPkMixin):
+    """Вариант ответа шкалы анкеты регистрации (ADR-0007).
+
+    Один справочник на все шкалы: вид шкалы задаёт `scale`. Формулировки —
+    из документа заказчика; три шкалы из пяти к применению как есть непригодны
+    (разрывы и пересечения), вопросы 19-21 в docs/medical/OPEN_QUESTIONS.md.
+    Правятся админ-ручкой, а не миграцией: состав задаёт медицинская команда.
+    """
+
+    __tablename__ = "intake_options"
+    __table_args__ = (UniqueConstraint("scale", "code", name="uq_intake_options_scale_code"),)
+
+    scale: Mapped[IntakeScale] = mapped_column(pg_enum(IntakeScale, "intake_scale"), nullable=False)
+    code: Mapped[str] = mapped_column(String(32), nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class AedDrug(Base, UUIDPkMixin):
+    """Противоэпилептический препарат (ADR-0007).
+
+    Каноническое имя и синонимы вместо свободной строки: «Летирам»,
+    «Леветирацетам» и «Кеппра» — одно и то же вещество, и свободный ввод сделал
+    бы записи несравнимыми. Поиск идёт и по синонимам.
+    """
+
+    __tablename__ = "aed_drugs"
+
+    name_ru: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    synonyms: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class PatientIntake(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
+    """Ответы семьи из анкеты регистрации (ADR-0007).
+
+    Отдельная таблица, а не колонки в `medical_profiles`: профиль пишет только
+    врач, а это — ответы семьи. Разделение по таблицам выражает право записи
+    связью, а не проверкой в каждой ручке (правило 5 CLAUDE.md).
+
+    Одна строка на пациента: анкета заполняется один раз при заведении ребёнка
+    и потом уточняется, а не накапливается версиями.
+    """
+
+    __tablename__ = "patient_intake"
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("patients.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+
+    # Дата последнего приступа **на момент анкеты**. Дальше она вычисляется из
+    # дневника: хранить её обновляемым полем нельзя — она немедленно разойдётся
+    # с записями, а лечение сверяется с записями (ADR-0007).
+    last_seizure_on: Mapped[date | None] = mapped_column(Date)
+
+    onset_age_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
+    )
+    seizure_frequency_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
+    )
+    seizure_duration_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
+    )
+    # Кратность приёмов пищи **до терапии**, со слов семьи. Не то же, что
+    # `prescriptions.meals_per_day`: там предписание врача, и одно поле на два
+    # смысла означало бы, что назначение переписывается ответом родителя.
+    meals_per_day_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
+    )
+
+    developmental_delay: Mapped[bool | None] = mapped_column(Boolean)
+    meals_regular: Mapped[bool | None] = mapped_column(Boolean)
+
+    # Что ребёнок принимает — со слов семьи, ориентировочно. Точный список с
+    # дозами ведёт врач в `medications`: на анкете родитель дозы не знает, а
+    # `medications.dose` и `frequency` обязательны и обязательными остаются.
+    current_aed_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)

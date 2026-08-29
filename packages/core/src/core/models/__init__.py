@@ -11,7 +11,15 @@ from .accounts import (
 )
 from .ai_audit import AiConversation, AiJob, AuditLog, DoctorSummary
 from .base import Base
-from .clinical import ClinicalNote, MedicalProfile, Medication, Prescription
+from .clinical import (
+    AedDrug,
+    ClinicalNote,
+    IntakeOption,
+    MedicalProfile,
+    Medication,
+    PatientIntake,
+    Prescription,
+)
 from .content import (
     CustomDish,
     Product,
@@ -44,7 +52,10 @@ __all__ = [
     "TelegramAccount",
     "LinkCode",
     # clinical
+    "AedDrug",
+    "IntakeOption",
     "MedicalProfile",
+    "PatientIntake",
     "Prescription",
     "Medication",
     "ClinicalNote",
