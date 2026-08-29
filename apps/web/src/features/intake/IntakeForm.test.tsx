@@ -16,7 +16,13 @@ vi.mock("../../lib/api", async (importOriginal) => {
 i18n.addResourceBundle("ru", "intake", intakeRu, true, true);
 
 const OPTIONS = [
-  { id: "o-onset", scale: "onset_age", code: "onset_0_6m", name_ru: "0-6 мес", sort: 0 },
+  {
+    id: "o-onset",
+    scale: "onset_age",
+    code: "onset_0_6m",
+    name_ru: "0-6 мес",
+    sort: 0,
+  },
   {
     id: "o-freq",
     scale: "seizure_frequency",
@@ -31,7 +37,13 @@ const OPTIONS = [
     name_ru: "До 1 мин",
     sort: 2,
   },
-  { id: "o-meals", scale: "meals_per_day", code: "meals_3", name_ru: "3 приёма пищи", sort: 3 },
+  {
+    id: "o-meals",
+    scale: "meals_per_day",
+    code: "meals_3",
+    name_ru: "3 приёма пищи",
+    sort: 3,
+  },
 ];
 
 const DRUGS = [
@@ -48,7 +60,11 @@ function respond(path: string) {
   }
   if (path === "/api/v1/patients/{patient_id}/intake") {
     // Анкеты ещё нет — сервер отвечает 404, и это не ошибка экрана.
-    return { error: { error: { code: "not_found", message: "Анкета ещё не заполнена." } } };
+    return {
+      error: {
+        error: { code: "not_found", message: "Анкета ещё не заполнена." },
+      },
+    };
   }
   throw new Error(`Unexpected GET ${path}`);
 }

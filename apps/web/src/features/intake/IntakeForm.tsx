@@ -13,6 +13,7 @@ import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import {
   optionsOfScale,
+  visibleDrugs,
   useAedDrugs,
   useIntakeOptions,
   usePatientIntake,
@@ -234,7 +235,7 @@ export function IntakeForm({
               <DrugPicker
                 label={t("fields.currentAed")}
                 hint={t("fields.currentAedHint")}
-                drugs={drugs.data ?? []}
+                drugs={visibleDrugs(drugs.data ?? [], values.currentAedIds)}
                 loading={drugs.isLoading}
                 selected={values.currentAedIds}
                 onToggle={(id, checked) =>
@@ -318,7 +319,10 @@ function ScaleField({
   onChange: (value: string) => void;
 }) {
   const { t } = useTranslation("intake");
-  const items = useMemo(() => optionsOfScale(options, scale), [options, scale]);
+  const items = useMemo(
+    () => optionsOfScale(options, scale, value),
+    [options, scale, value],
+  );
 
   return (
     <SelectField

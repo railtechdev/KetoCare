@@ -228,3 +228,119 @@ class TestDoctorPartOfIntake:
 
         assert response.status_code == 422, response.text
         assert response.json()["error"]["details"]["field"] == "aed_switch_count_id"
+
+
+class TestRetiredDictionaryValues:
+    """Выведенный из употребления вариант не предлагается, но остаётся читаемым.
+
+    Удалить его нельзя: на него ссылаются заполненные анкеты, и ответ семьи не
+    должен исчезать вместе со сменой формулировки (правило 4 CLAUDE.md).
+    """
+
+    async def test_retired_options_are_hidden_by_default(
+        self, client, session, make_user, auth_headers
+    ):
+        parent = await make_user(UserRole.PARENT)
+
+        default = await client.get(
+            "/api/v1/dictionaries/intake-options",
+            params={"scale": IntakeScale.SEIZURE_DURATION.value},
+            headers=auth_headers(parent),
+        )
+        with_retired = await client.get(
+            "/api/v1/dictionaries/intake-options",
+            params={
+                "scale": IntakeScale.SEIZURE_DURATION.value,
+                "include_retired": "true",
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert default.status_code == 200, default.text
+        assert all(not item["retired"] for item in default.json()["items"])
+        assert with_retired.json()["total"] > default.json()["total"]
+
+    async def test_duration_scale_has_no_gap_between_5_and_10_minutes(
+        self, client, session, make_user, auth_headers
+    ):
+        """Разрыв 5-10 минут в шкале заказчика закрыт; границы совмещены с
+        операциональным определением эпилептического статуса ILAE (Trinka 2015)."""
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            "/api/v1/dictionaries/intake-options",
+            params={"scale": IntakeScale.SEIZURE_DURATION.value},
+            headers=auth_headers(parent),
+        )
+
+        codes = [item["code"] for item in response.json()["items"]]
+        assert "dur_5_10min" in codes
+        assert "dur_under_5min" not in codes, "перекрывающийся вариант выведен"
+
+    async def test_frequency_scale_can_express_seizure_freedom(
+        self, client, session, make_user, auth_headers
+    ):
+        """Цель кетотерапии — прекращение приступов. Шкале заказчика её выразить
+        было нечем: варианты шли от «ежедневно» до «раз в 2-3 месяца»."""
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            "/api/v1/dictionaries/intake-options",
+            params={"scale": IntakeScale.SEIZURE_FREQUENCY.value},
+            headers=auth_headers(parent),
+        )
+
+        codes = [item["code"] for item in response.json()["items"]]
+        assert "freq_none" in codes
+        assert "freq_rarer" in codes
+
+    async def test_aed_switch_count_scale_does_not_overlap(
+        self, client, session, make_user, auth_headers
+    ):
+        """«2 препарата», «более 2х», «более 5» пересекались: сменивший шесть
+        подходил под два варианта сразу, а сменивший одного — ни под один."""
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            "/api/v1/dictionaries/intake-options",
+            params={"scale": IntakeScale.AED_SWITCH_COUNT.value},
+            headers=auth_headers(parent),
+        )
+
+        codes = {item["code"] for item in response.json()["items"]}
+        assert {"aed_0", "aed_1", "aed_2", "aed_3_5", "aed_6_plus"} <= codes
+        assert "aed_over_2" not in codes
+
+    async def test_drugs_are_one_per_substance(self, client, session, make_user, auth_headers):
+        """Строка заказчика «Карбамазепин, Окскарбазепин, Трилептал, Тегретол»
+        объединяла два разных действующих вещества."""
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.get("/api/v1/dictionaries/aed-drugs", headers=auth_headers(parent))
+
+        names = {item["name_ru"] for item in response.json()["items"]}
+        assert "Карбамазепин" in names
+        assert "Окскарбазепин" in names
+        assert "Карбамазепин, Окскарбазепин, Трилептал, Тегретол" not in names
+
+    async def test_retired_option_can_still_be_saved(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Анкета, заполненная старым вариантом, обязана сохраняться дальше:
+        иначе семья не сможет поправить в ней ни одного другого поля."""
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        retired = [
+            option
+            for option in await intake_repo.list_options(
+                session, scale=IntakeScale.SEIZURE_DURATION, include_retired=True
+            )
+            if option.retired
+        ]
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_duration_id": str(retired[0].id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text

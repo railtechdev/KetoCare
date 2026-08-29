@@ -6,7 +6,7 @@ ARQ-воркер: фоновые задачи раздела 10.1 ТЗ. Сейч
 ## Запуск
 
 ```
-uv run arq worker.main.WorkerSettingsARQ
+make worker
 ```
 
 Адрес Redis берётся из `core.config.Settings`, то есть из того же `.env`, что
@@ -22,8 +22,20 @@ Redis из `.env` — и очередь никогда бы не сошлась.
 OSError: cannot load library 'libgobject-2.0-0'
 ```
 
-На macOS: `brew install pango libffi`. В Debian-образе:
-`apt-get install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libffi8`.
+На macOS: `brew install pango libffi`. **Одной установки мало:** библиотеки
+ложатся в `/opt/homebrew/lib`, а dyld туда не смотрит при `dlopen` из Python —
+weasyprint падает с той же ошибкой при установленных библиотеках. Поэтому
+`make worker` выставляет `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`.
+
+Второй подвох там же: `make worker` запускает **`python -m arq`**, а не
+консольный скрипт `arq`. У скрипта в `.venv/bin` шебанг `#!/bin/sh`, а macOS
+вычищает переменные `DYLD_*` при запуске защищённых системой бинарников — до
+Python путь к библиотекам не доезжает, и weasyprint падает при установленных
+библиотеках. По той же причине тест печати проходит под
+`uv run python -m pytest`, а под консольным `pytest` пропускается.
+
+В Debian-образе: `apt-get install libpango-1.0-0 libpangoft2-1.0-0
+libharfbuzz0b libffi8`; там переменная не нужна.
 
 Библиотека импортируется **лениво**, внутри функции печати
 (`worker/reports/render.py`), поэтому их отсутствие не роняет воркер целиком:

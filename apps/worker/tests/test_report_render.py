@@ -132,3 +132,25 @@ def test_file_name_cannot_escape_the_volume():
     """Имя файла не участвует в пути как есть (то же решение, что в ADR-0004)."""
     with pytest.raises(ValueError):
         report_path("./var/reports", "../../etc/passwd")
+
+
+def test_report_renders_to_one_a4_page():
+    """Печатный лист, а не экран: A4 и один лист на обычный отчёт.
+
+    Проверка идёт через weasyprint и требует системных pango и cairo — на машине
+    без них тест пропускается, а не падает: его отсутствие ничего не говорит о
+    правильности отчёта (см. apps/worker/README.md).
+    """
+    try:
+        import weasyprint
+    except (ImportError, OSError) as error:
+        # Именно OSError: системные библиотеки грузятся уже на импорте, и
+        # `pytest.importorskip` его не ловит — он ждёт ImportError.
+        pytest.skip(f"weasyprint без системных библиотек: {error}")
+
+    document = weasyprint.HTML(string=render_html(REPORT, title="Отчёт по пациенту")).render()
+
+    assert len(document.pages) == 1
+    # A4 в пикселях CSS: 210 x 297 мм при 96 dpi
+    assert round(document.pages[0].width * 25.4 / 96) == 210
+    assert round(document.pages[0].height * 25.4 / 96) == 297

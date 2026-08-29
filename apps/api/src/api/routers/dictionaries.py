@@ -75,12 +75,15 @@ async def list_intake_options(
     session: SessionDep,
     _: CurrentUserDep,
     scale: Annotated[IntakeScale | None, Query(description="Одна шкала вместо всех")] = None,
+    include_retired: Annotated[
+        bool, Query(description="Вместе с выведенными из употребления")
+    ] = False,
 ) -> Page[IntakeOptionRead]:
     """Без пагинации: вариантов у всех пяти шкал меньше двадцати, а анкете
     нужны сразу все — постраничная выдача заставила бы экран собирать шкалу
     из кусков."""
 
-    options = await intake_repo.list_options(session, scale=scale)
+    options = await intake_repo.list_options(session, scale=scale, include_retired=include_retired)
     return Page(
         items=[IntakeOptionRead.model_validate(option) for option in options],
         total=len(options),
@@ -96,6 +99,11 @@ async def list_aed_drugs(
     session: SessionDep,
     _: CurrentUserDep,
     page: PaginationDep,
+    include_retired: Annotated[
+        bool, Query(description="Вместе с выведенными из употребления")
+    ] = False,
 ) -> Page[AedDrugRead]:
-    items, total = await intake_repo.list_drugs(session, limit=page.limit, offset=page.offset)
+    items, total = await intake_repo.list_drugs(
+        session, limit=page.limit, offset=page.offset, include_retired=include_retired
+    )
     return Page(items=[AedDrugRead.model_validate(drug) for drug in items], total=total)

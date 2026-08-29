@@ -34,6 +34,10 @@ export function useIntakeOptions() {
     queryFn: async (): Promise<IntakeOption[]> => {
       const { data, error } = await api.GET(
         "/api/v1/dictionaries/intake-options",
+        // Вместе с выведенными из употребления: заполненная раньше анкета
+        // ссылается на прежний вариант, и без него поле показало бы пустоту
+        // вместо ответа семьи. Скрывает их форма — см. `visibleOptions`.
+        { params: { query: { include_retired: true } } },
       );
       if (error || !data)
         throw error ?? new Error("Empty intake options response");
@@ -48,7 +52,7 @@ export function useAedDrugs() {
     staleTime: 30 * 60 * 1000,
     queryFn: async (): Promise<AedDrug[]> => {
       const { data, error } = await api.GET("/api/v1/dictionaries/aed-drugs", {
-        params: { query: { limit: 100, offset: 0 } },
+        params: { query: { limit: 100, offset: 0, include_retired: true } },
       });
       if (error || !data) throw error ?? new Error("Empty aed drugs response");
       return data.items;
@@ -102,10 +106,28 @@ export function useSaveIntakeMutation(patientId: string) {
   });
 }
 
-/** Варианты одной шкалы в порядке справочника. */
+/**
+ * Варианты одной шкалы в порядке справочника.
+ *
+ * Выведенный из употребления вариант показывается, только если он уже выбран:
+ * предлагать его новому ответу нельзя, а скрыть у старого — значит подменить
+ * ответ семьи пустотой.
+ */
 export function optionsOfScale(
   options: readonly IntakeOption[],
   scale: IntakeScale,
+  selectedId = "",
 ): IntakeOption[] {
-  return options.filter((option) => option.scale === scale);
+  return options.filter(
+    (option) =>
+      option.scale === scale && (!option.retired || option.id === selectedId),
+  );
+}
+
+/** То же правило для препаратов: выведенный виден, только если уже отмечен. */
+export function visibleDrugs(
+  drugs: readonly AedDrug[],
+  selected: readonly string[],
+): AedDrug[] {
+  return drugs.filter((drug) => !drug.retired || selected.includes(drug.id));
 }

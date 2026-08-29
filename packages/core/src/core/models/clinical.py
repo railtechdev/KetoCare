@@ -141,6 +141,11 @@ class IntakeOption(Base, UUIDPkMixin):
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Выведенный из употребления вариант: новым ответам не предлагается, но
+    # остаётся в справочнике. Удалить его нельзя — на него ссылаются уже
+    # заполненные анкеты, а ответ семьи не должен исчезать вместе со сменой
+    # формулировки (правило 4 CLAUDE.md).
+    retired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class AedDrug(Base, UUIDPkMixin):
@@ -156,6 +161,8 @@ class AedDrug(Base, UUIDPkMixin):
     name_ru: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     synonyms: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # См. `IntakeOption.retired`: на препарат ссылаются заполненные анкеты.
+    retired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class PatientIntake(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):

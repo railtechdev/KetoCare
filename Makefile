@@ -66,6 +66,19 @@ fix: ## Автоисправление форматирования
 		pnpm -r --if-present exec eslint src --fix >/dev/null && echo "eslint: ok"; \
 	fi
 
+.PHONY: worker
+worker: ## Запустить ARQ-воркер (PDF-отчёты)
+	# `python -m arq`, а не консольный скрипт `arq`: у скрипта в .venv/bin
+	# шебанг `#!/bin/sh`, а macOS вычищает переменные DYLD_* при запуске
+	# защищённых системой бинарников — и путь к pango с cairo до Python не
+	# доезжает. Запуск интерпретатора напрямую переменную сохраняет.
+	#
+	# DYLD_FALLBACK_LIBRARY_PATH нужен там же: библиотеки стоят в
+	# /opt/homebrew/lib, куда dyld при dlopen из Python не смотрит. На Linux
+	# переменная игнорируется, в образе библиотеки лежат в системных путях.
+	DYLD_FALLBACK_LIBRARY_PATH=$${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib} \
+		uv run python -m arq worker.main.WorkerSettingsARQ
+
 .PHONY: seed-demo
 seed-demo: ## Наполнить локальную БД демо-данными (учётки, продукты, две недели дневника)
 	uv run python infra/scripts/seed_demo.py

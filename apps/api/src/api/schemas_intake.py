@@ -30,6 +30,9 @@ class IntakeOptionRead(BaseModel):
     code: str
     name_ru: str
     sort: int
+    # Выведенный из употребления вариант: новым ответам не предлагается, но
+    # старую анкету им нужно подписать (ADR-0007, вопросы 19-21).
+    retired: bool
 
 
 class AedDrugRead(BaseModel):
@@ -39,6 +42,7 @@ class AedDrugRead(BaseModel):
     name_ru: str
     synonyms: list[str]
     sort: int
+    retired: bool
 
 
 class PatientIntakeWrite(BaseModel):

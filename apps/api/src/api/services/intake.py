@@ -34,7 +34,11 @@ async def check_option_scale(
     if option_id is None:
         return
 
-    options = await intake_repo.list_options(session, scale=scale)
+    # Вместе с выведенными из употребления: анкета, заполненная прежним
+    # вариантом, обязана сохраняться дальше. Иначе семья не смогла бы поправить
+    # в ней ни одного другого поля — вариант, который когда-то предложили,
+    # перестал бы приниматься.
+    options = await intake_repo.list_options(session, scale=scale, include_retired=True)
     if option_id not in {option.id for option in options}:
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
@@ -49,7 +53,7 @@ async def check_known_drugs(session: AsyncSession, drug_ids: list[uuid.UUID]) ->
 
     # Справочник заказчика — 16 позиций; предел выборки взят с запасом на
     # пополнение медицинской командой, а не как страница выдачи.
-    drugs, _ = await intake_repo.list_drugs(session, limit=1000)
+    drugs, _ = await intake_repo.list_drugs(session, limit=1000, include_retired=True)
     known = {drug.id for drug in drugs}
     unknown = [str(drug_id) for drug_id in drug_ids if drug_id not in known]
     if unknown:

@@ -47,6 +47,7 @@ export function ReportsPage({ patientId }: { patientId: string }) {
   const job = useReportJob(jobId);
 
   const isDoctor = session?.role === "doctor";
+
   const csvHref = `/api/v1/patients/${patientId}/report?from=${from}&to=${to}&format=csv`;
   const pdfHref =
     job.data?.status === "done"
@@ -105,6 +106,10 @@ export function ReportsPage({ patientId }: { patientId: string }) {
             сервер. */}
         {isDoctor && (
           <Button asChild variant="outline" className="min-h-touch self-start">
+            {/* Обычная ссылка, а не запрос с токеном: веб-кабинет
+                аутентифицируется httpOnly-cookie (раздел 5.2 ТЗ), и браузер
+                приложит её сам. Скачивание потоком, без сборки файла в памяти
+                вкладки, и без ручного fetch — их во фронтенде быть не должно. */}
             <a href={csvHref} download>
               <Download aria-hidden="true" />
               {t("csv.download")}
@@ -224,7 +229,12 @@ function Measurement({
   unit,
 }: {
   label: string;
-  series: { points: unknown[]; min: number | null; max: number | null; mean: number | null };
+  series: {
+    points: unknown[];
+    min: number | null;
+    max: number | null;
+    mean: number | null;
+  };
   unit: string;
 }) {
   const { t } = useTranslation("reports");

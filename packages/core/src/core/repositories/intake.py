@@ -23,9 +23,13 @@ from ..models.enums import IntakeScale
 
 
 async def list_options(
-    session: AsyncSession, *, scale: IntakeScale | None = None
+    session: AsyncSession, *, scale: IntakeScale | None = None, include_retired: bool = False
 ) -> list[IntakeOption]:
     """Варианты ответов: все или одной шкалы.
+
+    Выведенные из употребления по умолчанию не отдаются: новым ответам их
+    предлагать нельзя. Но и удалять нельзя — на них ссылаются заполненные
+    анкеты, и `include_retired` нужен, чтобы старый ответ было чем подписать.
 
     Порядок — по `sort`, затем по коду: `sort` задаёт администратор, дубликаты
     в нём допустимы, а порядок вариантов между запросами меняться не должен —
@@ -35,16 +39,27 @@ async def list_options(
     stmt = select(IntakeOption)
     if scale is not None:
         stmt = stmt.where(IntakeOption.scale == scale)
+    if not include_retired:
+        stmt = stmt.where(IntakeOption.retired.is_(False))
     stmt = stmt.order_by(IntakeOption.sort, IntakeOption.code)
     return list(await session.scalars(stmt))
 
 
 async def list_drugs(
-    session: AsyncSession, *, limit: int = 100, offset: int = 0
+    session: AsyncSession, *, limit: int = 100, offset: int = 0, include_retired: bool = False
 ) -> tuple[list[AedDrug], int]:
-    stmt = select(AedDrug).order_by(AedDrug.sort, AedDrug.name_ru).limit(limit).offset(offset)
+    """См. `list_options`: выведенный препарат не предлагается, но подписать
+    старую анкету им нужно."""
+
+    stmt = select(AedDrug)
+    count_stmt = select(func.count()).select_from(AedDrug)
+    if not include_retired:
+        stmt = stmt.where(AedDrug.retired.is_(False))
+        count_stmt = count_stmt.where(AedDrug.retired.is_(False))
+
+    stmt = stmt.order_by(AedDrug.sort, AedDrug.name_ru).limit(limit).offset(offset)
     items = list(await session.scalars(stmt))
-    total = await session.scalar(select(func.count()).select_from(AedDrug))
+    total = await session.scalar(count_stmt)
     return items, int(total or 0)
 
 
