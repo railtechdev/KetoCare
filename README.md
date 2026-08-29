@@ -42,14 +42,24 @@ infra/     docker-compose, nginx, скрипты бэкапа и деплоя
 
 ## Разработка
 
-Требуются Python 3.12+ с [uv](https://docs.astral.sh/uv/), Node 20+ с pnpm и Docker.
+Требуются Python 3.12+ с [uv](https://docs.astral.sh/uv/), Node 20+ и Docker.
+Отдельно ставить pnpm не нужно — `make setup` включит его через corepack.
 
 ```bash
-cp .env.example .env      # заполните SECRET_KEY: python -c "import secrets; print(secrets.token_urlsafe(48))"
-uv sync --all-packages
-pnpm install
-
+make setup                # зависимости, pnpm, .env с готовым SECRET_KEY
 make dev                  # postgres + redis в docker, затем миграции
+make seed-demo            # демо-данные: три роли, продукты, две недели дневника
+make api                  # API на :8001, Swagger — /api/v1/docs
+make web                  # кабинет на WEB_PORT (по умолчанию :5173)
+```
+
+`make setup` идемпотентен: существующий `.env` он не трогает — там уже могут быть
+настоящие токены. Фиктивными в нём остаются `BOT_TOKEN` и `ANTHROPIC_API_KEY`:
+до этапов бота и ИИ они не нужны, дальше впишите свои.
+
+Проверка и запуск тестов:
+
+```bash
 make test                 # все тесты
 make lint                 # ruff + mypy + prettier + tsc
 ```
@@ -58,6 +68,7 @@ make lint                 # ruff + mypy + prettier + tsc
 
 | Команда | Назначение |
 |---|---|
+| `make setup` | Подготовить свежий клон: зависимости, pnpm, `.env` |
 | `make dev` | Поднять окружение и применить миграции |
 | `make test` | Все тесты (pytest + vitest) |
 | `make test-engine` | Только эталонные тесты расчётного ядра |
@@ -70,8 +81,22 @@ make lint                 # ruff + mypy + prettier + tsc
 Запуск API: `make api` (Swagger — `/api/v1/docs`). За обратным прокси заполните
 `TRUSTED_PROXY_IPS` — см. [`infra/nginx/README.md`](infra/nginx/README.md).
 
-Если порты 5432/6379 заняты другими проектами, переопределите их:
-`POSTGRES_PORT=5434 REDIS_PORT=6381 make dev` (и укажите те же порты в `.env`).
+### Порты
+
+Все порты объявлены в корневом `.env` — и приложение, и Makefile, и Vite читают их
+только оттуда. Второе место объявления всегда однажды расходится с первым, поэтому
+приставки вида `POSTGRES_PORT=5434 make dev` не нужны.
+
+| Что | Переменная в `.env` | По умолчанию |
+|---|---|---|
+| postgres | порт в `DATABASE_URL` | 5432 |
+| redis | порт в `REDIS_URL` | 6379 |
+| API | `API_PORT`, и тот же порт в `API_PROXY_TARGET` | 8001 |
+| Кабинет | `WEB_PORT` (и `WEB_ORIGIN`) | 5173 |
+
+Дефолты 5432/6379 часто заняты другими проектами. `make dev` проверяет порты
+заранее и, если занято, называет конкретный порт, переменную и свободную замену —
+вместо `bind: address already in use` из середины лога `docker compose`.
 
 Требования к завершённой задаче — раздел 14 ТЗ (Definition of Done).
 

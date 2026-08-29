@@ -19,17 +19,104 @@ ENV_FILE := .env
 # комментарий и обрезает строку прямо посреди выражения.
 DB_PORT_FROM_ENV := $(shell sed -n 's,^DATABASE_URL=.*@[^:]*:\([0-9][0-9]*\)/.*,\1,p' $(ENV_FILE) 2>/dev/null | tail -1)
 REDIS_PORT_FROM_ENV := $(shell sed -n 's,^REDIS_URL=.*:\([0-9][0-9]*\)/.*,\1,p' $(ENV_FILE) 2>/dev/null | tail -1)
+# Порт API — из того же `API_PROXY_TARGET`, куда дев-сервер кабинета проксирует
+# `/api`. Отдельной переменной у него нет намеренно: это ровно один порт, и два
+# его объявления рано или поздно разъедутся — кабинет будет стучаться в 8001,
+# пока uvicorn слушает 8002, и «сервер не отвечает» придётся отлаживать с нуля.
+API_PORT_FROM_ENV := $(shell sed -n 's,^API_PROXY_TARGET=[a-z]*://[^:]*:\([0-9][0-9]*\).*,\1,p' $(ENV_FILE) 2>/dev/null | tail -1)
 
 export POSTGRES_PORT ?= $(or $(DB_PORT_FROM_ENV),5432)
 export REDIS_PORT ?= $(or $(REDIS_PORT_FROM_ENV),6379)
+export API_PORT ?= $(or $(API_PORT_FROM_ENV),8001)
 
 .PHONY: help
 help: ## Показать список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
+# Единственный вход для свежего клона. До него сборка расходилась по трём
+# граблям, и каждая выглядела как «всё встало», а не как ошибка:
+#   • `uv sync` без `--all-packages` ставит только корневые dev-зависимости и
+#     молча пропускает воркспейс — приложение потом не импортируется;
+#   • pnpm в системе может отсутствовать: в Node он поставляется через corepack,
+#     который надо включить;
+#   • без `.env` Makefile берёт порты по умолчанию (5432/6379), а они почти
+#     всегда заняты соседним проектом.
+.PHONY: setup
+setup: ## Подготовить свежий клон: зависимости, pnpm, .env
+	uv sync --all-packages
+	@if command -v pnpm >/dev/null 2>&1; then \
+		echo "pnpm $$(pnpm --version) — на месте"; \
+	elif command -v corepack >/dev/null 2>&1; then \
+		echo "pnpm не найден, включаю через corepack..."; \
+		corepack enable pnpm || { \
+			echo "corepack enable не сработал — поставьте pnpm вручную: https://pnpm.io/installation"; \
+			exit 1; }; \
+	else \
+		echo "Нет ни pnpm, ни corepack. Нужен Node 20+ — corepack входит в поставку."; \
+		exit 1; \
+	fi
+	pnpm install
+	@# `.env` только создаётся, и только когда его нет: существующий файл не
+	@# трогаем — там уже могут быть настоящие токены (правило 7).
+	@if [ -f $(ENV_FILE) ]; then \
+		echo "$(ENV_FILE) уже есть — оставляю как есть."; \
+	else \
+		sed "s|^SECRET_KEY=.*|SECRET_KEY=$$(uv run python -c 'import secrets; print(secrets.token_urlsafe(48))')|" \
+			.env.example > $(ENV_FILE); \
+		echo "Создан $(ENV_FILE) из .env.example, SECRET_KEY сгенерирован."; \
+		echo "BOT_TOKEN и ANTHROPIC_API_KEY остались фиктивными — впишите свои, когда дойдёт до бота и ИИ."; \
+	fi
+	@# `packages/api-client/src/generated` не в git — он выводится из OpenAPI.
+	@# Без этого шага свежий клон встречает разработчика красными импортами в
+	@# редакторе и падающим `pnpm typecheck`, хотя код исправен.
+	$(MAKE) openapi
+	@echo
+	@echo "Дальше: make dev — postgres, redis и миграции. Затем make seed-demo."
+
+.PHONY: check-env
+check-env:
+	@if [ ! -f $(ENV_FILE) ]; then \
+		echo "Нет $(ENV_FILE) — окружение не настроено."; \
+		echo "Выполните: make setup"; \
+		exit 1; \
+	fi
+
+# Порты проверяются до `docker compose up`: иначе единственный признак конфликта —
+# «bind: address already in use» посреди лога компоуза, где не видно ни какой
+# порт нужен приложению, ни где его менять.
+#
+# Проба через bash /dev/tcp, а не lsof: lsof не показывает сокеты, открытые
+# другим пользователем, и занятый порт выглядел у него свободным.
+#
+# Свой уже поднятый контейнер занимать порт «не считается» — иначе повторный
+# `make dev` ругался бы на самого себя. Но признаком своего служит именно
+# опубликованный порт (`compose port`), а не факт запуска сервиса: имя
+# compose-проекта (`ketocare-dev`) общее для всех клонов репозитория, поэтому
+# второй клон видит контейнеры первого как свои. С проверкой «сервис запущен»
+# он пропускал занятый порт и молча пересоздавал чужое окружение.
+.PHONY: check-ports
+check-ports:
+	@free_port() { p=$$1; while (echo >/dev/tcp/127.0.0.1/$$p) 2>/dev/null; do p=$$((p+1)); done; echo $$p; }; \
+	busy=""; \
+	for spec in "postgres $(POSTGRES_PORT) DATABASE_URL 5432" "redis $(REDIS_PORT) REDIS_URL 6379"; do \
+		set -- $$spec; name=$$1; port=$$2; var=$$3; inner=$$4; \
+		published=$$($(COMPOSE) port $$name $$inner 2>/dev/null | sed 's,.*:,,'); \
+		if [ "$$published" = "$$port" ]; then continue; fi; \
+		if (echo >/dev/tcp/127.0.0.1/$$port) 2>/dev/null; then \
+			echo "Порт $$port занят — на нём не поднимется $$name."; \
+			echo "  Впишите свободный порт в $$var внутри $(ENV_FILE) — например $$(free_port $$((port+1)))."; \
+			busy=1; \
+		fi; \
+	done; \
+	if [ -n "$$busy" ]; then \
+		echo; \
+		echo "Порты контейнеров Makefile берёт из $(ENV_FILE) — там же их и менять."; \
+		exit 1; \
+	fi
+
 .PHONY: dev
-dev: ## Поднять окружение (postgres, redis) и применить миграции
+dev: check-env check-ports ## Поднять окружение (postgres, redis) и применить миграции
 	@echo "postgres :$(POSTGRES_PORT), redis :$(REDIS_PORT) — из $(ENV_FILE)"
 	$(COMPOSE) up -d
 	@echo "Ожидание готовности postgres..."
@@ -38,18 +125,18 @@ dev: ## Поднять окружение (postgres, redis) и применит�
 	@echo "Готово. API: uv run uvicorn api.main:app --reload --app-dir apps/api/src"
 
 .PHONY: api
-api: ## Запустить API локально (uvicorn с автоперезагрузкой)
+api: check-env ## Запустить API локально (uvicorn с автоперезагрузкой)
 	@# --no-proxy-headers обязателен: иначе uvicorn сам перепишет адрес клиента из
 	@# X-Forwarded-For (по умолчанию доверяя 127.0.0.1), и приложение увидит уже
 	@# подменённый адрес — ключ ограничения частоты и audit_log.ip станут
 	@# управляемыми клиентом. Доверенные прокси задаются через TRUSTED_PROXY_IPS.
-	uv run uvicorn api.main:app --reload --app-dir apps/api/src --no-proxy-headers --port $${API_PORT:-8001}
+	uv run uvicorn api.main:app --reload --app-dir apps/api/src --no-proxy-headers --port $(API_PORT)
 
 .PHONY: web
-web: ## Запустить веб-кабинет (Vite); /api проксируется на API_PROXY_TARGET
-	@# Порт берёт сам vite из WEB_PORT в `.env` (loadEnv). По умолчанию 5173;
-	@# если он занят другим проектом, добавьте в `.env` строку
-	@# WEB_PORT=<свободный порт> — и кабинет поднимется там же.
+web: check-env ## Запустить веб-кабинет (Vite); /api проксируется на API_PROXY_TARGET
+	@# Порт берёт сам vite из WEB_PORT в корневом `.env` (loadEnv + envDir).
+	@# По умолчанию 5173; если он занят другим проектом, поправьте в корневом
+	@# `.env` строку WEB_PORT — и кабинет поднимется там же.
 	pnpm --filter @ketocare/web run dev
 
 .PHONY: down
