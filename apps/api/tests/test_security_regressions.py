@@ -93,3 +93,55 @@ class TestUnhandledErrorEnvelope:
         error = response.json()["error"]
         assert error["code"] == "internal"
         assert "secret detail" not in response.text, "детали исключения наружу не отдаются"
+
+
+@pytest.mark.asyncio
+class TestHttpExceptionDetail:
+    """`HTTPException` с текстом от автора — раздел 5.1 ТЗ.
+
+    Обработчик брал из исключения только статус и подставлял канонический текст,
+    поэтому свой текст пропадал молча: клиент видел «Запись не найдена» вместо
+    «Рецепт не найден». При этом отдавать `detail` безоговорочно нельзя — когда
+    своего текста нет, Starlette кладёт туда английскую фразу статуса.
+    """
+
+    @staticmethod
+    async def _get(app, path: str):
+        from httpx import ASGITransport, AsyncClient
+
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            return await c.get(path)
+
+    async def test_custom_detail_reaches_client(self, client):
+        from fastapi import HTTPException
+
+        from api.main import create_app
+
+        app = create_app()
+
+        @app.get("/api/v1/_missing_recipe")
+        async def _missing_recipe() -> None:
+            raise HTTPException(status_code=404, detail="Рецепт не найден.")
+
+        response = await self._get(app, "/api/v1/_missing_recipe")
+
+        assert response.status_code == 404
+        error = response.json()["error"]
+        assert error["code"] == "not_found", "код берётся из статуса, а не из текста"
+        assert error["message"] == "Рецепт не найден."
+
+    async def test_default_english_phrase_is_replaced_by_russian(self, client):
+        """Ненайденный маршрут: Starlette сам кладёт в detail `Not Found`.
+
+        Эту фразу отдавать нельзя — сообщения раздела 5.1 на русском.
+        """
+        from api.main import create_app
+
+        response = await self._get(create_app(), "/api/v1/_no_such_route")
+
+        assert response.status_code == 404
+        error = response.json()["error"]
+        assert error["code"] == "not_found"
+        assert error["message"] == "Запись не найдена."
+        assert "Not Found" not in response.text
