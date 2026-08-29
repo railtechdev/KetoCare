@@ -132,6 +132,7 @@ export function MedicalProfileForm({
 
         <Field
           id={`${ids}-onset`}
+          width="narrow"
           type="number"
           inputMode="numeric"
           min={0}

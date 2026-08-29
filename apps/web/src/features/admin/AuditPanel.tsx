@@ -157,6 +157,7 @@ export function AuditPanel() {
 
         <SelectField
           id="audit-entity"
+          width="medium"
           label={t("audit.filters.entity")}
           value={filters.entity}
           onChange={(event) => patchFilters({ entity: event.target.value })}
@@ -171,6 +172,7 @@ export function AuditPanel() {
 
         <SelectField
           id="audit-action"
+          width="medium"
           label={t("audit.filters.action")}
           value={filters.action}
           onChange={(event) => patchFilters({ action: event.target.value })}
@@ -185,6 +187,7 @@ export function AuditPanel() {
 
         <Field
           id="audit-from"
+          width="date"
           type="date"
           label={t("audit.filters.from")}
           value={filters.from}
@@ -193,6 +196,7 @@ export function AuditPanel() {
 
         <Field
           id="audit-to"
+          width="date"
           type="date"
           label={t("audit.filters.to")}
           value={filters.to}

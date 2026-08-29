@@ -76,6 +76,7 @@ export function LoginPage() {
           >
             <Field
               id="email"
+              width="wide"
               type="email"
               // Менеджеры паролей узнают поле по autoComplete; вставка ничем
               // не ограничивается (правило П21 канона).
@@ -87,6 +88,7 @@ export function LoginPage() {
 
             <Field
               id="password"
+              width="medium"
               type="password"
               autoComplete="current-password"
               label={t("login.password")}

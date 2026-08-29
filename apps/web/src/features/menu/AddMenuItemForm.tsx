@@ -99,6 +99,7 @@ export function AddMenuItemForm({
 
       <Field
         id={factorId}
+        width="narrow"
         type="number"
         inputMode="decimal"
         min={0.01}

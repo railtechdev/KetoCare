@@ -31,9 +31,9 @@ export function DayNavigator({ date, onChange }: Props) {
 
       <Field
         id={inputId}
+        width="date"
         type="date"
         label={t("day.label")}
-        className="w-auto"
         value={date}
         onChange={(event) => {
           // Поле даты можно очистить или оставить неполной датой — тогда

@@ -115,6 +115,7 @@ export function MedicationForm({
         />
         <Field
           id={`${ids}-started`}
+          width="date"
           type="date"
           label={t("medications.fields.startedAt")}
           error={errors.startedAt && t("medications.errors.date")}
@@ -122,6 +123,7 @@ export function MedicationForm({
         />
         <Field
           id={`${ids}-stopped`}
+          width="date"
           type="date"
           optional
           label={t("medications.fields.stoppedAt")}

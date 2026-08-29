@@ -117,6 +117,7 @@ export function DictionaryEntryForm({
 
         <Field
           id={sortId}
+          width="narrow"
           type="number"
           step="1"
           // Порядок вывода — целое, поэтому клавиатура числовая, а не

@@ -46,6 +46,7 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
       <Field
         id={inputId}
         label={t("addProduct")}
+        width="wide"
         role="combobox"
         aria-expanded={isOpen}
         aria-controls={listId}

@@ -304,6 +304,7 @@ function SeizureForm({
       <div className={step === 1 ? "flex flex-col gap-block" : "hidden"}>
         <Field
           id="seizure-occurred-at"
+          width="medium"
           type="datetime-local"
           label={t("form.occurredAt")}
           error={errors.occurredAt && t("form.occurredAtInvalid")}
@@ -313,6 +314,7 @@ function SeizureForm({
         {typesAvailable && (
           <SelectField
             id="seizure-type"
+            width="medium"
             label={t("seizures.type")}
             error={errors.seizureTypeId && t("seizures.typeRequired")}
             {...register("seizureTypeId")}
@@ -328,6 +330,7 @@ function SeizureForm({
 
         <Field
           id="seizure-duration"
+          width="narrow"
           type="number"
           inputMode="decimal"
           min={0}
@@ -342,6 +345,7 @@ function SeizureForm({
       <div className={step === 2 ? "flex flex-col gap-block" : "hidden"}>
         <Field
           id="seizure-count"
+          width="tiny"
           type="number"
           inputMode="decimal"
           min={SEIZURE_COUNT_MIN}
@@ -416,6 +420,7 @@ function KetoneForm({
     >
       <Field
         id="ketone-occurred-at"
+        width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
         error={errors.occurredAt && t("form.occurredAtInvalid")}
@@ -423,6 +428,7 @@ function KetoneForm({
       />
       <Field
         id="ketone-value"
+        width="narrow"
         type="number"
         inputMode="decimal"
         min={KETONE_MIN_MMOL}
@@ -440,6 +446,7 @@ function KetoneForm({
       />
       <SelectField
         id="ketone-method"
+        width="medium"
         label={t("ketones.method")}
         {...register("method")}
       >
@@ -497,6 +504,7 @@ function WeightForm({
     >
       <Field
         id="weight-occurred-at"
+        width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
         error={errors.occurredAt && t("form.occurredAtInvalid")}
@@ -504,6 +512,7 @@ function WeightForm({
       />
       <Field
         id="weight-value"
+        width="narrow"
         type="number"
         inputMode="decimal"
         min={WEIGHT_MIN_KG}
@@ -518,6 +527,7 @@ function WeightForm({
       />
       <Field
         id="weight-height"
+        width="narrow"
         type="number"
         inputMode="decimal"
         min={1}
@@ -594,6 +604,7 @@ function MedicationForm({
     >
       <Field
         id="medication-occurred-at"
+        width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
         error={errors.occurredAt && t("form.occurredAtInvalid")}
@@ -601,6 +612,7 @@ function MedicationForm({
       />
       <SelectField
         id="medication-drug"
+        width="wide"
         label={t("medications.drug")}
         error={errors.medicationId && t("medications.drugRequired")}
         {...register("medicationId")}
@@ -673,6 +685,7 @@ function MealForm({
     >
       <Field
         id="meal-occurred-at"
+        width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
         error={errors.occurredAt && t("form.occurredAtInvalid")}
@@ -737,6 +750,7 @@ function SideEffectForm({
     >
       <Field
         id="side-effect-occurred-at"
+        width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
         error={errors.occurredAt && t("form.occurredAtInvalid")}
@@ -744,6 +758,7 @@ function SideEffectForm({
       />
       <Field
         id="side-effect-symptom"
+        width="wide"
         label={t("sideEffects.symptom")}
         placeholder={t("sideEffects.symptomPlaceholder")}
         error={errors.symptom && t("sideEffects.symptomRequired")}

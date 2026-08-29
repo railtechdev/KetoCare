@@ -66,6 +66,7 @@ export function PrescriptionForm({
       <div className="grid gap-block sm:grid-cols-2">
         <Field
           id={`${ids}-ratio`}
+          width="narrow"
           type="number"
           inputMode="decimal"
           min={RATIO_MIN}
@@ -78,6 +79,7 @@ export function PrescriptionForm({
 
         <Field
           id={`${ids}-kcal`}
+          width="narrow"
           type="number"
           inputMode="decimal"
           min={KCAL_MIN}
@@ -90,6 +92,7 @@ export function PrescriptionForm({
 
         <Field
           id={`${ids}-protein`}
+          width="narrow"
           type="number"
           inputMode="decimal"
           min={0}
@@ -101,6 +104,7 @@ export function PrescriptionForm({
 
         <Field
           id={`${ids}-carbs`}
+          width="narrow"
           type="number"
           inputMode="decimal"
           min={0}
@@ -112,6 +116,7 @@ export function PrescriptionForm({
 
         <Field
           id={`${ids}-meals`}
+          width="narrow"
           type="number"
           inputMode="numeric"
           min={1}
@@ -123,6 +128,7 @@ export function PrescriptionForm({
 
         <Field
           id={`${ids}-effective-from`}
+          width="date"
           type="date"
           label={t("fields.effectiveFrom")}
           error={errors.effectiveFrom && t("prescription.errors.effectiveFrom")}

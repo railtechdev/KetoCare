@@ -87,6 +87,7 @@ export function RecipeForm({
 
             <SelectField
               id={categoryId}
+              width="medium"
               label={t("form.category")}
               error={errors.category && t("form.errors.category")}
               {...register("category")}
@@ -116,6 +117,7 @@ export function RecipeForm({
           <div className="grid gap-block sm:grid-cols-2">
             <Field
               id={`${ids}-yield`}
+              width="narrow"
               type="number"
               inputMode="decimal"
               min={0}
@@ -126,6 +128,7 @@ export function RecipeForm({
             />
             <Field
               id={`${ids}-servings`}
+              width="narrow"
               type="number"
               inputMode="numeric"
               min={1}

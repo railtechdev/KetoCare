@@ -47,6 +47,7 @@ export function RecipeFiltersPanel({
         <div className="sm:col-span-2">
           <Field
             id={searchId}
+            width="wide"
             type="search"
             label={t("filters.search")}
             placeholder={t("filters.searchPlaceholder")}
@@ -57,6 +58,7 @@ export function RecipeFiltersPanel({
 
         <SelectField
           id={categoryId}
+          width="medium"
           label={t("filters.category")}
           value={filters.category}
           onChange={(event) =>
@@ -78,6 +80,7 @@ export function RecipeFiltersPanel({
         <div className="grid grid-cols-2 gap-block">
           <Field
             id={minId}
+            width="narrow"
             type="number"
             inputMode="decimal"
             min={0}
@@ -91,6 +94,7 @@ export function RecipeFiltersPanel({
           />
           <Field
             id={maxId}
+            width="narrow"
             type="number"
             inputMode="decimal"
             min={0}

@@ -109,6 +109,7 @@ export function AcceptInvitePage() {
         />
         <Field
           id="invite-phone"
+          width="medium"
           type="tel"
           autoComplete="tel"
           optional
@@ -117,6 +118,7 @@ export function AcceptInvitePage() {
         />
         <Field
           id="invite-password"
+          width="medium"
           type="password"
           // new-password: менеджер паролей предложит сгенерировать и вставить
           // пароль, вставка ничем не ограничивается (правило П21 канона).
@@ -131,6 +133,7 @@ export function AcceptInvitePage() {
         />
         <Field
           id="invite-password-repeat"
+          width="medium"
           type="password"
           autoComplete="new-password"
           label={t("accept.fields.passwordRepeat")}

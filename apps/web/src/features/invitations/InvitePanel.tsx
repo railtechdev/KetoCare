@@ -66,6 +66,7 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
       >
         <Field
           id={`${ids}-email`}
+          width="wide"
           type="email"
           autoComplete="off"
           label={t("fields.email")}
@@ -76,6 +77,7 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
         {roles.length > 1 ? (
           <SelectField
             id={`${ids}-role`}
+            width="medium"
             label={t("fields.role")}
             {...register("role")}
           >

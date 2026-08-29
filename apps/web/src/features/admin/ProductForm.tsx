@@ -172,6 +172,7 @@ export function ProductForm({
 
         <SelectField
           id={fieldId("categoryId")}
+          width="medium"
           label={t("products.form.category")}
           error={fieldError("categoryId")}
           {...register("categoryId")}
@@ -198,6 +199,7 @@ export function ProductForm({
             <Field
               key={nutrient}
               id={fieldId(nutrient)}
+              width="narrow"
               type="number"
               min={0}
               step="0.1"
@@ -234,6 +236,7 @@ export function ProductForm({
         />
         <Field
           id={fieldId("verifiedAt")}
+          width="date"
           type="date"
           label={t("products.form.verifiedAt")}
           error={fieldError("verifiedAt")}

@@ -218,6 +218,7 @@ function TargetsFields({
     <div className="grid gap-block sm:grid-cols-2">
       <Field
         id="ratio"
+        width="narrow"
         label={t("targets.ratio")}
         type="number"
         inputMode="decimal"
@@ -232,6 +233,7 @@ function TargetsFields({
       />
       <Field
         id="kcal"
+        width="narrow"
         label={t("targets.kcal")}
         type="number"
         inputMode="decimal"
@@ -246,6 +248,7 @@ function TargetsFields({
         <>
           <Field
             id="protein-min"
+            width="narrow"
             label={t("targets.proteinMin")}
             optional
             type="number"
@@ -264,6 +267,7 @@ function TargetsFields({
           />
           <Field
             id="carbs-max"
+            width="narrow"
             label={t("targets.carbsMax")}
             optional
             type="number"
@@ -298,6 +302,7 @@ function ScaleFields({
     <div className="grid gap-block sm:grid-cols-2">
       <Field
         id="factor"
+        width="narrow"
         label={t("factor")}
         hint={t("factorHint")}
         type="number"

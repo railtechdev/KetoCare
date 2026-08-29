@@ -97,6 +97,7 @@ export function UserAccountForm({
 
         <SelectField
           id={roleId}
+          width="medium"
           label={t("users.form.role")}
           error={roleError}
           {...register("role")}

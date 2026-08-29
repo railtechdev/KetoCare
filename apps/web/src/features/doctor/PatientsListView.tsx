@@ -172,6 +172,7 @@ export function PatientsListView({
       <div className="max-w-md">
         <Field
           id="patient-search"
+          width="wide"
           type="search"
           label={t("list.search.label")}
           placeholder={t("list.search.placeholder")}

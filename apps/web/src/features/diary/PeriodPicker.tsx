@@ -76,6 +76,7 @@ export function PeriodPicker({
               через aria-describedby, а сам текст стоит под парой. */}
           <Field
             id={fromId}
+            width="date"
             type="date"
             label={t("period.from")}
             value={from}
@@ -85,6 +86,7 @@ export function PeriodPicker({
           />
           <Field
             id={toId}
+            width="date"
             type="date"
             label={t("period.to")}
             value={to}

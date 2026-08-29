@@ -202,6 +202,7 @@ export function ProductsPanel() {
         <div className="min-w-56 flex-1 sm:max-w-md">
           <Field
             id="admin-product-search"
+            width="wide"
             type="search"
             label={t("products.filters.search")}
             placeholder={t("products.filters.searchPlaceholder")}
