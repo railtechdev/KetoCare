@@ -1,0 +1,32 @@
+name: verify_high_fiber_broccoli_spinach
+provisional: true
+operation: verify
+note: клетчатка из овощей
+input:
+  ingredients:
+  - product_id: broccoli
+    kcal: 34
+    fat: 0.4
+    protein: 2.8
+    carbs: 6.6
+    fiber: 2.6
+  - product_id: spinach
+    kcal: 23
+    fat: 0.4
+    protein: 2.9
+    carbs: 3.6
+    fiber: 2.2
+  items:
+  - product_id: broccoli
+    grams: 150.0
+  - product_id: spinach
+    grams: 100.0
+expected:
+  kcal: 91.4
+  fat_g: 1.0
+  protein_g: 7.1
+  carbs_g: 13.5
+  fiber_g: 6.1
+  ratio: 0.048544
+tolerance:
+  abs: 1.0e-06

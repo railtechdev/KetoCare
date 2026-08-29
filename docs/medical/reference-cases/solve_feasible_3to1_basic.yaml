@@ -1,0 +1,28 @@
+name: solve_feasible_3to1_basic
+provisional: true
+operation: solve
+input:
+  ingredients:
+  - product_id: heavy_cream_33
+    kcal: 337
+    fat: 33.0
+    protein: 2.5
+    carbs: 3.6
+    fiber: 0.0
+  - product_id: egg_whole
+    kcal: 155
+    fat: 10.6
+    protein: 12.6
+    carbs: 1.1
+    fiber: 0.0
+  - product_id: spinach
+    kcal: 23
+    fat: 0.4
+    protein: 2.9
+    carbs: 3.6
+    fiber: 2.2
+  targets:
+    ratio: 3.0
+    kcal: 500
+expected:
+  infeasible: false

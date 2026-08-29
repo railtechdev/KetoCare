@@ -1,0 +1,34 @@
+name: scale_tiny_factor_below_min_ingredient_gram
+provisional: true
+operation: scale
+note: фактор x0.1 -> итоговые массы (0.3г, 0.5г) ниже MIN_INGREDIENT_GRAMS=2г; scale()
+  не отбрасывает такие ингредиенты (это специфика post-processing в solve())
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: chicken_breast
+    kcal: 165
+    fat: 3.6
+    protein: 31.0
+    carbs: 0.0
+    fiber: 0.0
+  recipe_items:
+  - product_id: butter
+    grams: 3.0
+  - product_id: chicken_breast
+    grams: 5.0
+  factor: 0.1
+expected:
+  kcal: 2.9837
+  fat_g: 0.2613
+  protein_g: 0.1577
+  carbs_g: 0.0003
+  fiber_g: 0.0
+  ratio: 1.653797
+tolerance:
+  abs: 1.0e-06

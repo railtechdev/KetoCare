@@ -1,0 +1,40 @@
+name: verify_ratio_3to1_cream_egg_spinach
+provisional: true
+operation: verify
+note: R≈3:1 на сливках/яйце/шпинате
+input:
+  ingredients:
+  - product_id: heavy_cream_33
+    kcal: 337
+    fat: 33.0
+    protein: 2.5
+    carbs: 3.6
+    fiber: 0.0
+  - product_id: egg_whole
+    kcal: 155
+    fat: 10.6
+    protein: 12.6
+    carbs: 1.1
+    fiber: 0.0
+  - product_id: spinach
+    kcal: 23
+    fat: 0.4
+    protein: 2.9
+    carbs: 3.6
+    fiber: 2.2
+  items:
+  - product_id: heavy_cream_33
+    grams: 90.0
+  - product_id: egg_whole
+    grams: 40.0
+  - product_id: spinach
+    grams: 40.0
+expected:
+  kcal: 361.18
+  fat_g: 34.1
+  protein_g: 8.45
+  carbs_g: 5.12
+  fiber_g: 0.88
+  ratio: 2.512896
+tolerance:
+  abs: 1.0e-06

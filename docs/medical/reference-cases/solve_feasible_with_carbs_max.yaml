@@ -1,0 +1,29 @@
+name: solve_feasible_with_carbs_max
+provisional: true
+operation: solve
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: salmon
+    kcal: 208
+    fat: 13.4
+    protein: 20.4
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: avocado
+    kcal: 160
+    fat: 14.7
+    protein: 2.0
+    carbs: 8.5
+    fiber: 6.7
+  targets:
+    ratio: 3.0
+    kcal: 450
+    carbs_max_g: 8
+expected:
+  infeasible: false

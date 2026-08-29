@@ -15,7 +15,7 @@
 
 ## Статус
 
-Стадия разработки — этап 1 «Фундамент». Репозиторий пока содержит только документацию; каркас монорепозитория, `Makefile` и CI создаются первой задачей.
+Стадия разработки — этап 1 «Фундамент» (раздел 15 ТЗ). Готово: каркас монорепозитория, расчётное ядро `keto_engine` с эталонными тестами, схема БД и миграции, репозитории, аутентификация с 2FA и RBAC, ручки `/auth`, `/patients`, `/prescriptions`, `/products`, `/calc`, генерация `api-client` из OpenAPI, CI. В работе: CSV-импорт продуктов, приглашения. Веб-кабинеты, Telegram и AI — этапы 2–4.
 
 ## Документация
 
@@ -42,15 +42,36 @@ infra/     docker-compose, nginx, скрипты бэкапа и деплоя
 
 ## Разработка
 
-Все команды — через `Makefile` в корне:
+Требуются Python 3.12+ с [uv](https://docs.astral.sh/uv/), Node 20+ с pnpm и Docker.
 
 ```bash
-make dev          # поднять окружение локально (postgres, redis, hot-reload)
-make test         # все тесты
-make test-engine  # эталонные тесты расчётного ядра
-make lint         # линтеры и проверка типов
-make migrate      # применить миграции
+cp .env.example .env      # заполните SECRET_KEY: python -c "import secrets; print(secrets.token_urlsafe(48))"
+uv sync --all-packages
+pnpm install
+
+make dev                  # postgres + redis в docker, затем миграции
+make test                 # все тесты
+make lint                 # ruff + mypy + prettier + tsc
 ```
+
+Все команды — через `Makefile` (`make help` — полный список):
+
+| Команда | Назначение |
+|---|---|
+| `make dev` | Поднять окружение и применить миграции |
+| `make test` | Все тесты (pytest + vitest) |
+| `make test-engine` | Только эталонные тесты расчётного ядра |
+| `make coverage-engine` | Покрытие `keto_engine` (по ТЗ требуется 100%) |
+| `make lint` / `make fix` | Проверка / автоисправление стиля и типов |
+| `make migrate` | `alembic upgrade head` |
+| `make makemigration m="..."` | Создать миграцию по изменениям моделей |
+| `make openapi` | Выгрузить `openapi.json` и перегенерировать `packages/api-client` |
+
+Запуск API: `make api` (Swagger — `/api/v1/docs`). За обратным прокси заполните
+`TRUSTED_PROXY_IPS` — см. [`infra/nginx/README.md`](infra/nginx/README.md).
+
+Если порты 5432/6379 заняты другими проектами, переопределите их:
+`POSTGRES_PORT=5434 REDIS_PORT=6381 make dev` (и укажите те же порты в `.env`).
 
 Требования к завершённой задаче — раздел 14 ТЗ (Definition of Done).
 

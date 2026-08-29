@@ -1,0 +1,205 @@
+/* Дизайн-система KetoCare: Tailwind 4 + shadcn/ui.
+ *
+ * Словарь токенов — как у shadcn/ui (background, foreground, primary, muted,
+ * destructive и т. д.), а не свой. Это не косметика: пока имена были свои,
+ * класс `bg-accent` у нас означал фирменный цвет, а у кита — подсветку при
+ * наведении, и компоненты кита красились не тем. Один словарь на всех убирает
+ * этот класс расхождений целиком.
+ *
+ * Сверх словаря кита оставлены только те роли, которых в нём нет: warning,
+ * success и минимальная тач-цель. Их нужно держать самим.
+ *
+ * Палитра взята с референса заказчика (сине-синевато-серая), но значения
+ * подобраны под требование контраста >= 4.5:1 раздела 8.2 ТЗ: у референса
+ * акцентный синий светлее и с белым текстом даёт около 4:1. Проверяет
+ * contrast.test.ts, читая значения прямо отсюда.
+ *
+ * Mini App перекрашивает интерфейс, подставляя themeParams Telegram в эти же
+ * переменные (раздел 9 ТЗ), поэтому компоненты обязаны пользоваться утилитами
+ * темы, а не литеральными цветами.
+ */
+
+@import "tailwindcss";
+
+/* Классы дизайн-системы живут в другом пакете — Tailwind не сканирует его
+   автоматически из приложения, поэтому источник указывается явно. */
+@source "../../src";
+
+/* Тёмная тема включается атрибутом на <html>, а не только системной настройкой:
+   Mini App выбирает её по themeParams Telegram, а не по настройкам ОС. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  /* --- основа --- */
+  --color-background: #f4f6fa;
+  --color-foreground: #16213e;
+  --color-card: #ffffff;
+  --color-card-foreground: #16213e;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #16213e;
+
+  /* --- фирменный цвет --- */
+  --color-primary: #2c5fe0;
+  --color-primary-foreground: #ffffff;
+
+  /* Вторичное и приглушённое — подложки, а не текст. Текст на них —
+     *-foreground. Путаница между «приглушённой подложкой» и «приглушённым
+     текстом» и была источником нечитаемых надписей. */
+  --color-secondary: #eef2fb;
+  --color-secondary-foreground: #16213e;
+  --color-muted: #eef1f7;
+  --color-muted-foreground: #576578;
+  --color-accent: #e8eefb;
+  --color-accent-foreground: #16213e;
+
+  /* --- состояния --- */
+  --color-destructive: #c0392b;
+  --color-destructive-foreground: #ffffff;
+  /* В ките нет предупреждения и успеха — эти две роли наши. */
+  --color-warning: #f5a623;
+  --color-on-warning: #16213e;
+  --color-success: #1e7f5c;
+  --color-on-success: #ffffff;
+
+  /* --- границы и фокус --- */
+  --color-border: #e3e8f1;
+  --color-input: #d8dfea;
+  --color-ring: #2c5fe0;
+
+  /* --- боковая навигация --- */
+  --color-sidebar: #ffffff;
+  --color-sidebar-foreground: #16213e;
+  --color-sidebar-primary: #2c5fe0;
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-accent: #e8eefb;
+  --color-sidebar-accent-foreground: #2c5fe0;
+  --color-sidebar-border: #e3e8f1;
+  --color-sidebar-ring: #2c5fe0;
+
+  /* --- графики ---
+     Порядок фиксирован: ряд с тем же смыслом должен сохранять цвет между
+     экранами, иначе один и тот же показатель выглядит разным. */
+  --color-chart-1: #4b7bf7;
+  --color-chart-2: #8b7fe8;
+  --color-chart-3: #f5a623;
+  --color-chart-4: #35b9a0;
+  --color-chart-5: #f2748a;
+
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* --- шкала типографики ---
+     Размеры выбираются из шкалы, а не на глаз в каждом файле: заголовок
+     страницы был 24 px на главной, 20 на калькуляторе и 18 внутри вкладок
+     админки — при том что это один и тот же уровень. */
+  --text-page-title: 1.5rem; /* заголовок экрана */
+  --text-page-title--line-height: 2rem;
+  --text-section-title: 1.125rem; /* заголовок блока внутри экрана */
+  --text-section-title--line-height: 1.75rem;
+  --text-card-title: 1rem; /* заголовок карточки */
+  --text-card-title--line-height: 1.5rem;
+
+  /* --- вертикальный ритм ---
+     Три значения на всё приложение: между блоками экрана, между полями формы,
+     внутри группы. Раньше отступы задавались тремя несогласованными системами. */
+  --spacing-screen: 1.5rem;
+  --spacing-block: 1rem;
+  --spacing-field: 0.5rem;
+
+  /* Максимальная ширина текстового содержимого: длинная строка на широком
+     мониторе читается плохо, а ограничение стояло у 4 экранов из тридцати. */
+  --container-content: 72rem;
+  --container-form: 42rem;
+
+  /* Минимальная тач-цель интерфейса родителя (раздел 8.2 ТЗ) */
+  --spacing-touch: 44px;
+
+  /* Мягкие тени референса */
+  --shadow-kc-sm: 0 1px 2px rgb(22 33 62 / 6%);
+  --shadow-kc: 0 4px 16px rgb(22 33 62 / 8%);
+}
+
+/* Тёмная тема обязательна для Mini App (раздел 9 ТЗ). */
+[data-theme="dark"] {
+  --color-background: #0f172a;
+  --color-foreground: #e8edf7;
+  --color-card: #1b2537;
+  --color-card-foreground: #e8edf7;
+  --color-popover: #1b2537;
+  --color-popover-foreground: #e8edf7;
+
+  /* На осветлённом фирменном цвете читается тёмный текст, а не белый */
+  --color-primary: #7fa6ff;
+  --color-primary-foreground: #0f172a;
+
+  --color-secondary: #24304a;
+  --color-secondary-foreground: #e8edf7;
+  --color-muted: #222e45;
+  --color-muted-foreground: #9aa8bf;
+  --color-accent: #24304a;
+  --color-accent-foreground: #e8edf7;
+
+  --color-destructive: #f09189;
+  --color-destructive-foreground: #0f172a;
+  --color-warning: #e8b45c;
+  --color-on-warning: #0f172a;
+  --color-success: #6fcfa3;
+  --color-on-success: #0f172a;
+
+  --color-border: #2c3a55;
+  --color-input: #364566;
+  --color-ring: #7fa6ff;
+
+  --color-sidebar: #1b2537;
+  --color-sidebar-foreground: #e8edf7;
+  --color-sidebar-primary: #7fa6ff;
+  --color-sidebar-primary-foreground: #0f172a;
+  --color-sidebar-accent: #24304a;
+  --color-sidebar-accent-foreground: #7fa6ff;
+  --color-sidebar-border: #2c3a55;
+  --color-sidebar-ring: #7fa6ff;
+}
+
+/* Несколько компонентов кита обращаются к переменным напрямую, минуя утилиты
+   (var(--border) в кольце фокуса, var(--radius) в скруглениях). Здесь они
+   объявляются псевдонимами тех же значений — второго источника правды не
+   заводим. */
+:root {
+  --radius: 0.75rem;
+  --border: var(--color-border);
+  --popover: var(--color-popover);
+  --popover-foreground: var(--color-popover-foreground);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  /* Видимый фокус обязателен (доступность, раздел 8.2 ТЗ) */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  /* Тач-цель не меньше 44 px там, где ввод пальцем (раздел 8.2 ТЗ, WCAG 2.5.8).
+   *
+   * Правило базовое, а не по классу на каждой кнопке: кит по умолчанию даёт
+   * 36 px, и переход на него молча уменьшил все кнопки приложения — заметить
+   * это можно было только замером. Ставить `min-h-touch` руками на каждую
+   * кнопку значит гарантированно однажды забыть.
+   *
+   * Только для сенсорного ввода: на мыши 44 px разрежают плотные таблицы
+   * админки, где точность указателя этого не требует. */
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    a[href],
+    summary,
+    select,
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]) {
+      min-height: var(--spacing-touch);
+    }
+  }
+}

@@ -1,0 +1,18 @@
+[project]
+name = "ketocare-bot"
+version = "0.1.0"
+description = "Telegram-бот KetoCare (aiogram 3). Реализация FSM-сценариев — этап 3 ТЗ."
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.15",
+    "httpx>=0.27",
+    "structlog>=24.4",
+    "pydantic-settings>=2.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bot"]

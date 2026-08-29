@@ -1,0 +1,32 @@
+name: verify_zero_carbs_butter_chicken
+provisional: true
+operation: verify
+note: нулевые углеводы у обоих продуктов
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: chicken_breast
+    kcal: 165
+    fat: 3.6
+    protein: 31.0
+    carbs: 0.0
+    fiber: 0.0
+  items:
+  - product_id: butter
+    grams: 45.0
+  - product_id: chicken_breast
+    grams: 60.0
+expected:
+  kcal: 424.095
+  fat_g: 38.655
+  protein_g: 19.005
+  carbs_g: 0.045
+  fiber_g: 0.0
+  ratio: 2.029134
+tolerance:
+  abs: 1.0e-06

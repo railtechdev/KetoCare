@@ -1,0 +1,20 @@
+[project]
+name = "keto-engine"
+version = "0.3.0"
+description = "Изолированное расчётное ядро KetoCare: проверка, подбор и пересчёт блюд по кетогенному соотношению"
+requires-python = ">=3.12"
+dependencies = [
+    "scipy>=1.14",
+]
+
+[dependency-groups]
+test = [
+    "pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/keto_engine"]

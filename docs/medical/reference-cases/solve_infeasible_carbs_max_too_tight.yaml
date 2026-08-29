@@ -1,0 +1,25 @@
+name: solve_infeasible_carbs_max_too_tight
+provisional: true
+operation: solve
+note: лимит углеводов слишком жёсткий для набора продуктов
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: rice_cooked
+    kcal: 130
+    fat: 0.3
+    protein: 2.7
+    carbs: 28.0
+    fiber: 0.4
+  targets:
+    ratio: 4.0
+    kcal: 500
+    carbs_max_g: 2
+expected:
+  infeasible: true
+  reason_contains: углеводов

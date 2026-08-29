@@ -1,0 +1,30 @@
+name: solve_feasible_net_carbs_true_with_fiber
+provisional: true
+operation: solve
+note: net_carbs=True снижает вклад клетчатки авокадо в расчёт соотношения
+input:
+  ingredients:
+  - product_id: butter
+    kcal: 717
+    fat: 81.1
+    protein: 0.9
+    carbs: 0.1
+    fiber: 0.0
+  - product_id: chicken_breast
+    kcal: 165
+    fat: 3.6
+    protein: 31.0
+    carbs: 0.0
+    fiber: 0.0
+  - product_id: avocado
+    kcal: 160
+    fat: 14.7
+    protein: 2.0
+    carbs: 8.5
+    fiber: 6.7
+  targets:
+    ratio: 4.0
+    kcal: 500
+    net_carbs: true
+expected:
+  infeasible: false

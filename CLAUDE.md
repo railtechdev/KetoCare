@@ -10,25 +10,50 @@ KetoCare — платформа сопровождения кетогенной 
 
 ## Текущее состояние
 
-Репозиторий содержит **только документацию** — кода, Makefile, монорепо-каркаса ещё нет. Первая задача по ТЗ (раздел 15, этап 1.1) — каркас монорепо, Makefile, `docker-compose.dev`, CI-скелет. Всё описанное ниже — целевое состояние из ТЗ, а не то, что уже существует; перед использованием команды проверяй, что она уже реализована.
+**Этап 1 «Фундамент» (раздел 15 ТЗ) завершён.** Реализовано и покрыто тестами:
+
+- `packages/keto_engine` — verify/solve/scale, 35 provisional-эталонов, property-тесты, покрытие 100%.
+- `packages/core` — все 31 таблица раздела 4.2, Alembic-миграции с сидом справочников, репозитории (`access`, `prescriptions`, `products`, `patients`, `users`, `audit`).
+- `apps/api` — JWT + TOTP, RBAC-зависимости, приглашения, `/auth`, `/patients`, `/prescriptions`, `/products` (включая CSV-импорт), `/calc`. 17 ручек.
+- `packages/api-client` — генерируется из OpenAPI (`make openapi`).
+- `Makefile`, `infra/docker-compose.dev.yml`, `.github/workflows/ci.yml`.
+
+Идёт **этап 2 «Веб-кабинеты»**:
+
+- `packages/ui` — **shadcn/ui** (25 компонентов в `src/components/ui`, ставятся и обновляются командой `shadcn add`) + предметные компоненты: `RatioBadge`, `MacroBar`, `TrendChart`, `DiaryEntryCard`, `DataTable`, а также общие состояния — `AsyncSection`, `EmptyState`, `ErrorState`, `ConfirmDialog`, `FormFooter`.
+- `apps/web` — React 19, Tailwind 4, TanStack Router/Query/Table, react-hook-form + zod, i18n, тёмная тема, сессия (access-токен в памяти, refresh в httpOnly cookie), вход с 2FA.
+- Экраны раздела 8.3: калькулятор, продукты, главная родителя, меню, дневники (6 видов), рецепты, кабинет врача, админка. Плюс сверх ТЗ: свой профиль, настройки с профилями детей, приглашения, витрина `/dev/ui`.
+- `apps/api` — `/logs`, `/menus`, `/overview`, `/recipes`, `/custom-dishes`, `/clinical`, `/admin`, `/dictionaries`, `/users` (свой профиль, смена пароля, справочник персонала), ведение пациента специалистом.
+
+Тестов: 534 pytest + 63 vitest (`packages/ui`) + ~175 vitest (`apps/web`).
+`make seed-demo` наполняет локальную БД демо-данными (три роли, продукты, две недели дневника).
+
+**Следующее по разделу 15** — п. 14: `/reports` и задача воркера `render_report` (PDF + CSV). Затем этап 3 (Telegram) и этап 4 (AI). `apps/bot` и `apps/worker` — только каркас, без логики: не наполнять их «заодно» (правило 9 ниже).
+
+**Открытые темы, вынесенные решениями:** вложенные маршруты второго уровня (`/app/patients/$id` и т. п.), сводка ошибок формы (правило П8 канона), подсистема файлов и фото ([ADR-0004](docs/adr/0004-files-and-attachments.md)), клинические разрывы ([AUDIT_CLINICAL_COVERAGE.md](docs/AUDIT_CLINICAL_COVERAGE.md)).
 
 ## Команды
 
 Единая точка входа — Makefile в корне. Использовать именно эти команды, а не вызывать инструменты напрямую:
 
 ```
-make dev          # docker compose dev: postgres, redis + hot-reload процессы
+make dev          # docker compose dev: postgres, redis, затем миграции
 make test         # pytest + vitest
 make test-engine  # только эталонные тесты keto_engine (обязательный отдельный job в CI)
-make lint         # ruff check + ruff format --check + mypy + eslint + prettier --check + tsc --noEmit
+make coverage-engine  # покрытие keto_engine с порогом 100%
+make lint         # ruff check + ruff format --check + mypy + prettier --check + eslint + tsc --noEmit
 make fix          # автоисправление форматирования
 make migrate      # alembic upgrade head
 make makemigration m="описание"   # alembic revision --autogenerate
 make openapi      # выгрузка openapi.json + регенерация packages/api-client
-make e2e          # playwright (требует запущенный make dev)
+make e2e          # playwright — появляется на этапе 5 ТЗ, сейчас заглушка
 ```
 
 Один эталонный кейс движка: `uv run pytest packages/keto_engine -k <имя_кейса>`; один тест API: `uv run pytest apps/api -k <имя>`; один vitest: `pnpm --filter <workspace> test -t "<имя>"`.
+
+Интеграционные тесты (`packages/core/tests`, `apps/api/tests`) требуют поднятый postgres: сначала `make dev`. Каждый тест идёт во внешней транзакции с откатом, поэтому БД между тестами чистая. Если порты заняты — `POSTGRES_PORT=5434 REDIS_PORT=6381 make dev` и те же порты в `.env`.
+
+Локальный запуск API: `make api` (именно так — цель передаёт `--no-proxy-headers`, иначе uvicorn подменит адрес клиента из `X-Forwarded-For` и ключ лимита с `audit_log.ip` станут управляемыми клиентом; см. `infra/nginx/README.md`). Swagger — `/api/v1/docs`.
 
 Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `packages/keto_engine`, `packages/core`). JS-часть — **pnpm workspaces** (`apps/web`, `apps/miniapp`, `packages/ui`, `packages/api-client`).
 
@@ -60,6 +85,37 @@ Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `
 8. **Язык.** UI-тексты — русский, но всегда через i18n (`apps/web/src/locales/ru/*.json`); захардкоженная строка в JSX — ошибка ревью. Код, идентификаторы, коммиты — английский.
 9. **Не выходить за рамки этапа.** Порядок реализации — раздел 15 ТЗ, этапы строго последовательны; функции будущих этапов «заодно» не делаются. Список того, что не реализуется вовсе, — раздел 16.
 
+## Защитные хуки
+
+`.claude/hooks/` блокируют правки, которые нарушают правила выше, — и через
+Edit/Write, и через shell. Правила и причины — в `guard_command.py` (единый
+источник для обоих режимов), тесты — `.claude/hooks/tests/`, гоняются вместе со
+всеми (`make test`).
+
+Заблокировано:
+
+| Путь | Почему |
+|---|---|
+| `docs/medical/*` | спецификации и эталоны меняет медицинская команда (правило 1, 2) |
+| `*/migrations/versions/*.py`, уже в git | закоммиченная миграция не правится (правило 3) |
+| `.env` и `.env.*` | секреты редактирует человек (правило 7) |
+| `.claude/hooks/`, `.claude/settings.json` | защита, которую агент отключает сам, — не защита |
+
+Разрешено всегда: `docs/medical/OPEN_QUESTIONS.md` (туда пишутся вопросы медкоманде)
+и `.env.example` (объявление переменных).
+
+Проверка Bash идёт по принципу **«запрещено, пока не доказано чтение»**: `python3 -c`,
+`node -e`, `perl -pi`, `cd` в защищённый каталог считаются пишущими. Чтение
+(`cat`, `grep`, `ls`, `head`, `find`, `git log/diff/show`) проходит свободно.
+Хук защищает от неосторожности, а не от намеренного обхода.
+
+`engine-guard.sh` (PostToolUse) после каждой правки `packages/keto_engine/src`
+прогоняет тесты ядра и требует поднять `ENGINE_VERSION` — правило 2 проверяется
+сразу, а не в CI через десяток правок.
+
+Хуки читаются при старте сессии: изменения в `.claude/settings.json` вступают в
+силу только в новой сессии.
+
 ## Конвенции
 
 - **Python:** ruff (линт + формат), mypy strict в `keto_engine` и `core`, обычный — в apps. Импорты абсолютные. Async везде, где есть I/O.
@@ -68,6 +124,59 @@ Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `
 - **ADR:** любое отступление от ТЗ фиксируется в `docs/adr/NNN-название.md` (контекст → решение → последствия) и упоминается в PR.
 - **Ошибки API:** `{"error": {"code", "message" (ru), "details"}}`; коды `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `infeasible_calculation`, `rate_limited`, `internal`. Пагинация — `?limit=&offset=`, ответ `{"items": [...], "total": n}`.
 - **Секреты** — только в `.env` (в `.gitignore`), с фиктивным зеркалом в `.env.example` (полный список переменных — раздел 12 ТЗ).
+
+### UI-канон и дизайн-система
+
+Правила интерфейса — в **[`docs/UI_GUIDE.md`](docs/UI_GUIDE.md)** (22 правила: навигация, шаблон
+страницы, формы, состояния empty/loading/error/success, таблицы, мобильность, доступность).
+Раздел 8 ТЗ задаёт состав экранов, канон — как они устроены. Любой новый или правленый экран
+проверяется по чек-листу в конце канона; отступление обсуждается в PR, а не делается молча.
+Расположение кнопок, пометка полей, поведение при отправке формы берутся оттуда — не изобретать.
+
+- **Кит — shadcn/ui.** Компоненты в `packages/ui/src/components/ui` копирует и обновляет
+  `shadcn add <имя> --overwrite`. **Править их руками нельзя** — правка не переживёт обновления.
+  Единственное отступление (`sonner.tsx`: источник темы вместо next-themes) описано в
+  [ADR-0005](docs/adr/0005-ui-kit-and-react-19.md) и проверяется при каждом обновлении.
+- **Импорт — только через `@ketocare/ui`.** У пакета один публичный вход; внутренняя раскладка
+  меняется вместе с китом.
+- **Словарь токенов — как у кита**: `background`, `card`, `foreground`, `primary`,
+  `muted-foreground`, `border`, `destructive`; сверх него наши `warning`, `success` и
+  `--spacing-touch`. Значения — только в `packages/ui/src/styles/tokens.css`.
+  Ссылки на выбывшие имена ловит `tokens.test.ts`, контраст — `contrast.test.ts`.
+- **Шкалы, а не глазомер**: `text-page-title` / `text-section-title` / `text-card-title`,
+  `gap-screen` / `gap-block` / `gap-field`, `max-w-content` / `max-w-form`.
+- **Витрина** `/dev/ui` (только dev-сборка) — все общие компоненты рядом. Расхождения видно
+  только так: именно на ней замечены две высоты кнопок и пропавшая полоса у баннера опасности.
+
+### Общие места `apps/web` — не заводить копий
+
+Экраны писались параллельно, и каждая копия тут уже однажды разошлась с оригиналом.
+Прежде чем добавить своё, посмотрите:
+
+- `components/PageLayout.tsx` — шаблон экрана: заголовок, пояснение, действия, возврат, ширина.
+- `components/Field.tsx` — `Field` / `SelectField` / `TextAreaField` и `FIELD_CONTROL`.
+  Важна не разметка (она у кита), а связь подписи, пояснения и ошибки.
+- `components/SectionLink.tsx` — ссылка на раздел; переносит выбранного ребёнка в адресе.
+  Голый `Link` на раздел запрещён, это проверяется тестом.
+- `@ketocare/ui` → `AsyncSection` — **четыре состояния блока данных.** Рукописная цепочка
+  `isError ? … : isLoading ? … : данные` запрещена: она прячет уже загруженные данные за
+  сообщением об ошибке. Десять экранов повторили эту ошибку независимо друг от друга.
+- `@ketocare/ui` → `ConfirmDialog` — единственное подтверждение удаления; заголовок обязан
+  называть объект.
+- `features/patients/overview.ts` — единственный запрос `/patients/{id}/overview`.
+- `features/patients/dayVerdict.ts` — **что интерфейс говорит о соответствии дня назначению.**
+  Соотношение — предупреждение, калорийность — набор (вопрос 9 в `docs/medical/OPEN_QUESTIONS.md`).
+- `features/patients/useSelectedPatient.ts` + `PatientGate.tsx` — определение ребёнка; экраны
+  получают `patientId` пропом и о способе выбора не знают.
+- `routes/sections.tsx` — раздел → экран и раздел → значок; новый раздел без экрана роняет тест.
+- `lib/i18n.ts` — список пространств имён выводится из словарей.
+- `lib/theme.ts` — тема оформления (светлая / тёмная / системная).
+
+## Инструментарий агента (`.claude/`)
+
+- **Хуки** (`.claude/settings.json` + `.claude/hooks/`): `protect-paths.sh` и `protect-bash.sh` блокируют правки `docs/medical/*` (кроме `OPEN_QUESTIONS.md`), уже закоммиченных миграций в `packages/core/migrations/versions/` и `.env` — и через Edit/Write, и через shell. Список защищённых путей — в `lib-protected.sh`, дублировать его в других скриптах не нужно. `autoformat.sh` прогоняет ruff/prettier по изменённому файлу (рукописный markdown в `docs/` не трогает).
+- **Скиллы** (`.claude/skills/`): `keto-engine`, `reference-cases`, `db-migrations`, `api-endpoint`, `frontend-feature`, `bot-scenario`, `ai-worker` — процедуры и инварианты по каждой зоне. Подхватываются автоматически по описанию; при расхождении скилла с кодом источник правды — код и ТЗ, скилл правится.
+- **Сабагент** `safety-reviewer` — чек-лист клинических и security-инвариантов по дифу; запускать перед закрытием задачи, особенно при изменениях в доступах, `keto_engine`, AI-вызовах и схеме БД.
 
 ## Definition of Done
 

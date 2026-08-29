@@ -1,0 +1,320 @@
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  ErrorState,
+  MacroBar,
+  RatioBadge,
+  Skeleton,
+  toast,
+} from "@ketocare/ui";
+import { Pencil, Trash2, Upload } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
+import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
+import { errorMessageOf } from "../../lib/api";
+import { formatGrams } from "./format";
+import { RecipePhoto } from "./RecipePhoto";
+import {
+  useDeleteRecipeMutation,
+  usePublishRecipeMutation,
+} from "./useRecipeMutations";
+import { useProductNames, useRecipe } from "./useRecipes";
+
+interface Props {
+  recipeId: string;
+  /** Правка доступна admin/dietitian; это UX, доступ проверяет сервер */
+  canEdit: boolean;
+  onBack: () => void;
+  onEdit: (recipeId: string) => void;
+}
+
+/** Карточка рецепта: состав, приготовление и показатели, посчитанные ядром. */
+export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
+  const { t } = useTranslation("recipes");
+
+  const recipe = useRecipe(recipeId);
+  const productNames = useProductNames(
+    recipe.data?.ingredients.map((ingredient) => ingredient.product_id) ?? [],
+  );
+
+  const publish = usePublishRecipeMutation();
+  const remove = useDeleteRecipeMutation();
+
+  const data = recipe.data;
+
+  // Ошибка занимает весь экран только тогда, когда показывать нечего. Если
+  // рецепт уже загружен, неудачное обновление не прячет его: React Query
+  // держит прежний ответ, и подменять состав красным блоком значит стирать с
+  // экрана данные, по которым сейчас готовят (то же правило — в AsyncSection).
+  if (data === undefined) {
+    return (
+      <PageLayout
+        title={t("detail.titleFallback")}
+        onBack={onBack}
+        backLabel={t("detail.back")}
+      >
+        {recipe.isError ? (
+          <ErrorState
+            title={t("detail.errorTitle")}
+            description={
+              errorMessageOf(recipe.error) ?? t("common:errors.unexpected")
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void recipe.refetch()}
+          />
+        ) : (
+          <>
+            <p role="status" className="sr-only">
+              {t("detail.loading")}
+            </p>
+            <Skeleton className="h-56 w-full max-w-xl rounded-xl" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </>
+        )}
+      </PageLayout>
+    );
+  }
+
+  const computed = data.computed;
+
+  return (
+    <PageLayout
+      title={data.title}
+      onBack={onBack}
+      backLabel={t("detail.back")}
+      intro={
+        <span className="flex flex-wrap items-center gap-field">
+          <span>{t(`categories.${data.category}`)}</span>
+          {canEdit && (
+            <Badge variant="outline">{t(`status.${data.status}`)}</Badge>
+          )}
+        </span>
+      }
+      actions={
+        canEdit && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch"
+              onClick={() => onEdit(data.id)}
+            >
+              <Pencil aria-hidden="true" />
+              {t("actions.edit")}
+            </Button>
+
+            {data.status !== "published" && (
+              <Button
+                type="button"
+                className="min-h-touch"
+                disabled={publish.isPending}
+                onClick={() =>
+                  publish.mutate(data.id, {
+                    onSuccess: () => toast.success(t("actions.publishSuccess")),
+                  })
+                }
+              >
+                <Upload aria-hidden="true" />
+                {publish.isPending
+                  ? t("actions.publishing")
+                  : t("actions.publish")}
+              </Button>
+            )}
+
+            {/* Заголовок диалога называет рецепт: подтверждается исчезновение
+                конкретного блюда, а не абстрактное «вы уверены?». */}
+            <ConfirmDialog
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch"
+                  disabled={remove.isPending}
+                >
+                  <Trash2 aria-hidden="true" />
+                  {remove.isPending
+                    ? t("actions.deleting")
+                    : t("actions.delete")}
+                </Button>
+              }
+              title={t("actions.confirmDelete.title", { title: data.title })}
+              description={t("actions.confirmDelete.body")}
+              confirmLabel={t("actions.confirmDelete.confirm")}
+              cancelLabel={t("actions.cancel")}
+              onConfirm={() =>
+                remove.mutate(data.id, {
+                  onSuccess: () => {
+                    toast.success(t("actions.deleteSuccess"));
+                    onBack();
+                  },
+                })
+              }
+            />
+          </>
+        )
+      }
+    >
+      {/* Обновление рецепта не удалось, но сам рецепт на экране остаётся:
+          сообщение идёт над ним и предлагает повторить. */}
+      {recipe.isError && (
+        <ErrorState
+          title={t("detail.errorTitle")}
+          description={
+            errorMessageOf(recipe.error) ?? t("common:errors.unexpected")
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void recipe.refetch()}
+        />
+      )}
+
+      {publish.isError && (
+        <FormError>
+          {errorMessageOf(publish.error) ?? t("common:errors.unexpected")}
+        </FormError>
+      )}
+
+      {remove.isError && (
+        <FormError>
+          {errorMessageOf(remove.error) ?? t("common:errors.unexpected")}
+        </FormError>
+      )}
+
+      <RecipePhoto
+        src={data.photo_path}
+        className="h-56 w-full max-w-xl rounded-xl"
+      />
+
+      <section aria-label={t("detail.nutrition")}>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="m-0 text-section-title font-semibold">
+                {t("detail.nutrition")}
+              </h2>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="flex flex-col gap-block">
+            {computed === null ? (
+              <p className="m-0 text-muted-foreground">
+                {t("detail.noComputed")}
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-block">
+                  {/* Без вердикта о допуске: соотношение рецепта — характеристика
+                      блюда, а не соответствие назначению конкретного ребёнка. */}
+                  <RatioBadge ratio={computed.ratio} />
+                  <span className="tabular-nums">
+                    {t("detail.kcal", { value: computed.kcal.toFixed(0) })}
+                  </span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {t("detail.fiber", { value: formatGrams(computed.fiber) })}
+                  </span>
+                </div>
+
+                <MacroBar
+                  fatG={computed.fat}
+                  proteinG={computed.protein}
+                  carbsG={computed.carbs}
+                />
+              </>
+            )}
+
+            <p className="m-0 flex flex-wrap gap-block text-sm text-muted-foreground tabular-nums">
+              <span>
+                {t("detail.yield", { grams: formatGrams(data.yield_g) })}
+              </span>
+              <span>{t("detail.servings", { value: data.servings })}</span>
+            </p>
+
+            {/* Версия ядра видна рядом с показателями: расчёты разных версий могут
+                отличаться, и понять это нужно до того, как по рецепту накормят. */}
+            <p className="m-0 text-xs text-muted-foreground">
+              {data.engine_version === null
+                ? t("detail.engineVersionUnknown")
+                : t("detail.engineVersion", { version: data.engine_version })}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-label={t("detail.composition")}>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="m-0 text-section-title font-semibold">
+                {t("detail.composition")}
+              </h2>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {data.ingredients.length === 0 ? (
+              <p className="m-0 text-muted-foreground">
+                {t("detail.compositionEmpty")}
+              </p>
+            ) : productNames.isLoading ? (
+              <div className="flex flex-col gap-field">
+                <p role="status" className="sr-only">
+                  {t("detail.loadingProducts")}
+                </p>
+                {data.ingredients.map((ingredient) => (
+                  <Skeleton
+                    key={ingredient.product_id}
+                    className="h-6 w-full"
+                  />
+                ))}
+              </div>
+            ) : (
+              <ul className="m-0 flex max-w-xl list-none flex-col gap-field p-0">
+                {data.ingredients.map((ingredient) => (
+                  <li
+                    key={ingredient.product_id}
+                    className="flex items-baseline justify-between gap-block border-b border-border pb-1"
+                  >
+                    <span>
+                      {productNames.byId[ingredient.product_id] ??
+                        t("detail.unknownProduct")}
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {t("detail.grams", {
+                        value: formatGrams(ingredient.grams),
+                      })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-label={t("detail.instructions")}>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="m-0 text-section-title font-semibold">
+                {t("detail.instructions")}
+              </h2>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {/* Переносы строк заданы автором рецепта — они и есть шаги готовки. */}
+            <p className="m-0 max-w-2xl whitespace-pre-line">
+              {data.instructions}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+    </PageLayout>
+  );
+}

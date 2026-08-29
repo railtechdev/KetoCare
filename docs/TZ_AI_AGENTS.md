@@ -119,7 +119,7 @@ make e2e          # playwright-тесты (требует make dev)
 | AI | Anthropic Python SDK (Claude API) | последняя |
 | Оптимизация | scipy (`linprog`, HiGHS) | 1.x |
 | PDF-отчёты | weasyprint (HTML → PDF) | последняя |
-| Frontend | React 18 + TypeScript 5 + Vite | — |
+| Frontend | React 19 + TypeScript 5 + Vite | компоненты shadcn/ui написаны под React 19: под 18 они молча теряют `ref`, и формы отправляют пустые значения (ADR-0005) |
 | UI | Tailwind CSS + shadcn/ui (Radix) | Tailwind 4 |
 | Данные на фронте | TanStack Query v5, TanStack Router, TanStack Table v8 | — |
 | Формы | react-hook-form + zod | — |
@@ -336,7 +336,7 @@ Worker-задача по расписанию (cron в ARQ): персональ�
 
 ### 8.1. Каркас
 
-Vite + React 18 + TS. TanStack Router: `/login`, `/app/*` (guard по роли из JWT). Разделы по ролям:
+Vite + React 19 + TS. TanStack Router: `/login`, `/app/*` (guard по роли из JWT). Разделы по ролям:
 
 ```
 /app (parent)   : home | calculator | products | recipes | menu | diary | reports | assistant | settings
@@ -349,9 +349,11 @@ Vite + React 18 + TS. TanStack Router: `/login`, `/app/*` (guard по роли �
 ### 8.2. Дизайн-система (`packages/ui`)
 
 - Tailwind 4 + shadcn/ui; компоненты копируются в `packages/ui/src/components` и переиспользуются web/miniapp.
-- Токены темы (CSS-переменные): фон `#FAF7F2` (молочно-бежевый), поверхность `#FFFFFF`, акцент `#2E5E4E` (шалфейный), текст `#2B2B2B` (графит), опасность `#B4483E`, предупреждение `#C98A2B`, успех `#3E7C4F`. Радиус 12 px, тени мягкие. Шрифт: Inter (кириллица), fallback system-ui.
+- Токены темы — в словаре shadcn/ui (`background`, `card`, `foreground`, `primary`, `muted-foreground`, `border`, `destructive`), сверх него наши `warning` и `success`. Единственный источник значений — `packages/ui/src/styles/tokens.css`; палитра сине-синевато-серая, принята по референсу заказчика (ADR-0005). Радиус 12 px, тени мягкие. Шрифт: Inter (кириллица), fallback system-ui.
+  Прежняя шалфейно-бежевая палитра и словарь `canvas/surface/ink/accent/line/danger` выведены из употребления; ссылки на них проверяет `packages/ui/src/styles/tokens.test.ts`.
 - Обязательные общие компоненты: `RatioBadge` (напр. «3.9 : 1», цвет по соответствию допуску), `MacroBar` (Ж/Б/У полоса), `TrendChart` (Recharts, с вертикальными маркерами смены назначения), `DiaryEntryCard`, `WarningBanner`, `DataTable` (обёртка TanStack Table: сортировка, пагинация, пустое состояние).
 - Доступность: focus-visible, aria-метки, контраст ≥ 4.5:1; крупные тач-цели (min 44 px) в интерфейсе родителя.
+- Паттерны взаимодействия, состояния экранов, правила форм и адаптивность — в `docs/UI_GUIDE.md` (UI-канон, 22 правила). Раздел 8 задаёт состав экранов, канон — как они устроены; при конфликте приоритет у ТЗ.
 
 ### 8.3. Ключевые экраны и критерии приёмки
 

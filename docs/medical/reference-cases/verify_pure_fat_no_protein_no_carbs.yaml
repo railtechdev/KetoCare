@@ -1,0 +1,24 @@
+name: verify_pure_fat_no_protein_no_carbs
+provisional: true
+operation: verify
+note: 'чистый жир: protein=carbs=0 -> ratio не определён (denom=0)'
+input:
+  ingredients:
+  - product_id: coconut_oil
+    kcal: 862
+    fat: 99.1
+    protein: 0.0
+    carbs: 0.0
+    fiber: 0.0
+  items:
+  - product_id: coconut_oil
+    grams: 50.0
+expected:
+  kcal: 445.95
+  fat_g: 49.55
+  protein_g: 0.0
+  carbs_g: 0.0
+  fiber_g: 0.0
+  ratio: null
+tolerance:
+  abs: 1.0e-06

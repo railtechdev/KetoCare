@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  # Тестовые значения; реальные секреты в CI не нужны — внешние сервисы не вызываются.
+  DATABASE_URL: postgresql+asyncpg://ketocare:ketocare@localhost:5432/ketocare
+  TEST_DATABASE_URL: postgresql+asyncpg://ketocare:ketocare@localhost:5432/ketocare
+  REDIS_URL: redis://localhost:6379/0
+  SECRET_KEY: ci-secret-key-not-used-outside-ci-000000000000
+  TZ: Asia/Tashkent
+
+jobs:
+  lint:
+    name: Линт и типы
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: uv sync --all-packages
+      - run: pnpm install --frozen-lockfile
+      - name: ruff check
+        run: uv run ruff check apps packages
+      - name: ruff format --check
+        run: uv run ruff format --check apps packages
+      - name: mypy
+        run: uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api
+      - name: Сгенерировать api-client
+        # packages/api-client/src/generated/ в .gitignore, поэтому на чистом
+        # checkout его нет, и tsc не нашёл бы типов схемы.
+        run: |
+          uv run python apps/api/scripts/export_openapi.py apps/api/openapi.json
+          pnpm --filter @ketocare/api-client run generate
+      - name: prettier + eslint + tsc
+        run: |
+          pnpm -r --if-present run format:check
+          pnpm -r --if-present run lint
+          pnpm -r --if-present run typecheck
+
+  vitest:
+    name: Тесты фронтенда (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: uv sync --all-packages
+      - run: pnpm install --frozen-lockfile
+      - name: Сгенерировать api-client
+        run: |
+          uv run python apps/api/scripts/export_openapi.py apps/api/openapi.json
+          pnpm --filter @ketocare/api-client run generate
+      - run: pnpm -r --if-present run test
+
+  engine:
+    name: Эталонные тесты keto_engine
+    # Обязательный отдельный job (раздел 13 ТЗ). Эталоны нельзя помечать skip/xfail.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - name: Эталоны + property-тесты + покрытие 100%
+        run: uv run pytest packages/keto_engine --cov=keto_engine --cov-report=term-missing --cov-fail-under=100
+      - name: Эталоны не помечены skip/xfail
+        run: |
+          if grep -rnE "pytest\.mark\.(skip|skipif|xfail)|pytest\.(skip|xfail)\(" \
+              packages/keto_engine/tests/; then
+            echo "::error::Эталонные тесты keto_engine нельзя пропускать (раздел 13 ТЗ)"
+            exit 1
+          fi
+
+  tests:
+    name: Тесты (pytest)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ketocare
+          POSTGRES_PASSWORD: ketocare
+          POSTGRES_DB: ketocare
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ketocare"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - name: Миграции на чистую БД
+        run: cd packages/core && uv run --project ../.. alembic upgrade head
+      - name: Автогенерация не оставляет диффа (DoD)
+        run: cd packages/core && uv run --project ../.. alembic check
+      - name: Миграции обратимы (downgrade -> upgrade)
+        run: |
+          cd packages/core
+          uv run --project ../.. alembic downgrade base
+          uv run --project ../.. alembic upgrade head
+      - name: pytest
+        run: uv run pytest
+
+  openapi:
+    name: OpenAPI и api-client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: uv sync --all-packages
+      - run: pnpm install --frozen-lockfile
+      - name: Сгенерировать клиент из OpenAPI
+        run: |
+          uv run python apps/api/scripts/export_openapi.py apps/api/openapi.json
+          pnpm --filter @ketocare/api-client run generate
+      - name: Клиент компилируется
+        run: pnpm --filter @ketocare/api-client run typecheck

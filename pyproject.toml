@@ -1,0 +1,73 @@
+[project]
+name = "ketocare-workspace"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = [
+    "apps/api",
+    "apps/bot",
+    "apps/worker",
+    "packages/keto_engine",
+    "packages/core",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.6",
+    "mypy>=1.13",
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "hypothesis>=6.115",
+    # Прогон читает адрес БД из .env (conftest.py в корне). Пакет доступен и
+    # транзитивно через pydantic-settings, но опираться на чужую зависимость
+    # нельзя: она исчезнет при первой смене реализации настроек.
+    "python-dotenv>=1.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["keto_engine", "core", "api", "bot", "worker"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "apps/api/src:apps/bot/src:apps/worker/src:packages/keto_engine/src:packages/core/src"
+namespace_packages = true
+explicit_package_bases = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["keto_engine.*", "core.*"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["api.*", "bot.*", "worker.*"]
+disallow_untyped_defs = false
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# Пакеты тестов в разных workspace-членах называются одинаково (`tests`), из-за чего
+# в классическом prepend-режиме их conftest.py конфликтуют по имени модуля.
+addopts = "--import-mode=importlib"
+consider_namespace_packages = true
+testpaths = [
+    # Защитные хуки — код, который ломается молча: сбой в них не роняет сборку,
+    # а просто перестаёт блокировать. Поэтому они под тестом наравне с остальным.
+    ".claude/hooks/tests",
+    "apps/api/tests",
+    "apps/worker/tests",
+    "packages/keto_engine/tests",
+    "packages/core/tests",
+]

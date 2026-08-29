@@ -1,0 +1,2 @@
+# Генерируется `make openapi` — форматирование задаёт openapi-typescript
+src/generated/
