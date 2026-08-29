@@ -22,10 +22,10 @@ export function QuickActions() {
 
   return (
     <nav aria-label={t("quickActions.title")}>
-      <ul className="m-0 grid list-none gap-block p-0 sm:grid-cols-3">
+      <ul className="m-0 flex list-none flex-col gap-block p-0 sm:flex-row sm:flex-wrap">
         {ACTIONS.map(({ key, icon: Icon, section, kind }) => (
           <li key={key}>
-            <Button asChild size="lg" className="min-h-touch w-full">
+            <Button asChild size="lg" className="min-h-touch w-full sm:w-auto">
               <SectionLink section={section} diaryKind={kind}>
                 <Icon aria-hidden="true" />
                 {t(`quickActions.${key}`)}

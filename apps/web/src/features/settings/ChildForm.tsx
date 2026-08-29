@@ -60,6 +60,7 @@ export function ChildForm({
     >
       <Field
         id={`${ids}-name`}
+        width="wide"
         label={t("child.fields.fullName")}
         error={errors.fullName && t("child.errors.fullName")}
         {...register("fullName")}
@@ -69,6 +70,7 @@ export function ChildForm({
         <>
           <Field
             id={`${ids}-birth`}
+            width="date"
             type="date"
             label={t("child.fields.birthDate")}
             error={errors.birthDate && t("child.errors.birthDate")}
@@ -76,6 +78,7 @@ export function ChildForm({
           />
           <SelectField
             id={`${ids}-sex`}
+            width="medium"
             label={t("child.fields.sex")}
             hint={t("child.immutableHint")}
             error={errors.sex && t("child.errors.sex")}
@@ -89,6 +92,7 @@ export function ChildForm({
 
       <Field
         id={`${ids}-height`}
+        width="narrow"
         type="number"
         inputMode="decimal"
         step="0.1"
@@ -100,6 +104,7 @@ export function ChildForm({
 
       <Field
         id={`${ids}-allergies`}
+        width="wide"
         optional
         label={t("child.fields.allergies")}
         placeholder={t("child.fields.allergiesPlaceholder")}

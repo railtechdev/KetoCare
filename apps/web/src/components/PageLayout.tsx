@@ -42,8 +42,12 @@ export function PageLayout({
 
   return (
     <div
+      // Колонка прижата влево, а не по центру: у заголовка, пояснения и полей
+      // должна быть общая левая линия. Отцентрованная форма шириной 672 px в
+      // области 1256 px оставляла по 290 px пустоты с каждой стороны — именно
+      // это читается как «много воздуха». Так же поступают GOV.UK и NHS.
       className={cn(
-        "mx-auto flex flex-col gap-screen",
+        "flex flex-col gap-screen",
         width === "form" ? "max-w-form" : "max-w-content",
       )}
     >

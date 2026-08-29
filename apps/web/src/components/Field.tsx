@@ -2,6 +2,29 @@ import { Input, Label, Textarea, cn } from "@ketocare/ui";
 import type { ComponentProps, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+/**
+ * Ширина поля показывает, сколько ждут ввести.
+ *
+ * Пока все поля были одной ширины, «Пол» с двумя вариантами, дата рождения и
+ * рост в три цифры растягивались на 672 px наравне с именем — и поле переставало
+ * что-либо подсказывать. Приём и шкала взяты у GOV.UK Design System
+ * (`govuk-input--width-*`), значения — в токенах темы.
+ *
+ * Ограничение действует с ширины `sm` и выше: на телефоне поле занимает строку
+ * целиком, там сужать нечего.
+ */
+export type FieldWidth =
+  "tiny" | "narrow" | "date" | "medium" | "wide" | "full";
+
+const WIDTH_CLASS: Record<FieldWidth, string> = {
+  tiny: "sm:max-w-field-tiny",
+  narrow: "sm:max-w-field-narrow",
+  date: "sm:max-w-field-date",
+  medium: "sm:max-w-field-medium",
+  wide: "sm:max-w-field-wide",
+  full: "",
+};
+
 interface FieldBaseProps {
   label: string;
   /** Текст ошибки; связывается с полем через aria-describedby */
@@ -11,6 +34,8 @@ interface FieldBaseProps {
   /** Помечается необязательное поле, а не обязательное звёздочкой:
       в клинических формах обязательно почти всё (правило П7 UI-канона). */
   optional?: boolean;
+  /** Сколько знаков ждут ввести; по умолчанию — вся ширина формы */
+  width?: FieldWidth;
 }
 
 /**
@@ -86,6 +111,7 @@ export function Field({
   optional,
   id,
   className,
+  width = "full",
   ...props
 }: FieldBaseProps & ComponentProps<"input">) {
   return (
@@ -100,7 +126,7 @@ export function Field({
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={useDescribedBy(id, error, hint)}
-        className={cn("min-h-touch", className)}
+        className={cn("min-h-touch", WIDTH_CLASS[width], className)}
         {...props}
       />
     </FieldShell>
@@ -114,6 +140,7 @@ export function SelectField({
   optional,
   id,
   className,
+  width = "full",
   children,
   ...props
 }: FieldBaseProps & ComponentProps<"select">) {
@@ -133,7 +160,7 @@ export function SelectField({
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={useDescribedBy(id, error, hint)}
-        className={cn(FIELD_CONTROL, className)}
+        className={cn(FIELD_CONTROL, WIDTH_CLASS[width], className)}
         {...props}
       >
         {children}
@@ -149,6 +176,7 @@ export function TextAreaField({
   optional,
   id,
   className,
+  width = "full",
   ...props
 }: FieldBaseProps & ComponentProps<"textarea">) {
   return (
@@ -163,7 +191,7 @@ export function TextAreaField({
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={useDescribedBy(id, error, hint)}
-        className={className}
+        className={cn(WIDTH_CLASS[width], className)}
         {...props}
       />
     </FieldShell>

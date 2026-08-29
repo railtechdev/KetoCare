@@ -139,6 +139,7 @@ export function ProfilePage() {
               >
                 <Field
                   id="profile-name"
+                  width="wide"
                   autoComplete="name"
                   label={t("fields.fullName")}
                   error={errors.fullName && t("errors.fullName")}
@@ -147,6 +148,7 @@ export function ProfilePage() {
 
                 <Field
                   id="profile-phone"
+                  width="medium"
                   type="tel"
                   autoComplete="tel"
                   optional
@@ -155,6 +157,7 @@ export function ProfilePage() {
                 />
 
                 <Field
+                  width="wide"
                   id="profile-email"
                   type="email"
                   label={t("fields.email")}
