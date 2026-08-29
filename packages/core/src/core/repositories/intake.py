@@ -84,4 +84,11 @@ async def upsert(
     intake.current_aed_ids = [str(drug_id) for drug_id in current_aed_ids]
 
     await session.flush()
+
+    # UPDATE помечает `updated_at` (onupdate=now()) устаревшим, и его значение
+    # подгружается ленивым запросом при первом обращении. В асинхронной сессии
+    # ленивая подгрузка вне await'а падает (MissingGreenlet), а обращается к полю
+    # уже сериализатор ответа — поэтому значение дочитывается здесь явно. Та же
+    # ловушка однажды сработала на медицинском профиле.
+    await session.refresh(intake)
     return intake

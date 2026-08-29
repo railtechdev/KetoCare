@@ -37,6 +37,7 @@ async def upsert(
     onset_age_months: int | None,
     genetics: dict[str, Any] | None,
     comorbidities: str | None,
+    aed_switch_count_id: uuid.UUID | None = None,
 ) -> MedicalProfile:
     """Создаёт профиль или полностью перезаписывает существующий."""
 
@@ -57,6 +58,10 @@ async def upsert(
     profile.onset_age_months = onset_age_months
     profile.genetics = genetics
     profile.comorbidities = comorbidities
+    # Сколько ПЭП сменил ребёнок — врачебная часть анкеты регистрации
+    # (ADR-0007): семья путает и названия, и число попыток, а от этого числа
+    # зависит, считается ли эпилепсия фармакорезистентной.
+    profile.aed_switch_count_id = aed_switch_count_id
     profile.deleted_at = None
 
     await session.flush()

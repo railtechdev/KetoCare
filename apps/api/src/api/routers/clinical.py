@@ -20,7 +20,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, Response
 
 from core.models import Medication
-from core.models.enums import UserRole
+from core.models.enums import IntakeScale, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import clinical_notes as notes_repo
 from core.repositories import medical_profiles as profiles_repo
@@ -38,6 +38,7 @@ from ..schemas_clinical import (
     MedicationRead,
     MedicationWrite,
 )
+from ..services import intake as intake_service
 
 router = APIRouter(prefix="/patients/{patient_id}", tags=["clinical"])
 
@@ -83,6 +84,15 @@ async def put_medical_profile(
 ) -> MedicalProfileRead:
     """Одна запись на пациента (unique patient_id), поэтому PUT — upsert."""
 
+    # Врачебная часть анкеты регистрации: вариант должен быть из своей шкалы,
+    # иначе в «сколько ПЭП сменил» окажется «Раз в 2-3 недели» (ADR-0007).
+    await intake_service.check_option_scale(
+        session,
+        option_id=payload.aed_switch_count_id,
+        scale=IntakeScale.AED_SWITCH_COUNT,
+        field="aed_switch_count_id",
+    )
+
     existing = await profiles_repo.get_for_patient(session, patient_id=patient_id)
     before = (
         MedicalProfileRead.model_validate(existing).model_dump(mode="json") if existing else None
@@ -96,6 +106,7 @@ async def put_medical_profile(
         onset_age_months=payload.onset_age_months,
         genetics=payload.genetics.model_dump() if payload.genetics is not None else None,
         comorbidities=payload.comorbidities,
+        aed_switch_count_id=payload.aed_switch_count_id,
     )
 
     # Профиль перезаписывается на месте, истории версий у него нет (в отличие от

@@ -43,6 +43,9 @@ class MedicalProfileWrite(BaseModel):
     onset_age_months: Annotated[int, Field(ge=0, le=1200)] | None = None
     genetics: Genetics | None = None
     comorbidities: str | None = Field(default=None, max_length=2000)
+    # Врачебная часть анкеты регистрации (ADR-0007): вариант шкалы
+    # `aed_switch_count` из `/dictionaries/intake-options`.
+    aed_switch_count_id: uuid.UUID | None = None
 
 
 class MedicalProfileRead(BaseModel):
@@ -55,6 +58,7 @@ class MedicalProfileRead(BaseModel):
     onset_age_months: int | None
     genetics: Genetics | None
     comorbidities: str | None
+    aed_switch_count_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
 

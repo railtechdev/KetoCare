@@ -58,6 +58,17 @@ class DictionaryEntryRead(BaseModel):
     sort: int
 
 
+class SeizureTypeRead(DictionaryEntryRead):
+    """Тип приступа с коротким кодом (ADR-0007).
+
+    Отдельная схема, а не поле в `DictionaryEntryRead`: у методов измерения
+    кетонов кода нет и быть не должно, а общая схема выдавала бы им пустое
+    поле и предлагала его заполнить.
+    """
+
+    code: str | None
+
+
 class DictionaryEntryCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
