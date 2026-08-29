@@ -22,9 +22,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      # Версия pnpm не задаётся здесь: она объявлена в `package.json`
+      # (`packageManager: pnpm@9.15.0`). Когда указаны оба места, действие
+      # отказывается работать — «Multiple versions of pnpm specified», и все
+      # JS-задачи падают ещё до установки зависимостей.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -57,9 +59,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      # Версия pnpm не задаётся здесь: она объявлена в `package.json`
+      # (`packageManager: pnpm@9.15.0`). Когда указаны оба места, действие
+      # отказывается работать — «Multiple versions of pnpm specified», и все
+      # JS-задачи падают ещё до установки зависимостей.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -142,9 +146,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      # Версия pnpm не задаётся здесь: она объявлена в `package.json`
+      # (`packageManager: pnpm@9.15.0`). Когда указаны оба места, действие
+      # отказывается работать — «Multiple versions of pnpm specified», и все
+      # JS-задачи падают ещё до установки зависимостей.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
