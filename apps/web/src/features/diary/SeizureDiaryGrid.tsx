@@ -6,7 +6,10 @@ import type { DiaryLog } from "./diaryApi";
 import { DAY_PARTS, buildSeizureGrid, formatCell } from "./seizureGrid";
 import type { DictionaryOption } from "./useDiary";
 
-const DATE = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" });
+const DATE = new Intl.DateTimeFormat("ru-RU", {
+  day: "2-digit",
+  month: "2-digit",
+});
 
 /**
  * Дневник приступов сеткой «день × часть суток» — вид, привычный врачу.

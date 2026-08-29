@@ -59,7 +59,9 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
   ),
   recipes: () => <RecipesPage />,
   reports: () => (
-    <PatientGate render={(patientId) => <ReportsPage patientId={patientId} />} />
+    <PatientGate
+      render={(patientId) => <ReportsPage patientId={patientId} />}
+    />
   ),
   patients: () => <DoctorPatientsPage />,
   products: (role) =>

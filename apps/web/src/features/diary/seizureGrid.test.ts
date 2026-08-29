@@ -93,7 +93,10 @@ describe("buildSeizureGrid", () => {
       TYPES,
     );
 
-    expect(grid.rows.map((row) => row.date)).toEqual(["2026-08-10", "2026-08-14"]);
+    expect(grid.rows.map((row) => row.date)).toEqual([
+      "2026-08-10",
+      "2026-08-14",
+    ]);
   });
 
   it("строки идут по возрастанию даты", () => {

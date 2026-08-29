@@ -71,19 +71,28 @@ lint: openapi ## Линтеры и проверка типов (сначала �
 	uv run ruff check apps packages
 	uv run ruff format --check apps packages
 	uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api
+	@# Шаги соединены через `&&`, а не `;`: при `;` код выхода блока — это код
+	@# последней команды, и падение prettier или eslint терялось. `make lint`
+	@# возвращал 0 при непройденной проверке форматирования, и её ловил уже CI.
 	@if [ -d node_modules ]; then \
-		pnpm -r --if-present run format:check; \
-		pnpm -r --if-present run lint; \
-		pnpm -r --if-present run typecheck; \
+		pnpm -r --if-present run format:check \
+		&& pnpm -r --if-present run lint \
+		&& pnpm -r --if-present run typecheck; \
 	fi
 
 .PHONY: fix
 fix: ## Автоисправление форматирования
 	uv run ruff check --fix apps packages
 	uv run ruff format apps packages
+	@# `exec` не понимает `--if-present` (это опция `run`) — с ней команда
+	@# падала с «Unknown option», а `&& echo` просто не выполнялся, и `make fix`
+	@# молча переставал форматировать JS. Теперь без неё, и с проверкой кода
+	@# выхода: тихо не форматировать хуже, чем не форматировать заметно.
 	@if [ -d node_modules ]; then \
-		pnpm -r --if-present exec prettier --write src >/dev/null && echo "prettier: ok"; \
-		pnpm -r --if-present exec eslint src --fix >/dev/null && echo "eslint: ok"; \
+		pnpm -r exec prettier --write src >/dev/null \
+		&& echo "prettier: ok" \
+		&& pnpm -r exec eslint src --fix >/dev/null \
+		&& echo "eslint: ok"; \
 	fi
 
 .PHONY: worker

@@ -119,7 +119,5 @@ export function buildSeizureGrid(
 
 /** Клетка в записи бумажного дневника: «5A», «2TC 1M», пусто. */
 export function formatCell(cell: GridCell): string {
-  return cell.byType
-    .map((entry) => `${entry.count}${entry.label}`)
-    .join(" ");
+  return cell.byType.map((entry) => `${entry.count}${entry.label}`).join(" ");
 }
