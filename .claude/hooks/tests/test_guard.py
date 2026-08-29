@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -156,3 +157,69 @@ class TestConsistency:
     def test_same_exceptions_allowed_in_both_modes(self, path: str) -> None:
         assert check_file(path) == ALLOW
         assert check_command(f"cat {path}") == ALLOW
+
+
+class TestSettingsWiring:
+    """Правильный хук, который не запускается, — это отсутствующий хук.
+
+    У каталога проекта в имени бывает пробел (`Downloads/My Apps/KetoCare`).
+    Команды в `.claude/settings.json` стояли без кавычек, оболочка разбивала путь
+    и пыталась выполнить `/Users/…/Downloads/My`. Молча не работали все четыре
+    хука: защита выглядела настроенной и не проверяла ничего — именно так
+    `make fix` однажды переписал 34 эталонных случая в `docs/medical`.
+
+    Проверка дешёвая, а дефект не виден ничем другим: хук не падает заметно, он
+    просто не запускается.
+    """
+
+    SETTINGS = REPO_ROOT / ".claude" / "settings.json"
+
+    def _commands(self) -> list[str]:
+        settings = json.loads(self.SETTINGS.read_text(encoding="utf-8"))
+        return [
+            hook["command"]
+            for phase in settings["hooks"].values()
+            for matcher in phase
+            for hook in matcher["hooks"]
+            if hook.get("type") == "command"
+        ]
+
+    def test_hook_paths_are_quoted(self) -> None:
+        for command in self._commands():
+            assert command.startswith('"') and command.endswith('"'), (
+                f"путь хука не в кавычках: {command} — "
+                "каталог с пробелом в имени разобьётся, и хук не запустится"
+            )
+
+    def test_every_hook_script_exists_and_is_executable(self) -> None:
+        for command in self._commands():
+            path = Path(
+                command.strip('"').replace("$CLAUDE_PROJECT_DIR", str(REPO_ROOT))
+            )
+            assert path.is_file(), f"хук не найден: {path}"
+            assert os.access(path, os.X_OK), f"хук не исполняемый: {path}"
+
+    def test_hooks_run_from_a_path_with_spaces(self, tmp_path: Path) -> None:
+        """Тот самый случай: копия проекта в каталоге с пробелом в имени.
+
+        Запуск идёт ровно так, как его выполняет раннер хуков, — строкой из
+        settings.json через оболочку. Без кавычек тест падает.
+        """
+        project = tmp_path / "My Apps" / "KetoCare"
+        (project / ".claude").mkdir(parents=True)
+        shutil.copytree(REPO_ROOT / ".claude" / "hooks", project / ".claude" / "hooks")
+
+        for command in self._commands():
+            result = subprocess.run(
+                ["sh", "-c", command],
+                input=json.dumps({"tool_input": {"file_path": "README.md"}}),
+                text=True,
+                capture_output=True,
+                env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)},
+            )
+            assert "No such file or directory" not in result.stderr, (
+                f"хук не запустился из каталога с пробелом: {command}\n{result.stderr}"
+            )
+            assert result.returncode == ALLOW, (
+                f"хук вернул {result.returncode} на разрешённом файле: {command}"
+            )
