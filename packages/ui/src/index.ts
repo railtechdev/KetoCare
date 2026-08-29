@@ -16,6 +16,9 @@ export type {
 export { DiaryEntryCard } from "./components/DiaryEntryCard";
 export type { DiaryEntryCardProps } from "./components/DiaryEntryCard";
 
+export { AsyncSection } from "./components/AsyncSection";
+export type { AsyncSectionProps } from "./components/AsyncSection";
+
 export { EmptyState } from "./components/EmptyState";
 export type { EmptyStateProps } from "./components/EmptyState";
 

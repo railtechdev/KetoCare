@@ -76,6 +76,22 @@ export function isRatioRangeInvalid(filters: RecipeFilters): boolean {
   return min !== null && max !== null && min > max;
 }
 
+/**
+ * Хоть один фильтр задан.
+ *
+ * Пустая выдача означает разное: «под фильтры ничего не подошло» — это повод
+ * их смягчить, а «база пуста» — повод завести первый рецепт. Одно пустое
+ * состояние на оба случая никуда не ведёт.
+ */
+export function hasActiveFilters(filters: RecipeFilters): boolean {
+  return (
+    filters.q.trim() !== "" ||
+    filters.category !== "" ||
+    filters.ratioMin.trim() !== "" ||
+    filters.ratioMax.trim() !== ""
+  );
+}
+
 export interface RecipeSearchQuery {
   q?: string;
   category?: RecipeCategory;

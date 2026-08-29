@@ -93,8 +93,15 @@ def create_token(
     role: UserRole,
     token_type: TokenType,
     patient_scope: uuid.UUID | None = None,
+    password_changed_at: datetime | None = None,
 ) -> str:
-    """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ)."""
+    """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ).
+
+    `password_changed_at` попадает в claim `pwd`: токен, выданный до смены
+    пароля, отвергается при следующей же проверке. Так требование раздела 11
+    «ревокация сессий при смене пароля» выполняется без хранилища выданных
+    токенов.
+    """
 
     now = datetime.now(UTC)
     ttl = _TTL_BY_TYPE[token_type]
@@ -108,6 +115,8 @@ def create_token(
     }
     if patient_scope is not None:
         payload["patient_scope"] = str(patient_scope)
+    if password_changed_at is not None:
+        payload["pwd"] = int(password_changed_at.timestamp())
 
     return jwt.encode(payload, get_settings().secret_key, algorithm=_ALGORITHM)
 
@@ -128,6 +137,25 @@ def decode_token(token: str, *, expected_type: TokenType) -> dict[str, Any]:
         raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.")
 
     return payload
+
+
+def token_predates_password_change(
+    payload: dict[str, Any], password_changed_at: datetime | None
+) -> bool:
+    """True, если токен выдан до последней смены пароля.
+
+    Токены без claim'а `pwd` — выданные до того, как пароль меняли впервые, —
+    тоже считаются устаревшими: иначе смена пароля не выгнала бы ровно те
+    сессии, ради которых её и делают.
+    """
+
+    if password_changed_at is None:
+        return False
+
+    issued_for = payload.get("pwd")
+    if not isinstance(issued_for, int):
+        return True
+    return issued_for < int(password_changed_at.timestamp())
 
 
 def generate_totp_secret() -> str:

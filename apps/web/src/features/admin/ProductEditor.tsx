@@ -1,3 +1,5 @@
+import { Button } from "@ketocare/ui";
+import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ProductForm } from "./ProductForm";
@@ -27,6 +29,10 @@ interface Props {
  * Карточка позиции справочника: форма и история её ревизий рядом.
  *
  * История показывается только у существующей позиции — у новой её ещё нет.
+ *
+ * Возврат оформлен так же, как в шапке `PageLayout`: у карточки нет своего
+ * URL — она живёт состоянием внутри вкладки, — поэтому шаблон экрана
+ * подставить сюда нечего, но паттерн возврата остаётся один (правило П2).
  */
 export function ProductEditor({
   product,
@@ -40,14 +46,17 @@ export function ProductEditor({
   const update = useUpdateProductMutation(product?.id ?? null);
 
   return (
-    <div className="flex flex-col gap-6">
-      <button
+    <div className="flex flex-col gap-screen">
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
+        className="-ml-2 self-start"
         onClick={onCancel}
-        className="min-h-touch self-start rounded-lg border border-border px-4 text-foreground"
       >
+        <ArrowLeft aria-hidden="true" />
         {t("products.backToList")}
-      </button>
+      </Button>
 
       <ProductForm
         mode={product === null ? "create" : "edit"}

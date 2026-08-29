@@ -32,7 +32,7 @@ export function SidebarNav({
                 <SectionLink
                   section={section}
                   className={cn(
-                    "flex min-h-touch items-center gap-3 rounded-lg px-3 text-sm font-medium",
+                    "flex min-h-touch items-center gap-block rounded-lg px-3 text-sm font-medium",
                     "text-sidebar-foreground/80 no-underline transition-colors",
                     "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                   )}

@@ -1,4 +1,5 @@
 import { cn } from "@ketocare/ui";
+import { ImageOff } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -25,17 +26,16 @@ export function RecipePhoto({ src, className }: Props) {
   const usable = src !== null && src !== "" && failedSrc !== src;
 
   if (!usable) {
-    // span, а не div: карточка списка целиком является кнопкой, а внутрь кнопки
-    // по HTML допускается только фразовое содержимое.
     return (
-      <span
+      <div
         className={cn(
-          "flex items-center justify-center bg-background text-sm text-muted-foreground",
+          "flex flex-col items-center justify-center gap-field bg-muted text-sm text-muted-foreground",
           className,
         )}
       >
-        {t("card.noPhoto")}
-      </span>
+        <ImageOff aria-hidden="true" className="size-5" />
+        <span>{t("card.noPhoto")}</span>
+      </div>
     );
   }
 

@@ -1,13 +1,20 @@
-import { DataTable } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  DataTable,
+  EmptyState,
+  Skeleton,
+} from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
+import { PackageSearch, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
+import { Field } from "../../components/Field";
+import { PageLayout } from "../../components/PageLayout";
 import { api, errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
-import { FIELD_CONTROL } from "../../components/Field";
 
 interface ProductRow {
   id: string;
@@ -72,55 +79,92 @@ export function ProductsPage() {
 
   const rows = products.data ?? [];
 
-  return (
-    <section className="flex flex-col gap-4">
-      <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
+  // Пустых состояний два: до поиска показывается, что здесь будет, а по
+  // неудачному запросу — как его исправить, с кнопкой сброса.
+  const emptyState =
+    trimmed === "" ? (
+      <EmptyState
+        icon={PackageSearch}
+        title={t("empty.noQuery.title")}
+        description={t("empty.noQuery.description")}
+      />
+    ) : (
+      <EmptyState
+        icon={SearchX}
+        title={t("empty.noResults.title")}
+        description={t("empty.noResults.description")}
+        action={
+          <Button type="button" variant="outline" onClick={() => setQuery("")}>
+            {t("empty.noResults.reset")}
+          </Button>
+        }
+      />
+    );
 
-      <div className="max-w-md">
-        <label
-          className="mb-1.5 block text-sm font-medium"
-          htmlFor="product-search"
-        >
-          {t("search.label")}
-        </label>
-        <input
+  return (
+    <PageLayout title={t("title")} intro={t("intro")}>
+      <div className="max-w-sm">
+        <Field
           id="product-search"
           type="search"
+          label={t("search.label")}
           value={query}
           placeholder={t("search.placeholder")}
           onChange={(event) => setQuery(event.target.value)}
-          className={FIELD_CONTROL}
         />
       </div>
 
-      <p className="m-0 text-sm text-muted-foreground">{t("per100g")}</p>
-
-      {products.isError && (
-        <FormError>
-          {errorMessageOf(products.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
-      {products.isLoading ? (
-        <p role="status" className="text-muted-foreground">
-          {t("loading")}
-        </p>
-      ) : (
+      {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
+          обновление не должно прятать уже показанную выдачу (П15 канона).
+          Пустое состояние отдано ему же, поэтому таблица своего не рисует. */}
+      <AsyncSection
+        loading={products.isLoading}
+        skeleton={<ProductsSkeleton label={t("loading")} />}
+        error={
+          products.isError
+            ? {
+                title: t("error.title"),
+                description:
+                  errorMessageOf(products.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void products.refetch()}
+        isEmpty={rows.length === 0}
+        empty={emptyState}
+      >
         <DataTable
           columns={columns}
           data={rows}
           caption={t("table.caption")}
-          emptyState={
-            trimmed === "" ? t("empty.noQuery") : t("empty.noResults")
-          }
+          emptyState={null}
           labels={{
             previousPage: t("table.previousPage"),
             nextPage: t("table.nextPage"),
             pageStatus: (page, total) => t("table.pageStatus", { page, total }),
           }}
         />
-      )}
-    </section>
+      </AsyncSection>
+    </PageLayout>
+  );
+}
+
+/**
+ * Скелетон в форме будущей таблицы (П15 канона).
+ *
+ * Подпись уходит в `aria-label` живой области, а не в видимую строку
+ * «Загружаем…»: зрячий видит будущую раскладку, а скринридер — сообщение.
+ */
+function ProductsSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status" aria-label={label} className="flex flex-col gap-field">
+      <Skeleton className="h-10 w-full" />
+      {Array.from({ length: 8 }).map((_, index) => (
+        <Skeleton key={index} className="h-12 w-full" />
+      ))}
+    </div>
   );
 }
 

@@ -1,11 +1,15 @@
+import { AsyncSection, EmptyState, toast } from "@ketocare/ui";
+import { UtensilsCrossed } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { CopyDayForm } from "./CopyDayForm";
 import { DayNavigator } from "./DayNavigator";
 import { DayTotalsPanel } from "./DayTotalsPanel";
+import { MenuSkeleton } from "./MenuSkeleton";
 import { MenuSlotSection } from "./MenuSlotSection";
 import { todayIso } from "./dates";
 import { useMenuItemTitles } from "./useDishCatalog";
@@ -13,6 +17,7 @@ import {
   MEAL_SLOTS,
   toWriteItem,
   toWriteItems,
+  useDayTargets,
   useDayTolerance,
   useEatenMutation,
   useMenuQuery,
@@ -36,9 +41,21 @@ export function MenuPage({ patientId }: { patientId: string }) {
   const upsert = useUpsertMenuMutation(patientId);
   const eaten = useEatenMutation(patientId, date);
   const tolerance = useDayTolerance(patientId, date);
+  const targets = useDayTargets(patientId, date);
 
   const items = useMemo(() => menu.data?.items ?? [], [menu.data]);
   const titles = useMenuItemTitles(patientId, items);
+
+  // Пустое состояние дня. Оно же уходит в `empty` у AsyncSection: день без
+  // позиций рисуется вместе с приёмами пищи (иначе в них нечем добавить первое
+  // блюдо), поэтому один и тот же блок нужен и как подсказка над составом.
+  const emptyDayState = (
+    <EmptyState
+      icon={UtensilsCrossed}
+      title={t("day.emptyTitle")}
+      description={t("day.empty")}
+    />
+  );
 
   function addItem(input: {
     slot: MealSlot;
@@ -46,10 +63,13 @@ export function MenuPage({ patientId }: { patientId: string }) {
     id: string;
     portionFactor: number;
   }) {
-    upsert.mutate({
-      date,
-      items: [...toWriteItems(items), toWriteItem(input)],
-    });
+    upsert.mutate(
+      {
+        date,
+        items: [...toWriteItems(items), toWriteItem(input)],
+      },
+      { onSuccess: () => toast.success(t("item.added")) },
+    );
   }
 
   function removeItem(itemId: string) {
@@ -57,34 +77,47 @@ export function MenuPage({ patientId }: { patientId: string }) {
     // Пустой день сервер не принимает (в меню минимум одна позиция), поэтому
     // кнопка удаления последней позиции заблокирована — сюда это не доходит.
     if (rest.length === 0) return;
-    upsert.mutate({ date, items: rest });
+    upsert.mutate(
+      { date, items: rest },
+      { onSuccess: () => toast.success(t("item.removed")) },
+    );
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-
+    <PageLayout title={t("title")} intro={t("intro")}>
       <DayNavigator date={date} onChange={setDate} />
 
-      <>
-        {menu.isLoading && (
-          <p role="status" className="text-muted-foreground">
-            {t("loading")}
-          </p>
-        )}
-
-        {menu.isError && (
-          <FormError>
-            {errorMessageOf(menu.error) ?? t("errors.load")}
-          </FormError>
-        )}
-
+      {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+          ошибка не должна прятать уже показанный состав дня. */}
+      <AsyncSection
+        loading={menu.isLoading}
+        skeleton={<MenuSkeleton />}
+        error={
+          menu.isError
+            ? {
+                title: t("errors.load"),
+                description:
+                  errorMessageOf(menu.error) ?? t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void menu.refetch()}
+        // «Показывать нечего» — это отсутствие ответа сервера. День, которого
+        // ещё нет, сервер отдаёт как `null`, и это уже ответ: экран рисует
+        // приёмы пищи, чтобы в них можно было добавить блюдо.
+        isEmpty={menu.data === undefined}
+        empty={emptyDayState}
+      >
         <DayTotalsPanel
           totals={menu.data?.totals ?? null}
           engineVersion={menu.data?.engine_version ?? null}
           tolerance={tolerance}
+          targets={targets}
         />
 
+        {/* Ошибка отправки, а не загрузки: повторять нечего, состав дня
+            остался прежним (правило П16 канона). */}
         {upsert.isError && (
           <FormError>
             {errorMessageOf(upsert.error) ?? t("errors.save")}
@@ -103,11 +136,9 @@ export function MenuPage({ patientId }: { patientId: string }) {
           </p>
         )}
 
-        {items.length === 0 && !menu.isLoading && !menu.isError && (
-          <p className="m-0 text-muted-foreground">{t("day.empty")}</p>
-        )}
+        {items.length === 0 && emptyDayState}
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-block">
           {MEAL_SLOTS.map((slot) => (
             <MenuSlotSection
               key={slot}
@@ -131,11 +162,11 @@ export function MenuPage({ patientId }: { patientId: string }) {
             {t("item.lastOne")}
           </p>
         )}
+      </AsyncSection>
 
-        {/* key по дате: форма перечитывает дату-источник по умолчанию и
-              не показывает «день скопирован» после перехода к другому дню. */}
-        <CopyDayForm key={date} patientId={patientId} date={date} />
-      </>
-    </section>
+      {/* key по дате: форма перечитывает дату-источник по умолчанию и
+          не предлагает скопировать день сам в себя после перехода. */}
+      <CopyDayForm key={date} patientId={patientId} date={date} />
+    </PageLayout>
   );
 }

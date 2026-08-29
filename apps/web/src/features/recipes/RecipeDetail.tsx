@@ -1,8 +1,22 @@
-import { MacroBar, RatioBadge, WarningBanner } from "@ketocare/ui";
-import { useState } from "react";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  ErrorState,
+  MacroBar,
+  RatioBadge,
+  Skeleton,
+  toast,
+} from "@ketocare/ui";
+import { Pencil, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { formatGrams } from "./format";
 import { RecipePhoto } from "./RecipePhoto";
@@ -20,9 +34,6 @@ interface Props {
   onEdit: (recipeId: string) => void;
 }
 
-const SECONDARY_BUTTON =
-  "min-h-touch rounded-lg border border-border px-4 text-foreground";
-
 /** Карточка рецепта: состав, приготовление и показатели, посчитанные ядром. */
 export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
   const { t } = useTranslation("recipes");
@@ -34,220 +45,276 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
 
   const publish = usePublishRecipeMutation();
   const remove = useDeleteRecipeMutation();
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  const backButton = (
-    <button type="button" onClick={onBack} className={SECONDARY_BUTTON}>
-      {t("detail.back")}
-    </button>
-  );
-
-  if (recipe.isLoading) {
-    return (
-      <section className="flex flex-col gap-4">
-        {backButton}
-        <p role="status" className="text-muted-foreground">
-          {t("detail.loading")}
-        </p>
-      </section>
-    );
-  }
-
-  if (recipe.isError || !recipe.data) {
-    return (
-      <section className="flex flex-col gap-4">
-        {backButton}
-        <FormError>
-          {errorMessageOf(recipe.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      </section>
-    );
-  }
 
   const data = recipe.data;
+
+  // Ошибка занимает весь экран только тогда, когда показывать нечего. Если
+  // рецепт уже загружен, неудачное обновление не прячет его: React Query
+  // держит прежний ответ, и подменять состав красным блоком значит стирать с
+  // экрана данные, по которым сейчас готовят (то же правило — в AsyncSection).
+  if (data === undefined) {
+    return (
+      <PageLayout
+        title={t("detail.titleFallback")}
+        onBack={onBack}
+        backLabel={t("detail.back")}
+      >
+        {recipe.isError ? (
+          <ErrorState
+            title={t("detail.errorTitle")}
+            description={
+              errorMessageOf(recipe.error) ?? t("common:errors.unexpected")
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void recipe.refetch()}
+          />
+        ) : (
+          <>
+            <p role="status" className="sr-only">
+              {t("detail.loading")}
+            </p>
+            <Skeleton className="h-56 w-full max-w-xl rounded-xl" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </>
+        )}
+      </PageLayout>
+    );
+  }
+
   const computed = data.computed;
 
   return (
-    <section className="flex flex-col gap-6">
-      {backButton}
-
-      <header className="flex flex-col gap-2">
-        <h1 className="m-0 text-xl font-semibold">{data.title}</h1>
-        <p className="m-0 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+    <PageLayout
+      title={data.title}
+      onBack={onBack}
+      backLabel={t("detail.back")}
+      intro={
+        <span className="flex flex-wrap items-center gap-field">
           <span>{t(`categories.${data.category}`)}</span>
           {canEdit && (
-            <span className="rounded-full border border-border px-2 py-0.5">
-              {t(`status.${data.status}`)}
-            </span>
+            <Badge variant="outline">{t(`status.${data.status}`)}</Badge>
           )}
-        </p>
-      </header>
+        </span>
+      }
+      actions={
+        canEdit && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch"
+              onClick={() => onEdit(data.id)}
+            >
+              <Pencil aria-hidden="true" />
+              {t("actions.edit")}
+            </Button>
+
+            {data.status !== "published" && (
+              <Button
+                type="button"
+                className="min-h-touch"
+                disabled={publish.isPending}
+                onClick={() =>
+                  publish.mutate(data.id, {
+                    onSuccess: () => toast.success(t("actions.publishSuccess")),
+                  })
+                }
+              >
+                <Upload aria-hidden="true" />
+                {publish.isPending
+                  ? t("actions.publishing")
+                  : t("actions.publish")}
+              </Button>
+            )}
+
+            {/* Заголовок диалога называет рецепт: подтверждается исчезновение
+                конкретного блюда, а не абстрактное «вы уверены?». */}
+            <ConfirmDialog
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch"
+                  disabled={remove.isPending}
+                >
+                  <Trash2 aria-hidden="true" />
+                  {remove.isPending
+                    ? t("actions.deleting")
+                    : t("actions.delete")}
+                </Button>
+              }
+              title={t("actions.confirmDelete.title", { title: data.title })}
+              description={t("actions.confirmDelete.body")}
+              confirmLabel={t("actions.confirmDelete.confirm")}
+              cancelLabel={t("actions.cancel")}
+              onConfirm={() =>
+                remove.mutate(data.id, {
+                  onSuccess: () => {
+                    toast.success(t("actions.deleteSuccess"));
+                    onBack();
+                  },
+                })
+              }
+            />
+          </>
+        )
+      }
+    >
+      {/* Обновление рецепта не удалось, но сам рецепт на экране остаётся:
+          сообщение идёт над ним и предлагает повторить. */}
+      {recipe.isError && (
+        <ErrorState
+          title={t("detail.errorTitle")}
+          description={
+            errorMessageOf(recipe.error) ?? t("common:errors.unexpected")
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void recipe.refetch()}
+        />
+      )}
+
+      {publish.isError && (
+        <FormError>
+          {errorMessageOf(publish.error) ?? t("common:errors.unexpected")}
+        </FormError>
+      )}
+
+      {remove.isError && (
+        <FormError>
+          {errorMessageOf(remove.error) ?? t("common:errors.unexpected")}
+        </FormError>
+      )}
 
       <RecipePhoto
         src={data.photo_path}
         className="h-56 w-full max-w-xl rounded-xl"
       />
 
-      <section
-        aria-label={t("detail.nutrition")}
-        className="flex flex-col gap-3"
-      >
-        <h2 className="m-0 text-lg font-semibold">{t("detail.nutrition")}</h2>
+      <section aria-label={t("detail.nutrition")}>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="m-0 text-section-title font-semibold">
+                {t("detail.nutrition")}
+              </h2>
+            </CardTitle>
+          </CardHeader>
 
-        {computed === null ? (
-          <p className="m-0 text-muted-foreground">{t("detail.noComputed")}</p>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-4">
-              {/* Без вердикта о допуске: соотношение рецепта — характеристика
-                  блюда, а не соответствие назначению конкретного ребёнка. */}
-              <RatioBadge ratio={computed.ratio} />
-              <span className="tabular-nums">
-                {t("detail.kcal", { value: computed.kcal.toFixed(0) })}
+          <CardContent className="flex flex-col gap-block">
+            {computed === null ? (
+              <p className="m-0 text-muted-foreground">
+                {t("detail.noComputed")}
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-block">
+                  {/* Без вердикта о допуске: соотношение рецепта — характеристика
+                      блюда, а не соответствие назначению конкретного ребёнка. */}
+                  <RatioBadge ratio={computed.ratio} />
+                  <span className="tabular-nums">
+                    {t("detail.kcal", { value: computed.kcal.toFixed(0) })}
+                  </span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {t("detail.fiber", { value: formatGrams(computed.fiber) })}
+                  </span>
+                </div>
+
+                <MacroBar
+                  fatG={computed.fat}
+                  proteinG={computed.protein}
+                  carbsG={computed.carbs}
+                />
+              </>
+            )}
+
+            <p className="m-0 flex flex-wrap gap-block text-sm text-muted-foreground tabular-nums">
+              <span>
+                {t("detail.yield", { grams: formatGrams(data.yield_g) })}
               </span>
-              <span className="text-muted-foreground tabular-nums">
-                {t("detail.fiber", { value: formatGrams(computed.fiber) })}
-              </span>
-            </div>
+              <span>{t("detail.servings", { value: data.servings })}</span>
+            </p>
 
-            <MacroBar
-              fatG={computed.fat}
-              proteinG={computed.protein}
-              carbsG={computed.carbs}
-            />
-          </>
-        )}
-
-        <p className="m-0 flex flex-wrap gap-4 text-sm text-muted-foreground tabular-nums">
-          <span>{t("detail.yield", { grams: formatGrams(data.yield_g) })}</span>
-          <span>{t("detail.servings", { value: data.servings })}</span>
-        </p>
-
-        {/* Версия ядра видна рядом с показателями: расчёты разных версий могут
-            отличаться, и понять это нужно до того, как по рецепту накормят. */}
-        <p className="m-0 text-xs text-muted-foreground">
-          {data.engine_version === null
-            ? t("detail.engineVersionUnknown")
-            : t("detail.engineVersion", { version: data.engine_version })}
-        </p>
+            {/* Версия ядра видна рядом с показателями: расчёты разных версий могут
+                отличаться, и понять это нужно до того, как по рецепту накормят. */}
+            <p className="m-0 text-xs text-muted-foreground">
+              {data.engine_version === null
+                ? t("detail.engineVersionUnknown")
+                : t("detail.engineVersion", { version: data.engine_version })}
+            </p>
+          </CardContent>
+        </Card>
       </section>
 
       <section aria-label={t("detail.composition")}>
-        <h2 className="mt-0 mb-2 text-lg font-semibold">
-          {t("detail.composition")}
-        </h2>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="m-0 text-section-title font-semibold">
+                {t("detail.composition")}
+              </h2>
+            </CardTitle>
+          </CardHeader>
 
-        {data.ingredients.length === 0 ? (
-          <p className="m-0 text-muted-foreground">
-            {t("detail.compositionEmpty")}
-          </p>
-        ) : productNames.isLoading ? (
-          <p role="status" className="m-0 text-muted-foreground">
-            {t("detail.loadingProducts")}
-          </p>
-        ) : (
-          <ul className="m-0 flex max-w-xl list-none flex-col gap-2 p-0">
-            {data.ingredients.map((ingredient) => (
-              <li
-                key={ingredient.product_id}
-                className="flex items-baseline justify-between gap-4 border-b border-border pb-1"
-              >
-                <span>
-                  {productNames.byId[ingredient.product_id] ??
-                    t("detail.unknownProduct")}
-                </span>
-                <span className="text-muted-foreground tabular-nums">
-                  {t("detail.grams", { value: formatGrams(ingredient.grams) })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+          <CardContent>
+            {data.ingredients.length === 0 ? (
+              <p className="m-0 text-muted-foreground">
+                {t("detail.compositionEmpty")}
+              </p>
+            ) : productNames.isLoading ? (
+              <div className="flex flex-col gap-field">
+                <p role="status" className="sr-only">
+                  {t("detail.loadingProducts")}
+                </p>
+                {data.ingredients.map((ingredient) => (
+                  <Skeleton
+                    key={ingredient.product_id}
+                    className="h-6 w-full"
+                  />
+                ))}
+              </div>
+            ) : (
+              <ul className="m-0 flex max-w-xl list-none flex-col gap-field p-0">
+                {data.ingredients.map((ingredient) => (
+                  <li
+                    key={ingredient.product_id}
+                    className="flex items-baseline justify-between gap-block border-b border-border pb-1"
+                  >
+                    <span>
+                      {productNames.byId[ingredient.product_id] ??
+                        t("detail.unknownProduct")}
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {t("detail.grams", {
+                        value: formatGrams(ingredient.grams),
+                      })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section aria-label={t("detail.instructions")}>
-        <h2 className="mt-0 mb-2 text-lg font-semibold">
-          {t("detail.instructions")}
-        </h2>
-        {/* Переносы строк заданы автором рецепта — они и есть шаги готовки. */}
-        <p className="m-0 max-w-2xl whitespace-pre-line">{data.instructions}</p>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="m-0 text-section-title font-semibold">
+                {t("detail.instructions")}
+              </h2>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {/* Переносы строк заданы автором рецепта — они и есть шаги готовки. */}
+            <p className="m-0 max-w-2xl whitespace-pre-line">
+              {data.instructions}
+            </p>
+          </CardContent>
+        </Card>
       </section>
-
-      {canEdit && (
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => onEdit(data.id)}
-              className={SECONDARY_BUTTON}
-            >
-              {t("actions.edit")}
-            </button>
-
-            {data.status !== "published" && (
-              <button
-                type="button"
-                disabled={publish.isPending}
-                onClick={() => publish.mutate(data.id)}
-                className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
-              >
-                {publish.isPending
-                  ? t("actions.publishing")
-                  : t("actions.publish")}
-              </button>
-            )}
-
-            <button
-              type="button"
-              disabled={remove.isPending}
-              onClick={() => setConfirmingDelete(true)}
-              className={SECONDARY_BUTTON}
-            >
-              {remove.isPending ? t("actions.deleting") : t("actions.delete")}
-            </button>
-          </div>
-
-          {confirmingDelete && (
-            <WarningBanner
-              level="danger"
-              title={t("actions.confirmDelete.title")}
-            >
-              <p className="mt-0 mb-3">{t("actions.confirmDelete.body")}</p>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  disabled={remove.isPending}
-                  onClick={() =>
-                    remove.mutate(data.id, { onSuccess: () => onBack() })
-                  }
-                  className="min-h-touch rounded-lg bg-destructive px-4 font-semibold text-destructive-foreground disabled:opacity-60"
-                >
-                  {t("actions.confirmDelete.confirm")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className={SECONDARY_BUTTON}
-                >
-                  {t("actions.cancel")}
-                </button>
-              </div>
-            </WarningBanner>
-          )}
-
-          {publish.isError && (
-            <FormError>
-              {errorMessageOf(publish.error) ?? t("common:errors.unexpected")}
-            </FormError>
-          )}
-
-          {remove.isError && (
-            <FormError>
-              {errorMessageOf(remove.error) ?? t("common:errors.unexpected")}
-            </FormError>
-          )}
-        </section>
-      )}
-    </section>
+    </PageLayout>
   );
 }

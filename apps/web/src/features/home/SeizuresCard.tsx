@@ -17,8 +17,8 @@ export function SeizuresCard({ seizures }: { seizures: SeizuresToday }) {
     <Panel title={t("seizures.title")}>
       {/* Ноль выводится наравне с любым другим числом: «сегодня приступов не
           было» — такой же результат дня, как и их количество. */}
-      <p className="m-0 flex items-baseline gap-2">
-        <span className="text-3xl font-semibold tabular-nums">
+      <p className="m-0 flex items-baseline gap-field">
+        <span className="text-page-title font-semibold tabular-nums">
           {seizures.count}
         </span>
         <span className="text-muted-foreground">

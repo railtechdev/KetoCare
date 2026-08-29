@@ -218,6 +218,37 @@ export function useDayTolerance(
   return tolerance;
 }
 
+/** Нормы назначения на день: с ними итоги показывают, сколько осталось. */
+export interface DayTargets {
+  kcalPerDay: number;
+  carbsLimitG: number;
+}
+
+/**
+ * Нормы дня для показа остатка «осталось до цели» (правило П18 UI-канона).
+ *
+ * Источник тот же, что у вердикта, — сводка пациента, и ограничение то же:
+ * сводка относится к сегодняшнему дню в часовом поясе установки. Для прочих
+ * дат остаток не показывается: назначение append-only, и вычитать сегодняшнюю
+ * норму из состава прошлой даты значило бы сравнивать день с нормой, которая
+ * тогда могла быть другой.
+ */
+export function useDayTargets(
+  patientId: string | null,
+  date: string,
+): DayTargets | null {
+  const overview = useQuery(patientOverviewQuery(patientId));
+
+  const prescription = overview.data?.prescription;
+
+  if (overview.data?.date !== date || !prescription) return null;
+
+  return {
+    kcalPerDay: prescription.kcal_per_day,
+    carbsLimitG: prescription.carbs_limit_g,
+  };
+}
+
 /**
  * Новая позиция плана.
  *

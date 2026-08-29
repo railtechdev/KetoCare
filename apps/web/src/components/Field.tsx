@@ -52,7 +52,10 @@ function FieldShell({
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col gap-field">
+    // gap-field — между подписью, полем и пояснением; mb-block — между самими
+    // полями. Отступ снизу был потерян при переходе на кит, и поля в формах
+    // слиплись: пояснение под одним полем читалось как подпись к следующему.
+    <div className="mb-block flex flex-col gap-field">
       <Label htmlFor={id}>
         {label}
         {optional && (

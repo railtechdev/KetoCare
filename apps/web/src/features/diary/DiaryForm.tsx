@@ -1,12 +1,22 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { WarningBanner } from "@ketocare/ui";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  FormFooter,
+  WarningBanner,
+} from "@ketocare/ui";
+import { Pill } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
-import { Field, SelectField } from "../../components/Field";
+import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
 import type { DiaryBody, DiaryKind, DiaryLog } from "./diaryApi";
 import {
@@ -133,62 +143,52 @@ function numberInput(value: number | null): string {
 
 function FormShell({
   editing,
+  description,
   error,
   onSubmit,
   children,
-  actions,
+  footer,
 }: {
   editing: boolean;
+  description?: ReactNode;
   error: unknown;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   children: ReactNode;
-  actions: ReactNode;
+  footer: ReactNode;
 }) {
   const { t } = useTranslation("diary");
 
   return (
-    <form
-      noValidate
-      onSubmit={onSubmit}
-      className="rounded-xl bg-card p-4 shadow-kc"
-    >
-      <h3 className="mt-0 mb-3 text-base font-semibold">
-        {editing ? t("form.editTitle") : t("form.addTitle")}
-      </h3>
+    <form noValidate onSubmit={onSubmit}>
+      <Card>
+        <CardHeader>
+          {/* Карточка кита рисует заголовок обычным блоком, а на экране он
+              третьего уровня: уровень задаётся ролью, чтобы структура
+              заголовков осталась читаемой скринридером. */}
+          <CardTitle role="heading" aria-level={3} className="text-card-title">
+            {editing ? t("form.editTitle") : t("form.addTitle")}
+          </CardTitle>
+          {description && <CardDescription>{description}</CardDescription>}
+        </CardHeader>
 
-      {children}
+        <CardContent className="flex flex-col gap-block">
+          {children}
 
-      {/* Сообщение сервера уже на русском (раздел 5.1 ТЗ) — свой текст запасной */}
-      {error ? (
-        <FormError>
-          {errorMessageOf(error) ?? t("common:errors.unexpected")}
-        </FormError>
-      ) : null}
+          {/* Сообщение сервера уже на русском (раздел 5.1 ТЗ) — свой текст запасной */}
+          {error ? (
+            <FormError>
+              {errorMessageOf(error) ?? t("common:errors.unexpected")}
+            </FormError>
+          ) : null}
+        </CardContent>
 
-      <div className="flex flex-wrap gap-3">{actions}</div>
+        <CardFooter>{footer}</CardFooter>
+      </Card>
     </form>
   );
 }
 
-function SecondaryButton({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="min-h-touch rounded-lg border border-border px-4 font-semibold text-foreground"
-    >
-      {children}
-    </button>
-  );
-}
-
-function DefaultActions({
+function DefaultFooter({
   editing,
   pending,
   onCancel,
@@ -200,14 +200,13 @@ function DefaultActions({
   const { t } = useTranslation("diary");
 
   return (
-    <>
-      <SubmitButton pending={pending} className="w-auto flex-1">
-        {pending ? t("form.saving") : editing ? t("form.save") : t("form.add")}
-      </SubmitButton>
-      {editing && (
-        <SecondaryButton onClick={onCancel}>{t("form.cancel")}</SecondaryButton>
-      )}
-    </>
+    <FormFooter
+      submitLabel={editing ? t("form.save") : t("form.add")}
+      pendingLabel={t("form.saving")}
+      pending={pending}
+      cancelLabel={editing ? t("form.cancel") : undefined}
+      onCancel={editing ? onCancel : undefined}
+    />
   );
 }
 
@@ -279,48 +278,45 @@ function SeizureForm({
     if (valid) setStep(2);
   }
 
+  // Подвал у обоих шагов один и тот же (FormFooter отправляет форму), поэтому
+  // смысл отправки задаётся здесь: на первом шаге это переход ко второму.
+  function handleFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (step === 1) {
+      event.preventDefault();
+      void goToSecondStep();
+      return;
+    }
+    void submit(event);
+  }
+
   return (
     <FormShell
       editing={editing !== null}
+      description={t("form.step", { current: step, total: 2 })}
       error={error}
-      onSubmit={submit}
-      actions={
+      onSubmit={handleFormSubmit}
+      footer={
         step === 1 ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void goToSecondStep()}
-              className="min-h-touch flex-1 rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
-            >
-              {t("form.next")}
-            </button>
-            {editing && (
-              <SecondaryButton onClick={onCancel}>
-                {t("form.cancel")}
-              </SecondaryButton>
-            )}
-          </>
+          <FormFooter
+            submitLabel={t("form.next")}
+            pendingLabel={t("form.next")}
+            cancelLabel={editing ? t("form.cancel") : undefined}
+            onCancel={editing ? onCancel : undefined}
+          />
         ) : (
-          <>
-            <SubmitButton pending={pending} className="w-auto flex-1">
-              {pending
-                ? t("form.saving")
-                : editing
-                  ? t("form.save")
-                  : t("form.add")}
-            </SubmitButton>
-            <SecondaryButton onClick={() => setStep(1)}>
-              {t("form.back")}
-            </SecondaryButton>
-          </>
+          <FormFooter
+            submitLabel={editing ? t("form.save") : t("form.add")}
+            pendingLabel={t("form.saving")}
+            pending={pending}
+            cancelLabel={t("form.back")}
+            onCancel={() => setStep(1)}
+          />
         )
       }
     >
-      <p className="mt-0 mb-3 text-sm text-muted-foreground">
-        {t("form.step", { current: step, total: 2 })}
-      </p>
-
-      <div hidden={step !== 1}>
+      {/* Скрытый шаг убирается из потока классом, а не атрибутом hidden:
+          утилита flex у соседнего шага перебила бы его display:none. */}
+      <div className={step === 1 ? "flex flex-col gap-block" : "hidden"}>
         <Field
           id="seizure-occurred-at"
           type="datetime-local"
@@ -348,33 +344,38 @@ function SeizureForm({
         <Field
           id="seizure-duration"
           type="number"
-          inputMode="numeric"
+          inputMode="decimal"
           min={0}
           step={1}
+          optional
           label={t("seizures.duration")}
           error={errors.durationSec && t("seizures.durationInvalid")}
           {...register("durationSec")}
         />
       </div>
 
-      <div hidden={step !== 2}>
+      <div className={step === 2 ? "flex flex-col gap-block" : "hidden"}>
         <Field
           id="seizure-count"
           type="number"
-          inputMode="numeric"
+          inputMode="decimal"
           min={SEIZURE_COUNT_MIN}
           step={1}
           label={t("seizures.count")}
           error={errors.count && t("seizures.countInvalid")}
           {...register("count")}
         />
-        <Field
+        <TextAreaField
           id="seizure-description"
+          rows={3}
+          optional
           label={t("seizures.description")}
           {...register("description")}
         />
-        <Field
+        <TextAreaField
           id="seizure-triggers"
+          rows={2}
+          optional
           label={t("seizures.triggers")}
           {...register("triggers")}
         />
@@ -421,8 +422,8 @@ function KetoneForm({
       editing={editing !== null}
       error={error}
       onSubmit={submit}
-      actions={
-        <DefaultActions
+      footer={
+        <DefaultFooter
           editing={editing !== null}
           pending={pending}
           onCancel={onCancel}
@@ -503,8 +504,8 @@ function WeightForm({
       editing={editing !== null}
       error={error}
       onSubmit={submit}
-      actions={
-        <DefaultActions
+      footer={
+        <DefaultFooter
           editing={editing !== null}
           pending={pending}
           onCancel={onCancel}
@@ -538,6 +539,7 @@ function WeightForm({
         inputMode="decimal"
         min={1}
         step={0.5}
+        optional
         label={t("weight.height")}
         error={errors.heightCm && t("weight.heightInvalid")}
         {...register("heightCm")}
@@ -584,7 +586,15 @@ function MedicationForm({
   });
 
   if (medications.length === 0) {
-    return <p className="text-muted-foreground">{t("medications.none")}</p>;
+    // Действия у пустого состояния нет намеренно: препараты назначает врач,
+    // семья завести их не может.
+    return (
+      <EmptyState
+        icon={Pill}
+        title={t("medications.noneTitle")}
+        description={t("medications.none")}
+      />
+    );
   }
 
   return (
@@ -592,8 +602,8 @@ function MedicationForm({
       editing={editing !== null}
       error={error}
       onSubmit={submit}
-      actions={
-        <DefaultActions
+      footer={
+        <DefaultFooter
           editing={editing !== null}
           pending={pending}
           onCancel={onCancel}
@@ -623,7 +633,7 @@ function MedicationForm({
           </option>
         ))}
       </SelectField>
-      <label className="mb-4 flex min-h-touch items-center gap-3 text-sm font-medium">
+      <label className="flex min-h-touch items-center gap-block text-sm font-medium">
         <input
           type="checkbox"
           className="size-5 accent-primary"
@@ -672,8 +682,8 @@ function MealForm({
       editing={editing !== null}
       error={error}
       onSubmit={submit}
-      actions={
-        <DefaultActions
+      footer={
+        <DefaultFooter
           editing={editing !== null}
           pending={pending}
           onCancel={onCancel}
@@ -687,8 +697,9 @@ function MealForm({
         error={errors.occurredAt && t("form.occurredAtInvalid")}
         {...register("occurredAt")}
       />
-      <Field
+      <TextAreaField
         id="meal-free-text"
+        rows={3}
         label={t("meals.freeText")}
         placeholder={t("meals.freeTextPlaceholder")}
         error={errors.freeText && t("meals.freeTextRequired")}
@@ -736,8 +747,8 @@ function SideEffectForm({
       editing={editing !== null}
       error={error}
       onSubmit={submit}
-      actions={
-        <DefaultActions
+      footer={
+        <DefaultFooter
           editing={editing !== null}
           pending={pending}
           onCancel={onCancel}
@@ -758,8 +769,10 @@ function SideEffectForm({
         error={errors.symptom && t("sideEffects.symptomRequired")}
         {...register("symptom")}
       />
-      <Field
+      <TextAreaField
         id="side-effect-description"
+        rows={3}
+        optional
         label={t("sideEffects.description")}
         {...register("description")}
       />

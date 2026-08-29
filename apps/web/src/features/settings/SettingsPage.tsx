@@ -1,7 +1,17 @@
+import {
+  AsyncSection,
+  Button,
+  Card,
+  CardContent,
+  EmptyState,
+  Skeleton,
+  toast,
+} from "@ketocare/ui";
+import { Baby, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { ChildForm } from "./ChildForm";
 import { toChildBody, toChildUpdateBody } from "./childSchemas";
@@ -39,73 +49,97 @@ export function SettingsPage() {
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <header>
-        <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-        <p className="m-0 mt-1 text-muted-foreground">{t("children.intro")}</p>
-      </header>
-
-      {patients.isPending && (
-        <p role="status" className="m-0 text-muted-foreground">
-          {t("children.loading")}
-        </p>
-      )}
-
-      {patients.error !== null && (
-        <FormError>
-          {errorMessageOf(patients.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
-      {!patients.isPending && children.length === 0 && (
-        <p className="m-0 text-muted-foreground">{t("children.empty")}</p>
-      )}
-
-      {children.length > 0 && (
-        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+    <PageLayout
+      title={t("title")}
+      intro={t("children.intro")}
+      actions={
+        <Button type="button" onClick={() => setView({ kind: "add" })}>
+          <Plus aria-hidden="true" />
+          {t("child.add")}
+        </Button>
+      }
+    >
+      {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
+          обновление не должно прятать уже показанный список детей. */}
+      <AsyncSection
+        loading={patients.isLoading}
+        skeleton={
+          <div
+            className="flex flex-col gap-block"
+            role="status"
+            aria-busy="true"
+          >
+            {[0, 1].map((index) => (
+              <Skeleton key={index} className="h-20 w-full rounded-xl" />
+            ))}
+          </div>
+        }
+        error={
+          patients.isError
+            ? {
+                title: t("children.loadError"),
+                description:
+                  errorMessageOf(patients.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void patients.refetch()}
+        isEmpty={children.length === 0}
+        empty={
+          <EmptyState
+            icon={Baby}
+            title={t("children.empty")}
+            description={t("children.emptyHint")}
+            action={
+              <Button type="button" onClick={() => setView({ kind: "add" })}>
+                <Plus aria-hidden="true" />
+                {t("child.add")}
+              </Button>
+            }
+          />
+        }
+      >
+        <ul className="m-0 flex list-none flex-col gap-block p-0">
           {children.map((child) => (
-            <li
-              key={child.id}
-              className="flex flex-wrap items-center gap-4 rounded-xl border border-border p-4"
-            >
-              <span className="font-semibold">{child.full_name}</span>
-              <span className="text-sm text-muted-foreground">
-                {t("children.birthDate", { date: child.birth_date })}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {child.height_cm === null
-                  ? t("children.noHeight")
-                  : t("children.height", { value: child.height_cm })}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {child.allergies.length === 0
-                  ? t("children.noAllergies")
-                  : t("children.allergies", {
-                      list: child.allergies.join(", "),
-                    })}
-              </span>
-              <button
-                type="button"
-                onClick={() => setView({ kind: "edit", child })}
-                className="ml-auto min-h-touch rounded-lg border border-border px-4 text-foreground"
-              >
-                {t("children.edit")}
-              </button>
+            <li key={child.id}>
+              <Card>
+                <CardContent className="flex flex-wrap items-center gap-block">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <span className="font-semibold">{child.full_name}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {t("children.birthDate", { date: child.birth_date })}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {child.height_cm === null
+                        ? t("children.noHeight")
+                        : t("children.height", { value: child.height_cm })}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {child.allergies.length === 0
+                        ? t("children.noAllergies")
+                        : t("children.allergies", {
+                            list: child.allergies.join(", "),
+                          })}
+                    </span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="ml-auto min-h-touch"
+                    onClick={() => setView({ kind: "edit", child })}
+                  >
+                    {t("children.edit")}
+                  </Button>
+                </CardContent>
+              </Card>
             </li>
           ))}
         </ul>
-      )}
-
-      <div>
-        <button
-          type="button"
-          onClick={() => setView({ kind: "add" })}
-          className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
-        >
-          {t("child.add")}
-        </button>
-      </div>
-    </section>
+      </AsyncSection>
+    </PageLayout>
   );
 }
 
@@ -114,18 +148,22 @@ function AddChild({ onDone }: { onDone: () => void }) {
   const create = useCreateChildMutation();
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="m-0 text-xl font-semibold">{t("child.addTitle")}</h1>
+    <PageLayout title={t("child.addTitle")} width="form" onBack={onDone}>
       <ChildForm
         child={null}
         pending={create.isPending}
         error={create.error}
         onCancel={onDone}
         onSubmit={(values) => {
-          create.mutate(toChildBody(values), { onSuccess: onDone });
+          create.mutate(toChildBody(values), {
+            onSuccess: (child) => {
+              toast.success(t("child.added", { name: child.full_name }));
+              onDone();
+            },
+          });
         }}
       />
-    </section>
+    </PageLayout>
   );
 }
 
@@ -134,17 +172,21 @@ function EditChild({ child, onDone }: { child: Patient; onDone: () => void }) {
   const update = useUpdateChildMutation(child.id);
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="m-0 text-xl font-semibold">{t("child.editTitle")}</h1>
+    <PageLayout title={t("child.editTitle")} width="form" onBack={onDone}>
       <ChildForm
         child={child}
         pending={update.isPending}
         error={update.error}
         onCancel={onDone}
         onSubmit={(values) => {
-          update.mutate(toChildUpdateBody(values), { onSuccess: onDone });
+          update.mutate(toChildUpdateBody(values), {
+            onSuccess: (saved) => {
+              toast.success(t("child.saved", { name: saved.full_name }));
+              onDone();
+            },
+          });
         }}
       />
-    </section>
+    </PageLayout>
   );
 }

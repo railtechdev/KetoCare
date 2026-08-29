@@ -1,8 +1,16 @@
-import { DiaryEntryCard } from "@ketocare/ui";
-import { useState, type ReactNode } from "react";
+import {
+  Button,
+  ConfirmDialog,
+  DiaryEntryCard,
+  EmptyState,
+  Skeleton,
+} from "@ketocare/ui";
+import { NotebookPen } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DiaryLog } from "./diaryApi";
+import { formatChartDate } from "./time";
 
 interface DiaryListProps {
   logs: DiaryLog[];
@@ -13,6 +21,7 @@ interface DiaryListProps {
   onEdit: (log: DiaryLog) => void;
   onDelete: (logId: string) => void;
   deletingId: string | null;
+  /** Пустое состояние: готовый узел с действием либо просто текст */
   emptyState: ReactNode;
 }
 
@@ -27,16 +36,18 @@ export function DiaryList({
   deletingId,
   emptyState,
 }: DiaryListProps) {
-  // Подтверждение удаления живёт на уровне списка: открытым может быть только
-  // одно, иначе родитель случайно удаляет не ту запись.
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-
   if (logs.length === 0) {
-    return <p className="m-0 text-muted-foreground">{emptyState}</p>;
+    // Экран, где добавлять нечего (карта врача), передаёт просто текст —
+    // оформление пустого состояния всё равно остаётся общим.
+    return typeof emptyState === "string" ? (
+      <EmptyState icon={NotebookPen} title={emptyState} />
+    ) : (
+      <>{emptyState}</>
+    );
   }
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-3 p-0">
+    <ul className="m-0 flex list-none flex-col gap-block p-0">
       {logs.map((log) => (
         <li key={log.id}>
           <DiaryEntry
@@ -44,19 +55,41 @@ export function DiaryList({
             own={log.created_by !== null && log.created_by === currentUserId}
             seizureTypeNames={seizureTypeNames}
             medicationNames={medicationNames}
-            confirming={confirmId === log.id}
             deleting={deletingId === log.id}
             onEdit={() => onEdit(log)}
-            onAskDelete={() => setConfirmId(log.id)}
-            onCancelDelete={() => setConfirmId(null)}
-            onConfirmDelete={() => {
-              setConfirmId(null);
-              onDelete(log.id);
-            }}
+            onDelete={() => onDelete(log.id)}
           />
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Загрузка списка — скелетон в форме будущих карточек.
+ *
+ * Подпись приходит снаружи: компонент общий для дневника семьи и карты врача,
+ * а словари у них разные (правило 8 CLAUDE.md).
+ */
+export function DiaryListSkeleton({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      className="flex flex-col gap-block"
+      data-testid="diary-list-skeleton"
+    >
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="rounded-xl bg-card p-4 shadow-kc">
+          <div className="flex items-baseline justify-between gap-block">
+            <Skeleton className="h-5 w-40 max-w-[60%]" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <Skeleton className="mt-3 h-4 w-2/3" />
+          <Skeleton className="mt-2 h-4 w-1/2" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -65,12 +98,9 @@ interface DiaryEntryProps {
   own: boolean;
   seizureTypeNames: Map<string, string>;
   medicationNames: Map<string, string>;
-  confirming: boolean;
   deleting: boolean;
   onEdit: () => void;
-  onAskDelete: () => void;
-  onCancelDelete: () => void;
-  onConfirmDelete: () => void;
+  onDelete: () => void;
 }
 
 function DiaryEntry({
@@ -78,12 +108,9 @@ function DiaryEntry({
   own,
   seizureTypeNames,
   medicationNames,
-  confirming,
   deleting,
   onEdit,
-  onAskDelete,
-  onCancelDelete,
-  onConfirmDelete,
+  onDelete,
 }: DiaryEntryProps) {
   const { t } = useTranslation("diary");
 
@@ -154,22 +181,21 @@ function DiaryEntry({
   const details = lines.filter(
     (line): line is string => line !== null && line !== "",
   );
+  const occurredAt = new Date(log.occurred_at);
 
   return (
     <DiaryEntryCard
       title={title}
-      occurredAt={new Date(log.occurred_at)}
+      occurredAt={occurredAt}
       source={log.source}
       actions={
         own ? (
           <EntryActions
             title={title}
-            confirming={confirming}
+            occurredAt={occurredAt}
             deleting={deleting}
             onEdit={onEdit}
-            onAskDelete={onAskDelete}
-            onCancelDelete={onCancelDelete}
-            onConfirmDelete={onConfirmDelete}
+            onDelete={onDelete}
           />
         ) : undefined
       }
@@ -191,64 +217,52 @@ function Details({ lines }: { lines: string[] }) {
 
 function EntryActions({
   title,
-  confirming,
+  occurredAt,
   deleting,
   onEdit,
-  onAskDelete,
-  onCancelDelete,
-  onConfirmDelete,
+  onDelete,
 }: {
   title: string;
-  confirming: boolean;
+  occurredAt: Date;
   deleting: boolean;
   onEdit: () => void;
-  onAskDelete: () => void;
-  onCancelDelete: () => void;
-  onConfirmDelete: () => void;
+  onDelete: () => void;
 }) {
   const { t } = useTranslation("diary");
 
-  const action = "rounded-lg border border-border px-3 text-sm font-semibold";
-
-  if (confirming) {
-    return (
-      <>
-        <span className="text-sm text-destructive" role="alert">
-          {t("list.confirmDelete")}
-        </span>
-        <button
-          type="button"
-          onClick={onConfirmDelete}
-          className="rounded-lg bg-destructive px-3 text-sm font-semibold text-destructive-foreground"
-        >
-          {t("list.confirmYes")}
-        </button>
-        <button type="button" onClick={onCancelDelete} className={action}>
-          {t("list.confirmNo")}
-        </button>
-      </>
-    );
-  }
-
   return (
     <>
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={onEdit}
         aria-label={t("list.editAria", { title })}
-        className={action}
       >
         {t("list.edit")}
-      </button>
-      <button
-        type="button"
-        onClick={onAskDelete}
-        disabled={deleting}
-        aria-label={t("list.deleteAria", { title })}
-        className={`${action} text-destructive disabled:opacity-60`}
-      >
-        {deleting ? t("list.deleting") : t("list.delete")}
-      </button>
+      </Button>
+
+      {/* Диалог кита, а не подмена кнопок на месте: заголовок называет запись,
+          Esc и фокус работают одинаково во всём приложении (правило П14). */}
+      <ConfirmDialog
+        trigger={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={deleting}
+            aria-label={t("list.deleteAria", { title })}
+            className="text-destructive hover:text-destructive"
+          >
+            {deleting ? t("list.deleting") : t("list.delete")}
+          </Button>
+        }
+        title={t("list.confirmTitle", { date: formatChartDate(occurredAt) })}
+        description={t("list.confirmBody", { title })}
+        confirmLabel={t("list.confirmYes")}
+        cancelLabel={t("list.confirmNo")}
+        onConfirm={onDelete}
+      />
     </>
   );
 }

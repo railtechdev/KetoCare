@@ -1,13 +1,22 @@
-import { DataTable, formatOccurredAt } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  DataTable,
+  EmptyState,
+  formatOccurredAt,
+  toast,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
 import { InvitePanel } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
+import { SectionHeading } from "./SectionHeading";
+import { TableSkeleton } from "./TableSkeleton";
 import { UserAccountForm } from "./UserAccountForm";
 import { useAdminUsers, useUpdateUserMutation } from "./useAdminUsers";
 import type { AdminUser } from "./types";
@@ -81,16 +90,17 @@ export function UsersPanel() {
               {t("users.self")}
             </span>
           ) : (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 resetUpdate();
                 setEditingId(row.original.id);
               }}
-              className="min-h-touch rounded-lg border border-border px-3 text-foreground"
             >
               {t("users.edit")}
-            </button>
+            </Button>
           ),
       },
     ],
@@ -98,19 +108,12 @@ export function UsersPanel() {
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <h2 className="m-0 text-lg font-semibold">{t("users.title")}</h2>
-      <p className="m-0 text-muted-foreground">{t("users.intro")}</p>
+    <div className="flex flex-col gap-block">
+      <SectionHeading title={t("users.title")} intro={t("users.intro")} />
 
       {/* Администратор заводит персонал; семью приглашает её врач или диетолог,
           он же становится ведущим специалистом (ADR-0003). */}
       <InvitePanel roles={STAFF_ROLES} />
-
-      {users.isError && (
-        <FormError>
-          {errorMessageOf(users.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
 
       {editing !== null && (
         <UserAccountForm
@@ -125,35 +128,53 @@ export function UsersPanel() {
           onSubmit={(changes) =>
             update.mutate(
               { userId: editing.id, changes },
-              { onSuccess: () => setEditingId(null) },
+              {
+                onSuccess: (saved) => {
+                  setEditingId(null);
+                  toast.success(t("users.saved", { name: saved.full_name }));
+                },
+              },
             )
           }
         />
       )}
 
-      {update.isSuccess && editing === null && (
-        <p role="status" className="m-0 text-success">
-          {t("users.saved", { name: update.data.full_name })}
-        </p>
-      )}
-
-      {users.isLoading ? (
-        <p role="status" className="text-muted-foreground">
-          {t("users.loading")}
-        </p>
-      ) : (
+      {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
+      <AsyncSection
+        loading={users.isLoading}
+        skeleton={<TableSkeleton label={t("users.loading")} columns={6} />}
+        error={
+          users.isError
+            ? {
+                title: t("users.error"),
+                description:
+                  errorMessageOf(users.error) ?? t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void users.refetch()}
+        isEmpty={rows.length === 0}
+        empty={
+          <EmptyState
+            icon={Users}
+            title={t("users.empty.title")}
+            description={t("users.empty.description")}
+          />
+        }
+      >
         <DataTable
           columns={columns}
           data={rows}
           caption={t("users.table.caption")}
-          emptyState={t("users.empty")}
+          emptyState={null}
           labels={{
             previousPage: t("table.previousPage"),
             nextPage: t("table.nextPage"),
             pageStatus: (page, total) => t("table.pageStatus", { page, total }),
           }}
         />
-      )}
+      </AsyncSection>
 
       {users.data !== undefined && users.data.total > rows.length && (
         <p className="m-0 text-sm text-muted-foreground">

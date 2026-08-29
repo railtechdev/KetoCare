@@ -1,10 +1,22 @@
-import * as Tabs from "@radix-ui/react-tabs";
-import { WarningBanner, cn } from "@ketocare/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  WarningBanner,
+} from "@ketocare/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FIELD_CONTROL } from "../../components/Field";
+import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { DishResultView, type DishView } from "./DishResultView";
 import { DishRows } from "./DishRows";
@@ -19,6 +31,8 @@ import {
 } from "./useCalcMutations";
 
 type Mode = "verify" | "solve" | "scale";
+
+const MODES = ["verify", "solve", "scale"] as const;
 
 const DEFAULT_TARGETS: TargetsInput = { ratio: 4, kcal: 400 };
 
@@ -79,97 +93,102 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
   const rowsForSave = mode === "solve" ? solvedRows : rows;
 
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-
-      <Tabs.Root
+    <PageLayout title={t("title")} intro={t("intro")}>
+      <Tabs
         value={mode}
         onValueChange={(value) => {
           setMode(value as Mode);
           resetResults();
         }}
       >
-        <Tabs.List className="flex gap-2 border-b border-border">
-          {(["verify", "solve", "scale"] as const).map((value) => (
-            <Tabs.Trigger
-              key={value}
-              value={value}
-              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
-            >
+        {/* Высота списка отпущена, чтобы вкладка дотягивала до тач-цели 44 px
+            (правило П20 канона): на телефоне режим переключают пальцем.
+            Снимается она тем же селектором, каким кит её задаёт, — обычный
+            `h-auto` менее специфичен и не действует. */}
+        <TabsList
+          aria-label={t("tabsLabel")}
+          className="w-full group-data-[orientation=horizontal]/tabs:h-auto"
+        >
+          {MODES.map((value) => (
+            <TabsTrigger key={value} value={value} className="min-h-touch">
               {t(`tabs.${value}`)}
-            </Tabs.Trigger>
+            </TabsTrigger>
           ))}
-        </Tabs.List>
+        </TabsList>
 
-        {(["verify", "solve", "scale"] as const).map((value) => (
-          <Tabs.Content key={value} value={value} className="pt-4">
-            <p className="mt-0 text-muted-foreground">
+        {MODES.map((value) => (
+          <TabsContent key={value} value={value}>
+            <p className="m-0 text-sm text-muted-foreground">
               {t(`tabHint.${value}`)}
             </p>
-          </Tabs.Content>
+          </TabsContent>
         ))}
-      </Tabs.Root>
+      </Tabs>
 
-      <ProductPicker
-        excludeIds={rows.map((r) => r.product.id)}
-        onPick={(product) => {
-          setRows((current) => [...current, { product, grams: 50 }]);
-          resetResults();
-        }}
-      />
-
-      <DishRows
-        rows={mode === "solve" && solvedRows.length > 0 ? solvedRows : rows}
-        readOnlyGrams={mode === "solve" && solvedRows.length > 0}
-        onChangeGrams={(productId, grams) => {
-          setRows((current) =>
-            current.map((row) =>
-              row.product.id === productId ? { ...row, grams } : row,
-            ),
-          );
-          resetResults();
-        }}
-        onRemove={(productId) => {
-          setRows((current) =>
-            current.filter((row) => row.product.id !== productId),
-          );
-          resetResults();
-        }}
-      />
-
-      {mode !== "scale" && (
-        <TargetsFields
-          targets={targets}
-          onChange={setTargets}
-          showLimits={mode === "solve"}
-        />
-      )}
-
-      {mode === "scale" && (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium" htmlFor="factor">
-            {t("factor")}
-          </label>
-          <input
-            id="factor"
-            type="number"
-            min={0.1}
-            step={0.1}
-            value={factor}
-            onChange={(event) => setFactor(Number(event.target.value))}
-            className="min-h-touch w-40 rounded-lg border border-border bg-card px-3 py-2 tabular-nums"
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-card-title">
+            {t("composition.title")}
+          </CardTitle>
+          <CardDescription>{t("composition.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-block">
+          <ProductPicker
+            excludeIds={rows.map((r) => r.product.id)}
+            onPick={(product) => {
+              setRows((current) => [...current, { product, grams: 50 }]);
+              resetResults();
+            }}
           />
-        </div>
-      )}
 
-      <button
+          <DishRows
+            rows={mode === "solve" && solvedRows.length > 0 ? solvedRows : rows}
+            readOnlyGrams={mode === "solve" && solvedRows.length > 0}
+            onChangeGrams={(productId, grams) => {
+              setRows((current) =>
+                current.map((row) =>
+                  row.product.id === productId ? { ...row, grams } : row,
+                ),
+              );
+              resetResults();
+            }}
+            onRemove={(productId) => {
+              setRows((current) =>
+                current.filter((row) => row.product.id !== productId),
+              );
+              resetResults();
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-card-title">{t("params.title")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {mode === "scale" ? (
+            <ScaleFields factor={factor} onChange={setFactor} />
+          ) : (
+            <TargetsFields
+              targets={targets}
+              onChange={setTargets}
+              showLimits={mode === "solve"}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Button
         type="button"
+        size="lg"
         onClick={run}
         disabled={rows.length === 0 || active.isPending}
-        className="min-h-touch w-full max-w-xs rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
+        aria-busy={active.isPending}
+        className="min-h-touch w-full sm:w-auto sm:self-start"
       >
         {active.isPending ? t("calculating") : t("calculate")}
-      </button>
+      </Button>
 
       {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3 ТЗ):
           сервер возвращает человекочитаемую причину, её и показываем. */}
@@ -179,6 +198,8 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         </WarningBanner>
       )}
 
+      {/* Расчёт запускает пользователь — это отправка, а не загрузка экрана,
+          поэтому ошибка показывается как ошибка действия (П16 канона). */}
       {active.isError && !infeasible && (
         <FormError>
           {errorMessageOf(active.error) ?? t("common:errors.unexpected")}
@@ -195,7 +216,7 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
           <SaveDishForm patientId={patientId} rows={rowsForSave} />
         </>
       )}
-    </section>
+    </PageLayout>
   );
 }
 
@@ -211,100 +232,101 @@ function TargetsFields({
   const { t } = useTranslation("calculator");
 
   // tabular-nums: цифры в полях цели не должны прыгать при вводе.
-  const field = cn(FIELD_CONTROL, "tabular-nums");
-
+  // inputMode="decimal": на телефоне открывается цифровая клавиатура (П13).
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div>
-        <label className="mb-1.5 block text-sm font-medium" htmlFor="ratio">
-          {t("targets.ratio")}
-        </label>
-        <input
-          id="ratio"
-          type="number"
-          min={1}
-          max={5}
-          step={0.5}
-          value={targets.ratio}
-          onChange={(e) =>
-            onChange({ ...targets, ratio: Number(e.target.value) })
-          }
-          className={field}
-        />
-      </div>
-      <div>
-        <label className="mb-1.5 block text-sm font-medium" htmlFor="kcal">
-          {t("targets.kcal")}
-        </label>
-        <input
-          id="kcal"
-          type="number"
-          min={1}
-          step={10}
-          value={targets.kcal}
-          onChange={(e) =>
-            onChange({ ...targets, kcal: Number(e.target.value) })
-          }
-          className={field}
-        />
-      </div>
+    <div className="grid gap-block sm:grid-cols-2">
+      <Field
+        id="ratio"
+        label={t("targets.ratio")}
+        type="number"
+        inputMode="decimal"
+        min={1}
+        max={5}
+        step={0.5}
+        value={targets.ratio}
+        onChange={(e) =>
+          onChange({ ...targets, ratio: Number(e.target.value) })
+        }
+        className="tabular-nums"
+      />
+      <Field
+        id="kcal"
+        label={t("targets.kcal")}
+        type="number"
+        inputMode="decimal"
+        min={1}
+        step={10}
+        value={targets.kcal}
+        onChange={(e) => onChange({ ...targets, kcal: Number(e.target.value) })}
+        className="tabular-nums"
+      />
 
       {showLimits && (
         <>
-          <div>
-            <label
-              className="mb-1.5 block text-sm font-medium"
-              htmlFor="protein-min"
-            >
-              {t("targets.proteinMin")}{" "}
-              <span className="font-normal text-muted-foreground">
-                ({t("targets.optional")})
-              </span>
-            </label>
-            <input
-              id="protein-min"
-              type="number"
-              min={0}
-              step={1}
-              value={targets.proteinMin ?? ""}
-              onChange={(e) =>
-                onChange({
-                  ...targets,
-                  proteinMin:
-                    e.target.value === "" ? null : Number(e.target.value),
-                })
-              }
-              className={field}
-            />
-          </div>
-          <div>
-            <label
-              className="mb-1.5 block text-sm font-medium"
-              htmlFor="carbs-max"
-            >
-              {t("targets.carbsMax")}{" "}
-              <span className="font-normal text-muted-foreground">
-                ({t("targets.optional")})
-              </span>
-            </label>
-            <input
-              id="carbs-max"
-              type="number"
-              min={0}
-              step={1}
-              value={targets.carbsMax ?? ""}
-              onChange={(e) =>
-                onChange({
-                  ...targets,
-                  carbsMax:
-                    e.target.value === "" ? null : Number(e.target.value),
-                })
-              }
-              className={field}
-            />
-          </div>
+          <Field
+            id="protein-min"
+            label={t("targets.proteinMin")}
+            optional
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={1}
+            value={targets.proteinMin ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...targets,
+                proteinMin:
+                  e.target.value === "" ? null : Number(e.target.value),
+              })
+            }
+            className="tabular-nums"
+          />
+          <Field
+            id="carbs-max"
+            label={t("targets.carbsMax")}
+            optional
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={1}
+            value={targets.carbsMax ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...targets,
+                carbsMax: e.target.value === "" ? null : Number(e.target.value),
+              })
+            }
+            className="tabular-nums"
+          />
         </>
       )}
+    </div>
+  );
+}
+
+function ScaleFields({
+  factor,
+  onChange,
+}: {
+  factor: number;
+  onChange: (next: number) => void;
+}) {
+  const { t } = useTranslation("calculator");
+
+  return (
+    <div className="grid gap-block sm:grid-cols-2">
+      <Field
+        id="factor"
+        label={t("factor")}
+        hint={t("factorHint")}
+        type="number"
+        inputMode="decimal"
+        min={0.1}
+        step={0.1}
+        value={factor}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="tabular-nums"
+      />
     </div>
   );
 }

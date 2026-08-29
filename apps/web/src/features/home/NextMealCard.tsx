@@ -1,7 +1,15 @@
-import { Badge, Button } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Badge,
+  Button,
+  EmptyState,
+  Skeleton,
+} from "@ketocare/ui";
+import { CalendarDays } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SectionLink } from "../../components/SectionLink";
+import { errorMessageOf } from "../../lib/api";
 import { MEAL_SLOTS, useMenuQuery } from "../menu/useMenu";
 import { useMenuItemTitles } from "../menu/useDishCatalog";
 import { todayIso } from "../menu/dates";
@@ -15,6 +23,11 @@ import { Panel } from "./Panel";
  * часам: времени приёмов система не хранит, а порядок завтрак → обед → ужин →
  * перекус задан разделом 4.2 ТЗ. Когда всё отмечено съеденным, показывается,
  * что день пройден, — это ответ, а не пустота.
+ *
+ * Упавший запрос показывается ошибкой с повтором, а не пустым меню: «меню на
+ * сегодня ещё не составлено» вместо сорвавшегося запроса — неправда, и родитель
+ * начал бы составлять день заново. Отсутствие меню (404) запрос отдаёт как
+ * `null`, и это остаётся обычным пустым состоянием.
  */
 export function NextMealCard({ patientId }: { patientId: string }) {
   const { t } = useTranslation("home");
@@ -28,53 +41,76 @@ export function NextMealCard({ patientId }: { patientId: string }) {
     items.filter((item) => item.meal_slot === slot),
   ).find((item) => !item.eaten);
 
+  // Ссылка «Всё меню» ведёт к тому, чего ещё нет, когда меню на день не
+  // составлено, — там достаточно кнопки пустого состояния.
+  const showAction = menu.isPending || items.length > 0;
   const action = (
     <Button asChild variant="ghost" size="sm">
       <SectionLink section="menu">{t("nextMeal.toMenu")}</SectionLink>
     </Button>
   );
 
-  if (menu.isPending) {
-    return (
-      <Panel title={t("nextMeal.title")} action={action}>
-        <p role="status" className="m-0 text-muted-foreground">
-          {t("loading")}
-        </p>
-      </Panel>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <Panel title={t("nextMeal.title")} action={action}>
-        <p className="m-0 text-muted-foreground">{t("nextMeal.noMenu")}</p>
-      </Panel>
-    );
-  }
-
-  if (next === undefined) {
-    return (
-      <Panel title={t("nextMeal.title")} action={action}>
-        <p role="status" className="m-0 text-success">
-          {t("nextMeal.allEaten")}
-        </p>
-      </Panel>
-    );
-  }
-
-  const title = titles[next.id] ?? t("nextMeal.unknownDish");
-
   return (
-    <Panel title={t("nextMeal.title")} action={action}>
-      <div className="flex flex-wrap items-center gap-3">
-        <Badge variant="secondary">
-          {t(`nextMeal.slots.${next.meal_slot}`)}
-        </Badge>
-        <span className="text-lg font-semibold">{title}</span>
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {t("nextMeal.portion", { value: next.portion_factor })}
-        </span>
-      </div>
+    <Panel title={t("nextMeal.title")} action={showAction ? action : undefined}>
+      <AsyncSection
+        loading={menu.isPending}
+        skeleton={
+          <div
+            className="flex flex-col gap-field"
+            role="status"
+            aria-busy="true"
+          >
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+        }
+        error={
+          menu.isError
+            ? {
+                title: t("nextMeal.errorTitle"),
+                description:
+                  errorMessageOf(menu.error) ?? t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void menu.refetch()}
+        isEmpty={items.length === 0}
+        empty={
+          <EmptyState
+            icon={CalendarDays}
+            title={t("nextMeal.noMenu")}
+            description={t("nextMeal.noMenuHint")}
+            action={
+              <Button asChild className="min-h-touch">
+                <SectionLink section="menu">
+                  {t("nextMeal.planMenu")}
+                </SectionLink>
+              </Button>
+            }
+          />
+        }
+      >
+        {next === undefined ? (
+          // Не тост: это состояние дня, а не подтверждение только что сделанного
+          // действия — оно должно оставаться на экране (правило П16 канона).
+          <p role="status" className="m-0 text-success">
+            {t("nextMeal.allEaten")}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-block">
+            <Badge variant="secondary">
+              {t(`nextMeal.slots.${next.meal_slot}`)}
+            </Badge>
+            <span className="min-w-0 text-section-title font-semibold break-words">
+              {titles[next.id] ?? t("nextMeal.unknownDish")}
+            </span>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {t("nextMeal.portion", { value: next.portion_factor })}
+            </span>
+          </div>
+        )}
+      </AsyncSection>
     </Panel>
   );
 }

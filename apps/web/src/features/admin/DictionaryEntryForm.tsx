@@ -1,4 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  FormFooter,
+} from "@ketocare/ui";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -6,8 +14,11 @@ import { z } from "zod";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
+import {
+  FormErrorSummary,
+  type FormErrorSummaryItem,
+} from "./FormErrorSummary";
 import type { DictionaryEntryCreateBody } from "./types";
 
 const entryFormSchema = z.object({
@@ -49,61 +60,94 @@ export function DictionaryEntryForm({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<EntryFormValues>({
     resolver: zodResolver(entryFormSchema),
     defaultValues,
+    // Правило П8: сообщение появляется по уходу с поля, а не на каждой
+    // набранной цифре — иначе форма спорит с пользователем во время ввода.
+    mode: "onBlur",
+    reValidateMode: "onBlur",
   });
+
+  const nameId = `${ids}-name`;
+  const sortId = `${ids}-sort`;
+
+  const nameError = errors.nameRu && t("dictionaries.form.errors.name");
+  const sortError = errors.sort && t("dictionaries.form.errors.sort");
+
+  // Сводка появляется только после неудачной отправки: до неё ошибка живёт под
+  // полем, с которого ушли (правило П8).
+  const summary: FormErrorSummaryItem[] =
+    submitCount === 0
+      ? []
+      : [
+          { fieldId: nameId, message: nameError },
+          { fieldId: sortId, message: sortError },
+        ].filter(
+          (item): item is FormErrorSummaryItem => item.message !== undefined,
+        );
 
   return (
     <form
       noValidate
+      className="flex flex-col gap-block"
       onSubmit={handleSubmit((values) =>
         onSubmit({ name_ru: values.nameRu.trim(), sort: values.sort }),
       )}
-      className="rounded-xl border border-border p-4"
     >
-      <h3 className="mt-0 mb-4 text-base font-semibold">
-        {mode === "create"
-          ? t("dictionaries.form.createTitle")
-          : t("dictionaries.form.editTitle")}
-      </h3>
-
-      {error !== null && error !== undefined && (
-        <FormError>
-          {errorMessageOf(error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
-      <Field
-        id={`${ids}-name`}
-        label={t("dictionaries.form.name")}
-        error={errors.nameRu && t("dictionaries.form.errors.name")}
-        {...register("nameRu")}
+      <FormErrorSummary
+        title={t("errorSummary.title")}
+        items={summary}
+        focusKey={submitCount}
       />
 
-      <Field
-        id={`${ids}-sort`}
-        type="number"
-        step="1"
-        inputMode="numeric"
-        label={t("dictionaries.form.sort")}
-        error={errors.sort && t("dictionaries.form.errors.sort")}
-        {...register("sort", { valueAsNumber: true })}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle role="heading" aria-level={3} className="text-card-title">
+            {mode === "create"
+              ? t("dictionaries.form.createTitle")
+              : t("dictionaries.form.editTitle")}
+          </CardTitle>
+        </CardHeader>
 
-      <div className="flex gap-3">
-        <SubmitButton pending={pending} className="max-w-48">
-          {t("common:actions.save")}
-        </SubmitButton>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="min-h-touch max-w-48 flex-1 rounded-lg border border-border px-4 text-foreground"
-        >
-          {t("common:actions.cancel")}
-        </button>
-      </div>
+        <CardContent className="flex flex-col gap-block">
+          {error !== null && error !== undefined && (
+            <FormError>
+              {errorMessageOf(error) ?? t("common:errors.unexpected")}
+            </FormError>
+          )}
+
+          <Field
+            id={nameId}
+            label={t("dictionaries.form.name")}
+            error={nameError}
+            {...register("nameRu")}
+          />
+
+          <Field
+            id={sortId}
+            type="number"
+            step="1"
+            // Порядок вывода — целое, поэтому клавиатура числовая, а не
+            // десятичная: запятая здесь не нужна.
+            inputMode="numeric"
+            label={t("dictionaries.form.sort")}
+            error={sortError}
+            {...register("sort", { valueAsNumber: true })}
+          />
+        </CardContent>
+
+        <CardFooter>
+          <FormFooter
+            submitLabel={t("common:actions.save")}
+            pendingLabel={t("common:actions.saving")}
+            pending={pending}
+            cancelLabel={t("common:actions.cancel")}
+            onCancel={onCancel}
+          />
+        </CardFooter>
+      </Card>
     </form>
   );
 }

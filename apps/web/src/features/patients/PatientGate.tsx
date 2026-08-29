@@ -1,8 +1,8 @@
-import { WarningBanner } from "@ketocare/ui";
+import { Button, EmptyState, ErrorState, Skeleton } from "@ketocare/ui";
+import { Baby, Users } from "lucide-react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { usePatients } from "./usePatients";
@@ -30,39 +30,50 @@ export function PatientGate({
 
   if (isPending) {
     return (
-      <p role="status" className="m-0 text-muted-foreground">
-        {t("patientGate.loading")}
-      </p>
+      <div className="flex flex-col gap-block" role="status" aria-busy="true">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-40 w-full" />
+      </div>
     );
   }
 
   if (patients.error !== null) {
     return (
-      <FormError>
-        {errorMessageOf(patients.error) ?? t("errors.unexpected")}
-      </FormError>
+      <ErrorState
+        title={t("patientGate.errorTitle")}
+        description={
+          errorMessageOf(patients.error) ?? t("errors.unexpected") ?? undefined
+        }
+        retryLabel={t("actions.retry")}
+        onRetry={() => void patients.refetch()}
+      />
     );
   }
 
   if (needsChoice) {
     return (
-      <WarningBanner level="info" title={t("patientGate.chooseTitle")}>
-        {t("patientGate.chooseBody")}
-      </WarningBanner>
+      <EmptyState
+        icon={Users}
+        title={t("patientGate.chooseTitle")}
+        description={t("patientGate.chooseBody")}
+      />
     );
   }
 
   if (patientId === null) {
     return (
-      <WarningBanner level="info" title={t("patientGate.noneTitle")}>
-        <p className="m-0">{t("patientGate.noneBody")}</p>
-        <SectionLink
-          section="settings"
-          className="mt-2 inline-flex min-h-touch items-center text-primary"
-        >
-          {t("patientGate.addChild")}
-        </SectionLink>
-      </WarningBanner>
+      <EmptyState
+        icon={Baby}
+        title={t("patientGate.noneTitle")}
+        description={t("patientGate.noneBody")}
+        action={
+          <Button asChild>
+            <SectionLink section="settings">
+              {t("patientGate.addChild")}
+            </SectionLink>
+          </Button>
+        }
+      />
     );
   }
 

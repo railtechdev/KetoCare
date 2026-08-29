@@ -16,6 +16,7 @@ from core.repositories import invitations as invitations_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
+from ..cookies import set_auth_cookies
 from ..deps.auth import CurrentUserDep, SessionDep, TotpSetupUserDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
@@ -37,6 +38,7 @@ from ..security import (
     decode_token,
     generate_totp_secret,
     hash_password_async,
+    token_predates_password_change,
     totp_provisioning_uri,
     verify_password_async,
     verify_totp,
@@ -50,21 +52,22 @@ ROLES_REQUIRING_TOTP = frozenset({UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIET
 _INVALID_CREDENTIALS = "Неверный email или пароль."
 
 
-def _set_auth_cookies(response: Response, tokens: TokenPair) -> None:
-    """httpOnly cookie для web (раздел 11 ТЗ: httpOnly, secure, samesite=lax)."""
-
-    response.set_cookie(
-        "access_token", tokens.access_token, httponly=True, secure=True, samesite="lax"
-    )
-    response.set_cookie(
-        "refresh_token", tokens.refresh_token, httponly=True, secure=True, samesite="lax"
-    )
-
-
 def _issue_tokens(user: User) -> TokenPair:
+    """Оба токена несут отметку смены пароля: по ней отзываются старые сессии."""
+
     return TokenPair(
-        access_token=create_token(user_id=user.id, role=user.role, token_type="access"),
-        refresh_token=create_token(user_id=user.id, role=user.role, token_type="refresh"),
+        access_token=create_token(
+            user_id=user.id,
+            role=user.role,
+            token_type="access",
+            password_changed_at=user.password_changed_at,
+        ),
+        refresh_token=create_token(
+            user_id=user.id,
+            role=user.role,
+            token_type="refresh",
+            password_changed_at=user.password_changed_at,
+        ),
     )
 
 
@@ -120,7 +123,7 @@ async def login(
             raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
 
     tokens = _issue_tokens(user)
-    _set_auth_cookies(response, tokens)
+    set_auth_cookies(response, tokens)
 
     await audit_repo.write_audit_log(
         session,
@@ -156,8 +159,11 @@ async def refresh(
     if user is None or not user.is_active:
         raise ApiError(ErrorCode.UNAUTHORIZED, "Учётная запись недоступна.")
 
+    if token_predates_password_change(claims, user.password_changed_at):
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Пароль изменён, войдите заново.")
+
     tokens = _issue_tokens(user)
-    _set_auth_cookies(response, tokens)
+    set_auth_cookies(response, tokens)
     return tokens
 
 
@@ -255,7 +261,7 @@ async def totp_verify(
     )
 
     tokens = _issue_tokens(db_user)
-    _set_auth_cookies(response, tokens)
+    set_auth_cookies(response, tokens)
     return tokens
 
 

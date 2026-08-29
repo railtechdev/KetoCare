@@ -1,6 +1,7 @@
+import { AsyncSection } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { usePatientOverview } from "../patients/overview";
 import { DayTotalsCard } from "./DayTotalsCard";
@@ -27,49 +28,64 @@ import { formatOverviewDate } from "./date";
 export function HomePage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("home");
   const overview = usePatientOverview(patientId);
-
-  if (overview.isPending) return <HomeSkeleton />;
-
-  if (overview.error !== null) {
-    return (
-      <FormError>
-        {errorMessageOf(overview.error) ?? t("common:errors.unexpected")}
-      </FormError>
-    );
-  }
-
   const data = overview.data;
-  if (data === undefined) return <HomeSkeleton />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="m-0 text-2xl font-semibold">{t("title")}</h1>
-        <p className="m-0 mt-1 text-sm text-muted-foreground">
-          {t("date", { date: formatOverviewDate(data.date) })}
-        </p>
-      </header>
+    <PageLayout
+      title={t("title")}
+      // Дата известна только вместе со сводкой: до ответа подпись пустая,
+      // а не подставленная клиентом — сутки считает сервер по своей зоне.
+      intro={
+        data === undefined
+          ? undefined
+          : t("date", { date: formatOverviewDate(data.date) })
+      }
+    >
+      {/* Четыре состояния — в AsyncSection: там же записано, почему неудачное
+          обновление не должно прятать уже показанную сводку. */}
+      <AsyncSection
+        loading={overview.isLoading}
+        skeleton={<HomeSkeleton />}
+        error={
+          overview.isError
+            ? {
+                title: t("loadError"),
+                description:
+                  errorMessageOf(overview.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void overview.refetch()}
+        isEmpty={data === undefined}
+        empty={null}
+      >
+        {data !== undefined && (
+          <>
+            <QuickActions />
 
-      <QuickActions />
+            <div className="grid gap-block lg:grid-cols-3">
+              <div className="flex flex-col gap-block lg:col-span-2">
+                <NextMealCard patientId={patientId} />
+                <DayTotalsCard
+                  day={data.day ?? null}
+                  targetKcal={data.prescription?.kcal_per_day ?? null}
+                />
+                <LatestReadings
+                  ketone={data.last_ketone ?? null}
+                  weight={data.last_weight ?? null}
+                />
+              </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="flex flex-col gap-4 lg:col-span-2">
-          <NextMealCard patientId={patientId} />
-          <DayTotalsCard
-            day={data.day ?? null}
-            targetKcal={data.prescription?.kcal_per_day ?? null}
-          />
-          <LatestReadings
-            ketone={data.last_ketone ?? null}
-            weight={data.last_weight ?? null}
-          />
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <PrescriptionCard prescription={data.prescription ?? null} />
-          <SeizuresCard seizures={data.seizures_today} />
-        </div>
-      </div>
-    </div>
+              <div className="flex flex-col gap-block">
+                <PrescriptionCard prescription={data.prescription ?? null} />
+                <SeizuresCard seizures={data.seizures_today} />
+              </div>
+            </div>
+          </>
+        )}
+      </AsyncSection>
+    </PageLayout>
   );
 }

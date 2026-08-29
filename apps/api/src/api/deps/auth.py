@@ -20,7 +20,7 @@ from core.repositories import access as access_repo
 from core.repositories import users as users_repo
 
 from ..errors import ApiError, ErrorCode
-from ..security import decode_token
+from ..security import decode_token, token_predates_password_change
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -74,6 +74,13 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
     # не дожидаясь истечения выданного access-токена.
     if user.role is not role:
         raise ApiError(ErrorCode.UNAUTHORIZED, "Права учётной записи изменились, войдите заново.")
+
+    # Смена пароля обрывает все прежние сессии (раздел 11 ТЗ). Проверка здесь, а
+    # не только при обновлении токена: иначе угнанный access-токен продолжал бы
+    # работать до пятнадцати минут после того, как владелец сменил пароль.
+    # Дополнительного запроса это не стоит — пользователь уже прочитан выше.
+    if token_predates_password_change(payload, user.password_changed_at):
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Пароль изменён, войдите заново.")
 
     scope_raw = payload.get("patient_scope")
     patient_scope = uuid.UUID(scope_raw) if scope_raw else None

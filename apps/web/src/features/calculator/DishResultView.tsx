@@ -1,4 +1,13 @@
-import { MacroBar, RatioBadge, WarningBanner } from "@ketocare/ui";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  MacroBar,
+  RatioBadge,
+  WarningBanner,
+} from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 export interface DishView {
@@ -28,31 +37,42 @@ export function DishResultView({
     ratioWithinTolerance === false || kcalWithinTolerance === false;
 
   return (
-    <section aria-label={t("result")} className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <RatioBadge ratio={dish.ratio} withinTolerance={ratioWithinTolerance} />
-        <span className="tabular-nums">
-          {t("kcalValue", { value: dish.kcal.toFixed(0) })}
-        </span>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-card-title">{t("result")}</CardTitle>
+      </CardHeader>
 
-      <MacroBar
-        fatG={dish.fat_g}
-        proteinG={dish.protein_g}
-        carbsG={dish.carbs_g}
-      />
+      <CardContent className="flex flex-col gap-block">
+        <div className="flex flex-wrap items-center gap-block">
+          <RatioBadge
+            ratio={dish.ratio}
+            withinTolerance={ratioWithinTolerance}
+          />
+          <span className="tabular-nums">
+            {t("kcalValue", { value: dish.kcal.toFixed(0) })}
+          </span>
+        </div>
 
-      {offTolerance && (
-        <WarningBanner level="warning" title={t("offTolerance.title")}>
-          {t("offTolerance.body")}
-        </WarningBanner>
-      )}
+        <MacroBar
+          fatG={dish.fat_g}
+          proteinG={dish.protein_g}
+          carbsG={dish.carbs_g}
+        />
+
+        {offTolerance && (
+          <WarningBanner level="warning" title={t("offTolerance.title")}>
+            {t("offTolerance.body")}
+          </WarningBanner>
+        )}
+      </CardContent>
 
       {/* Версия движка показывается рядом с результатом: расчёт, сделанный разными
           версиями ядра, может отличаться, и это должно быть видно. */}
-      <p className="text-xs text-muted-foreground">
-        {t("engineVersion", { version: dish.engine_version })}
-      </p>
-    </section>
+      <CardFooter>
+        <p className="m-0 text-xs text-muted-foreground">
+          {t("engineVersion", { version: dish.engine_version })}
+        </p>
+      </CardFooter>
+    </Card>
   );
 }

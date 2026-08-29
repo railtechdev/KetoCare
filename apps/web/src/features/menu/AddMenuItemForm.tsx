@@ -1,11 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { FormFooter } from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { Field } from "../../components/Field";
-import { SubmitButton } from "../../components/SubmitButton";
 import { DishPicker } from "./DishPicker";
 import type { DishOption } from "./useDishCatalog";
 import type { DishKind, MealSlot } from "./useMenu";
@@ -35,7 +35,9 @@ interface Props {
  *
  * Приём пищи не спрашивается: форма открывается кнопкой внутри своего слота, и
  * на экране остаётся два поля вместо трёх (раздел 8.3 ТЗ: не больше трёх полей
- * в форме родительского интерфейса).
+ * в форме родительского интерфейса). Название приёма пищи остаётся у формы
+ * подписью: подписи кнопок подвала одинаковы во всех слотах, и без неё
+ * пользователь скринридера не понял бы, в какой приём он добавляет блюдо.
  */
 export function AddMenuItemForm({
   patientId,
@@ -49,7 +51,6 @@ export function AddMenuItemForm({
 
   const factorId = useId();
   const dishErrorId = useId();
-  const factorHintId = useId();
 
   const {
     register,
@@ -77,7 +78,8 @@ export function AddMenuItemForm({
     <form
       onSubmit={(event) => void onSubmit(event)}
       noValidate
-      className="mt-3 flex flex-col gap-3 rounded-xl border border-border p-4"
+      aria-label={t("slot.addTo", { slot: t(`slots.${slot}`) })}
+      className="flex flex-col gap-block rounded-lg border border-border p-4"
     >
       <DishPicker
         patientId={patientId}
@@ -90,7 +92,7 @@ export function AddMenuItemForm({
         invalid={errors.dishKey !== undefined}
       />
       {errors.dishKey && (
-        <p id={dishErrorId} className="text-sm text-destructive">
+        <p id={dishErrorId} className="m-0 text-sm text-destructive">
           {t("picker.required")}
         </p>
       )}
@@ -102,33 +104,18 @@ export function AddMenuItemForm({
         min={0.01}
         step={0.1}
         label={t("add.factor")}
+        hint={t("add.factorHint")}
         error={errors.portionFactor && t("add.factorInvalid")}
-        // Field связывает с полем сообщение об ошибке по `${id}-error`;
-        // подсказка добавляется к нему, а не вместо него.
-        aria-describedby={
-          errors.portionFactor
-            ? `${factorId}-error ${factorHintId}`
-            : factorHintId
-        }
         {...register("portionFactor", { valueAsNumber: true })}
       />
-      <p id={factorHintId} className="-mt-2 text-sm text-muted-foreground">
-        {t("add.factorHint")}
-      </p>
 
-      <div className="flex flex-wrap gap-3">
-        <SubmitButton pending={pending} className="w-auto px-6">
-          {pending ? t("add.submitting") : t("add.submit")}
-        </SubmitButton>
-        <button
-          type="button"
-          onClick={onCancel}
-          aria-label={t("slot.cancelIn", { slot: t(`slots.${slot}`) })}
-          className="min-h-touch rounded-lg border border-border px-4 text-foreground"
-        >
-          {t("slot.cancel")}
-        </button>
-      </div>
+      <FormFooter
+        submitLabel={t("add.submit")}
+        pendingLabel={t("add.submitting")}
+        pending={pending}
+        cancelLabel={t("slot.cancel")}
+        onCancel={onCancel}
+      />
     </form>
   );
 }

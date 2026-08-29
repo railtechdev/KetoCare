@@ -1,3 +1,5 @@
+import { Button, EmptyState, Input, cn } from "@ketocare/ui";
+import { Utensils, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { DishRow } from "./types";
@@ -20,41 +22,63 @@ export function DishRows({
   const { t } = useTranslation("calculator");
 
   if (rows.length === 0) {
-    return <p className="text-muted-foreground">{t("emptyComposition")}</p>;
+    return (
+      <EmptyState
+        icon={Utensils}
+        title={t("empty.title")}
+        description={t("empty.description")}
+      />
+    );
   }
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+    <ul className="m-0 flex list-none flex-col gap-field p-0">
       {rows.map((row) => (
-        <li key={row.product.id} className="flex items-center gap-3">
-          <span className="flex-1">{row.product.name}</span>
+        <li
+          key={row.product.id}
+          /* basis-full у названия: на узком экране масса и удаление уезжают на
+             свою строку, а длинное название не выдавливает поле за экран (П20). */
+          className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
+        >
+          <span className="min-w-0 flex-1 basis-full break-words sm:basis-auto">
+            {row.product.name}
+          </span>
 
-          <label className="sr-only" htmlFor={`grams-${row.product.id}`}>
-            {t("gramsFor", { name: row.product.name })}
-          </label>
-          <input
-            id={`grams-${row.product.id}`}
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step={1}
-            readOnly={readOnlyGrams}
-            value={Number.isFinite(row.grams) ? row.grams : ""}
-            onChange={(event) =>
-              onChangeGrams(row.product.id, Number(event.target.value))
-            }
-            className="min-h-touch w-24 rounded-lg border border-border bg-card px-3 py-2 text-right tabular-nums read-only:bg-background read-only:text-muted-foreground"
-          />
-          <span className="text-muted-foreground">{t("gramsUnit")}</span>
+          <div className="flex items-center gap-field sm:ml-auto">
+            <label className="sr-only" htmlFor={`grams-${row.product.id}`}>
+              {t("gramsFor", { name: row.product.name })}
+            </label>
+            <Input
+              id={`grams-${row.product.id}`}
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={1}
+              readOnly={readOnlyGrams}
+              value={Number.isFinite(row.grams) ? row.grams : ""}
+              onChange={(event) =>
+                onChangeGrams(row.product.id, Number(event.target.value))
+              }
+              className={cn(
+                "min-h-touch w-24 text-right tabular-nums",
+                "read-only:bg-muted read-only:text-muted-foreground",
+              )}
+            />
+            <span className="text-sm text-muted-foreground">
+              {t("gramsUnit")}
+            </span>
 
-          <button
-            type="button"
-            onClick={() => onRemove(row.product.id)}
-            aria-label={t("removeProduct", { name: row.product.name })}
-            className="min-h-touch min-w-touch rounded-lg border border-border px-3 text-foreground"
-          >
-            ×
-          </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onRemove(row.product.id)}
+              aria-label={t("removeProduct", { name: row.product.name })}
+              className="min-h-touch min-w-touch shrink-0"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </div>
         </li>
       ))}
     </ul>

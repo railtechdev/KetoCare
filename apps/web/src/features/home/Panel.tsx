@@ -1,7 +1,12 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@ketocare/ui";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  cn,
+} from "@ketocare/ui";
 import type { ReactNode } from "react";
-
-import { cn } from "@ketocare/ui";
 
 /**
  * Блок сводки — тонкая обёртка над `Card` кита.
@@ -23,10 +28,10 @@ export function Panel({
   children: ReactNode;
 }) {
   return (
-    <Card className={cn("gap-4", className)}>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle className="text-base">{title}</CardTitle>
-        {action}
+    <Card className={cn("gap-block", className)}>
+      <CardHeader>
+        <CardTitle className="text-card-title">{title}</CardTitle>
+        {action && <CardAction>{action}</CardAction>}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>

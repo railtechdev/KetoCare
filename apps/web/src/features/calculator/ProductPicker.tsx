@@ -1,8 +1,10 @@
+import { ErrorState } from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Field } from "../../components/Field";
+import { errorMessageOf } from "../../lib/api";
 import { useProductSearch, type ProductOption } from "./useProducts";
-import { FIELD_CONTROL } from "../../components/Field";
 
 interface Props {
   onPick: (product: ProductOption) => void;
@@ -24,10 +26,13 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
 
   const listId = useId();
   const inputId = useId();
-  const { data, isFetching } = useProductSearch(query);
+  const { data, isFetching, isError, error, refetch } = useProductSearch(query);
 
   const options = (data ?? []).filter((p) => !excludeIds.includes(p.id));
   const isOpen = query.trim().length >= 2 && options.length > 0;
+  // Упавший поиск без сообщения неотличим от «ничего не нашлось»: подсказок
+  // нет в обоих случаях. Показываем ошибку с повтором (П15 канона).
+  const searchFailed = isError && query.trim().length >= 2;
 
   function pick(product: ProductOption | undefined) {
     if (!product) return;
@@ -38,17 +43,14 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
 
   return (
     <div className="relative">
-      <label className="mb-1.5 block text-sm font-medium" htmlFor={inputId}>
-        {t("addProduct")}
-      </label>
-      <input
+      <Field
         id={inputId}
+        label={t("addProduct")}
         role="combobox"
         aria-expanded={isOpen}
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={isOpen ? `${listId}-${activeIndex}` : undefined}
-        className={FIELD_CONTROL}
         placeholder={t("searchPlaceholder")}
         value={query}
         onChange={(event) => {
@@ -82,6 +84,16 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
             : ""}
       </span>
 
+      {searchFailed && (
+        <ErrorState
+          className="mt-field"
+          title={t("searchError")}
+          description={errorMessageOf(error) ?? t("common:errors.unexpected")}
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void refetch()}
+        />
+      )}
+
       {isOpen && (
         <ul
           id={listId}
@@ -94,8 +106,8 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
               id={`${listId}-${index}`}
               role="option"
               aria-selected={index === activeIndex}
-              className={`min-h-touch cursor-pointer px-3 py-2 ${
-                index === activeIndex ? "bg-background" : ""
+              className={`flex min-h-touch cursor-pointer flex-wrap items-center gap-x-field px-3 py-2 ${
+                index === activeIndex ? "bg-accent text-accent-foreground" : ""
               }`}
               onMouseDown={(event) => {
                 // mouseDown, а не click: click срабатывает после blur поля,
@@ -105,8 +117,8 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
               }}
               onMouseEnter={() => setActiveIndex(index)}
             >
-              <span>{product.name}</span>
-              <span className="ml-2 text-sm text-muted-foreground tabular-nums">
+              <span className="min-w-0 break-words">{product.name}</span>
+              <span className="text-sm text-muted-foreground tabular-nums">
                 {t("per100g", {
                   kcal: product.kcal.toFixed(0),
                   fat: product.fat.toFixed(1),

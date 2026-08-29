@@ -240,6 +240,19 @@ class MeUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=32)
 
 
+class PasswordChange(BaseModel):
+    """Смена собственного пароля.
+
+    Текущий пароль обязателен: без него оставленная без присмотра открытая
+    сессия позволяла бы сменить пароль и запереть владельца.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 class ColleagueRead(BaseModel):
     """Специалист в справочнике персонала.
 

@@ -4,9 +4,10 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
+import { FormFooter } from "@ketocare/ui";
+
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
 import { parseDateInput, toDateInput } from "../diary/time";
 import type { Medication, MedicationBody } from "./types";
@@ -89,8 +90,9 @@ export function MedicationForm({
     <form
       noValidate
       onSubmit={handleSubmit((values) => onSubmit(toBody(values)))}
+      className="flex flex-col gap-block"
     >
-      <div className="grid gap-x-4 sm:grid-cols-2">
+      <div className="grid gap-block sm:grid-cols-2">
         <Field
           id={`${ids}-drug`}
           label={t("medications.fields.drugName")}
@@ -121,15 +123,13 @@ export function MedicationForm({
         <Field
           id={`${ids}-stopped`}
           type="date"
+          optional
           label={t("medications.fields.stoppedAt")}
+          hint={t("medications.stoppedHint")}
           error={errors.stoppedAt && t("medications.errors.stoppedAt")}
           {...register("stoppedAt")}
         />
       </div>
-
-      <p className="mt-0 mb-4 text-sm text-muted-foreground">
-        {t("medications.stoppedHint")}
-      </p>
 
       {error !== null && error !== undefined && (
         <FormError>
@@ -137,18 +137,13 @@ export function MedicationForm({
         </FormError>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <SubmitButton pending={pending} className="w-auto px-6">
-          {t("actions.save")}
-        </SubmitButton>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="min-h-touch rounded-lg border border-border px-4 font-semibold"
-        >
-          {t("actions.cancel")}
-        </button>
-      </div>
+      <FormFooter
+        submitLabel={t("actions.save")}
+        pendingLabel={t("common:actions.saving")}
+        pending={pending}
+        cancelLabel={t("actions.cancel")}
+        onCancel={onCancel}
+      />
     </form>
   );
 }

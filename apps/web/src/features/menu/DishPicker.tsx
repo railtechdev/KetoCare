@@ -1,4 +1,4 @@
-import { formatRatio } from "@ketocare/ui";
+import { Input, Label, cn, formatRatio } from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -25,6 +25,10 @@ interface Props {
  * Разметка combobox по WAI-ARIA: поле связано со списком через aria-controls,
  * активный вариант — через aria-activedescendant. Без этого пользователь
  * скринридера не узнает ни о появлении подсказок, ни о выбранном варианте.
+ *
+ * Поле собрано из `Input` и `Label` кита, а не из `Field`: список подсказок
+ * позиционируется относительно поля и должен стоять сразу за ним, а `Field`
+ * ставит между ними подсказку и сообщение об ошибке.
  */
 export function DishPicker({
   patientId,
@@ -59,11 +63,9 @@ export function DishPicker({
   }
 
   return (
-    <div className="relative">
-      <label className="mb-1.5 block text-sm font-medium" htmlFor={inputId}>
-        {t("picker.label")}
-      </label>
-      <input
+    <div className="relative flex flex-col gap-field">
+      <Label htmlFor={inputId}>{t("picker.label")}</Label>
+      <Input
         id={inputId}
         role="combobox"
         aria-expanded={isOpen}
@@ -72,9 +74,7 @@ export function DishPicker({
         aria-activedescendant={isOpen ? `${listId}-${activeIndex}` : undefined}
         aria-invalid={invalid ? true : undefined}
         aria-describedby={errorId}
-        className={`min-h-touch w-full rounded-lg border bg-card px-3 py-2.5 text-foreground ${
-          invalid ? "border-destructive" : "border-border"
-        }`}
+        className="min-h-touch"
         placeholder={t("picker.placeholder")}
         value={query}
         onFocus={() => setOpen(true)}
@@ -120,7 +120,7 @@ export function DishPicker({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-border bg-card shadow-kc"
+          className="absolute z-10 mt-1 max-h-72 w-full list-none overflow-auto rounded-lg border border-border bg-popover p-0 text-popover-foreground shadow-kc"
         >
           {options.map((option, index) => (
             <li
@@ -128,9 +128,10 @@ export function DishPicker({
               id={`${listId}-${index}`}
               role="option"
               aria-selected={index === activeIndex}
-              className={`min-h-touch cursor-pointer px-3 py-2 ${
-                index === activeIndex ? "bg-background" : ""
-              }`}
+              className={cn(
+                "flex min-h-touch cursor-pointer flex-wrap items-center gap-field px-3 py-2",
+                index === activeIndex && "bg-accent text-accent-foreground",
+              )}
               onMouseDown={(event) => {
                 // mouseDown, а не click: click срабатывает после blur поля,
                 // и список успевает закрыться раньше выбора.
@@ -139,11 +140,11 @@ export function DishPicker({
               }}
               onMouseEnter={() => setActiveIndex(index)}
             >
-              <span>{option.title}</span>
-              <span className="ml-2 text-sm text-muted-foreground">
+              <span className="min-w-0 break-words">{option.title}</span>
+              <span className="text-sm text-muted-foreground">
                 {t(`item.${option.kind}`)}
               </span>
-              <span className="ml-2 text-sm text-muted-foreground tabular-nums">
+              <span className="text-sm text-muted-foreground tabular-nums">
                 {option.kcal === null
                   ? t("picker.noTotals")
                   : t("picker.totals", {
@@ -153,7 +154,7 @@ export function DishPicker({
                     })}
               </span>
               {option.servings !== null && (
-                <span className="ml-2 text-sm text-muted-foreground tabular-nums">
+                <span className="text-sm text-muted-foreground tabular-nums">
                   {t("picker.servings", { count: option.servings })}
                 </span>
               )}
@@ -163,12 +164,12 @@ export function DishPicker({
       )}
 
       {isError && (
-        <p className="mt-1 text-sm text-destructive" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {errorMessageOf(error) ?? t("picker.failed")}
         </p>
       )}
 
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="m-0 text-sm text-muted-foreground">
         {value !== null
           ? t(`item.${value.kind}`)
           : query.trim().length >= 2 && !isFetching && !isOpen

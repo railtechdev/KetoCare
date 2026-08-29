@@ -8,10 +8,19 @@ import { resources } from "./i18n";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 
+/**
+ * Витрина компонентов — инструмент разработчика, а не пользовательский экран:
+ * она не входит в production-сборку (маршрут регистрируется только при
+ * `import.meta.env.DEV`) и переводить её подписи некуда и незачем. Исключение
+ * названо поимённо, чтобы под него нельзя было спрятать обычный экран.
+ */
+const DEV_ONLY = [join("routes", "UiShowcase.tsx")];
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) return sourceFiles(full);
+    if (DEV_ONLY.some((suffix) => full.endsWith(suffix))) return [];
     return /\.tsx$/.test(full) && !full.endsWith(".test.tsx") ? [full] : [];
   });
 }

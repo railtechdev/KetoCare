@@ -1,12 +1,22 @@
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  FormFooter,
+  toast,
+} from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import type { DishRow } from "./types";
 import { useSaveDishMutation } from "./useCalcMutations";
-import { FIELD_CONTROL } from "../../components/Field";
 
 interface Props {
   patientId: string | null;
@@ -21,65 +31,65 @@ export function SaveDishForm({ patientId, rows }: Props) {
   const [title, setTitle] = useState("");
 
   if (patientId === null) {
-    return <p className="text-muted-foreground">{t("save.noPatient")}</p>;
-  }
-
-  if (save.isSuccess) {
     return (
-      <p role="status" className="text-success">
-        {t("save.saved")}
-      </p>
+      <p className="m-0 text-sm text-muted-foreground">{t("save.noPatient")}</p>
     );
   }
 
   return (
-    <form
-      className="flex flex-wrap items-end gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        save.mutate(
-          { title: title.trim(), rows },
-          {
-            onSuccess: () =>
-              void queryClient.invalidateQueries({
-                queryKey: ["patient", patientId, "custom-dishes"],
-              }),
-          },
-        );
-      }}
-    >
-      <div className="flex-1">
-        <label
-          className="mb-1.5 block text-sm font-medium"
-          htmlFor="dish-title"
-        >
-          {t("save.title")}
-        </label>
-        <input
-          id="dish-title"
-          required
-          value={title}
-          placeholder={t("save.placeholder")}
-          onChange={(event) => setTitle(event.target.value)}
-          className={FIELD_CONTROL}
-        />
-      </div>
-
-      <button
-        type="submit"
-        disabled={save.isPending || title.trim() === "" || rows.length === 0}
-        className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
+    <Card>
+      <form
+        className="flex flex-col gap-block"
+        onSubmit={(event) => {
+          event.preventDefault();
+          save.mutate(
+            { title: title.trim(), rows },
+            {
+              onSuccess: () => {
+                // Успех — тост, а не зелёная строка навсегда в потоке
+                // страницы (П16 канона): форма остаётся на месте и готова
+                // принять следующее блюдо.
+                toast.success(t("save.saved"));
+                setTitle("");
+                void queryClient.invalidateQueries({
+                  queryKey: ["patient", patientId, "custom-dishes"],
+                });
+              },
+            },
+          );
+        }}
       >
-        {save.isPending ? t("save.saving") : t("save.action")}
-      </button>
+        <CardHeader>
+          <CardTitle className="text-card-title">{t("save.action")}</CardTitle>
+          <CardDescription>{t("save.description")}</CardDescription>
+        </CardHeader>
 
-      {save.isError && (
-        <div className="w-full">
-          <FormError>
-            {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
-          </FormError>
-        </div>
-      )}
-    </form>
+        <CardContent className="flex flex-col gap-block">
+          <Field
+            id="dish-title"
+            label={t("save.title")}
+            required
+            value={title}
+            placeholder={t("save.placeholder")}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+
+          {save.isError && (
+            <FormError>
+              {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
+            </FormError>
+          )}
+        </CardContent>
+
+        <CardFooter>
+          <FormFooter
+            submitLabel={t("save.submit")}
+            pendingLabel={t("save.saving")}
+            pending={save.isPending}
+            disabled={title.trim() === "" || rows.length === 0}
+          />
+        </CardFooter>
+      </form>
+    </Card>
   );
 }

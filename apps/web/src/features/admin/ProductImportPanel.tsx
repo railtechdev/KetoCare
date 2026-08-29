@@ -1,10 +1,21 @@
-import { DataTable, WarningBanner } from "@ketocare/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  DataTable,
+  WarningBanner,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { ArrowLeft, FileUp, RotateCcw } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import { SectionHeading } from "./SectionHeading";
 import { useImportProductsMutation } from "./useAdminProducts";
 import type { ImportRowError } from "./types";
 
@@ -71,57 +82,52 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <h2 className="m-0 text-lg font-semibold">
-        {t("products.import.title")}
-      </h2>
-      <p className="m-0 text-muted-foreground">{t("products.import.intro")}</p>
+    <div className="flex flex-col gap-block">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="-ml-2 self-start"
+        onClick={onDone}
+      >
+        <ArrowLeft aria-hidden="true" />
+        {t("products.import.backToList")}
+      </Button>
+
+      <SectionHeading
+        title={t("products.import.title")}
+        intro={t("products.import.intro")}
+      />
 
       {/* Список колонок повторяет REQUIRED_COLUMNS из
           apps/api/src/api/services/product_import.py — это подсказка к формату
           файла, сами колонки проверяет сервер. */}
-      <p className="m-0 text-sm text-muted-foreground">
-        {t("products.import.formatHint")}
-      </p>
-
-      <div>
-        <label
-          className="mb-1.5 block text-sm font-medium"
-          htmlFor={`${ids}-file`}
-        >
-          {t("products.import.file")}
-        </label>
-        <input
+      <div className="max-w-md">
+        <Field
           ref={fileInput}
           id={`${ids}-file`}
           type="file"
           accept=".csv,text/csv"
+          label={t("products.import.file")}
+          hint={t("products.import.formatHint")}
           onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
-          className="min-h-touch w-full max-w-md rounded-lg border border-border bg-card px-3 py-2.5 text-foreground"
         />
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <button
+      <div className="flex flex-wrap gap-block">
+        <Button
           type="button"
           disabled={file === null || importProducts.isPending}
+          aria-busy={importProducts.isPending}
           onClick={() => {
             if (file !== null) importProducts.mutate({ file, dryRun: true });
           }}
-          className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
         >
+          <FileUp aria-hidden="true" />
           {importProducts.isPending
             ? t("products.import.checking")
             : t("products.import.check")}
-        </button>
-
-        <button
-          type="button"
-          onClick={onDone}
-          className="min-h-touch rounded-lg border border-border px-4 text-foreground"
-        >
-          {t("products.import.backToList")}
-        </button>
+        </Button>
       </div>
 
       {importProducts.isError && (
@@ -132,91 +138,101 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
       )}
 
       {report !== null && (
-        <section className="flex flex-col gap-3">
-          <h3 className="m-0 text-base font-semibold">
-            {report.dry_run
-              ? t("products.import.preview.title")
-              : t("products.import.result.title")}
-          </h3>
-
-          <p className="m-0 tabular-nums">
-            {t("products.import.preview.totalRows", {
-              value: report.total_rows,
-            })}
-            {" · "}
-            {t("products.import.preview.errorRows", { value: errorRows })}
-          </p>
-
-          {report.dry_run ? (
-            <>
-              <p className="m-0 text-sm text-muted-foreground">
-                {t("products.import.preview.note")}
-              </p>
-              <div>
-                <button
-                  type="button"
-                  disabled={file === null || importProducts.isPending}
-                  onClick={() => {
-                    if (file !== null)
-                      importProducts.mutate({ file, dryRun: false });
-                  }}
-                  className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60"
-                >
-                  {t("products.import.confirm")}
-                </button>
-              </div>
-            </>
-          ) : report.imported > 0 ? (
-            <WarningBanner
-              level="info"
-              title={t("products.import.result.done")}
+        <Card>
+          <CardHeader>
+            <CardTitle
+              role="heading"
+              aria-level={3}
+              className="text-card-title"
             >
-              {t("products.import.result.imported", {
-                value: report.imported,
+              {report.dry_run
+                ? t("products.import.preview.title")
+                : t("products.import.result.title")}
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="flex flex-col gap-block">
+            <p className="m-0 tabular-nums">
+              {t("products.import.preview.totalRows", {
+                value: report.total_rows,
               })}
-            </WarningBanner>
-          ) : (
-            // Файл загружается одной транзакцией: ошибка разбора отменяет весь
-            // импорт, а не отдельные строки (частичная база продуктов хуже, чем
-            // её отсутствие).
-            <WarningBanner
-              level="danger"
-              title={t("products.import.result.failed")}
-            >
-              {t("products.import.result.nothing")}
-            </WarningBanner>
-          )}
+              {" · "}
+              {t("products.import.preview.errorRows", { value: errorRows })}
+            </p>
 
-          {errors.length > 0 && (
-            <DataTable
-              columns={columns}
-              data={errors}
-              caption={t("products.import.errors.caption")}
-              emptyState={t("products.import.errors.none")}
-              labels={{
-                previousPage: t("table.previousPage"),
-                nextPage: t("table.nextPage"),
-                pageStatus: (page, total) =>
-                  t("table.pageStatus", { page, total }),
-              }}
-            />
-          )}
-
-          {!report.dry_run && (
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  pickFile(null);
-                  if (fileInput.current !== null) fileInput.current.value = "";
-                }}
-                className="min-h-touch rounded-lg border border-border px-4 text-foreground"
+            {report.dry_run ? (
+              <>
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t("products.import.preview.note")}
+                </p>
+                <div>
+                  <Button
+                    type="button"
+                    disabled={file === null || importProducts.isPending}
+                    aria-busy={importProducts.isPending}
+                    onClick={() => {
+                      if (file !== null)
+                        importProducts.mutate({ file, dryRun: false });
+                    }}
+                  >
+                    {t("products.import.confirm")}
+                  </Button>
+                </div>
+              </>
+            ) : report.imported > 0 ? (
+              <WarningBanner
+                level="info"
+                title={t("products.import.result.done")}
               >
-                {t("products.import.another")}
-              </button>
-            </div>
-          )}
-        </section>
+                {t("products.import.result.imported", {
+                  value: report.imported,
+                })}
+              </WarningBanner>
+            ) : (
+              // Файл загружается одной транзакцией: ошибка разбора отменяет весь
+              // импорт, а не отдельные строки (частичная база продуктов хуже, чем
+              // её отсутствие).
+              <WarningBanner
+                level="danger"
+                title={t("products.import.result.failed")}
+              >
+                {t("products.import.result.nothing")}
+              </WarningBanner>
+            )}
+
+            {errors.length > 0 && (
+              <DataTable
+                columns={columns}
+                data={errors}
+                caption={t("products.import.errors.caption")}
+                emptyState={t("products.import.errors.none")}
+                labels={{
+                  previousPage: t("table.previousPage"),
+                  nextPage: t("table.nextPage"),
+                  pageStatus: (page, total) =>
+                    t("table.pageStatus", { page, total }),
+                }}
+              />
+            )}
+
+            {!report.dry_run && (
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    pickFile(null);
+                    if (fileInput.current !== null)
+                      fileInput.current.value = "";
+                  }}
+                >
+                  <RotateCcw aria-hidden="true" />
+                  {t("products.import.another")}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

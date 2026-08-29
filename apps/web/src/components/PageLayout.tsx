@@ -71,7 +71,9 @@ export function PageLayout({
             )}
           </div>
           {actions && (
-            <div className="flex flex-wrap items-center gap-2">{actions}</div>
+            <div className="flex flex-wrap items-center gap-field">
+              {actions}
+            </div>
           )}
         </div>
       </header>

@@ -22,7 +22,7 @@ export function QuickActions() {
 
   return (
     <nav aria-label={t("quickActions.title")}>
-      <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-3">
+      <ul className="m-0 grid list-none gap-block p-0 sm:grid-cols-3">
         {ACTIONS.map(({ key, icon: Icon, section, kind }) => (
           <li key={key}>
             <Button asChild size="lg" className="min-h-touch w-full">

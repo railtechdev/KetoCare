@@ -1,4 +1,13 @@
-import { cn } from "@ketocare/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  cn,
+} from "@ketocare/ui";
+import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -44,94 +53,111 @@ export function MenuSlotSection({
   const slotName = t(`slots.${slot}`);
 
   return (
-    <section
-      aria-label={slotName}
-      className="rounded-xl bg-card p-4 shadow-kc-sm"
-    >
-      <h2 className="m-0 text-lg font-semibold">{slotName}</h2>
+    <Card role="region" aria-label={slotName}>
+      <CardHeader>
+        <CardTitle>
+          <h2 className="m-0 text-section-title">{slotName}</h2>
+        </CardTitle>
+      </CardHeader>
 
-      {items.length === 0 ? (
-        <p className="mt-2 mb-0 text-muted-foreground">{t("slot.empty")}</p>
-      ) : (
-        <ul className="mt-3 mb-0 flex list-none flex-col gap-2 p-0">
-          {items.map((item) => {
-            const key = itemDishKey(item);
-            const title =
-              (key === null ? undefined : titles[key]) ?? t("item.unknown");
+      <CardContent className="flex flex-col gap-block">
+        {items.length === 0 ? (
+          <p className="m-0 text-sm text-muted-foreground">{t("slot.empty")}</p>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-field p-0">
+            {items.map((item) => {
+              const key = itemDishKey(item);
+              const title =
+                (key === null ? undefined : titles[key]) ?? t("item.unknown");
 
-            return (
-              <li
-                key={item.id}
-                className="flex flex-wrap items-center gap-3 rounded-lg border border-border px-3 py-2"
-              >
-                <label className="flex min-h-touch items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-5 accent-primary"
-                    checked={item.eaten}
-                    aria-label={t("item.eatenFor", { name: title })}
-                    onChange={(event) =>
-                      onToggleEaten(item.id, event.target.checked)
+              return (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
+                >
+                  <label className="flex min-h-touch items-center gap-field text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-5 accent-primary"
+                      checked={item.eaten}
+                      aria-label={t("item.eatenFor", { name: title })}
+                      onChange={(event) =>
+                        onToggleEaten(item.id, event.target.checked)
+                      }
+                    />
+                    {t("item.eaten")}
+                  </label>
+
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 break-words",
+                      item.eaten && "text-muted-foreground line-through",
+                    )}
+                  >
+                    {title}
+                  </span>
+
+                  <span className="text-sm text-muted-foreground">
+                    {t(`item.${item.recipe_id !== null ? "recipe" : "custom"}`)}
+                  </span>
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {t("item.portion", {
+                      factor: formatPortionFactor(item.portion_factor),
+                    })}
+                  </span>
+
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="min-h-touch min-w-touch text-muted-foreground"
+                        disabled={!canRemove || pending}
+                        aria-label={t("item.remove", { name: title })}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
                     }
+                    title={t("item.removeTitle", { name: title })}
+                    description={t("item.removeDescription", {
+                      slot: slotName,
+                    })}
+                    confirmLabel={t("item.removeConfirm")}
+                    cancelLabel={t("common:actions.cancel")}
+                    onConfirm={() => onRemove(item.id)}
                   />
-                  {t("item.eaten")}
-                </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-                <span
-                  className={cn(
-                    "flex-1",
-                    item.eaten && "text-muted-foreground line-through",
-                  )}
-                >
-                  {title}
-                </span>
-
-                <span className="text-sm text-muted-foreground">
-                  {t(`item.${item.recipe_id !== null ? "recipe" : "custom"}`)}
-                </span>
-                <span className="text-sm text-muted-foreground tabular-nums">
-                  {t("item.portion", {
-                    factor: formatPortionFactor(item.portion_factor),
-                  })}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => onRemove(item.id)}
-                  disabled={!canRemove || pending}
-                  aria-label={t("item.remove", { name: title })}
-                  className="min-h-touch min-w-touch rounded-lg border border-border px-3 text-foreground disabled:opacity-60"
-                >
-                  ×
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {adding ? (
-        <AddMenuItemForm
-          patientId={patientId}
-          slot={slot}
-          pending={pending}
-          onAdd={(input) => {
-            onAdd({ slot, ...input });
-            setAdding(false);
-          }}
-          onCancel={() => setAdding(false)}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          disabled={pending}
-          aria-label={t("slot.addTo", { slot: slotName })}
-          className="mt-3 min-h-touch rounded-lg border border-primary px-4 font-semibold text-primary disabled:opacity-60"
-        >
-          {t("slot.add")}
-        </button>
-      )}
-    </section>
+        {adding ? (
+          <AddMenuItemForm
+            patientId={patientId}
+            slot={slot}
+            pending={pending}
+            onAdd={(input) => {
+              onAdd({ slot, ...input });
+              setAdding(false);
+            }}
+            onCancel={() => setAdding(false)}
+          />
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch self-start"
+            onClick={() => setAdding(true)}
+            disabled={pending}
+            aria-label={t("slot.addTo", { slot: slotName })}
+          >
+            <Plus aria-hidden="true" />
+            {t("slot.add")}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }

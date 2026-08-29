@@ -1,9 +1,17 @@
-import { DataTable, RatioBadge } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  DataTable,
+  EmptyState,
+  RatioBadge,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { SearchX, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
+import { Field } from "../../components/Field";
+import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { usePatients } from "../patients/usePatients";
@@ -11,8 +19,8 @@ import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
 import { ageInMonths } from "./dates";
 import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
+import { TableSkeleton } from "./skeletons";
 import type { Patient } from "./types";
-import { FIELD_CONTROL } from "../../components/Field";
 import { InvitePanel } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 
@@ -124,98 +132,131 @@ export function PatientsListView({
         id: "flags",
         header: t("list.columns.flags"),
         enableSorting: false,
-        cell: ({ row }) => <PatientFlagsView flags={row.original.flags} />,
+        // Пока сводка не пришла, в ячейке скелетон, а не прочерк: прочерк
+        // читается как «замечаний нет», и это разные утверждения.
+        cell: ({ row }) => (
+          <PatientFlagsView
+            flags={row.original.flags}
+            pending={overviews.pending}
+          />
+        ),
       },
       {
         id: "open",
         header: t("list.columns.card"),
         enableSorting: false,
         cell: ({ row }) => (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-touch"
             onClick={() => onOpen(row.original.patient)}
             aria-label={t("list.openAria", { name: row.original.name })}
-            className="min-h-touch rounded-lg border border-border px-3 text-sm font-semibold text-primary"
           >
             {t("list.open")}
-          </button>
+          </Button>
         ),
       },
     ],
-    [onOpen, t],
+    [onOpen, overviews.pending, t],
   );
 
   return (
-    <section className="flex flex-col gap-4">
-      <header>
-        <h1 className="m-0 text-xl font-semibold">{t("list.title")}</h1>
-        <p className="mt-1 mb-0 text-muted-foreground">{t("list.intro")}</p>
-      </header>
-
+    <PageLayout title={t("list.title")} intro={t("list.intro")}>
       {/* Пригласивший семью специалист становится ведущим для её ребёнка, как
           только родитель заведёт профиль (ADR-0003). Другого способа получить
           пациента у врача нет: «взять» чужого пациента нельзя. */}
       <InvitePanel roles={FAMILY_ROLES} />
 
       <div className="max-w-md">
-        <label
-          className="mb-1.5 block text-sm font-medium"
-          htmlFor="patient-search"
-        >
-          {t("list.search.label")}
-        </label>
-        <input
+        <Field
           id="patient-search"
           type="search"
-          value={query}
+          label={t("list.search.label")}
           placeholder={t("list.search.placeholder")}
+          value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className={FIELD_CONTROL}
         />
       </div>
 
-      {patients.isError && (
-        <FormError>
-          {errorMessageOf(patients.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
+      {/* Ошибка обновления списка не прячет уже показанных пациентов: врач,
+          у которого строки исчезли за красным блоком, решает, что потерял
+          доступ к своим пациентам. */}
+      <AsyncSection
+        loading={patients.isPending}
+        skeleton={<TableSkeleton label={t("list.loading")} />}
+        error={
+          patients.isError
+            ? {
+                title: t("list.loadError"),
+                description:
+                  errorMessageOf(patients.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void patients.refetch()}
+        isEmpty={rows.length === 0}
+        empty={
+          needle === "" ? (
+            <EmptyState
+              icon={Users}
+              title={t("list.empty")}
+              description={t("list.emptyDescription")}
+            />
+          ) : (
+            <EmptyState
+              icon={SearchX}
+              title={t("list.emptySearch")}
+              description={t("list.emptySearchDescription")}
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setQuery("")}
+                >
+                  {t("list.resetSearch")}
+                </Button>
+              }
+            />
+          )
+        }
+      >
+        {/* Флаги появляются по мере ответов на сводки: в ячейках скелетон,
+            а состояние проговаривается один раз на весь список. */}
+        {overviews.pending && (
+          <p role="status" className="sr-only">
+            {t("list.flagsLoading")}
+          </p>
+        )}
 
-      {patients.isPending ? (
-        <p role="status" className="m-0 text-muted-foreground">
-          {t("list.loading")}
-        </p>
-      ) : (
-        <>
-          {/* Флаги появляются по мере ответов на сводки: строка без сводки
-              показывает прочерк, а не «данных нет» — это разные утверждения. */}
-          {overviews.pending && (
-            <p role="status" className="m-0 text-sm text-muted-foreground">
-              {t("list.flagsLoading")}
-            </p>
-          )}
-          {overviews.failed && (
-            <p className="m-0 text-sm text-muted-foreground">
-              {t("list.flagsFailed")}
-            </p>
-          )}
+        {/* У пациента, чью сводку получить не удалось, флагов нет — об этом
+            надо сказать явно. */}
+        {overviews.failed && (
+          <p className="m-0 text-sm text-muted-foreground">
+            {t("list.flagsFailed")}
+          </p>
+        )}
 
-          <DataTable
-            columns={columns}
-            data={rows}
-            caption={t("list.caption")}
-            emptyState={needle === "" ? t("list.empty") : t("list.emptySearch")}
-            labels={{
-              previousPage: t("table.previousPage"),
-              nextPage: t("table.nextPage"),
-              pageStatus: (page, total) =>
-                t("table.pageStatus", { page, total }),
-            }}
-          />
+        <DataTable
+          columns={columns}
+          data={rows}
+          caption={t("list.caption")}
+          // Пустое состояние — у `AsyncSection`, иначе оно рисовалось бы
+          // дважды: и вместо таблицы, и вместо всего блока.
+          emptyState={null}
+          labels={{
+            previousPage: t("table.previousPage"),
+            nextPage: t("table.nextPage"),
+            pageStatus: (page, total) => t("table.pageStatus", { page, total }),
+          }}
+        />
 
-          <PatientFlagsLegend />
-        </>
-      )}
-    </section>
+        <PatientFlagsLegend />
+      </AsyncSection>
+    </PageLayout>
   );
 }
 

@@ -1,11 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { FormFooter } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
 import type { Patient } from "../patients/useChildren";
 import { childSchema, type ChildValues } from "./childSchemas";
@@ -53,7 +53,11 @@ export function ChildForm({
   });
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="max-w-xl">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      noValidate
+      className="flex flex-col gap-block"
+    >
       <Field
         id={`${ids}-name`}
         label={t("child.fields.fullName")}
@@ -73,15 +77,13 @@ export function ChildForm({
           <SelectField
             id={`${ids}-sex`}
             label={t("child.fields.sex")}
+            hint={t("child.immutableHint")}
             error={errors.sex && t("child.errors.sex")}
             {...register("sex")}
           >
             <option value="m">{t("child.sex.m")}</option>
             <option value="f">{t("child.sex.f")}</option>
           </SelectField>
-          <p className="mt-0 mb-4 text-sm text-muted-foreground">
-            {t("child.immutableHint")}
-          </p>
         </>
       )}
 
@@ -90,6 +92,7 @@ export function ChildForm({
         type="number"
         inputMode="decimal"
         step="0.1"
+        optional
         label={t("child.fields.heightCm")}
         error={errors.heightCm && t("child.errors.heightCm")}
         {...register("heightCm")}
@@ -97,6 +100,7 @@ export function ChildForm({
 
       <Field
         id={`${ids}-allergies`}
+        optional
         label={t("child.fields.allergies")}
         placeholder={t("child.fields.allergiesPlaceholder")}
         {...register("allergies")}
@@ -105,6 +109,7 @@ export function ChildForm({
       <TextAreaField
         id={`${ids}-notes`}
         rows={3}
+        optional
         label={t("child.fields.notes")}
         {...register("notes")}
       />
@@ -115,20 +120,13 @@ export function ChildForm({
         </FormError>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <SubmitButton pending={pending}>
-          {isEdit ? t("common:actions.save") : t("child.add")}
-        </SubmitButton>
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-touch rounded-lg border border-border px-4 text-foreground"
-          >
-            {t("common:actions.cancel")}
-          </button>
-        )}
-      </div>
+      <FormFooter
+        submitLabel={isEdit ? t("common:actions.save") : t("child.add")}
+        pendingLabel={t("common:actions.saving")}
+        pending={pending}
+        cancelLabel={onCancel ? t("common:actions.cancel") : undefined}
+        onCancel={onCancel}
+      />
     </form>
   );
 }

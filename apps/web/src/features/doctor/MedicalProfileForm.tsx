@@ -4,11 +4,19 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  FormFooter,
+  toast,
+} from "@ketocare/ui";
+
 import { Field, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
-import { Panel } from "../home/Panel";
 import { useSaveMedicalProfile } from "./doctorMutations";
 import type { MedicalProfile, MedicalProfileBody } from "./types";
 
@@ -102,86 +110,100 @@ export function MedicalProfileForm({
   });
 
   return (
-    <Panel title={t("profile.title")}>
-      <form
-        noValidate
-        onSubmit={handleSubmit((values) =>
-          save.mutate(toBody(values), { onSuccess: onDone }),
-        )}
-      >
-        <TextAreaField
-          id={`${ids}-diagnosis`}
-          rows={3}
-          label={t("profile.fields.diagnosis")}
-          {...register("diagnosis")}
-        />
-
-        <Field
-          id={`${ids}-epilepsy-type`}
-          label={t("profile.fields.epilepsyType")}
-          {...register("epilepsyType")}
-        />
-
-        <Field
-          id={`${ids}-onset`}
-          type="number"
-          inputMode="numeric"
-          min={0}
-          step={1}
-          label={t("profile.fields.onset")}
-          error={errors.onsetAgeMonths && t("profile.errors.onset")}
-          {...register("onsetAgeMonths", { valueAsNumber: true })}
-        />
-
-        <fieldset className="m-0 mb-4 border-0 p-0">
-          <legend className="mb-2 p-0 text-sm font-semibold">
-            {t("profile.fields.genetics")}
-          </legend>
-
-          <Field
-            id={`${ids}-gene`}
-            label={t("profile.fields.gene")}
-            {...register("gene")}
-          />
-          <Field
-            id={`${ids}-variant`}
-            label={t("profile.fields.variant")}
-            {...register("variant")}
-          />
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-card-title">{t("profile.title")}</CardTitle>
+        <CardDescription>{t("profile.formHint")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          noValidate
+          className="flex flex-col gap-block"
+          onSubmit={handleSubmit((values) =>
+            save.mutate(toBody(values), {
+              onSuccess: () => {
+                toast.success(t("profile.saved"));
+                onDone();
+              },
+            }),
+          )}
+        >
           <TextAreaField
-            id={`${ids}-interpretation`}
+            id={`${ids}-diagnosis`}
             rows={3}
-            label={t("profile.fields.interpretation")}
-            {...register("interpretation")}
+            optional
+            label={t("profile.fields.diagnosis")}
+            {...register("diagnosis")}
           />
-        </fieldset>
 
-        <TextAreaField
-          id={`${ids}-comorbidities`}
-          rows={3}
-          label={t("profile.fields.comorbidities")}
-          {...register("comorbidities")}
-        />
+          <Field
+            id={`${ids}-epilepsy-type`}
+            optional
+            label={t("profile.fields.epilepsyType")}
+            {...register("epilepsyType")}
+          />
 
-        {save.isError && (
-          <FormError>
-            {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
-          </FormError>
-        )}
+          <Field
+            id={`${ids}-onset`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            optional
+            label={t("profile.fields.onset")}
+            error={errors.onsetAgeMonths && t("profile.errors.onset")}
+            {...register("onsetAgeMonths", { valueAsNumber: true })}
+          />
 
-        <div className="flex flex-wrap gap-3">
-          <SubmitButton pending={save.isPending} className="w-auto px-6">
-            {t("actions.save")}
-          </SubmitButton>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-touch rounded-lg border border-border px-4 font-semibold"
-          >
-            {t("actions.cancel")}
-          </button>
-        </div>
-      </form>
-    </Panel>
+          <fieldset className="m-0 flex flex-col gap-block border-0 p-0">
+            <legend className="mb-2 p-0 text-sm font-semibold">
+              {t("profile.fields.genetics")}
+            </legend>
+
+            <Field
+              id={`${ids}-gene`}
+              optional
+              label={t("profile.fields.gene")}
+              {...register("gene")}
+            />
+            <Field
+              id={`${ids}-variant`}
+              optional
+              label={t("profile.fields.variant")}
+              {...register("variant")}
+            />
+            <TextAreaField
+              id={`${ids}-interpretation`}
+              rows={3}
+              optional
+              label={t("profile.fields.interpretation")}
+              {...register("interpretation")}
+            />
+          </fieldset>
+
+          <TextAreaField
+            id={`${ids}-comorbidities`}
+            rows={3}
+            optional
+            label={t("profile.fields.comorbidities")}
+            {...register("comorbidities")}
+          />
+
+          {save.isError && (
+            <FormError>
+              {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
+            </FormError>
+          )}
+
+          <FormFooter
+            submitLabel={t("actions.save")}
+            pendingLabel={t("common:actions.saving")}
+            pending={save.isPending}
+            cancelLabel={t("actions.cancel")}
+            onCancel={onCancel}
+          />
+        </form>
+      </CardContent>
+    </Card>
   );
 }

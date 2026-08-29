@@ -1,3 +1,4 @@
+import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -136,10 +137,15 @@ function renderPage() {
     defaultOptions: { queries: { retry: false } },
   });
 
+  // Toaster монтируется в `AppLayout`, а тест рендерит экран отдельно: без него
+  // сообщение об успехе некуда показать (правило П16 канона — успех тостом).
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          {children}
+          <Toaster />
+        </SessionProvider>
       </QueryClientProvider>
     );
   }
@@ -262,7 +268,8 @@ describe("Форма назначения", () => {
       }),
     );
 
-    // Номер версии берётся из обновлённой истории, а не из «было плюс один».
+    // Номер версии берётся из обновлённой истории, а не из «было плюс один»,
+    // и сообщается тостом, а не зелёной строкой в потоке страницы.
     expect(await screen.findByText("Создана версия 3")).toBeInTheDocument();
   });
 });

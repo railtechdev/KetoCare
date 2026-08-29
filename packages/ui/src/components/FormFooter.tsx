@@ -38,12 +38,24 @@ export function FormFooter({
 }: FormFooterProps) {
   return (
     <div className={cn("flex flex-wrap items-center gap-3", className)}>
-      <Button type="submit" disabled={pending || disabled} aria-busy={pending}>
+      {/* min-h-touch явно: кнопка подтверждения формы — то, во что целятся
+          чаще всего, и 36 px кита здесь мало даже на мыши (раздел 8.2 ТЗ). */}
+      <Button
+        type="submit"
+        className="min-h-touch"
+        disabled={pending || disabled}
+        aria-busy={pending}
+      >
         {pending ? pendingLabel : submitLabel}
       </Button>
 
       {cancelLabel && onCancel && (
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-touch"
+          onClick={onCancel}
+        >
           {cancelLabel}
         </Button>
       )}

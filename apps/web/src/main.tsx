@@ -6,6 +6,7 @@ import "@ketocare/ui/styles.css";
 
 import { App } from "./App";
 import "./lib/i18n";
+import { initTheme } from "./lib/theme";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,6 +18,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Тема применяется до отрисовки: иначе светлая успевает мигнуть перед тёмной.
+initTheme();
 
 const container = document.getElementById("root");
 if (container === null) throw new Error("Root element #root not found");

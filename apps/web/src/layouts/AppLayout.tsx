@@ -38,13 +38,13 @@ export function AppLayout() {
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-background">
-        <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-6 border-r border-sidebar-border bg-sidebar p-4 lg:flex">
+        <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-screen border-r border-sidebar-border bg-sidebar p-4 lg:flex">
           <Brand />
           <SidebarNav sections={sections} />
         </aside>
 
         <div className="lg:pl-64">
-          <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-card px-4 sm:px-6">
+          <header className="sticky top-0 z-20 flex h-16 items-center gap-block border-b border-border bg-card px-4 sm:px-6">
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -89,7 +89,7 @@ function Brand() {
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-field">
       <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
         <Activity aria-hidden="true" className="size-5" />
       </span>

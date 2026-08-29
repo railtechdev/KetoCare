@@ -1,7 +1,8 @@
-import * as Tabs from "@radix-ui/react-tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ketocare/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { PageLayout } from "../../components/PageLayout";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { ProductsPanel } from "./ProductsPanel";
@@ -36,49 +37,42 @@ export function AdminPage({ section }: { section?: string }) {
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <header>
-        <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-        <p className="mt-1 mb-0 text-muted-foreground">{t("intro")}</p>
-      </header>
-
-      <Tabs.Root
+    <PageLayout title={t("title")} intro={t("intro")}>
+      <Tabs
         value={tab}
         onValueChange={(value) => {
           if (isAdminSection(value)) setTab(value);
         }}
+        className="gap-block"
       >
-        <Tabs.List
-          aria-label={t("tabsLabel")}
-          className="flex flex-wrap gap-2 border-b border-border"
-        >
-          {ADMIN_SECTIONS.map((value) => (
-            <Tabs.Trigger
-              key={value}
-              value={value}
-              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
-            >
-              {t(`tabs.${value}`)}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+        {/* Четыре подписи не помещаются в 360 px, поэтому полоса вкладок
+            прокручивается внутри себя, а не растягивает страницу. */}
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <TabsList aria-label={t("tabsLabel")}>
+            {ADMIN_SECTIONS.map((value) => (
+              <TabsTrigger key={value} value={value}>
+                {t(`tabs.${value}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         {/* Содержимое неактивной вкладки не монтируется, поэтому запросы уходят
             только за открытым подразделом. */}
-        <Tabs.Content value="users" className="pt-2">
+        <TabsContent value="users">
           <UsersPanel />
-        </Tabs.Content>
-        <Tabs.Content value="products" className="pt-2">
+        </TabsContent>
+        <TabsContent value="products">
           <ProductsPanel />
-        </Tabs.Content>
-        <Tabs.Content value="dictionaries" className="pt-2">
+        </TabsContent>
+        <TabsContent value="dictionaries">
           <DictionariesPanel />
-        </Tabs.Content>
-        <Tabs.Content value="audit" className="pt-2">
+        </TabsContent>
+        <TabsContent value="audit">
           <AuditPanel />
-        </Tabs.Content>
-      </Tabs.Root>
-    </section>
+        </TabsContent>
+      </Tabs>
+    </PageLayout>
   );
 }
 

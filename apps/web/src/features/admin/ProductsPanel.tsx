@@ -1,14 +1,22 @@
-import { DataTable } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  DataTable,
+  EmptyState,
+  toast,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Apple, Plus, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
-import { FIELD_CONTROL } from "../../components/Field";
+import { SectionHeading } from "./SectionHeading";
+import { TableSkeleton } from "./TableSkeleton";
+import { Field } from "../../components/Field";
 import type { Product } from "./types";
 import {
   EMPTY_PRODUCT_FILTERS,
@@ -35,8 +43,6 @@ export function ProductsPanel() {
 
   const [filters, setFilters] = useState<ProductFilters>(EMPTY_PRODUCT_FILTERS);
   const [view, setView] = useState<View>({ kind: "list" });
-  /** Название последней сохранённой позиции — подтверждение после возврата к списку */
-  const [savedName, setSavedName] = useState<string | null>(null);
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
   const debouncedQuery = useDebouncedValue(filters.q, 300);
@@ -58,8 +64,11 @@ export function ProductsPanel() {
         accessorKey: "category_id",
         header: t("products.columns.category"),
         cell: ({ row }) => (
-          <button
+          <Button
             type="button"
+            variant="link"
+            size="sm"
+            className="px-0"
             title={row.original.category_id}
             onClick={() =>
               setFilters((current) => ({
@@ -67,11 +76,10 @@ export function ProductsPanel() {
                 categoryId: row.original.category_id,
               }))
             }
-            className="min-h-touch text-primary underline"
           >
             {categoryNames.get(row.original.category_id) ??
               t("products.columns.unknownCategory")}
-          </button>
+          </Button>
         ),
       },
       {
@@ -130,16 +138,14 @@ export function ProductsPanel() {
         header: t("products.columns.actions"),
         enableSorting: false,
         cell: ({ row }) => (
-          <button
+          <Button
             type="button"
-            onClick={() => {
-              setSavedName(null);
-              setView({ kind: "form", product: row.original });
-            }}
-            className="min-h-touch rounded-lg border border-border px-3 text-foreground"
+            variant="outline"
+            size="sm"
+            onClick={() => setView({ kind: "form", product: row.original })}
           >
             {t("products.edit")}
-          </button>
+          </Button>
         ),
       },
     ],
@@ -156,8 +162,8 @@ export function ProductsPanel() {
         product={view.product}
         categories={categories.data ?? []}
         onSaved={(product) => {
-          setSavedName(product.name_ru);
           setView({ kind: "list" });
+          toast.success(t("products.saved", { name: product.name_ru }));
         }}
         onCancel={() => setView({ kind: "list" })}
       />
@@ -165,104 +171,112 @@ export function ProductsPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="m-0 text-lg font-semibold">{t("products.title")}</h2>
-          <p className="mt-1 mb-0 text-muted-foreground">
-            {t("products.intro")}
-          </p>
-        </div>
+    <div className="flex flex-col gap-block">
+      <SectionHeading
+        title={t("products.title")}
+        intro={t("products.intro")}
+        actions={
+          <>
+            <Button
+              type="button"
+              onClick={() => setView({ kind: "form", product: null })}
+            >
+              <Plus aria-hidden="true" />
+              {t("products.create")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setView({ kind: "import" })}
+            >
+              <Upload aria-hidden="true" />
+              {t("products.importCsv")}
+            </Button>
+          </>
+        }
+      />
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setSavedName(null);
-              setView({ kind: "form", product: null });
-            }}
-            className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
-          >
-            {t("products.create")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setView({ kind: "import" })}
-            className="min-h-touch rounded-lg border border-border px-4 text-foreground"
-          >
-            {t("products.importCsv")}
-          </button>
-        </div>
-      </div>
-
-      <fieldset className="m-0 flex flex-wrap items-end gap-4 border-0 p-0">
+      <fieldset className="m-0 flex flex-wrap items-end gap-block border-0 p-0">
         <legend className="sr-only">{t("products.filters.legend")}</legend>
 
-        <div className="max-w-md flex-1">
-          <label
-            className="mb-1.5 block text-sm font-medium"
-            htmlFor="admin-product-search"
-          >
-            {t("products.filters.search")}
-          </label>
-          <input
+        <div className="min-w-56 flex-1 sm:max-w-md">
+          <Field
             id="admin-product-search"
             type="search"
-            value={filters.q}
+            label={t("products.filters.search")}
             placeholder={t("products.filters.searchPlaceholder")}
+            value={filters.q}
             onChange={(event) =>
               setFilters((current) => ({ ...current, q: event.target.value }))
             }
-            className={FIELD_CONTROL}
           />
         </div>
 
         {filters.categoryId !== "" && (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            className="min-h-touch"
             onClick={() =>
               setFilters((current) => ({ ...current, categoryId: "" }))
             }
-            className="min-h-touch rounded-lg border border-border px-4 text-foreground"
           >
+            <X aria-hidden="true" />
             {t("products.filters.clearCategory", {
               id:
                 categoryNames.get(filters.categoryId) ??
                 t("products.columns.unknownCategory"),
             })}
-          </button>
+          </Button>
         )}
       </fieldset>
 
-      {savedName !== null && (
-        <p role="status" className="m-0 text-success">
-          {t("products.saved", { name: savedName })}
-        </p>
-      )}
-
-      {products.isError && (
-        <FormError>
-          {errorMessageOf(products.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
-      {products.isLoading ? (
-        <p role="status" className="text-muted-foreground">
-          {t("products.loading")}
-        </p>
-      ) : (
+      {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
+      <AsyncSection
+        loading={products.isLoading}
+        skeleton={<TableSkeleton label={t("products.loading")} columns={6} />}
+        error={
+          products.isError
+            ? {
+                title: t("products.error"),
+                description:
+                  errorMessageOf(products.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void products.refetch()}
+        isEmpty={rows.length === 0}
+        empty={
+          <EmptyState
+            icon={Apple}
+            title={t("products.empty.title")}
+            description={t("products.empty.description")}
+            action={
+              <Button
+                type="button"
+                onClick={() => setView({ kind: "form", product: null })}
+              >
+                <Plus aria-hidden="true" />
+                {t("products.create")}
+              </Button>
+            }
+          />
+        }
+      >
         <DataTable
           columns={columns}
           data={rows}
           caption={t("products.table.caption")}
-          emptyState={t("products.empty")}
+          emptyState={null}
           labels={{
             previousPage: t("table.previousPage"),
             nextPage: t("table.nextPage"),
             pageStatus: (page, total) => t("table.pageStatus", { page, total }),
           }}
         />
-      )}
+      </AsyncSection>
 
       {products.data !== undefined && products.data.total > rows.length && (
         <p className="m-0 text-sm text-muted-foreground">

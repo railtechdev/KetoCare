@@ -11,6 +11,7 @@ import { AcceptInvitePage } from "./features/invitations/AcceptInvitePage";
 import { SECTIONS_BY_ROLE, type Role } from "./features/auth/roles";
 import type { Session } from "./features/auth/claims";
 import { AppLayout } from "./layouts/AppLayout";
+import { UiShowcase } from "./routes/UiShowcase";
 import { SectionRoute } from "./routes/SectionRoute";
 
 export interface RouterContext {
@@ -124,10 +125,27 @@ const sectionRoute = createRoute({
   component: SectionRoute,
 });
 
+/**
+ * Витрина компонентов (раздел 15, п. 8 ТЗ) — только в dev-сборке.
+ *
+ * `import.meta.env.DEV` вычисляется на этапе сборки, поэтому в production
+ * маршрута нет вовсе, а не «есть, но закрыт».
+ */
+const devRoutes = import.meta.env.DEV
+  ? [
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: "/dev/ui",
+        component: UiShowcase,
+      }),
+    ]
+  : [];
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   inviteRoute,
+  ...devRoutes,
   appRoute.addChildren([appIndexRoute, sectionRoute]),
 ]);
 

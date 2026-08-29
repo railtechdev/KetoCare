@@ -1,4 +1,5 @@
-import { RatioBadge } from "@ketocare/ui";
+import { EmptyState, RatioBadge } from "@ketocare/ui";
+import { ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Panel } from "./Panel";
@@ -15,14 +16,20 @@ export function PrescriptionCard({
   if (prescription === null) {
     return (
       <Panel title={t("prescription.title")}>
-        <p className="m-0 text-muted-foreground">{t("prescription.empty")}</p>
+        {/* Без кнопки действия намеренно: назначение задаёт врач, семье здесь
+            нечего нажать — обещать ей выход было бы неправдой. */}
+        <EmptyState
+          icon={ClipboardList}
+          title={t("prescription.emptyTitle")}
+          description={t("prescription.empty")}
+        />
       </Panel>
     );
   }
 
   return (
     <Panel title={t("prescription.title")}>
-      <dl className="m-0 grid gap-4 sm:grid-cols-2">
+      <dl className="m-0 grid gap-block sm:grid-cols-2">
         <div>
           <dt className="text-sm text-muted-foreground">
             {t("prescription.ratio")}

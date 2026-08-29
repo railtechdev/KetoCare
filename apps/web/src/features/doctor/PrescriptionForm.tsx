@@ -3,9 +3,10 @@ import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
+import { FormFooter } from "@ketocare/ui";
+
 import { Field, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
 import {
   KCAL_MAX,
@@ -54,8 +55,15 @@ export function PrescriptionForm({
   });
 
   return (
-    <form noValidate onSubmit={handleSubmit(onSubmit)}>
-      <div className="grid gap-x-4 sm:grid-cols-2">
+    <form
+      noValidate
+      onSubmit={handleSubmit(onSubmit)}
+      className="flex flex-col gap-block"
+    >
+      {/* Две колонки — исключение для парных числовых показателей назначения:
+          врач сверяет их между собой на одном экране. На узком экране колонка
+          одна (правило П6 канона). */}
+      <div className="grid gap-block sm:grid-cols-2">
         <Field
           id={`${ids}-ratio`}
           type="number"
@@ -71,7 +79,7 @@ export function PrescriptionForm({
         <Field
           id={`${ids}-kcal`}
           type="number"
-          inputMode="numeric"
+          inputMode="decimal"
           min={KCAL_MIN}
           max={KCAL_MAX}
           step={10}
@@ -125,6 +133,7 @@ export function PrescriptionForm({
       <TextAreaField
         id={`${ids}-restrictions`}
         rows={3}
+        optional
         label={t("fields.restrictions")}
         placeholder={t("prescription.restrictionsPlaceholder")}
         {...register("restrictions")}
@@ -136,9 +145,11 @@ export function PrescriptionForm({
         </FormError>
       )}
 
-      <SubmitButton pending={pending} className="w-auto px-6">
-        {t("prescription.submit")}
-      </SubmitButton>
+      <FormFooter
+        submitLabel={t("prescription.submit")}
+        pendingLabel={t("prescription.submitPending")}
+        pending={pending}
+      />
     </form>
   );
 }

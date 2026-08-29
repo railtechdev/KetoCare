@@ -1,4 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  FormFooter,
+} from "@ketocare/ui";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -7,7 +16,6 @@ import { z } from "zod";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
 import { useAcceptInvitationMutation } from "./useInvitations";
 
@@ -61,31 +69,22 @@ export function AcceptInvitePage() {
 
   if (token === "") {
     return (
-      <Shell title={t("accept.title")}>
-        <p className="m-0 text-muted-foreground">{t("accept.noToken")}</p>
-      </Shell>
+      <Shell title={t("accept.title")} description={t("accept.noToken")} />
     );
   }
 
   if (done) {
     return (
-      <Shell title={t("accept.doneTitle")}>
-        <p className="m-0 text-muted-foreground">{t("accept.doneBody")}</p>
-        <button
-          type="button"
-          onClick={() => void navigate({ to: "/login" })}
-          className="mt-4 min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
-        >
+      <Shell title={t("accept.doneTitle")} description={t("accept.doneBody")}>
+        <Button type="button" onClick={() => void navigate({ to: "/login" })}>
           {t("accept.toLogin")}
-        </button>
+        </Button>
       </Shell>
     );
   }
 
   return (
-    <Shell title={t("accept.title")}>
-      <p className="mt-0 mb-6 text-muted-foreground">{t("accept.intro")}</p>
-
+    <Shell title={t("accept.title")} description={t("accept.intro")}>
       <form
         onSubmit={handleSubmit((values) => {
           accept.mutate(
@@ -99,6 +98,7 @@ export function AcceptInvitePage() {
           );
         })}
         noValidate
+        className="flex flex-col gap-block"
       >
         <Field
           id="invite-name"
@@ -111,14 +111,18 @@ export function AcceptInvitePage() {
           id="invite-phone"
           type="tel"
           autoComplete="tel"
+          optional
           label={t("accept.fields.phone")}
           {...register("phone")}
         />
         <Field
           id="invite-password"
           type="password"
+          // new-password: менеджер паролей предложит сгенерировать и вставить
+          // пароль, вставка ничем не ограничивается (правило П21 канона).
           autoComplete="new-password"
           label={t("accept.fields.password")}
+          hint={t("accept.hints.password", { min: PASSWORD_MIN_LENGTH })}
           error={
             errors.password &&
             t("accept.errors.password", { min: PASSWORD_MIN_LENGTH })
@@ -140,27 +144,38 @@ export function AcceptInvitePage() {
           </FormError>
         )}
 
-        <SubmitButton pending={accept.isPending}>
-          {t("accept.submit")}
-        </SubmitButton>
+        <FormFooter
+          submitLabel={t("accept.submit")}
+          pendingLabel={t("accept.submitting")}
+          pending={accept.isPending}
+        />
       </form>
     </Shell>
   );
 }
 
+/**
+ * Каркас публичной страницы: кабинета ещё нет, поэтому `PageLayout` здесь не
+ * применяется — карточка по центру пустого экрана, как и на входе.
+ */
 function Shell({
   title,
+  description,
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  description: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <section className="w-full max-w-md rounded-xl bg-card p-8 shadow-kc">
-        <h1 className="mb-2 text-2xl font-semibold">{title}</h1>
-        {children}
-      </section>
+    <div className="flex min-h-screen items-center justify-center p-screen">
+      <Card className="w-full max-w-form">
+        <CardHeader>
+          <CardTitle className="text-page-title">{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </CardHeader>
+        {children && <CardContent>{children}</CardContent>}
+      </Card>
     </div>
   );
 }

@@ -1,13 +1,18 @@
-import * as Tabs from "@radix-ui/react-tabs";
 import {
+  AsyncSection,
+  EmptyState,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   TrendChart,
   type PrescriptionMarker,
   type TrendPoint,
 } from "@ketocare/ui";
+import { CalendarSearch } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { DiaryList } from "../diary/DiaryList";
 import { PeriodPicker } from "../diary/PeriodPicker";
@@ -25,6 +30,7 @@ import {
   useSeizureTypes,
 } from "../diary/useDiary";
 import { useMedications } from "./doctorQueries";
+import { CardsSkeleton } from "./skeletons";
 
 /**
  * Дневники пациента глазами врача (раздел 8.1 ТЗ, карта пациента).
@@ -42,33 +48,33 @@ export function PatientDiaryTab({ patientId }: { patientId: string }) {
   const [kind, setKind] = useState<DiaryKind>("seizures");
 
   return (
-    <Tabs.Root
-      value={kind}
-      onValueChange={(value) => setKind(value as DiaryKind)}
-    >
-      <Tabs.List
+    <Tabs value={kind} onValueChange={(value) => setKind(value as DiaryKind)}>
+      {/* Шесть видов записей в строку не помещаются на узком экране, поэтому
+          список переносится, а не уезжает в горизонтальный скролл. */}
+      <TabsList
         aria-label={t("diary.tabsLabel")}
-        className="flex flex-wrap gap-2 border-b border-border"
+        variant="line"
+        className="w-full flex-wrap justify-start gap-1 border-b border-border group-data-[orientation=horizontal]/tabs:h-auto"
       >
         {DIARY_KINDS.map((value) => (
-          <Tabs.Trigger
+          <TabsTrigger
             key={value}
             value={value}
-            className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
+            className="min-h-touch flex-none px-4"
           >
             {t(`diary.kinds.${value}`)}
-          </Tabs.Trigger>
+          </TabsTrigger>
         ))}
-      </Tabs.List>
+      </TabsList>
 
       {/* Radix монтирует только активную вкладку: запросы соседних видов
           записей не уходят, пока врач их не открыл. */}
       {DIARY_KINDS.map((value) => (
-        <Tabs.Content key={value} value={value} className="pt-4">
+        <TabsContent key={value} value={value} className="pt-block">
           <DiaryKindView kind={value} patientId={patientId} />
-        </Tabs.Content>
+        </TabsContent>
       ))}
-    </Tabs.Root>
+    </Tabs>
   );
 }
 
@@ -162,7 +168,7 @@ function DiaryKindView({
   );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-block">
       <PeriodPicker
         preset={preset}
         onPresetChange={setPreset}
@@ -196,24 +202,43 @@ function DiaryKindView({
         </p>
       )}
 
-      {logs.isError && (
-        <FormError>
-          {errorMessageOf(logs.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
       {total > items.length && (
         <p className="m-0 text-sm text-muted-foreground">
           {t("diary.truncated", { shown: items.length, total })}
         </p>
       )}
 
-      {logs.isLoading ? (
-        <p role="status" className="m-0 text-muted-foreground">
-          {t("diary.loading")}
-        </p>
-      ) : (
-        range !== null && (
+      {/* Период задан неверно — запрос не уходит, и показывать нечего: об
+          ошибке ввода говорит сам `PeriodPicker`. */}
+      {range !== null && (
+        // Четыре состояния одним компонентом. Ошибка обновления не прячет уже
+        // показанные записи и не выводится вместе с «записей нет»: врач,
+        // который только что их читал, иначе решил бы, что данные пропали.
+        <AsyncSection
+          loading={logs.isLoading}
+          skeleton={<CardsSkeleton label={t("diary.loading")} />}
+          error={
+            logs.isError
+              ? {
+                  title: t("diary.loadError"),
+                  description:
+                    errorMessageOf(logs.error) ?? t("common:errors.unexpected"),
+                }
+              : null
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void logs.refetch()}
+          isEmpty={items.length === 0}
+          // Пустое состояние показывается здесь, а не подписью внутри списка:
+          // `DiaryList` выводит её абзацем, а объяснение с действием — блок.
+          empty={
+            <EmptyState
+              icon={CalendarSearch}
+              title={t("diary.empty")}
+              description={t("diary.emptyDescription")}
+            />
+          }
+        >
           <DiaryList
             logs={items}
             currentUserId={null}
@@ -222,9 +247,9 @@ function DiaryKindView({
             onEdit={noop}
             onDelete={noop}
             deletingId={null}
-            emptyState={t("diary.empty")}
+            emptyState={null}
           />
-        )
+        </AsyncSection>
       )}
     </div>
   );

@@ -1,11 +1,17 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  FormFooter,
+} from "@ketocare/ui";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { Field } from "../../components/Field";
-import { SubmitButton } from "../../components/SubmitButton";
 import { errorMessageOf } from "../../lib/api";
 import { TotpSetupPanel } from "./TotpSetupPanel";
 import { loginSchema, type LoginValues } from "./schemas";
@@ -54,54 +60,64 @@ export function LoginPage() {
   });
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <form
-        onSubmit={onSubmit}
-        noValidate
-        className="w-full max-w-md rounded-xl bg-card p-8 shadow-kc"
-      >
-        <h1 className="mb-6 text-2xl font-semibold">{t("login.title")}</h1>
+    <div className="flex min-h-screen items-center justify-center p-screen">
+      <Card className="w-full max-w-form">
+        <CardHeader>
+          <CardTitle className="text-page-title">{t("login.title")}</CardTitle>
+        </CardHeader>
 
-        <Field
-          id="email"
-          type="email"
-          autoComplete="username"
-          label={t("login.email")}
-          error={errors.email && t("login.emailInvalid")}
-          {...register("email")}
-        />
+        <CardContent>
+          <form
+            onSubmit={onSubmit}
+            noValidate
+            className="flex flex-col gap-block"
+          >
+            <Field
+              id="email"
+              type="email"
+              // Менеджеры паролей узнают поле по autoComplete; вставка ничем
+              // не ограничивается (правило П21 канона).
+              autoComplete="username"
+              label={t("login.email")}
+              error={errors.email && t("login.emailInvalid")}
+              {...register("email")}
+            />
 
-        <Field
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          label={t("login.password")}
-          error={errors.password && t("login.passwordRequired")}
-          {...register("password")}
-        />
+            <Field
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              label={t("login.password")}
+              error={errors.password && t("login.passwordRequired")}
+              {...register("password")}
+            />
 
-        {totpRequired && (
-          <Field
-            id="totp"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            label={t("login.totpCode")}
-            {...register("totpCode")}
-          />
-        )}
+            {totpRequired && (
+              <Field
+                id="totp"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                label={t("login.totpCode")}
+                {...register("totpCode")}
+              />
+            )}
 
-        {login.isError && (
-          // Сообщение приходит от сервера уже на русском (раздел 5.1 ТЗ);
-          // свой текст — только если тело ответа не соответствует контракту.
-          <FormError>
-            {errorMessageOf(login.error) ?? t("login.invalidCredentials")}
-          </FormError>
-        )}
+            {login.isError && (
+              // Сообщение приходит от сервера уже на русском (раздел 5.1 ТЗ);
+              // свой текст — только если тело ответа не соответствует контракту.
+              <FormError>
+                {errorMessageOf(login.error) ?? t("login.invalidCredentials")}
+              </FormError>
+            )}
 
-        <SubmitButton pending={login.isPending}>
-          {login.isPending ? t("login.submitting") : t("login.submit")}
-        </SubmitButton>
-      </form>
+            <FormFooter
+              submitLabel={t("login.submit")}
+              pendingLabel={t("login.submitting")}
+              pending={login.isPending}
+            />
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

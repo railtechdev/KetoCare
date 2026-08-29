@@ -1,16 +1,28 @@
-import { DataTable } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  toast,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Pencil, Pill, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
-import { Panel } from "../home/Panel";
 import { MedicationForm } from "./MedicationForm";
 import { formatIsoDate } from "./dates";
 import { useMedicationMutations } from "./doctorMutations";
 import { useMedications } from "./doctorQueries";
+import { TableSkeleton } from "./skeletons";
 import { isDoctor, type Medication } from "./types";
 
 type FormState =
@@ -25,9 +37,6 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
   const { create, update, remove } = useMedicationMutations(patientId);
 
   const [form, setForm] = useState<FormState>(null);
-  // Подтверждение удаления живёт на уровне вкладки: открытым может быть только
-  // одно, иначе врач случайно снимает не тот препарат.
-  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const canWrite = isDoctor(session?.role);
   const items = medications.data ?? [];
@@ -70,164 +79,202 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
         cell: ({ row }) => (
           <MedicationActions
             medication={row.original}
-            confirming={confirmId === row.original.id}
-            deleting={remove.isPending && confirmId === row.original.id}
             onEdit={() => setForm({ mode: "edit", medication: row.original })}
-            onAskDelete={() => setConfirmId(row.original.id)}
-            onCancelDelete={() => setConfirmId(null)}
             onConfirmDelete={() =>
               remove.mutate(row.original.id, {
-                onSuccess: () => setConfirmId(null),
+                onSuccess: () =>
+                  toast.success(
+                    t("medications.deleted", {
+                      name: row.original.drug_name,
+                    }),
+                  ),
               })
             }
           />
         ),
       },
     ];
-  }, [canWrite, confirmId, remove, t]);
+  }, [canWrite, remove, t]);
 
   if (form !== null) {
     const editing = form.mode === "edit" ? form.medication : null;
     const mutation = editing === null ? create : update;
 
     return (
-      <Panel
-        title={
-          editing === null
-            ? t("medications.createTitle")
-            : t("medications.editTitle")
-        }
-      >
-        <MedicationForm
-          medication={editing}
-          pending={mutation.isPending}
-          error={mutation.error}
-          onCancel={() => setForm(null)}
-          onSubmit={(body) => {
-            if (editing === null) {
-              create.mutate(body, { onSuccess: () => setForm(null) });
-            } else {
-              update.mutate(
-                { medicationId: editing.id, body },
-                { onSuccess: () => setForm(null) },
-              );
-            }
-          }}
-        />
-      </Panel>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-card-title">
+            {editing === null
+              ? t("medications.createTitle")
+              : t("medications.editTitle")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MedicationForm
+            medication={editing}
+            pending={mutation.isPending}
+            error={mutation.error}
+            onCancel={() => setForm(null)}
+            onSubmit={(body) => {
+              if (editing === null) {
+                create.mutate(body, {
+                  onSuccess: () => {
+                    toast.success(t("medications.created"));
+                    setForm(null);
+                  },
+                });
+              } else {
+                update.mutate(
+                  { medicationId: editing.id, body },
+                  {
+                    onSuccess: () => {
+                      toast.success(t("medications.updated"));
+                      setForm(null);
+                    },
+                  },
+                );
+              }
+            }}
+          />
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <Panel title={t("medications.title")}>
-      {medications.isPending && (
-        <p role="status" className="m-0 text-muted-foreground">
-          {t("medications.loading")}
-        </p>
-      )}
-
-      {medications.isError && (
-        <FormError>
-          {errorMessageOf(medications.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
-      {remove.isError && (
-        <FormError>
-          {errorMessageOf(remove.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
-      {medications.data !== undefined && (
-        <DataTable
-          columns={columns}
-          data={items}
-          caption={t("medications.caption")}
-          emptyState={t("medications.empty")}
-          labels={{
-            previousPage: t("table.previousPage"),
-            nextPage: t("table.nextPage"),
-            pageStatus: (page, total) => t("table.pageStatus", { page, total }),
-          }}
-        />
-      )}
-
-      {canWrite && (
-        <button
-          type="button"
-          onClick={() => setForm({ mode: "create" })}
-          className="mt-4 min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-card-title">
+          {t("medications.title")}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-block">
+        <AsyncSection
+          loading={medications.isPending}
+          skeleton={<TableSkeleton label={t("medications.loading")} rows={3} />}
+          error={
+            medications.isError
+              ? {
+                  title: t("medications.loadError"),
+                  description:
+                    errorMessageOf(medications.error) ??
+                    t("common:errors.unexpected"),
+                }
+              : null
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void medications.refetch()}
+          isEmpty={items.length === 0}
+          empty={
+            <EmptyState
+              icon={Pill}
+              title={t("medications.empty")}
+              description={t("medications.emptyDescription")}
+              action={
+                canWrite ? (
+                  <Button
+                    type="button"
+                    onClick={() => setForm({ mode: "create" })}
+                  >
+                    <Plus aria-hidden="true" />
+                    {t("medications.add")}
+                  </Button>
+                ) : undefined
+              }
+            />
+          }
         >
-          {t("medications.add")}
-        </button>
-      )}
-    </Panel>
+          <DataTable
+            columns={columns}
+            data={items}
+            caption={t("medications.caption")}
+            emptyState={null}
+            labels={{
+              previousPage: t("table.previousPage"),
+              nextPage: t("table.nextPage"),
+              pageStatus: (page, total) =>
+                t("table.pageStatus", { page, total }),
+            }}
+          />
+        </AsyncSection>
+
+        {/* Ошибка удаления — не ошибка загрузки: повторять нечего, врач решает
+            заново. Поэтому она остаётся сообщением действия. */}
+        {remove.isError && (
+          <FormError>
+            {errorMessageOf(remove.error) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
+
+        {/* Условие прежнее — только роль. Добавленная проверка на непустой
+            список отнимала возможность назначить препарат ровно тогда, когда
+            список не загрузился. */}
+        {canWrite && (
+          <Button
+            type="button"
+            className="self-start"
+            onClick={() => setForm({ mode: "create" })}
+          >
+            <Plus aria-hidden="true" />
+            {t("medications.add")}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 function MedicationActions({
   medication,
-  confirming,
-  deleting,
   onEdit,
-  onAskDelete,
-  onCancelDelete,
   onConfirmDelete,
 }: {
   medication: Medication;
-  confirming: boolean;
-  deleting: boolean;
   onEdit: () => void;
-  onAskDelete: () => void;
-  onCancelDelete: () => void;
   onConfirmDelete: () => void;
 }) {
   const { t } = useTranslation("doctor");
-  const action =
-    "min-h-touch rounded-lg border border-border px-3 text-sm font-semibold";
-
-  if (confirming) {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-destructive" role="alert">
-          {t("medications.confirmDelete")}
-        </span>
-        <button
-          type="button"
-          onClick={onConfirmDelete}
-          disabled={deleting}
-          className="min-h-touch rounded-lg bg-destructive px-3 text-sm font-semibold text-destructive-foreground disabled:opacity-60"
-        >
-          {t("actions.yes")}
-        </button>
-        <button type="button" onClick={onCancelDelete} className={action}>
-          {t("actions.no")}
-        </button>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <button
+    <div className="flex flex-wrap gap-field">
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
+        className="min-h-touch"
         onClick={onEdit}
         aria-label={t("medications.editAria", { name: medication.drug_name })}
-        className={action}
       >
+        <Pencil aria-hidden="true" />
         {t("actions.edit")}
-      </button>
+      </Button>
+
       {/* Удаление — только для ошибочной записи: отмена препарата задаётся
           датой окончания приёма, иначе исчезнет объяснение уже сделанных
-          отметок о приёме. */}
-      <button
-        type="button"
-        onClick={onAskDelete}
-        aria-label={t("medications.deleteAria", { name: medication.drug_name })}
-        className={`${action} text-destructive`}
-      >
-        {t("actions.delete")}
-      </button>
+          отметок о приёме. Подтверждение называет препарат (правило П14). */}
+      <ConfirmDialog
+        trigger={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="min-h-touch text-destructive"
+            aria-label={t("medications.deleteAria", {
+              name: medication.drug_name,
+            })}
+          >
+            <Trash2 aria-hidden="true" />
+            {t("actions.delete")}
+          </Button>
+        }
+        title={t("medications.confirmDeleteTitle", {
+          name: medication.drug_name,
+        })}
+        description={t("medications.confirmDeleteBody")}
+        confirmLabel={t("medications.confirmDeleteAction")}
+        cancelLabel={t("actions.cancel")}
+        onConfirm={onConfirmDelete}
+      />
     </div>
   );
 }

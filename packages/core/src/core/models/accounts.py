@@ -22,6 +22,11 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
     phone: Mapped[str | None] = mapped_column(String(32))
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Момент последней смены пароля. Раздел 11 ТЗ требует ревокации сессий при
+    # смене пароля, а refresh-токены у нас без состояния: хранилища выданных
+    # токенов нет. Отметка попадает в токен claim'ом, и токен, выданный до
+    # смены, отвергается — так revoke работает без таблицы сессий.
+    password_changed_at: Mapped[datetime | None]
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     # Секрет-кандидат: заполняется на /auth/totp/setup и становится действующим
     # только после /auth/totp/verify с валидным кодом. Пока подтверждения не было,

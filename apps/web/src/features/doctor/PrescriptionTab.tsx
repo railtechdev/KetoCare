@@ -1,12 +1,22 @@
-import { DataTable, RatioBadge, WarningBanner } from "@ketocare/ui";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  RatioBadge,
+  toast,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { ClipboardList } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
-import { Panel } from "../home/Panel";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { useCreatePrescription } from "./doctorMutations";
@@ -15,6 +25,7 @@ import {
   prescriptionFormValues,
   toPrescriptionBody,
 } from "./prescriptionSchema";
+import { TableSkeleton } from "./skeletons";
 import { canWritePrescriptions, type PrescriptionVersion } from "./types";
 
 /**
@@ -42,6 +53,17 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
       ? null
       : (versions.find((entry) => entry.prescription.id === createdId)
           ?.version ?? null);
+
+  // Успех — тост, а не зелёная плашка в потоке страницы (правило П16 канона).
+  // Ждём номер версии из обновлённой истории: он и есть содержание сообщения.
+  useEffect(() => {
+    if (savedVersion === null) return;
+
+    toast.success(t("prescription.saved.title", { version: savedVersion }), {
+      description: t("prescription.saved.body"),
+    });
+    setCreatedId(null);
+  }, [savedVersion, t]);
 
   const canWrite = canWritePrescriptions(session?.role);
 
@@ -127,67 +149,78 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      {savedVersion !== null && (
-        <WarningBanner
-          level="info"
-          title={t("prescription.saved.title", { version: savedVersion })}
-        >
-          {t("prescription.saved.body")}
-        </WarningBanner>
-      )}
-
+    <div className="flex flex-col gap-block">
       {canWrite && (
-        <Panel title={t("prescription.formTitle")}>
-          <p className="mt-0 mb-4 text-sm text-muted-foreground">
-            {t("prescription.formHint")}
-          </p>
-
-          <PrescriptionForm
-            // Ключ по идентификатору действующей версии: после сохранения форма
-            // пересоздаётся уже с новыми значениями, иначе врач увидел бы в ней
-            // предыдущее назначение.
-            key={active?.id ?? "first"}
-            defaultValues={prescriptionFormValues(active, new Date())}
-            pending={create.isPending}
-            error={create.error}
-            onSubmit={(values) =>
-              create.mutate(toPrescriptionBody(values), {
-                onSuccess: (created) => setCreatedId(created.id),
-              })
-            }
-          />
-        </Panel>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-card-title">
+              {t("prescription.formTitle")}
+            </CardTitle>
+            <CardDescription>{t("prescription.formHint")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PrescriptionForm
+              // Ключ по идентификатору действующей версии: после сохранения форма
+              // пересоздаётся уже с новыми значениями, иначе врач увидел бы в ней
+              // предыдущее назначение.
+              key={active?.id ?? "first"}
+              defaultValues={prescriptionFormValues(active, new Date())}
+              pending={create.isPending}
+              error={create.error}
+              onSubmit={(values) =>
+                create.mutate(toPrescriptionBody(values), {
+                  onSuccess: (created) => setCreatedId(created.id),
+                })
+              }
+            />
+          </CardContent>
+        </Card>
       )}
 
-      <Panel title={t("prescription.historyTitle")}>
-        {history.isPending && (
-          <p role="status" className="m-0 text-muted-foreground">
-            {t("prescription.loading")}
-          </p>
-        )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-card-title">
+            {t("prescription.historyTitle")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {history.isPending && (
+            <TableSkeleton label={t("prescription.loading")} rows={3} />
+          )}
 
-        {history.isError && (
-          <FormError>
-            {errorMessageOf(history.error) ?? t("common:errors.unexpected")}
-          </FormError>
-        )}
+          {history.isError && (
+            <ErrorState
+              title={t("prescription.loadError")}
+              description={
+                errorMessageOf(history.error) ?? t("common:errors.unexpected")
+              }
+              retryLabel={t("common:actions.retry")}
+              onRetry={() => void history.refetch()}
+            />
+          )}
 
-        {history.data !== undefined && (
-          <DataTable
-            columns={columns}
-            data={versions}
-            caption={t("prescription.caption")}
-            emptyState={t("prescription.empty")}
-            labels={{
-              previousPage: t("table.previousPage"),
-              nextPage: t("table.nextPage"),
-              pageStatus: (page, total) =>
-                t("table.pageStatus", { page, total }),
-            }}
-          />
-        )}
-      </Panel>
+          {history.data !== undefined && (
+            <DataTable
+              columns={columns}
+              data={versions}
+              caption={t("prescription.caption")}
+              emptyState={
+                <EmptyState
+                  icon={ClipboardList}
+                  title={t("prescription.empty")}
+                  description={t("prescription.emptyDescription")}
+                />
+              }
+              labels={{
+                previousPage: t("table.previousPage"),
+                nextPage: t("table.nextPage"),
+                pageStatus: (page, total) =>
+                  t("table.pageStatus", { page, total }),
+              }}
+            />
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -18,7 +18,7 @@ export function PatientSwitcher() {
   if (patients.length <= 1) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-field">
       <label className="text-sm text-muted-foreground" htmlFor={id}>
         {t("nav.patient")}
       </label>

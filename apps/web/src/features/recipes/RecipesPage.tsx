@@ -1,17 +1,20 @@
+import { AsyncSection, Button } from "@ketocare/ui";
+import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useSession } from "../auth/useSession";
 import { RecipeDetail } from "./RecipeDetail";
 import { RecipeFiltersPanel } from "./RecipeFiltersPanel";
 import { RecipeFormPanel } from "./RecipeFormPanel";
-import { RecipeList } from "./RecipeList";
+import { RecipeList, RecipeListEmpty, RecipeListSkeleton } from "./RecipeList";
 import {
   canEditRecipes,
   EMPTY_RECIPE_FILTERS,
+  hasActiveFilters,
   isRatioRangeInvalid,
   RECIPES_PAGE_SIZE,
   type RecipeFilters,
@@ -89,24 +92,22 @@ export function RecipesPage() {
   const items = recipes.data?.items ?? [];
 
   return (
-    <section className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="m-0 text-xl font-semibold">{t("title")}</h1>
-          <p className="mt-1 mb-0 text-muted-foreground">{t("intro")}</p>
-        </div>
-
-        {canEdit && (
-          <button
+    <PageLayout
+      title={t("title")}
+      intro={t("intro")}
+      actions={
+        canEdit && (
+          <Button
             type="button"
+            className="min-h-touch"
             onClick={() => setView({ kind: "form", recipeId: null })}
-            className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
           >
+            <Plus aria-hidden="true" />
             {t("actions.create")}
-          </button>
-        )}
-      </header>
-
+          </Button>
+        )
+      }
+    >
       <RecipeFiltersPanel
         filters={filters}
         rangeInvalid={rangeInvalid}
@@ -114,17 +115,36 @@ export function RecipesPage() {
         onReset={() => setFilters(EMPTY_RECIPE_FILTERS)}
       />
 
-      {recipes.isError && (
-        <FormError>
-          {errorMessageOf(recipes.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
-
-      {recipes.isLoading ? (
-        <p role="status" className="text-muted-foreground">
-          {t("list.loading")}
-        </p>
-      ) : (
+      {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+          ошибка не должна прятать уже показанную выдачу. */}
+      <AsyncSection
+        loading={recipes.isLoading}
+        skeleton={<RecipeListSkeleton />}
+        error={
+          recipes.isError
+            ? {
+                title: t("list.errorTitle"),
+                description:
+                  errorMessageOf(recipes.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void recipes.refetch()}
+        isEmpty={items.length === 0}
+        empty={
+          <RecipeListEmpty
+            filtersActive={hasActiveFilters(filters)}
+            onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
+            onCreate={
+              canEdit
+                ? () => setView({ kind: "form", recipeId: null })
+                : undefined
+            }
+          />
+        }
+      >
         <RecipeList
           recipes={items}
           total={recipes.data?.total ?? items.length}
@@ -137,7 +157,7 @@ export function RecipesPage() {
             }))
           }
         />
-      )}
-    </section>
+      </AsyncSection>
+    </PageLayout>
   );
 }

@@ -8,14 +8,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, Request, Response
 
 from core.models.enums import UserRole
+from core.repositories import audit as audit_repo
 from core.repositories import users as users_repo
 
+from ..client_address import client_address
+from ..cookies import set_auth_cookies
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
-from ..schemas import ColleagueRead, MeUpdate, UserRead
+from ..ratelimit import AUTH_RATE_LIMIT, limiter
+from ..schemas import ColleagueRead, MeUpdate, PasswordChange, TokenPair, UserRead
+from ..security import create_token, hash_password_async, verify_password
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -57,3 +64,70 @@ async def update_me(payload: MeUpdate, user: CurrentUserDep, session: SessionDep
 
     updated = await users_repo.update(session, user=me, **payload.model_dump())
     return UserRead.model_validate(updated)
+
+
+@router.post("/me/password", response_model=TokenPair, summary="Сменить свой пароль")
+@limiter.limit(AUTH_RATE_LIMIT)
+async def change_password(
+    payload: PasswordChange,
+    request: Request,
+    response: Response,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> TokenPair:
+    """Меняет пароль и обрывает все прежние сессии (раздел 11 ТЗ).
+
+    Отзыв работает через отметку `password_changed_at`: она попадает в claim
+    новых токенов, а любой токен с меньшей отметкой отвергается при следующей
+    же проверке. Хранилища выданных токенов для этого не нужно.
+
+    Вызвавшему сразу выдаётся новая пара — иначе смена пароля выкидывала бы из
+    приложения того, кто её сделал.
+    """
+
+    me = await users_repo.get(session, user.id)
+    if me is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+
+    if not verify_password(me.password_hash, payload.current_password):
+        await audit_repo.write_audit_log_independent(
+            user_id=me.id,
+            action="password_change_failed",
+            entity="users",
+            entity_id=me.id,
+            ip=client_address(request),
+        )
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Текущий пароль указан неверно.")
+
+    if payload.new_password == payload.current_password:
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Новый пароль совпадает с текущим.")
+
+    me.password_hash = await hash_password_async(payload.new_password)
+    me.password_changed_at = datetime.now(UTC)
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=me.id,
+        action="password_changed",
+        entity="users",
+        entity_id=me.id,
+        ip=client_address(request),
+    )
+
+    tokens = TokenPair(
+        access_token=create_token(
+            user_id=me.id,
+            role=me.role,
+            token_type="access",
+            password_changed_at=me.password_changed_at,
+        ),
+        refresh_token=create_token(
+            user_id=me.id,
+            role=me.role,
+            token_type="refresh",
+            password_changed_at=me.password_changed_at,
+        ),
+    )
+    set_auth_cookies(response, tokens)
+    return tokens

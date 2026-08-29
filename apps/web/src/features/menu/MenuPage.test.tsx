@@ -70,6 +70,8 @@ function respond(path: string) {
       data: {
         patient_id: "p1",
         date: todayIso(),
+        // Нормы назначения — источник строки «осталось до цели» (правило П18).
+        prescription: { kcal_per_day: 1600, carbs_limit_g: 15 },
         day: {
           totals: TOTALS,
           // Вердикт приходит от сервера — экран его только показывает.
@@ -119,6 +121,7 @@ describe("MenuPage", () => {
     (api.POST as unknown as Mock).mockResolvedValue({
       data: { ...MENU.items[0], eaten: true },
     });
+    (api.PUT as unknown as Mock).mockResolvedValue({ data: MENU });
   });
 
   it("показывает позиции дня с названиями блюд", async () => {
@@ -153,6 +156,73 @@ describe("MenuPage", () => {
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/menus/items/{item_id}/eaten",
       expect.objectContaining({ body: { eaten: true } }),
+    );
+  });
+
+  it("показывает, сколько осталось до норм назначения", async () => {
+    renderPage();
+
+    // 1600 − 1200 и 15 − 12: родитель не считает разницу в уме (правило П18).
+    expect(await screen.findByText("осталось 400 ккал")).toBeVisible();
+    expect(screen.getByText("осталось 3 г")).toBeVisible();
+  });
+
+  it("ошибка обновления не прячет уже показанный состав дня", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Каша на кокосовом масле");
+
+    // Дальше день перечитать не удаётся. TanStack Query держит прежний ответ,
+    // и состав дня должен остаться на экране: родитель, увидевший вместо своих
+    // блюд красный блок, решит, что меню пропало, и составит день заново.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      path === "/api/v1/patients/{patient_id}/menus"
+        ? Promise.resolve({
+            error: {
+              error: { code: "internal", message: "Сервер недоступен" },
+            },
+          })
+        : Promise.resolve(respond(path)),
+    );
+
+    // Отметка «съедено» перечитывает день (onSettled), и перечитывание падает.
+    await user.click(
+      screen.getByLabelText("Отметить «Каша на кокосовом масле» съеденным"),
+    );
+
+    expect(await screen.findByText("Не удалось загрузить меню.")).toBeVisible();
+    expect(screen.getByText("Каша на кокосовом масле")).toBeVisible();
+    expect(screen.getByText("Омлет на сливках")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Повторить" }),
+    ).toBeInTheDocument();
+  });
+
+  it("удаление позиции подтверждается диалогом с названием блюда", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByLabelText("Убрать «Каша на кокосовом масле» из меню"),
+    );
+
+    // Заголовок называет объект, а не спрашивает «вы уверены?» (правило П14).
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Убрать «Каша на кокосовом масле» из меню?",
+      }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Убрать" }));
+
+    expect(api.PUT).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/menus",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          // Ушёл весь день без удалённой позиции: PUT задаёт состав целиком.
+          items: [expect.objectContaining({ custom_dish_id: "d1" })],
+        }),
+      }),
     );
   });
 });

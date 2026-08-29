@@ -1,12 +1,23 @@
-import * as Tabs from "@radix-ui/react-tabs";
-import { DataTable } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  DataTable,
+  EmptyState,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  toast,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { ListOrdered, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { DictionaryEntryForm } from "./DictionaryEntryForm";
+import { SectionHeading } from "./SectionHeading";
+import { TableSkeleton } from "./TableSkeleton";
 import {
   DICTIONARY_KINDS,
   useCreateDictionaryEntryMutation,
@@ -28,36 +39,34 @@ export function DictionariesPanel() {
   const [kind, setKind] = useState<DictionaryKind>("seizure-types");
 
   return (
-    <div className="flex flex-col gap-4">
-      <h2 className="m-0 text-lg font-semibold">{t("dictionaries.title")}</h2>
+    <div className="flex flex-col gap-block">
+      <SectionHeading title={t("dictionaries.title")} />
 
-      <Tabs.Root
+      <Tabs
         value={kind}
         onValueChange={(value) => setKind(value as DictionaryKind)}
+        className="gap-block"
       >
-        <Tabs.List
-          aria-label={t("dictionaries.tabsLabel")}
-          className="flex flex-wrap gap-2 border-b border-border"
-        >
-          {DICTIONARY_KINDS.map((value) => (
-            <Tabs.Trigger
-              key={value}
-              value={value}
-              className="min-h-touch px-4 text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold"
-            >
-              {t(`dictionaries.kinds.${value}`)}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+        {/* Вкладки второго уровня — линейным вариантом кита: иначе два
+            одинаковых переключателя подряд читаются как один. */}
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <TabsList variant="line" aria-label={t("dictionaries.tabsLabel")}>
+            {DICTIONARY_KINDS.map((value) => (
+              <TabsTrigger key={value} value={value}>
+                {t(`dictionaries.kinds.${value}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         {DICTIONARY_KINDS.map((value) => (
-          <Tabs.Content key={value} value={value} className="pt-4">
+          <TabsContent key={value} value={value}>
             {/* Свой экземпляр на справочник: состояние правки не должно
                 переезжать со вкладки на вкладку. */}
             <DictionaryEditor kind={value} />
-          </Tabs.Content>
+          </TabsContent>
         ))}
-      </Tabs.Root>
+      </Tabs>
     </div>
   );
 }
@@ -86,6 +95,11 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
     [rows],
   );
 
+  function startCreating() {
+    create.reset();
+    setEditing({ kind: "create" });
+  }
+
   const columns = useMemo<ColumnDef<DictionaryEntry, unknown>[]>(
     () => [
       { accessorKey: "name_ru", header: t("dictionaries.columns.name") },
@@ -101,16 +115,17 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
         header: t("dictionaries.columns.actions"),
         enableSorting: false,
         cell: ({ row }) => (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               resetUpdate();
               setEditing({ kind: "entry", entry: row.original });
             }}
-            className="min-h-touch rounded-lg border border-border px-3 text-foreground"
           >
             {t("dictionaries.edit")}
-          </button>
+          </Button>
         ),
       },
     ],
@@ -118,25 +133,13 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-block">
       <div>
-        <button
-          type="button"
-          onClick={() => {
-            create.reset();
-            setEditing({ kind: "create" });
-          }}
-          className="min-h-touch rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
-        >
+        <Button type="button" onClick={startCreating}>
+          <Plus aria-hidden="true" />
           {t("dictionaries.create")}
-        </button>
+        </Button>
       </div>
-
-      {entries.isError && (
-        <FormError>
-          {errorMessageOf(entries.error) ?? t("common:errors.unexpected")}
-        </FormError>
-      )}
 
       {editing.kind === "create" && (
         <DictionaryEntryForm
@@ -147,7 +150,10 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
           onCancel={() => setEditing({ kind: "none" })}
           onSubmit={(body) =>
             create.mutate(body, {
-              onSuccess: () => setEditing({ kind: "none" }),
+              onSuccess: (saved) => {
+                setEditing({ kind: "none" });
+                toast.success(t("dictionaries.saved", { name: saved.name_ru }));
+              },
             })
           }
         />
@@ -169,29 +175,64 @@ function DictionaryEditor({ kind }: { kind: DictionaryKind }) {
           onSubmit={(body) =>
             update.mutate(
               { entryId: editing.entry.id, body },
-              { onSuccess: () => setEditing({ kind: "none" }) },
+              {
+                onSuccess: (saved) => {
+                  setEditing({ kind: "none" });
+                  toast.success(
+                    t("dictionaries.saved", { name: saved.name_ru }),
+                  );
+                },
+              },
             )
           }
         />
       )}
 
-      {entries.isLoading ? (
-        <p role="status" className="text-muted-foreground">
-          {t("dictionaries.loading")}
-        </p>
-      ) : (
+      {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
+      <AsyncSection
+        loading={entries.isLoading}
+        skeleton={
+          <TableSkeleton label={t("dictionaries.loading")} columns={3} />
+        }
+        error={
+          entries.isError
+            ? {
+                title: t("dictionaries.error"),
+                description:
+                  errorMessageOf(entries.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void entries.refetch()}
+        isEmpty={rows.length === 0}
+        empty={
+          <EmptyState
+            icon={ListOrdered}
+            title={t("dictionaries.empty.title")}
+            description={t("dictionaries.empty.description")}
+            action={
+              <Button type="button" onClick={startCreating}>
+                <Plus aria-hidden="true" />
+                {t("dictionaries.create")}
+              </Button>
+            }
+          />
+        }
+      >
         <DataTable
           columns={columns}
           data={rows}
           caption={t(`dictionaries.table.caption.${kind}`)}
-          emptyState={t("dictionaries.empty")}
+          emptyState={null}
           labels={{
             previousPage: t("table.previousPage"),
             nextPage: t("table.nextPage"),
             pageStatus: (page, total) => t("table.pageStatus", { page, total }),
           }}
         />
-      )}
+      </AsyncSection>
     </div>
   );
 }

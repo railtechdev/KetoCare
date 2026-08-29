@@ -1,6 +1,7 @@
+import { ErrorState, Skeleton, toast } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { FormError } from "../../components/FormError";
+import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { RecipeForm } from "./RecipeForm";
 import {
@@ -42,17 +43,32 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
   if (recipeId !== null) {
     if (recipe.isLoading || productNames.isLoading) {
       return (
-        <p role="status" className="text-muted-foreground">
-          {t("form.loading")}
-        </p>
+        <PageLayout title={t("form.editTitle")} width="form" onBack={onCancel}>
+          <p role="status" className="sr-only">
+            {t("form.loading")}
+          </p>
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </PageLayout>
       );
     }
 
-    if (recipe.isError || !recipe.data) {
+    // Ошибка закрывает форму только тогда, когда открывать нечего. Рецепт уже
+    // загружен — неудачное фоновое обновление оставляет форму на месте: иначе
+    // оно стёрло бы начатую правку вместе с набранным текстом.
+    if (!recipe.data) {
       return (
-        <FormError>
-          {errorMessageOf(recipe.error) ?? t("common:errors.unexpected")}
-        </FormError>
+        <PageLayout title={t("form.editTitle")} width="form" onBack={onCancel}>
+          <ErrorState
+            title={t("detail.errorTitle")}
+            description={
+              errorMessageOf(recipe.error) ?? t("common:errors.unexpected")
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void recipe.refetch()}
+          />
+        </PageLayout>
       );
     }
   }
@@ -78,9 +94,19 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
         const body = toRecipeBody(values);
 
         if (editing === null) {
-          create.mutate(body, { onSuccess: (created) => onSaved(created.id) });
+          create.mutate(body, {
+            onSuccess: (created) => {
+              toast.success(t("actions.createSuccess"));
+              onSaved(created.id);
+            },
+          });
         } else {
-          update.mutate(body, { onSuccess: () => onSaved(editing.id) });
+          update.mutate(body, {
+            onSuccess: () => {
+              toast.success(t("actions.saveSuccess"));
+              onSaved(editing.id);
+            },
+          });
         }
       }}
     />
