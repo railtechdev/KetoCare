@@ -1,11 +1,27 @@
 # Единая точка входа для команд разработки (раздел 2.2 ТЗ).
-# Порты postgres/redis можно переопределить: POSTGRES_PORT=5434 REDIS_PORT=6381 make dev
 
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
 COMPOSE := docker compose -f infra/docker-compose.dev.yml
 OPENAPI_JSON := apps/api/openapi.json
+
+# Порты контейнеров вычитываются из `.env` — оттуда же, откуда их берёт
+# приложение. Раньше они задавались отдельно (`POSTGRES_PORT=5434 make dev`), и
+# `make dev` без этой приставки поднимал postgres на 5432, пока приложение
+# ходило на 5434: команда отрабатывала успешно, а окружение получалось
+# нерабочим. Второе объявление порта всегда однажды расходится с первым.
+#
+# Переопределить по-прежнему можно из командной строки: значения оттуда
+# перекрывают `?=`.
+ENV_FILE := .env
+# Разделитель у sed — запятая, а не решётка: в Makefile `#` открывает
+# комментарий и обрезает строку прямо посреди выражения.
+DB_PORT_FROM_ENV := $(shell sed -n 's,^DATABASE_URL=.*@[^:]*:\([0-9][0-9]*\)/.*,\1,p' $(ENV_FILE) 2>/dev/null | tail -1)
+REDIS_PORT_FROM_ENV := $(shell sed -n 's,^REDIS_URL=.*:\([0-9][0-9]*\)/.*,\1,p' $(ENV_FILE) 2>/dev/null | tail -1)
+
+export POSTGRES_PORT ?= $(or $(DB_PORT_FROM_ENV),5432)
+export REDIS_PORT ?= $(or $(REDIS_PORT_FROM_ENV),6379)
 
 .PHONY: help
 help: ## Показать список команд
@@ -14,6 +30,7 @@ help: ## Показать список команд
 
 .PHONY: dev
 dev: ## Поднять окружение (postgres, redis) и применить миграции
+	@echo "postgres :$(POSTGRES_PORT), redis :$(REDIS_PORT) — из $(ENV_FILE)"
 	$(COMPOSE) up -d
 	@echo "Ожидание готовности postgres..."
 	@until $(COMPOSE) exec -T postgres pg_isready -U ketocare >/dev/null 2>&1; do sleep 1; done
@@ -30,6 +47,9 @@ api: ## Запустить API локально (uvicorn с автопереза
 
 .PHONY: web
 web: ## Запустить веб-кабинет (Vite); /api проксируется на API_PROXY_TARGET
+	@# Порт берёт сам vite из WEB_PORT в `.env` (loadEnv). По умолчанию 5173;
+	@# если он занят другим проектом, добавьте в `.env` строку
+	@# WEB_PORT=<свободный порт> — и кабинет поднимется там же.
 	pnpm --filter @ketocare/web run dev
 
 .PHONY: down

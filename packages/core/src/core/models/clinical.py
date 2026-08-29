@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     event,
+    false,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -145,7 +146,9 @@ class IntakeOption(Base, UUIDPkMixin):
     # остаётся в справочнике. Удалить его нельзя — на него ссылаются уже
     # заполненные анкеты, а ответ семьи не должен исчезать вместе со сменой
     # формулировки (правило 4 CLAUDE.md).
-    retired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    retired: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
 
 
 class AedDrug(Base, UUIDPkMixin):
@@ -162,7 +165,9 @@ class AedDrug(Base, UUIDPkMixin):
     synonyms: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # См. `IntakeOption.retired`: на препарат ссылаются заполненные анкеты.
-    retired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    retired: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
 
 
 class PatientIntake(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):

@@ -67,7 +67,7 @@ make e2e          # playwright — появляется на этапе 5 ТЗ, 
 
 Один эталонный кейс движка: `uv run pytest packages/keto_engine -k <имя_кейса>`; один тест API: `uv run pytest apps/api -k <имя>`; один vitest: `pnpm --filter <workspace> test -t "<имя>"`.
 
-Интеграционные тесты (`packages/core/tests`, `apps/api/tests`) требуют поднятый postgres: сначала `make dev`. Каждый тест идёт во внешней транзакции с откатом, поэтому БД между тестами чистая. Если порты заняты — `POSTGRES_PORT=5434 REDIS_PORT=6381 make dev` и те же порты в `.env`.
+Интеграционные тесты (`packages/core/tests`, `apps/api/tests`) требуют поднятый postgres: сначала `make dev`. Каждый тест идёт во внешней транзакции с откатом, поэтому БД между тестами чистая. Порты контейнеров Makefile берёт из `.env` (из `DATABASE_URL` и `REDIS_URL`) — задавать их отдельной приставкой к команде не нужно; порт кабинета — `WEB_PORT` там же.
 
 Локальный запуск API: `make api` (именно так — цель передаёт `--no-proxy-headers`, иначе uvicorn подменит адрес клиента из `X-Forwarded-For` и ключ лимита с `audit_log.ip` станут управляемыми клиентом; см. `infra/nginx/README.md`). Swagger — `/api/v1/docs`.
 
