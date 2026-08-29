@@ -7,12 +7,13 @@ import {
   Skeleton,
   toast,
 } from "@ketocare/ui";
-import { Baby, Plus } from "lucide-react";
+import { Baby, ClipboardList, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
+import { IntakeForm } from "../intake/IntakeForm";
 import { ChildForm } from "./ChildForm";
 import { toChildBody, toChildUpdateBody } from "./childSchemas";
 import {
@@ -23,7 +24,10 @@ import {
 import { usePatients } from "../patients/usePatients";
 
 type View =
-  { kind: "list" } | { kind: "add" } | { kind: "edit"; child: Patient };
+  | { kind: "list" }
+  | { kind: "add" }
+  | { kind: "edit"; child: Patient }
+  | { kind: "intake"; child: Patient };
 
 /**
  * Раздел «Ребёнок»: профили детей семьи.
@@ -45,6 +49,14 @@ export function ChildPage() {
   if (view.kind === "edit") {
     return (
       <EditChild child={view.child} onDone={() => setView({ kind: "list" })} />
+    );
+  }
+  if (view.kind === "intake") {
+    return (
+      <ChildIntake
+        child={view.child}
+        onDone={() => setView({ kind: "list" })}
+      />
     );
   }
 
@@ -125,14 +137,25 @@ export function ChildPage() {
                     </span>
                   </div>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="ml-auto min-h-touch"
-                    onClick={() => setView({ kind: "edit", child })}
-                  >
-                    {t("children.edit")}
-                  </Button>
+                  <div className="ml-auto flex flex-wrap gap-field">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      onClick={() => setView({ kind: "intake", child })}
+                    >
+                      <ClipboardList aria-hidden="true" />
+                      {t("children.intake")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      onClick={() => setView({ kind: "edit", child })}
+                    >
+                      {t("children.edit")}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </li>
@@ -186,6 +209,37 @@ function EditChild({ child, onDone }: { child: Patient; onDone: () => void }) {
             },
           });
         }}
+      />
+    </PageLayout>
+  );
+}
+
+/**
+ * Анкета регистрации ребёнка (ADR-0007).
+ *
+ * Отдельным экраном, а не панелью: правило П29 канона оставляет панель коротким
+ * формам, а здесь три шага вопросов. Возврат — через шаблон (правило П2).
+ */
+function ChildIntake({
+  child,
+  onDone,
+}: {
+  child: Patient;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation("intake");
+
+  return (
+    <PageLayout
+      title={t("titleFor", { name: child.full_name })}
+      intro={t("intro")}
+      width="form"
+      onBack={onDone}
+    >
+      <IntakeForm
+        patientId={child.id}
+        childName={child.full_name}
+        onDone={onDone}
       />
     </PageLayout>
   );
