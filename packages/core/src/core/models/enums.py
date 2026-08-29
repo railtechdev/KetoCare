@@ -90,3 +90,15 @@ class IntakeScale(enum.StrEnum):
     SEIZURE_DURATION = "seizure_duration"
     AED_SWITCH_COUNT = "aed_switch_count"
     MEALS_PER_DAY = "meals_per_day"
+
+
+class ReportFormat(enum.StrEnum):
+    PDF = "pdf"
+    CSV = "csv"
+
+
+class ReportJobStatus(enum.StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"

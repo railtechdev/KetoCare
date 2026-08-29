@@ -1,12 +1,15 @@
 """ARQ-воркер KetoCare.
 
-Каркас этапа 1 (раздел 15 ТЗ, п.1). Задачи из раздела 10.1
-(parse_free_text, assistant_reply, doctor_summary, render_report,
-notify_family, reminders_cron, content_draft) добавляются на этапах 2-4.
+Задачи раздела 10.1 ТЗ подключаются по мере готовности этапов: сейчас здесь
+`render_report` (раздел 15 п. 14), остальные (parse_free_text, assistant_reply,
+doctor_summary, notify_family, reminders_cron, content_draft) появляются на
+этапах 3-4.
 """
 
 from arq.connections import RedisSettings
 from pydantic_settings import BaseSettings
+
+from .reports.task import render_report
 
 
 class WorkerSettings(BaseSettings):
@@ -17,5 +20,5 @@ _settings = WorkerSettings()  # type: ignore[call-arg]
 
 
 class WorkerSettingsARQ:
-    functions: list = []
+    functions: list = [render_report]
     redis_settings = RedisSettings.from_dsn(_settings.redis_url)

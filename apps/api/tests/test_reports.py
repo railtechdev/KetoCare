@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
@@ -262,3 +262,124 @@ class TestPeriodValidation:
         )
 
         assert response.status_code == 422
+
+
+class TestPdfJob:
+    async def test_pdf_request_creates_job_and_enqueues_it(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """PDF собирает воркер: weasyprint долгий, и держать на нём веб-процесс
+        нельзя (раздел 10.1 ТЗ)."""
+        from api.services import queue as queue_service
+
+        enqueued: list[tuple] = []
+
+        async def fake_enqueue(task: str, *args):
+            enqueued.append((task, args))
+
+        monkeypatch.setattr(queue_service, "enqueue", fake_enqueue)
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        response = await client.get(_url(patient.id, "pdf"), headers=auth_headers(doctor))
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] == "queued"
+        assert enqueued and enqueued[0][0] == "render_report"
+        # Данные отчёта уезжают в задачу готовыми: воркер не собирает их заново.
+        assert enqueued[0][1][1]["patient"]["id"] == str(patient.id)
+
+    async def test_pdf_request_is_audited(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        from api.services import queue as queue_service
+
+        monkeypatch.setattr(queue_service, "enqueue", lambda *a, **k: _noop())
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        await client.get(_url(patient.id, "pdf"), headers=auth_headers(doctor))
+
+        rows = await session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.entity == "reports", AuditLog.action == "export")
+        )
+        assert rows == 1
+
+    async def test_stranger_cannot_poll_someone_elses_job(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """Путь задачи не содержит пациента, и `require_patient_access` здесь не
+        сработает — доступ проверяется по пациенту из самой задачи."""
+        from api.services import queue as queue_service
+        from core.repositories import report_jobs as jobs_repo
+
+        monkeypatch.setattr(queue_service, "enqueue", lambda *a, **k: _noop())
+
+        _, patient = await _doctor_with_patient(session, make_user, make_patient)
+        job = await jobs_repo.create(
+            session,
+            patient_id=patient.id,
+            requested_by=(await make_user(UserRole.DOCTOR)).id,
+            period_start=PERIOD_FROM,
+            period_end=PERIOD_TO,
+        )
+        stranger = await make_user(UserRole.DOCTOR)
+
+        response = await client.get(
+            f"/api/v1/reports/jobs/{job.id}", headers=auth_headers(stranger)
+        )
+
+        assert response.status_code == 403
+
+    async def test_download_before_render_is_a_conflict(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        from core.repositories import report_jobs as jobs_repo
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        job = await jobs_repo.create(
+            session,
+            patient_id=patient.id,
+            requested_by=doctor.id,
+            period_start=PERIOD_FROM,
+            period_end=PERIOD_TO,
+        )
+
+        response = await client.get(
+            f"/api/v1/reports/jobs/{job.id}/file", headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 409
+
+    async def test_expired_link_is_not_served(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ссылка с истечением (раздел 7.5 ТЗ): просроченную не продлеваем
+        молча — файла к этому моменту может уже не быть."""
+        from core.repositories import report_jobs as jobs_repo
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        job = await jobs_repo.create(
+            session,
+            patient_id=patient.id,
+            requested_by=doctor.id,
+            period_start=PERIOD_FROM,
+            period_end=PERIOD_TO,
+        )
+        await jobs_repo.mark_done(
+            session,
+            job=job,
+            file_name=f"{job.id}.pdf",
+            expires_at=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+
+        response = await client.get(
+            f"/api/v1/reports/jobs/{job.id}/file", headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 404
+
+
+async def _noop() -> None:
+    return None

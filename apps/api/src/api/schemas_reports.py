@@ -133,4 +133,25 @@ class PatientReport(BaseModel):
     summaries: list[DoctorSummaryRow]
 
 
+class ReportJobRead(BaseModel):
+    """Состояние сборки PDF (ADR-0008).
+
+    Ссылки на файл в ответе нет: скачивание идёт отдельной ручкой, которая
+    заново проверяет доступ к пациенту. Ссылка, выданная строкой, пережила бы
+    отзыв доступа.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    patient_id: uuid.UUID
+    period_start: date
+    period_end: date
+    status: str
+    error: str | None
+    expires_at: datetime | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
 MeasurementSeries.model_rebuild()

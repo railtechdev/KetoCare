@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     # заполняется значением, которое выбрал сам атакующий.
     trusted_proxy_ips: str = ""
 
+    # Том под собранные PDF-отчёты: воркер пишет, API отдаёт по ссылке с
+    # истечением (раздел 7.5 ТЗ, ADR-0008). Каталог общий у обоих процессов.
+    reports_dir: str = "./var/reports"
+    report_link_ttl_hours: int = 24
+
     web_origin: str = "http://localhost:5173"
     miniapp_origin: str = "http://localhost:5174"
 

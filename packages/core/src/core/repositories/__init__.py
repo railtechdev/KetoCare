@@ -20,6 +20,7 @@ from . import (
     prescriptions,
     products,
     recipes,
+    report_jobs,
     reports,
     users,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "prescriptions",
     "products",
     "recipes",
+    "report_jobs",
     "reports",
     "users",
 ]

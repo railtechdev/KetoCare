@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ title }}</title>
+    <style>
+      /* Печатный лист, а не экран: единицы в миллиметрах и пунктах, потому что
+         документ уходит в бумагу и в переписку, где пиксели ничего не значат. */
+      @page { size: A4; margin: 18mm 15mm; }
+      body { font-family: "DejaVu Sans", sans-serif; font-size: 10pt; color: #1a1a1a; }
+      h1 { font-size: 16pt; margin: 0 0 2mm; }
+      h2 { font-size: 12pt; margin: 6mm 0 2mm; }
+      p { margin: 0 0 1mm; }
+      .muted { color: #555; }
+      table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
+      th, td { border-bottom: 0.3pt solid #bbb; padding: 1.4mm 1mm; text-align: left; }
+      th { font-weight: 600; }
+      td.num, th.num { text-align: right; }
+      /* Раздел не разрывается между страницами посреди заголовка: врач читает
+         таблицу целиком, а не её хвост на следующем листе. */
+      section { break-inside: avoid-page; }
+    </style>
+  </head>
+  <body>
+    <h1>{{ title }}</h1>
+    <p class="muted">
+      {{ patient.full_name }}, {{ patient.birth_date }} · период
+      {{ period.from_date }} — {{ period.to_date }}
+    </p>
+    <p class="muted">Собран {{ generated_at }}</p>
+
+    <section>
+      <h2>Назначение</h2>
+      {% if prescriptions %}
+        <table>
+          <thead>
+            <tr>
+              <th>Действует с</th><th class="num">Соотношение</th><th class="num">Ккал</th>
+              <th class="num">Белок, г</th><th class="num">Углеводы до, г</th>
+              <th class="num">Приёмов</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in prescriptions %}
+              <tr>
+                <td>{{ item.effective_from }}</td>
+                <td class="num">{{ item.ratio }} : 1</td>
+                <td class="num">{{ item.kcal_per_day }}</td>
+                <td class="num">{{ item.protein_g }}</td>
+                <td class="num">{{ item.carbs_limit_g }}</td>
+                <td class="num">{{ item.meals_per_day }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">Назначение за период не оформлялось.</p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Приступы</h2>
+      <p>
+        Всего приступов: {{ seizures.count }} · записей в дневнике:
+        {{ seizures.entries }}
+      </p>
+      {% if seizures.by_type %}
+        <table>
+          <thead>
+            <tr><th>Тип</th><th>Код</th><th class="num">Приступов</th><th class="num">Записей</th></tr>
+          </thead>
+          <tbody>
+            {% for item in seizures.by_type %}
+              <tr>
+                <td>{{ item.name_ru }}</td>
+                <td>{{ item.code or "—" }}</td>
+                <td class="num">{{ item.count }}</td>
+                <td class="num">{{ item.entries }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">За период приступов не записано.</p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Кетоны и вес</h2>
+      <table>
+        <thead>
+          <tr><th>Показатель</th><th class="num">Измерений</th><th class="num">Мин</th><th class="num">Макс</th><th class="num">Среднее</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Кетоны, ммоль/л</td>
+            <td class="num">{{ ketones.points | length }}</td>
+            <td class="num">{{ ketones.min if ketones.min is not none else "—" }}</td>
+            <td class="num">{{ ketones.max if ketones.max is not none else "—" }}</td>
+            <td class="num">{{ ketones.mean if ketones.mean is not none else "—" }}</td>
+          </tr>
+          <tr>
+            <td>Вес, кг</td>
+            <td class="num">{{ weight.points | length }}</td>
+            <td class="num">{{ weight.min if weight.min is not none else "—" }}</td>
+            <td class="num">{{ weight.max if weight.max is not none else "—" }}</td>
+            <td class="num">{{ weight.mean if weight.mean is not none else "—" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Препараты</h2>
+      {% if medications %}
+        <table>
+          <thead><tr><th>Препарат</th><th>Доза</th><th>Приём</th><th>Период</th></tr></thead>
+          <tbody>
+            {% for item in medications %}
+              <tr>
+                <td>{{ item.drug_name }}</td>
+                <td>{{ item.dose }}</td>
+                <td>{{ item.frequency }}</td>
+                <td>с {{ item.started_at }}{% if item.stopped_at %} по {{ item.stopped_at }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">Схема терапии не заполнена.</p>
+      {% endif %}
+    </section>
+
+    {% if side_effects %}
+      <section>
+        <h2>Нежелательные явления</h2>
+        <table>
+          <thead><tr><th>Когда</th><th>Симптом</th><th>Описание</th></tr></thead>
+          <tbody>
+            {% for item in side_effects %}
+              <tr>
+                <td>{{ item.occurred_at }}</td>
+                <td>{{ item.symptom }}</td>
+                <td>{{ item.description or "—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    {% endif %}
+
+    <section>
+      <h2>Выполнение меню</h2>
+      <p>
+        Дней спланировано: {{ menu.days_planned }} · позиций в меню:
+        {{ menu.items_planned }} · отмечено съеденными: {{ menu.items_eaten }}
+      </p>
+    </section>
+
+    {% if summaries %}
+      <section>
+        <h2>Сводки врача</h2>
+        {% for item in summaries %}
+          <p class="muted">{{ item.period_start }} — {{ item.period_end }}</p>
+          <p>{{ item.approved_md }}</p>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    <section>
+      <p class="muted">
+        Отчёт собран автоматически из записей дневника и назначений. Сводки
+        включены только в подтверждённом врачом виде.
+      </p>
+    </section>
+  </body>
+</html>

@@ -9,7 +9,7 @@ from .accounts import (
     TelegramAccount,
     User,
 )
-from .ai_audit import AiConversation, AiJob, AuditLog, DoctorSummary
+from .ai_audit import AiConversation, AiJob, AuditLog, DoctorSummary, ReportJob
 from .base import Base
 from .clinical import (
     AedDrug,
@@ -81,5 +81,6 @@ __all__ = [
     "AiJob",
     "AiConversation",
     "DoctorSummary",
+    "ReportJob",
     "AuditLog",
 ]

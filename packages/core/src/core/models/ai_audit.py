@@ -6,13 +6,19 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, UpdatedAtMixin, UUIDPkMixin
-from .enums import AiConversationChannel, AiJobKind, AiJobStatus, pg_enum
+from .enums import (
+    AiConversationChannel,
+    AiJobKind,
+    AiJobStatus,
+    ReportJobStatus,
+    pg_enum,
+)
 
 
 class AiJob(Base, UUIDPkMixin, CreatedAtMixin):
@@ -81,3 +87,36 @@ class AuditLog(Base, UUIDPkMixin, CreatedAtMixin):
     before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     ip: Mapped[str | None] = mapped_column(INET)
+
+
+class ReportJob(Base, UUIDPkMixin, CreatedAtMixin):
+    """Задача сборки PDF-отчёта (раздел 5.3 ТЗ: ручка возвращает job id, дальше поллинг).
+
+    Раздел 4.2 ТЗ таблицы под это не предусматривает, а состояние задачи держать
+    негде: ARQ хранит его в Redis, который эфемерен, а по идентификатору задачи
+    нужно ещё и проверить право скачивать файл — это клинические данные. Плюс
+    ссылка на файл живёт ограниченное время, и срок надо где-то помнить.
+    Расхождение с разделом 4.2 зафиксировано в docs/adr/0008-report-jobs.md.
+    """
+
+    __tablename__ = "report_jobs"
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False
+    )
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[ReportJobStatus] = mapped_column(
+        pg_enum(ReportJobStatus, "report_job_status"),
+        nullable=False,
+        default=ReportJobStatus.QUEUED,
+    )
+    # Имя файла в томе отчётов, а не путь: путь задаётся настройкой, и файл,
+    # собранный на одной машине, не должен ссылаться на её каталоги.
+    file_name: Mapped[str | None] = mapped_column(String(255))
+    error: Mapped[str | None]
+    expires_at: Mapped[datetime | None]
+    finished_at: Mapped[datetime | None]
