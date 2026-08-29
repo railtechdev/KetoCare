@@ -13,7 +13,7 @@ import menuRu from "../locales/ru/menu.json";
 import productsRu from "../locales/ru/products.json";
 import profileRu from "../locales/ru/profile.json";
 import recipesRu from "../locales/ru/recipes.json";
-import settingsRu from "../locales/ru/settings.json";
+import childRu from "../locales/ru/child.json";
 
 /**
  * i18n-слой (раздел 8.5 ТЗ). Язык пока один, но все пользовательские строки
@@ -37,7 +37,7 @@ export const resources = {
     products: productsRu,
     profile: profileRu,
     recipes: recipesRu,
-    settings: settingsRu,
+    child: childRu,
   },
 } as const;
 

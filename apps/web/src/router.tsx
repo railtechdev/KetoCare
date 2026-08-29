@@ -72,7 +72,9 @@ const appRoute = createRoute({
 
 function firstSectionFor(role: Role): string {
   const sections = SECTIONS_BY_ROLE[role];
-  return sections[0] ?? "settings";
+  // Запасной вариант — свой профиль: он есть у любой роли, в отличие от
+  // разделов, состав которых зависит от этапа.
+  return sections[0] ?? "profile";
 }
 
 const appIndexRoute = createRoute({

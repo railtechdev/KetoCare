@@ -26,15 +26,15 @@ type View =
   { kind: "list" } | { kind: "add" } | { kind: "edit"; child: Patient };
 
 /**
- * Настройки родителя: дети и их профили.
+ * Раздел «Ребёнок»: профили детей семьи.
  *
- * Раздел `settings` объявлен в разделе 8.1 ТЗ для родителя, но критериев приёмки
- * в 8.3 у него нет. Здесь он получает то, без чего кабинет не работает: завести
- * ребёнка было нельзя вовсе, а рост и аллергии — изменить (см. ADR-0003 и
- * docs/AUDIT_USER_PATH.md). Смена пароля появится здесь же.
+ * Раньше это лежало в разделе «Настройки» — и заказчик на первом же показе
+ * спросил, чья это страница, ребёнка или родителя. Вопрос справедливый: ребёнок
+ * — главный предмет всего кабинета родителя, а «Настройки» не говорят ни о чём.
+ * Свой профиль родителя живёт отдельно, в меню пользователя (ADR-0006).
  */
-export function SettingsPage() {
-  const { t } = useTranslation("settings");
+export function ChildPage() {
+  const { t } = useTranslation("child");
   const patients = usePatients();
   const [view, setView] = useState<View>({ kind: "list" });
 
@@ -144,7 +144,7 @@ export function SettingsPage() {
 }
 
 function AddChild({ onDone }: { onDone: () => void }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation("child");
   const create = useCreateChildMutation();
 
   return (
@@ -168,7 +168,7 @@ function AddChild({ onDone }: { onDone: () => void }) {
 }
 
 function EditChild({ child, onDone }: { child: Patient; onDone: () => void }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation("child");
   const update = useUpdateChildMutation(child.id);
 
   return (

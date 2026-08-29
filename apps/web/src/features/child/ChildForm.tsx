@@ -32,7 +32,7 @@ export function ChildForm({
   pending,
   error,
 }: Props) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation("child");
   const ids = useId();
   const isEdit = child !== null;
 

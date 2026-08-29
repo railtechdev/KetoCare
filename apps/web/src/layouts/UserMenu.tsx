@@ -18,7 +18,6 @@ import {
   LogOut,
   Monitor,
   Moon,
-  Settings,
   Sun,
   UserRound,
   type LucideIcon,
@@ -90,21 +89,6 @@ export function UserMenu({ session }: { session: Session }) {
           <UserRound aria-hidden="true" />
           {t("nav.profile")}
         </DropdownMenuItem>
-
-        {session.role === "parent" && (
-          <DropdownMenuItem
-            onSelect={() => {
-              void navigate({
-                to: "/app/$section",
-                params: { section: "settings" },
-                search: (previous) => previous,
-              });
-            }}
-          >
-            <Settings aria-hidden="true" />
-            {t("nav.settings")}
-          </DropdownMenuItem>
-        )}
 
         <DropdownMenuSeparator />
 

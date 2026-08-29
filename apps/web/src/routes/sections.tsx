@@ -9,7 +9,7 @@ import {
   NotebookPen,
   Salad,
   ScrollText,
-  Settings,
+  Baby,
   ShoppingBasket,
   UserCog,
   UserRound,
@@ -29,7 +29,7 @@ import { MenuPage } from "../features/menu/MenuPage";
 import { ProductsPage } from "../features/products/ProductsPage";
 import { RecipesPage } from "../features/recipes/RecipesPage";
 import { ProfilePage } from "../features/profile/ProfilePage";
-import { SettingsPage } from "../features/settings/SettingsPage";
+import { ChildPage } from "../features/child/ChildPage";
 
 /**
  * Экран раздела. Роль — аргумент, потому что один и тот же ключ раздела
@@ -63,21 +63,19 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
   users: () => <AdminPage section="users" />,
   dictionaries: () => <AdminPage section="dictionaries" />,
   audit: () => <AdminPage section="audit" />,
-  settings: () => <SettingsPage />,
+  child: () => <ChildPage />,
   profile: () => <ProfilePage />,
 };
 
 /**
- * Разделы без экрана — пп. 14 и далее раздела 15 ТЗ. Список ведётся явно, а не
- * выводится как «всё, чего нет в SECTION_SCREENS»: тогда раздел, добавленный в
- * SECTIONS_BY_ROLE без экрана, попадал бы в заглушку молча. Тест сверяет оба
- * списка с ролевой таблицей, поэтому забыть подключить экран нельзя.
+ * Разделы, объявленные в ролевой таблице, но пока без экрана.
+ *
+ * Список короткий намеренно: пункт меню, за которым ничего нет, хуже его
+ * отсутствия (правило П3 канона). «Отчёты» и «Ассистент» убраны из навигации
+ * родителя до своих этапов и вернутся вместе с работой; здесь остаётся только
+ * то, что роль всё же видит.
  */
-export const PENDING_SECTIONS: readonly string[] = [
-  "reports",
-  "assistant",
-  "summaries",
-];
+export const PENDING_SECTIONS: readonly string[] = ["summaries"];
 
 /**
  * Значок раздела в навигации.
@@ -95,7 +93,7 @@ export const SECTION_ICONS: Record<string, LucideIcon> = {
   diary: NotebookPen,
   reports: FileText,
   assistant: Bot,
-  settings: Settings,
+  child: Baby,
   patients: Users,
   summaries: ClipboardList,
   users: UserCog,

@@ -68,7 +68,7 @@ export function PatientGate({
         description={t("patientGate.noneBody")}
         action={
           <Button asChild>
-            <SectionLink section="settings">
+            <SectionLink section="child">
               {t("patientGate.addChild")}
             </SectionLink>
           </Button>
