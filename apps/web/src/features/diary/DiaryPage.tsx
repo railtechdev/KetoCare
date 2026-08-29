@@ -24,6 +24,7 @@ import { useSession } from "../auth/useSession";
 import { DiaryForm } from "./DiaryForm";
 import { DiaryList, DiaryListSkeleton } from "./DiaryList";
 import { PeriodPicker } from "./PeriodPicker";
+import { SeizureDiaryGrid } from "./SeizureDiaryGrid";
 import {
   CHART_KINDS,
   DIARY_KINDS,
@@ -313,6 +314,12 @@ function DiaryTab({
           retryLabel={t("common:actions.retry")}
           onRetry={() => void medications.refetch()}
         />
+      )}
+
+      {/* Сетка «день × часть суток» из дневника KETO-STEP: представление над
+          теми же записями, что и список ниже (ADR-0007). */}
+      {kind === "seizures" && (
+        <SeizureDiaryGrid logs={items} types={seizureTypes.data ?? []} />
       )}
 
       {total > items.length && (

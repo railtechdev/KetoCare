@@ -27,6 +27,8 @@ export interface MedicationOption {
 export interface DictionaryOption {
   id: string;
   name: string;
+  /** Короткий код типа приступа (A, C, F, FG, M, T, TC, O) для месячной сетки */
+  code?: string | null;
 }
 
 /** Ключ запроса дневника: иерархия «пациент → дневники → вид → период» (раздел 8.4 ТЗ). */
@@ -204,7 +206,11 @@ export function useSeizureTypes(enabled: boolean) {
       if (error || !data) {
         throw error ?? new Error("Empty seizure types response");
       }
-      return data.items.map((item) => ({ id: item.id, name: item.name_ru }));
+      return data.items.map((item) => ({
+        id: item.id,
+        name: item.name_ru,
+        code: item.code,
+      }));
     },
   });
 }

@@ -13,6 +13,7 @@ import { SelectField } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
 import { useSectionTab } from "../../routes/useSectionTab";
 import { DiaryList } from "../diary/DiaryList";
+import { SeizureDiaryGrid } from "../diary/SeizureDiaryGrid";
 import { PeriodPicker } from "../diary/PeriodPicker";
 import { CHART_KINDS, DIARY_KINDS, type DiaryKind } from "../diary/diaryApi";
 import {
@@ -200,6 +201,13 @@ function DiaryKindView({
         <p className="m-0 text-sm text-warning">
           {t("diary.markersUnavailable")}
         </p>
+      )}
+
+      {/* Дневник приступов в виде, привычном врачу: сетка «день × часть суток»
+          из бумажного дневника KETO-STEP (ADR-0007). Это представление над теми
+          же записями, что ниже списком, — не вторая их копия. */}
+      {kind === "seizures" && (
+        <SeizureDiaryGrid logs={items} types={seizureTypes.data ?? []} />
       )}
 
       {total > items.length && (
