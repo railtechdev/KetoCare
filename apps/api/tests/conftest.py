@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import itertools
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -56,11 +57,18 @@ async def session() -> AsyncIterator[AsyncSession]:
         await engine.dispose()
 
 
+#: Счётчик тестов: из него получается уникальный адрес клиента (см. `client`).
+_test_client_seq = itertools.count(1)
+
+
 @pytest.fixture(autouse=True)
 def reset_rate_limiter():
-    """Лимитер /auth/* хранит счётчики в памяти процесса, поэтому без сброса
-    они переносятся между тестами (все ходят с 127.0.0.1) и роняют посторонние
-    сценарии. Сам лимит проверяется отдельным тестом в test_auth_flows.py."""
+    """Общий сброс счётчиков между тестами.
+
+    Страховка, а не основной механизм: изоляцию даёт уникальный адрес клиента у
+    каждого теста (`client`). Сброс остаётся на случай, если счётчик всё-таки
+    переживёт тест — например, при добавлении лимита с ключом не по адресу.
+    """
 
     limiter.reset()
     yield
@@ -77,7 +85,21 @@ async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides[get_session] = _override_session
 
-    transport = ASGITransport(app=app)
+    # У каждого теста свой адрес клиента, потому что ключ ограничения частоты —
+    # это адрес (`ratelimit._client_key`).
+    #
+    # Пока все ходили с 127.0.0.1, тесты делили одно окно лимитера, и проверки
+    # лимита зависели от порядка запуска: `test_rate_limited` в test_leads.py
+    # проходил в составе файла и падал в одиночку, а `TestRateLimiting` в
+    # test_auth_flows.py — наоборот. Общего сброса для этого не хватало: он
+    # чистит хранилище между тестами, но не между запусками процесса и не между
+    # тестом и живым сервером на той же Redis.
+    #
+    # Адрес из счётчика, а не случайный: воспроизводимость важнее уникальности
+    # между прогонами, а внутри прогона счётчик её и даёт.
+    number = next(_test_client_seq)
+    host = f"10.0.{number // 256 % 256}.{number % 256}"
+    transport = ASGITransport(app=app, client=(host, 12345))
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client
 

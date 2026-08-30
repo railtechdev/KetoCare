@@ -161,6 +161,18 @@ class TestDeleteLead:
         assert await _count(session) == 1
 
 
+async def _leads_audit_count(session) -> int:
+    """Сколько записей журнала о заявках уже есть.
+
+    Тесты идут во внешней транзакции с откатом, но в базе разработчика лежат
+    записи от ручной работы с кабинетом — и они видны запросу. Поэтому
+    проверяется прирост, а не абсолютное значение: иначе тест падает не на
+    своей ошибке, а на чужих данных.
+    """
+
+    return len(list(await session.scalars(select(AuditLog).where(AuditLog.entity == "leads"))))
+
+
 class TestAudit:
     """Список заявок — это контакты семей, где `audience=family` сам по себе
     говорит о болезни ребёнка. Чтение и удаление такой базы журналируются."""
@@ -171,27 +183,34 @@ class TestAudit:
 
         await client.get("/api/v1/leads", headers=auth_headers(admin))
 
-        entry = await session.scalar(select(AuditLog).where(AuditLog.action == "leads.list"))
+        # Отбор по автору: записи `leads.list` от прежней ручной работы с
+        # админкой лежат в той же таблице.
+        entry = await session.scalar(
+            select(AuditLog).where(AuditLog.action == "leads.list", AuditLog.user_id == admin.id)
+        )
         assert entry is not None
-        assert entry.user_id == admin.id
 
     async def test_deletion_is_audited(self, client, session, make_user, auth_headers):
         await client.post("/api/v1/leads", json={"email": "b@example.com", "audience": "doctor"})
         admin = await make_user(UserRole.ADMIN)
-        lead = await session.scalar(select(Lead))
+        lead = await session.scalar(select(Lead).where(Lead.email == "b@example.com"))
         assert lead is not None
 
         await client.delete(f"/api/v1/leads/{lead.id}", headers=auth_headers(admin))
 
-        entry = await session.scalar(select(AuditLog).where(AuditLog.action == "leads.delete"))
+        # Отбор по самой записи, а не только по действию: иначе находится чужое
+        # удаление, и тест подтверждает не то, что проверял.
+        entry = await session.scalar(
+            select(AuditLog).where(AuditLog.action == "leads.delete", AuditLog.entity_id == lead.id)
+        )
         assert entry is not None
-        assert entry.entity_id == lead.id
 
     async def test_public_submit_is_not_audited(self, client, session):
         """Записи о заявке в журнале быть не должно: пользователя, от чьего
         имени её писать, не существует (ADR-0012)."""
 
+        before = await _leads_audit_count(session)
+
         await client.post("/api/v1/leads", json={"email": "c@example.com", "audience": "family"})
 
-        entries = list(await session.scalars(select(AuditLog)))
-        assert entries == []
+        assert await _leads_audit_count(session) == before
