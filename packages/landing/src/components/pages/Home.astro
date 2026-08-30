@@ -46,10 +46,14 @@ const faqSchema = {
           <span class="badge__dot" aria-hidden="true"></span>{h.hero.badge}
         </p>
         <h1 class="h1" style="margin:22px 0 20px">{h.hero.h1}</h1>
-        <p class="lead measure--tight" style="margin-bottom:32px">{h.hero.lead}</p>
+        <p class="lead measure--tight" style="margin-bottom:32px">
+          {h.hero.lead}
+        </p>
         <div class="btn-row" style="margin-bottom:28px">
           <a class="btn btn--primary" href="#cta">{h.hero.ctaFamily}</a>
-          <a class="btn btn--secondary" href={pagePath("doctors", locale)}>{h.hero.ctaDoctors}</a>
+          <a class="btn btn--secondary" href={pagePath("doctors", locale)}
+            >{h.hero.ctaDoctors}</a
+          >
         </div>
         <ul class="chip-row">
           {h.hero.chips.map((c) => <li class="chip">{c}</li>)}
@@ -60,10 +64,16 @@ const faqSchema = {
         <div class="mock">
           <div class="mock__row">
             <div>
-              <div style="font-size:.78rem;color:var(--ink-muted)">{h.hero.card.today}</div>
-              <div style="font-size:1.06rem;font-weight:700">{h.hero.card.childName}</div>
+              <div style="font-size:.78rem;color:var(--ink-muted)">
+                {h.hero.card.today}
+              </div>
+              <div style="font-size:1.06rem;font-weight:700">
+                {h.hero.card.childName}
+              </div>
             </div>
-            <span class="mock__avatar" aria-hidden="true">{h.hero.card.childInitials}</span>
+            <span class="mock__avatar" aria-hidden="true"
+              >{h.hero.card.childInitials}</span
+            >
           </div>
 
           <div class="mock__panel">
@@ -74,7 +84,10 @@ const faqSchema = {
               <span class="ratio-badge">{h.hero.card.ratio}</span>
             </div>
             <div style="font-weight:600">{h.hero.card.dish}</div>
-            <div style="font-size:.8rem;color:var(--ink-muted);margin-top:2px" class="num">
+            <div
+              style="font-size:.8rem;color:var(--ink-muted);margin-top:2px"
+              class="num"
+            >
               {h.hero.card.dishMacros}
             </div>
           </div>
@@ -99,17 +112,25 @@ const faqSchema = {
             </div>
             <div class="macro-legend">
               <span
-                ><i style="background:var(--macro-fat)" aria-hidden="true"></i>{d.common.fat}
-                <span class="num" style="color:var(--ink-muted)">{h.hero.card.fatValue}</span></span
-              >
-              <span
-                ><i style="background:var(--macro-protein)" aria-hidden="true"></i>{d.common.protein}
-                <span class="num" style="color:var(--ink-muted)">{h.hero.card.proteinValue}</span
+                ><i style="background:var(--macro-fat)" aria-hidden="true"></i>{
+                  d.common.fat
+                }
+                <span class="num" style="color:var(--ink-muted)"
+                  >{h.hero.card.fatValue}</span
                 ></span
               >
               <span
-                ><i style="background:var(--macro-carbs)" aria-hidden="true"></i>{d.common.carbs}
-                <span class="num" style="color:var(--ink-muted)">{h.hero.card.carbsValue}</span
+                ><i style="background:var(--macro-protein)" aria-hidden="true"
+                ></i>{d.common.protein}
+                <span class="num" style="color:var(--ink-muted)"
+                  >{h.hero.card.proteinValue}</span
+                ></span
+              >
+              <span
+                ><i style="background:var(--macro-carbs)" aria-hidden="true"
+                ></i>{d.common.carbs}
+                <span class="num" style="color:var(--ink-muted)"
+                  >{h.hero.card.carbsValue}</span
                 ></span
               >
             </div>
@@ -134,17 +155,23 @@ const faqSchema = {
   <section class="section dark-section">
     <div class="wrap reveal">
       <p class="eyebrow">{h.mission.eyebrow}</p>
-      <h2 class="h2" style="max-width:24ch;margin-bottom:18px">{h.mission.h2}</h2>
+      <h2 class="h2" style="max-width:24ch;margin-bottom:18px">
+        {h.mission.h2}
+      </h2>
       <p class="lead measure" style="margin-bottom:44px">{h.mission.lead}</p>
       <div class="grid grid--auto">
         <div class="card card--dark">
-          <p class="eyebrow" style="margin-bottom:14px">{h.mission.families.title}</p>
+          <p class="eyebrow" style="margin-bottom:14px">
+            {h.mission.families.title}
+          </p>
           <ul class="tick-list">
             {h.mission.families.items.map((i) => <li>{i}</li>)}
           </ul>
         </div>
         <div class="card card--dark">
-          <p class="eyebrow" style="margin-bottom:14px">{h.mission.doctors.title}</p>
+          <p class="eyebrow" style="margin-bottom:14px">
+            {h.mission.doctors.title}
+          </p>
           <ul class="tick-list">
             {h.mission.doctors.items.map((i) => <li>{i}</li>)}
           </ul>
@@ -173,7 +200,8 @@ const faqSchema = {
       </div>
       <p style="margin-top:28px">
         <a class="arrow-link" href={pagePath("howItWorks", locale)}>
-          {h.steps.link} <span aria-hidden="true">→</span>
+          {h.steps.link}
+          <span aria-hidden="true">→</span>
         </a>
       </p>
     </div>
@@ -185,9 +213,15 @@ const faqSchema = {
       <div class="split" style="align-items:flex-start">
         <div class="split__text">
           <p class="eyebrow">{h.calc.eyebrow}</p>
-          <h2 class="h2" style="max-width:20ch;margin-bottom:18px">{h.calc.h2}</h2>
-          <p class="lead measure--tight" style="margin-bottom:14px">{h.calc.lead1}</p>
-          <p class="lead measure--tight" style="margin-bottom:24px">{h.calc.lead2}</p>
+          <h2 class="h2" style="max-width:20ch;margin-bottom:18px">
+            {h.calc.h2}
+          </h2>
+          <p class="lead measure--tight" style="margin-bottom:14px">
+            {h.calc.lead1}
+          </p>
+          <p class="lead measure--tight" style="margin-bottom:24px">
+            {h.calc.lead2}
+          </p>
           <p class="note">{h.calc.note}</p>
         </div>
         <div class="split__media">
@@ -201,22 +235,32 @@ const faqSchema = {
   <section class="section section--white section--bordered">
     <div class="wrap reveal">
       <p class="eyebrow">{h.diaries.eyebrow}</p>
-      <h2 class="h2" style="max-width:26ch;margin-bottom:16px">{h.diaries.h2}</h2>
+      <h2 class="h2" style="max-width:26ch;margin-bottom:16px">
+        {h.diaries.h2}
+      </h2>
       <p class="lead measure" style="margin-bottom:44px">{h.diaries.lead}</p>
       <div class="grid grid--auto">
         <div class="card card--sunken">
           <div
             style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px;flex-wrap:wrap"
           >
-            <h3 class="card__title" style="margin:0">{h.diaries.ketones.title}</h3>
+            <h3 class="card__title" style="margin:0">
+              {h.diaries.ketones.title}
+            </h3>
             <span
               class="num"
               style="font-size:.8rem;font-weight:600;color:var(--success);background:var(--success-bg);border-radius:8px;padding:2px 9px"
               >{h.diaries.ketones.badge}</span
             >
           </div>
-          <p class="card__text" style="margin-bottom:14px">{h.diaries.ketones.caption}</p>
-          <svg viewBox="0 0 280 92" role="img" aria-label={h.diaries.ketones.chartAlt}>
+          <p class="card__text" style="margin-bottom:14px">
+            {h.diaries.ketones.caption}
+          </p>
+          <svg
+            viewBox="0 0 280 92"
+            role="img"
+            aria-label={h.diaries.ketones.chartAlt}
+          >
             <polygon
               points="10,79.3 30,75.1 50,70.9 70,66.7 90,62.5 110,58.3 130,54.1 150,49.9 170,45.7 190,41.5 210,37.3 230,33.1 250,28.9 270,24.7 270,92 10,92"
               fill="rgba(44,95,224,.10)"></polygon>
@@ -233,9 +277,13 @@ const faqSchema = {
         <div style="display:flex;flex-direction:column;gap:20px">
           <div class="card card--sunken" style="flex:1">
             <h3 class="card__title">{h.diaries.seizure.title}</h3>
-            <p class="card__text" style="margin-bottom:14px">{h.diaries.seizure.text}</p>
+            <p class="card__text" style="margin-bottom:14px">
+              {h.diaries.seizure.text}
+            </p>
             <div class="chip-row" aria-hidden="true">
-              <span class="chip chip--outline">{h.diaries.seizure.chipType}</span>
+              <span class="chip chip--outline"
+                >{h.diaries.seizure.chipType}</span
+              >
               <span
                 class="chip"
                 style="background:var(--primary);color:#fff;font-weight:600;padding:8px 14px"
@@ -257,8 +305,12 @@ const faqSchema = {
     <div class="wrap split reveal">
       <div class="split__text">
         <p class="eyebrow">{h.telegram.eyebrow}</p>
-        <h2 class="h2" style="max-width:20ch;margin-bottom:16px">{h.telegram.h2}</h2>
-        <p class="lead measure--tight" style="margin-bottom:18px">{h.telegram.lead}</p>
+        <h2 class="h2" style="max-width:20ch;margin-bottom:16px">
+          {h.telegram.h2}
+        </h2>
+        <p class="lead measure--tight" style="margin-bottom:18px">
+          {h.telegram.lead}
+        </p>
         <ul class="tick-list">
           {h.telegram.items.map((i) => <li>{i}</li>)}
         </ul>
@@ -274,23 +326,38 @@ const faqSchema = {
     <div class="wrap split reveal">
       <div class="split__text">
         <p class="eyebrow">{h.doctorsTeaser.eyebrow}</p>
-        <h2 class="h2" style="max-width:22ch;margin-bottom:16px">{h.doctorsTeaser.h2}</h2>
-        <p class="lead measure--tight" style="margin-bottom:26px">{h.doctorsTeaser.lead}</p>
-        <a class="btn btn--on-dark" href={pagePath("doctors", locale)}>{h.doctorsTeaser.cta}</a>
+        <h2 class="h2" style="max-width:22ch;margin-bottom:16px">
+          {h.doctorsTeaser.h2}
+        </h2>
+        <p class="lead measure--tight" style="margin-bottom:26px">
+          {h.doctorsTeaser.lead}
+        </p>
+        <a class="btn btn--on-dark" href={pagePath("doctors", locale)}
+          >{h.doctorsTeaser.cta}</a
+        >
       </div>
       <div class="split__media">
         <div class="card card--dark">
-          <h3 class="eyebrow" style="color:var(--dark-muted);margin-bottom:14px">
+          <h3
+            class="eyebrow"
+            style="color:var(--dark-muted);margin-bottom:14px"
+          >
             {h.doctorsTeaser.queueTitle}
           </h3>
           <ul class="queue">
             {
               h.doctorsTeaser.queue.map((row) => (
                 <li class="queue__item">
-                  <span class={`queue__dot queue__dot--${row.level}`} aria-hidden="true" />
+                  <span
+                    class={`queue__dot queue__dot--${row.level}`}
+                    aria-hidden="true"
+                  />
                   <span style="flex:1;min-width:0">
                     <span class="queue__name">
-                      {row.name} · <span class={`queue__status--${row.level}`}>{row.status}</span>
+                      {row.name} ·{" "}
+                      <span class={`queue__status--${row.level}`}>
+                        {row.status}
+                      </span>
                     </span>
                     <span class="queue__reason" style="display:block">
                       {row.reason}
@@ -310,7 +377,10 @@ const faqSchema = {
   </section>
 
   {/* ---------- Доверие ---------- */}
-  <section class="section section--white" style="border-bottom:1px solid var(--border)">
+  <section
+    class="section section--white"
+    style="border-bottom:1px solid var(--border)"
+  >
     <div class="wrap reveal">
       <p class="eyebrow">{h.trust.eyebrow}</p>
       <h2 class="h2" style="max-width:24ch;margin-bottom:44px">{h.trust.h2}</h2>
@@ -336,26 +406,50 @@ const faqSchema = {
   </section>
 
   {/* ---------- Заявки ---------- */}
-  <section class="section section--white" id="cta" style="border-top:1px solid var(--border)">
+  <section
+    class="section section--white"
+    id="cta"
+    style="border-top:1px solid var(--border)"
+  >
     <div class="wrap">
       <div style="text-align:center;margin-bottom:44px">
         <h2 class="h2" style="margin-bottom:14px">{h.cta.h2}</h2>
-        <p class="lead" style="max-width:56ch;margin-inline:auto">{h.cta.lead}</p>
+        <p class="lead" style="max-width:56ch;margin-inline:auto">
+          {h.cta.lead}
+        </p>
       </div>
-      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));max-width:920px;margin-inline:auto">
+      <div
+        class="grid"
+        style="grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));max-width:920px;margin-inline:auto"
+      >
         <div class="card card--sunken" style="padding:32px;border-radius:20px">
-          <p class="eyebrow" style="margin-bottom:10px">{h.cta.family.eyebrow}</p>
-          <h3 class="card__title" style="font-size:1.19rem">{h.cta.family.title}</h3>
-          <p class="card__text" style="margin-bottom:20px">{h.cta.family.text}</p>
+          <p class="eyebrow" style="margin-bottom:10px">
+            {h.cta.family.eyebrow}
+          </p>
+          <h3 class="card__title" style="font-size:1.19rem">
+            {h.cta.family.title}
+          </h3>
+          <p class="card__text" style="margin-bottom:20px">
+            {h.cta.family.text}
+          </p>
           <LeadForm locale={locale} variant="family" />
         </div>
         <div class="card card--dark" style="padding:32px;border-radius:20px">
-          <p class="eyebrow" style="margin-bottom:10px">{h.cta.doctors.eyebrow}</p>
-          <h3 class="card__title" style="font-size:1.19rem">{h.cta.doctors.title}</h3>
-          <p class="card__text" style="color:var(--dark-muted);margin-bottom:20px">
+          <p class="eyebrow" style="margin-bottom:10px">
+            {h.cta.doctors.eyebrow}
+          </p>
+          <h3 class="card__title" style="font-size:1.19rem">
+            {h.cta.doctors.title}
+          </h3>
+          <p
+            class="card__text"
+            style="color:var(--dark-muted);margin-bottom:20px"
+          >
             {h.cta.doctors.text}
           </p>
-          <a class="btn btn--on-dark" href={pagePath("doctors", locale)}>{h.cta.doctors.cta}</a>
+          <a class="btn btn--on-dark" href={pagePath("doctors", locale)}
+            >{h.cta.doctors.cta}</a
+          >
         </div>
       </div>
     </div>

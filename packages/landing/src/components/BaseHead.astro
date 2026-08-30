@@ -4,7 +4,13 @@
  * соцсетей и микроразметка. Единственное место, где это собирается, —
  * иначе языковые версии рано или поздно получат разные наборы тегов.
  */
-import { HTML_LANG, LOCALES, pagePath, type Locale, type PageKey } from "../i18n/config";
+import {
+  HTML_LANG,
+  LOCALES,
+  pagePath,
+  type Locale,
+  type PageKey,
+} from "../i18n/config";
 
 interface Props {
   locale: Locale;
@@ -45,12 +51,22 @@ const ogLocale = { ru: "ru_RU", uz: "uz_UZ", en: "en_US" }[locale];
 <meta name="description" content={description} />
 <link rel="canonical" href={canonical.href} />
 
-{alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
-<link rel="alternate" hreflang="x-default" href={new URL(pagePath(page, "ru"), Astro.site).href} />
+{
+  alternates.map((a) => (
+    <link rel="alternate" hreflang={a.hreflang} href={a.href} />
+  ))
+}
+<link
+  rel="alternate"
+  hreflang="x-default"
+  href={new URL(pagePath(page, "ru"), Astro.site).href}
+/>
 
 <meta
   name="robots"
-  content={indexable ? "index, follow, max-image-preview:large" : "noindex, nofollow"}
+  content={indexable
+    ? "index, follow, max-image-preview:large"
+    : "noindex, nofollow"}
 />
 
 <meta property="og:type" content="website" />

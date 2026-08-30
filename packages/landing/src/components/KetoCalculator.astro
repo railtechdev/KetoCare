@@ -6,7 +6,13 @@
  */
 import { t, useTranslations } from "../i18n";
 import type { Locale } from "../i18n/config";
-import { calculate, formatNumber, INGREDIENTS, TARGET_RATIO, TOLERANCE } from "../lib/keto";
+import {
+  calculate,
+  formatNumber,
+  INGREDIENTS,
+  TARGET_RATIO,
+  TOLERANCE,
+} from "../lib/keto";
 
 interface Props {
   locale: Locale;
@@ -64,7 +70,9 @@ const configJson = JSON.stringify({
           step="5"
           value={ing.initial}
           data-calc-input={i}
-          aria-label={t(d.home.calc.sliderLabel, { name: d.home.calc.ingredients[i] ?? "" })}
+          aria-label={t(d.home.calc.sliderLabel, {
+            name: d.home.calc.ingredients[i] ?? "",
+          })}
         />
       </div>
     ))
@@ -72,8 +80,9 @@ const configJson = JSON.stringify({
 
   <div class="calc__total">
     <div class="macro-bar" aria-hidden="true">
-      <span style={`width:${r.fatPct.toFixed(1)}%;background:var(--macro-fat)`} data-calc-bar="fat"
-      ></span>
+      <span
+        style={`width:${r.fatPct.toFixed(1)}%;background:var(--macro-fat)`}
+        data-calc-bar="fat"></span>
       <span
         style={`width:${r.proteinPct.toFixed(1)}%;background:var(--macro-protein)`}
         data-calc-bar="protein"></span>
@@ -105,8 +114,10 @@ const configJson = JSON.stringify({
       </span>
     </div>
 
-    {/* Итог меняется при движении ползунка — экранный диктор должен
-        сообщить об этом, не перебивая ввод: role="status" и aria-live="polite". */}
+    {
+      /* Итог меняется при движении ползунка — экранный диктор должен
+        сообщить об этом, не перебивая ввод: role="status" и aria-live="polite". */
+    }
     <div
       class="calc__verdict"
       data-calc-verdict
@@ -115,20 +126,33 @@ const configJson = JSON.stringify({
       aria-live="polite"
     >
       <span
-        class={r.state === "ok" ? "ratio-badge" : "ratio-badge ratio-badge--off"}
+        class={r.state === "ok"
+          ? "ratio-badge"
+          : "ratio-badge ratio-badge--off"}
         data-calc-ratio
       >
         {formatNumber(r.ratio, locale, 2)} : 1
       </span>
-      <span class="calc__verdict-text" data-calc-verdict-text>{verdictText[r.state]}</span>
+      <span class="calc__verdict-text" data-calc-verdict-text
+        >{verdictText[r.state]}</span
+      >
     </div>
 
-    {/* Оговорка стоит внутри карточки, а не в стороне: посетитель, который
-        считает этим завтрак ребёнку, смотрит именно сюда. */}
+    {
+      /* Оговорка стоит внутри карточки, а не в стороне: посетитель, который
+        считает этим завтрак ребёнку, смотрит именно сюда. */
+    }
     <p class="calc__disclaimer">{d.home.calc.disclaimer}</p>
   </div>
 
-  {/* Не скрипт, а данные для скрипта: значения словаря, которых он иначе не
-      узнает. is:inline — чтобы сборщик не пытался его обрабатывать. */}
-  <script is:inline type="application/json" data-calc-config set:html={configJson} />
+  {
+    /* Не скрипт, а данные для скрипта: значения словаря, которых он иначе не
+      узнает. is:inline — чтобы сборщик не пытался его обрабатывать. */
+  }
+  <script
+    is:inline
+    type="application/json"
+    data-calc-config
+    set:html={configJson}
+  />
 </div>

@@ -24,7 +24,8 @@ interface Props {
   schema?: unknown;
 }
 
-const { locale, page, title, description, ctaHref, ctaLabel, schema } = Astro.props;
+const { locale, page, title, description, ctaHref, ctaLabel, schema } =
+  Astro.props;
 const d = useTranslations(locale);
 
 const organization = {
@@ -41,9 +42,26 @@ const organization = {
 <!doctype html>
 <html lang={HTML_LANG[locale]}>
   <head>
-    <BaseHead locale={locale} page={page} title={title} description={description} />
-    <script is:inline set:html={JSON.stringify(organization)} type="application/ld+json" />
-    {schema && <script is:inline set:html={JSON.stringify(schema)} type="application/ld+json" />}
+    <BaseHead
+      locale={locale}
+      page={page}
+      title={title}
+      description={description}
+    />
+    <script
+      is:inline
+      set:html={JSON.stringify(organization)}
+      type="application/ld+json"
+    />
+    {
+      schema && (
+        <script
+          is:inline
+          set:html={JSON.stringify(schema)}
+          type="application/ld+json"
+        />
+      )
+    }
     <script is:inline>
       // Классы ставятся до первой отрисовки, иначе блоки успевают мигнуть.
       // `js` — скрипты вообще есть (форма заявки вместо ссылки на почту);
