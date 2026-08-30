@@ -116,6 +116,14 @@ export interface SectionSearch {
    * страницу — F5 возвращал в список, а «Назад» браузера уводил из раздела.
    */
   item?: string;
+  /**
+   * Строка поиска раздела.
+   *
+   * В адресе, потому что поиск — это ссылка: калькулятор, не нашедший продукт,
+   * отправляет в справочник с тем же запросом, и переспрашивать его у семьи,
+   * стоящей у плиты, незачем.
+   */
+  q?: string;
 }
 
 /** Непустая строка или ничего: `?tab=` в адресе — то же самое, что его отсутствие. */
@@ -137,10 +145,12 @@ const sectionRoute = createRoute({
     const tab = text(search.tab);
     const kind = text(search.kind);
     const item = text(search.item);
+    const q = text(search.q);
     if (patient !== undefined) result.patient = patient;
     if (tab !== undefined) result.tab = tab;
     if (kind !== undefined) result.kind = kind;
     if (item !== undefined) result.item = item;
+    if (q !== undefined) result.q = q;
     return result;
   },
   beforeLoad: ({ context, params }) => {

@@ -6,19 +6,20 @@ import {
   TabsContent,
   WarningBanner,
 } from "@ketocare/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
-import { useSectionTab } from "../../routes/useSectionTab";
+import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
 import { DishResultView, type DishView } from "./DishResultView";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
 import type { DishRow } from "./types";
+import { useProduct } from "./useProducts";
 import {
   useScaleMutation,
   useSolveMutation,
@@ -40,8 +41,30 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
   // переслать, а F5 не возвращает в «проверить».
   const [mode, setMode] = useSectionTab<Mode>("tab", MODES, "verify");
   const [rows, setRows] = useState<DishRow[]>([]);
+
+  // Продукт, пришедший из справочника (`?item=<id>`). Справочник знает только
+  // идентификатор, состав на 100 г нужно дочитать. До этого справочник и
+  // калькулятор не знали друг о друге: найденный продукт приходилось искать
+  // здесь заново по памяти.
+  const [incomingId, setIncomingId] = useSectionItem();
+  const incoming = useProduct(incomingId);
   const [targets, setTargets] = useState<TargetsInput>(DEFAULT_TARGETS);
   const [factor, setFactor] = useState(2);
+
+  useEffect(() => {
+    const product = incoming.data;
+    if (product === undefined) return;
+
+    // Параметр снимается сразу: он описывает не состояние экрана, а разовый
+    // приход из справочника. Оставленный в адресе, он добавлял бы продукт
+    // заново после каждой перезагрузки.
+    setIncomingId(undefined);
+    setRows((current) =>
+      current.some((row) => row.product.id === product.id)
+        ? current
+        : [...current, { product, grams: 50 }],
+    );
+  }, [incoming.data, setIncomingId]);
 
   const verify = useVerifyMutation();
   const solve = useSolveMutation();

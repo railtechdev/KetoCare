@@ -7,14 +7,16 @@ import {
 } from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { PackageSearch, SearchX } from "lucide-react";
+import { Calculator, PackageSearch, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { PageLayout } from "../../components/PageLayout";
+import { SectionLink } from "../../components/SectionLink";
 import { api, errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { useSectionQuery } from "../../routes/useSectionTab";
 
 interface ProductRow {
   id: string;
@@ -31,7 +33,13 @@ interface ProductRow {
 /** Справочник продуктов для родителя (раздел 8.1 ТЗ, раздел «products»). */
 export function ProductsPage() {
   const { t } = useTranslation("products");
-  const [query, setQuery] = useState("");
+
+  // Запрос — в адресе: калькулятор, не нашедший продукт, ведёт сюда с уже
+  // введённым словом, а семья не набирает его во второй раз. Поле при этом
+  // остаётся отзывчивым — своё состояние нужно, чтобы каждая буква не ждала
+  // навигации.
+  const [urlQuery, setUrlQuery] = useSectionQuery();
+  const [query, setQuery] = useState(urlQuery);
 
   // Запрос уходит с задержкой: иначе полнотекстовый поиск дёргается на каждой букве.
   const debounced = useDebouncedValue(query, 300);
@@ -73,6 +81,21 @@ export function ProductsPage() {
       { accessorKey: "carbs", header: t("columns.carbs"), cell: numeric(1) },
       { accessorKey: "fiber", header: t("columns.fiber"), cell: numeric(1) },
       { accessorKey: "source", header: t("columns.source") },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          // Справочник без выхода в расчёт был тупиком: продукт находился, а
+          // сделать с ним было нечего — калькулятор про него не знал, и его
+          // приходилось искать там заново.
+          <Button asChild variant="ghost" size="sm" className="min-h-touch">
+            <SectionLink section="calculator" item={row.original.id}>
+              <Calculator aria-hidden="true" />
+              {t("actions.toCalculator")}
+            </SectionLink>
+          </Button>
+        ),
+      },
     ],
     [t],
   );
@@ -94,7 +117,14 @@ export function ProductsPage() {
         title={t("empty.noResults.title")}
         description={t("empty.noResults.description")}
         action={
-          <Button type="button" variant="outline" onClick={() => setQuery("")}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setQuery("");
+              setUrlQuery("");
+            }}
+          >
             {t("empty.noResults.reset")}
           </Button>
         }
@@ -110,7 +140,10 @@ export function ProductsPage() {
         width="wide"
         value={query}
         placeholder={t("search.placeholder")}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setUrlQuery(event.target.value);
+        }}
       />
 
       {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
