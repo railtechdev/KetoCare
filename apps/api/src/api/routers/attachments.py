@@ -25,6 +25,7 @@ from core.repositories import audit as audit_repo
 from ..client_address import client_address
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
+from ..ratelimit import ATTACHMENT_RATE_LIMIT, limiter
 from ..schemas_attachments import AttachmentRead
 from ..services import attachments as files_service
 
@@ -49,6 +50,7 @@ async def list_attachments(
     status_code=201,
     summary="Загрузить документ пациента",
 )
+@limiter.limit(ATTACHMENT_RATE_LIMIT)
 async def upload_attachment(
     patient_id: Annotated[uuid.UUID, Path()],
     request: Request,
@@ -73,6 +75,11 @@ async def upload_attachment(
 
     content = await file.read()
     mime = files_service.validate(content)
+
+    used = await attachments_repo.used_bytes(
+        session, owner_kind=AttachmentOwnerKind.PATIENT, owner_id=patient_id
+    )
+    files_service.assert_within_quota(used, len(content))
 
     parsed_date = None
     if doc_date:

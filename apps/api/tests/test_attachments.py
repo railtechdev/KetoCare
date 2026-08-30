@@ -465,3 +465,54 @@ class TestRecipePhoto:
         )
         assert got.content == JPEG
         assert second.json()["photo_path"] != ""
+
+
+class TestQuota:
+    """Предел на файл диск не защищает: сотня документов заполнит том так же
+    надёжно, как один огромный файл (ADR-0013)."""
+
+    async def test_upload_beyond_quota_is_rejected(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        from core.config import get_settings
+
+        doctor, patient = await _linked_doctor(session, make_user, make_patient)
+
+        # Квота уменьшена до одного мегабайта: гонять настоящие сто мегабайт
+        # через тест значило бы тратить минуту на каждый прогон.
+        settings = get_settings()
+        monkeypatch.setattr(settings, "attachment_quota_mb", 1, raising=False)
+
+        big = PNG + b"\x00" * (600 * 1024)
+        first = await client.post(url(patient.id), files=upload(big), headers=auth_headers(doctor))
+        assert first.status_code == 201, first.text
+
+        second = await client.post(
+            url(patient.id), files=upload(big, "второй.png"), headers=auth_headers(doctor)
+        )
+
+        assert second.status_code == 422
+        message = second.json()["error"]["message"]
+        # Отказ обязан говорить, что делать: «превышена квота» без этого
+        # читается как поломка.
+        assert "МБ" in message
+        assert "Удалите" in message
+
+    async def test_deleting_frees_the_quota(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        from core.config import get_settings
+
+        doctor, patient = await _linked_doctor(session, make_user, make_patient)
+        monkeypatch.setattr(get_settings(), "attachment_quota_mb", 1, raising=False)
+
+        big = PNG + b"\x00" * (600 * 1024)
+        first = await client.post(url(patient.id), files=upload(big), headers=auth_headers(doctor))
+        await client.delete(f"{url(patient.id)}/{first.json()['id']}", headers=auth_headers(doctor))
+
+        # Иначе упершийся в квоту не смог бы её разгрузить вовсе: удаление
+        # мягкое, и без этого место не возвращалось бы никогда.
+        second = await client.post(
+            url(patient.id), files=upload(big, "второй.png"), headers=auth_headers(doctor)
+        )
+        assert second.status_code == 201, second.text

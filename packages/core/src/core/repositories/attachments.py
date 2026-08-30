@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Attachment
@@ -77,6 +77,27 @@ async def list_for_owner(
         .order_by(Attachment.doc_date.desc().nullslast(), Attachment.created_at.desc())
     )
     return list(await session.scalars(stmt))
+
+
+async def used_bytes(
+    session: AsyncSession, *, owner_kind: AttachmentOwnerKind, owner_id: uuid.UUID
+) -> int:
+    """Сколько байт занимают живые вложения владельца.
+
+    Удалённые не считаются, хотя их байты пока остаются на диске: уборщика
+    файлов в продукте нет (ADR-0013). Иначе удаление документа не освобождало
+    бы место в глазах семьи, и упершийся в квоту не смог бы её разгрузить
+    вовсе.
+    """
+
+    result = await session.execute(
+        select(func.coalesce(func.sum(Attachment.size_bytes), 0)).where(
+            Attachment.owner_kind == owner_kind,
+            Attachment.owner_id == owner_id,
+            Attachment.deleted_at.is_(None),
+        )
+    )
+    return int(result.scalar_one())
 
 
 async def soft_delete(session: AsyncSession, *, attachment: Attachment) -> None:
