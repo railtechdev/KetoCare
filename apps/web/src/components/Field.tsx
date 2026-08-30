@@ -242,7 +242,9 @@ export function FileField({
         <input
           id={id}
           type="file"
-          className="sr-only"
+          // `peer` — потому что поле стоит перед label в DOM: подсветить
+          // соседа можно только вперёд.
+          className="peer sr-only"
           aria-invalid={error ? true : undefined}
           aria-describedby={useDescribedBy(id, error, hint)}
           {...props}
@@ -261,7 +263,15 @@ export function FileField({
             "inline-flex min-h-touch cursor-pointer items-center rounded-md border border-input",
             "bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground",
             "hover:bg-secondary/80",
-            "has-[+*:focus-visible]:outline-2 has-[+*:focus-visible]:outline-ring",
+            // Кольцо фокуса переносится на label: само поле скрыто, и без
+            // этого фокус на нём не виден вовсе. Прежний селектор смотрел на
+            // следующего соседа label — то есть на подпись с именем файла, а
+            // не на поле, и не срабатывал никогда.
+            //
+            // Оформление — как у кнопок кита (`button.tsx`), чтобы фокус
+            // выглядел одинаково во всём приложении.
+            "peer-focus-visible:outline peer-focus-visible:outline-2",
+            "peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring",
           )}
         >
           {t("actions.chooseFile")}
