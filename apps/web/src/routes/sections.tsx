@@ -22,6 +22,7 @@ import { AdminPage } from "../features/admin/AdminPage";
 import type { Role } from "../features/auth/roles";
 import { CalculatorPage } from "../features/calculator/CalculatorPage";
 import { DiaryPage } from "../features/diary/DiaryPage";
+import { AdminHomePage } from "../features/admin/AdminHomePage";
 import { DoctorHomePage } from "../features/doctor/DoctorHomePage";
 import { DoctorPatientsPage } from "../features/doctor/DoctorPatientsPage";
 import { HomePage } from "../features/home/HomePage";
@@ -48,7 +49,9 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
   // «что сейчас», врачу — «кем заняться» (`docs/DESIGN_PROPOSAL.md`). Экран
   // выбирается по роли, как у `products`; право читать проверяет сервер.
   home: (role) =>
-    role === "doctor" || role === "dietitian" ? (
+    role === "admin" ? (
+      <AdminHomePage />
+    ) : role === "doctor" || role === "dietitian" ? (
       <DoctorHomePage />
     ) : (
       <PatientGate render={(patientId) => <HomePage patientId={patientId} />} />

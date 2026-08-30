@@ -41,5 +41,13 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
   // вместо ответа на вопрос, с которого начинается рабочий день.
   doctor: ["home", "patients", "summaries", "profile"],
   dietitian: ["home", "patients", "products", "recipes", "profile"],
-  admin: ["users", "products", "recipes", "dictionaries", "audit", "profile"],
+  admin: [
+    "home",
+    "users",
+    "products",
+    "recipes",
+    "dictionaries",
+    "audit",
+    "profile",
+  ],
 };

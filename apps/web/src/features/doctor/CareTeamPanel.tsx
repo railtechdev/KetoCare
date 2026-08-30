@@ -103,7 +103,7 @@ export function CareTeamPanel({ patientId }: { patientId: string }) {
                 {member.full_name}
               </span>
               <span className="text-sm text-muted-foreground">
-                {t(`careTeam.roles.${member.role}`)}
+                {t(`common:roles.${member.role}`)}
               </span>
 
               {canWrite && (
@@ -185,7 +185,7 @@ export function CareTeamPanel({ patientId }: { patientId: string }) {
             <option value="">{t("careTeam.colleaguePlaceholder")}</option>
             {candidates.map((colleague) => (
               <option key={colleague.id} value={colleague.id}>
-                {colleague.full_name} · {t(`careTeam.roles.${colleague.role}`)}
+                {colleague.full_name} · {t(`common:roles.${colleague.role}`)}
               </option>
             ))}
           </SelectField>
