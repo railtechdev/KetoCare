@@ -9,6 +9,7 @@
     "og": "node scripts/og.mjs",
     "preview": "astro preview",
     "typecheck": "astro check",
+    "lint": "eslint src",
     "format:check": "prettier --check src scripts",
     "format": "prettier --write src scripts",
     "test": "node scripts/check-constants.mjs"

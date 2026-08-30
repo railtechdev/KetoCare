@@ -148,7 +148,8 @@ function initCalculator(): void {
 
     if (kcalEl) {
       // Единица измерения уже стоит в разметке рядом; здесь только число.
-      const unit = kcalEl.textContent?.replace(/[\d\s ]+/, "").trim() ?? "";
+      const unit =
+        kcalEl.textContent?.replace(/[\d\s\u00a0]+/, "").trim() ?? "";
       kcalEl.textContent = `${Math.round(r.kcal)} ${unit}`;
     }
 
@@ -165,7 +166,7 @@ function initCalculator(): void {
         `[data-calc-macro="${key}"]`,
       );
       if (macro)
-        macro.textContent = `${formatNumber(value, config.locale)} ${config.grams}`;
+        macro.textContent = `${formatNumber(value, config.locale)}\u00a0${config.grams}`;
     });
 
     if (ratioEl) {
