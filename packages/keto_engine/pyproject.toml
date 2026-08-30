@@ -4,7 +4,15 @@ version = "0.3.0"
 description = "Изолированное расчётное ядро KetoCare: проверка, подбор и пересчёт блюд по кетогенному соотношению"
 requires-python = ">=3.12"
 dependencies = [
-    "scipy>=1.14",
+    # Верхняя граница — не каприз, а требование площадки: процессор пред-прода
+    # (QEMU Virtual CPU 2.5+, x86-64-v1) не поддерживает sse4.2 и popcnt, а
+    # колёса numpy 2.x собраны с базовой линией x86-64-v2 и падают на импорте:
+    #   RuntimeError: NumPy was built with baseline optimizations: (X86_V2)
+    # Проверено: scipy 1.13.1 + numpy 1.26.4 работают на этом процессоре, и все
+    # 35 эталонных случаев с property-тестами проходят без изменений.
+    # Подробности и условие отката — docs/adr/0014-numeric-stack-pin.md.
+    "scipy>=1.13,<1.14",
+    "numpy>=1.26,<2",
 ]
 
 [dependency-groups]
