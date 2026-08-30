@@ -1,0 +1,129 @@
+"""Заявки с посадочной страницы (ADR-0012).
+
+Ручка публичная — единственная такая на запись, — поэтому проверяется не только
+happy path, но и то, что она не превращается в открытую дверь: приманка для
+ботов, ограничение частоты и закрытое чтение списка.
+"""
+
+from __future__ import annotations
+
+import pytest
+from sqlalchemy import func, select
+
+from core.models import Lead
+from core.models.enums import LeadAudience, UserRole
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _count(session) -> int:
+    return int(await session.scalar(select(func.count()).select_from(Lead)) or 0)
+
+
+class TestCreateLead:
+    @pytest.mark.parametrize("audience", ["family", "doctor"])
+    async def test_anyone_can_submit(self, client, session, audience):
+        response = await client.post(
+            "/api/v1/leads",
+            json={"email": "Parent@Example.COM", "audience": audience, "locale": "ru"},
+        )
+        assert response.status_code == 202, response.text
+
+        lead = await session.scalar(select(Lead))
+        assert lead is not None
+        # Адрес нормализуется: иначе «Parent@» и «parent@» — две разные заявки.
+        assert lead.email == "parent@example.com"
+        assert lead.audience == LeadAudience(audience)
+
+    async def test_locale_is_stored(self, client, session):
+        await client.post(
+            "/api/v1/leads",
+            json={"email": "a@example.com", "audience": "family", "locale": "uz-Latn-UZ"},
+        )
+        lead = await session.scalar(select(Lead))
+        assert lead is not None
+        assert lead.locale == "uz-Latn-UZ"
+
+    async def test_repeated_submit_does_not_duplicate(self, client, session):
+        for _ in range(3):
+            response = await client.post(
+                "/api/v1/leads",
+                json={"email": "same@example.com", "audience": "family"},
+            )
+            # Ответ одинаковый каждый раз: по коду нельзя узнать, есть ли уже
+            # такой адрес в базе.
+            assert response.status_code == 202
+        assert await _count(session) == 1
+
+    async def test_same_email_two_audiences_are_two_leads(self, client, session):
+        for audience in ("family", "doctor"):
+            await client.post(
+                "/api/v1/leads",
+                json={"email": "both@example.com", "audience": audience},
+            )
+        assert await _count(session) == 2
+
+    async def test_honeypot_looks_like_success_but_stores_nothing(self, client, session):
+        response = await client.post(
+            "/api/v1/leads",
+            json={
+                "email": "bot@example.com",
+                "audience": "family",
+                "company": "Acme Marketing",
+            },
+        )
+        assert response.status_code == 202, "боту отвечаем как всем — иначе он подберёт обход"
+        assert await _count(session) == 0
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"email": "не почта", "audience": "family"},
+            {"email": "a@example.com", "audience": "investor"},
+            {"audience": "family"},
+        ],
+        ids=["bad-email", "unknown-audience", "no-email"],
+    )
+    async def test_validation(self, client, session, payload):
+        response = await client.post("/api/v1/leads", json=payload)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+        assert await _count(session) == 0
+
+    async def test_rate_limited(self, client, session):
+        """Лимит существует и срабатывает: открытую форму иначе заливают мусором."""
+
+        codes = []
+        for i in range(25):
+            response = await client.post(
+                "/api/v1/leads",
+                json={"email": f"user{i}@example.com", "audience": "family"},
+            )
+            codes.append(response.status_code)
+
+        assert 429 in codes, "ограничение частоты не сработало"
+        assert codes.index(429) >= 20, "лимит сработал раньше объявленных 20 запросов в час"
+
+
+class TestListLeads:
+    async def test_admin_reads_leads(self, client, session, make_user, auth_headers):
+        await client.post("/api/v1/leads", json={"email": "a@example.com", "audience": "doctor"})
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.get("/api/v1/leads", headers=auth_headers(admin))
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["email"] == "a@example.com"
+
+    @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.PARENT, UserRole.DIETITIAN])
+    async def test_other_roles_forbidden(self, client, make_user, auth_headers, role):
+        user = await make_user(role)
+        response = await client.get("/api/v1/leads", headers=auth_headers(user))
+        assert response.status_code == 403
+
+    async def test_anonymous_cannot_read(self, client):
+        """Список — это чужие контакты. Писать может кто угодно, читать — нет."""
+
+        response = await client.get("/api/v1/leads")
+        assert response.status_code == 401

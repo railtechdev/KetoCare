@@ -29,6 +29,7 @@ from .content import (
     Recipe,
     RecipeIngredient,
 )
+from .marketing import Lead
 from .diary import (
     KetoneLog,
     KetoneMethodDict,
@@ -85,4 +86,6 @@ __all__ = [
     "DoctorSummary",
     "ReportJob",
     "AuditLog",
+    # marketing
+    "Lead",
 ]

@@ -92,6 +92,17 @@ class IntakeScale(enum.StrEnum):
     MEALS_PER_DAY = "meals_per_day"
 
 
+class LeadAudience(enum.StrEnum):
+    """Кому адресована заявка с посадочной страницы (ADR-0012).
+
+    Формы две и ведут они к разным разговорам: семье нужно объяснить, что
+    доступ открывает лечащий врач, клинике — показать кабинет и обсудить пилот.
+    """
+
+    FAMILY = "family"
+    DOCTOR = "doctor"
+
+
 class ReportFormat(enum.StrEnum):
     PDF = "pdf"
     CSV = "csv"

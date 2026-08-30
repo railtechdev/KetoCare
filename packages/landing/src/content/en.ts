@@ -94,7 +94,7 @@ export const en: Dict = {
     mission: {
       eyebrow: "Mission",
       h2: "So that therapy at home is followed as precisely as in the clinic",
-      lead: "Ketogenic diet therapy helps children for whom medication did not work — but only when it is followed precisely. Between visits the family is left alone with the arithmetic. KetoCare brings the family and the clinician into one loop: the prescription, the calculations, the diaries and the trends live in one system.",
+      lead: "Ketogenic diet therapy may help some of the children for whom medication did not work — but only when it is followed precisely. Between visits the family is left alone with the arithmetic. KetoCare brings the family and the clinician into one loop: the prescription, the calculations, the diaries and the trends live in one system.",
       families: {
         title: "What families can expect",
         items: [
@@ -138,12 +138,16 @@ export const en: Dict = {
         "The ketogenic ratio is fat against protein and carbs together. Every meal has to land on the prescribed ratio within the tolerance.",
       lead2:
         "Move the sliders — the calculation is instant. In real life the platform does this, so there is no scale-calculator-notebook routine at every meal.",
-      note: "Food data comes from USDA FoodData Central. In the product the calculation runs in an isolated engine validated against the medical team's reference cases.",
+      note: "Food data comes from USDA FoodData Central. In the product the calculation runs in an isolated engine checked against reference cases that are themselves computed from the formulas in the specification. Confirmation by the medical team is still ahead.",
       dish: "Omelette with cream and broccoli",
       ingredients: ["Egg", "Cream 33%", "Butter", "Broccoli"],
+      /** Видимая оговорка: посетитель не должен считать этим завтрак ребёнку. */
+      disclaimer:
+        "This is a demonstration of the formula, not a meal-planning tool. A child's meals are calculated in the workspace, against the prescription currently in effect.",
       /** Подпись ползунка для читателя с экранного диктора: «Яйцо куриное, граммы». */
       sliderLabel: "{name}, grams",
-      verdictOk: "Matches the 3.5 : 1 prescription (tolerance ±0.15)",
+      verdictOk:
+        "Matches the 3.5 : 1 prescription (preliminary tolerance ±0.15)",
       verdictLow: "Below the prescription — add fat or remove carbs",
       verdictHigh: "Above the prescription — more fat than prescribed",
     },
@@ -172,12 +176,12 @@ export const en: Dict = {
     telegram: {
       eyebrow: "Telegram",
       h2: "Log entries straight from the messenger",
-      lead: "A ketone reading is one message to the bot. Reminders arrive in the same place. The bot and the mini app are part of the platform: everything lands in the same diary and is visible to the clinician.",
+      lead: "A ketone reading is one message to the bot. The bot and the mini app are part of the platform: everything lands in the same diary and is visible to the clinician. The bot is being released step by step, so some of the scenarios below already work and some are on the way.",
       items: [
-        "Ketones, weight, a seizure — 2–4 taps, with buttons",
-        "Food in plain text: the AI parses it, you confirm it",
-        "Reminders for measurements and medication",
-        "The parent workspace as a mini app inside Telegram",
+        "Ketones, weight and wellbeing — 2–4 taps, with buttons",
+        "Coming: food in plain text — the AI parses it, you confirm it",
+        "Coming: reminders for measurements and medication",
+        "Coming: the parent workspace as a mini app inside Telegram",
       ],
       botLabel: "bot",
       replay: "Play again",
