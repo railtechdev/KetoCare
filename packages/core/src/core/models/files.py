@@ -8,9 +8,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -68,3 +68,9 @@ class Attachment(Base, UUIDPkMixin, CreatedAtMixin, SoftDeleteMixin):
     #: Дата самого документа, а не загрузки: выписку прикладывают позже события.
     doc_date: Mapped[date | None]
     description: Mapped[str | None] = mapped_column(String(255))
+
+    # Когда уборщик снял байты с диска. Отдельно от `deleted_at`: между
+    # удалением и уборкой стоит отсрочка, и по строке должно быть видно, файл
+    # ещё лежит или его уже нет. Без этой отметки уборщик каждую ночь заново
+    # обходил бы все когда-либо удалённые вложения.
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

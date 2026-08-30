@@ -86,3 +86,14 @@ async def list_expired(session: AsyncSession, *, now: datetime) -> list[ReportJo
             )
         )
     )
+
+
+async def mark_file_removed(session: AsyncSession, *, job: ReportJob) -> None:
+    """Файл отчёта убран с диска; строка остаётся.
+
+    Обнуление `file_name` — это и отметка об уборке: без неё `list_expired`
+    возвращала бы одни и те же задачи каждую ночь до конца времён.
+    """
+
+    job.file_name = None
+    await session.flush()
