@@ -75,6 +75,22 @@ KetoCare — платформа сопровождения кетогенной 
 - **Связь калькулятора и справочника продуктов** в обе стороны; экран 404; смена пароля
   в своём профиле.
 
+Параллельно двумя отдельными ветками сделано:
+
+- **Подсистема файлов** ([ADR-0004](docs/adr/0004-files-and-attachments.md),
+  [ADR-0013](docs/adr/0013-attachments-implementation.md)): вложения пациента
+  (выписки, ЭЭГ, анализы) и фото рецептов. Тип определяется по сигнатуре файла,
+  имя на диске генерирует приложение, картинки отдаются `inline`, PDF — всегда
+  вложением. Загружает и семья, и специалист; удаляет только загрузивший.
+  **Уборщика физических файлов нет**, `core.tools.erase_patient` не написан —
+  долг зафиксирован в ADR-0013.
+- **Посадочная страница и заявки** ([ADR-0012](docs/adr/0012-landing-site-and-leads.md)):
+  `packages/landing` (Astro, три языка) и `POST /leads` — единственная публичная
+  ручка записи. Заявки читает администратор в разделе «Заявки».
+  **Уведомления о новой заявке нет**: отправки почты в продукте не существует.
+- **Пред-прод на VPS** ([`docs/DEPLOY.md`](docs/DEPLOY.md)): docker compose,
+  nginx, деплой-скрипт, бэкапы.
+
 **Открытые темы, вынесенные решениями:** вложенные маршруты второго уровня (`/app/patients/$id` и т. п.), сводка ошибок формы (правило П8 канона), подсистема файлов и фото ([ADR-0004](docs/adr/0004-files-and-attachments.md)), клинические разрывы ([AUDIT_CLINICAL_COVERAGE.md](docs/AUDIT_CLINICAL_COVERAGE.md)).
 
 ## Команды
@@ -102,7 +118,7 @@ make e2e          # playwright — появляется на этапе 5 ТЗ, 
 
 Локальный запуск API: `make api` (именно так — цель передаёт `--no-proxy-headers`, иначе uvicorn подменит адрес клиента из `X-Forwarded-For` и ключ лимита с `audit_log.ip` станут управляемыми клиентом; см. `infra/nginx/README.md`). Swagger — `/api/v1/docs`.
 
-Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `packages/keto_engine`, `packages/core`). JS-часть — **pnpm workspaces** (`apps/web`, `apps/miniapp`, `packages/ui`, `packages/api-client`).
+Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `packages/keto_engine`, `packages/core`). JS-часть — **pnpm workspaces** (`apps/web`, `apps/miniapp`, `packages/ui`, `packages/api-client`, `packages/landing`).
 
 ## Архитектура
 
