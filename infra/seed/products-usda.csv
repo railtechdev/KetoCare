@@ -1,0 +1,99 @@
+name_ru,name_uz,name_en,category,kcal_100g,fat_100g,protein_100g,carbs_100g,fiber_100g,source,source_version,verified_at
+Масло сливочное,,"Butter, salted",Жиры и масла,717,81.11,0.85,0.06,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 173410",2026-08-31
+Масло топлёное (гхи),,"Butter oil, anhydrous",Жиры и масла,876,99.48,0.28,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 173412",2026-08-31
+Масло оливковое,,"Oil, olive, salad or cooking",Жиры и масла,884,100.00,0.00,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171413",2026-08-31
+Масло подсолнечное,,"Oil, sunflower, linoleic, (approx. 65%)",Жиры и масла,884,100.00,0.00,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171025",2026-08-31
+Масло хлопковое,,"Oil, cottonseed, salad or cooking",Жиры и масла,884,100.00,0.00,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171024",2026-08-31
+Масло кукурузное,,"Oil, corn, industrial and retail, all purpose salad or cooking",Жиры и масла,900,100.00,0.00,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171029",2026-08-31
+Масло кокосовое,,"Oil, coconut",Жиры и масла,892,99.06,0.00,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171412",2026-08-31
+Жир свиной (смалец),,Lard,Жиры и масла,902,100.00,0.00,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171401",2026-08-31
+Майонез,,"Salad dressing, mayonnaise, regular",Жиры и масла,680,74.85,0.96,0.57,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171009",2026-08-31
+Сливки 36%,,"Cream, fluid, heavy whipping",Молочные продукты,340,36.08,2.84,2.84,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170859",2026-08-31
+Сметана,,"Cream, sour, cultured",Молочные продукты,198,19.35,2.44,4.63,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171257",2026-08-31
+"Молоко цельное 3,25%",,"Milk, whole, 3.25% milkfat, without added vitamin A and vitamin D",Молочные продукты,61,3.27,3.15,4.78,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 172217",2026-08-31
+Сыр моцарелла,,"Cheese, mozzarella, whole milk",Молочные продукты,299,22.14,22.17,2.40,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170845",2026-08-31
+Сыр брынза (фета),,"Cheese, feta",Молочные продукты,265,21.49,14.21,3.88,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 173420",2026-08-31
+Сыр сливочный,,"Cheese, cream",Молочные продукты,350,34.44,6.15,5.52,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 173418",2026-08-31
+Йогурт греческий цельный,,"Yogurt, Greek, plain, whole milk",Молочные продукты,97,5.00,9.00,3.98,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171304",2026-08-31
+Яйцо куриное,,"Egg, whole, raw, fresh",Яйца,143,9.51,12.56,0.72,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171287",2026-08-31
+Яичный желток,,"Egg, yolk, raw, fresh",Яйца,322,26.54,15.86,3.59,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 172184",2026-08-31
+Яичный белок,,"Egg, white, raw, fresh",Яйца,52,0.17,10.90,0.73,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 172183",2026-08-31
+"Говядина, фарш 80/20",,"Beef, ground, 80% lean meat / 20% fat, raw",Мясо и птица,254,20.00,17.17,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 174036",2026-08-31
+"Говядина, печень",,"Beef, variety meats and by-products, liver, raw",Мясо и птица,135,3.63,20.36,3.89,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 169451",2026-08-31
+"Говядина, язык",,"Beef, variety meats and by-products, tongue, raw",Мясо и птица,224,16.09,14.90,3.68,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170196",2026-08-31
+"Баранина, фарш",,"Lamb, ground, raw",Мясо и птица,282,23.41,16.56,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 174370",2026-08-31
+"Курица, бедро с кожей",,"Chicken, broilers or fryers, thigh, meat and skin, raw",Мясо и птица,221,16.61,16.52,0.25,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 172385",2026-08-31
+"Курица, кожа",,"Chicken, broilers or fryers, skin only, raw",Мясо и птица,349,32.35,13.33,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171452",2026-08-31
+"Свинина, лопатка",,"Pork, fresh, shoulder, whole, separable lean and fat, raw",Мясо и птица,236,17.99,17.18,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 167843",2026-08-31
+Лосось атлантический,,"Fish, salmon, Atlantic, farmed, raw",Рыба и морепродукты,208,13.42,20.42,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 175167",2026-08-31
+Форель радужная,,"Fish, trout, rainbow, farmed, raw",Рыба и морепродукты,141,6.18,19.94,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 173717",2026-08-31
+Скумбрия,,"Fish, mackerel, Atlantic, raw",Рыба и морепродукты,205,13.89,18.60,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 175119",2026-08-31
+Сельдь,,"Fish, herring, Atlantic, raw",Рыба и морепродукты,158,9.04,17.96,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 175116",2026-08-31
+Тунец,,"Fish, tuna, fresh, bluefin, raw",Рыба и морепродукты,144,4.90,23.33,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 173706",2026-08-31
+Треска,,"Fish, cod, Atlantic, raw",Рыба и морепродукты,82,0.67,17.81,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171955",2026-08-31
+Судак,,"Fish, pike, walleye, raw",Рыба и морепродукты,93,1.22,19.14,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 175128",2026-08-31
+Миндаль,,"Nuts, almonds",Орехи и семена,579,49.93,21.15,21.55,12.50,USDA FoodData Central,"SR Legacy 2018-04, fdc 170567",2026-08-31
+Грецкий орех,,"Nuts, walnuts, english",Орехи и семена,654,65.21,15.23,13.71,6.70,USDA FoodData Central,"SR Legacy 2018-04, fdc 170187",2026-08-31
+Фундук,,"Nuts, hazelnuts or filberts",Орехи и семена,628,60.75,14.95,16.70,9.70,USDA FoodData Central,"SR Legacy 2018-04, fdc 170581",2026-08-31
+Кешью,,"Nuts, cashew nuts, raw",Орехи и семена,553,43.85,18.22,30.19,3.30,USDA FoodData Central,"SR Legacy 2018-04, fdc 170162",2026-08-31
+Фисташки,,"Nuts, pistachio nuts, raw",Орехи и семена,560,45.32,20.16,27.17,10.60,USDA FoodData Central,"SR Legacy 2018-04, fdc 170184",2026-08-31
+Кедровые орехи,,"Nuts, pine nuts, dried",Орехи и семена,673,68.37,13.69,13.08,3.70,USDA FoodData Central,"SR Legacy 2018-04, fdc 170591",2026-08-31
+Арахис,,"Peanuts, all types, raw",Орехи и семена,567,49.24,25.80,16.13,8.50,USDA FoodData Central,"SR Legacy 2018-04, fdc 172430",2026-08-31
+Семена чиа,,"Seeds, chia seeds, dried",Орехи и семена,486,30.74,16.54,42.12,34.40,USDA FoodData Central,"SR Legacy 2018-04, fdc 170554",2026-08-31
+Семена льна,,"Seeds, flaxseed",Орехи и семена,534,42.16,18.29,28.88,27.30,USDA FoodData Central,"SR Legacy 2018-04, fdc 169414",2026-08-31
+Кунжут,,"Seeds, sesame seeds, whole, dried",Орехи и семена,573,49.67,17.73,23.45,11.80,USDA FoodData Central,"SR Legacy 2018-04, fdc 170150",2026-08-31
+Семена тыквы,,"Seeds, pumpkin and squash seed kernels, dried",Орехи и семена,559,49.05,30.23,10.71,6.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170556",2026-08-31
+Семена подсолнечника,,"Seeds, sunflower seed kernels, dried",Орехи и семена,584,51.46,20.78,20.00,8.60,USDA FoodData Central,"SR Legacy 2018-04, fdc 170562",2026-08-31
+Брокколи,,"Broccoli, raw",Овощи,34,0.37,2.82,6.64,2.60,USDA FoodData Central,"SR Legacy 2018-04, fdc 170379",2026-08-31
+Цветная капуста,,"Cauliflower, raw",Овощи,25,0.28,1.92,4.97,2.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 169986",2026-08-31
+Капуста белокочанная,,"Cabbage, raw",Овощи,25,0.10,1.28,5.80,2.50,USDA FoodData Central,"SR Legacy 2018-04, fdc 169975",2026-08-31
+Шпинат,,"Spinach, raw",Овощи,23,0.39,2.86,3.63,2.20,USDA FoodData Central,"SR Legacy 2018-04, fdc 168462",2026-08-31
+Огурец,,"Cucumber, with peel, raw",Овощи,15,0.11,0.65,3.63,0.50,USDA FoodData Central,"SR Legacy 2018-04, fdc 168409",2026-08-31
+Помидор,,"Tomatoes, red, ripe, raw, year round average",Овощи,18,0.20,0.88,3.89,1.20,USDA FoodData Central,"SR Legacy 2018-04, fdc 170457",2026-08-31
+Кабачок,,"Squash, summer, zucchini, includes skin, raw",Овощи,17,0.32,1.21,3.11,1.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 169291",2026-08-31
+Баклажан,,"Eggplant, raw",Овощи,25,0.18,0.98,5.88,3.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 169228",2026-08-31
+Перец болгарский красный,,"Peppers, sweet, red, raw",Овощи,26,0.30,0.99,6.03,2.10,USDA FoodData Central,"SR Legacy 2018-04, fdc 170108",2026-08-31
+Редис,,"Radishes, raw",Овощи,16,0.10,0.68,3.40,1.60,USDA FoodData Central,"SR Legacy 2018-04, fdc 169276",2026-08-31
+Салат романо,,"Lettuce, cos or romaine, raw",Овощи,17,0.30,1.23,3.29,2.10,USDA FoodData Central,"SR Legacy 2018-04, fdc 169247",2026-08-31
+Сельдерей,,"Celery, raw",Овощи,14,0.17,0.69,2.97,1.60,USDA FoodData Central,"SR Legacy 2018-04, fdc 169988",2026-08-31
+Спаржа,,"Asparagus, raw",Овощи,20,0.12,2.20,3.88,2.10,USDA FoodData Central,"SR Legacy 2018-04, fdc 168389",2026-08-31
+Фасоль стручковая,,"Beans, snap, green, raw",Овощи,31,0.22,1.83,6.97,2.70,USDA FoodData Central,"SR Legacy 2018-04, fdc 169961",2026-08-31
+Лук репчатый,,"Onions, raw",Овощи,40,0.10,1.10,9.34,1.70,USDA FoodData Central,"SR Legacy 2018-04, fdc 170000",2026-08-31
+Чеснок,,"Garlic, raw",Овощи,149,0.50,6.36,33.06,2.10,USDA FoodData Central,"SR Legacy 2018-04, fdc 169230",2026-08-31
+Морковь,,"Carrots, raw",Овощи,41,0.24,0.93,9.58,2.80,USDA FoodData Central,"SR Legacy 2018-04, fdc 170393",2026-08-31
+Тыква,,"Pumpkin, raw",Овощи,26,0.10,1.00,6.50,0.50,USDA FoodData Central,"SR Legacy 2018-04, fdc 168448",2026-08-31
+Авокадо,,"Avocados, raw, all commercial varieties",Овощи,160,14.66,2.00,8.53,6.70,USDA FoodData Central,"SR Legacy 2018-04, fdc 171705",2026-08-31
+Шампиньоны,,"Mushrooms, white, raw",Овощи,22,0.34,3.09,3.26,1.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 169251",2026-08-31
+Оливки консервированные,,"Olives, ripe, canned (small-extra large)",Овощи,116,10.90,0.84,6.04,1.60,USDA FoodData Central,"SR Legacy 2018-04, fdc 169094",2026-08-31
+Клубника,,"Strawberries, raw",Фрукты и ягоды,32,0.30,0.67,7.68,2.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 167762",2026-08-31
+Малина,,"Raspberries, raw",Фрукты и ягоды,52,0.65,1.20,11.94,6.50,USDA FoodData Central,"SR Legacy 2018-04, fdc 167755",2026-08-31
+Ежевика,,"Blackberries, raw",Фрукты и ягоды,43,0.49,1.39,9.61,5.30,USDA FoodData Central,"SR Legacy 2018-04, fdc 173946",2026-08-31
+Черника,,"Blueberries, raw",Фрукты и ягоды,57,0.33,0.74,14.49,2.40,USDA FoodData Central,"SR Legacy 2018-04, fdc 171711",2026-08-31
+Лимон,,"Lemons, raw, without peel",Фрукты и ягоды,29,0.30,1.10,9.32,2.80,USDA FoodData Central,"SR Legacy 2018-04, fdc 167746",2026-08-31
+Яблоко,,"Apples, raw, with skin (Includes foods for USDA's Food Distribution Program)",Фрукты и ягоды,52,0.17,0.26,13.81,2.40,USDA FoodData Central,"SR Legacy 2018-04, fdc 171688",2026-08-31
+Груша,,"Pears, raw",Фрукты и ягоды,57,0.14,0.36,15.23,3.10,USDA FoodData Central,"SR Legacy 2018-04, fdc 169118",2026-08-31
+Виноград,,"Grapes, red or green (European type, such as Thompson seedless), raw",Фрукты и ягоды,69,0.16,0.72,18.10,0.90,USDA FoodData Central,"SR Legacy 2018-04, fdc 174683",2026-08-31
+Дыня,,"Melons, cantaloupe, raw",Фрукты и ягоды,34,0.19,0.84,8.16,0.90,USDA FoodData Central,"SR Legacy 2018-04, fdc 169092",2026-08-31
+Арбуз,,"Watermelon, raw",Фрукты и ягоды,30,0.15,0.61,7.55,0.40,USDA FoodData Central,"SR Legacy 2018-04, fdc 167765",2026-08-31
+Рис белый длиннозёрный,,"Rice, white, long-grain, regular, raw, unenriched",Крупы и мука,365,0.66,7.13,79.95,1.30,USDA FoodData Central,"SR Legacy 2018-04, fdc 169756",2026-08-31
+Гречка,,Buckwheat,Крупы и мука,343,3.40,13.25,71.50,10.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170286",2026-08-31
+Овсяные хлопья,,"Cereals, oats, regular and quick, not fortified, dry",Крупы и мука,379,6.52,13.15,67.70,10.10,USDA FoodData Central,"SR Legacy 2018-04, fdc 173904",2026-08-31
+Мука пшеничная,,"Wheat flour, white, all-purpose, unenriched",Крупы и мука,364,0.98,10.33,76.31,2.70,USDA FoodData Central,"SR Legacy 2018-04, fdc 169761",2026-08-31
+Отруби пшеничные,,"Wheat bran, crude",Крупы и мука,216,4.25,15.55,64.51,42.80,USDA FoodData Central,"SR Legacy 2018-04, fdc 169722",2026-08-31
+Какао-порошок,,"Cocoa, dry powder, unsweetened",Прочее,228,13.70,19.60,57.90,37.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 169593",2026-08-31
+Кокосовое молоко,,"Nuts, coconut milk, raw (liquid expressed from grated meat and water)",Прочее,230,23.84,2.29,5.54,2.20,USDA FoodData Central,"SR Legacy 2018-04, fdc 170172",2026-08-31
+Кокосовая стружка,,"Nuts, coconut meat, dried (desiccated), not sweetened",Прочее,660,64.53,6.88,23.65,16.30,USDA FoodData Central,"SR Legacy 2018-04, fdc 170170",2026-08-31
+Сыр чеддер,,"Cheese, cheddar (Includes foods for USDA's Food Distribution Program)",Молочные продукты,403,33.31,22.87,3.37,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 173414",2026-08-31
+Творог (cottage) 2%,,"Cheese, cottage, lowfat, 2% milkfat",Молочные продукты,81,2.27,10.45,4.76,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 172182",2026-08-31
+Творог (cottage) 4%,,"Cheese, cottage, creamed, large or small curd",Молочные продукты,98,4.30,11.12,3.38,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 172179",2026-08-31
+Кефир нежирный,,"Kefir, lowfat, plain, LIFEWAY",Молочные продукты,43,1.02,3.79,4.77,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170904",2026-08-31
+Сливки 30%,,"Cream, fluid, light whipping",Молочные продукты,292,30.91,2.17,2.96,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170858",2026-08-31
+Сливки 20%,,"Cream, fluid, light (coffee cream or table cream)",Молочные продукты,195,19.10,2.96,3.66,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 170857",2026-08-31
+Сливки 10%,,"Cream, fluid, half and half",Молочные продукты,131,11.50,3.13,4.30,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171255",2026-08-31
+"Баранина, лопатка (мякоть)",,"Lamb, shoulder, blade, separable lean only, trimmed to 1/4"" fat, choice, raw",Мясо и птица,151,7.63,19.29,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 174334",2026-08-31
+"Баранина, корейка (мякоть)",,"Lamb, loin, separable lean only, trimmed to 1/4"" fat, choice, raw",Мясо и птица,143,5.94,20.88,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 172491",2026-08-31
+"Курица, грудка без кожи",,"Chicken, broiler or fryers, breast, skinless, boneless, meat only, raw",Мясо и птица,120,2.62,22.50,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171077",2026-08-31
+"Индейка, грудка (мякоть)",,"Turkey, whole, breast, meat only, raw",Мясо и птица,114,1.48,23.66,0.14,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 171098",2026-08-31
+Креветки,,"Crustaceans, shrimp, mixed species, raw (may contain additives to retain moisture)",Рыба и морепродукты,71,1.01,13.61,0.91,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 174210",2026-08-31
+"Говядина, вырезка",,"Beef, tenderloin, steak, separable lean and fat, trimmed to 1/8"" fat, all grades, raw",Мясо и птица,247,18.16,19.61,0.00,0.00,USDA FoodData Central,"SR Legacy 2018-04, fdc 169542",2026-08-31
+Томатная паста,,"Tomato products, canned, paste, without salt added (Includes foods for USDA's Food Distribution Program)",Прочее,82,0.47,4.32,18.91,4.10,USDA FoodData Central,"SR Legacy 2018-04, fdc 170459",2026-08-31
