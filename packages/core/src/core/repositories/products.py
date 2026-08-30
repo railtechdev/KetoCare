@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Product, ProductCategory, ProductRevision
@@ -50,6 +50,36 @@ async def get(session: AsyncSession, product_id: uuid.UUID) -> Product | None:
     return await session.get(Product, product_id)
 
 
+def _like_pattern(q: str) -> str:
+    """`%` и `_` во вводе — это подстановочные знаки LIKE, а не буквы.
+
+    Без экранирования запрос «100%» превращался бы в «что угодно», а «_» — в
+    «любой символ»: поиск молча возвращал бы не то, что попросили.
+    """
+
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _name_matches(q: str) -> ColumnElement[bool]:
+    """Совпадение по названию: словоформы ИЛИ подстрока, по обоим языкам.
+
+    `name_uz` включён потому, что это второе имя, которое видит человек. Пока
+    узбекские названия не заполнены, условие просто не срабатывает; когда
+    медицинская команда их пришлёт, поиск начнёт работать без правок кода.
+    `name_en` намеренно не ищется: это поле происхождения (описание позиции в
+    источнике), а не название для показа.
+    """
+
+    pattern = _like_pattern(q)
+    query = func.websearch_to_tsquery("russian", q)
+    return or_(
+        Product.name_ru.ilike(pattern, escape="\\"),
+        Product.name_uz.ilike(pattern, escape="\\"),
+        func.to_tsvector("russian", Product.name_ru).op("@@")(query),
+    )
+
+
 async def search(
     session: AsyncSession,
     *,
@@ -59,7 +89,23 @@ async def search(
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Product], int]:
-    """Поиск продуктов. `q` — полнотекст по name_ru (GIN-индекс `ix_products_name_ru_fts`)."""
+    """Поиск продуктов по названию — по мере ввода, а не по готовому слову.
+
+    Условие сдвоенное, и обе половины нужны.
+
+    **Полнотекст** (GIN-индекс `ix_products_name_ru_fts`) даёт словоформы и
+    независимость от порядка слов: «маслом» находит «Масло», «сливочное масло»
+    находит «Масло сливочное». Но ищет он ЦЕЛЫМИ лексемами — «мас» не находило
+    ничего, и поиск оживал только на полностью набранном слове.
+
+    **Подстрока** покрывает то, что полнотекст не умеет в принципе: совпадение с
+    середины слова. «ливоч» находит «сливочное» — а никакой префиксный поиск,
+    включая `to_tsquery('мас:*')`, этого не сделает.
+
+    Используется `websearch_to_tsquery`, а не `to_tsquery`: последний падает на
+    произвольном вводе (`&`, `|`, `!`, `:` — синтаксис запроса), и строка поиска
+    из формы роняла бы запрос. `websearch_to_tsquery` принимает что угодно.
+    """
 
     conditions: list[ColumnElement[bool]] = []
     if only_active:
@@ -67,11 +113,7 @@ async def search(
     if category_id is not None:
         conditions.append(Product.category_id == category_id)
     if q:
-        conditions.append(
-            func.to_tsvector("russian", Product.name_ru).op("@@")(
-                func.plainto_tsquery("russian", q)
-            )
-        )
+        conditions.append(_name_matches(q))
 
     stmt = select(Product).where(*conditions).order_by(Product.name_ru).limit(limit).offset(offset)
     items = list(await session.scalars(stmt))
