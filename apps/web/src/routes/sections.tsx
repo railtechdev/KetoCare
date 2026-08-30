@@ -22,6 +22,7 @@ import { AdminPage } from "../features/admin/AdminPage";
 import type { Role } from "../features/auth/roles";
 import { CalculatorPage } from "../features/calculator/CalculatorPage";
 import { DiaryPage } from "../features/diary/DiaryPage";
+import { DoctorHomePage } from "../features/doctor/DoctorHomePage";
 import { DoctorPatientsPage } from "../features/doctor/DoctorPatientsPage";
 import { HomePage } from "../features/home/HomePage";
 import { PatientGate } from "../features/patients/PatientGate";
@@ -43,9 +44,15 @@ import { ChildPage } from "../features/child/ChildPage";
 export type SectionScreen = (role: Role | undefined) => ReactElement;
 
 export const SECTION_SCREENS: Record<string, SectionScreen> = {
-  home: () => (
-    <PatientGate render={(patientId) => <HomePage patientId={patientId} />} />
-  ),
+  // Главная у семьи и у специалиста отвечает на разные вопросы: родителю —
+  // «что сейчас», врачу — «кем заняться» (`docs/DESIGN_PROPOSAL.md`). Экран
+  // выбирается по роли, как у `products`; право читать проверяет сервер.
+  home: (role) =>
+    role === "doctor" || role === "dietitian" ? (
+      <DoctorHomePage />
+    ) : (
+      <PatientGate render={(patientId) => <HomePage patientId={patientId} />} />
+    ),
   calculator: () => (
     <PatientGate
       render={(patientId) => <CalculatorPage patientId={patientId} />}
