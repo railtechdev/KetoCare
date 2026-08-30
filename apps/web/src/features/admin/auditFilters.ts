@@ -37,6 +37,11 @@ export const AUDIT_ENTITIES = [
   "medications",
   "seizure_types",
   "ketone_methods",
+  "patients",
+  "doctor_patient",
+  "reports",
+  "telegram_accounts",
+  "link_codes",
 ] as const;
 
 /** Значения `audit_log.action`, которые пишет API. */
@@ -53,6 +58,14 @@ export const AUDIT_ACTIONS = [
   "login_failed_totp",
   "totp_setup_requested",
   "totp_enabled",
+  "password_changed",
+  "password_change_failed",
+  "export",
+  "grant_patient_access",
+  "revoke_patient_access",
+  "telegram_link_code_issued",
+  "telegram_link",
+  "telegram_unlink",
 ] as const;
 
 const UUID_PATTERN =
