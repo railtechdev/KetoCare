@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
-"""Анализ Bash-команды на запись в защищённые пути.
+"""Анализ Bash-команды и правки файла на нарушение правил проекта.
 
-Принцип — fail-closed: если в команде упомянут защищённый путь, она блокируется,
-пока не доказано, что каждый её сегмент только читает. Обратный принцип
-(«блокировать по списку опасных шаблонов») неизбежно дырявый: запись возможна
-через python3 -c, node -e, perl -pi, cd в каталог, подстановку переменной —
-перечислить все способы нельзя.
+Две задачи, разные по природе:
+
+1. **Защищённые пути.** Принцип — fail-closed: если в команде упомянут
+   защищённый путь, она блокируется, пока не доказано, что каждый её сегмент
+   только читает. Обратный принцип («блокировать по списку опасных шаблонов»)
+   неизбежно дырявый: запись возможна через python3 -c, node -e, perl -pi,
+   cd в каталог, подстановку переменной — перечислить все способы нельзя.
+
+2. **Порядок работы с main.** Ветка → PR → merge. Это не защита от злого умысла,
+   а страховка от привычки: коммит в main проходит мимо ревью и мимо CI, а с
+   автодеплоем — сразу уезжает на стенд.
 
 Хук защищает от НЕОСТОРОЖНОСТИ, а не от намеренного обхода: закодировать команду
-в base64 и выполнить всё равно можно. Задача — чтобы правки медицинских данных
-и миграций не происходили мимоходом, незаметно для человека.
+в base64 и выполнить всё равно можно. Задача — чтобы правки медицинских данных,
+миграций и боевой ветки не происходили мимоходом, незаметно для человека.
+
+Код самих хуков намеренно НЕ защищён (в отличие от `.claude/settings.json`).
+Механический запрет стоил дороже, чем давал: любая правка правил требовала
+ручного вмешательства человека, а обойти запрет всё равно можно было. Вместо
+него — два других контроля: правило «main только через PR» делает изменение
+правил видимым в ревью, а `tests/test_guard.py` падает, если набор запретов
+поредел. `settings.json` остаётся под защитой: он выключает все хуки разом,
+и его правка не роняет ни одного теста.
 
 Вход: JSON от Claude Code на stdin. Выход: 0 — разрешить, 2 — заблокировать.
 """
@@ -24,8 +38,9 @@ import subprocess
 import sys
 
 # --- защищённые пути -------------------------------------------------------
-# Единственное место, где перечислены пути для Bash-хука. Правила Edit/Write
-# живут в lib-protected.sh; списки обязаны совпадать — см. тест hooks.
+# Единственное место, где перечислены пути: и protect-paths.sh (Edit/Write), и
+# protect-bash.sh (Bash) вызывают этот же файл, только с разным режимом. Две
+# копии списка — на bash и на регулярках — однажды разошлись бы незаметно.
 
 PROTECTED_DIRS = (
     # Медицинские спецификации и эталоны — только медицинская команда (ТЗ §0.1)
@@ -33,8 +48,6 @@ PROTECTED_DIRS = (
     # Закоммиченные Alembic-миграции не правятся (ТЗ §0.3)
     "migrations/versions",
     "alembic/versions",
-    # Сами хуки: защита, которую агент может снести, — не защита
-    ".claude/hooks",
 )
 
 PROTECTED_FILES = (".claude/settings.json",)
@@ -56,6 +69,11 @@ ALLOWED = (
 # .env обрабатывается отдельно: как отдельное слово, чтобы .env.example и
 # упоминания вида "environment" не считались совпадением.
 ENV_RE = re.compile(r"(^|[\s\"'/=])\.env(\.[A-Za-z0-9_-]+)?([\s\"';&|)]|$)")
+
+# Путь до файла миграции. Нужен отдельно от PROTECTED_RE: правило запрещает
+# править ЗАКОММИЧЕННУЮ миграцию, а свежесозданная ревизия — обычный рабочий
+# файл, который приходится и править, и удалять, и добавлять в индекс.
+MIGRATION_FILE_RE = re.compile(r"[\w./-]*(?:migrations|alembic)/versions/[\w.-]+\.py")
 
 # --- команды, которые заведомо только читают -------------------------------
 READ_ONLY = {
@@ -106,31 +124,163 @@ READ_ONLY = {
 # git — только читающие подкоманды
 GIT_READ_ONLY = {"log", "diff", "show", "status", "ls-files", "blame", "cat-file", "rev-parse"}
 
+# Подкоманды git, создающие коммит в текущей ветке. На main запрещены целиком.
+GIT_COMMIT_VERBS = {"commit", "merge", "rebase", "cherry-pick", "revert", "am"}
 
-def mentions_protected(text: str) -> bool:
+# Флаги, у которых `.env` — читаемый вход, а не цель записи.
+ENV_READ_FLAGS = ("--env-file", "--envfile", "--env_file")
+
+# Команды, для которых `.env` в аргументах означает запись в него.
+ENV_WRITERS = {
+    "rm",
+    "mv",
+    "cp",
+    "sed",
+    "tee",
+    "truncate",
+    "install",
+    "chmod",
+    "chown",
+    "ln",
+    "touch",
+    "dd",
+    "vim",
+    "vi",
+    "nano",
+    "emacs",
+    "sponge",
+    "shred",
+}
+
+
+def _project_dir() -> str:
+    return os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+
+
+def _tracked_by_git(path: str) -> bool:
+    """Файл под контролем версий? Незакоммиченный — не защищён."""
+
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", path],
+            cwd=_project_dir(),
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        # Git недоступен — считаем защищённым: лучше лишний вопрос человеку,
+        # чем правка закоммиченной миграции по недосмотру.
+        return True
+    return result.returncode == 0
+
+
+def _tracked_migration_names() -> frozenset[str]:
+    """Имена файлов закоммиченных миграций — без каталогов.
+
+    Сверять полный путь нельзя: `cd packages/core && rm migrations/versions/x.py`
+    даёт путь, которого нет в индексе от корня репозитория, и проверка сочла бы
+    закоммиченную миграцию новой. Имя ревизии несёт хеш и уникально, поэтому
+    сравнение по имени и строже, и честнее.
+    """
+
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--", "*/versions/*.py"],
+            cwd=_project_dir(),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return frozenset()
+    if result.returncode != 0:
+        return frozenset()
+    return frozenset(line.rsplit("/", 1)[-1] for line in result.stdout.split() if line)
+
+
+def _mask_allowed(text: str) -> str:
     masked = text
     for allowed in ALLOWED:
         masked = masked.replace(allowed, "@ALLOWED@")
-    if PROTECTED_RE.search(masked):
-        return True
-    return bool(ENV_RE.search(masked))
+    # Свежая, ещё не добавленная в индекс ревизия — обычный файл. Скрываем её
+    # от проверки, чтобы `rm`/`git add` по ней работали: правило ТЗ говорит
+    # именно о закоммиченной миграции.
+    candidates = MIGRATION_FILE_RE.findall(masked)
+    if candidates:
+        tracked = _tracked_migration_names()
+        for candidate in candidates:
+            if candidate.rsplit("/", 1)[-1] not in tracked:
+                masked = masked.replace(candidate, "@ALLOWED@")
+    return masked
+
+
+def mentions_protected_paths(text: str) -> bool:
+    return bool(PROTECTED_RE.search(_mask_allowed(text)))
+
+
+def mentions_env(text: str) -> bool:
+    return bool(ENV_RE.search(_mask_allowed(text)))
+
+
+def mentions_protected(text: str) -> bool:
+    """Совместимость со старым интерфейсом: путь ИЛИ .env."""
+
+    return mentions_protected_paths(text) or mentions_env(text)
 
 
 def split_segments(command: str) -> list[str]:
-    """Разбивает команду на сегменты по ; && || | & и переводам строк."""
-    return [s for s in re.split(r"(?:\|\||&&|[;|&\n])", command) if s.strip()]
+    """Разбивает команду на сегменты по ; && || | & и переводам строк.
+
+    С учётом кавычек: `ssh host 'a && b'` — это ОДИН сегмент, обращённый к
+    другой машине. Наивное разбиение регуляркой делило его пополам, второй
+    кусок выглядел локальной командой, и разбор `ssh` не срабатывал никогда.
+    """
+
+    segments: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "'\"":
+            quote = char
+            current.append(char)
+            index += 1
+            continue
+        if command.startswith(("&&", "||"), index):
+            segments.append("".join(current))
+            current = []
+            index += 2
+            continue
+        if char in ";|&\n":
+            segments.append("".join(current))
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    segments.append("".join(current))
+    return [s for s in segments if s.strip()]
+
+
+def _tokens(segment: str) -> list[str]:
+    try:
+        return shlex.split(segment, posix=True)
+    except ValueError:
+        # Незакрытая кавычка (частый случай — heredoc)
+        return segment.split()
 
 
 def first_word(segment: str) -> str:
     """Имя команды сегмента без присваиваний окружения и обёрток."""
-    try:
-        tokens = shlex.split(segment, posix=True)
-    except ValueError:
-        # Незакрытая кавычка (частый случай — heredoc): считаем неизвестной командой
-        tokens = segment.split()
-
     skip_prefix = {"sudo", "command", "nohup", "time", "xargs", "nice"}
-    for token in tokens:
+    for token in _tokens(segment):
         if "=" in token and not token.startswith("-") and "/" not in token.split("=")[0]:
             continue  # FOO=bar
         if token in skip_prefix:
@@ -139,9 +289,13 @@ def first_word(segment: str) -> str:
     return ""
 
 
+def _redirects(segment: str) -> bool:
+    return bool(re.search(r"(?<![0-9<>])>>?", segment))
+
+
 def segment_is_read_only(segment: str) -> bool:
     # Любое перенаправление вывода делает сегмент пишущим
-    if re.search(r"(?<![0-9<>])>>?", segment):
+    if _redirects(segment):
         return False
 
     name = first_word(segment)
@@ -149,11 +303,7 @@ def segment_is_read_only(segment: str) -> bool:
         return False
 
     if name == "git":
-        try:
-            tokens = shlex.split(segment, posix=True)
-        except ValueError:
-            return False
-        subcommands = [t for t in tokens[1:] if not t.startswith("-")]
+        subcommands = [t for t in _tokens(segment)[1:] if not t.startswith("-")]
         return bool(subcommands) and subcommands[0] in GIT_READ_ONLY
 
     # cd в защищённый каталог открывает запись относительными путями дальше
@@ -163,13 +313,168 @@ def segment_is_read_only(segment: str) -> bool:
     return name in READ_ONLY
 
 
+def env_usage_is_read_only(segment: str) -> bool:
+    """`.env` в сегменте только читается?
+
+    Отдельно от `segment_is_read_only`, потому что защищается ФАЙЛ, а не
+    операция. `docker compose --env-file .env ... up -d` поднимает контейнеры и
+    ничего в `.env` не пишет — блокировать его бессмысленно, а раньше он
+    блокировался: имя команды не входило в список читающих.
+
+    Правило: чтение, если каждое вхождение `.env` — значение читающего флага
+    (`--env-file .env`, `--env-file=.env`), нет перенаправления в файл и команда
+    не из списка тех, для кого `.env` в аргументах означает запись.
+    """
+
+    if _redirects(segment):
+        return False
+
+    name = first_word(segment)
+    if name in ENV_WRITERS:
+        return False
+
+    tokens = _tokens(segment)
+    for index, token in enumerate(tokens):
+        if not ENV_RE.search(f" {token} "):
+            continue
+        # `--env-file=.env`
+        if any(token.startswith(f"{flag}=") for flag in ENV_READ_FLAGS):
+            continue
+        # `--env-file .env`
+        if index > 0 and tokens[index - 1] in ENV_READ_FLAGS:
+            continue
+        return False
+    return True
+
+
+QUOTED_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+
+def local_part(segment: str) -> str:
+    """Часть команды, которая действует на ЭТОЙ машине.
+
+    Нужна для `ssh`: `ssh host 'cat > /srv/ketocare/.env'` не трогает файлы
+    репозитория — путь и перенаправление относятся к удалённой машине. Без
+    этого разбора любая работа с сервером упиралась в защиту локального `.env`,
+    ничего при этом не защищая.
+
+    Кавычки снимаются только у `ssh`. У локальных команд содержимое кавычек —
+    это код (`python3 -c "open('.env','w')"`), и снимать его нельзя.
+    """
+
+    if first_word(segment) != "ssh":
+        return segment
+    # Остаётся то, что вне кавычек: там же окажется и `> .env`, если кто-то
+    # перенаправит вывод ssh в локальный файл.
+    return QUOTED_RE.sub(" ", segment)
+
+
+def segment_blocked(segment: str) -> bool:
+    """Сегмент нарушает защиту путей?"""
+
+    segment = local_part(segment)
+
+    if mentions_protected_paths(segment) and not segment_is_read_only(segment):
+        return True
+    if mentions_env(segment) and not (
+        segment_is_read_only(segment) or env_usage_is_read_only(segment)
+    ):
+        return True
+    return False
+
+
+# --- правило «main только через ветку и PR» --------------------------------
+
+
+def current_branch() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=_project_dir(),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def _git_verb(segment: str) -> str | None:
+    if first_word(segment) != "git":
+        return None
+    for token in _tokens(segment)[1:]:
+        if token.startswith("-"):
+            continue
+        return token
+    return None
+
+
+def _switches_to_main(segment: str) -> bool:
+    verb = _git_verb(segment)
+    if verb not in {"switch", "checkout"}:
+        return False
+    args = [t for t in _tokens(segment)[2:] if not t.startswith("-")]
+    # `git checkout -b main` — тоже переход на main; `git checkout -- main.py` нет.
+    return "main" in args and "--" not in _tokens(segment)
+
+
+def _pushes_main(segment: str, on_main: bool) -> bool:
+    if _git_verb(segment) != "push":
+        return False
+    args = [t for t in _tokens(segment)[2:] if not t.startswith("-")]
+    if any(a == "main" or a.endswith(":main") for a in args):
+        return True
+    # Голый `git push` из main отправляет main.
+    return on_main and not args
+
+
+MAIN_BLOCK_MESSAGE = """BLOCKED: работа с main идёт только через ветку и pull request.
+
+Почему: коммит прямо в main проходит мимо ревью и мимо зелёного CI, а с
+автодеплоем (.github/workflows/deploy.yml) сразу уезжает на боевой стенд.
+
+Что делать:
+  git switch -c feat/<кратко>     # или fix/<кратко>
+  git add … && git commit -m "…"
+  git push -u origin feat/<кратко>
+  gh pr create --fill             # merge — после зелёного CI
+
+Если ветка уже создана, просто переключитесь на неё: git switch <ветка>."""
+
+
+def main_rule_violation(command: str) -> bool:
+    """Команда создаёт коммит в main или отправляет main напрямую?"""
+
+    segments = split_segments(command)
+    if not any(first_word(s) == "git" for s in segments):
+        return False
+
+    branch = current_branch()
+    on_main = branch == "main"
+    goes_to_main = on_main or any(_switches_to_main(s) for s in segments)
+
+    for segment in segments:
+        verb = _git_verb(segment)
+        if verb is None:
+            continue
+        if verb in GIT_COMMIT_VERBS and goes_to_main:
+            return True
+        if _pushes_main(segment, on_main):
+            return True
+    return False
+
+
 BLOCK_MESSAGE = """BLOCKED: команда затрагивает защищённый путь и не распознана как read-only.
 
 Защищено:
   docs/medical/*            — спецификации и эталоны меняет медицинская команда (ТЗ §0.1, правило 1)
-  */migrations/versions/*   — закоммиченная миграция не правится, создаётся новая (ТЗ §0.3, правило 3)
-  .env                      — секреты редактирует человек (правило 7)
-  .claude/hooks/, settings.json — защита не отключается агентом
+  */migrations/versions/*   — ЗАКОММИЧЕННАЯ миграция не правится (ТЗ §0.3, правило 3);
+                              свежая, ещё не добавленная в индекс, — правится свободно
+  .env                      — секреты редактирует человек (правило 7); чтение (--env-file) разрешено
+  .claude/settings.json     — выключает все хуки разом
 
 Разрешено без ограничений:
   docs/medical/OPEN_QUESTIONS.md — вопросы и допущения пиши сюда
@@ -193,7 +498,7 @@ FILE_BLOCK_TEMPLATE = """BLOCKED: {reason}
 
 def file_block_reason(file_path: str) -> str | None:
     """Причина блокировки правки файла, либо None."""
-    root = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+    root = _project_dir()
     rel = file_path
     if rel.startswith(root + os.sep):
         rel = rel[len(root) + 1 :]
@@ -214,12 +519,7 @@ def file_block_reason(file_path: str) -> str | None:
 
     if re.search(r"(^|/)(migrations|alembic)/versions/.*\.py$", rel):
         # Свежесозданная ревизия ещё не в индексе — её правка легитимна.
-        tracked = subprocess.run(
-            ["git", "ls-files", "--error-unmatch", rel],
-            cwd=os.environ.get("CLAUDE_PROJECT_DIR", "."),
-            capture_output=True,
-        )
-        if tracked.returncode == 0:
+        if _tracked_by_git(rel):
             return (
                 f"{rel} — закоммиченная миграция не правится (ТЗ §0.3, правило 3 CLAUDE.md). "
                 'Создай новую ревизию: cd packages/core && uv run alembic revision --autogenerate -m "..."'
@@ -229,11 +529,11 @@ def file_block_reason(file_path: str) -> str | None:
     if rel == ".env" or rel.startswith(".env."):
         return f"{rel} — файлы с секретами редактирует человек (правило 7). Меняй .env.example."
 
-    if rel.startswith(".claude/hooks/") or rel == ".claude/settings.json":
+    if rel == ".claude/settings.json":
         return (
-            f"{rel} — защита, которую агент может отключить сам, защитой не является. "
-            "Если правка хуков действительно нужна, попроси пользователя внести её "
-            "или временно отключить хуки."
+            f"{rel} — этот файл выключает все хуки разом, и его правка не роняет ни одного "
+            "теста. Код самих хуков править можно: изменение видно в PR, а "
+            ".claude/hooks/tests/test_guard.py падает, если запрет исчез."
         )
 
     return None
@@ -258,19 +558,26 @@ def main() -> int:
         return 0
 
     command = payload.get("tool_input", {}).get("command", "")
-    if not command or not mentions_protected(command):
+    if not command:
         return 0
 
-    for segment in split_segments(command):
-        if mentions_protected(segment) and not segment_is_read_only(segment):
+    if main_rule_violation(command):
+        print(MAIN_BLOCK_MESSAGE, file=sys.stderr)
+        return 2
+
+    if not mentions_protected(command):
+        return 0
+
+    segments = split_segments(command)
+    for segment in segments:
+        if segment_blocked(segment):
             print(BLOCK_MESSAGE, file=sys.stderr)
             return 2
 
     # Путь упомянут, но каждый сегмент, где он встречается, только читает.
     # Отдельно ловим случай, когда защищённый путь «внесён» через cd, а пишет
     # следующий сегмент уже относительным путём.
-    segments = split_segments(command)
-    if any(first_word(s) == "cd" and mentions_protected(s) for s in segments):
+    if any(first_word(s) == "cd" and mentions_protected_paths(local_part(s)) for s in segments):
         print(BLOCK_MESSAGE, file=sys.stderr)
         return 2
 
