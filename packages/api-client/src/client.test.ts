@@ -18,10 +18,25 @@ describe("клиент API: продление сессии", () => {
     globalThis.fetch = originalFetch;
   });
 
-  function jsonResponse(body: unknown, status = 200) {
+  function jsonResponse(
+    body: unknown,
+    status = 200,
+    headers: Record<string, string> = {},
+  ) {
     return new Response(JSON.stringify(body), {
       status,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...headers },
+    });
+  }
+
+  /**
+   * 401 от проверки токена — такой, какой отдаёт сервер: с `WWW-Authenticate`.
+   * Отказ по существу запроса (неверный текущий пароль) заголовка не несёт, и
+   * ниже это отдельный случай.
+   */
+  function unauthorized(status = 401) {
+    return jsonResponse({ error: { code: "unauthorized" } }, status, {
+      "WWW-Authenticate": "Bearer",
     });
   }
 
@@ -35,7 +50,7 @@ describe("клиент API: продление сессии", () => {
       seen.push(auth);
       return auth === "Bearer new-token"
         ? jsonResponse({ items: [], total: 0 })
-        : jsonResponse({ error: { code: "unauthorized" } }, 401);
+        : unauthorized();
     });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -65,7 +80,7 @@ describe("клиент API: продление сессии", () => {
       const auth = (input as Request).headers.get("Authorization");
       return auth === "Bearer new-token"
         ? jsonResponse({ items: [], total: 0 })
-        : jsonResponse({ error: { code: "unauthorized" } }, 401);
+        : unauthorized();
     }) as unknown as typeof fetch;
 
     const api = createApiClient({
@@ -94,7 +109,7 @@ describe("клиент API: продление сессии", () => {
     const refresh = vi.fn(async () => "new-token");
 
     globalThis.fetch = vi.fn(async () =>
-      jsonResponse({ error: { code: "unauthorized" } }, 401),
+      unauthorized(),
     ) as unknown as typeof fetch;
 
     const api = createApiClient({
@@ -114,7 +129,7 @@ describe("клиент API: продление сессии", () => {
     const expired = vi.fn();
 
     globalThis.fetch = vi.fn(async () =>
-      jsonResponse({ error: { code: "unauthorized" } }, 401),
+      unauthorized(),
     ) as unknown as typeof fetch;
 
     const api = createApiClient({
@@ -127,5 +142,51 @@ describe("клиент API: продление сессии", () => {
     await api.GET("/api/v1/patients", {});
 
     expect(expired).toHaveBeenCalledOnce();
+  });
+  it("не обновляет сессию, когда 401 — отказ по существу запроса", async () => {
+    // Смена пароля отвечает 401 с текстом «Текущий пароль указан неверно» —
+    // это не протухший токен. Обновление здесь повторяло запрос, получало тот
+    // же отказ и теряло его сообщение: человек видел «что-то пошло не так»
+    // вместо причины. А когда обновиться не удавалось, опечатка в своём же
+    // пароле ещё и выбрасывала из кабинета.
+    const refresh = vi.fn(async () => "new-token");
+    const expired = vi.fn();
+    let calls = 0;
+
+    globalThis.fetch = vi.fn(async () => {
+      calls += 1;
+      return jsonResponse(
+        {
+          error: {
+            code: "unauthorized",
+            message: "Текущий пароль указан неверно.",
+          },
+        },
+        401,
+      );
+    }) as unknown as typeof fetch;
+
+    const api = createApiClient({
+      baseUrl: "http://test",
+      getAccessToken: () => "token",
+      refreshAccessToken: refresh,
+      onSessionExpired: expired,
+    });
+
+    const { error } = await api.POST("/api/v1/users/me/password", {
+      body: {
+        current_password: "wrong",
+        new_password: "new secure passphrase",
+      },
+    });
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(expired).not.toHaveBeenCalled();
+    expect(calls).toBe(1);
+    // Конверт ошибки в сгенерированных типах не описан (он общий для всего API,
+    // а не для ручки), поэтому читается так же, как в кабинете — сужением из
+    // `unknown`; см. `errorMessageOf` в `apps/web/src/lib/api.ts`.
+    const body = error as { error?: { message?: string } } | undefined;
+    expect(body?.error?.message).toBe("Текущий пароль указан неверно.");
   });
 });

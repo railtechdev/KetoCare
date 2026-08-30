@@ -16,6 +16,7 @@ import { z } from "zod";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
+import { PasswordSection } from "./PasswordSection";
 import { errorMessageOf } from "../../lib/api";
 import { useMe } from "../auth/useMe";
 import { initialsOf } from "../../layouts/initials";
@@ -172,6 +173,10 @@ export function ProfilePage() {
           </Section>
         )}
       </AsyncSection>
+      {/* Смена пароля — отдельным блоком и вне AsyncSection: она не зависит от
+          того, загрузился ли профиль, и должна быть доступна даже если чтение
+          профиля отказало. */}
+      <PasswordSection />
     </PageLayout>
   );
 }

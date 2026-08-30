@@ -18,6 +18,21 @@ export interface ApiClientOptions {
 /** Ручки, на которых обновляться бессмысленно: их 401 и означает «сессии нет». */
 const NO_REFRESH = ["/api/v1/auth/login", "/api/v1/auth/refresh"];
 
+/**
+ * Отличает «токен не годится» от «запрос отклонён по существу».
+ *
+ * Код 401 API отдаёт и на протухший токен, и на неверный текущий пароль или
+ * неверный код подтверждения. Обновлять сессию имеет смысл только в первом
+ * случае: во втором повтор получит тот же отказ, а его сообщение — единственное,
+ * что объясняет человеку, что он сделал не так, — будет потеряно.
+ *
+ * Признак — `WWW-Authenticate` (RFC 9110, §11.6.1): заголовок сопровождает
+ * вызов аутентификации и не сопровождает отказ по содержанию запроса.
+ */
+function isAuthChallenge(response: Response): boolean {
+  return response.headers.has("WWW-Authenticate");
+}
+
 export function createApiClient({
   baseUrl,
   getAccessToken,
@@ -65,6 +80,7 @@ export function createApiClient({
      */
     async onResponse({ request, response, options }) {
       if (response.status !== 401) return;
+      if (!isAuthChallenge(response)) return;
       if (NO_REFRESH.some((path) => request.url.includes(path))) return;
 
       const token = await refreshOnce();

@@ -52,20 +52,28 @@ class ApiError(Exception):
         *,
         details: dict[str, Any] | None = None,
         status_code: int | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
         self.status_code = status_code or _STATUS_BY_CODE[code]
+        self.headers = headers or {}
         super().__init__(message)
 
 
 def error_response(
-    code: ErrorCode, message: str, *, details: dict[str, Any] | None = None, status_code: int
+    code: ErrorCode,
+    message: str,
+    *,
+    details: dict[str, Any] | None = None,
+    status_code: int,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
         content={"error": {"code": code.value, "message": message, "details": details or {}}},
+        headers=headers,
     )
 
 
@@ -73,7 +81,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
         return error_response(
-            exc.code, exc.message, details=exc.details, status_code=exc.status_code
+            exc.code,
+            exc.message,
+            details=exc.details,
+            status_code=exc.status_code,
+            headers=exc.headers or None,
         )
 
     @app.exception_handler(RequestValidationError)

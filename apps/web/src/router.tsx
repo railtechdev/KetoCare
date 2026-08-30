@@ -12,6 +12,7 @@ import { SECTIONS_BY_ROLE, type Role } from "./features/auth/roles";
 import type { Session } from "./features/auth/claims";
 import { AppLayout } from "./layouts/AppLayout";
 import { UiShowcase } from "./routes/UiShowcase";
+import { NotFoundPage } from "./routes/NotFoundPage";
 import { SectionRoute } from "./routes/SectionRoute";
 
 export interface RouterContext {
@@ -185,6 +186,10 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { session: null },
+  // Несуществующий адрес — свой экран с выходом, а не англоязычная заглушка
+  // маршрутизатора без единой ссылки (правило П22 и здравый смысл: из тупика
+  // должен быть выход).
+  defaultNotFoundComponent: NotFoundPage,
 });
 
 declare module "@tanstack/react-router" {
