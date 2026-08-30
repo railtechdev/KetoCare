@@ -16,6 +16,7 @@ import { z } from "zod";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
+import { BackupCodesSection } from "./BackupCodesSection";
 import { PasswordSection } from "./PasswordSection";
 import { errorMessageOf } from "../../lib/api";
 import { useMe } from "../auth/useMe";
@@ -177,6 +178,8 @@ export function ProfilePage() {
           того, загрузился ли профиль, и должна быть доступна даже если чтение
           профиля отказало. */}
       <PasswordSection />
+
+      <BackupCodesSection />
     </PageLayout>
   );
 }

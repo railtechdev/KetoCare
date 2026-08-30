@@ -50,7 +50,13 @@
     },
     "error": "Не удалось загрузить учётные записи",
     "inviteAction": "Пригласить сотрудника",
-    "editTitle": "Учётная запись"
+    "editTitle": "Учётная запись",
+    "resetTotp": "Сбросить 2FA",
+    "resetTotpAria": "Сбросить второй фактор: {{name}}",
+    "confirmResetTotpTitle": "Сбросить второй фактор: {{name}}?",
+    "confirmResetTotpBody": "Прежние коды приложения и резервные коды перестанут работать. При следующем входе человек настроит второй фактор заново — отключением 2FA это не является. Запись попадёт в журнал.",
+    "confirmResetTotpAction": "Сбросить",
+    "totpReset": "Второй фактор сброшен"
   },
   "products": {
     "title": "Справочник продуктов",
@@ -255,6 +261,7 @@
     },
     "actions": {
       "accept_invitation": "Принятие приглашения",
+      "backup_codes_regenerated": "Резервные коды выпущены заново",
       "create": "Создание",
       "delete": "Удаление",
       "export": "Выгрузка",
@@ -264,6 +271,7 @@
       "login": "Вход",
       "login_failed": "Неудачный вход",
       "login_failed_totp": "Неверный код второго фактора",
+      "login_with_backup_code": "Вход резервным кодом",
       "password_change_failed": "Неудачная смена пароля",
       "password_changed": "Смена пароля",
       "publish": "Публикация",
@@ -272,6 +280,7 @@
       "telegram_link_code_issued": "Выпуск кода привязки Telegram",
       "telegram_unlink": "Отвязка Telegram",
       "totp_enabled": "Второй фактор включён",
+      "totp_reset": "Сброс второго фактора администратором",
       "totp_setup_requested": "Запрос настройки второго фактора",
       "update": "Изменение"
     },

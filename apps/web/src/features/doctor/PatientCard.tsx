@@ -7,16 +7,25 @@ import { useSession } from "../auth/useSession";
 import { MedicationsTab } from "./MedicationsTab";
 import { NotesTab } from "./NotesTab";
 import { PatientDiaryTab } from "./PatientDiaryTab";
+import { PatientMenuTab } from "./PatientMenuTab";
 import { PrescriptionTab } from "./PrescriptionTab";
 import { SummaryTab } from "./SummaryTab";
 import { ReportsView } from "../reports/ReportsView";
 import { ageInMonths, formatIsoDate } from "./dates";
 import { isDoctor, type Patient } from "./types";
 
+/**
+ * Вкладки карты — шесть, и это потолок канона (правило П29).
+ *
+ * «Лекарства» жили отдельной седьмой вкладкой и переехали к назначению: и то и
+ * другое — то, что назначил врач, а разносить их значило требовать лишний клик
+ * ради перехода между двумя половинами одного решения. Прежний адрес
+ * `?tab=medications` теперь открывает сводку — внешних ссылок на него нет.
+ */
 const TABS = [
   "summary",
   "prescription",
-  "medications",
+  "menu",
   "diary",
   "reports",
   "notes",
@@ -118,11 +127,15 @@ export function PatientCard({
         <TabsContent value="summary" className="pt-screen">
           <SummaryTab patient={patient} clinicalAllowed={clinicalAllowed} />
         </TabsContent>
-        <TabsContent value="prescription" className="pt-screen">
+        <TabsContent
+          value="prescription"
+          className="flex flex-col gap-block pt-screen"
+        >
           <PrescriptionTab patientId={patient.id} />
-        </TabsContent>
-        <TabsContent value="medications" className="pt-screen">
           <MedicationsTab patientId={patient.id} />
+        </TabsContent>
+        <TabsContent value="menu" className="pt-screen">
+          <PatientMenuTab patientId={patient.id} />
         </TabsContent>
         <TabsContent value="diary" className="pt-screen">
           <PatientDiaryTab patientId={patient.id} />

@@ -104,9 +104,14 @@ class TestListUsers:
         card = listed[str(doctor.id)]
         assert card["role"] == "doctor"
         # Список учётных записей — не клинические данные, но и лишнего в нём быть
-        # не должно: хеш пароля и секрет 2FA не покидают сервер.
+        # не должно: хеш пароля и секрет 2FA не покидают сервер. Наружу уходит
+        # только признак `has_totp` — по нему администратор видит, есть ли что
+        # сбрасывать; сам секрет не отдаётся никогда.
+        assert card["has_totp"] is False
+        assert "totp_secret" not in card
         assert set(card) == {
             "id",
+            "has_totp",
             "role",
             "full_name",
             "email",

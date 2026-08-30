@@ -39,8 +39,27 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
   ],
   // «Главная» первой: вход вёл сразу в таблицу пациентов — полный реестр
   // вместо ответа на вопрос, с которого начинается рабочий день.
-  doctor: ["home", "patients", "summaries", "profile"],
-  dietitian: ["home", "patients", "products", "recipes", "profile"],
+  //
+  // Калькулятор и справочник продуктов ТЗ §8.1 врачу не даёт, но врач
+  // назначает кетосоотношение и обязан понимать, выполнимо ли оно на доступных
+  // семье продуктах. Сервер его туда уже пускает — новых прав не появляется.
+  // Отступление от ТЗ зафиксировано в ADR-0010.
+  doctor: [
+    "home",
+    "patients",
+    "calculator",
+    "products",
+    "summaries",
+    "profile",
+  ],
+  dietitian: [
+    "home",
+    "patients",
+    "calculator",
+    "products",
+    "recipes",
+    "profile",
+  ],
   admin: [
     "home",
     "users",

@@ -245,7 +245,7 @@ describe("Форма назначения", () => {
 
     // Карта открывается ссылкой на имени, а не кнопкой в отдельном столбце.
     await user.click(screen.getByRole("link", { name: "Иван Петров" }));
-    await user.click(screen.getByRole("tab", { name: "Назначение" }));
+    await user.click(screen.getByRole("tab", { name: "Назначения" }));
 
     const ratio = await screen.findByLabelText("Кетосоотношение");
     await user.clear(ratio);

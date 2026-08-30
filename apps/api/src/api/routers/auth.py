@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from core.models import User
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import invitations as invitations_repo
 from core.repositories import users as users_repo
 
@@ -21,6 +22,9 @@ from ..deps.auth import CurrentUserDep, SessionDep, TotpSetupUserDep, require_ro
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
 from ..schemas import (
+    BackupCodes,
+    BackupCodesRegenerate,
+    BackupCodesStatus,
     InvitationAccept,
     InvitationCreate,
     InvitationCreated,
@@ -28,6 +32,7 @@ from ..schemas import (
     LoginResponse,
     RefreshRequest,
     TokenPair,
+    TotpEnabledResponse,
     TotpSetupRequest,
     TotpSetupResponse,
     TotpVerifyRequest,
@@ -112,7 +117,20 @@ async def login(
 
     if needs_totp:
         assert user.totp_secret is not None
-        if not payload.totp_code or not verify_totp(user.totp_secret, payload.totp_code):
+
+        # Резервный код — второй фактор для случая «телефона с приложением нет»
+        # (NIST SP 800-63B, §5.1.2). Без него потерянный телефон означал потерю
+        # учётной записи навсегда: отключить второй фактор нельзя, сброса не
+        # было ни у кого. Код одноразовый и гасится атомарно.
+        by_backup = False
+        if payload.backup_code:
+            by_backup = await backup_codes_repo.consume(
+                session, user_id=user.id, code=payload.backup_code
+            )
+
+        if not by_backup and (
+            not payload.totp_code or not verify_totp(user.totp_secret, payload.totp_code)
+        ):
             await audit_repo.write_audit_log_independent(
                 user_id=user.id,
                 action="login_failed_totp",
@@ -121,6 +139,18 @@ async def login(
                 ip=client_address(request),
             )
             raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
+
+        if by_backup:
+            # Отдельной записью: использование резервного кода — событие, о
+            # котором владелец учётной записи должен узнать из журнала.
+            await audit_repo.write_audit_log(
+                session,
+                user_id=user.id,
+                action="login_with_backup_code",
+                entity="users",
+                entity_id=user.id,
+                ip=client_address(request),
+            )
 
     tokens = _issue_tokens(user)
     set_auth_cookies(response, tokens)
@@ -225,7 +255,11 @@ async def totp_setup(
     )
 
 
-@router.post("/totp/verify", response_model=TokenPair, summary="Подтвердить и включить 2FA")
+@router.post(
+    "/totp/verify",
+    response_model=TotpEnabledResponse,
+    summary="Подтвердить и включить 2FA",
+)
 @limiter.limit(AUTH_RATE_LIMIT)
 async def totp_verify(
     payload: TotpVerifyRequest,
@@ -233,9 +267,14 @@ async def totp_verify(
     response: Response,
     user: TotpSetupUserDep,
     session: SessionDep,
-) -> TokenPair:
+) -> TotpEnabledResponse:
     """Активирует секрет-кандидат и завершает вход: после первичной настройки
-    пользователь сразу получает рабочую пару токенов."""
+    пользователь сразу получает рабочую пару токенов.
+
+    Здесь же выдаётся набор резервных кодов — это единственный момент, когда их
+    можно показать: в базе лежит только sha256, повторить показ невозможно.
+    Прежний набор при смене второго фактора заменяется: он был привязан к
+    прежнему устройству."""
 
     db_user = await users_repo.get(session, user.id)
     if db_user is None:
@@ -260,9 +299,11 @@ async def totp_verify(
         ip=client_address(request),
     )
 
+    codes = await backup_codes_repo.replace_for_user(session, user_id=user.id)
+
     tokens = _issue_tokens(db_user)
     set_auth_cookies(response, tokens)
-    return tokens
+    return TotpEnabledResponse(tokens=tokens, backup_codes=codes)
 
 
 # Кто кого приглашает (ADR-0003): администратор заводит персонал, врач и диетолог —
@@ -361,3 +402,62 @@ async def accept_invitation(
         after={"email": user.email, "role": user.role.value},
     )
     return UserRead.model_validate(user)
+
+
+@router.get(
+    "/backup-codes",
+    response_model=BackupCodesStatus,
+    summary="Сколько резервных кодов осталось",
+)
+async def backup_codes_status(
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> BackupCodesStatus:
+    """Набор кончается молча: девять входов резервными кодами подряд оставили бы
+    владельца с одним кодом и без предупреждения."""
+
+    remaining = await backup_codes_repo.count_unused(session, user_id=user.id)
+    return BackupCodesStatus(remaining=remaining, total=backup_codes_repo.BACKUP_CODE_COUNT)
+
+
+@router.post(
+    "/backup-codes",
+    response_model=BackupCodes,
+    summary="Выпустить резервные коды заново",
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def regenerate_backup_codes(
+    payload: BackupCodesRegenerate,
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> BackupCodes:
+    """Перевыпуск требует кода приложения, а не только открытой сессии.
+
+    Иначе чужой доступ к незакрытой вкладке позволял бы выпустить себе набор
+    кодов на будущее — то есть превратить временный доступ в постоянный, минуя
+    второй фактор.
+
+    Прежний набор стирается: он мог попасть в чужие руки, ради чего перевыпуск и
+    затевают.
+    """
+
+    db_user = await users_repo.get(session, user.id)
+    if db_user is None or db_user.totp_secret is None:
+        raise ApiError(ErrorCode.CONFLICT, "Второй фактор не настроен.")
+
+    if not verify_totp(db_user.totp_secret, payload.totp_code):
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
+
+    codes = await backup_codes_repo.replace_for_user(session, user_id=user.id)
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="backup_codes_regenerated",
+        entity="users",
+        entity_id=user.id,
+        ip=client_address(request),
+    )
+
+    return BackupCodes(codes=codes)

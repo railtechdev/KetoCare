@@ -74,6 +74,8 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
     />
   ),
   patients: () => <DoctorPatientsPage />,
+  // Справочник продуктов на чтение — семье, врачу и диетологу; администратору
+  // тот же справочник с правкой и импортом.
   products: (role) =>
     role === "admin" ? <AdminPage section="products" /> : <ProductsPage />,
   users: () => <AdminPage section="users" />,

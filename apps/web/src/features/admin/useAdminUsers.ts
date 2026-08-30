@@ -43,3 +43,31 @@ export function useUpdateUserMutation() {
     },
   });
 }
+
+/**
+ * Сброс второго фактора — последняя ступень восстановления доступа.
+ *
+ * Первая — резервные коды, выданные при включении 2FA. Когда и они потеряны
+ * вместе с телефоном, вернуть человека в систему может только администратор.
+ * Отключением второго фактора это не является: при следующем входе учётная
+ * запись проходит его настройку заново.
+ */
+export function useResetTotpMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await api.POST(
+        "/api/v1/admin/users/{user_id}/reset-totp",
+        { params: { path: { user_id: userId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty reset response");
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      // Сброс пишется в журнал — свежая страница журнала обязана его показать.
+      await queryClient.invalidateQueries({ queryKey: ["admin", "audit"] });
+    },
+  });
+}

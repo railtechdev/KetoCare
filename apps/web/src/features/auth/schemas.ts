@@ -11,6 +11,8 @@ export const loginSchema = z.object({
   email: z.string().min(1).email(),
   password: z.string().min(1),
   totpCode: z.string().optional(),
+  /** Резервный код вместо кода приложения, когда телефон недоступен */
+  backupCode: z.string().optional(),
 });
 
 export type LoginValues = z.infer<typeof loginSchema>;

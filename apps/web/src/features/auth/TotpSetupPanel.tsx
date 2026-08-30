@@ -11,10 +11,12 @@ import {
 } from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import QRCode from "qrcode";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { BackupCodesPanel } from "./BackupCodesPanel";
 import { FormError } from "../../components/FormError";
 import { api, errorMessageOf } from "../../lib/api";
 import { totpVerifySchema, type TotpVerifyValues } from "./schemas";
@@ -71,12 +73,48 @@ export function TotpSetupPanel({ setupToken }: Props) {
     formState: { errors },
   } = useForm<TotpVerifyValues>({ resolver: zodResolver(totpVerifySchema) });
 
+  /**
+   * Резервные коды, выданные вместе с включением второго фактора.
+   *
+   * Пока они на экране, вход не завершается: `signIn` переводит в кабинет
+   * немедленно, и коды исчезли бы вместе с этим экраном — а показать их второй
+   * раз невозможно, в базе только sha256.
+   */
+  const [issuedCodes, setIssuedCodes] = useState<string[] | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+
   const onSubmit = handleSubmit(async (values) => {
     const data = await verify.mutateAsync(values.code).catch(() => null);
-    // Переход в кабинет делает guard маршрута: App перевычисляет его, как
-    // только в контексте появляется сессия.
-    if (data?.access_token) signIn(data.access_token);
+    if (!data) return;
+    setAccessToken(data.tokens.access_token);
+    setIssuedCodes(data.backup_codes);
   });
+
+  if (issuedCodes !== null) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center p-screen">
+        <Card className="w-full max-w-form">
+          <CardHeader>
+            <CardTitle className="text-page-title">
+              <h1 className="m-0 font-semibold">{t("backupCodes.title")}</h1>
+            </CardTitle>
+            <CardDescription>{t("backupCodes.setupIntro")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BackupCodesPanel
+              codes={issuedCodes}
+              doneLabel={t("backupCodes.saved")}
+              onDone={() => {
+                // Переход в кабинет делает guard маршрута: App перевычисляет
+                // его, как только в контексте появляется сессия.
+                if (accessToken !== null) signIn(accessToken);
+              }}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-screen">

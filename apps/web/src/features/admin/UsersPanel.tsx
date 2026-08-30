@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  ConfirmDialog,
   FormSheet,
   Button,
   DataTable,
@@ -8,7 +9,7 @@ import {
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { UserPlus, Users } from "lucide-react";
+import { KeyRound, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -19,7 +20,11 @@ import { useSession } from "../auth/useSession";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
 import { UserAccountForm } from "./UserAccountForm";
-import { useAdminUsers, useUpdateUserMutation } from "./useAdminUsers";
+import {
+  useAdminUsers,
+  useResetTotpMutation,
+  useUpdateUserMutation,
+} from "./useAdminUsers";
 import type { AdminUser } from "./types";
 
 /**
@@ -38,6 +43,7 @@ export function UsersPanel() {
 
   const users = useAdminUsers();
   const update = useUpdateUserMutation();
+  const resetTotp = useResetTotpMutation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
 
@@ -92,21 +98,62 @@ export function UsersPanel() {
               {t("users.self")}
             </span>
           ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                resetUpdate();
-                setEditingId(row.original.id);
-              }}
-            >
-              {t("users.edit")}
-            </Button>
+            <div className="flex flex-wrap gap-field">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  resetUpdate();
+                  setEditingId(row.original.id);
+                }}
+              >
+                {t("users.edit")}
+              </Button>
+
+              {/* Кнопки нет, когда второго фактора нет: она вела бы в
+                  заведомый 409 (правило П3 канона). Подтверждение называет
+                  учётную запись — «сбросить второй фактор» без имени это
+                  вопрос без объекта (правило П14). */}
+              {row.original.has_totp && (
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-touch"
+                      aria-label={t("users.resetTotpAria", {
+                        name: row.original.full_name,
+                      })}
+                    >
+                      <KeyRound aria-hidden="true" />
+                      {t("users.resetTotp")}
+                    </Button>
+                  }
+                  title={t("users.confirmResetTotpTitle", {
+                    name: row.original.full_name,
+                  })}
+                  description={t("users.confirmResetTotpBody")}
+                  confirmLabel={t("users.confirmResetTotpAction")}
+                  cancelLabel={t("common:actions.cancel")}
+                  onConfirm={() =>
+                    resetTotp.mutate(row.original.id, {
+                      onSuccess: () => toast.success(t("users.totpReset")),
+                      onError: (error) =>
+                        toast.error(
+                          errorMessageOf(error) ??
+                            t("common:errors.unexpected"),
+                        ),
+                    })
+                  }
+                />
+              )}
+            </div>
           ),
       },
     ],
-    [t, currentUserId, resetUpdate],
+    [t, currentUserId, resetUpdate, resetTotp],
   );
 
   return (
