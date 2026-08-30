@@ -25,7 +25,13 @@ export function PatientGate({
   render: (patientId: string) => ReactElement;
 }) {
   const { t } = useTranslation();
-  const { patientId, needsChoice, isPending } = useSelectedPatient();
+  const {
+    patientId,
+    patients: available,
+    needsChoice,
+    isPending,
+    select,
+  } = useSelectedPatient();
   const patients = usePatients();
 
   if (isPending) {
@@ -51,11 +57,31 @@ export function PatientGate({
   }
 
   if (needsChoice) {
+    // Выбор предлагается здесь же, а не отсылкой «в списке наверху страницы»:
+    // переключатель в шапке есть только у родителя, и у врача, попавшего сюда
+    // из меню, отсылать было бы некуда. Пустое состояние без выхода — тупик,
+    // и это тот же тупик, который экран должен закрывать (правило П15).
     return (
       <EmptyState
         icon={Users}
         title={t("patientGate.chooseTitle")}
         description={t("patientGate.chooseBody")}
+        action={
+          <ul className="m-0 flex list-none flex-wrap justify-center gap-field p-0">
+            {available.map((patient) => (
+              <li key={patient.id}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch"
+                  onClick={() => select(patient.id)}
+                >
+                  {patient.full_name}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        }
       />
     );
   }

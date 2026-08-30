@@ -137,12 +137,15 @@ describe("главная врача", () => {
     expect(screen.queryByText("Неизвестный Пациент")).not.toBeInTheDocument();
   });
 
-  it("имя в очереди ведёт в карту этого пациента", async () => {
+  it("имя в очереди ведёт в карту сразу на нужную вкладку", async () => {
     renderHome();
 
+    // Флаг существует, чтобы вызвать действие. Молчание семьи проверяют в
+    // дневниках — открывать карту на сводке значило бы требовать ещё клик там,
+    // где известно, куда идти.
     const link = await screen.findByRole("link", { name: "Молчащий Пациент" });
-    expect(decodeURIComponent(link.getAttribute("href") ?? "")).toBe(
-      `/app/patients?patient=${SILENT}`,
-    );
+    const href = decodeURIComponent(link.getAttribute("href") ?? "");
+    expect(href).toContain(`patient=${SILENT}`);
+    expect(href).toContain("tab=diary");
   });
 });

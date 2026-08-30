@@ -10,6 +10,8 @@ interface Props {
   activeProps?: LinkProps["activeProps"];
   /** Вид дневника, который нужно открыть сразу (для быстрых действий главной) */
   diaryKind?: string;
+  /** Вкладка, которую нужно открыть сразу (`?tab=`) */
+  tab?: string;
   /** Объект, который нужно открыть в новом разделе (`?item=`) */
   item?: string;
   /** Строка поиска для нового раздела (`?q=`) */
@@ -42,6 +44,7 @@ export function SectionLink({
   className,
   activeProps,
   diaryKind,
+  tab,
   item,
   query,
   patient,
@@ -60,7 +63,10 @@ export function SectionLink({
       // калькулятор ведёт в справочник со своим запросом (`query`).
       search={(previous) => ({
         ...previous,
-        tab: undefined,
+        // Вкладка гасится по умолчанию и задаётся явно там, где переход ведёт
+        // к конкретному виду: очередь врача открывает карту сразу на том, из-за
+        // чего пациент в неё попал, а не на сводке, откуда нужен ещё клик.
+        tab,
         kind: diaryKind,
         item,
         q: query,

@@ -14,6 +14,7 @@ import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
+import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
@@ -31,6 +32,18 @@ type Mode = "verify" | "solve" | "scale";
 
 const MODES = ["verify", "solve", "scale"] as const;
 
+/**
+ * Цели по умолчанию, пока назначение не загрузилось.
+ *
+ * Кетосоотношение подставляется из активного назначения ребёнка, как только оно
+ * придёт: до этого калькулятор сравнивал блюдо с четвёркой, зашитой в экране, и
+ * объявлял «выходит за допуски назначения» — вердикт относительно чужой цели.
+ *
+ * Калорийность приёма остаётся за пользователем. Разделить суточную норму на
+ * число приёмов — медицинское допущение о равномерном распределении, а его
+ * принимает не фронтенд (правило 1 CLAUDE.md).
+ * TODO(med): вопрос 24 в `docs/medical/OPEN_QUESTIONS.md`.
+ */
 const DEFAULT_TARGETS: TargetsInput = { ratio: 4, kcal: 400 };
 
 /** Калькулятор: три режима из раздела 8.3 ТЗ. */
@@ -50,6 +63,25 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
   const incoming = useProduct(incomingId);
   const [targets, setTargets] = useState<TargetsInput>(DEFAULT_TARGETS);
   const [factor, setFactor] = useState(2);
+
+  // Назначение — тем же запросом, что у главной и меню: свой запрос делил бы
+  // с ними ключ, но расходился бы в обработке.
+  const overview = usePatientOverview(patientId);
+  const prescribedRatio = overview.data?.prescription?.ratio ?? null;
+
+  // Правка пользователя важнее назначения: он мог считать блюдо под другую
+  // цель осознанно, и подставлять назначение поверх введённого значит терять
+  // его ввод.
+  const [ratioTouched, setRatioTouched] = useState(false);
+
+  useEffect(() => {
+    if (prescribedRatio === null || ratioTouched) return;
+    setTargets((current) =>
+      current.ratio === prescribedRatio
+        ? current
+        : { ...current, ratio: prescribedRatio },
+    );
+  }, [prescribedRatio, ratioTouched]);
 
   useEffect(() => {
     const product = incoming.data;
@@ -84,12 +116,9 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
    * «двойную порцию», получал блюдо с одинарной раскладкой и расхождение
    * замечал, только сложив макросы вручную.
    */
-  const serverItems =
-    mode === "solve"
-      ? solve.data?.dish.items
-      : mode === "scale"
-        ? scale.data?.dish.items
-        : undefined;
+  // Только «пересчитать»: подобранные массы теперь уезжают прямо в состав
+  // (см. ниже), и второй их список был бы копией того, что уже в полях.
+  const serverItems = mode === "scale" ? scale.data?.dish.items : undefined;
 
   const serverRows: DishRow[] = (serverItems ?? []).flatMap((item) => {
     const row = rows.find((r) => r.product.id === item.product_id);
@@ -124,6 +153,29 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
     else if (mode === "solve") solve.mutate({ rows, targets });
     else scale.mutate({ rows, factor });
   }
+
+  // Подобранная раскладка переносится в состав.
+  //
+  // До этого массы решателя жили только внутри ответа мутации: поля были
+  // заблокированы, а переход на другую вкладку сбрасывал результат и возвращал
+  // исходные 50 г. Цепочка «подобрал → округлил под кухонные весы → проверил →
+  // пересчитал на две порции» была разорвана: из режима «подобрать» вёл один
+  // выход — сохранить как есть, иначе результат исчезал.
+  const solvedItems = solve.data?.dish.items;
+  useEffect(() => {
+    if (solvedItems === undefined) return;
+    const grams = new Map(
+      solvedItems.map((item) => [item.product_id, item.grams]),
+    );
+    setRows((current) =>
+      current.map((row) => {
+        const next = grams.get(row.product.id);
+        return next === undefined || next === row.grams
+          ? row
+          : { ...row, grams: next };
+      }),
+    );
+  }, [solvedItems]);
 
   const infeasible = errorCodeOf(solve.error) === "infeasible_calculation";
   // Сохраняется то, что показано: расчётные массы, если сервер их вернул.
@@ -165,8 +217,7 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         />
 
         <DishRows
-          rows={mode === "solve" && serverRows.length > 0 ? serverRows : rows}
-          readOnlyGrams={mode === "solve" && serverRows.length > 0}
+          rows={rows}
           onChangeGrams={(productId, grams) => {
             setRows((current) =>
               current.map((row) =>
@@ -186,11 +237,25 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
 
       <Section title={t("params.title")}>
         {mode === "scale" ? (
-          <ScaleFields factor={factor} onChange={setFactor} />
+          <ScaleFields
+            factor={factor}
+            onChange={(next) => {
+              setFactor(next);
+              resetResults();
+            }}
+          />
         ) : (
           <TargetsFields
             targets={targets}
-            onChange={setTargets}
+            prescribedRatio={prescribedRatio}
+            onChange={(next) => {
+              if (next.ratio !== targets.ratio) setRatioTouched(true);
+              setTargets(next);
+              // Вердикт относится к тем целям, при которых его посчитали:
+              // зелёный значок от прежнего соотношения рядом с новым числом в
+              // поле опаснее обычной устаревшей выдачи — по нему готовят.
+              resetResults();
+            }}
             showLimits={mode === "solve"}
           />
         )}
@@ -257,10 +322,13 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
 
 function TargetsFields({
   targets,
+  prescribedRatio,
   onChange,
   showLimits,
 }: {
   targets: TargetsInput;
+  /** Соотношение из активного назначения; null — назначения нет или не пришло */
+  prescribedRatio: number | null;
   onChange: (next: TargetsInput) => void;
   showLimits: boolean;
 }) {
@@ -274,6 +342,15 @@ function TargetsFields({
         id="ratio"
         width="narrow"
         label={t("targets.ratio")}
+        // Откуда взялось значение — видно прямо у поля: молча подставленное
+        // назначение неотличимо от значения, введённого в прошлый раз.
+        hint={
+          prescribedRatio === null
+            ? t("targets.ratioNoPrescription")
+            : targets.ratio === prescribedRatio
+              ? t("targets.ratioFromPrescription", { value: prescribedRatio })
+              : t("targets.ratioOverridden", { value: prescribedRatio })
+        }
         type="number"
         inputMode="decimal"
         min={1}
@@ -289,6 +366,10 @@ function TargetsFields({
         id="kcal"
         width="narrow"
         label={t("targets.kcal")}
+        // Из назначения не подставляется: суточная норма делится на приёмы
+        // только при допущении о равномерном распределении, а это решение
+        // медицинской команды (вопрос 24 в OPEN_QUESTIONS).
+        hint={t("targets.kcalHint")}
         type="number"
         inputMode="decimal"
         min={1}

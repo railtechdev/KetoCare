@@ -1,6 +1,10 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { SectionRouter } from "../test/SectionRouter";
+import { SectionLink } from "./SectionLink";
 
 /**
  * Выбранный ребёнок живёт в адресе, а TanStack Router параметры поиска при
@@ -30,14 +34,40 @@ describe("ссылки на разделы кабинета", () => {
     expect(offenders.map((path) => path.slice(SRC.length + 1))).toEqual([]);
   });
 
-  it("не тащат вкладку прошлого раздела в новый", () => {
+  it("не тащат состояние прошлого раздела в новый", async () => {
     // `?tab=verify` калькулятора приезжал на главную и оставался в адресе:
-    // вкладка принадлежит своему экрану и на другом означает уже не то.
-    const source = readFileSync(
-      join(SRC, "components", "SectionLink.tsx"),
-      "utf8",
+    // вкладка, объект и строка поиска принадлежат своему экрану, а на другом
+    // означают уже не то. Проверяется адрес ссылки, а не текст исходника:
+    // проверка по тексту ломается от любой правки, ничего не гарантируя.
+    render(
+      <SectionRouter
+        section="calculator"
+        search={{ tab: "verify", item: "dish-1", q: "масло", patient: "p1" }}
+      >
+        <SectionLink section="home">На главную</SectionLink>
+      </SectionRouter>,
     );
 
-    expect(source).toContain("tab: undefined");
+    const href = (
+      await screen.findByRole("link", { name: "На главную" })
+    ).getAttribute("href");
+    expect(href).toBe("/app/home?patient=p1");
+  });
+
+  it("открывают нужную вкладку, когда она задана явно", async () => {
+    // Очередь врача ведёт в карту сразу на том, из-за чего пациент в неё попал.
+    render(
+      <SectionRouter section="home">
+        <SectionLink section="patients" patient="p9" tab="diary">
+          К пациенту
+        </SectionLink>
+      </SectionRouter>,
+    );
+
+    const href = (
+      await screen.findByRole("link", { name: "К пациенту" })
+    ).getAttribute("href");
+    expect(decodeURIComponent(href ?? "")).toContain("tab=diary");
+    expect(decodeURIComponent(href ?? "")).toContain("patient=p9");
   });
 });

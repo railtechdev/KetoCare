@@ -29,6 +29,18 @@ interface QueueRow {
 }
 
 /**
+ * Вкладка карты, на которую ведёт строка очереди.
+ *
+ * Флаг существует, чтобы вызвать действие, и действие у каждого своё: молчание
+ * семьи проверяют в дневниках, отклонение соотношения — в плане питания за
+ * день. Открывать карту на сводке значило бы требовать ещё один клик там, где
+ * известно, куда именно идти.
+ */
+function tabForFlags(flags: PatientFlags): string {
+  return flags.staleData ? "diary" : "menu";
+}
+
+/**
  * Главная врача — «кем заняться» (`docs/DESIGN_PROPOSAL.md`).
  *
  * Вход врача вёл сразу в таблицу пациентов: полный реестр вместо ответа на
@@ -152,6 +164,7 @@ export function DoctorHomePage() {
                 <SectionLink
                   section="patients"
                   patient={row.patient.id}
+                  tab={tabForFlags(row.flags)}
                   className="min-w-0 flex-1 font-medium break-words underline-offset-2 hover:underline"
                 >
                   {row.patient.full_name}
