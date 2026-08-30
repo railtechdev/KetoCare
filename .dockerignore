@@ -1,0 +1,21 @@
+# Контекст сборки infra/docker/Dockerfile — корень репозитория. В образы
+# попадают только python-исходники и infra/scripts; всё тяжёлое и локальное —
+# мимо, иначе передача контекста на 2 ГБ VPS занимает минуты.
+.git
+.venv
+node_modules
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/dist
+apps/web
+apps/miniapp
+packages/ui
+packages/api-client
+docs
+graphify-out
+var
+.env
+.env.*
+!.env.example
