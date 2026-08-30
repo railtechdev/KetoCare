@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import secrets
 import sys
 
@@ -40,12 +41,23 @@ from core.repositories import users as users_repo
 # раз копированием, а подбирать нечего.
 TEMP_PASSWORD_BYTES = 24
 
+#: Переменная окружения с заранее заданным паролем. Нужна для автодеплоя: там
+#: пароль приходит из секретов GitHub, и печатать его в журнал прогона нельзя.
+PASSWORD_ENV = "ADMIN_PASSWORD"
+
+# Минимальная длина заданного человеком пароля. Не «политика паролей» (её место
+# в приложении), а защита от очевидной ошибки: пустой или трёхсимвольный секрет
+# в GitHub означал бы открытую админку на публичном домене.
+MIN_PASSWORD_LENGTH = 12
+
 
 def _generate_password() -> str:
     return secrets.token_urlsafe(TEMP_PASSWORD_BYTES)
 
 
-async def create_admin(*, email: str, full_name: str, reset: bool) -> int:
+async def create_admin(
+    *, email: str, full_name: str, reset: bool, password: str | None = None
+) -> int:
     # Импорт здесь, а не наверху: хеширование живёт в слое API (argon2 с его
     # параметрами), и `core` о нём знать не должен. Тот же приём в seed_demo.py.
     from api.security import hash_password
@@ -63,7 +75,8 @@ async def create_admin(*, email: str, full_name: str, reset: bool) -> int:
                 print("Сбросить пароль: тот же вызов с --reset-password.")
                 return 1
 
-            password = _generate_password()
+            given = password is not None
+            password = password or _generate_password()
 
             if existing is None:
                 user = await users_repo.create(
@@ -109,10 +122,16 @@ async def create_admin(*, email: str, full_name: str, reset: bool) -> int:
 
     print(what)
     print(f"Идентификатор: {user_id}")
-    print()
-    print(f"  Временный пароль: {password}")
-    print()
-    print("Пароль показан один раз и в базе не хранится в открытом виде.")
+    if given:
+        # Пароль задан человеком — он его знает. Печатать нельзя: команда
+        # запускается из автодеплоя, а журнал прогона публичного репозитория
+        # читает кто угодно.
+        print("Пароль взят из окружения и в вывод не попадает.")
+    else:
+        print()
+        print(f"  Временный пароль: {password}")
+        print()
+        print("Пароль показан один раз и в базе не хранится в открытом виде.")
     print("При первом входе система потребует задать свой; второй фактор")
     print("настраивается там же, в кабинете.")
     return 0
@@ -135,8 +154,22 @@ def main(argv: list[str] | None = None) -> int:
     if "@" not in args.email:
         parser.error("--email должен быть адресом почты")
 
+    # Пароль приходит переменной окружения, а не аргументом: аргументы видны в
+    # `ps aux` любому пользователю машины.
+    password = os.environ.get(PASSWORD_ENV) or None
+    if password is not None and len(password) < MIN_PASSWORD_LENGTH:
+        parser.error(
+            f"{PASSWORD_ENV} короче {MIN_PASSWORD_LENGTH} символов — "
+            "на публичном домене это открытая админка"
+        )
+
     return asyncio.run(
-        create_admin(email=args.email, full_name=args.name, reset=args.reset_password)
+        create_admin(
+            email=args.email,
+            full_name=args.name,
+            reset=args.reset_password,
+            password=password,
+        )
     )
 
 

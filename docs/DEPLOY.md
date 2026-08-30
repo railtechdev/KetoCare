@@ -178,7 +178,8 @@ restrict,command="/srv/ketocare/infra/scripts/remote-deploy.sh" ssh-ed25519 …
 
 Секреты (Settings → Secrets): `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`,
 `DEPLOY_KNOWN_HOSTS`, `POSTGRES_PASSWORD`, `SECRET_KEY`, `BOT_API_TOKEN`,
-`BOT_TOKEN`, при появлении — `ANTHROPIC_API_KEY`, `SENTRY_DSN`.
+`BOT_TOKEN`, `BOT_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`,
+при появлении — `ANTHROPIC_API_KEY`, `SENTRY_DSN`.
 Переменные (там же, вкладка Variables): `WEB_ORIGIN`, `MINIAPP_ORIGIN`,
 `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
 `PUBLIC_CONTACT_EMAIL`, `PUBLIC_TELEGRAM_URL`, `LANDING_INDEXABLE`, `TZ`.
@@ -195,14 +196,31 @@ restrict,command="/srv/ketocare/infra/scripts/remote-deploy.sh" ssh-ed25519 …
 Войти на свежий стенд иначе нечем: учётки заводятся приглашениями, а пригласить
 может только тот, кто уже вошёл.
 
+**Обычный путь — секреты репозитория.** Задайте `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+и `ADMIN_NAME`, и учётка появится при ближайшем деплое. Действие идемпотентно:
+если администратор уже есть, деплой его не трогает и пароль не перезаписывает —
+человек мог сменить его при первом входе, и автоматика не вправе это откатывать.
+
+**Пароль администратора на диске сервера не остаётся.** `remote-deploy.sh`
+забирает переменные `ADMIN_*` из потока, использует и не записывает в файл
+окружения: в отличие от служебных ключей (их читают приложения при каждом
+старте), это учётные данные человека. Пароль обязан быть не короче 12 символов —
+иначе команда откажется работать.
+
+После первого входа и смены пароля секрет `ADMIN_PASSWORD` можно удалить: он
+нужен только для создания учётки.
+
+Тот же результат вручную, если секретов нет:
+
 ```bash
 docker compose --env-file .env -f infra/docker-compose.prod.yml \
   run --rm api python infra/scripts/create_admin.py \
   --email admin@example.uz --name "Имя Фамилия"
 ```
 
-Пароль печатается один раз и помечается как временный — при первом входе система
-потребует задать свой. Второй фактор администратор настраивает сам в кабинете.
+Без `ADMIN_PASSWORD` команда сама выпустит временный пароль и напечатает его
+один раз. В обоих случаях учётка помечается как требующая смены пароля при
+первом входе; второй фактор администратор настраивает сам в кабинете.
 **Не используйте для этого `seed_demo.py`:** он заводит `admin@example.com` с
 паролем из открытого репозитория, то есть открытую админку на публичном домене.
 

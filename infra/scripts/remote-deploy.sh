@@ -57,6 +57,21 @@ if [ ! -s "$REPO/.env.next" ]; then
     rm -f "$REPO/.env.next"
     exit 65
 fi
+
+# Учётные данные администратора нужны только на время выката и на диске НЕ
+# остаются: в отличие от служебных ключей (их всё равно читают приложения при
+# каждом старте), это пароль человека. Он живёт в памяти этого процесса и
+# исчезает вместе с ним.
+#
+# Значения пришли пропущенными через shlex.quote, поэтому eval безопасен: это
+# ровно те строки, которые сформировал шаг сборки окружения.
+ADMIN_LINES="$(grep '^ADMIN_' "$REPO/.env.next" || true)"
+if [ -n "$ADMIN_LINES" ]; then
+    eval "$ADMIN_LINES"
+    grep -v '^ADMIN_' "$REPO/.env.next" > "$REPO/.env.clean"
+    mv "$REPO/.env.clean" "$REPO/.env.next"
+fi
+
 mv "$REPO/.env.next" "$REPO/.env"
 
 echo "→ код: $REF"
@@ -67,6 +82,22 @@ git log --oneline -1
 
 echo "→ деплой"
 infra/scripts/deploy.sh
+
+if [ -n "${ADMIN_EMAIL:-}" ]; then
+    echo "→ администратор"
+    # Идемпотентно: если учётка уже есть, команда ничего не меняет и пароль не
+    # перезаписывает — человек мог сменить его при первом входе, и деплой не
+    # вправе откатывать это назад.
+    #
+    # Пароль уходит переменной окружения, а не аргументом: аргументы видны в
+    # `ps aux` любому пользователю сервера.
+    docker compose --env-file "$REPO/.env" -f infra/docker-compose.prod.yml \
+        run --rm --no-deps \
+        -e ADMIN_PASSWORD="${ADMIN_PASSWORD:-}" \
+        api python infra/scripts/create_admin.py \
+        --email "$ADMIN_EMAIL" --name "${ADMIN_NAME:-Администратор}" \
+        || echo "создание администратора не удалось — стенд при этом работает" >&2
+fi
 
 echo "→ проверка живости"
 # Изнутри сервера: снаружи /health не проксируется (nginx отдаёт только /api/),

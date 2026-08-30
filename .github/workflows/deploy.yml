@@ -92,8 +92,16 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          # Переменные стенда
-          BOT_USERNAME: ${{ vars.BOT_USERNAME }}
+          # Учётные данные первого администратора. На диск сервера НЕ попадают:
+          # remote-deploy.sh забирает их из потока и не пишет в файл окружения.
+          # Учётка создаётся один раз; если она уже есть, пароль не трогается —
+          # человек мог сменить его при первом входе.
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_NAME: ${{ secrets.ADMIN_NAME || vars.ADMIN_NAME }}
+          # Имя бота публично (по нему находят бота), но берётся из секрета,
+          # если он задан: так все настройки бота лежат в одном месте.
+          BOT_USERNAME: ${{ secrets.BOT_USERNAME || vars.BOT_USERNAME }}
           TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
           WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
           MINIAPP_ORIGIN: ${{ vars.MINIAPP_ORIGIN }}
@@ -125,6 +133,7 @@ jobs:
           NAMES = [
               "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
               "BOT_USERNAME", "ANTHROPIC_API_KEY", "SENTRY_DSN",
+              "ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME",
               "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN",
               "LANDING_SITE_URL", "LANDING_INDEXABLE", "PUBLIC_APP_URL",
               "PUBLIC_CONTACT_EMAIL", "PUBLIC_TELEGRAM_URL",
