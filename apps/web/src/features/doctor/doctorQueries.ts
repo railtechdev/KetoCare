@@ -60,10 +60,28 @@ export function prescriptionsKey(patientId: string) {
   return ["patient", patientId, "prescriptions"] as const;
 }
 
+/**
+ * Ключ истории назначений — с отдельным хвостом.
+ *
+ * `usePrescriptionVersions` (features/diary) ходит по тому же адресу API и
+ * отдаёт МАССИВ версий, а этот хук — объект `{ versions, total }`. Пока ключ был
+ * общим, обе формы попадали в одну ячейку кэша: на карте пациента вкладка
+ * «Назначение» клала туда объект, а вкладка «Дневники» читала его как массив и
+ * падала с `.filter is not a function`. Типы этого не ловят — каждый хук
+ * объявляет свой возвращаемый тип, а ключ для кэша просто массив строк.
+ *
+ * Хвост не ломает инвалидацию: TanStack Query сверяет ключи по префиксу,
+ * поэтому `invalidateQueries(prescriptionsKey(id))` по-прежнему накрывает обе
+ * записи.
+ */
+export function prescriptionHistoryKey(patientId: string) {
+  return [...prescriptionsKey(patientId), "history"] as const;
+}
+
 /** История назначений с номерами версий (раздел 8.3 ТЗ: таблица истории). */
 export function usePrescriptionHistory(patientId: string) {
   return useQuery({
-    queryKey: prescriptionsKey(patientId),
+    queryKey: prescriptionHistoryKey(patientId),
     queryFn: async (): Promise<PrescriptionHistory> => {
       const { data, error } = await api.GET(
         "/api/v1/patients/{patient_id}/prescriptions",

@@ -217,7 +217,7 @@ export function ProductsPanel() {
         title={t("products.filters.legend")}
         titleHidden
         density="compact"
-        contentClassName="flex flex-wrap items-end gap-block"
+        contentClassName="flex-row flex-wrap items-end gap-block"
       >
         <div className="min-w-56 flex-1 sm:max-w-md">
           <Field

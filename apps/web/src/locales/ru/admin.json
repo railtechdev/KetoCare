@@ -254,29 +254,42 @@
       "none": "—"
     },
     "actions": {
+      "accept_invitation": "Принятие приглашения",
       "create": "Создание",
-      "update": "Изменение",
       "delete": "Удаление",
-      "publish": "Публикация",
+      "export": "Выгрузка",
+      "grant_patient_access": "Прикрепление к пациенту",
       "import": "Импорт",
       "invite": "Приглашение",
-      "accept_invitation": "Принятие приглашения",
       "login": "Вход",
       "login_failed": "Неудачный вход",
       "login_failed_totp": "Неверный код второго фактора",
+      "password_change_failed": "Неудачная смена пароля",
+      "password_changed": "Смена пароля",
+      "publish": "Публикация",
+      "revoke_patient_access": "Открепление от пациента",
+      "telegram_link": "Привязка Telegram",
+      "telegram_link_code_issued": "Выпуск кода привязки Telegram",
+      "telegram_unlink": "Отвязка Telegram",
+      "totp_enabled": "Второй фактор включён",
       "totp_setup_requested": "Запрос настройки второго фактора",
-      "totp_enabled": "Второй фактор включён"
+      "update": "Изменение"
     },
     "entities": {
-      "users": "Учётные записи",
+      "doctor_patient": "Прикрепления к пациентам",
       "invitations": "Приглашения",
-      "products": "Продукты",
-      "recipes": "Рецепты",
-      "prescriptions": "Назначения",
+      "ketone_methods": "Методы измерения кетонов",
+      "link_codes": "Коды привязки",
       "medical_profiles": "Медицинские профили",
       "medications": "Лекарства",
+      "patients": "Пациенты",
+      "prescriptions": "Назначения",
+      "products": "Продукты",
+      "recipes": "Рецепты",
+      "reports": "Отчёты",
       "seizure_types": "Типы приступов",
-      "ketone_methods": "Методы измерения кетонов"
+      "telegram_accounts": "Привязки Telegram",
+      "users": "Учётные записи"
     },
     "error": "Не удалось загрузить журнал"
   }
