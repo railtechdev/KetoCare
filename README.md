@@ -15,7 +15,19 @@
 
 ## Статус
 
-Стадия разработки — этап 1 «Фундамент» (раздел 15 ТЗ). Готово: каркас монорепозитория, расчётное ядро `keto_engine` с эталонными тестами, схема БД и миграции, репозитории, аутентификация с 2FA и RBAC, ручки `/auth`, `/patients`, `/prescriptions`, `/products`, `/calc`, генерация `api-client` из OpenAPI, CI. В работе: CSV-импорт продуктов, приглашения. Веб-кабинеты, Telegram и AI — этапы 2–4.
+Этапы 1 «Фундамент» и 2 «Веб-кабинеты» (раздел 15 ТЗ) закрыты. Идёт этап 3 «Telegram».
+
+| Этап | Состояние |
+|---|---|
+| 1. Фундамент | готово: расчётное ядро с эталонными тестами и покрытием 100%, все таблицы раздела 4.2, миграции, аутентификация с 2FA и RBAC, `/auth`, `/patients`, `/prescriptions`, `/products`, `/calc`, генерация `api-client`, CI |
+| 2. Веб-кабинеты | готово: дизайн-система на shadcn/ui, кабинеты родителя, врача и администратора, дневники, меню, рецепты, справочники, журнал аудита, отчёты `/reports` с PDF через воркер |
+| 3. Telegram | привязка чата к ребёнку и двухключевая аутентификация бота ([ADR-0009](docs/adr/0009-telegram-bot-authentication.md)); бот умеет привязку, меню и сценарии кетонов, веса, самочувствия. **Впереди:** сценарии еды и лекарств, напоминания воркера, Mini App |
+| 4. AI | не начат |
+| 5. Стабилизация | не начат: E2E, нагрузочный прогон, security-проход, прод-инфраструктура |
+
+Сценарий «Приступ» в боте ждёт ответа медицинской команды: шкала длительности из ТЗ теряет пороги 10 и 30 минут, значимые по ILAE (вопрос 23 в [`docs/medical/OPEN_QUESTIONS.md`](docs/medical/OPEN_QUESTIONS.md)).
+
+Тестов: 644 pytest, 265 vitest. Демо-данные — `make seed-demo`.
 
 ## Документация
 
@@ -24,6 +36,7 @@
 | [`docs/TZ_AI_AGENTS.md`](docs/TZ_AI_AGENTS.md) | Техническое задание — единый источник истины: архитектура, схема БД, API, контракт расчётного ядра, безопасность, этапы |
 | [`CLAUDE.md`](CLAUDE.md) | Памятка ИИ-агентам: команды, границы модулей, правила, нарушение которых ломает продукт |
 | `docs/medical/` | Медицинская спецификация, эталонные расчёты, открытые вопросы к мед. команде |
+| [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md) | UI-канон: 32 правила композиции экранов, форм, состояний и доступности, с чек-листом ревью |
 | `docs/adr/` | Architecture decision records — отступления от ТЗ с обоснованием |
 
 При конфликте между ТЗ и кодом приоритет у ТЗ; при конфликте между ТЗ и медицинской спецификацией приоритет у медицинской спецификации.
@@ -31,7 +44,7 @@
 ## Стек
 
 Backend — Python 3.12, FastAPI, SQLAlchemy 2.0 (async) + Alembic, PostgreSQL 16, Redis 7 + ARQ, aiogram 3, scipy (`linprog`/HiGHS), Anthropic Claude API.
-Frontend — React 18, TypeScript 5, Vite, Tailwind 4 + shadcn/ui, TanStack Query/Router/Table.
+Frontend — React 19, TypeScript 5, Vite, Tailwind 4 + shadcn/ui, TanStack Query/Router/Table.
 Монорепозиторий: uv workspace для Python, pnpm workspaces для JS.
 
 ```
@@ -51,7 +64,12 @@ make dev                  # postgres + redis в docker, затем миграц�
 make seed-demo            # демо-данные: три роли, продукты, две недели дневника
 make api                  # API на :8001, Swagger — /api/v1/docs
 make web                  # кабинет на WEB_PORT (по умолчанию :5173)
+make bot                  # Telegram-бот; нужны make dev и make api
 ```
+
+Учётные записи после `make seed-demo` — три роли с общим паролем; он печатается
+самой командой. Родителю второй фактор не обязателен, врачу и администратору
+кабинет предложит настроить его при первом входе (раздел 5.2 ТЗ).
 
 `make setup` идемпотентен: существующий `.env` он не трогает — там уже могут быть
 настоящие токены. Фиктивными в нём остаются `BOT_TOKEN` и `ANTHROPIC_API_KEY`:
@@ -77,6 +95,8 @@ make lint                 # ruff + mypy + prettier + tsc
 | `make migrate` | `alembic upgrade head` |
 | `make makemigration m="..."` | Создать миграцию по изменениям моделей |
 | `make openapi` | Выгрузить `openapi.json` и перегенерировать `packages/api-client` |
+| `make bot` | Запустить Telegram-бота (long polling) |
+| `make worker` | Запустить ARQ-воркер (PDF-отчёты) |
 
 Запуск API: `make api` (Swagger — `/api/v1/docs`). За обратным прокси заполните
 `TRUSTED_PROXY_IPS` — см. [`infra/nginx/README.md`](infra/nginx/README.md).

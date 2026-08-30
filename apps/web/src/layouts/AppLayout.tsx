@@ -37,7 +37,7 @@ export function AppLayout() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-dvh bg-background">
         <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-screen border-r border-sidebar-border bg-sidebar p-4 lg:flex">
           <Brand />
           <SidebarNav sections={sections} />

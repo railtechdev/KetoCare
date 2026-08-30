@@ -79,7 +79,7 @@ export function TotpSetupPanel({ setupToken }: Props) {
   });
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-screen">
+    <div className="flex min-h-dvh items-center justify-center p-screen">
       <Card className="w-full max-w-form">
         <CardHeader>
           <CardTitle className="text-page-title">
