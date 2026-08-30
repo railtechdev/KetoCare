@@ -1,4 +1,4 @@
-import { Card, CardContent, Tabs, TabsBar, TabsContent } from "@ketocare/ui";
+import { Section, Tabs, TabsBar, TabsContent } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
@@ -57,43 +57,45 @@ export function PatientCard({
       onBack={onBack}
       backLabel={t("card.back")}
     >
-      <Card>
-        <CardContent>
-          <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
-            <dt className="text-muted-foreground">{t("card.birthDate")}</dt>
-            <dd className="m-0 tabular-nums">
-              {birthDate === null
-                ? "—"
-                : months === null
-                  ? birthDate
-                  : t("card.birthDateWithAge", {
-                      date: birthDate,
-                      age:
-                        months < 24
-                          ? t("age.months", { count: months })
-                          : t("age.years", { count: Math.floor(months / 12) }),
-                    })}
-            </dd>
+      {/* Блок выделяется `Section`, а не `Card`: `Card` — карточка элемента
+          списка, а это блок экрана (правило П23 канона). Заголовок скрыт —
+          паспорт узнаётся по содержимому, а надпись «Пациент» под именем
+          пациента была бы шумом; скринридер его при этом слышит. */}
+      <Section title={t("card.passportTitle")} titleHidden density="compact">
+        <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+          <dt className="text-muted-foreground">{t("card.birthDate")}</dt>
+          <dd className="m-0 tabular-nums">
+            {birthDate === null
+              ? "—"
+              : months === null
+                ? birthDate
+                : t("card.birthDateWithAge", {
+                    date: birthDate,
+                    age:
+                      months < 24
+                        ? t("age.months", { count: months })
+                        : t("age.years", { count: Math.floor(months / 12) }),
+                  })}
+          </dd>
 
-            <dt className="text-muted-foreground">{t("card.sex")}</dt>
-            <dd className="m-0">{t(`card.sexValue.${patient.sex}`)}</dd>
+          <dt className="text-muted-foreground">{t("card.sex")}</dt>
+          <dd className="m-0">{t(`card.sexValue.${patient.sex}`)}</dd>
 
-            <dt className="text-muted-foreground">{t("card.height")}</dt>
-            <dd className="m-0 tabular-nums">
-              {patient.height_cm === null
-                ? "—"
-                : t("card.heightValue", { value: patient.height_cm })}
-            </dd>
+          <dt className="text-muted-foreground">{t("card.height")}</dt>
+          <dd className="m-0 tabular-nums">
+            {patient.height_cm === null
+              ? "—"
+              : t("card.heightValue", { value: patient.height_cm })}
+          </dd>
 
-            <dt className="text-muted-foreground">{t("card.allergies")}</dt>
-            <dd className="m-0">
-              {patient.allergies.length === 0
-                ? t("card.noAllergies")
-                : patient.allergies.join(", ")}
-            </dd>
-          </dl>
-        </CardContent>
-      </Card>
+          <dt className="text-muted-foreground">{t("card.allergies")}</dt>
+          <dd className="m-0">
+            {patient.allergies.length === 0
+              ? t("card.noAllergies")
+              : patient.allergies.join(", ")}
+          </dd>
+        </dl>
+      </Section>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TabKey)}>
         <TabsBar

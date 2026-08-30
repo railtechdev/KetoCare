@@ -1,7 +1,7 @@
 import {
+  AsyncSection,
   DataTable,
   EmptyState,
-  ErrorState,
   RatioBadge,
   Section,
   toast,
@@ -169,41 +169,50 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
       )}
 
       <Section title={t("prescription.historyTitle")}>
-        {history.isPending && (
-          <TableSkeleton label={t("prescription.loading")} rows={3} />
-        )}
-
-        {history.isError && (
-          <ErrorState
-            title={t("prescription.loadError")}
-            description={
-              errorMessageOf(history.error) ?? t("common:errors.unexpected")
-            }
-            retryLabel={t("common:actions.retry")}
-            onRetry={() => void history.refetch()}
-          />
-        )}
-
-        {history.data !== undefined && (
-          <DataTable
-            columns={columns}
-            data={versions}
-            caption={t("prescription.caption")}
-            emptyState={
-              <EmptyState
-                icon={ClipboardList}
-                title={t("prescription.empty")}
-                description={t("prescription.emptyDescription")}
-              />
-            }
-            labels={{
-              previousPage: t("table.previousPage"),
-              nextPage: t("table.nextPage"),
-              pageStatus: (page, total) =>
-                t("table.pageStatus", { page, total }),
-            }}
-          />
-        )}
+        {/* Правило четырёх состояний — общим компонентом (П15): рукописная
+            цепочка прятала уже загруженную историю назначений за красным
+            блоком при неудачном фоновом обновлении. */}
+        <AsyncSection
+          loading={history.isPending}
+          skeleton={
+            <TableSkeleton label={t("prescription.loading")} rows={3} />
+          }
+          error={
+            history.isError
+              ? {
+                  title: t("prescription.loadError"),
+                  description:
+                    errorMessageOf(history.error) ??
+                    t("common:errors.unexpected"),
+                }
+              : null
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void history.refetch()}
+          isEmpty={history.data === undefined}
+          empty={null}
+        >
+          {history.data !== undefined && (
+            <DataTable
+              columns={columns}
+              data={versions}
+              caption={t("prescription.caption")}
+              emptyState={
+                <EmptyState
+                  icon={ClipboardList}
+                  title={t("prescription.empty")}
+                  description={t("prescription.emptyDescription")}
+                />
+              }
+              labels={{
+                previousPage: t("table.previousPage"),
+                nextPage: t("table.nextPage"),
+                pageStatus: (page, total) =>
+                  t("table.pageStatus", { page, total }),
+              }}
+            />
+          )}
+        </AsyncSection>
       </Section>
     </div>
   );

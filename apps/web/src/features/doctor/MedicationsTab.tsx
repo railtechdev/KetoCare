@@ -4,6 +4,7 @@ import {
   ConfirmDialog,
   DataTable,
   EmptyState,
+  FormSheet,
   Section,
   toast,
 } from "@ketocare/ui";
@@ -93,50 +94,19 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
     ];
   }, [canWrite, remove, t]);
 
-  if (form !== null) {
-    const editing = form.mode === "edit" ? form.medication : null;
-    const mutation = editing === null ? create : update;
-
-    return (
-      <Section
-        title={
-          editing === null
-            ? t("medications.createTitle")
-            : t("medications.editTitle")
-        }
-      >
-        <MedicationForm
-          medication={editing}
-          pending={mutation.isPending}
-          error={mutation.error}
-          onCancel={() => setForm(null)}
-          onSubmit={(body) => {
-            if (editing === null) {
-              create.mutate(body, {
-                onSuccess: () => {
-                  toast.success(t("medications.created"));
-                  setForm(null);
-                },
-              });
-            } else {
-              update.mutate(
-                { medicationId: editing.id, body },
-                {
-                  onSuccess: () => {
-                    toast.success(t("medications.updated"));
-                    setForm(null);
-                  },
-                },
-              );
-            }
-          }}
-        />
-      </Section>
-    );
-  }
-
   return (
-    <Section title={t("medications.title")}>
+    <Section
+      title={t("medications.title")}
+      density="compact"
+      action={
+        canWrite && (
+          <Button type="button" onClick={() => setForm({ mode: "create" })}>
+            <Plus aria-hidden="true" />
+            {t("medications.add")}
+          </Button>
+        )
+      }
+    >
       <AsyncSection
         loading={medications.isPending}
         skeleton={<TableSkeleton label={t("medications.loading")} rows={3} />}
@@ -193,20 +163,77 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
         </FormError>
       )}
 
-      {/* Условие прежнее — только роль. Добавленная проверка на непустой
-          список отнимала возможность назначить препарат ровно тогда, когда
-          список не загрузился. */}
-      {canWrite && (
-        <Button
-          type="button"
-          className="self-start"
-          onClick={() => setForm({ mode: "create" })}
-        >
-          <Plus aria-hidden="true" />
-          {t("medications.add")}
-        </Button>
-      )}
+      <MedicationFormSheet
+        form={form}
+        onClose={() => setForm(null)}
+        create={create}
+        update={update}
+      />
     </Section>
+  );
+}
+
+/**
+ * Форма препарата — панелью, а не вместо вкладки (правило П32 канона).
+ *
+ * До этого `if (form !== null) return <Section><MedicationForm/></Section>`
+ * подменял собой всю вкладку: врач, нажавший «Изменить» у третьей строки,
+ * терял из виду схему терапии целиком и не мог свериться с тем, что правит.
+ */
+function MedicationFormSheet({
+  form,
+  onClose,
+  create,
+  update,
+}: {
+  form: FormState;
+  onClose: () => void;
+  create: ReturnType<typeof useMedicationMutations>["create"];
+  update: ReturnType<typeof useMedicationMutations>["update"];
+}) {
+  const { t } = useTranslation("doctor");
+  const editing = form?.mode === "edit" ? form.medication : null;
+  const mutation = editing === null ? create : update;
+
+  return (
+    <FormSheet
+      open={form !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={
+        editing === null
+          ? t("medications.createTitle")
+          : t("medications.editTitle")
+      }
+    >
+      <MedicationForm
+        medication={editing}
+        pending={mutation.isPending}
+        error={mutation.error}
+        onCancel={onClose}
+        onSubmit={(body) => {
+          if (editing === null) {
+            create.mutate(body, {
+              onSuccess: () => {
+                toast.success(t("medications.created"));
+                onClose();
+              },
+            });
+          } else {
+            update.mutate(
+              { medicationId: editing.id, body },
+              {
+                onSuccess: () => {
+                  toast.success(t("medications.updated"));
+                  onClose();
+                },
+              },
+            );
+          }
+        }}
+      />
+    </FormSheet>
   );
 }
 
