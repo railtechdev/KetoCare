@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { MEAL_SLOTS, useMenuQuery } from "../menu/useMenu";
-import { useMenuItemTitles } from "../menu/useDishCatalog";
+import { itemDishKey, useMenuItemTitles } from "../menu/useDishCatalog";
 import { todayIso } from "../menu/dates";
 import { Panel } from "./Panel";
 
@@ -40,6 +40,11 @@ export function NextMealCard({ patientId }: { patientId: string }) {
   const next = MEAL_SLOTS.flatMap((slot) =>
     items.filter((item) => item.meal_slot === slot),
   ).find((item) => !item.eaten);
+
+  // Название берётся тем же ключом, что и в меню: словарь заполнен по
+  // `recipe:<id>` / `custom:<id>`, а не по идентификатору позиции.
+  const dishKeyOfNext = next ? itemDishKey(next) : null;
+  const dishTitle = dishKeyOfNext === null ? null : titles[dishKeyOfNext];
 
   // Ссылка «Всё меню» ведёт к тому, чего ещё нет, когда меню на день не
   // составлено, — там достаточно кнопки пустого состояния.
@@ -103,7 +108,11 @@ export function NextMealCard({ patientId }: { patientId: string }) {
               {t(`nextMeal.slots.${next.meal_slot}`)}
             </Badge>
             <span className="min-w-0 text-card-title font-semibold break-words">
-              {titles[next.id] ?? t("nextMeal.unknownDish")}
+              {/* Ключ словаря — `recipe:<id>` / `custom:<id>`, а не идентификатор
+                  позиции меню: `titles[next.id]` не совпадал никогда, и главный
+                  блок главной вместо названия блюда всегда показывал «Блюдо».
+                  В меню тот же словарь читается правильно — через `itemDishKey`. */}
+              {dishTitle ?? t("nextMeal.unknownDish")}
             </span>
             <span className="text-sm text-muted-foreground tabular-nums">
               {t("nextMeal.portion", { value: next.portion_factor })}

@@ -6,9 +6,10 @@ import type { DishRow } from "./types";
 
 interface Props {
   rows: DishRow[];
-  onChangeGrams: (productId: string, grams: number) => void;
-  onRemove: (productId: string) => void;
-  /** Массы задаёт решатель — поля только для чтения */
+  /** Не передаются, когда состав только показывается: расчёт сервера не правят */
+  onChangeGrams?: (productId: string, grams: number) => void;
+  onRemove?: (productId: string) => void;
+  /** Массы задаёт сервер — поля только для чтения */
   readOnlyGrams?: boolean;
 }
 
@@ -57,7 +58,7 @@ export function DishRows({
               readOnly={readOnlyGrams}
               value={Number.isFinite(row.grams) ? row.grams : ""}
               onChange={(event) =>
-                onChangeGrams(row.product.id, Number(event.target.value))
+                onChangeGrams?.(row.product.id, Number(event.target.value))
               }
               className={cn(
                 "min-h-touch w-24 text-right tabular-nums",
@@ -68,16 +69,20 @@ export function DishRows({
               {t("gramsUnit")}
             </span>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => onRemove(row.product.id)}
-              aria-label={t("removeProduct", { name: row.product.name })}
-              className="min-h-touch min-w-touch shrink-0"
-            >
-              <X aria-hidden="true" />
-            </Button>
+            {/* Кнопки удаления нет, когда состав только показывается:
+                расчёт сервера правят не здесь, а изменением ввода выше. */}
+            {onRemove && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => onRemove(row.product.id)}
+                aria-label={t("removeProduct", { name: row.product.name })}
+                className="min-h-touch min-w-touch shrink-0"
+              >
+                <X aria-hidden="true" />
+              </Button>
+            )}
           </div>
         </li>
       ))}
