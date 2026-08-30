@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import sys
+
+from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,3 +31,29 @@ class BotSettings(BaseSettings):
     # Часовой пояс для «Сейчас» в сценариях: родитель вводит время по своим
     # часам, а сервер хранит UTC.
     tz: str = "Asia/Tashkent"
+
+
+def load_settings() -> BotSettings:
+    """Настройки бота или понятный отказ — но без секретов в журнале.
+
+    `BotSettings()` при незаполненной переменной поднимает `ValidationError`, а
+    он печатает `input_value` целиком — то есть **весь словарь настроек вместе с
+    `bot_api_token`**. Бот при этом перезапускается по `restart: unless-stopped`,
+    и сервисный токен уходит в `docker logs` снова и снова: на стенде без токена
+    BotFather журнал за сутки набивается секретом, который виден любому, у кого
+    есть доступ к серверу.
+
+    Поэтому наружу выдаются только имена незаполненных полей.
+    """
+
+    try:
+        return BotSettings()  # type: ignore[call-arg]
+    except ValidationError as error:
+        missing = ", ".join(str(item["loc"][0]).upper() for item in error.errors())
+        print(
+            f"Бот не запущен: не заданы переменные окружения — {missing}.\n"
+            "Значения берутся из .env; полный список — .env.example, "
+            "получение токена — docs/DEPLOY.md.",
+            file=sys.stderr,
+        )
+        raise SystemExit(78) from None  # EX_CONFIG
