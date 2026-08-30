@@ -47,7 +47,7 @@ export const uz: Dict = {
     errorNetwork:
       "Arizani yuborib bo‘lmadi. Yana urinib ko‘ring yoki bizga pochtaga yozing.",
     errorRateLimited:
-      "Urinishlar juda ko‘p bo‘ldi. Bir necha daqiqadan so‘ng qayta urinib ko‘ring.",
+      "Manzilingizdan juda ko‘p ariza yuborildi. Bizga {email} manziliga yozing.",
     doneFamily:
       "Yozib oldik! {email} manziliga yozamiz va ulanishda yordam beramiz.",
     doneDoctor:

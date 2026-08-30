@@ -13,6 +13,24 @@ WEB_ROOT=/var/www/ketocare-app
 LANDING_ROOT=/var/www/ketocare-landing
 COMPOSE="docker compose --env-file .env -f infra/docker-compose.prod.yml"
 
+# Корневой `.env` — единственное место объявления настроек (CLAUDE.md), и
+# сборка лендинга обязана читать его же. `--env-file` выше относится только к
+# docker compose: без этой строки оператор вписывал рабочую почту в `.env`,
+# видел успешный деплой — а в подвале на трёх языках оставались адреса из
+# макета, которые никто не читает.
+#
+# `set -a` экспортирует всё присвоенное, чтобы значения дошли до дочерних
+# процессов сборки; при `set -u` (включён выше) отсутствие файла — это отказ, а
+# не тихая работа на умолчаниях.
+if [ -f .env ]; then
+    set -a
+    . ./.env
+    set +a
+else
+    echo "Нет .env — скопируйте .env.example и заполните (docs/DEPLOY.md)." >&2
+    exit 1
+fi
+
 git pull --ff-only
 
 $COMPOSE build
@@ -50,9 +68,15 @@ if [ "${1:-}" != "--api-only" ]; then
 
     # Посадочная страница (Astro, ADR-0012). Адреса домена и кабинета уходят в
     # сборку: из них собираются canonical, hreflang, sitemap и ссылки «Войти».
+    # Все пять переменных лендинга перечислены явно: они приходят из `.env`
+    # (см. загрузку выше), а умолчания остаются на случай пустого значения.
+    # `LANDING_INDEXABLE` пуст на пред-проде и равен `1` на боевом домене —
+    # без него robots.txt отдаёт Disallow, и сайт не появится в поиске.
     LANDING_SITE_URL="${LANDING_SITE_URL:-https://ketocare.railtech.uz}" \
+    LANDING_INDEXABLE="${LANDING_INDEXABLE:-}" \
     PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app.ketocare.railtech.uz}" \
     PUBLIC_CONTACT_EMAIL="${PUBLIC_CONTACT_EMAIL:-hello@ketocare.uz}" \
+    PUBLIC_TELEGRAM_URL="${PUBLIC_TELEGRAM_URL:-https://t.me/ketocare}" \
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/landing run build
     rsync -a --delete packages/landing/dist/ "$LANDING_ROOT"/
 fi

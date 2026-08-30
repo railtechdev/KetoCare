@@ -324,7 +324,16 @@ function initLeadForms(): void {
               return;
             }
             if (response.status === 429) {
-              showError(messages.dataset.errorRate ?? "");
+              // Окно лимита — час (LEADS_RATE_LIMIT), а не минуты. Обещать
+              // срок нельзя: посетитель ждёт, повторяет, получает тот же
+              // отказ — и уходит. Вместо срока называем работающий обход:
+              // почту, которая на форме скрыта, когда JavaScript включён.
+              showError(
+                (messages.dataset.errorRate ?? "").replace(
+                  "{email}",
+                  messages.dataset.contactEmail ?? "",
+                ),
+              );
             } else if (response.status === 422 || response.status === 400) {
               showError(messages.dataset.errorEmail ?? "");
             } else {

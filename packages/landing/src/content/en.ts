@@ -44,7 +44,7 @@ export const en: Dict = {
     errorEmail: "Please check the address — it looks like there is a typo.",
     errorNetwork:
       "We could not send your request. Please try again or write to us by email.",
-    errorRateLimited: "Too many attempts. Please try again in a few minutes.",
+    errorRateLimited: "Too many requests from your address. Write to us at {email}.",
     doneFamily: "Got it. We will write to {email} and help you get set up.",
     doneDoctor:
       "Your request is in. We will reply to {email} within the next few days.",

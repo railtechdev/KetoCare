@@ -89,8 +89,12 @@ def register_rate_limiting(app: FastAPI) -> None:
 
     @app.exception_handler(RateLimitExceeded)
     async def _rate_limited(_: Request, __: RateLimitExceeded) -> JSONResponse:
+        # Без срока: обработчик один на все лимиты, а окна у них разные —
+        # 5/минуту у входа и 20/час у заявок с лендинга. «Подождите минуту»
+        # заставляло бы посетителя формы делать заведомо бесполезные попытки
+        # весь следующий час.
         return error_response(
             ErrorCode.RATE_LIMITED,
-            "Слишком много попыток. Подождите минуту и попробуйте снова.",
+            "Слишком много попыток. Попробуйте позже.",
             status_code=429,
         )
