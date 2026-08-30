@@ -1,9 +1,7 @@
 import {
+  AsyncSection,
   Button,
-  Card,
-  CardContent,
   EmptyState,
-  ErrorState,
   formatOccurredAt,
   MacroBar,
   RatioBadge,
@@ -43,26 +41,30 @@ export function SummaryTab({
 
   return (
     <div className="flex flex-col gap-block">
-      {overview.isPending && (
-        <Card>
-          <CardContent>
-            <LinesSkeleton label={t("summary.loading")} lines={5} />
-          </CardContent>
-        </Card>
-      )}
-
-      {overview.isError && (
-        <ErrorState
-          title={t("summary.loadError")}
-          description={
-            errorMessageOf(overview.error) ?? t("common:errors.unexpected")
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void overview.refetch()}
-        />
-      )}
-
-      {overview.data !== undefined && <OverviewPanels data={overview.data} />}
+      {/* Четыре состояния — общим компонентом. Рукописная цепочка прятала
+          уже загруженную сводку за сообщением об ошибке: TanStack Query при
+          неудачном ОБНОВЛЕНИИ сохраняет прежний ответ и одновременно
+          переводит запрос в состояние ошибки (правило П15 канона). */}
+      <AsyncSection
+        loading={overview.isPending}
+        skeleton={<LinesSkeleton label={t("summary.loading")} lines={5} />}
+        error={
+          overview.isError
+            ? {
+                title: t("summary.loadError"),
+                description:
+                  errorMessageOf(overview.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void overview.refetch()}
+        isEmpty={overview.data === undefined}
+        empty={null}
+      >
+        {overview.data !== undefined && <OverviewPanels data={overview.data} />}
+      </AsyncSection>
 
       {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
     </div>
@@ -262,55 +264,60 @@ function MedicalProfilePanel({ patientId }: { patientId: string }) {
 
   return (
     <Section title={t("profile.title")}>
-      {profile.isPending && (
-        <LinesSkeleton label={t("profile.loading")} lines={4} />
-      )}
+      {/* Правило четырёх состояний — общим компонентом (П15). 403 и
+          «ещё не заполнен» — не сбои, а пустые состояния: предлагать врачу
+          «Повторить» там, где повторять нечего, значит звать его в тупик. */}
+      <AsyncSection
+        loading={profile.isPending}
+        skeleton={<LinesSkeleton label={t("profile.loading")} lines={4} />}
+        error={
+          profile.isError && !notFilled && !forbidden
+            ? {
+                title: t("profile.loadError"),
+                description:
+                  errorMessageOf(profile.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void profile.refetch()}
+        isEmpty={forbidden}
+        empty={
+          <EmptyState
+            icon={Lock}
+            title={t("profile.forbidden")}
+            description={t("profile.forbiddenDescription")}
+          />
+        }
+      >
+        {notFilled && (
+          <EmptyState
+            icon={FileText}
+            title={t("profile.empty")}
+            description={t("profile.emptyDescription")}
+            action={
+              <Button type="button" onClick={() => setEditing(true)}>
+                {t("profile.fill")}
+              </Button>
+            }
+          />
+        )}
 
-      {forbidden && (
-        <EmptyState
-          icon={Lock}
-          title={t("profile.forbidden")}
-          description={t("profile.forbiddenDescription")}
-        />
-      )}
-
-      {profile.isError && !notFilled && !forbidden && (
-        <ErrorState
-          title={t("profile.loadError")}
-          description={
-            errorMessageOf(profile.error) ?? t("common:errors.unexpected")
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void profile.refetch()}
-        />
-      )}
-
-      {notFilled && (
-        <EmptyState
-          icon={FileText}
-          title={t("profile.empty")}
-          description={t("profile.emptyDescription")}
-          action={
-            <Button type="button" onClick={() => setEditing(true)}>
-              {t("profile.fill")}
+        {profile.data !== undefined && (
+          <>
+            <ProfileValues profile={profile.data} />
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start"
+              onClick={() => setEditing(true)}
+            >
+              {t("profile.edit")}
             </Button>
-          }
-        />
-      )}
-
-      {profile.data !== undefined && (
-        <>
-          <ProfileValues profile={profile.data} />
-          <Button
-            type="button"
-            variant="outline"
-            className="self-start"
-            onClick={() => setEditing(true)}
-          >
-            {t("profile.edit")}
-          </Button>
-        </>
-      )}
+          </>
+        )}
+      </AsyncSection>
     </Section>
   );
 }

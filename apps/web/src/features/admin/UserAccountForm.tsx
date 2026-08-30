@@ -12,7 +12,7 @@ import { SelectField } from "../../components/Field";
 import {
   FormErrorSummary,
   type FormErrorSummaryItem,
-} from "./FormErrorSummary";
+} from "../../components/FormErrorSummary";
 import type { AdminUser, AdminUserUpdate } from "./types";
 
 const accountFormSchema = z.object({

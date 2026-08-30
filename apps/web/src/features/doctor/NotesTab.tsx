@@ -1,21 +1,23 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  AsyncSection,
+  Button,
   EmptyState,
-  ErrorState,
   FormFooter,
+  FormSheet,
   Section,
   toast,
 } from "@ketocare/ui";
-import { Lock, NotebookPen } from "lucide-react";
-import { useId } from "react";
+import { Lock, NotebookPen, Plus } from "lucide-react";
+import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { FormError } from "../../components/FormError";
+import { TextAreaField } from "../../components/Field";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
-import { TextAreaField } from "../../components/Field";
 import { formatTimestamp } from "./dates";
 import { useCreateClinicalNote } from "./doctorMutations";
 import { useClinicalNotes } from "./doctorQueries";
@@ -31,11 +33,16 @@ type NoteFormValues = z.infer<typeof noteSchema>;
  *
  * Только добавление и чтение: ручек изменения и удаления сервер не даёт
  * намеренно — заметка фиксирует наблюдение на момент времени.
+ *
+ * Список идёт первым, форма открывается панелью (правило П32 канона): врач
+ * приходит сюда читать историю наблюдений, а добавляет запись реже, чем
+ * читает. Раскрытая форма над списком отодвигала заметки коллег вниз экрана.
  */
 export function NotesTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
   const { session } = useSession();
   const ids = useId();
+  const [formOpen, setFormOpen] = useState(false);
 
   const notes = useClinicalNotes(patientId, true);
   const create = useCreateClinicalNote(patientId);
@@ -50,12 +57,81 @@ export function NotesTab({ patientId }: { patientId: string }) {
     defaultValues: { text: "" },
   });
 
+  // 403 — не сбой, а граница роли: диетологу заметки не положены. Показывать
+  // ему «не удалось загрузить» с кнопкой «Повторить» значило бы предлагать
+  // повторять то, что не разрешено.
   const forbidden = errorCodeOf(notes.error) === "forbidden";
   const items = notes.data ?? [];
 
+  function closeForm() {
+    setFormOpen(false);
+    reset({ text: "" });
+  }
+
   return (
-    <div className="flex flex-col gap-block">
-      <Section title={t("notes.addTitle")}>
+    <>
+      <Section
+        title={t("notes.listTitle")}
+        density="compact"
+        action={
+          !forbidden && (
+            <Button type="button" onClick={() => setFormOpen(true)}>
+              <Plus aria-hidden="true" />
+              {t("notes.addAction")}
+            </Button>
+          )
+        }
+      >
+        <AsyncSection
+          loading={notes.isLoading}
+          skeleton={<LinesSkeleton label={t("notes.loading")} lines={4} />}
+          error={
+            notes.isError && !forbidden
+              ? {
+                  title: t("notes.loadError"),
+                  description:
+                    errorMessageOf(notes.error) ??
+                    t("common:errors.unexpected"),
+                }
+              : null
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void notes.refetch()}
+          isEmpty={items.length === 0}
+          empty={
+            forbidden ? (
+              <EmptyState
+                icon={Lock}
+                title={t("notes.forbidden")}
+                description={t("notes.forbiddenDescription")}
+              />
+            ) : (
+              <EmptyState
+                icon={NotebookPen}
+                title={t("notes.empty")}
+                description={t("notes.emptyDescription")}
+              />
+            )
+          }
+        >
+          <ul className="m-0 flex list-none flex-col gap-block p-0">
+            {items.map((note) => (
+              <li key={note.id}>
+                <NoteItem
+                  note={note}
+                  own={note.author_id === session?.userId}
+                />
+              </li>
+            ))}
+          </ul>
+        </AsyncSection>
+      </Section>
+
+      <FormSheet
+        open={formOpen}
+        onOpenChange={(open) => (open ? setFormOpen(true) : closeForm())}
+        title={t("notes.addTitle")}
+      >
         <form
           noValidate
           className="flex flex-col gap-block"
@@ -63,7 +139,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
             create.mutate(values.text.trim(), {
               onSuccess: () => {
                 toast.success(t("notes.added"));
-                reset({ text: "" });
+                closeForm();
               },
             }),
           )}
@@ -87,55 +163,12 @@ export function NotesTab({ patientId }: { patientId: string }) {
             submitLabel={t("notes.submit")}
             pendingLabel={t("notes.submitPending")}
             pending={create.isPending}
+            onCancel={closeForm}
+            cancelLabel={t("common:actions.cancel")}
           />
         </form>
-      </Section>
-
-      <Section title={t("notes.listTitle")}>
-        {notes.isPending && (
-          <LinesSkeleton label={t("notes.loading")} lines={4} />
-        )}
-
-        {forbidden && (
-          <EmptyState
-            icon={Lock}
-            title={t("notes.forbidden")}
-            description={t("notes.forbiddenDescription")}
-          />
-        )}
-
-        {notes.isError && !forbidden && (
-          <ErrorState
-            title={t("notes.loadError")}
-            description={
-              errorMessageOf(notes.error) ?? t("common:errors.unexpected")
-            }
-            retryLabel={t("common:actions.retry")}
-            onRetry={() => void notes.refetch()}
-          />
-        )}
-
-        {notes.data !== undefined &&
-          (items.length === 0 ? (
-            <EmptyState
-              icon={NotebookPen}
-              title={t("notes.empty")}
-              description={t("notes.emptyDescription")}
-            />
-          ) : (
-            <ul className="m-0 flex list-none flex-col gap-block p-0">
-              {items.map((note) => (
-                <li key={note.id}>
-                  <NoteItem
-                    note={note}
-                    own={note.author_id === session?.userId}
-                  />
-                </li>
-              ))}
-            </ul>
-          ))}
-      </Section>
-    </div>
+      </FormSheet>
+    </>
   );
 }
 

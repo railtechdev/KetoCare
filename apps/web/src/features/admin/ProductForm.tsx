@@ -10,7 +10,7 @@ import { errorMessageOf } from "../../lib/api";
 import {
   FormErrorSummary,
   type FormErrorSummaryItem,
-} from "./FormErrorSummary";
+} from "../../components/FormErrorSummary";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { productFormSchema, type ProductFormValues } from "./productSchemas";
 import type { ProductCategory } from "./types";

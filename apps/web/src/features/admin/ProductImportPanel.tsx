@@ -1,4 +1,4 @@
-import { Button, DataTable, Section, WarningBanner } from "@ketocare/ui";
+import { Button, DataTable, Section, toast, WarningBanner } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, FileUp, RotateCcw } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
@@ -157,33 +157,45 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
                   disabled={file === null || importProducts.isPending}
                   aria-busy={importProducts.isPending}
                   onClick={() => {
-                    if (file !== null)
-                      importProducts.mutate({ file, dryRun: false });
+                    if (file === null) return;
+                    importProducts.mutate(
+                      { file, dryRun: false },
+                      {
+                        onSuccess: (result) => {
+                          if (result.imported > 0) {
+                            toast.success(
+                              t("products.import.result.imported", {
+                                value: result.imported,
+                              }),
+                            );
+                          }
+                        },
+                      },
+                    );
                   }}
                 >
                   {t("products.import.confirm")}
                 </Button>
               </div>
             </>
-          ) : report.imported > 0 ? (
-            <WarningBanner
-              level="info"
-              title={t("products.import.result.done")}
-            >
-              {t("products.import.result.imported", {
-                value: report.imported,
-              })}
-            </WarningBanner>
           ) : (
-            // Файл загружается одной транзакцией: ошибка разбора отменяет весь
-            // импорт, а не отдельные строки (частичная база продуктов хуже, чем
-            // её отсутствие).
-            <WarningBanner
-              level="danger"
-              title={t("products.import.result.failed")}
-            >
-              {t("products.import.result.nothing")}
-            </WarningBanner>
+            // Успех сюда не попадает: подтверждение действия — тост (правило
+            // П16), а «вечный» баннер в потоке страницы оставался висеть и
+            // после перехода к следующему файлу, читаясь как состояние экрана.
+            // Числа отчёта при этом никуда не делись — они строкой выше.
+            //
+            // Отказ, наоборот, остаётся на экране: файл загружается одной
+            // транзакцией, ошибка разбора отменяет весь импорт, а не отдельные
+            // строки (частичная база продуктов хуже, чем её отсутствие), и
+            // читать список ошибок администратор будет долго.
+            report.imported === 0 && (
+              <WarningBanner
+                level="danger"
+                title={t("products.import.result.failed")}
+              >
+                {t("products.import.result.nothing")}
+              </WarningBanner>
+            )
           )}
 
           {errors.length > 0 && (

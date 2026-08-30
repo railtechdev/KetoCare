@@ -6,6 +6,10 @@ import { useTranslation } from "react-i18next";
 import { FormFooter } from "@ketocare/ui";
 
 import { Field, TextAreaField } from "../../components/Field";
+import {
+  FormErrorSummary,
+  type FormErrorSummaryItem,
+} from "../../components/FormErrorSummary";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import {
@@ -17,6 +21,27 @@ import {
   RATIO_STEP,
   type PrescriptionFormValues,
 } from "./prescriptionSchema";
+
+/**
+ * Поля, у которых бывает ошибка проверки: порядок повторяет порядок в форме,
+ * потому что сводка читается сверху вниз вместе с ней.
+ */
+const VALIDATED_FIELDS = [
+  { name: "ratio", anchor: "ratio", messageKey: "ratio" },
+  { name: "kcalPerDay", anchor: "kcal", messageKey: "kcal" },
+  { name: "proteinG", anchor: "protein", messageKey: "protein" },
+  { name: "carbsLimitG", anchor: "carbs", messageKey: "carbsLimit" },
+  { name: "mealsPerDay", anchor: "meals", messageKey: "meals" },
+  {
+    name: "effectiveFrom",
+    anchor: "effective-from",
+    messageKey: "effectiveFrom",
+  },
+] as const satisfies readonly {
+  name: keyof PrescriptionFormValues;
+  anchor: string;
+  messageKey: string;
+}[];
 
 /**
  * Форма назначения (раздел 8.3 ТЗ, «Врач / Назначение»).
@@ -48,11 +73,25 @@ export function PrescriptionForm({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<PrescriptionFormValues>({
     resolver: zodResolver(prescriptionFormSchema),
     defaultValues,
   });
+
+  // Сводка появляется только после неудачной отправки и повторяет тексты из-под
+  // полей (правило П8 канона). Без неё врач, отправивший форму с клавиатуры,
+  // оставался у кнопки внизу: назначение из шести числовых полей, и какое из
+  // них не прошло, ниоткуда не следовало.
+  const summary: FormErrorSummaryItem[] =
+    submitCount === 0
+      ? []
+      : VALIDATED_FIELDS.filter(
+          (field) => errors[field.name] !== undefined,
+        ).map((field) => ({
+          fieldId: `${ids}-${field.anchor}`,
+          message: t(`prescription.errors.${field.messageKey}`),
+        }));
 
   return (
     <form
@@ -60,6 +99,12 @@ export function PrescriptionForm({
       onSubmit={handleSubmit(onSubmit)}
       className="flex flex-col gap-block"
     >
+      <FormErrorSummary
+        title={t("prescription.errorSummary")}
+        items={summary}
+        focusKey={submitCount}
+      />
+
       {/* Две колонки — исключение для парных числовых показателей назначения:
           врач сверяет их между собой на одном экране. На узком экране колонка
           одна (правило П6 канона). */}

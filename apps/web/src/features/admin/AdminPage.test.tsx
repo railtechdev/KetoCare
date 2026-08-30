@@ -1,9 +1,11 @@
+import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
+import { SectionRouter } from "../../test/SectionRouter";
 import { SessionProvider } from "../auth/session";
 import i18n from "../../lib/i18n";
 import adminRu from "../../locales/ru/admin.json";
@@ -133,7 +135,15 @@ function renderPage(section: string) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          {/* Второй уровень раздела продуктов живёт в адресе (`?item=`,
+              правило П1), поэтому экрану нужен роутер — как и в работающем
+              приложении. */}
+          <SectionRouter section={section}>{children}</SectionRouter>
+          {/* Toaster монтируется в AppLayout, а тест рендерит экран отдельно:
+              без него подтверждению успеха некуда показаться (правило П16). */}
+          <Toaster />
+        </SessionProvider>
       </QueryClientProvider>
     );
   }
@@ -239,8 +249,11 @@ describe("AdminPage — импорт продуктов", () => {
 
     await user.click(screen.getByRole("button", { name: "Импортировать" }));
 
-    expect(await screen.findByText("Импорт выполнен")).toBeInTheDocument();
-    expect(screen.getByText("Импортировано строк: 3")).toBeInTheDocument();
+    // Успех — тостом, а не «вечным» баннером в потоке страницы (правило П16):
+    // баннер оставался висеть и после перехода к следующему файлу.
+    expect(
+      await screen.findByText("Импортировано строк: 3"),
+    ).toBeInTheDocument();
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/products/import",
       expect.objectContaining({ params: { query: { dry_run: false } } }),

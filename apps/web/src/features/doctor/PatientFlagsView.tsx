@@ -1,5 +1,10 @@
 import { Skeleton } from "@ketocare/ui";
-import { CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
+import {
+  CircleAlert,
+  CircleCheck,
+  CircleHelp,
+  TriangleAlert,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { NO_DATA_FLAG_DAYS, type PatientFlags } from "./flags";
@@ -32,11 +37,20 @@ export function PatientFlagsView({
     // Скелетон в ячейке молчит: живая область на каждую строку списка
     // проговорила бы «собираем сводки» столько раз, сколько в нём пациентов.
     // Об этом сообщает одна живая область на весь список.
-    return pending ? (
-      <Skeleton aria-hidden="true" className="h-5 w-28" />
-    ) : (
-      <span className="text-sm text-muted-foreground" aria-hidden="true">
-        —
+    if (pending) return <Skeleton aria-hidden="true" className="h-5 w-28" />;
+
+    // Сводка не пришла — это отдельное состояние, а не «замечаний нет».
+    // Прочерк с `aria-hidden` не говорил ничего вообще: скринридер читал
+    // пустую ячейку, а зрячий врач принимал её за спокойную строку. Триаж,
+    // выдающий «всё хорошо» там, где ничего не известно, — худшая из его
+    // возможных ошибок (правило П19 канона).
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"
+        data-flag="unknown"
+      >
+        <CircleHelp aria-hidden="true" className="size-4" />
+        {t("flags.unknown")}
       </span>
     );
   }
@@ -70,10 +84,15 @@ export function PatientFlagsView({
   }
 
   if (badges.length === 0) {
+    // Давность показывается и у спокойной строки: правило П19 требует в строке
+    // «давность последних данных», а величина уже посчитана для каждого
+    // пациента и раньше просто выбрасывалась. Без неё врач не отличает
+    // ребёнка, чей замер пришёл час назад, от ребёнка с записью позавчера —
+    // на пороге в трое суток это разные ситуации.
     return (
       <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
         <CircleCheck aria-hidden="true" className="size-4" />
-        {t("flags.none")}
+        {t("flags.noneWithRecency", { recency: recencyLabel(t, flags) })}
       </span>
     );
   }
@@ -90,6 +109,16 @@ export function PatientFlagsView({
       ))}
     </ul>
   );
+}
+
+/** Подпись давности последних данных: «данные сегодня» / «данные 2 дн. назад». */
+function recencyLabel(
+  t: ReturnType<typeof useTranslation<"doctor">>["t"],
+  flags: PatientFlags,
+): string {
+  if (flags.daysSinceLastReading === null) return t("flags.lastDataNever");
+  if (flags.daysSinceLastReading === 0) return t("flags.lastData");
+  return t("flags.lastDataDays", { count: flags.daysSinceLastReading });
 }
 
 /**
@@ -115,6 +144,11 @@ export function PatientFlagsLegend() {
         {t("flags.legend.nutritionOffTerm")}
       </dt>
       <dd className="m-0">{t("flags.legend.nutritionOff")}</dd>
+      <dt className="flex items-center gap-1.5 font-semibold">
+        <CircleHelp aria-hidden="true" className="size-4" />
+        {t("flags.legend.unknownTerm")}
+      </dt>
+      <dd className="m-0">{t("flags.legend.unknown")}</dd>
     </dl>
   );
 }

@@ -3,10 +3,13 @@ import {
   Button,
   DataTable,
   EmptyState,
+  ErrorState,
+  FormSheet,
   RatioBadge,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { SearchX, Users } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -21,7 +24,7 @@ import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import { TableSkeleton } from "./skeletons";
 import type { Patient } from "./types";
-import { InvitePanel } from "../invitations/InvitePanel";
+import { InviteForm } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 
 interface PatientRow {
@@ -37,13 +40,10 @@ interface PatientRow {
 /** Список пациентов врача с флагами (раздел 8.3 ТЗ, «Врач / Пациенты»). */
 const FAMILY_ROLES: readonly Role[] = ["parent"];
 
-export function PatientsListView({
-  onOpen,
-}: {
-  onOpen: (patient: Patient) => void;
-}) {
+export function PatientsListView() {
   const { t } = useTranslation("doctor");
   const [query, setQuery] = useState("");
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const patients = usePatients();
   const items = useMemo(() => patients.data?.items ?? [], [patients.data]);
@@ -99,7 +99,28 @@ export function PatientsListView({
 
   const columns = useMemo<ColumnDef<PatientRow, unknown>[]>(
     () => [
-      { accessorKey: "name", header: t("list.columns.name") },
+      {
+        accessorKey: "name",
+        header: t("list.columns.name"),
+        // Имя — ссылка, а не текст рядом с кнопкой в отдельном столбце: карта
+        // пациента живёт по адресу (правило П1), и ссылку врач открывает в
+        // новой вкладке, копирует и пересылает — с кнопкой ничего этого нельзя.
+        // Освободившийся столбец возвращает таблице ширину, которую П19 просит
+        // держать узкой.
+        cell: ({ row }) => (
+          <Link
+            from="/app/$section"
+            to="."
+            search={(previous) => ({
+              ...previous,
+              patient: row.original.patient.id,
+            })}
+            className="font-medium underline-offset-2 hover:underline"
+          >
+            {row.original.name}
+          </Link>
+        ),
+      },
       {
         accessorKey: "ageMonths",
         header: t("list.columns.age"),
@@ -141,34 +162,21 @@ export function PatientsListView({
           />
         ),
       },
-      {
-        id: "open",
-        header: t("list.columns.card"),
-        enableSorting: false,
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-touch"
-            onClick={() => onOpen(row.original.patient)}
-            aria-label={t("list.openAria", { name: row.original.name })}
-          >
-            {t("list.open")}
-          </Button>
-        ),
-      },
     ],
-    [onOpen, overviews.pending, t],
+    [overviews.pending, t],
   );
 
   return (
-    <PageLayout title={t("list.title")} intro={t("list.intro")}>
-      {/* Пригласивший семью специалист становится ведущим для её ребёнка, как
-          только родитель заведёт профиль (ADR-0003). Другого способа получить
-          пациента у врача нет: «взять» чужого пациента нельзя. */}
-      <InvitePanel roles={FAMILY_ROLES} />
-
+    <PageLayout
+      title={t("list.title")}
+      intro={t("list.intro")}
+      actions={
+        <Button type="button" onClick={() => setInviteOpen(true)}>
+          <UserPlus aria-hidden="true" />
+          {t("list.inviteAction")}
+        </Button>
+      }
+    >
       <div className="max-w-md">
         <Field
           id="patient-search"
@@ -233,12 +241,18 @@ export function PatientsListView({
           </p>
         )}
 
-        {/* У пациента, чью сводку получить не удалось, флагов нет — об этом
-            надо сказать явно. */}
+        {/* У пациента, чью сводку получить не удалось, флагов нет. Раньше об
+            этом сообщал серый абзац того же цвета, что и подписи таблицы, и
+            повторить запрос было нечем — помогала только перезагрузка
+            страницы (правило П15 канона). */}
         {overviews.failed && (
-          <p className="m-0 text-sm text-muted-foreground">
-            {t("list.flagsFailed")}
-          </p>
+          <ErrorState
+            className="mb-block"
+            title={t("list.flagsFailedTitle")}
+            description={t("list.flagsFailed")}
+            retryLabel={t("common:actions.retry")}
+            onRetry={overviews.refetch}
+          />
         )}
 
         <DataTable
@@ -257,6 +271,20 @@ export function PatientsListView({
 
         <PatientFlagsLegend />
       </AsyncSection>
+      {/* Пригласивший семью специалист становится ведущим для её ребёнка, как
+          только родитель заведёт профиль (ADR-0003). Другого способа получить
+          пациента у врача нет: «взять» чужого пациента нельзя.
+
+          Панелью, а не блоком над списком: врач приходит сюда за триажем, а
+          приглашает семью считаные разы (правило П32 канона). */}
+      <FormSheet
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        title={t("invitations:title")}
+        description={t("invitations:intro")}
+      >
+        <InviteForm roles={FAMILY_ROLES} />
+      </FormSheet>
     </PageLayout>
   );
 }

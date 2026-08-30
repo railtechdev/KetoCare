@@ -201,15 +201,30 @@ describe("Список пациентов", () => {
   it("помечает молчание и выход соотношения за допуск, поднимая такие строки наверх", async () => {
     renderPage();
 
-    expect(await screen.findByText("Иван Петров")).toBeInTheDocument();
-
+    // Сначала дожидаемся сводок: до них строки стоят в алфавитном порядке и
+    // после их прихода перестраиваются, поэтому узел, взятый раньше, к моменту
+    // проверки уже откреплён от документа.
+    //
     // Последний замер 18 августа, дата сводки — 28-е: десять суток молчания.
     expect(await screen.findByText("Нет замеров: 10 дн.")).toBeInTheDocument();
+
+    // Имя пациента — ссылка на его карту: карта живёт по адресу (правило П1),
+    // и ссылку врач открывает в новой вкладке, копирует и пересылает.
+    expect(
+      screen.getByRole("link", { name: "Иван Петров" }),
+    ).toBeInTheDocument();
 
     // Именно в таблице: тот же текст есть в расшифровке флагов под ней.
     const table = within(screen.getByRole("table"));
     expect(table.getByText("Кетосоотношение вне допуска")).toBeInTheDocument();
-    expect(table.getByText("Без замечаний")).toBeInTheDocument();
+    // Спокойная строка тоже несёт давность данных: правило П19 требует её в
+    // каждой строке, иначе врач не отличает ребёнка с утренним замером от
+    // ребёнка с записью позавчера.
+    expect(
+      table.getByText(
+        /Без замечаний · данные \d+ дн\. назад|Без замечаний · данные сегодня/,
+      ),
+    ).toBeInTheDocument();
 
     const names = screen
       .getAllByRole("row")
@@ -228,11 +243,8 @@ describe("Форма назначения", () => {
     // после загрузки сводок перестраиваются.
     await screen.findByText("Нет замеров: 10 дн.");
 
-    await user.click(
-      screen.getByRole("button", {
-        name: "Открыть карту пациента Иван Петров",
-      }),
-    );
+    // Карта открывается ссылкой на имени, а не кнопкой в отдельном столбце.
+    await user.click(screen.getByRole("link", { name: "Иван Петров" }));
     await user.click(screen.getByRole("tab", { name: "Назначение" }));
 
     const ratio = await screen.findByLabelText("Кетосоотношение");
@@ -242,9 +254,21 @@ describe("Форма назначения", () => {
       screen.getByRole("button", { name: "Сохранить назначение" }),
     );
 
-    expect(
-      await screen.findByText("Кетосоотношение — от 1,0 до 5,0 с шагом 0,5."),
-    ).toBeInTheDocument();
+    // Текст обязан стоять в двух местах сразу: под полем и строкой сводки над
+    // формой (правило П8 канона — сводка повторяет формулировку поля, иначе
+    // читается как вторая, несуществующая ошибка).
+    const ratioErrors = await screen.findAllByText(
+      "Кетосоотношение — от 1,0 до 5,0 с шагом 0,5.",
+    );
+    expect(ratioErrors).toHaveLength(2);
+
+    // Строка сводки ведёт в поле: без якоря она сообщает об ошибке, но не
+    // помогает её исправить.
+    const summaryLink = ratioErrors.find(
+      (node) => node.tagName === "A",
+    ) as HTMLAnchorElement;
+    expect(summaryLink).toBeDefined();
+    expect(summaryLink.getAttribute("href")).toBe(`#${ratio.id}`);
     expect(api.POST).not.toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/prescriptions",
       expect.anything(),
