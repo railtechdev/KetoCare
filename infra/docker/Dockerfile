@@ -33,9 +33,15 @@ COPY apps/worker apps/worker
 COPY infra/scripts infra/scripts
 RUN uv sync --frozen --no-dev --all-packages
 
+# Каталоги томов создаются в образе и отдаются `app` заранее.
+#
+# Пустой named volume наследует владельца и права той точки монтирования,
+# которая есть в образе; если её нет — docker создаёт каталог от root, а
+# процесс идёт под `app` (USER ниже) и писать туда не может. Вложения так и
+# падали бы: 500 на первой же загрузке документа, причём только на сервере.
 RUN useradd --create-home --uid 1000 app \
-    && mkdir -p /data/reports \
-    && chown app /data/reports
+    && mkdir -p /data/reports /data/attachments \
+    && chown app /data/reports /data/attachments
 
 
 FROM base AS api

@@ -7,11 +7,12 @@ import {
   Skeleton,
   toast,
 } from "@ketocare/ui";
-import { Baby, ClipboardList, Plus } from "lucide-react";
+import { Baby, ClipboardList, Plus, Paperclip } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
 import { errorMessageOf } from "../../lib/api";
 import { IntakeForm } from "../intake/IntakeForm";
 import { ChildForm } from "./ChildForm";
@@ -27,7 +28,8 @@ type View =
   | { kind: "list" }
   | { kind: "add" }
   | { kind: "edit"; child: Patient }
-  | { kind: "intake"; child: Patient };
+  | { kind: "intake"; child: Patient }
+  | { kind: "documents"; child: Patient };
 
 /**
  * Раздел «Ребёнок»: профили детей семьи.
@@ -49,6 +51,14 @@ export function ChildPage() {
   if (view.kind === "edit") {
     return (
       <EditChild child={view.child} onDone={() => setView({ kind: "list" })} />
+    );
+  }
+  if (view.kind === "documents") {
+    return (
+      <ChildDocuments
+        child={view.child}
+        onDone={() => setView({ kind: "list" })}
+      />
     );
   }
   if (view.kind === "intake") {
@@ -147,6 +157,19 @@ export function ChildPage() {
                       <ClipboardList aria-hidden="true" />
                       {t("children.intake")}
                     </Button>
+                    {/* Документы приносит из стационара семья: выписку, ЭЭГ,
+                        анализы. До этого приложить их могли только врач и
+                        диетолог — ради семьи подсистема и делалась
+                        (ADR-0004). */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      onClick={() => setView({ kind: "documents", child })}
+                    >
+                      <Paperclip aria-hidden="true" />
+                      {t("children.documents")}
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -241,6 +264,32 @@ function ChildIntake({
         childName={child.full_name}
         onDone={onDone}
       />
+    </PageLayout>
+  );
+}
+
+/**
+ * Документы ребёнка глазами семьи.
+ *
+ * Возврат — через шапку шаблона (правило П2 канона), как у анкеты: это шаг в
+ * глубину раздела, а не отдельный раздел меню.
+ */
+function ChildDocuments({
+  child,
+  onDone,
+}: {
+  child: Patient;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation("child");
+
+  return (
+    <PageLayout
+      title={t("documents.title", { name: child.full_name })}
+      intro={t("documents.intro")}
+      onBack={onDone}
+    >
+      <AttachmentsPanel patientId={child.id} />
     </PageLayout>
   );
 }

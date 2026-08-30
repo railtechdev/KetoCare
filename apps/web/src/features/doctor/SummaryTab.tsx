@@ -13,7 +13,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
-import { AttachmentsPanel } from "./AttachmentsPanel";
+import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
 import { CareTeamPanel } from "./CareTeamPanel";
 import { FamilyPanel } from "./FamilyPanel";
 import { MedicalProfileForm } from "./MedicalProfileForm";

@@ -15,9 +15,9 @@ import { FileField, SelectField, Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { api, errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
-import { formatIsoDate } from "./dates";
-import { LinesSkeleton } from "./skeletons";
-import type { Attachment } from "./types";
+import { formatIsoDate } from "../doctor/dates";
+import { LinesSkeleton } from "../doctor/skeletons";
+import type { Attachment } from "../doctor/types";
 
 /** Виды документов — как в справочнике сервера (`AttachmentDocKind`). */
 const DOC_KINDS = ["discharge", "eeg", "lab", "prescription", "other"] as const;
@@ -36,6 +36,11 @@ function attachmentsKey(patientId: string) {
  * Удалить может только тот, кто загрузил (решение заказчика, ADR-0013): родитель
  * убирает свою ошибку, врач — свою. Кнопка у чужого документа не показывается —
  * она вела бы в заведомый 403 (правило П3 канона).
+ *
+ * Панель общая для семьи и специалиста, поэтому лежит не в `features/doctor`:
+ * документы приносит из стационара именно семья, и экран, доступный только
+ * врачу, оставлял бы её без способа их приложить — при том что ради этого
+ * подсистема и делалась.
  */
 export function AttachmentsPanel({ patientId }: { patientId: string }) {
   const { t } = useTranslation("attachments");
