@@ -37,7 +37,17 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
     "child",
     "profile",
   ],
-  doctor: ["patients", "summaries", "profile"],
-  dietitian: ["patients", "products", "recipes", "profile"],
-  admin: ["users", "products", "recipes", "dictionaries", "audit", "profile"],
+  // «Главная» первой: вход вёл сразу в таблицу пациентов — полный реестр
+  // вместо ответа на вопрос, с которого начинается рабочий день.
+  doctor: ["home", "patients", "summaries", "profile"],
+  dietitian: ["home", "patients", "products", "recipes", "profile"],
+  admin: [
+    "home",
+    "users",
+    "products",
+    "recipes",
+    "dictionaries",
+    "audit",
+    "profile",
+  ],
 };

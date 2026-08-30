@@ -16,6 +16,7 @@ import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { CareTeamPanel } from "./CareTeamPanel";
 import { MedicalProfileForm } from "./MedicalProfileForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
+import { IntakeView } from "../intake/IntakeView";
 import { useIntakeOptions } from "../intake/useIntake";
 import { dayVerdict } from "../patients/dayVerdict";
 import { usePatientOverview } from "../patients/overview";
@@ -67,6 +68,11 @@ export function SummaryTab({
       >
         {overview.data !== undefined && <OverviewPanels data={overview.data} />}
       </AsyncSection>
+
+      {/* Анкета — рядом с медицинским профилем: врачебная часть анамнеза и
+          часть, заполненная семьёй, читаются вместе. Доступ к ней даёт сам
+          доступ к пациенту, поэтому диетолог её тоже видит. */}
+      <IntakeView patientId={patient.id} />
 
       {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
 

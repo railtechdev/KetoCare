@@ -14,6 +14,14 @@ interface Props {
   item?: string;
   /** Строка поиска для нового раздела (`?q=`) */
   query?: string;
+  /**
+   * Пациент, чью карту нужно открыть.
+   *
+   * Обычно ребёнок переносится сам — семья ведёт одного. У врача пациентов
+   * много, и очередь внимания на главной ведёт к конкретному: перенести здесь
+   * нечего, нужно задать.
+   */
+  patient?: string;
   onClick?: () => void;
 }
 
@@ -36,6 +44,7 @@ export function SectionLink({
   diaryKind,
   item,
   query,
+  patient,
   onClick,
 }: Props) {
   return (
@@ -55,6 +64,7 @@ export function SectionLink({
         kind: diaryKind,
         item,
         q: query,
+        patient: patient ?? previous.patient,
       })}
       className={className}
       activeProps={activeProps}
