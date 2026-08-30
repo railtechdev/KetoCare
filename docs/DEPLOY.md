@@ -10,7 +10,7 @@
 
 | Адрес | Что отдаёт |
 | --- | --- |
-| `ketocare.railtech.uz` | посадочная — статика из `/var/www/ketocare-landing` |
+| `ketocare.railtech.uz` | посадочная — статика из `/var/www/ketocare-landing`; языки `/`, `/uz/`, `/en/`; путь `/api/v1/leads` проксируется в API ради формы заявок |
 | `app.ketocare.railtech.uz` | SPA кабинета из `/var/www/ketocare-app`; `location /api/` → прокси на контейнер API (`127.0.0.1:8001`) |
 | — | бот работает по long polling: домен и открытый порт ему не нужны |
 
@@ -21,7 +21,7 @@
 Раскладка каталогов:
 
 - `/srv/ketocare` — клон репозитория (compose, `.env`, деплой-скрипт);
-- `/var/www/ketocare-landing` — посадочная, заливается rsync'ом;
+- `/var/www/ketocare-landing` — посадочная (собирается из `packages/landing`);
 - `/var/www/ketocare-app` — собранный `apps/web/dist`, кладёт `deploy.sh`;
 - `/srv/backups` — дампы postgres;
 - данные postgres/redis и PDF-отчёты — named volumes docker
@@ -99,17 +99,31 @@ HTTP утекает.
 infra/scripts/deploy.sh
 ```
 
-Скрипт собирает образы, применяет миграции, поднимает compose, собирает фронт
-и выкладывает его в `/var/www/ketocare-app`. Повторный запуск = обновление
-(`--api-only` — без пересборки фронта).
+Скрипт собирает образы, применяет миграции, поднимает compose, собирает кабинет
+(`/var/www/ketocare-app`) и посадочную страницу (`/var/www/ketocare-landing`).
+Повторный запуск = обновление (`--api-only` — без пересборки фронта).
 
-### Посадочная
+### Посадочная страница
 
-С локальной машины:
+Собирается тем же `deploy.sh` из `packages/landing` (Astro, [ADR-0012](adr/0012-landing-site-and-leads.md)).
+Отдельной выкладки не требует.
+
+Домен, адрес кабинета и контактная почта уходят в сборку переменными — из них
+собираются canonical, hreflang, sitemap, ссылки «Войти» и адрес в подвале.
+Значения по умолчанию заданы в `deploy.sh`; чтобы их переопределить, объявите
+переменные в окружении перед запуском:
 
 ```bash
-rsync -av --delete <каталог-посадочной>/ vps:/var/www/ketocare-landing/
+PUBLIC_CONTACT_EMAIL=hello@example.uz infra/scripts/deploy.sh
 ```
+
+**Проверьте почту и Telegram перед публикацией.** Значения по умолчанию пришли
+из макета: `hello@ketocare.uz` и `https://t.me/ketocare`. Неотвечающий контакт
+на лендинге хуже отсутствующего.
+
+Заявки с форм принимает `POST /api/v1/leads`; nginx лендинга проксирует именно
+этот путь, поэтому запрос остаётся same-origin и CORS не расширяется. Читать
+заявки — `GET /api/v1/leads` под учётной записью админа.
 
 ### Проверки после первого запуска
 

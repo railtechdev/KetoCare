@@ -10,6 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 WEB_ROOT=/var/www/ketocare-app
+LANDING_ROOT=/var/www/ketocare-landing
 COMPOSE="docker compose --env-file .env -f infra/docker-compose.prod.yml"
 
 git pull --ff-only
@@ -34,6 +35,14 @@ if [ "${1:-}" != "--api-only" ]; then
     pnpm --filter @ketocare/api-client run generate
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/web run build
     rsync -a --delete apps/web/dist/ "$WEB_ROOT"/
+
+    # Посадочная страница (Astro, ADR-0012). Адреса домена и кабинета уходят в
+    # сборку: из них собираются canonical, hreflang, sitemap и ссылки «Войти».
+    LANDING_SITE_URL="${LANDING_SITE_URL:-https://ketocare.railtech.uz}" \
+    PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app.ketocare.railtech.uz}" \
+    PUBLIC_CONTACT_EMAIL="${PUBLIC_CONTACT_EMAIL:-hello@ketocare.uz}" \
+    NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/landing run build
+    rsync -a --delete packages/landing/dist/ "$LANDING_ROOT"/
 fi
 
 $COMPOSE ps
