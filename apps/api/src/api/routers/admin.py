@@ -69,6 +69,30 @@ async def update_user(
     return UserRead.model_validate(updated)
 
 
+@router.post(
+    "/users/{user_id}/reset-totp",
+    response_model=UserRead,
+    summary="Сбросить второй фактор",
+)
+async def reset_user_totp(
+    user_id: Annotated[uuid.UUID, Path()],
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> UserRead:
+    """Последняя ступень восстановления доступа: телефон утерян, резервные коды
+    израсходованы. При следующем входе учётная запись пройдёт настройку второго
+    фактора заново — отключением 2FA сброс не является."""
+
+    updated = await admin_service.reset_totp(
+        session,
+        actor=user,
+        user_id=user_id,
+        ip=client_address(request),
+    )
+    return UserRead.model_validate(updated)
+
+
 # --- журнал аудита --------------------------------------------------------
 
 

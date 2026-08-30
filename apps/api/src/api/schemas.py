@@ -45,12 +45,52 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
     totp_code: str | None = Field(default=None, description="Обязателен для admin/doctor/dietitian")
+    backup_code: str | None = Field(
+        default=None,
+        description="Резервный код вместо кода приложения, когда телефон недоступен",
+    )
 
 
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class BackupCodes(BaseModel):
+    """Резервные коды в открытом виде.
+
+    Отдаются ровно один раз — при включении второго фактора и при перевыпуске:
+    в базе лежит только sha256, и повторить показ невозможно.
+    """
+
+    codes: list[str]
+
+
+class TotpEnabledResponse(BaseModel):
+    """Второй фактор включён: пара токенов и резервные коды.
+
+    Коды выдаются здесь, а не отдельным шагом, потому что это единственный
+    момент, когда их можно показать: до включения второго фактора они не нужны,
+    а после — уже не восстанавливаются.
+    """
+
+    tokens: TokenPair
+    backup_codes: list[str]
+
+
+class BackupCodesStatus(BaseModel):
+    """Сколько кодов осталось. Набор кончается молча, и об этом надо сказать."""
+
+    remaining: int
+    total: int
+
+
+class BackupCodesRegenerate(BaseModel):
+    """Перевыпуск требует кода приложения: иначе чужой доступ к открытой сессии
+    позволял бы выпустить себе набор кодов на будущее."""
+
+    totp_code: str
 
 
 class LoginResponse(BaseModel):
@@ -223,6 +263,10 @@ class UserRead(BaseModel):
     phone: str | None
     is_active: bool
     created_at: datetime
+    #: Настроен ли второй фактор. Сам секрет наружу не отдаётся — только факт:
+    #: кнопка «сбросить второй фактор» у учётной записи, где его нет, ведёт в
+    #: заведомый 409 (правило П3 канона).
+    has_totp: bool
 
 
 class MeUpdate(BaseModel):

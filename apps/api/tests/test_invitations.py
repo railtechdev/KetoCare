@@ -159,7 +159,11 @@ class TestAcceptInvitation:
             headers={"Authorization": f"Bearer {setup_token}"},
         )
         assert verify.status_code == 200, verify.text
-        assert verify.json()["access_token"], "после подтверждения выдаётся рабочая сессия"
+        body = verify.json()
+        assert body["tokens"]["access_token"], "после подтверждения выдаётся рабочая сессия"
+        # Резервные коды выдаются здесь же и только здесь: это единственный
+        # момент, когда их можно показать (в базе только sha256).
+        assert body["backup_codes"], "вместе с 2FA выдаётся набор резервных кодов"
 
         second = await client.post(
             "/api/v1/auth/login",

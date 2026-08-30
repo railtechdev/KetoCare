@@ -34,10 +34,55 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     # отобрать второй фактор у владельца учётной записи.
     totp_pending_secret: Mapped[str | None] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    @property
+    def has_totp(self) -> bool:
+        """Настроен ли второй фактор.
+
+        Свойство, а не колонка: единственный источник — сам секрет, и вторая
+        запись того же факта однажды разошлась бы с ним. Наружу уходит только
+        этот признак, сам секрет — никогда.
+        """
+
+        return self.totp_secret is not None
+
     invited_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id")
     )
     last_login_at: Mapped[datetime | None]
+
+
+class UserBackupCode(Base, UUIDPkMixin, CreatedAtMixin):
+    """Резервный код входа: второй фактор, когда телефона с приложением нет.
+
+    Без них потерянный телефон означал потерю учётной записи навсегда: отключить
+    второй фактор нельзя (раздел 7 ТЗ требует его для admin/doctor/dietitian), а
+    сброса не было ни у кого. Для клинической системы, где врач должен попасть в
+    данные ребёнка сейчас, а не завтра, это неприемлемо.
+
+    Практика — NIST SP 800-63B, §5.1.2 (look-up secrets): набор одноразовых
+    кодов, выдаваемых один раз при включении второго фактора.
+
+    Хранится sha256, а не argon2: код — случайные 50+ бит из узкого алфавита, и
+    перебор по хэшу бессмыслен, а проверка при входе идёт против всех
+    неиспользованных кодов сразу — десять argon2-проверок на каждый вход стоили
+    бы секунду. Тот же довод, что у секрета привязки Telegram (ADR-0009).
+
+    Строка не удаляется после использования: `used_at` — след того, что код
+    сработал, и он нужен и журналу, и владельцу учётной записи.
+    """
+
+    __tablename__ = "user_backup_codes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "code_hash", name="uq_user_backup_code"),
+        Index("ix_user_backup_codes_user_id", "user_id"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    used_at: Mapped[datetime | None]
 
 
 class Patient(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):

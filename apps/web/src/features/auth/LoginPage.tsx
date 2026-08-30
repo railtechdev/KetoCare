@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -29,6 +30,15 @@ export function LoginPage() {
   const [setupToken, setSetupToken] = useState<string | null>(null);
   /** Показывать поле кода: 2FA настроена и обязательна при входе. */
   const [totpRequired, setTotpRequired] = useState(false);
+  /**
+   * Вход резервным кодом.
+   *
+   * Телефон с приложением теряется, ломается и остаётся дома. До резервных
+   * кодов это означало потерю учётной записи навсегда: отключить второй фактор
+   * нельзя, сброса не было ни у кого. Переключатель показывается только когда
+   * код уже спрошен — до этого он был бы вопросом без повода.
+   */
+  const [useBackupCode, setUseBackupCode] = useState(false);
 
   const {
     register,
@@ -119,16 +129,39 @@ export function LoginPage() {
                 {...register("password")}
               />
 
+              {totpRequired &&
+                (useBackupCode ? (
+                  <Field
+                    id="backup-code"
+                    width="wide"
+                    autoComplete="one-time-code"
+                    label={t("login.backupCode")}
+                    hint={t("login.backupCodeHint")}
+                    {...register("backupCode")}
+                  />
+                ) : (
+                  <Field
+                    id="totp"
+                    width="narrow"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    label={t("login.totpCode")}
+                    hint={t("login.totpHint")}
+                    {...register("totpCode")}
+                  />
+                ))}
+
               {totpRequired && (
-                <Field
-                  id="totp"
-                  width="narrow"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  label={t("login.totpCode")}
-                  hint={t("login.totpHint")}
-                  {...register("totpCode")}
-                />
+                <Button
+                  type="button"
+                  variant="link"
+                  className="min-h-touch self-start px-0"
+                  onClick={() => setUseBackupCode((current) => !current)}
+                >
+                  {useBackupCode
+                    ? t("login.useTotpCode")
+                    : t("login.useBackupCode")}
+                </Button>
               )}
 
               {login.isError && (

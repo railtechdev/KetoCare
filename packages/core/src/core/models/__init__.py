@@ -8,6 +8,7 @@ from .accounts import (
     Patient,
     TelegramAccount,
     User,
+    UserBackupCode,
 )
 from .ai_audit import AiConversation, AiJob, AuditLog, DoctorSummary, ReportJob
 from .base import Base
@@ -50,6 +51,7 @@ __all__ = [
     "DoctorPatient",
     "Invitation",
     "TelegramAccount",
+    "UserBackupCode",
     "LinkCode",
     # clinical
     "AedDrug",

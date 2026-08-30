@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import AuditLog, KetoneMethodDict, SeizureType, User
 from core.repositories import audit as audit_repo
+from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import dictionaries as dictionaries_repo
 from core.repositories import users as users_repo
 
@@ -129,6 +130,64 @@ async def update_user(
         ip=ip,
     )
     return updated
+
+
+async def reset_totp(
+    session: AsyncSession,
+    *,
+    actor: CurrentUser,
+    user_id: uuid.UUID,
+    ip: str | None,
+) -> User:
+    """Сбрасывает второй фактор: телефон утерян, резервные коды кончились.
+
+    Это последняя ступень восстановления доступа. Первая — резервные коды,
+    выданные при включении второго фактора; когда и они израсходованы или
+    потеряны вместе с телефоном, вернуть человека в систему может только другой
+    человек с правами администратора.
+
+    Отключением второго фактора это не является: очищенный секрет означает, что
+    при следующем входе учётная запись пройдёт первичную настройку 2FA заново
+    (`totp_setup_required`). Раздел 7 ТЗ требует второго фактора для
+    admin/doctor/dietitian, и обойти это требование сброс не позволяет.
+
+    Резервные коды стираются вместе с секретом: они были выпущены под прежнее
+    устройство, и оставить их значило бы оставить действующим тот самый набор,
+    из-за потери которого сброс и понадобился.
+
+    Свой собственный второй фактор администратор сбросить не может: доступ к
+    открытой сессии превращался бы в способ снять второй фактор с себя, то есть
+    в обход требования. Для этого есть другой администратор — так же, как с
+    отключением собственной учётной записи.
+    """
+
+    if user_id == actor.id:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Нельзя сбросить собственный второй фактор. Попросите другого администратора.",
+        )
+
+    user = await users_repo.get(session, user_id)
+    if user is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Пользователь не найден.")
+
+    if user.totp_secret is None and user.totp_pending_secret is None:
+        raise ApiError(ErrorCode.CONFLICT, "У этой учётной записи второй фактор не настроен.")
+
+    user.totp_secret = None
+    user.totp_pending_secret = None
+    await backup_codes_repo.drop_for_user(session, user_id=user.id)
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=actor.id,
+        action="totp_reset",
+        entity="users",
+        entity_id=user.id,
+        ip=ip,
+    )
+    return user
 
 
 # --- справочники ----------------------------------------------------------

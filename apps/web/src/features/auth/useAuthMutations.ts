@@ -15,12 +15,18 @@ export function useLoginMutation() {
       email: string;
       password: string;
       totpCode?: string;
+      backupCode?: string;
     }) => {
       const { data, error } = await api.POST("/api/v1/auth/login", {
         body: {
           email: input.email,
           password: input.password,
           totp_code: input.totpCode?.trim() ? input.totpCode.trim() : null,
+          // Резервный код — на случай, когда телефона с приложением нет.
+          // Отправляются оба поля: сервер сам решает, чем открывать вход.
+          backup_code: input.backupCode?.trim()
+            ? input.backupCode.trim()
+            : null,
         },
       });
       if (error || !data) throw error ?? new Error("Empty login response");
