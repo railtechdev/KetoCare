@@ -8,6 +8,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "generate": "openapi-typescript ../../apps/api/openapi.json -o src/generated/schema.d.ts",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check src",
     "lint": "eslint src"
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "openapi-typescript": "^7.4.4",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

@@ -9,6 +9,10 @@ import { useSession } from "./useSession";
 vi.mock("../../lib/api", () => ({
   api: { POST: vi.fn() },
   setAccessToken: vi.fn(),
+  // Провайдер подписывается на окончательное истечение сессии, чтобы увести
+  // человека на вход. Подписка возвращает функцию отписки — её вызывает React
+  // при размонтировании, и без неё тест падал бы на очистке эффекта.
+  onSessionExpired: () => () => undefined,
 }));
 
 const { api } = await import("../../lib/api");
