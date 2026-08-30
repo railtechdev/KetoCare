@@ -257,14 +257,21 @@ async def download_report(
 ) -> Response:
     job = await _job_with_access(session, user, job_id)
 
-    if job.status is not ReportJobStatus.DONE or job.file_name is None:
+    if job.status is not ReportJobStatus.DONE:
         raise ApiError(ErrorCode.CONFLICT, "Отчёт ещё не собран.")
 
     now = datetime.now(UTC)
     if job.expires_at is not None and job.expires_at < now:
         # Ссылка с истечением (раздел 7.5 ТЗ): просроченную не продлеваем молча,
-        # а просим собрать заново — файла к этому моменту может уже не быть.
+        # а просим собрать заново — файла к этому моменту уже может не быть.
         raise ApiError(ErrorCode.NOT_FOUND, "Срок ссылки на отчёт истёк, соберите заново.")
+
+    if job.file_name is None:
+        # Уборщик (`worker.maintenance.purge_files`) обнуляет имя, когда снимает
+        # файл. Проверка стоит ПОСЛЕ срока: собранный и убранный отчёт — это
+        # «срок истёк», а не «ещё не собран», и порядок наоборот врал бы о
+        # состоянии.
+        raise ApiError(ErrorCode.NOT_FOUND, "Файл отчёта недоступен.")
 
     file_path = await run_in_threadpool(_resolve_report_file, job.file_name)
     if file_path is None:
