@@ -14,6 +14,7 @@ export type Medication = Schemas["MedicationRead"];
 export type MedicationBody = Schemas["MedicationWrite"];
 export type ClinicalNote = Schemas["ClinicalNoteRead"];
 export type Colleague = Schemas["ColleagueRead"];
+export type FamilyMember = Schemas["FamilyMemberRead"];
 
 /**
  * Назначение вместе с номером версии.

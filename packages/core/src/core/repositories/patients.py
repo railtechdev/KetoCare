@@ -111,6 +111,17 @@ async def list_doctor_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> li
     return list(await session.scalars(stmt))
 
 
+async def list_parent_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> list[uuid.UUID]:
+    """Идентификаторы родителей, ведущих ребёнка дома.
+
+    Зеркало `list_doctor_ids`. Связь «родитель — ребёнок» многие-ко-многим
+    (раздел 4.2 ТЗ): у ребёнка бывает двое родителей с отдельными кабинетами.
+    """
+
+    stmt = select(ParentPatient.parent_id).where(ParentPatient.patient_id == patient_id)
+    return list(await session.scalars(stmt))
+
+
 async def list_for_ids(
     session: AsyncSession, *, patient_ids: list[uuid.UUID], limit: int = 50, offset: int = 0
 ) -> tuple[list[Patient], int]:

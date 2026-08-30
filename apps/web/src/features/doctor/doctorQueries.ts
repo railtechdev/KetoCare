@@ -7,6 +7,7 @@ import {
   DOCTOR_PAGE_LIMIT,
   type ClinicalNote,
   type Colleague,
+  type FamilyMember,
   type Medication,
   type MedicalProfile,
   type PatientOverview,
@@ -241,6 +242,31 @@ export function useColleagues(enabled: boolean) {
     queryFn: async (): Promise<Colleague[]> => {
       const { data, error } = await api.GET("/api/v1/users/colleagues", {});
       if (error || !data) throw error ?? new Error("Empty colleagues response");
+      return data;
+    },
+  });
+}
+
+export function familyKey(patientId: string) {
+  return ["patient", patientId, "parents"] as const;
+}
+
+/**
+ * Кто ведёт ребёнка дома (ADR-0011).
+ *
+ * Флаг «семья молчит N дней» существует, чтобы вызвать действие, а единственное
+ * осмысленное действие — связаться с семьёй — интерфейсом не поддерживалось:
+ * контактов родителя в продукте не было нигде.
+ */
+export function useFamily(patientId: string) {
+  return useQuery({
+    queryKey: familyKey(patientId),
+    queryFn: async (): Promise<FamilyMember[]> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/parents",
+        { params: { path: { patient_id: patientId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty family response");
       return data;
     },
   });
