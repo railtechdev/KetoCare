@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, cast, get_args
 
 from fastapi import Depends, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,10 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_sessionmaker
 from core.models.enums import UserRole
 from core.repositories import access as access_repo
+from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
 from ..errors import ApiError, ErrorCode
-from ..security import decode_token, token_predates_password_change
+from ..security import Channel, decode_token, token_predates_password_change
+from .bot import assert_route_allowed_for_bot
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -41,6 +43,11 @@ class CurrentUser:
     id: uuid.UUID
     role: UserRole
     patient_scope: uuid.UUID | None = None
+    # Откуда пришёл токен. `bot` — автоматика, получившая токен по секрету
+    # привязки, а не человек, вошедший паролем (ADR-0009). Отличать нужно, чтобы
+    # токен бота не открывал то, что предназначено человеку: обновление сессии,
+    # настройку второго фактора, выпуск новых кодов привязки.
+    channel: Channel = "web"
 
 
 def _bearer_token(request: Request) -> str:
@@ -85,7 +92,78 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
     scope_raw = payload.get("patient_scope")
     patient_scope = uuid.UUID(scope_raw) if scope_raw else None
 
-    return CurrentUser(id=user.id, role=user.role, patient_scope=patient_scope)
+    channel = _channel_of(payload)
+    if channel == "bot":
+        # Единственная точка, через которую проходит любой пользовательский
+        # токен, — здесь и стоит ограничение маршрутов для бота. Отдельная
+        # зависимость, которую надо не забыть навесить на ручку, однажды
+        # окажется не навешенной.
+        assert_route_allowed_for_bot(request)
+        await _assert_binding_alive(session, payload, user_id=user.id, patient_scope=patient_scope)
+
+    return CurrentUser(
+        id=user.id,
+        role=user.role,
+        patient_scope=patient_scope,
+        channel=channel,
+    )
+
+
+async def _assert_binding_alive(
+    session: AsyncSession,
+    payload: dict[str, Any],
+    *,
+    user_id: uuid.UUID,
+    patient_scope: uuid.UUID | None,
+) -> None:
+    """Проверяет, что привязка, по которой выдан ботовый токен, ещё жива.
+
+    Без этого отвязка не отвязывала: `revoke` ставит `revoked_at`, но уже
+    выданный access-токен живёт пятнадцать минут и всё это время писал бы в
+    дневник ребёнка. Ровно от этого разрыва в сценарии «потерял телефон →
+    отвязал в кабинете» защита и нужна.
+
+    Запрос выполняется только для канала `bot` — сессии человека его не платят.
+    Он же и причина, по которой `link_id` попадает в токен: иначе привязку
+    пришлось бы искать по родителю и пациенту, а их у семьи может быть
+    несколько, и отзыв одного чата гасил бы все.
+    """
+
+    denied = ApiError(ErrorCode.UNAUTHORIZED, "Привязка отозвана, требуется повторная привязка.")
+
+    raw = payload.get("tg")
+    if not isinstance(raw, str):
+        raise denied
+    try:
+        binding_id = uuid.UUID(raw)
+    except ValueError as exc:
+        raise denied from exc
+
+    link = await telegram_repo.get_active_link(session, binding_id)
+    if link is None:
+        raise denied
+    # Сверка с содержимым токена: подписанные claim'ы и строка в БД должны
+    # описывать одну и ту же привязку. Расхождение означает подделку или
+    # изменение данных под выданным токеном — в обоих случаях отказ.
+    if link.parent_id != user_id or link.patient_id != patient_scope:
+        raise denied
+
+
+def _channel_of(payload: dict[str, Any]) -> Channel:
+    """Канал из claim `chan`. Неизвестное значение — не «web по умолчанию».
+
+    Неизвестный канал означает токен, выпущенный кодом, которого эта версия API
+    не знает. Считать его самым доверенным вариантом нельзя: так новый канал с
+    послаблениями молча получил бы права web-сессии на старом узле при
+    раскатке. Отказ здесь дороже в эксплуатации, но дешевле в последствиях.
+    """
+
+    raw = payload.get("chan")
+    if raw is None:
+        return "web"
+    if raw in get_args(Channel):
+        return cast(Channel, raw)
+    raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.")
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
@@ -106,6 +184,29 @@ def require_roles(
     return _dependency
 
 
+async def assert_patient_access(
+    session: AsyncSession, user: CurrentUser, patient_id: uuid.UUID
+) -> None:
+    """Обе ступени проверки доступа к пациенту — одним местом.
+
+    Ручки, у которых `{patient_id}` нет в пути (задача отчёта знает пациента
+    сама), проверяют доступ вручную и обязаны звать именно это, а не репозиторий
+    напрямую. Раньше такая ручка была одна и повторяла только вторую ступень,
+    без сверки `patient_scope`: пока scope-токены не выпускались, разницы не
+    было, но первый же их выпуск открыл бы этот путь мимо сужения.
+    """
+
+    # Токен, суженный до одного пациента (Mini App, бот), — сузить его нельзя обойти
+    if user.patient_scope is not None and user.patient_scope != patient_id:
+        raise ApiError(ErrorCode.FORBIDDEN, "Нет доступа к данным этого пациента.")
+
+    allowed = await access_repo.user_has_patient_access(
+        session, user_id=user.id, role=user.role, patient_id=patient_id
+    )
+    if not allowed:
+        raise ApiError(ErrorCode.FORBIDDEN, "Нет доступа к данным этого пациента.")
+
+
 async def require_patient_access(
     patient_id: Annotated[uuid.UUID, Path()],
     user: CurrentUserDep,
@@ -117,16 +218,7 @@ async def require_patient_access(
     `core.repositories.access`, возвращая False для роли admin.
     """
 
-    # Токен Mini App ограничен конкретным пациентом — сузить его нельзя обойти
-    if user.patient_scope is not None and user.patient_scope != patient_id:
-        raise ApiError(ErrorCode.FORBIDDEN, "Нет доступа к данным этого пациента.")
-
-    allowed = await access_repo.user_has_patient_access(
-        session, user_id=user.id, role=user.role, patient_id=patient_id
-    )
-    if not allowed:
-        raise ApiError(ErrorCode.FORBIDDEN, "Нет доступа к данным этого пациента.")
-
+    await assert_patient_access(session, user, patient_id)
     return user
 
 
@@ -170,6 +262,13 @@ async def get_totp_setup_user(request: Request, session: SessionDep) -> CurrentU
         payload = decode_token(token, expected_type="access")
     except ApiError:
         payload = decode_token(token, expected_type="totp_setup")
+
+    # Токен бота сюда не пускается. Он выдан автоматике по секрету привязки, а
+    # второй фактор — это личная вещь человека: с ботовым токеном можно было бы
+    # перевыпустить TOTP-секрет родителя и тем самым превратить временный доступ
+    # к чату в постоянный вход в кабинет (ADR-0009).
+    if _channel_of(payload) != "web":
+        raise ApiError(ErrorCode.FORBIDDEN, "Это действие недоступно из Telegram-бота.")
 
     try:
         user_id = uuid.UUID(payload["sub"])

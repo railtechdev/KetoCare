@@ -67,6 +67,7 @@ testpaths = [
     # а просто перестаёт блокировать. Поэтому они под тестом наравне с остальным.
     ".claude/hooks/tests",
     "apps/api/tests",
+    "apps/bot/tests",
     "apps/worker/tests",
     "packages/keto_engine/tests",
     "packages/core/tests",

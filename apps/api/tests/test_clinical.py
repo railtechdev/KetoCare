@@ -326,8 +326,15 @@ class TestMedications:
         )
         assert updated.json()["author_id"] == str(doctor.id), "автор — назначивший врач"
 
+        # Отбор по entity_id обязателен: без него запрос без сортировки и лимита
+        # берёт произвольную строку журнала и цепляет запись постороннего прогона,
+        # оставшуюся в базе разработчика. Тест падал не по своей причине.
         entry = await session.scalar(
-            select(AuditLog).where(AuditLog.entity == "medications", AuditLog.action == "update")
+            select(AuditLog).where(
+                AuditLog.entity == "medications",
+                AuditLog.action == "update",
+                AuditLog.entity_id == uuid.UUID(created.json()["id"]),
+            )
         )
         assert entry is not None and entry.user_id == colleague.id
         assert entry.before["dose"] == MEDICATION["dose"]

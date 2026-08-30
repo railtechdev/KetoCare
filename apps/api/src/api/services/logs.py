@@ -23,12 +23,26 @@ from ..deps.query import Pagination, Period
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page
 from ..schemas_logs import LogCreate, LogUpdate, MealLogCreate
+from ..security import Channel
 
-# Канал проставляет сервер, а не клиент (раздел 5.3 ТЗ). У этой группы ручек он
-# один — веб; бот и Mini App появляются на этапах 3-4 и придут со своим каналом.
-# Если бы `source` приходил из тела запроса, запись из веба могла бы объявить себя
-# подтверждённым разбором ИИ, а в отчёте врача это разные по достоверности данные.
-CHANNEL_SOURCE = DiarySource.WEB
+# Канал проставляет сервер, а не клиент (раздел 5.3 ТЗ). Если бы `source` приходил
+# из тела запроса, запись из веба могла бы объявить себя подтверждённым разбором
+# ИИ, а в отчёте врача это разные по достоверности данные.
+_SOURCE_BY_CHANNEL: dict[Channel, DiarySource] = {
+    "web": DiarySource.WEB,
+    "bot": DiarySource.BOT,
+}
+
+
+def channel_source(author: CurrentUser) -> DiarySource:
+    """Откуда пришла запись — из канала токена, а не из запроса.
+
+    Раздел 4.2 ТЗ требует различать `web` и `bot`: врач в отчёте должен видеть,
+    записан ли приступ в кабинете за столом или на бегу в чате. Пока бота не
+    было, значение было константой; теперь оно выводится из личности автора.
+    """
+
+    return _SOURCE_BY_CHANNEL[author.channel]
 
 
 async def list_logs[M: DiaryLog, R: BaseModel](
@@ -71,7 +85,7 @@ async def create_log[M: DiaryLog, R: BaseModel](
         model,
         patient_id=patient_id,
         occurred_at=payload.occurred_at,
-        source=CHANNEL_SOURCE,
+        source=channel_source(author),
         created_by=author.id,
         fields=fields,
     )

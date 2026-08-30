@@ -1,28 +1,87 @@
-"""Точка входа Telegram-бота KetoCare.
+"""Точка входа Telegram-бота KetoCare (раздел 7 ТЗ).
 
-Каркас этапа 1 (раздел 15 ТЗ, п.1). FSM-сценарии, привязка через /start <code>
-и остальная логика раздела 7 ТЗ реализуются на этапе 3 — здесь только
-структура, достаточная для запуска пустого диспетчера.
+Собственного доступа к БД у бота нет — только вызовы API по двухключевой схеме
+(ADR-0009). Состояния FSM и секреты привязок живут в Redis: и то и другое обязано
+переживать перезапуск, иначе после каждого деплоя семьи оказывались бы отвязаны
+посреди начатого ввода.
 """
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from aiogram import Bot, Dispatcher
-from pydantic_settings import BaseSettings
+import httpx
+import structlog
+from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import TelegramObject
+from redis.asyncio import Redis
+
+from .api import BotApi
+from .config import BotSettings
+from .handlers import fallback, scenarios, start
+from .storage import BindingStore
+
+logger = structlog.get_logger(__name__)
 
 
-class BotSettings(BaseSettings):
-    bot_token: str
-    bot_api_token: str
+class DepsMiddleware(BaseMiddleware):
+    """Кладёт клиент API и хранилище привязок в аргументы обработчиков.
+
+    Глобальных объектов нет намеренно: тест подставляет свои и не трогает ни
+    сеть, ни Redis.
+    """
+
+    def __init__(self, api: BotApi, store: BindingStore) -> None:
+        self._api = api
+        self._store = store
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        data["api"] = self._api
+        data["store"] = self._store
+        return await handler(event, data)
 
 
-dp = Dispatcher()
+def build_dispatcher(*, storage: RedisStorage, api: BotApi, store: BindingStore) -> Dispatcher:
+    dp = Dispatcher(storage=storage)
+
+    middleware = DepsMiddleware(api, store)
+    dp.message.middleware(middleware)
+    dp.callback_query.middleware(middleware)
+
+    # Порядок важен: fallback ловит всё подряд и обязан быть последним.
+    dp.include_router(start.router)
+    dp.include_router(scenarios.router)
+    dp.include_router(fallback.router)
+    return dp
 
 
 async def main() -> None:
     settings = BotSettings()  # type: ignore[call-arg]
+
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    http = httpx.AsyncClient(base_url=settings.bot_api_base_url, timeout=10.0)
     bot = Bot(token=settings.bot_token)
-    await dp.start_polling(bot)
+
+    dp = build_dispatcher(
+        storage=RedisStorage(redis),
+        api=BotApi(http, service_token=settings.bot_api_token),
+        store=BindingStore(redis),
+    )
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await http.aclose()
+        await bot.session.close()
+        await redis.aclose()
 
 
 if __name__ == "__main__":

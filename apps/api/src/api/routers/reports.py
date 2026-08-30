@@ -28,12 +28,11 @@ from starlette.concurrency import run_in_threadpool
 from core.config import Settings
 from core.models import ReportJob
 from core.models.enums import ReportJobStatus, UserRole
-from core.repositories import access as access_repo
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import report_jobs as jobs_repo
 
-from ..deps.auth import CurrentUserDep, PatientAccessDep, SessionDep
+from ..deps.auth import CurrentUserDep, PatientAccessDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
 from ..schemas_reports import PatientReport, ReportJobRead
 from ..services import queue as queue_service
@@ -218,19 +217,18 @@ async def _job_with_access(
 
     `require_patient_access` здесь не подходит: он берёт `patient_id` из пути, а
     в пути только идентификатор задачи. Поэтому пациент читается из задачи, и
-    доступ проверяется тем же репозиторием, что и в зависимости, — обходить
-    правило 5 нельзя даже ради удобной сигнатуры.
+    доступ проверяется тем же кодом, что и в зависимости, — обходить правило 5
+    нельзя даже ради удобной сигнатуры.
+
+    Именно тем же кодом, а не тем же репозиторием: копия проверки повторяла
+    только вторую её ступень и пропускала сверку `patient_scope`.
     """
 
     job = await jobs_repo.get(session, job_id)
     if job is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Задача отчёта не найдена.")
 
-    allowed = await access_repo.user_has_patient_access(
-        session, user_id=user.id, role=user.role, patient_id=job.patient_id
-    )
-    if not allowed:
-        raise ApiError(ErrorCode.FORBIDDEN, "Нет доступа к этому пациенту.")
+    await assert_patient_access(session, user, job.patient_id)
     return job
 
 

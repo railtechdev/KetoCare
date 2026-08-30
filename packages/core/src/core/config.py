@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     secret_key: Annotated[str, Field(min_length=SECRET_KEY_MIN_LENGTH)]
     bot_token: str = ""
     bot_api_token: str = ""
+    # Имя бота без «@»: из него собирается deep-link t.me/<имя>?start=<код>,
+    # который кабинет показывает родителю. Пусто — кабинет покажет сам код.
+    bot_username: str = ""
 
     anthropic_api_key: str = ""
     ai_model_fast: str = ""
