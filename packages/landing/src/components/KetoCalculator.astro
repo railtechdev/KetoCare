@@ -1,0 +1,124 @@
+---
+/**
+ * Демонстрационный калькулятор. Значения по умолчанию считаются на сборке,
+ * поэтому без JavaScript посетитель видит корректный расчёт — просто без
+ * возможности двигать ползунки.
+ */
+import { t, useTranslations } from "../i18n";
+import type { Locale } from "../i18n/config";
+import { calculate, formatNumber, INGREDIENTS, TARGET_RATIO, TOLERANCE } from "../lib/keto";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const d = useTranslations(locale);
+
+const initial = INGREDIENTS.map((i) => i.initial);
+const r = calculate(initial);
+
+const verdictText = {
+  ok: d.home.calc.verdictOk,
+  low: d.home.calc.verdictLow,
+  high: d.home.calc.verdictHigh,
+};
+
+/** Строки, которые скрипту нужны в браузере: он не имеет доступа к словарю. */
+const config = {
+  ingredients: INGREDIENTS,
+  target: TARGET_RATIO,
+  tolerance: TOLERANCE,
+  locale,
+  grams: d.common.grams,
+  verdict: verdictText,
+};
+---
+
+<div class="calc" data-calc>
+  <div class="calc__head">
+    <strong>{d.home.calc.dish}</strong>
+    <span class="num" data-calc-kcal>{Math.round(r.kcal)} {d.common.kcal}</span>
+  </div>
+
+  {
+    INGREDIENTS.map((ing, i) => (
+      <div class="calc__ing">
+        <div class="calc__ing-row">
+          <label for={`calc-ing-${i}`}>{d.home.calc.ingredients[i]}</label>
+          <span class="num" data-calc-grams={i}>
+            {ing.initial} {d.common.grams}
+          </span>
+        </div>
+        <input
+          type="range"
+          id={`calc-ing-${i}`}
+          min="0"
+          max={ing.max}
+          step="5"
+          value={ing.initial}
+          data-calc-input={i}
+          aria-label={t(d.home.calc.sliderLabel, { name: d.home.calc.ingredients[i] ?? "" })}
+        />
+      </div>
+    ))
+  }
+
+  <div class="calc__total">
+    <div class="macro-bar" aria-hidden="true">
+      <span style={`width:${r.fatPct.toFixed(1)}%;background:var(--macro-fat)`} data-calc-bar="fat"
+      ></span>
+      <span
+        style={`width:${r.proteinPct.toFixed(1)}%;background:var(--macro-protein)`}
+        data-calc-bar="protein"></span>
+      <span
+        style={`width:${r.carbsPct.toFixed(1)}%;background:var(--macro-carbs)`}
+        data-calc-bar="carbs"></span>
+    </div>
+    <div class="macro-legend">
+      <span>
+        <i style="background:var(--macro-fat)" aria-hidden="true"></i>
+        {d.common.fat}
+        <strong class="num" data-calc-macro="fat">
+          {formatNumber(r.fat, locale)}&nbsp;{d.common.grams}
+        </strong>
+      </span>
+      <span>
+        <i style="background:var(--macro-protein)" aria-hidden="true"></i>
+        {d.common.protein}
+        <strong class="num" data-calc-macro="protein">
+          {formatNumber(r.protein, locale)}&nbsp;{d.common.grams}
+        </strong>
+      </span>
+      <span>
+        <i style="background:var(--macro-carbs)" aria-hidden="true"></i>
+        {d.common.carbs}
+        <strong class="num" data-calc-macro="carbs">
+          {formatNumber(r.carbs, locale)}&nbsp;{d.common.grams}
+        </strong>
+      </span>
+    </div>
+
+    {/* Итог меняется при движении ползунка — экранный диктор должен
+        сообщить об этом, не перебивая ввод: role="status" и aria-live="polite". */}
+    <div
+      class="calc__verdict"
+      data-calc-verdict
+      data-state={r.state === "ok" ? "ok" : "off"}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        class={r.state === "ok" ? "ratio-badge" : "ratio-badge ratio-badge--off"}
+        data-calc-ratio
+      >
+        {formatNumber(r.ratio, locale, 2)} : 1
+      </span>
+      <span class="calc__verdict-text" data-calc-verdict-text>{verdictText[r.state]}</span>
+    </div>
+  </div>
+
+  {/* Не скрипт, а данные для скрипта: значения словаря, которых он иначе не
+      узнает. is:inline — чтобы сборщик не пытался его обрабатывать. */}
+  <script is:inline type="application/json" data-calc-config set:html={JSON.stringify(config)} />
+</div>

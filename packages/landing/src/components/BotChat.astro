@@ -1,0 +1,57 @@
+---
+/**
+ * Демонстрация диалога с ботом. Все сообщения отрисованы в HTML сразу:
+ * скрипт лишь прячет их и показывает по очереди. Без JavaScript посетитель
+ * читает переписку целиком — просто без анимации.
+ */
+import { useTranslations } from "../i18n";
+import type { Locale } from "../i18n/config";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const d = useTranslations(locale);
+const chat = d.home.telegram.chat;
+---
+
+<div class="chat" data-chat>
+  <div class="chat__head">
+    <span class="brand__mark" aria-hidden="true">{d.common.brandMark}</span>
+    <div style="flex:1">
+      <div style="font-weight:600">{d.common.brand}</div>
+      <div style="font-size:.75rem;color:var(--ink-muted)">{d.home.telegram.botLabel}</div>
+    </div>
+    <button class="chat__replay" type="button" data-chat-replay>
+      <span aria-hidden="true">↺ </span>{d.home.telegram.replay}
+    </button>
+  </div>
+
+  <div class="chat__body">
+    {
+      chat.map((m, i) => (
+        <div
+          class={m.from === "user" ? "chat__msg chat__msg--user" : "chat__msg"}
+          data-chat-msg={i}
+        >
+          <div class="chat__bubble">
+            {m.text}
+            {m.chips && (
+              <div class="chat__chips">
+                {m.chips.map((c) => (
+                  <span>{c}</span>
+                ))}
+              </div>
+            )}
+            <div class="chat__time">{m.time}</div>
+          </div>
+        </div>
+      ))
+    }
+    <div class="chat__typing" data-chat-typing hidden>
+      <div class="chat__typing-inner" aria-hidden="true"><i></i><i></i><i></i></div>
+    </div>
+  </div>
+</div>
+<p class="mock__caption">{d.home.telegram.caption}</p>

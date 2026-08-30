@@ -1,0 +1,104 @@
+---
+/**
+ * Форма заявки. Одна на два места: семьям (на светлом фоне) и врачам
+ * (на тёмном), различаются только подписи и выравнивание.
+ *
+ * Поле проверяет браузер (`type="email" required`) — его сообщение уже
+ * переведено на язык пользователя. Наш блок ошибки показывает то, что
+ * браузер знать не может: сеть не ответила, сервер отверг адрес, сработало
+ * ограничение частоты.
+ *
+ * Без JavaScript форма не отправится, поэтому вместо неё показывается
+ * почта — молчаливая кнопка «Отправить», которая ничего не делает, хуже
+ * честной ссылки.
+ */
+import { useTranslations } from "../i18n";
+import type { Locale } from "../i18n/config";
+import { CONTACT_EMAIL, LEADS_ENDPOINT } from "../site";
+
+interface Props {
+  locale: Locale;
+  variant: "family" | "doctor";
+}
+
+const { locale, variant } = Astro.props;
+const d = useTranslations(locale);
+const f = d.leadForm;
+const isDoctor = variant === "doctor";
+---
+
+<form
+  class={isDoctor ? "lead-form lead-form--center" : "lead-form"}
+  data-lead-form
+  data-variant={variant}
+  action={LEADS_ENDPOINT}
+  method="post"
+>
+  <div class="lead-form__fields" data-lead-fields>
+    <div class="lead-form__row">
+      <label class="visually-hidden" for={`lead-email-${variant}`}>{f.emailLabel}</label>
+      <input
+        type="email"
+        id={`lead-email-${variant}`}
+        name="email"
+        required
+        autocomplete="email"
+        spellcheck="false"
+        placeholder={isDoctor ? f.emailPlaceholderDoctor : f.emailPlaceholderFamily}
+      />
+      {/* Приманка для ботов: живой человек это поле не видит и не заполняет. */}
+      <input
+        type="text"
+        name="company"
+        tabindex="-1"
+        autocomplete="off"
+        class="visually-hidden"
+        aria-hidden="true"
+      />
+      <button class={isDoctor ? "btn btn--on-dark" : "btn btn--primary"} type="submit">
+        {isDoctor ? f.submitDoctor : f.submitFamily}
+      </button>
+    </div>
+    <p class="lead-form__error" data-lead-error hidden role="alert"></p>
+    <p class="lead-form__consent">{f.consent}</p>
+  </div>
+
+  <p
+    class="lead-form__done"
+    data-lead-done
+    data-template={isDoctor ? f.doneDoctor : f.doneFamily}
+    role="status"
+    hidden
+  >
+  </p>
+
+  <p
+    class="lead-form__error-text"
+    data-lead-messages
+    data-error-email={f.errorEmail}
+    data-error-network={f.errorNetwork}
+    data-error-rate={f.errorRateLimited}
+    data-sending={f.sending}
+    hidden
+  >
+  </p>
+</form>
+
+<p class="lead-form__noscript">
+  <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+</p>
+
+<style>
+  /* Форма живёт только там, где есть JavaScript; иначе видна почта. */
+  :global(html.js) .lead-form__noscript {
+    display: none;
+  }
+
+  :global(html:not(.js)) .lead-form {
+    display: none;
+  }
+
+  .lead-form__noscript {
+    font-weight: 600;
+  }
+</style>

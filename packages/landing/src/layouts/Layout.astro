@@ -1,0 +1,72 @@
+---
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource-variable/source-serif-4";
+import "../styles/global.css";
+
+import BaseHead from "../components/BaseHead.astro";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { useTranslations } from "../i18n";
+import { HTML_LANG, type Locale, type PageKey } from "../i18n/config";
+import { CONTACT_EMAIL, TELEGRAM_URL } from "../site";
+
+interface Props {
+  locale: Locale;
+  page: PageKey;
+  title: string;
+  description: string;
+  ctaHref: string;
+  ctaLabel: string;
+  /** Микроразметка страницы (FAQPage и т. п.) сверх общей Organization. */
+  schema?: unknown;
+}
+
+const { locale, page, title, description, ctaHref, ctaLabel, schema } = Astro.props;
+const d = useTranslations(locale);
+
+const organization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "KetoCare",
+  url: Astro.site?.href,
+  description: d.home.seo.description,
+  email: CONTACT_EMAIL,
+  sameAs: [TELEGRAM_URL],
+};
+---
+
+<!doctype html>
+<html lang={HTML_LANG[locale]}>
+  <head>
+    <BaseHead locale={locale} page={page} title={title} description={description} />
+    <script is:inline set:html={JSON.stringify(organization)} type="application/ld+json" />
+    {schema && <script is:inline set:html={JSON.stringify(schema)} type="application/ld+json" />}
+    <script is:inline>
+      // Классы ставятся до первой отрисовки, иначе блоки успевают мигнуть.
+      // `js` — скрипты вообще есть (форма заявки вместо ссылки на почту);
+      // `js-anim` — можно прятать блоки до их появления при прокрутке.
+      var de = document.documentElement;
+      de.classList.add("js", "js-anim");
+      // Страховка. Прятать содержимое, рассчитывая показать его скриптом, —
+      // ставка на то, что скрипт выполнится. Если основной модуль не
+      // выполнился за 3 секунды (ошибка, оборванная загрузка, старый
+      // браузер), снимаем оба класса: пусть без анимации и с почтой вместо
+      // формы, но страница будет читаемой, а не пустой.
+      setTimeout(function () {
+        if (de.dataset.siteReady !== "1") de.classList.remove("js", "js-anim");
+      }, 3000);
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{d.common.skipToContent}</a>
+    <Header locale={locale} page={page} ctaHref={ctaHref} ctaLabel={ctaLabel} />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer locale={locale} />
+    <script src="../scripts/site.ts"></script>
+  </body>
+</html>

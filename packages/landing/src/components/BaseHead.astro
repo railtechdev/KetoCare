@@ -1,0 +1,65 @@
+---
+/**
+ * Всё содержимое <head>: метатеги, canonical, hreflang, карточки для
+ * соцсетей и микроразметка. Единственное место, где это собирается, —
+ * иначе языковые версии рано или поздно получат разные наборы тегов.
+ */
+import { HTML_LANG, LOCALES, pagePath, type Locale, type PageKey } from "../i18n/config";
+
+interface Props {
+  locale: Locale;
+  page: PageKey;
+  title: string;
+  description: string;
+}
+
+const { locale, page, title, description } = Astro.props;
+
+const canonical = new URL(pagePath(page, locale), Astro.site);
+
+/**
+ * hreflang перечисляет все языковые версии ИМЕННО этой страницы плюс
+ * x-default. Без него поисковик сам решает, что показать в стране, где ни
+ * один из наших языков не основной.
+ */
+const alternates = LOCALES.map((l) => ({
+  hreflang: HTML_LANG[l],
+  href: new URL(pagePath(page, l), Astro.site).href,
+}));
+
+const ogImage = new URL(`/og/${locale}.png`, Astro.site).href;
+const ogLocale = { ru: "ru_RU", uz: "uz_UZ", en: "en_US" }[locale];
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonical.href} />
+
+{alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+<link rel="alternate" hreflang="x-default" href={new URL(pagePath(page, "ru"), Astro.site).href} />
+
+<meta name="robots" content="index, follow, max-image-preview:large" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="KetoCare" />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical.href} />
+<meta property="og:image" content={ogImage} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content={ogLocale} />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={ogImage} />
+
+<meta name="theme-color" content="#2c5fe0" />
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="sitemap" href="/sitemap-index.xml" />

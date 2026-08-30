@@ -1,0 +1,42 @@
+---
+import { t, useTranslations } from "../i18n";
+import { pagePath, type Locale } from "../i18n/config";
+import { BUILD_YEAR, CONTACT_EMAIL, LOGIN_URL, TELEGRAM_URL } from "../site";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const d = useTranslations(locale);
+---
+
+<footer class="site-footer">
+  <div class="wrap site-footer__top">
+    <div>
+      <div class="brand" style="margin-bottom:12px">
+        <span class="brand__mark" aria-hidden="true">{d.common.brandMark}</span>
+        <span>{d.common.brand}</span>
+      </div>
+      <p class="site-footer__disclaimer">{d.footer.disclaimer}</p>
+    </div>
+
+    <div class="site-footer__cols">
+      <div class="site-footer__col">
+        <h2>{d.footer.sectionsTitle}</h2>
+        <a href={pagePath("home", locale)}>{d.nav.home}</a>
+        <a href={pagePath("howItWorks", locale)}>{d.nav.howItWorks}</a>
+        <a href={pagePath("doctors", locale)}>{d.nav.doctors}</a>
+        <a href={LOGIN_URL}>{d.nav.login}</a>
+      </div>
+      <div class="site-footer__col">
+        <h2>{d.footer.contactsTitle}</h2>
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        <a href={TELEGRAM_URL} rel="noopener">{d.footer.telegram}</a>
+      </div>
+    </div>
+  </div>
+  <div class="site-footer__bottom">
+    <div class="wrap">{t(d.footer.copyright, { year: BUILD_YEAR })}</div>
+  </div>
+</footer>

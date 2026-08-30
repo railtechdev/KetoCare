@@ -1,0 +1,41 @@
+---
+/**
+ * Переключатель языка. Ведёт на ТУ ЖЕ страницу на другом языке, а не на
+ * главную: сброс на главную при смене языка — самая частая и самая обидная
+ * ошибка многоязычных сайтов.
+ */
+import {
+  HTML_LANG,
+  LOCALES,
+  LOCALE_LABEL,
+  LOCALE_SHORT,
+  pagePath,
+  type Locale,
+  type PageKey,
+} from "../i18n/config";
+
+interface Props {
+  locale: Locale;
+  page: PageKey;
+  label: string;
+}
+
+const { locale, page, label } = Astro.props;
+---
+
+<nav class="lang" aria-label={label}>
+  {
+    LOCALES.map((l) => (
+      <a
+        class="lang__item"
+        href={pagePath(page, l)}
+        hreflang={HTML_LANG[l]}
+        lang={HTML_LANG[l]}
+        aria-current={l === locale ? "true" : undefined}
+      >
+        <span aria-hidden="true">{LOCALE_SHORT[l]}</span>
+        <span class="visually-hidden">{LOCALE_LABEL[l]}</span>
+      </a>
+    ))
+  }
+</nav>
