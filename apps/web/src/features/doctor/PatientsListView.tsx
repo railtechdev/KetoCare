@@ -8,6 +8,7 @@ import {
   RatioBadge,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Link } from "@tanstack/react-router";
 import { SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -39,11 +40,7 @@ interface PatientRow {
 /** Список пациентов врача с флагами (раздел 8.3 ТЗ, «Врач / Пациенты»). */
 const FAMILY_ROLES: readonly Role[] = ["parent"];
 
-export function PatientsListView({
-  onOpen,
-}: {
-  onOpen: (patient: Patient) => void;
-}) {
+export function PatientsListView() {
   const { t } = useTranslation("doctor");
   const [query, setQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -102,7 +99,28 @@ export function PatientsListView({
 
   const columns = useMemo<ColumnDef<PatientRow, unknown>[]>(
     () => [
-      { accessorKey: "name", header: t("list.columns.name") },
+      {
+        accessorKey: "name",
+        header: t("list.columns.name"),
+        // Имя — ссылка, а не текст рядом с кнопкой в отдельном столбце: карта
+        // пациента живёт по адресу (правило П1), и ссылку врач открывает в
+        // новой вкладке, копирует и пересылает — с кнопкой ничего этого нельзя.
+        // Освободившийся столбец возвращает таблице ширину, которую П19 просит
+        // держать узкой.
+        cell: ({ row }) => (
+          <Link
+            from="/app/$section"
+            to="."
+            search={(previous) => ({
+              ...previous,
+              patient: row.original.patient.id,
+            })}
+            className="font-medium underline-offset-2 hover:underline"
+          >
+            {row.original.name}
+          </Link>
+        ),
+      },
       {
         accessorKey: "ageMonths",
         header: t("list.columns.age"),
@@ -144,25 +162,8 @@ export function PatientsListView({
           />
         ),
       },
-      {
-        id: "open",
-        header: t("list.columns.card"),
-        enableSorting: false,
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-touch"
-            onClick={() => onOpen(row.original.patient)}
-            aria-label={t("list.openAria", { name: row.original.name })}
-          >
-            {t("list.open")}
-          </Button>
-        ),
-      },
     ],
-    [onOpen, overviews.pending, t],
+    [overviews.pending, t],
   );
 
   return (
