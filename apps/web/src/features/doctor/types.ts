@@ -13,6 +13,7 @@ export type MedicalProfileBody = Schemas["MedicalProfileWrite"];
 export type Medication = Schemas["MedicationRead"];
 export type MedicationBody = Schemas["MedicationWrite"];
 export type ClinicalNote = Schemas["ClinicalNoteRead"];
+export type Colleague = Schemas["ColleagueRead"];
 
 /**
  * Назначение вместе с номером версии.
@@ -41,7 +42,18 @@ export function isDoctor(role: Role | undefined): boolean {
   return role === "doctor";
 }
 
+/**
+ * Специалист, ведущий пациентов, — `CARE_ROLES` на сервере.
+ *
+ * Одно определение на все проверки этой пары ролей: две одинаковые проверки
+ * под разными именами со временем разошлись бы, и одна из них разрешила бы
+ * действие, которое сервер отвергает.
+ */
+export function isCareRole(role: Role | undefined): boolean {
+  return role === "doctor" || role === "dietitian";
+}
+
 /** Назначения создают врач и диетолог (`prescriptions.py`). */
 export function canWritePrescriptions(role: Role | undefined): boolean {
-  return role === "doctor" || role === "dietitian";
+  return isCareRole(role);
 }

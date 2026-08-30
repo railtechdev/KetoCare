@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { CareTeamPanel } from "./CareTeamPanel";
 import { MedicalProfileForm } from "./MedicalProfileForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { useIntakeOptions } from "../intake/useIntake";
@@ -68,6 +69,8 @@ export function SummaryTab({
       </AsyncSection>
 
       {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
+
+      <CareTeamPanel patientId={patient.id} />
     </div>
   );
 }

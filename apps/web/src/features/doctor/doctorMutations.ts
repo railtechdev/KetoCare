@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { patientOverviewKey } from "../patients/overview";
 import {
+  careTeamKey,
   clinicalNotesKey,
   medicalProfileKey,
   medicationsBranchKey,
@@ -155,4 +156,50 @@ export function useCreateClinicalNote(patientId: string) {
       });
     },
   });
+}
+
+/**
+ * Кто ведёт пациента: подключить коллегу и снять ведение.
+ *
+ * Обязанность решена ADR-0003 и реализована на сервере целиком — с проверкой
+ * доступа, запретом снимать последнего специалиста и записью в `audit_log`, —
+ * но не вызывалась фронтендом ни разу. Пациент оставался навсегда закреплён за
+ * тем, кто выдал приглашение семье: ни передать его в отпуск или при
+ * увольнении, ни подключить диетолога было нельзя ни одной ролью, включая
+ * администратора (к клиническим данным у него доступа нет).
+ */
+export function useCareTeamMutations(patientId: string) {
+  const queryClient = useQueryClient();
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: careTeamKey(patientId) });
+
+  const add = useMutation({
+    mutationFn: async (doctorId: string): Promise<void> => {
+      const { error } = await api.POST(
+        "/api/v1/patients/{patient_id}/doctors",
+        {
+          params: { path: { patient_id: patientId } },
+          body: { doctor_id: doctorId },
+        },
+      );
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: async (doctorId: string): Promise<void> => {
+      const { error } = await api.DELETE(
+        "/api/v1/patients/{patient_id}/doctors/{doctor_id}",
+        {
+          params: { path: { patient_id: patientId, doctor_id: doctorId } },
+        },
+      );
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  return { add, remove };
 }

@@ -6,6 +6,7 @@ import { withVersions } from "./prescriptionSchema";
 import {
   DOCTOR_PAGE_LIMIT,
   type ClinicalNote,
+  type Colleague,
   type Medication,
   type MedicalProfile,
   type PatientOverview,
@@ -200,4 +201,47 @@ export function activePrescriptionOf(
   history: PrescriptionHistory | undefined,
 ): Prescription | null {
   return history?.versions[0]?.prescription ?? null;
+}
+
+export function careTeamKey(patientId: string) {
+  return ["patient", patientId, "doctors"] as const;
+}
+
+/**
+ * Кто ведёт пациента.
+ *
+ * Ручка открыта и семье — родитель вправе знать, у кого есть доступ к данным
+ * ребёнка, — но экрана у неё пока нет; здесь список нужен врачу, чтобы
+ * передать пациента коллеге или подключить диетолога (ADR-0003, решение 3).
+ */
+export function useCareTeam(patientId: string) {
+  return useQuery({
+    queryKey: careTeamKey(patientId),
+    queryFn: async (): Promise<Colleague[]> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/doctors",
+        { params: { path: { patient_id: patientId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty care team response");
+      return data;
+    },
+  });
+}
+
+/**
+ * Справочник персонала для выбора коллеги. Сервер отдаёт его только doctor и
+ * dietitian; администратору он не нужен — к клиническим данным у него доступа
+ * нет (правило 5 CLAUDE.md).
+ */
+export function useColleagues(enabled: boolean) {
+  return useQuery({
+    queryKey: ["users", "colleagues"],
+    enabled,
+    staleTime: 10 * 60 * 1000,
+    queryFn: async (): Promise<Colleague[]> => {
+      const { data, error } = await api.GET("/api/v1/users/colleagues", {});
+      if (error || !data) throw error ?? new Error("Empty colleagues response");
+      return data;
+    },
+  });
 }
