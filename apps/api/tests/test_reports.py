@@ -397,6 +397,41 @@ class TestPdfJob:
 
         assert response.status_code == 404
 
+    async def test_purged_report_says_expired_not_unbuilt(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """После уборки файла отчёт остаётся собранным.
+
+        Уборщик обнуляет `file_name` — это его отметка. Если проверять имя
+        раньше срока ссылки, врач получит «Отчёт ещё не собран» о собранном
+        месяц назад отчёте и будет ждать сборки, которая давно прошла.
+        """
+
+        from core.repositories import report_jobs as jobs_repo
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        job = await jobs_repo.create(
+            session,
+            patient_id=patient.id,
+            requested_by=doctor.id,
+            period_start=PERIOD_FROM,
+            period_end=PERIOD_TO,
+        )
+        await jobs_repo.mark_done(
+            session,
+            job=job,
+            file_name=f"{job.id}.pdf",
+            expires_at=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+        await jobs_repo.mark_file_removed(session, job=job)
+
+        response = await client.get(
+            f"/api/v1/reports/jobs/{job.id}/file", headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 404
+        assert response.json()["error"]["message"] == "Срок ссылки на отчёт истёк, соберите заново."
+
 
 async def _noop() -> None:
     return None

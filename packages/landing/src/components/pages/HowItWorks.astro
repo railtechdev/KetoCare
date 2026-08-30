@@ -20,11 +20,16 @@ const p = d.howItWorks;
   ctaHref={`${pagePath("home", locale)}#cta`}
   ctaLabel={d.nav.earlyAccess}
 >
-  <section class="section section--white" style="border-bottom:1px solid var(--border)">
+  <section
+    class="section section--white"
+    style="border-bottom:1px solid var(--border)"
+  >
     <div class="wrap wrap--text" style="text-align:center">
       <p class="eyebrow">{p.hero.eyebrow}</p>
       <h1 class="h1" style="margin-bottom:18px">{p.hero.h1}</h1>
-      <p class="lead" style="max-width:56ch;margin-inline:auto">{p.hero.lead}</p>
+      <p class="lead" style="max-width:56ch;margin-inline:auto">
+        {p.hero.lead}
+      </p>
     </div>
   </section>
 
@@ -100,28 +105,42 @@ const p = d.howItWorks;
       <h2 class="h2" style="margin-bottom:28px">{p.status.h2}</h2>
       <div class="grid grid--auto">
         <div class="card card--sand">
-          <h3 class="card__title" style="color:var(--success)">{p.status.nowTitle}</h3>
+          <h3 class="card__title" style="color:var(--success)">
+            {p.status.nowTitle}
+          </h3>
           <ul class="tick-list" style="font-size:.92rem">
             {p.status.now.map((i) => <li>{i}</li>)}
           </ul>
         </div>
         <div class="card card--sand">
-          <h3 class="card__title" style="color:var(--sand-accent)">{p.status.nextTitle}</h3>
+          <h3 class="card__title" style="color:var(--sand-accent)">
+            {p.status.nextTitle}
+          </h3>
           <ul class="tick-list tick-list--next" style="font-size:.92rem">
             {p.status.next.map((i) => <li>{i}</li>)}
           </ul>
         </div>
       </div>
-      <p style="margin-top:24px;font-size:.84rem;color:var(--sand-muted);line-height:1.6">
+      <p
+        style="margin-top:24px;font-size:.84rem;color:var(--sand-muted);line-height:1.6"
+      >
         {p.status.note}
       </p>
     </div>
   </section>
 
-  <section class="section section--white" style="border-top:1px solid var(--border)">
+  <section
+    class="section section--white"
+    style="border-top:1px solid var(--border)"
+  >
     <div class="wrap wrap--text" style="text-align:center">
       <h2 class="h2" style="margin-bottom:14px">{p.cta.h2}</h2>
-      <p class="lead" style="max-width:52ch;margin-inline:auto;margin-bottom:30px">{p.cta.lead}</p>
+      <p
+        class="lead"
+        style="max-width:52ch;margin-inline:auto;margin-bottom:30px"
+      >
+        {p.cta.lead}
+      </p>
       <div class="btn-row btn-row--center">
         <a class="btn btn--primary" href={`${pagePath("home", locale)}#cta`}>
           {d.home.hero.ctaFamily}

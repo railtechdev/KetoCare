@@ -32,7 +32,9 @@ const d = useTranslations(locale);
       data-label-open={d.common.openMenu}
       data-label-close={d.common.closeMenu}
     >
-      <span class="nav-toggle__bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="nav-toggle__bars" aria-hidden="true"
+        ><i></i><i></i><i></i></span
+      >
       <span data-nav-toggle-label>{d.common.openMenu}</span>
     </button>
 
@@ -53,7 +55,11 @@ const d = useTranslations(locale);
       </a>
       <a class="nav__login" href={LOGIN_URL}>{d.nav.login}</a>
       <a class="nav__cta" href={ctaHref}>{ctaLabel}</a>
-      <LangSwitcher locale={locale} page={page} label={d.common.languageLabel} />
+      <LangSwitcher
+        locale={locale}
+        page={page}
+        label={d.common.languageLabel}
+      />
     </nav>
   </div>
 </header>

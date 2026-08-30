@@ -19,6 +19,7 @@ x-app-env: &app-env
   REDIS_URL: redis://redis:6379/0
   REPORTS_DIR: /data/reports
   ATTACHMENTS_DIR: /data/attachments
+  ERASED_DIR: /data/erased
 
 # 40 ГБ диска: без ограничения json-file логи uvicorn/бота съедают его молча.
 x-logging: &logging
@@ -73,6 +74,9 @@ services:
     volumes:
       - reports:/data/reports
       - attachments:/data/attachments
+      # Архивы стирания (раздел 11 ТЗ): команда запускается в этом контейнере,
+      # а её архив обязан пережить и контейнер, и деплой.
+      - erased:/data/erased
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,3 +149,6 @@ volumes:
   # существует в одном экземпляре, и pg_dump сохраняет только строку таблицы, а
   # не байты файла. Том обязан попадать в резервное копирование (ADR-0013).
   attachments:
+  # Архивы стирания (раздел 11 ТЗ). Восстановить стёртое можно только отсюда,
+  # поэтому том — и в резервное копирование вместе с вложениями.
+  erased:

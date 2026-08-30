@@ -88,6 +88,29 @@ def validate(content: bytes) -> str:
     return mime
 
 
+def quota_bytes() -> int:
+    return get_settings().attachment_quota_mb * 1024 * 1024
+
+
+def assert_within_quota(used: int, incoming: int) -> None:
+    """Проверяет, что новый файл помещается в квоту пациента.
+
+    Предел на файл диск не защищает: сотня документов заполнит том так же
+    надёжно, как один огромный файл. Отказ объясняет, что делать — удалить
+    лишнее, — потому что «превышена квота» без этого читается как поломка.
+    """
+
+    limit = quota_bytes()
+    if used + incoming > limit:
+        free = max(0, limit - used)
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Не помещается: на документы этого ребёнка отведено "
+            f"{limit // (1024 * 1024)} МБ, свободно {free // (1024 * 1024)} МБ. "
+            "Удалите ненужные документы.",
+        )
+
+
 def generate_stored_name(mime: str) -> str:
     """Имя файла на диске. Генерирует приложение (ADR-0004, решение 2).
 

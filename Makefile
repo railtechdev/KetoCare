@@ -150,6 +150,14 @@ web: check-env ## Запустить веб-кабинет (Vite); /api прок
 	@# `.env` строку WEB_PORT — и кабинет поднимется там же.
 	pnpm --filter @ketocare/web run dev
 
+.PHONY: landing
+landing: check-env ## Запустить посадочную страницу (astro dev); /api проксируется на API_PROXY_TARGET
+	@# Порт — LANDING_PORT в корневом файле настроек, читает его сам astro.
+	@# Прокси `/api` обязателен: на сервере его делает nginx, и без него форма
+	@# заявки локально отвечает 404 — единственную публичную ручку записи
+	@# нельзя было проверить, не собрав лендинг и не подняв рядом nginx.
+	pnpm --filter @ketocare/landing run dev
+
 .PHONY: down
 down: ## Остановить окружение
 	$(COMPOSE) down
@@ -182,12 +190,17 @@ lint: openapi ## Линтеры и проверка типов (сначала �
 fix: ## Автоисправление форматирования
 	uv run ruff check --fix apps packages
 	uv run ruff format apps packages
+	@# Через скрипты пакетов (`format`), а не `exec prettier --write src`:
+	@# пути должен знать сам пакет. С зашитым `src` лендинг форматировался не
+	@# целиком — его `format:check` смотрит ещё и `scripts/`, и файл оттуда
+	@# ронял `make lint`, а `make fix` его не чинил.
+	@#
 	@# `exec` не понимает `--if-present` (это опция `run`) — с ней команда
 	@# падала с «Unknown option», а `&& echo` просто не выполнялся, и `make fix`
-	@# молча переставал форматировать JS. Теперь без неё, и с проверкой кода
-	@# выхода: тихо не форматировать хуже, чем не форматировать заметно.
+	@# молча переставал форматировать JS. Отсюда проверка кода выхода: тихо не
+	@# форматировать хуже, чем не форматировать заметно.
 	@if [ -d node_modules ]; then \
-		pnpm -r exec prettier --write src >/dev/null \
+		pnpm -r --if-present run format >/dev/null \
 		&& echo "prettier: ok" \
 		&& pnpm -r exec eslint src --fix >/dev/null \
 		&& echo "eslint: ok"; \

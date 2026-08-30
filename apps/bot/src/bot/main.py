@@ -20,7 +20,7 @@ from aiogram.types import TelegramObject
 from redis.asyncio import Redis
 
 from .api import BotApi
-from .config import BotSettings
+from .config import load_settings
 from .handlers import fallback, scenarios, start
 from .storage import BindingStore
 
@@ -64,7 +64,7 @@ def build_dispatcher(*, storage: RedisStorage, api: BotApi, store: BindingStore)
 
 
 async def main() -> None:
-    settings = BotSettings()  # type: ignore[call-arg]
+    settings = load_settings()
 
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     http = httpx.AsyncClient(base_url=settings.bot_api_base_url, timeout=10.0)

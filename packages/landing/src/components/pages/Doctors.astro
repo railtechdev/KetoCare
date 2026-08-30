@@ -24,16 +24,24 @@ const g = p.benefits.grid;
   ctaLabel={d.nav.pilot}
 >
   <section class="hero dark-section">
-    <div class="hero__glow" aria-hidden="true" style="top:-160px;left:-140px;width:520px;height:520px;background:radial-gradient(closest-side,rgb(127 166 255 / 16%),transparent 70%)">
+    <div
+      class="hero__glow"
+      aria-hidden="true"
+      style="top:-160px;left:-140px;width:520px;height:520px;background:radial-gradient(closest-side,rgb(127 166 255 / 16%),transparent 70%)"
+    >
     </div>
     <div class="wrap hero__inner split">
       <div class="split__text">
         <p class="eyebrow">{p.hero.eyebrow}</p>
         <h1 class="h1" style="margin-bottom:20px">{p.hero.h1}</h1>
-        <p class="lead measure--tight" style="margin-bottom:30px">{p.hero.lead}</p>
+        <p class="lead measure--tight" style="margin-bottom:30px">
+          {p.hero.lead}
+        </p>
         <div class="btn-row">
           <a class="btn btn--on-dark" href="#pilot">{p.hero.ctaPilot}</a>
-          <a class="btn btn--ghost-dark" href={pagePath("howItWorks", locale)}>{p.hero.ctaHow}</a>
+          <a class="btn btn--ghost-dark" href={pagePath("howItWorks", locale)}
+            >{p.hero.ctaHow}</a
+          >
         </div>
       </div>
 
@@ -46,7 +54,9 @@ const g = p.benefits.grid;
               >{p.hero.card.badge}</span
             >
           </div>
-          <dl style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0">
+          <dl
+            style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0"
+          >
             {
               [
                 [p.hero.card.ratioLabel, p.hero.card.ratioValue],
@@ -55,8 +65,13 @@ const g = p.benefits.grid;
                 [p.hero.card.carbsLabel, p.hero.card.carbsValue],
               ].map(([label, value]) => (
                 <div style="background:var(--surface-sunken);border-radius:13px;padding:13px 15px">
-                  <dt style="font-size:.75rem;color:var(--ink-muted);margin-bottom:2px">{label}</dt>
-                  <dd class="num" style="margin:0;font-weight:700;font-size:1.19rem">
+                  <dt style="font-size:.75rem;color:var(--ink-muted);margin-bottom:2px">
+                    {label}
+                  </dt>
+                  <dd
+                    class="num"
+                    style="margin:0;font-weight:700;font-size:1.19rem"
+                  >
                     {value}
                   </dd>
                 </div>
@@ -66,10 +81,16 @@ const g = p.benefits.grid;
           <div
             style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--border);border-radius:13px;padding:12px 15px"
           >
-            <span style="font-size:.84rem;color:var(--ink-muted)">{p.hero.card.mealsLabel}</span>
-            <span class="num" style="font-weight:700;font-size:1rem">{p.hero.card.mealsValue}</span>
+            <span style="font-size:.84rem;color:var(--ink-muted)"
+              >{p.hero.card.mealsLabel}</span
+            >
+            <span class="num" style="font-weight:700;font-size:1rem"
+              >{p.hero.card.mealsValue}</span
+            >
           </div>
-          <p style="margin-top:12px;font-size:.78rem;color:var(--ink-muted);line-height:1.5">
+          <p
+            style="margin-top:12px;font-size:.78rem;color:var(--ink-muted);line-height:1.5"
+          >
             {p.hero.card.note}
           </p>
         </div>
@@ -78,13 +99,20 @@ const g = p.benefits.grid;
   </section>
 
   {/* ---------- Что получает врач ---------- */}
-  <section class="section section--white" style="border-bottom:1px solid var(--border)">
+  <section
+    class="section section--white"
+    style="border-bottom:1px solid var(--border)"
+  >
     <div class="wrap reveal">
-      <h2 class="h2" style="max-width:26ch;margin-bottom:44px">{p.benefits.h2}</h2>
+      <h2 class="h2" style="max-width:26ch;margin-bottom:44px">
+        {p.benefits.h2}
+      </h2>
       <div class="grid grid--auto">
         <div class="card card--sunken">
           <h3 class="card__title">{p.benefits.queue.title}</h3>
-          <p class="card__text" style="margin-bottom:16px">{p.benefits.queue.text}</p>
+          <p class="card__text" style="margin-bottom:16px">
+            {p.benefits.queue.text}
+          </p>
           <ul style="display:flex;flex-direction:column;gap:8px">
             {
               p.benefits.queue.rows.map((row) => (
@@ -92,7 +120,9 @@ const g = p.benefits.grid;
                   <span
                     aria-hidden="true"
                     style={`width:9px;height:9px;border-radius:50%;flex:none;background:${
-                      row.level === "danger" ? "var(--danger)" : "var(--warn-mark)"
+                      row.level === "danger"
+                        ? "var(--danger)"
+                        : "var(--warn-mark)"
                     }`}
                   />
                   <strong>{row.name}</strong>
@@ -105,8 +135,14 @@ const g = p.benefits.grid;
 
         <div class="card card--sunken">
           <h3 class="card__title">{p.benefits.chart.title}</h3>
-          <p class="card__text" style="margin-bottom:16px">{p.benefits.chart.text}</p>
-          <svg viewBox="0 0 280 84" role="img" aria-label={p.benefits.chart.chartAlt}>
+          <p class="card__text" style="margin-bottom:16px">
+            {p.benefits.chart.text}
+          </p>
+          <svg
+            viewBox="0 0 280 84"
+            role="img"
+            aria-label={p.benefits.chart.chartAlt}
+          >
             <line
               x1="150"
               y1="6"
@@ -123,14 +159,18 @@ const g = p.benefits.grid;
               stroke-linecap="round"></polyline>
             <circle cx="270" cy="26" r="4" fill="var(--primary)"></circle>
           </svg>
-          <p style="font-size:.75rem;color:#5d51b8;font-weight:600;margin-top:6px">
+          <p
+            style="font-size:.75rem;color:#5d51b8;font-weight:600;margin-top:6px"
+          >
             <span aria-hidden="true">— — </span>{p.benefits.chart.legend}
           </p>
         </div>
 
         <div class="card card--sunken">
           <h3 class="card__title">{p.benefits.report.title}</h3>
-          <p class="card__text" style="margin-bottom:16px">{p.benefits.report.text}</p>
+          <p class="card__text" style="margin-bottom:16px">
+            {p.benefits.report.text}
+          </p>
           <div
             style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;font-size:.8rem;line-height:1.7;color:var(--ink-muted)"
           >
@@ -196,7 +236,9 @@ const g = p.benefits.grid;
   {/* ---------- Подключение семей ---------- */}
   <section class="section">
     <div class="wrap reveal">
-      <h2 class="h2" style="max-width:24ch;margin-bottom:14px">{p.onboarding.h2}</h2>
+      <h2 class="h2" style="max-width:24ch;margin-bottom:14px">
+        {p.onboarding.h2}
+      </h2>
       <p class="lead measure" style="margin-bottom:40px">{p.onboarding.lead}</p>
       <div class="grid grid--auto">
         {
@@ -214,7 +256,10 @@ const g = p.benefits.grid;
   </section>
 
   {/* ---------- Пилот ---------- */}
-  <section class="section section--white" style="border-top:1px solid var(--border)">
+  <section
+    class="section section--white"
+    style="border-top:1px solid var(--border)"
+  >
     <div class="wrap reveal">
       <h2 class="h2" style="max-width:22ch;margin-bottom:44px">{p.pilot.h2}</h2>
       <div class="grid grid--auto">
@@ -239,12 +284,16 @@ const g = p.benefits.grid;
   <section class="section dark-section" id="pilot">
     <div class="wrap wrap--text" style="text-align:center">
       <h2 class="h2" style="margin-bottom:14px">{p.ctaForm.h2}</h2>
-      <p class="lead" style="max-width:52ch;margin-inline:auto;margin-bottom:32px">
+      <p
+        class="lead"
+        style="max-width:52ch;margin-inline:auto;margin-bottom:32px"
+      >
         {p.ctaForm.lead}
       </p>
       <LeadForm locale={locale} variant="doctor" />
       <p style="margin-top:22px;font-size:.84rem;color:var(--dark-muted)">
-        {p.ctaForm.direct} <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        {p.ctaForm.direct}
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
       </p>
     </div>
   </section>

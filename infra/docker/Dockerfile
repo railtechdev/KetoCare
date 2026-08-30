@@ -40,8 +40,8 @@ RUN uv sync --frozen --no-dev --all-packages
 # процесс идёт под `app` (USER ниже) и писать туда не может. Вложения так и
 # падали бы: 500 на первой же загрузке документа, причём только на сервере.
 RUN useradd --create-home --uid 1000 app \
-    && mkdir -p /data/reports /data/attachments \
-    && chown app /data/reports /data/attachments
+    && mkdir -p /data/reports /data/attachments /data/erased \
+    && chown app /data/reports /data/attachments /data/erased
 
 
 FROM base AS api

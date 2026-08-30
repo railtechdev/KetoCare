@@ -31,7 +31,15 @@ else
     exit 1
 fi
 
-git pull --ff-only
+# Автодеплой (.github/workflows/deploy.yml) сам переводит рабочую копию на тот
+# коммит, на котором зеленел CI, и приходит сюда с отсоединённым HEAD. `git pull`
+# на нём падает: «You are not currently on a branch». Ручной запуск на сервере
+# по-прежнему подтягивает вершину ветки.
+if git symbolic-ref --quiet HEAD >/dev/null; then
+    git pull --ff-only
+else
+    echo "Отсоединённый HEAD — код уже на нужном коммите: $(git rev-parse --short HEAD)"
+fi
 
 $COMPOSE build
 $COMPOSE up -d postgres redis
@@ -48,6 +56,10 @@ if [ "${1:-}" != "--api-only" ]; then
     # Сборка фронта на хосте (node 22 + corepack, см. docs/DEPLOY.md).
     # Лимит памяти node — VPS с 2 ГБ RAM, рядом работают postgres и api.
     corepack enable >/dev/null 2>&1 || true
+    # Без этого corepack при первом запуске (и после каждой смены версии pnpm в
+    # `packageManager`) спрашивает подтверждение загрузки. В автодеплое отвечать
+    # некому: задача GitHub Actions висит до таймаута, а в журнале — тишина.
+    export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
     pnpm install --frozen-lockfile
 
     # openapi.json и сам сгенерированный клиент в git не попадают (.gitignore),

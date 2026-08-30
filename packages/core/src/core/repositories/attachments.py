@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Attachment
@@ -79,13 +79,58 @@ async def list_for_owner(
     return list(await session.scalars(stmt))
 
 
+async def used_bytes(
+    session: AsyncSession, *, owner_kind: AttachmentOwnerKind, owner_id: uuid.UUID
+) -> int:
+    """Сколько байт занимают живые вложения владельца.
+
+    Удалённые не считаются, хотя их байты лежат на диске до уборки (отсрочка
+    `ATTACHMENT_PURGE_DAYS`). Иначе удаление документа не освобождало бы место в
+    глазах семьи, и упершийся в квоту не смог бы её разгрузить вовсе.
+    """
+
+    result = await session.execute(
+        select(func.coalesce(func.sum(Attachment.size_bytes), 0)).where(
+            Attachment.owner_kind == owner_kind,
+            Attachment.owner_id == owner_id,
+            Attachment.deleted_at.is_(None),
+        )
+    )
+    return int(result.scalar_one())
+
+
 async def soft_delete(session: AsyncSession, *, attachment: Attachment) -> None:
     """Мягкое удаление (правило 4).
 
-    Байты остаются на диске: уборщика файлов в продукте нет ни для отчётов, ни
-    для вложений, и делать вид, что он есть, нельзя. Долг зафиксирован в
-    ADR-0013.
+    Байты остаются на диске, пока их не снимет уборщик — не раньше чем через
+    `ATTACHMENT_PURGE_DAYS` дней. Отсрочка нужна ровно затем, чтобы случайное
+    удаление выписки можно было отменить руками.
     """
 
     attachment.deleted_at = datetime.now(UTC)
+    await session.flush()
+
+
+async def list_purgeable(session: AsyncSession, *, before: datetime) -> list[Attachment]:
+    """Вложения, у которых пора снять байты с диска.
+
+    Удалённые раньше `before` и ещё не убранные. Строки остаются навсегда: по
+    ним видно, что документ был и когда исчез, — это и есть след правила 4.
+    """
+
+    stmt = select(Attachment).where(
+        Attachment.deleted_at.is_not(None),
+        Attachment.deleted_at < before,
+        Attachment.purged_at.is_(None),
+    )
+    return list(await session.scalars(stmt))
+
+
+async def mark_purged(session: AsyncSession, *, attachments: list[Attachment]) -> None:
+    """Отмечает, что байты сняты. Без отметки уборщик каждую ночь заново
+    обходил бы все когда-либо удалённые вложения."""
+
+    now = datetime.now(UTC)
+    for attachment in attachments:
+        attachment.purged_at = now
     await session.flush()

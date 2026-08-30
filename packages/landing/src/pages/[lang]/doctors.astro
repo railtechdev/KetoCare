@@ -3,7 +3,9 @@ import Doctors from "../../components/pages/Doctors.astro";
 import { DEFAULT_LOCALE, LOCALES, type Locale } from "../../i18n/config";
 
 export function getStaticPaths() {
-  return LOCALES.filter((l) => l !== DEFAULT_LOCALE).map((lang) => ({ params: { lang } }));
+  return LOCALES.filter((l) => l !== DEFAULT_LOCALE).map((lang) => ({
+    params: { lang },
+  }));
 }
 
 const locale = Astro.params.lang as Locale;

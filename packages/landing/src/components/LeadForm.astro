@@ -36,7 +36,9 @@ const isDoctor = variant === "doctor";
 >
   <div class="lead-form__fields" data-lead-fields>
     <div class="lead-form__row">
-      <label class="visually-hidden" for={`lead-email-${variant}`}>{f.emailLabel}</label>
+      <label class="visually-hidden" for={`lead-email-${variant}`}
+        >{f.emailLabel}</label
+      >
       <input
         type="email"
         id={`lead-email-${variant}`}
@@ -44,11 +46,15 @@ const isDoctor = variant === "doctor";
         required
         autocomplete="email"
         spellcheck="false"
-        placeholder={isDoctor ? f.emailPlaceholderDoctor : f.emailPlaceholderFamily}
+        placeholder={isDoctor
+          ? f.emailPlaceholderDoctor
+          : f.emailPlaceholderFamily}
       />
-      {/* Приманка для ботов: живой человек это поле не видит и не заполняет.
+      {
+        /* Приманка для ботов: живой человек это поле не видит и не заполняет.
           Имя не `company`: менеджеры паролей подставляют организацию даже
-          в скрытое поле, и живой посетитель молча терял бы заявку. */}
+          в скрытое поле, и живой посетитель молча терял бы заявку. */
+      }
       <input
         type="text"
         name="website"
@@ -57,7 +63,10 @@ const isDoctor = variant === "doctor";
         class="visually-hidden"
         aria-hidden="true"
       />
-      <button class={isDoctor ? "btn btn--on-dark" : "btn btn--primary"} type="submit">
+      <button
+        class={isDoctor ? "btn btn--on-dark" : "btn btn--primary"}
+        type="submit"
+      >
         {isDoctor ? f.submitDoctor : f.submitFamily}
       </button>
     </div>
@@ -80,7 +89,7 @@ const isDoctor = variant === "doctor";
     data-error-email={f.errorEmail}
     data-error-network={f.errorNetwork}
     data-error-rate={f.errorRateLimited}
-  data-contact-email={CONTACT_EMAIL}
+    data-contact-email={CONTACT_EMAIL}
     data-sending={f.sending}
     hidden
   >

@@ -10,6 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check src",
+    "format": "prettier --write src",
     "lint": "eslint src"
   },
   "dependencies": {
