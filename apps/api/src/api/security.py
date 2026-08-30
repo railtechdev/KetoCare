@@ -32,7 +32,7 @@ _ALGORITHM = "HS256"
 
 _hasher = PasswordHasher()
 
-TokenType = Literal["access", "refresh", "totp_setup"]
+TokenType = Literal["access", "refresh", "totp_setup", "password_reset"]
 
 # Канал, которому выдан токен. `web` в payload не пишется — он же и значение по
 # умолчанию для токенов без claim'а `chan`, выпущенных до появления признака.
@@ -50,6 +50,9 @@ _TTL_BY_TYPE: dict[str, timedelta] = {
     "access": ACCESS_TOKEN_TTL,
     "refresh": REFRESH_TOKEN_TTL,
     "totp_setup": TOTP_SETUP_TOKEN_TTL,
+    # Тот же срок, что у настройки 2FA: это такой же шаг, не завершающий вход, —
+    # человек обязан задать свой пароль здесь и сейчас, а не когда вспомнит.
+    "password_reset": TOTP_SETUP_TOKEN_TTL,
 }
 
 

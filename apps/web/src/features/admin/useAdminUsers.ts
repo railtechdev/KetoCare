@@ -71,3 +71,30 @@ export function useResetTotpMutation() {
     },
   });
 }
+
+/**
+ * Выдать временный пароль.
+ *
+ * Восстановления пароля в продукте нет: рассылки нет вовсе, а смена требует
+ * знать текущий. Забывший пароль врач терял доступ к данным своих пациентов
+ * навсегда.
+ *
+ * Пароль возвращается один раз — в базе только argon2-хэш.
+ */
+export function useResetPasswordMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await api.POST(
+        "/api/v1/admin/users/{user_id}/reset-password",
+        { params: { path: { user_id: userId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty reset response");
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin", "audit"] });
+    },
+  });
+}

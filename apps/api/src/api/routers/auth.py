@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, Response
 
@@ -18,7 +19,13 @@ from core.repositories import users as users_repo
 
 from ..client_address import client_address
 from ..cookies import set_auth_cookies
-from ..deps.auth import CurrentUserDep, SessionDep, TotpSetupUserDep, require_roles
+from ..deps.auth import (
+    CurrentUserDep,
+    PasswordResetUserDep,
+    SessionDep,
+    TotpSetupUserDep,
+    require_roles,
+)
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
 from ..schemas import (
@@ -30,6 +37,7 @@ from ..schemas import (
     InvitationCreated,
     LoginRequest,
     LoginResponse,
+    PasswordSet,
     RefreshRequest,
     TokenPair,
     TotpEnabledResponse,
@@ -151,6 +159,20 @@ async def login(
                 entity_id=user.id,
                 ip=client_address(request),
             )
+
+    if user.password_change_required:
+        # После проверки пароля и второго фактора, а не вместо них: временный
+        # пароль сокращает путь до смены, но не отменяет ни одной проверки.
+        #
+        # Рабочих токенов здесь не выдаётся вовсе. Иначе человек получал бы
+        # сессию, а вместе с ней возможность не менять пароль, который знает
+        # администратор, — то есть признак не значил бы ничего.
+        return LoginResponse(
+            status="password_change_required",
+            password_reset_token=create_token(
+                user_id=user.id, role=user.role, token_type="password_reset"
+            ),
+        )
 
     tokens = _issue_tokens(user)
     set_auth_cookies(response, tokens)
@@ -461,3 +483,55 @@ async def regenerate_backup_codes(
     )
 
     return BackupCodes(codes=codes)
+
+
+@router.post(
+    "/password/set",
+    response_model=TokenPair,
+    summary="Задать пароль после сброса администратором",
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def set_password_after_reset(
+    payload: PasswordSet,
+    request: Request,
+    response: Response,
+    user: PasswordResetUserDep,
+    session: SessionDep,
+) -> TokenPair:
+    """Завершает вход тому, кому администратор сбросил пароль.
+
+    Текущий пароль не спрашивается: владелец его не знает, а временный знает
+    ещё и администратор. Именно поэтому вход и не выдавал рабочих токенов,
+    пока пароль не заменён.
+
+    Отметка `password_changed_at` обрывает все прежние сессии (раздел 11 ТЗ) —
+    в том числе те, что мог открыть кто-то с временным паролем на руках.
+    """
+
+    db_user = await users_repo.get(session, user.id)
+    if db_user is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+
+    if await verify_password_async(db_user.password_hash, payload.new_password):
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Новый пароль совпадает с временным. Задайте другой.",
+        )
+
+    db_user.password_hash = await hash_password_async(payload.new_password)
+    db_user.password_changed_at = datetime.now(UTC)
+    db_user.password_change_required = False
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="password_changed",
+        entity="users",
+        entity_id=user.id,
+        ip=client_address(request),
+    )
+
+    tokens = _issue_tokens(db_user)
+    set_auth_cookies(response, tokens)
+    return tokens

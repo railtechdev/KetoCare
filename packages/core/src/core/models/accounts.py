@@ -27,6 +27,14 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     # токенов нет. Отметка попадает в токен claim'ом, и токен, выданный до
     # смены, отвергается — так revoke работает без таблицы сессий.
     password_changed_at: Mapped[datetime | None]
+    # Пароль выдан администратором и должен быть заменён при первом входе.
+    #
+    # Временный пароль администратор передаёт голосом или в переписке, то есть
+    # он заведомо известен второму человеку. Без этого признака он оставался бы
+    # действующим сколько угодно долго, и администратор знал бы пароль врача.
+    password_change_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     totp_secret: Mapped[str | None] = mapped_column(String(64))
     # Секрет-кандидат: заполняется на /auth/totp/setup и становится действующим
     # только после /auth/totp/verify с валидным кодом. Пока подтверждения не было,

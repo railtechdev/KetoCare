@@ -101,9 +101,32 @@ class LoginResponse(BaseModel):
     `totp_setup_token` даёт доступ только к /auth/totp/setup и /auth/totp/verify.
     """
 
-    status: Literal["ok", "totp_setup_required"]
+    status: Literal["ok", "totp_setup_required", "password_change_required"]
     tokens: TokenPair | None = None
     totp_setup_token: str | None = None
+    #: Токен для `POST /auth/password/set`. Выдаётся, когда пароль сбросил
+    #: администратор: временный пароль заведомо известен второму человеку, и
+    #: работать он должен ровно до того, как владелец задаст свой.
+    password_reset_token: str | None = None
+
+
+class PasswordSet(BaseModel):
+    """Новый пароль по токену сброса. Текущий не спрашивается: его владелец не
+    знает — пароль ему выдал администратор, и задача как раз в том, чтобы
+    временный перестал действовать."""
+
+    new_password: Annotated[str, Field(min_length=12, max_length=128)]
+
+
+class AdminPasswordReset(BaseModel):
+    """Временный пароль, выданный администратором.
+
+    Показывается ему один раз: в базе только argon2-хэш. Передавать его нужно
+    тому, чью учётную запись сбрасывали, — голосом или в переписке, — и он
+    перестанет работать сразу, как только человек задаст свой.
+    """
+
+    temporary_password: str
 
 
 class RefreshRequest(BaseModel):

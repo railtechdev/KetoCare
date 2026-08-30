@@ -22,7 +22,7 @@ from ..client_address import client_address
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
-from ..schemas import Page, UserRead
+from ..schemas import AdminPasswordReset, Page, UserRead
 from ..schemas_admin import (
     AdminUserUpdate,
     AuditLogRead,
@@ -91,6 +91,33 @@ async def reset_user_totp(
         ip=client_address(request),
     )
     return UserRead.model_validate(updated)
+
+
+@router.post(
+    "/users/{user_id}/reset-password",
+    response_model=AdminPasswordReset,
+    summary="Выдать временный пароль",
+)
+async def reset_user_password(
+    user_id: Annotated[uuid.UUID, Path()],
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> AdminPasswordReset:
+    """Восстановление доступа для забывшего пароль.
+
+    Временный пароль возвращается один раз — в базе только argon2-хэш. Вход по
+    нему не выдаёт рабочей сессии: человек обязан задать свой пароль, потому что
+    временный знает и администратор.
+    """
+
+    temporary = await admin_service.reset_password(
+        session,
+        actor=user,
+        user_id=user_id,
+        ip=client_address(request),
+    )
+    return AdminPasswordReset(temporary_password=temporary)
 
 
 # --- журнал аудита --------------------------------------------------------

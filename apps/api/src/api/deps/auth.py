@@ -288,3 +288,32 @@ async def get_totp_setup_user(request: Request, session: SessionDep) -> CurrentU
 
 
 TotpSetupUserDep = Annotated[CurrentUser, Depends(get_totp_setup_user)]
+
+
+async def get_password_reset_user(request: Request, session: SessionDep) -> CurrentUser:
+    """Пользователь, обязанный задать себе новый пароль.
+
+    Принимает только `password_reset`-токен, выданный `/auth/login` тому, кому
+    администратор сбросил пароль. Обычный access-токен сюда не подходит: у
+    такого человека рабочей сессии ещё нет — он её и получит, задав пароль.
+
+    Смена уже известного пароля живёт отдельно (`POST /users/me/password`) и
+    требует текущего: две разные задачи, и слить их значило бы разрешить смену
+    пароля без знания старого по любому access-токену.
+    """
+
+    payload = decode_token(_bearer_token(request), expected_type="password_reset")
+
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise auth_challenge("Недействительный токен.") from exc
+
+    user = await users_repo.get(session, user_id)
+    if user is None or not user.is_active:
+        raise auth_challenge("Учётная запись недоступна.")
+
+    return CurrentUser(id=user.id, role=user.role)
+
+
+PasswordResetUserDep = Annotated[CurrentUser, Depends(get_password_reset_user)]

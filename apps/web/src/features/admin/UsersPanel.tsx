@@ -9,7 +9,7 @@ import {
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { KeyRound, UserPlus, Users } from "lucide-react";
+import { KeyRound, RotateCcwKey, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -22,6 +22,7 @@ import { TableSkeleton } from "./TableSkeleton";
 import { UserAccountForm } from "./UserAccountForm";
 import {
   useAdminUsers,
+  useResetPasswordMutation,
   useResetTotpMutation,
   useUpdateUserMutation,
 } from "./useAdminUsers";
@@ -44,6 +45,19 @@ export function UsersPanel() {
   const users = useAdminUsers();
   const update = useUpdateUserMutation();
   const resetTotp = useResetTotpMutation();
+  const resetPassword = useResetPasswordMutation();
+
+  /**
+   * Выданный временный пароль и чья это запись.
+   *
+   * Показывается один раз: в базе только argon2-хэш, повторить показ
+   * невозможно. Поэтому панель не закрывается сама — администратор должен
+   * успеть передать пароль владельцу.
+   */
+  const [issued, setIssued] = useState<{
+    name: string;
+    password: string;
+  } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
 
@@ -111,6 +125,45 @@ export function UsersPanel() {
                 {t("users.edit")}
               </Button>
 
+              {/* Пароль сбрасывается у любой учётной записи: забыть его может
+                  кто угодно, в отличие от второго фактора, которого у части
+                  ролей нет вовсе. */}
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-touch"
+                    aria-label={t("users.resetPasswordAria", {
+                      name: row.original.full_name,
+                    })}
+                  >
+                    <RotateCcwKey aria-hidden="true" />
+                    {t("users.resetPassword")}
+                  </Button>
+                }
+                title={t("users.confirmResetPasswordTitle", {
+                  name: row.original.full_name,
+                })}
+                description={t("users.confirmResetPasswordBody")}
+                confirmLabel={t("users.confirmResetPasswordAction")}
+                cancelLabel={t("common:actions.cancel")}
+                onConfirm={() =>
+                  resetPassword.mutate(row.original.id, {
+                    onSuccess: (data) =>
+                      setIssued({
+                        name: row.original.full_name,
+                        password: data.temporary_password,
+                      }),
+                    onError: (error) =>
+                      toast.error(
+                        errorMessageOf(error) ?? t("common:errors.unexpected"),
+                      ),
+                  })
+                }
+              />
+
               {/* Кнопки нет, когда второго фактора нет: она вела бы в
                   заведомый 409 (правило П3 канона). Подтверждение называет
                   учётную запись — «сбросить второй фактор» без имени это
@@ -153,7 +206,7 @@ export function UsersPanel() {
           ),
       },
     ],
-    [t, currentUserId, resetUpdate, resetTotp],
+    [t, currentUserId, resetUpdate, resetTotp, resetPassword],
   );
 
   return (
@@ -175,6 +228,43 @@ export function UsersPanel() {
           Панелью, а не блоком над списком: администратор приходит сюда
           управлять учётными записями, а приглашает сотрудника изредка
           (правило П32 канона). */}
+      {/* Временный пароль — панелью, которая не закрывается сама: показать его
+          второй раз нельзя (в базе только argon2-хэш), а передать владельцу
+          администратор должен успеть. */}
+      <FormSheet
+        open={issued !== null}
+        onOpenChange={(open) => {
+          if (!open) setIssued(null);
+        }}
+        title={t("users.temporaryPasswordTitle")}
+        description={t("users.temporaryPasswordBody", { name: issued?.name })}
+      >
+        <div className="flex flex-col gap-block">
+          <p className="m-0 rounded-lg border border-border px-3 py-2 text-center font-mono text-lg tracking-wider">
+            {issued?.password}
+          </p>
+          <div className="flex flex-wrap gap-field">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch"
+              onClick={() =>
+                void navigator.clipboard?.writeText(issued?.password ?? "")
+              }
+            >
+              {t("users.temporaryPasswordCopy")}
+            </Button>
+            <Button
+              type="button"
+              className="min-h-touch"
+              onClick={() => setIssued(null)}
+            >
+              {t("users.temporaryPasswordDone")}
+            </Button>
+          </div>
+        </div>
+      </FormSheet>
+
       <FormSheet
         open={inviteOpen}
         onOpenChange={setInviteOpen}
