@@ -42,6 +42,7 @@ from .diary import (
     WeightLog,
 )
 from .files import Attachment
+from .marketing import Lead
 
 __all__ = [
     "Attachment",
@@ -87,4 +88,6 @@ __all__ = [
     "DoctorSummary",
     "ReportJob",
     "AuditLog",
+    # marketing
+    "Lead",
 ]

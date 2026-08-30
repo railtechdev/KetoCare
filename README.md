@@ -38,6 +38,7 @@
 | `docs/medical/` | Медицинская спецификация, эталонные расчёты, открытые вопросы к мед. команде |
 | [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md) | UI-канон: 32 правила композиции экранов, форм, состояний и доступности, с чек-листом ревью |
 | `docs/adr/` | Architecture decision records — отступления от ТЗ с обоснованием |
+| [`docs/PLAN_LANDING.md`](docs/PLAN_LANDING.md) | План работ по посадочной странице и заявкам |
 
 При конфликте между ТЗ и кодом приоритет у ТЗ; при конфликте между ТЗ и медицинской спецификацией приоритет у медицинской спецификации.
 
@@ -45,11 +46,12 @@
 
 Backend — Python 3.12, FastAPI, SQLAlchemy 2.0 (async) + Alembic, PostgreSQL 16, Redis 7 + ARQ, aiogram 3, scipy (`linprog`/HiGHS), Anthropic Claude API.
 Frontend — React 19, TypeScript 5, Vite, Tailwind 4 + shadcn/ui, TanStack Query/Router/Table.
+Посадочная страница — Astro (статика, три языка).
 Монорепозиторий: uv workspace для Python, pnpm workspaces для JS.
 
 ```
 apps/      api · bot · worker · web · miniapp
-packages/  keto_engine · core · ui · api-client
+packages/  keto_engine · core · ui · api-client · landing
 infra/     docker-compose, nginx, скрипты бэкапа и деплоя
 ```
 

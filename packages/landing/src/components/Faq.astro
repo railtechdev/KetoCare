@@ -1,0 +1,46 @@
+---
+/**
+ * Частые вопросы. Разметка — кнопка с `aria-expanded` и связанный с ней
+ * блок ответа: `<details>` не подошёл, потому что нужен одновременно
+ * закрывающийся сосед и одинаковое поведение во всех браузерах.
+ *
+ * Без JavaScript все ответы раскрыты (скрипт сам их сворачивает) — текст
+ * виден и посетителю, и поисковику.
+ */
+import { useTranslations } from "../i18n";
+import type { Locale } from "../i18n/config";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const d = useTranslations(locale);
+---
+
+<div class="faq" data-faq>
+  {
+    d.home.faq.items.map((item, i) => (
+      <div class="faq__item">
+        <h3>
+          <button
+            class="faq__q"
+            type="button"
+            aria-expanded="true"
+            aria-controls={`faq-a-${i}`}
+            id={`faq-q-${i}`}
+            data-faq-q
+          >
+            <span>{item.q}</span>
+            <span class="faq__sign" aria-hidden="true">
+              +
+            </span>
+          </button>
+        </h3>
+        <div class="faq__a" id={`faq-a-${i}`} role="region" aria-labelledby={`faq-q-${i}`}>
+          <p>{item.a}</p>
+        </div>
+      </div>
+    ))
+  }
+</div>

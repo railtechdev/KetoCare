@@ -1,0 +1,363 @@
+---
+import { useTranslations } from "../../i18n";
+import { pagePath, type Locale } from "../../i18n/config";
+import Layout from "../../layouts/Layout.astro";
+import BotChat from "../BotChat.astro";
+import Faq from "../Faq.astro";
+import KetoCalculator from "../KetoCalculator.astro";
+import LeadForm from "../LeadForm.astro";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const d = useTranslations(locale);
+const h = d.home;
+
+/** Микроразметка вопросов: даёт им шанс попасть в блок ответов поисковика. */
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: h.faq.items.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+};
+---
+
+<Layout
+  locale={locale}
+  page="home"
+  title={h.seo.title}
+  description={h.seo.description}
+  ctaHref="#cta"
+  ctaLabel={d.nav.earlyAccess}
+  schema={faqSchema}
+>
+  {/* ---------- Первый экран ---------- */}
+  <section class="hero">
+    <div class="hero__glow hero__glow--amber" aria-hidden="true"></div>
+    <div class="hero__glow hero__glow--blue" aria-hidden="true"></div>
+    <div class="wrap hero__inner split">
+      <div class="split__text">
+        <p class="badge">
+          <span class="badge__dot" aria-hidden="true"></span>{h.hero.badge}
+        </p>
+        <h1 class="h1" style="margin:22px 0 20px">{h.hero.h1}</h1>
+        <p class="lead measure--tight" style="margin-bottom:32px">{h.hero.lead}</p>
+        <div class="btn-row" style="margin-bottom:28px">
+          <a class="btn btn--primary" href="#cta">{h.hero.ctaFamily}</a>
+          <a class="btn btn--secondary" href={pagePath("doctors", locale)}>{h.hero.ctaDoctors}</a>
+        </div>
+        <ul class="chip-row">
+          {h.hero.chips.map((c) => <li class="chip">{c}</li>)}
+        </ul>
+      </div>
+
+      <div class="split__media reveal">
+        <div class="mock">
+          <div class="mock__row">
+            <div>
+              <div style="font-size:.78rem;color:var(--ink-muted)">{h.hero.card.today}</div>
+              <div style="font-size:1.06rem;font-weight:700">{h.hero.card.childName}</div>
+            </div>
+            <span class="mock__avatar" aria-hidden="true">{h.hero.card.childInitials}</span>
+          </div>
+
+          <div class="mock__panel">
+            <div
+              style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap"
+            >
+              <span class="mock__label">{h.hero.card.nextMeal}</span>
+              <span class="ratio-badge">{h.hero.card.ratio}</span>
+            </div>
+            <div style="font-weight:600">{h.hero.card.dish}</div>
+            <div style="font-size:.8rem;color:var(--ink-muted);margin-top:2px" class="num">
+              {h.hero.card.dishMacros}
+            </div>
+          </div>
+
+          <div class="mock__box">
+            <div style="font-size:.84rem;font-weight:600;margin-bottom:10px">
+              {h.hero.card.dayVsPrescription}
+            </div>
+            <div
+              style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--ink-muted);margin-bottom:5px"
+            >
+              <span>{h.hero.card.caloriesLabel}</span>
+              <span class="num">{h.hero.card.caloriesValue}</span>
+            </div>
+            <div class="meter" style="margin-bottom:12px" aria-hidden="true">
+              <span style="width:62%"></span>
+            </div>
+            <div class="macro-bar" aria-hidden="true">
+              <span style="width:71%;background:var(--macro-fat)"></span>
+              <span style="width:18%;background:var(--macro-protein)"></span>
+              <span style="width:11%;background:var(--macro-carbs)"></span>
+            </div>
+            <div class="macro-legend">
+              <span
+                ><i style="background:var(--macro-fat)" aria-hidden="true"></i>{d.common.fat}
+                <span class="num" style="color:var(--ink-muted)">{h.hero.card.fatValue}</span></span
+              >
+              <span
+                ><i style="background:var(--macro-protein)" aria-hidden="true"></i>{d.common.protein}
+                <span class="num" style="color:var(--ink-muted)">{h.hero.card.proteinValue}</span
+                ></span
+              >
+              <span
+                ><i style="background:var(--macro-carbs)" aria-hidden="true"></i>{d.common.carbs}
+                <span class="num" style="color:var(--ink-muted)">{h.hero.card.carbsValue}</span
+                ></span
+              >
+            </div>
+            <p
+              style="margin-top:10px;font-size:.8rem;background:var(--surface-sunken);border-radius:9px;padding:8px 12px"
+              set:html={h.hero.card.carbsLeft}
+            />
+          </div>
+
+          <div class="mock__quick" aria-hidden="true">
+            <span>{h.hero.card.quickKetones}</span>
+            <span>{h.hero.card.quickWeight}</span>
+            <span>{h.hero.card.quickSeizure}</span>
+          </div>
+        </div>
+        <p class="mock__caption">{h.hero.card.caption}</p>
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Миссия ---------- */}
+  <section class="section dark-section">
+    <div class="wrap reveal">
+      <p class="eyebrow">{h.mission.eyebrow}</p>
+      <h2 class="h2" style="max-width:24ch;margin-bottom:18px">{h.mission.h2}</h2>
+      <p class="lead measure" style="margin-bottom:44px">{h.mission.lead}</p>
+      <div class="grid grid--auto">
+        <div class="card card--dark">
+          <p class="eyebrow" style="margin-bottom:14px">{h.mission.families.title}</p>
+          <ul class="tick-list">
+            {h.mission.families.items.map((i) => <li>{i}</li>)}
+          </ul>
+        </div>
+        <div class="card card--dark">
+          <p class="eyebrow" style="margin-bottom:14px">{h.mission.doctors.title}</p>
+          <ul class="tick-list">
+            {h.mission.doctors.items.map((i) => <li>{i}</li>)}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Три шага ---------- */}
+  <section class="section section--white section--bordered">
+    <div class="wrap reveal">
+      <p class="eyebrow">{h.steps.eyebrow}</p>
+      <h2 class="h2" style="max-width:24ch;margin-bottom:44px">{h.steps.h2}</h2>
+      <div class="grid grid--auto">
+        {
+          h.steps.items.map((item, i) => (
+            <div class="card card--sunken">
+              <div class="card__num" aria-hidden="true">
+                {i + 1}
+              </div>
+              <h3 class="card__title">{item.title}</h3>
+              <p class="card__text">{item.text}</p>
+            </div>
+          ))
+        }
+      </div>
+      <p style="margin-top:28px">
+        <a class="arrow-link" href={pagePath("howItWorks", locale)}>
+          {h.steps.link} <span aria-hidden="true">→</span>
+        </a>
+      </p>
+    </div>
+  </section>
+
+  {/* ---------- Калькулятор ---------- */}
+  <section class="section section--sand">
+    <div class="wrap reveal">
+      <div class="split" style="align-items:flex-start">
+        <div class="split__text">
+          <p class="eyebrow">{h.calc.eyebrow}</p>
+          <h2 class="h2" style="max-width:20ch;margin-bottom:18px">{h.calc.h2}</h2>
+          <p class="lead measure--tight" style="margin-bottom:14px">{h.calc.lead1}</p>
+          <p class="lead measure--tight" style="margin-bottom:24px">{h.calc.lead2}</p>
+          <p class="note">{h.calc.note}</p>
+        </div>
+        <div class="split__media">
+          <KetoCalculator locale={locale} />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Дневники ---------- */}
+  <section class="section section--white section--bordered">
+    <div class="wrap reveal">
+      <p class="eyebrow">{h.diaries.eyebrow}</p>
+      <h2 class="h2" style="max-width:26ch;margin-bottom:16px">{h.diaries.h2}</h2>
+      <p class="lead measure" style="margin-bottom:44px">{h.diaries.lead}</p>
+      <div class="grid grid--auto">
+        <div class="card card--sunken">
+          <div
+            style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px;flex-wrap:wrap"
+          >
+            <h3 class="card__title" style="margin:0">{h.diaries.ketones.title}</h3>
+            <span
+              class="num"
+              style="font-size:.8rem;font-weight:600;color:var(--success);background:var(--success-bg);border-radius:8px;padding:2px 9px"
+              >{h.diaries.ketones.badge}</span
+            >
+          </div>
+          <p class="card__text" style="margin-bottom:14px">{h.diaries.ketones.caption}</p>
+          <svg viewBox="0 0 280 92" role="img" aria-label={h.diaries.ketones.chartAlt}>
+            <polygon
+              points="10,79.3 30,75.1 50,70.9 70,66.7 90,62.5 110,58.3 130,54.1 150,49.9 170,45.7 190,41.5 210,37.3 230,33.1 250,28.9 270,24.7 270,92 10,92"
+              fill="rgba(44,95,224,.10)"></polygon>
+            <polyline
+              points="10,79.3 30,75.1 50,70.9 70,66.7 90,62.5 110,58.3 130,54.1 150,49.9 170,45.7 190,41.5 210,37.3 230,33.1 250,28.9 270,24.7"
+              fill="none"
+              stroke="var(--macro-fat)"
+              stroke-width="2.5"
+              stroke-linecap="round"></polyline>
+            <circle cx="270" cy="24.7" r="4" fill="var(--macro-fat)"></circle>
+          </svg>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <div class="card card--sunken" style="flex:1">
+            <h3 class="card__title">{h.diaries.seizure.title}</h3>
+            <p class="card__text" style="margin-bottom:14px">{h.diaries.seizure.text}</p>
+            <div class="chip-row" aria-hidden="true">
+              <span class="chip chip--outline">{h.diaries.seizure.chipType}</span>
+              <span
+                class="chip"
+                style="background:var(--primary);color:#fff;font-weight:600;padding:8px 14px"
+                >{h.diaries.seizure.chipNow}</span
+              >
+            </div>
+          </div>
+          <div class="card card--sunken" style="flex:1">
+            <h3 class="card__title">{h.diaries.progress.title}</h3>
+            <p class="card__text">{h.diaries.progress.text}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Telegram ---------- */}
+  <section class="section">
+    <div class="wrap split reveal">
+      <div class="split__text">
+        <p class="eyebrow">{h.telegram.eyebrow}</p>
+        <h2 class="h2" style="max-width:20ch;margin-bottom:16px">{h.telegram.h2}</h2>
+        <p class="lead measure--tight" style="margin-bottom:18px">{h.telegram.lead}</p>
+        <ul class="tick-list">
+          {h.telegram.items.map((i) => <li>{i}</li>)}
+        </ul>
+      </div>
+      <div class="split__media">
+        <BotChat locale={locale} />
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Тизер кабинета врача ---------- */}
+  <section class="section dark-section">
+    <div class="wrap split reveal">
+      <div class="split__text">
+        <p class="eyebrow">{h.doctorsTeaser.eyebrow}</p>
+        <h2 class="h2" style="max-width:22ch;margin-bottom:16px">{h.doctorsTeaser.h2}</h2>
+        <p class="lead measure--tight" style="margin-bottom:26px">{h.doctorsTeaser.lead}</p>
+        <a class="btn btn--on-dark" href={pagePath("doctors", locale)}>{h.doctorsTeaser.cta}</a>
+      </div>
+      <div class="split__media">
+        <div class="card card--dark">
+          <h3 class="eyebrow" style="color:var(--dark-muted);margin-bottom:14px">
+            {h.doctorsTeaser.queueTitle}
+          </h3>
+          <ul class="queue">
+            {
+              h.doctorsTeaser.queue.map((row) => (
+                <li class="queue__item">
+                  <span class={`queue__dot queue__dot--${row.level}`} aria-hidden="true" />
+                  <span style="flex:1;min-width:0">
+                    <span class="queue__name">
+                      {row.name} · <span class={`queue__status--${row.level}`}>{row.status}</span>
+                    </span>
+                    <span class="queue__reason" style="display:block">
+                      {row.reason}
+                    </span>
+                  </span>
+                  <span class="queue__age">{row.age}</span>
+                </li>
+              ))
+            }
+          </ul>
+          <p style="margin-top:14px;font-size:.78rem;color:var(--dark-muted)">
+            {h.doctorsTeaser.queueNote}
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Доверие ---------- */}
+  <section class="section section--white" style="border-bottom:1px solid var(--border)">
+    <div class="wrap reveal">
+      <p class="eyebrow">{h.trust.eyebrow}</p>
+      <h2 class="h2" style="max-width:24ch;margin-bottom:44px">{h.trust.h2}</h2>
+      <div class="grid grid--auto-sm">
+        {
+          h.trust.items.map((item) => (
+            <div class="card">
+              <h3 class="card__title">{item.title}</h3>
+              <p class="card__text">{item.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Частые вопросы ---------- */}
+  <section class="section">
+    <div class="wrap wrap--text reveal">
+      <h2 class="h2" style="margin-bottom:32px">{h.faq.h2}</h2>
+      <Faq locale={locale} />
+    </div>
+  </section>
+
+  {/* ---------- Заявки ---------- */}
+  <section class="section section--white" id="cta" style="border-top:1px solid var(--border)">
+    <div class="wrap">
+      <div style="text-align:center;margin-bottom:44px">
+        <h2 class="h2" style="margin-bottom:14px">{h.cta.h2}</h2>
+        <p class="lead" style="max-width:56ch;margin-inline:auto">{h.cta.lead}</p>
+      </div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));max-width:920px;margin-inline:auto">
+        <div class="card card--sunken" style="padding:32px;border-radius:20px">
+          <p class="eyebrow" style="margin-bottom:10px">{h.cta.family.eyebrow}</p>
+          <h3 class="card__title" style="font-size:1.19rem">{h.cta.family.title}</h3>
+          <p class="card__text" style="margin-bottom:20px">{h.cta.family.text}</p>
+          <LeadForm locale={locale} variant="family" />
+        </div>
+        <div class="card card--dark" style="padding:32px;border-radius:20px">
+          <p class="eyebrow" style="margin-bottom:10px">{h.cta.doctors.eyebrow}</p>
+          <h3 class="card__title" style="font-size:1.19rem">{h.cta.doctors.title}</h3>
+          <p class="card__text" style="color:var(--dark-muted);margin-bottom:20px">
+            {h.cta.doctors.text}
+          </p>
+          <a class="btn btn--on-dark" href={pagePath("doctors", locale)}>{h.cta.doctors.cta}</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

@@ -1,5 +1,6 @@
 packages:
   - "apps/web"
   - "apps/miniapp"
+  - "packages/landing"
   - "packages/ui"
   - "packages/api-client"

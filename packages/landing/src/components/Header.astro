@@ -1,0 +1,59 @@
+---
+import { useTranslations } from "../i18n";
+import { pagePath, type Locale, type PageKey } from "../i18n/config";
+import { LOGIN_URL } from "../site";
+import LangSwitcher from "./LangSwitcher.astro";
+
+interface Props {
+  locale: Locale;
+  page: PageKey;
+  /** Куда ведёт главная кнопка: на форму семьи или на форму пилота. */
+  ctaHref: string;
+  ctaLabel: string;
+}
+
+const { locale, page, ctaHref, ctaLabel } = Astro.props;
+const d = useTranslations(locale);
+---
+
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <a class="brand" href={pagePath("home", locale)}>
+      <span class="brand__mark" aria-hidden="true">{d.common.brandMark}</span>
+      <span>{d.common.brand}</span>
+    </a>
+
+    <button
+      class="nav-toggle"
+      type="button"
+      aria-expanded="false"
+      aria-controls="site-nav"
+      data-nav-toggle
+      data-label-open={d.common.openMenu}
+      data-label-close={d.common.closeMenu}
+    >
+      <span class="nav-toggle__bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span data-nav-toggle-label>{d.common.openMenu}</span>
+    </button>
+
+    <nav class="nav" id="site-nav" aria-label={d.common.brand}>
+      <a
+        class="nav__link"
+        href={pagePath("howItWorks", locale)}
+        aria-current={page === "howItWorks" ? "page" : undefined}
+      >
+        {d.nav.howItWorks}
+      </a>
+      <a
+        class="nav__link"
+        href={pagePath("doctors", locale)}
+        aria-current={page === "doctors" ? "page" : undefined}
+      >
+        {d.nav.doctors}
+      </a>
+      <a class="nav__login" href={LOGIN_URL}>{d.nav.login}</a>
+      <a class="nav__cta" href={ctaHref}>{ctaLabel}</a>
+      <LangSwitcher locale={locale} page={page} label={d.common.languageLabel} />
+    </nav>
+  </div>
+</header>

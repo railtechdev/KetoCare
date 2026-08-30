@@ -18,6 +18,7 @@ from .routers import (
     custom_dishes,
     dictionaries,
     intake,
+    leads,
     logs,
     menus,
     overview,
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     v1.include_router(products.router)
     v1.include_router(custom_dishes.router)
     v1.include_router(calc.router)
+    v1.include_router(leads.router)
     v1.include_router(logs.router)
     v1.include_router(menus.router)
     v1.include_router(overview.router)
