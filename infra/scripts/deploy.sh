@@ -31,6 +31,18 @@ if [ "${1:-}" != "--api-only" ]; then
     # Лимит памяти node — VPS с 2 ГБ RAM, рядом работают postgres и api.
     corepack enable >/dev/null 2>&1 || true
     pnpm install --frozen-lockfile
+
+    # openapi.json и сам сгенерированный клиент в git не попадают (.gitignore),
+    # то есть на свежем клоне их нет вовсе — а `generate` читает именно файл.
+    # Первый деплой на чистом сервере падал здесь с ENOENT.
+    #
+    # Выгружаем из уже собранного образа, а не с хоста: python и uv на сервере
+    # не устанавливаются вовсе (docs/DEPLOY.md, «Однократная настройка»), API
+    # живёт только в контейнере. Каталог монтируется в /out, чтобы не заслонить
+    # /app с исходниками внутри образа.
+    $COMPOSE run --rm --no-deps -v "$PWD/apps/api:/out" api \
+        python apps/api/scripts/export_openapi.py /out/openapi.json
+
     # Тот же порядок, что в CI: клиент генерируется до сборки.
     pnpm --filter @ketocare/api-client run generate
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/web run build
