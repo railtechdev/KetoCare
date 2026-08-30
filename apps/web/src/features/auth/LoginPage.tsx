@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { FormError } from "../../components/FormError";
 import { Field } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
+import { SetPasswordPanel } from "./SetPasswordPanel";
 import { TotpSetupPanel } from "./TotpSetupPanel";
 import { loginSchema, type LoginValues } from "./schemas";
 import { useSession } from "./useSession";
@@ -28,6 +29,13 @@ export function LoginPage() {
 
   /** Токен первичной настройки 2FA, если сервер её потребовал. */
   const [setupToken, setSetupToken] = useState<string | null>(null);
+  /**
+   * Токен задания пароля: администратор выдал временный.
+   *
+   * Рабочей сессии сервер при этом не даёт — временный пароль знают двое, и
+   * кабинет открывается только после того, как владелец задаст свой.
+   */
+  const [resetToken, setResetToken] = useState<string | null>(null);
   /** Показывать поле кода: 2FA настроена и обязательна при входе. */
   const [totpRequired, setTotpRequired] = useState(false);
   /**
@@ -50,6 +58,10 @@ export function LoginPage() {
     return <TotpSetupPanel setupToken={setupToken} />;
   }
 
+  if (resetToken !== null) {
+    return <SetPasswordPanel resetToken={resetToken} />;
+  }
+
   const onSubmit = handleSubmit(async (values) => {
     try {
       const data = await login.mutateAsync(values);
@@ -58,6 +70,13 @@ export function LoginPage() {
         // Приглашённому врачу/админу нужно завершить настройку второго фактора,
         // иначе войти нельзя в принципе (раздел 5.2 ТЗ).
         setSetupToken(data.totp_setup_token);
+        return;
+      }
+      if (
+        data.status === "password_change_required" &&
+        data.password_reset_token
+      ) {
+        setResetToken(data.password_reset_token);
         return;
       }
       if (data.tokens?.access_token) {

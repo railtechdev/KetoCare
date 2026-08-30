@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import secrets
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +29,7 @@ from ..schemas_admin import (
     DictionaryEntryRead,
     DictionaryEntryUpdate,
 )
+from ..security import hash_password_async
 
 # Сущности, для которых `before`/`after` можно показать администратору.
 #
@@ -188,6 +191,85 @@ async def reset_totp(
         ip=ip,
     )
     return user
+
+
+#: Длина временного пароля. Он живёт до первого входа и не запоминается
+#: человеком, поэтому читаемость важнее краткости: его диктуют по телефону.
+TEMPORARY_PASSWORD_GROUPS = 4
+TEMPORARY_PASSWORD_GROUP_LEN = 4
+
+#: Тот же алфавит, что у кодов привязки и резервных кодов: без 0/O и 1/I/L.
+TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def _generate_temporary_password() -> str:
+    """Временный пароль вида `ABCD-EFGH-JKMN-PQRS`.
+
+    `secrets`, а не `random`: это пароль к клиническим данным, пусть и на один
+    вход. Двадцать знаков из алфавита в 31 символ — около 98 бит, что заведомо
+    больше требований раздела 11 ТЗ к длине.
+    """
+
+    groups = [
+        "".join(
+            secrets.choice(TEMPORARY_PASSWORD_ALPHABET) for _ in range(TEMPORARY_PASSWORD_GROUP_LEN)
+        )
+        for _ in range(TEMPORARY_PASSWORD_GROUPS)
+    ]
+    return "-".join(groups)
+
+
+async def reset_password(
+    session: AsyncSession,
+    *,
+    actor: CurrentUser,
+    user_id: uuid.UUID,
+    ip: str | None,
+) -> str:
+    """Выдаёт временный пароль. Возвращает его в открытом виде — один раз.
+
+    Восстановления пароля в продукте нет: почтовой рассылки нет вовсе, а
+    единственная смена пароля требует знать текущий. Забывший пароль врач терял
+    доступ к данным своих пациентов навсегда.
+
+    Временный пароль передаётся голосом или в переписке, то есть заведомо
+    известен двоим. Поэтому одновременно ставится `password_change_required`:
+    вход по нему не выдаёт рабочей сессии, а ведёт к заданию своего пароля.
+
+    `password_changed_at` обрывает все прежние сессии (раздел 11 ТЗ): если
+    учётной записью успел воспользоваться посторонний, сброс закрывает и его
+    сессию тоже.
+
+    Свой собственный пароль администратор так не сбрасывает: смена своего
+    пароля — отдельная ручка, требующая текущего. Здесь же он и так знает
+    временный, и обход проверки ничего не даёт, кроме потери следа.
+    """
+
+    if user_id == actor.id:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Свой пароль меняйте в профиле — там нужен текущий.",
+        )
+
+    user = await users_repo.get(session, user_id)
+    if user is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Пользователь не найден.")
+
+    temporary = _generate_temporary_password()
+    user.password_hash = await hash_password_async(temporary)
+    user.password_changed_at = datetime.now(UTC)
+    user.password_change_required = True
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=actor.id,
+        action="password_reset",
+        entity="users",
+        entity_id=user.id,
+        ip=ip,
+    )
+    return temporary
 
 
 # --- справочники ----------------------------------------------------------
