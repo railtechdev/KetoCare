@@ -19,8 +19,11 @@ export type ImportRowError = Schemas["ImportRowError"];
  * audit). Рецепты сюда не входят: их база общая с диетологом и живёт в разделе
  * `recipes`, а не в администрировании.
  */
+export type Lead = Schemas["LeadRead"];
+
 export const ADMIN_SECTIONS = [
   "users",
+  "leads",
   "products",
   "dictionaries",
   "audit",

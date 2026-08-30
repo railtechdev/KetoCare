@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { PageLayout } from "../../components/PageLayout";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
+import { LeadsPanel } from "./LeadsPanel";
 import { ProductsPanel } from "./ProductsPanel";
 import { UsersPanel } from "./UsersPanel";
 import { ADMIN_SECTIONS, isAdminSection, type AdminSection } from "./types";
@@ -69,6 +70,9 @@ export function AdminPage({ section }: { section?: string }) {
             только за открытым подразделом. */}
         <TabsContent value="users">
           <UsersPanel />
+        </TabsContent>
+        <TabsContent value="leads">
+          <LeadsPanel />
         </TabsContent>
         <TabsContent value="products">
           <ProductsPanel />

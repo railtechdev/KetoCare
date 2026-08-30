@@ -5,6 +5,7 @@ import {
   ClipboardList,
   FileText,
   Home,
+  Inbox,
   ListTree,
   NotebookPen,
   Salad,
@@ -79,6 +80,7 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
   products: (role) =>
     role === "admin" ? <AdminPage section="products" /> : <ProductsPage />,
   users: () => <AdminPage section="users" />,
+  leads: () => <AdminPage section="leads" />,
   dictionaries: () => <AdminPage section="dictionaries" />,
   audit: () => <AdminPage section="audit" />,
   child: () => <ChildPage />,
@@ -115,6 +117,7 @@ export const SECTION_ICONS: Record<string, LucideIcon> = {
   patients: Users,
   summaries: ClipboardList,
   users: UserCog,
+  leads: Inbox,
   dictionaries: ListTree,
   audit: ScrollText,
   profile: UserRound,
