@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     reports_dir: str = "./var/reports"
     report_link_ttl_hours: int = 24
 
+    # Каталог вложений: фото рецептов и документы пациентов (ADR-0004).
+    #
+    # Вне webroot и раздаётся только ручкой: вложение пациента — клинические
+    # данные, и прямая раздача статики обошла бы проверку доступа.
+    #
+    # Том обязан попадать в резервное копирование: pg_dump сохранит строки
+    # таблицы, но не байты файлов, а выписка из стационара — единственный
+    # экземпляр документа (ADR-0013).
+    attachments_dir: str = "./var/attachments"
+
     web_origin: str = "http://localhost:5173"
     miniapp_origin: str = "http://localhost:5174"
 

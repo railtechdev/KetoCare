@@ -92,6 +92,17 @@ class IntakeScale(enum.StrEnum):
     MEALS_PER_DAY = "meals_per_day"
 
 
+class LeadAudience(enum.StrEnum):
+    """Кому адресована заявка с посадочной страницы (ADR-0012).
+
+    Формы две и ведут они к разным разговорам: семье нужно объяснить, что
+    доступ открывает лечащий врач, клинике — показать кабинет и обсудить пилот.
+    """
+
+    FAMILY = "family"
+    DOCTOR = "doctor"
+
+
 class ReportFormat(enum.StrEnum):
     PDF = "pdf"
     CSV = "csv"
@@ -102,3 +113,30 @@ class ReportJobStatus(enum.StrEnum):
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
+
+
+class AttachmentOwnerKind(enum.StrEnum):
+    """Кому принадлежит файл (ADR-0004: одна подсистема на два владельца).
+
+    Разные контуры доступа: вложение пациента — клинические данные и проходит
+    `require_patient_access`, фото рецепта клиническими данными не является.
+    """
+
+    RECIPE = "recipe"
+    PATIENT = "patient"
+
+
+class AttachmentDocKind(enum.StrEnum):
+    """Вид документа пациента (решение заказчика, ADR-0013).
+
+    Без него врач получал список файлов, различимых только по имени, которое дал
+    телефон родителя. Значения покрывают сценарии из ADR-0004 плюс «иное»:
+    справочник закрытый, потому что от вида зависит сортировка карты, а
+    свободный ввод превратил бы её в набор синонимов.
+    """
+
+    DISCHARGE = "discharge"
+    EEG = "eeg"
+    LAB = "lab"
+    PRESCRIPTION = "prescription"
+    OTHER = "other"

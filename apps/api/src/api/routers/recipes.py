@@ -11,18 +11,23 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Response
+from fastapi import APIRouter, Depends, File, Path, Query, Request, Response, UploadFile
+from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from core.models import Recipe
-from core.models.enums import RecipeCategory, RecipeStatus, UserRole
+from core.models.enums import AttachmentOwnerKind, RecipeCategory, RecipeStatus, UserRole
+from core.repositories import attachments as attachments_repo
 from core.repositories import audit as audit_repo
 from core.repositories import recipes as recipes_repo
 
+from ..client_address import client_address
 from ..deps.auth import CurrentUser, CurrentUserDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page
 from ..schemas_recipes import RecipeRead, RecipeWrite
+from ..services import attachments as files_service
 from ..services import recipes as recipes_service
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
@@ -103,6 +108,124 @@ async def get_recipe(
 ) -> RecipeRead:
     recipe = await _visible_recipe(session, recipe_id, user)
     return await _read(session, recipe)
+
+
+@router.put(
+    "/{recipe_id}/photo",
+    response_model=RecipeRead,
+    summary="Загрузить фото рецепта",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def upload_recipe_photo(
+    recipe_id: Annotated[uuid.UUID, Path()],
+    request: Request,
+    session: SessionDep,
+    user: CurrentUserDep,
+    file: Annotated[UploadFile, File()],
+) -> RecipeRead:
+    """Фото рецепта отдельным действием, а не полем создания.
+
+    Владелец вложения обязателен, а рецепт до ответа сервера идентификатора не
+    имеет. Нулевой владелец породил бы сирот, которых некому убирать: уборщика
+    файлов в продукте нет (ADR-0013, решения 1 и 8).
+
+    PDF здесь не принимается, хотя подсистема его разрешает: фото рецепта
+    существует ради показа в `<img>`, и документ на этом месте — ошибка ввода, а
+    не выбор пользователя.
+
+    Прежнее фото помечается удалённым: рецепт показывает одно, и оставлять
+    прошлое видимым в списке вложений незачем.
+    """
+
+    recipe = await _visible_recipe(session, recipe_id, user)
+
+    content = await file.read()
+    mime = files_service.validate(content)
+    if mime not in files_service.INLINE_MIMES:
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Фото рецепта — картинка JPEG, PNG или WebP.")
+
+    for previous in await attachments_repo.list_for_owner(
+        session, owner_kind=AttachmentOwnerKind.RECIPE, owner_id=recipe.id
+    ):
+        await attachments_repo.soft_delete(session, attachment=previous)
+
+    stored_name = files_service.generate_stored_name(mime)
+    await run_in_threadpool(files_service.write_file, stored_name, content)
+
+    attachment = await attachments_repo.create(
+        session,
+        owner_kind=AttachmentOwnerKind.RECIPE,
+        owner_id=recipe.id,
+        filename=(file.filename or "фото")[:255],
+        stored_name=stored_name,
+        mime=mime,
+        size_bytes=len(content),
+        sha256=files_service.sha256_of(content),
+        uploaded_by=user.id,
+    )
+
+    # В колонке — идентификатор вложения, а не готовый адрес: адрес вшил бы
+    # префикс `/api/v1` в строки базы, и его смена потребовала бы миграции
+    # данных (ADR-0013, решение 7).
+    recipe.photo_path = str(attachment.id)
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="update",
+        entity="recipes",
+        entity_id=recipe.id,
+        ip=client_address(request),
+    )
+    return await _read(session, recipe)
+
+
+@router.get("/{recipe_id}/photo", summary="Фото рецепта")
+async def get_recipe_photo(
+    recipe_id: Annotated[uuid.UUID, Path()],
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> Response:
+    """Отдаёт картинку рецепта.
+
+    Читает любая аутентифицированная роль — фото рецепта клиническими данными
+    не является. Но черновик по-прежнему скрыт от родителя (`_visible_recipe`):
+    иначе фото стало бы способом узнать о существовании неопубликованного
+    рецепта.
+
+    `inline`, потому что показывается в `<img>`; `nosniff` — потому что тип
+    определён нами по сигнатуре, и браузеру угадывать нечего.
+    """
+
+    recipe = await _visible_recipe(session, recipe_id, user)
+    if recipe.photo_path is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "У рецепта нет фото.")
+
+    try:
+        attachment_id = uuid.UUID(recipe.photo_path)
+    except ValueError as exc:
+        # В колонке может лежать значение, записанное до подсистемы вложений.
+        raise ApiError(ErrorCode.NOT_FOUND, "У рецепта нет фото.") from exc
+
+    attachment = await attachments_repo.get(session, attachment_id)
+    if attachment is None or attachment.owner_id != recipe.id:
+        raise ApiError(ErrorCode.NOT_FOUND, "У рецепта нет фото.")
+
+    file_path = await run_in_threadpool(files_service.resolve_file, attachment.stored_name)
+    if file_path is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Файл недоступен.")
+
+    return FileResponse(
+        file_path,
+        media_type=attachment.mime,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": files_service.content_disposition(
+                attachment.mime, attachment.filename
+            ),
+        },
+    )
 
 
 @router.post(

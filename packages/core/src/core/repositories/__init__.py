@@ -5,6 +5,7 @@
 
 from . import (
     access,
+    attachments,
     audit,
     clinical_notes,
     custom_dishes,
@@ -28,6 +29,7 @@ from . import (
 
 __all__ = [
     "access",
+    "attachments",
     "audit",
     "clinical_notes",
     "custom_dishes",
