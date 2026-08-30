@@ -25,7 +25,7 @@
 - `/var/www/ketocare-app` — собранный `apps/web/dist`, кладёт `deploy.sh`;
 - `/srv/backups` — дампы postgres;
 - данные postgres/redis и PDF-отчёты — named volumes docker
-  (`ketocare_pgdata`, `ketocare_redisdata`, `ketocare_reports`).
+  (`ketocare_pgdata`, `ketocare_redisdata`, `ketocare_reports`, `ketocare_attachments`).
 
 ## Однократная настройка сервера
 
@@ -79,6 +79,7 @@ cp .env.example .env   # и заполнить, см. ниже
 | `TRUSTED_PROXY_IPS` | `172.30.100.1` — шлюз docker-сети, откуда приходит трафик host-nginx (подсеть зафиксирована в compose) |
 | `WEB_ORIGIN` | `https://app.ketocare.railtech.uz` |
 | `REPORTS_DIR` | не менять: внутри контейнеров задан compose'ом (`/data/reports`) |
+| `ATTACHMENTS_DIR` | не менять: внутри контейнеров задан compose'ом (`/data/attachments`). Том обязан попадать в бэкап — см. ниже |
 | `ANTHROPIC_API_KEY` | оставить заглушкой — AI-функции появляются на этапе 4 |
 
 ### nginx и TLS
@@ -171,11 +172,23 @@ infra/scripts/deploy.sh --api-only   # миграции наполнят спр�
 30 2 * * * docker exec ketocare-postgres-1 pg_dump -U ketocare -Fc ketocare > /srv/backups/ketocare-$(date +\%F).dump && find /srv/backups -name '*.dump' -mtime +30 -delete
 ```
 
-Плюс копия за пределы VPS (rclone/scp — куда угодно, но не на этот же диск).
-PDF-отчёты пересобираются из БД, отдельный бэкап тома `reports` не критичен.
+**Дампа базы недостаточно.** `pg_dump` сохраняет строки таблицы `attachments`,
+но не байты файлов в томе: восстановление из одного дампа даст базу со ссылками
+на отсутствующие документы. Вложение — выписка из стационара, протокол ЭЭГ,
+результат анализа — существует в одном экземпляре, его никак не пересобрать
+(ADR-0013). Поэтому том `attachments` копируется вместе с дампом:
+
+```cron
+0 3 * * * docker run --rm -v ketocare_attachments:/data:ro -v /srv/backups:/out alpine tar czf /out/attachments-$(date +\%F).tar.gz -C /data . && find /srv/backups -name 'attachments-*.tar.gz' -mtime +30 -delete
+```
+
+Плюс копия за пределы VPS (rclone/scp — куда угодно, но не на этот же диск):
+и дамп, и архив вложений. Том `reports` копировать не нужно — PDF-отчёты
+пересобираются из БД.
 
 Один раз проверить восстановление: `pg_restore` дампа в пустую БД на локальной
-машине. Бэкап, который ни разу не восстанавливали, бэкапом не считается.
+машине и распаковку архива вложений. Бэкап, который ни разу не восстанавливали,
+бэкапом не считается.
 
 ## Эксплуатация
 

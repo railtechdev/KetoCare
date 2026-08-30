@@ -18,6 +18,7 @@ x-app-env: &app-env
   DATABASE_URL: postgresql+asyncpg://ketocare:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@postgres:5432/ketocare
   REDIS_URL: redis://redis:6379/0
   REPORTS_DIR: /data/reports
+  ATTACHMENTS_DIR: /data/attachments
 
 # 40 ГБ диска: без ограничения json-file логи uvicorn/бота съедают его молча.
 x-logging: &logging
@@ -71,6 +72,7 @@ services:
       - "127.0.0.1:8001:8000"
     volumes:
       - reports:/data/reports
+      - attachments:/data/attachments
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,6 +99,7 @@ services:
     environment: *app-env
     volumes:
       - reports:/data/reports
+      - attachments:/data/attachments
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,3 +141,7 @@ volumes:
   pgdata:
   redisdata:
   reports:
+  # Вложения, в отличие от отчётов, пересобрать нельзя: выписка из стационара
+  # существует в одном экземпляре, и pg_dump сохраняет только строку таблицы, а
+  # не байты файла. Том обязан попадать в резервное копирование (ADR-0013).
+  attachments:
