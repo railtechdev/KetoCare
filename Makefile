@@ -150,6 +150,14 @@ web: check-env ## Запустить веб-кабинет (Vite); /api прок
 	@# `.env` строку WEB_PORT — и кабинет поднимется там же.
 	pnpm --filter @ketocare/web run dev
 
+.PHONY: landing
+landing: check-env ## Запустить посадочную страницу (astro dev); /api проксируется на API_PROXY_TARGET
+	@# Порт — LANDING_PORT в корневом файле настроек, читает его сам astro.
+	@# Прокси `/api` обязателен: на сервере его делает nginx, и без него форма
+	@# заявки локально отвечает 404 — единственную публичную ручку записи
+	@# нельзя было проверить, не собрав лендинг и не подняв рядом nginx.
+	pnpm --filter @ketocare/landing run dev
+
 .PHONY: down
 down: ## Остановить окружение
 	$(COMPOSE) down
