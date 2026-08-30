@@ -93,7 +93,11 @@ async def list_leads(
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,
-        action="leads.list",
+        # `export`, а не своё имя: сущность уже названа рядом (`entity`), а
+        # словарь действий в журнале плоский — точечные имена в нём выглядели бы
+        # сырыми кодами. Смысл тот же, что у выгрузки отчёта: наружу уходит
+        # список контактов целиком.
+        action="export",
         entity="leads",
         after={"returned": len(items), "total": total},
         ip=client_address(request),
@@ -125,7 +129,7 @@ async def delete_lead(
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,
-        action="leads.delete",
+        action="delete",
         entity="leads",
         entity_id=lead_id,
         ip=client_address(request),

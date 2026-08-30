@@ -42,6 +42,8 @@ export const AUDIT_ENTITIES = [
   "reports",
   "telegram_accounts",
   "link_codes",
+  "attachments",
+  "leads",
 ] as const;
 
 /** Значения `audit_log.action`, которые пишет API. */

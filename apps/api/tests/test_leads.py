@@ -183,10 +183,10 @@ class TestAudit:
 
         await client.get("/api/v1/leads", headers=auth_headers(admin))
 
-        # Отбор по автору: записи `leads.list` от прежней ручной работы с
+        # Отбор по автору: записи о выгрузке заявок от прежней ручной работы с
         # админкой лежат в той же таблице.
         entry = await session.scalar(
-            select(AuditLog).where(AuditLog.action == "leads.list", AuditLog.user_id == admin.id)
+            select(AuditLog).where(AuditLog.action == "export", AuditLog.user_id == admin.id)
         )
         assert entry is not None
 
@@ -201,7 +201,7 @@ class TestAudit:
         # Отбор по самой записи, а не только по действию: иначе находится чужое
         # удаление, и тест подтверждает не то, что проверял.
         entry = await session.scalar(
-            select(AuditLog).where(AuditLog.action == "leads.delete", AuditLog.entity_id == lead.id)
+            select(AuditLog).where(AuditLog.action == "delete", AuditLog.entity_id == lead.id)
         )
         assert entry is not None
 

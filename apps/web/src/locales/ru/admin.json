@@ -294,9 +294,11 @@
       "update": "Изменение"
     },
     "entities": {
+      "attachments": "Вложения",
       "doctor_patient": "Прикрепления к пациентам",
       "invitations": "Приглашения",
       "ketone_methods": "Методы измерения кетонов",
+      "leads": "Заявки с сайта",
       "link_codes": "Коды привязки",
       "medical_profiles": "Медицинские профили",
       "medications": "Лекарства",
