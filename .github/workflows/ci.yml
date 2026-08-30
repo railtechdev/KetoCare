@@ -11,6 +11,9 @@ env:
   TEST_DATABASE_URL: postgresql+asyncpg://ketocare:ketocare@localhost:5432/ketocare
   REDIS_URL: redis://localhost:6379/0
   SECRET_KEY: ci-secret-key-not-used-outside-ci-000000000000
+  # Канал бота выключен, пока переменная пуста, — и тесты привязки Telegram
+  # тогда упираются в «Канал бота не настроен» вместо проверяемого поведения.
+  BOT_API_TOKEN: ci-bot-service-token-not-used-outside-ci
   TZ: Asia/Tashkent
 
 jobs:

@@ -24,7 +24,20 @@ OTHER_CHAT_ID = 482913002
 
 
 def bot_headers() -> dict[str, str]:
-    return {"X-Bot-Token": get_settings().bot_api_token}
+    """Заголовок сервисного токена бота.
+
+    Пустая настройка означает выключенный канал, и тогда КАЖДЫЙ тест этого файла
+    падает на «Канал бота не настроен» — то есть на настройке окружения, а не на
+    проверяемом поведении. Именно так они и упали в CI, где переменной не было.
+    Отказ здесь называет причину сразу.
+    """
+
+    token = get_settings().bot_api_token
+    assert token, (
+        "BOT_API_TOKEN не задан: канал бота выключен, проверять нечего. "
+        "Задайте переменную локально в файле окружения или в env workflow."
+    )
+    return {"X-Bot-Token": token}
 
 
 async def _family(session, make_user, make_patient, *, name: str = "Амина"):
