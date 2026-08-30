@@ -24,6 +24,8 @@ DOMAIN_APP="${DOMAIN_APP:-app.ketocare.railtech.uz}"
 OWNER="${OWNER:-ketocare}"
 REPO_URL="${REPO_URL:-git@github.com:railtechdev/KetoCare.git}"
 REPO=/srv/ketocare
+# Точка входа автодеплоя — ВНЕ рабочего дерева (см. шаг ниже).
+ENTRYPOINT=/srv/ketocare-deploy.sh
 
 step() { echo; echo "### $*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -152,10 +154,20 @@ else
     echo "добавлено: $CRON"
 fi
 
+step "точка входа автодеплоя"
+# Вне рабочего дерева намеренно: скрипт делает `git checkout --force`, и лежи
+# исполняемая копия внутри репозитория, checkout переписывал бы файл, который
+# bash в этот момент выполняет. Дальше копия обновляет себя сама, последним
+# шагом успешного выката.
+install -m 0755 -o "$OWNER" -g "$OWNER" \
+    "$REPO/infra/scripts/remote-deploy.sh" "$ENTRYPOINT"
+ls -l "$ENTRYPOINT"
+
 echo
 echo "Готово. Дальше — БЕЗ входа на сервер:"
 echo "  1. Ключ автодеплоя: открытую часть в ~$OWNER/.ssh/authorized_keys строкой"
-echo "     restrict,command=\"$REPO/infra/scripts/remote-deploy.sh\" ssh-ed25519 …"
+echo "     restrict,command=\"$ENTRYPOINT\" ssh-ed25519 …"
 echo "     закрытую — в секрет DEPLOY_SSH_KEY репозитория."
 echo "  2. Actions → Deploy → Run workflow — первый выкат."
-echo "  3. Первый администратор: docs/DEPLOY.md, раздел «Первый администратор»."
+echo "  3. Первый администратор: секреты ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME —"
+echo "     учётка появится сама при выкате (docs/DEPLOY.md)."
