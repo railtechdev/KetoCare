@@ -2,10 +2,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
   FormFooter,
 } from "@ketocare/ui";
+import { Activity } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -60,68 +62,104 @@ export function LoginPage() {
   });
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-screen">
-      <Card className="w-full max-w-form">
-        <CardHeader>
-          <CardTitle className="text-page-title">
-            <h1 className="m-0 font-semibold">{t("login.title")}</h1>
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          <form
-            onSubmit={onSubmit}
-            noValidate
-            className="flex flex-col gap-block"
+    <div className="flex min-h-dvh items-center justify-center p-screen">
+      <div className="flex w-full max-w-form flex-col gap-block">
+        {/* Знак продукта и одна строка о том, что это: человек приходит сюда по
+            ссылке из письма и должен понять, куда попал, до того как введёт
+            почту. Тот же значок стоит в шапке кабинета — вход не должен
+            выглядеть чужой страницей. */}
+        <div className="flex items-center gap-field">
+          <span
+            aria-hidden="true"
+            className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"
           >
-            <Field
-              id="email"
-              width="wide"
-              type="email"
-              // Менеджеры паролей узнают поле по autoComplete; вставка ничем
-              // не ограничивается (правило П21 канона).
-              autoComplete="username"
-              label={t("login.email")}
-              error={errors.email && t("login.emailInvalid")}
-              {...register("email")}
-            />
+            <Activity className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="m-0 text-card-title font-semibold">
+              {t("login.brand")}
+            </p>
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("login.tagline")}
+            </p>
+          </div>
+        </div>
 
-            <Field
-              id="password"
-              width="medium"
-              type="password"
-              autoComplete="current-password"
-              label={t("login.password")}
-              error={errors.password && t("login.passwordRequired")}
-              {...register("password")}
-            />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-page-title">
+              <h1 className="m-0 font-semibold">{t("login.title")}</h1>
+            </CardTitle>
+            <CardDescription>{t("login.intro")}</CardDescription>
+          </CardHeader>
 
-            {totpRequired && (
+          <CardContent>
+            <form
+              onSubmit={onSubmit}
+              noValidate
+              className="flex flex-col gap-block"
+            >
               <Field
-                id="totp"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                label={t("login.totpCode")}
-                {...register("totpCode")}
+                id="email"
+                type="email"
+                // Менеджеры паролей узнают поле по autoComplete; вставка ничем
+                // не ограничивается (правило П21 канона).
+                autoComplete="username"
+                label={t("login.email")}
+                error={errors.email && t("login.emailInvalid")}
+                {...register("email")}
               />
-            )}
 
-            {login.isError && (
-              // Сообщение приходит от сервера уже на русском (раздел 5.1 ТЗ);
-              // свой текст — только если тело ответа не соответствует контракту.
-              <FormError>
-                {errorMessageOf(login.error) ?? t("login.invalidCredentials")}
-              </FormError>
-            )}
+              <Field
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                label={t("login.password")}
+                error={errors.password && t("login.passwordRequired")}
+                {...register("password")}
+              />
 
-            <FormFooter
-              submitLabel={t("login.submit")}
-              pendingLabel={t("login.submitting")}
-              pending={login.isPending}
-            />
-          </form>
-        </CardContent>
-      </Card>
+              {totpRequired && (
+                <Field
+                  id="totp"
+                  width="narrow"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  label={t("login.totpCode")}
+                  hint={t("login.totpHint")}
+                  {...register("totpCode")}
+                />
+              )}
+
+              {login.isError && (
+                // Сообщение приходит от сервера уже на русском (раздел 5.1 ТЗ);
+                // свой текст — только если тело ответа не соответствует контракту.
+                <FormError>
+                  {errorMessageOf(login.error) ?? t("login.invalidCredentials")}
+                </FormError>
+              )}
+
+              <FormFooter
+                submitLabel={t("login.submit")}
+                pendingLabel={t("login.submitting")}
+                pending={login.isPending}
+              />
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Регистрации в продукте нет: доступ выдаёт клиника (ADR-0003).
+            Человек без учётной записи иначе упирается в форму, которую ему
+            нечем заполнить, и не понимает, что делать дальше. */}
+        <div className="rounded-xl border border-border bg-card px-4 py-3">
+          <p className="m-0 text-sm font-semibold">
+            {t("login.noAccountTitle")}
+          </p>
+          <p className="m-0 mt-1 text-sm text-muted-foreground">
+            {t("login.noAccount")}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
