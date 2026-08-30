@@ -11,7 +11,7 @@ import { errorMessageOf } from "../../lib/api";
 import {
   FormErrorSummary,
   type FormErrorSummaryItem,
-} from "./FormErrorSummary";
+} from "../../components/FormErrorSummary";
 import type { DictionaryEntryCreateBody } from "./types";
 
 const entryFormSchema = z.object({

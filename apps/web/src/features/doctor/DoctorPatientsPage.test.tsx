@@ -249,9 +249,21 @@ describe("Форма назначения", () => {
       screen.getByRole("button", { name: "Сохранить назначение" }),
     );
 
-    expect(
-      await screen.findByText("Кетосоотношение — от 1,0 до 5,0 с шагом 0,5."),
-    ).toBeInTheDocument();
+    // Текст обязан стоять в двух местах сразу: под полем и строкой сводки над
+    // формой (правило П8 канона — сводка повторяет формулировку поля, иначе
+    // читается как вторая, несуществующая ошибка).
+    const ratioErrors = await screen.findAllByText(
+      "Кетосоотношение — от 1,0 до 5,0 с шагом 0,5.",
+    );
+    expect(ratioErrors).toHaveLength(2);
+
+    // Строка сводки ведёт в поле: без якоря она сообщает об ошибке, но не
+    // помогает её исправить.
+    const summaryLink = ratioErrors.find(
+      (node) => node.tagName === "A",
+    ) as HTMLAnchorElement;
+    expect(summaryLink).toBeDefined();
+    expect(summaryLink.getAttribute("href")).toBe(`#${ratio.id}`);
     expect(api.POST).not.toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/prescriptions",
       expect.anything(),
