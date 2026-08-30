@@ -1,0 +1,140 @@
+# Пред-прод / прод: postgres, redis, api, bot, worker. Веб-кабинет и посадочная —
+# статика у host-nginx (infra/nginx/), в compose их нет. Запуск — из корня репо:
+#
+#   docker compose --env-file .env -f infra/docker-compose.prod.yml up -d
+#
+# Наружу опубликован один порт — API на 127.0.0.1:8001 (за nginx). У postgres и
+# redis опубликованных портов нет намеренно: в dev-compose они открыты для
+# локальных инструментов, на сервере это была бы дыра.
+#
+# Полный порядок развёртывания — docs/DEPLOY.md.
+
+name: ketocare
+
+# Адреса контейнеров внутри сети — топология, а не конфигурация: они объявлены
+# здесь и перекрывают значения из .env (environment сильнее env_file). В .env
+# на сервере обязателен только POSTGRES_PASSWORD и секреты приложения.
+x-app-env: &app-env
+  DATABASE_URL: postgresql+asyncpg://ketocare:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@postgres:5432/ketocare
+  REDIS_URL: redis://redis:6379/0
+  REPORTS_DIR: /data/reports
+
+# 40 ГБ диска: без ограничения json-file логи uvicorn/бота съедают его молча.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ketocare
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: ketocare
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ketocare"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    <<: *logging
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    # AOF обязателен: в redis живут состояния FSM бота и секреты привязок —
+    # они должны переживать перезапуск (ADR-0009).
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    <<: *logging
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile
+      target: api
+    restart: unless-stopped
+    env_file: ../.env
+    environment: *app-env
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - reports:/data/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    <<: *logging
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile
+      target: worker
+    restart: unless-stopped
+    env_file: ../.env
+    environment: *app-env
+    volumes:
+      - reports:/data/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    <<: *logging
+
+  bot:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile
+      target: bot
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      # Бот ходит в API напрямую по внутренней сети, мимо nginx
+      # (см. BOT_API_BASE_URL в .env.example).
+      BOT_API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    <<: *logging
+
+networks:
+  # Фиксированная подсеть, чтобы адрес шлюза (с него приходит трафик host-nginx
+  # внутрь контейнера api) был предсказуем: TRUSTED_PROXY_IPS=172.30.100.1.
+  # Без фиксации docker выбирает подсеть сам, и после пересоздания сети аудит
+  # молча начал бы писать адрес шлюза вместо адреса клиента.
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.100.0/24
+          gateway: 172.30.100.1
+
+volumes:
+  pgdata:
+  redisdata:
+  reports:

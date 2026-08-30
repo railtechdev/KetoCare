@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
@@ -28,7 +29,10 @@ from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
 
-DEMO_PASSWORD = "correct horse battery staple"
+# Дефолт годится только для локальной БД. На публичном стенде пароль из
+# репозитория — это открытая админка, поэтому там его обязательно перекрывает
+# переменная окружения (docs/DEPLOY.md, «Демо-данные и фокус-группа»).
+DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "correct horse battery staple")
 
 # Значения на 100 г. Источник указан честно: это данные USDA, а не выдуманные
 # цифры — база продуктов кормит расчёт, и происхождение должно быть прослеживаемо.
