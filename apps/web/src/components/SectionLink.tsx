@@ -10,6 +10,10 @@ interface Props {
   activeProps?: LinkProps["activeProps"];
   /** Вид дневника, который нужно открыть сразу (для быстрых действий главной) */
   diaryKind?: string;
+  /** Объект, который нужно открыть в новом разделе (`?item=`) */
+  item?: string;
+  /** Строка поиска для нового раздела (`?q=`) */
+  query?: string;
   onClick?: () => void;
 }
 
@@ -30,6 +34,8 @@ export function SectionLink({
   className,
   activeProps,
   diaryKind,
+  item,
+  query,
   onClick,
 }: Props) {
   return (
@@ -37,10 +43,19 @@ export function SectionLink({
       to="/app/$section"
       params={{ section }}
       // Выбранный ребёнок переносится, состояние другого экрана — нет:
-      // вкладка и вид записей принадлежат тому разделу, из которого уходим, и
-      // на новом означали бы уже другое (`?tab=verify` калькулятора приезжал
-      // на главную). Вид дневника задаётся явно там, где он нужен.
-      search={(previous) => ({ ...previous, tab: undefined, kind: diaryKind })}
+      // вкладка, объект и строка поиска принадлежат тому разделу, из которого
+      // уходим, и на новом означали бы уже другое (`?tab=verify` калькулятора
+      // приезжал на главную, а `?item=` карточки продукта — куда угодно).
+      // Поэтому все они гасятся по умолчанию и задаются явно там, где нужны:
+      // справочник открывает калькулятор на своём продукте (`item`), а
+      // калькулятор ведёт в справочник со своим запросом (`query`).
+      search={(previous) => ({
+        ...previous,
+        tab: undefined,
+        kind: diaryKind,
+        item,
+        q: query,
+      })}
       className={className}
       activeProps={activeProps}
       onClick={onClick}

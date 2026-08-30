@@ -149,20 +149,43 @@ def create_token(
     return jwt.encode(payload, get_settings().secret_key, algorithm=_ALGORITHM)
 
 
+def auth_challenge(message: str) -> ApiError:
+    """401, означающий «предъявленный токен не годится», — с `WWW-Authenticate`.
+
+    Код `unauthorized` API отдаёт и по другим поводам: неверный текущий пароль,
+    неверный код подтверждения, неверная пара логин-пароль. Для клиента это
+    разные события: первое лечится обновлением токена, остальные — нет.
+
+    Различать их по тексту сообщения нельзя, а `WWW-Authenticate` (RFC 9110,
+    §11.6.1) существует ровно для этого: он сопровождает вызов аутентификации и
+    не сопровождает отказ по существу запроса. Без него кабинет на «текущий
+    пароль указан неверно» молча обновлял сессию, повторял запрос, получал тот
+    же отказ и показывал «что-то пошло не так» вместо ответа сервера.
+    """
+
+    return ApiError(ErrorCode.UNAUTHORIZED, message, headers={"WWW-Authenticate": "Bearer"})
+
+
 def decode_token(token: str, *, expected_type: TokenType) -> dict[str, Any]:
+    # Заголовок вызова — только для access-токена: отказ по refresh-токену
+    # означает «сессия окончена», а не «предъяви токен заново», и обновлять
+    # там уже нечего.
+    def rejected(message: str) -> ApiError:
+        if expected_type == "access":
+            return auth_challenge(message)
+        return ApiError(ErrorCode.UNAUTHORIZED, message)
+
     try:
         payload: dict[str, Any] = jwt.decode(
             token, get_settings().secret_key, algorithms=[_ALGORITHM]
         )
     except jwt.ExpiredSignatureError as exc:
-        raise ApiError(
-            ErrorCode.UNAUTHORIZED, "Срок действия сессии истёк, войдите заново."
-        ) from exc
+        raise rejected("Срок действия сессии истёк, войдите заново.") from exc
     except jwt.PyJWTError as exc:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+        raise rejected("Недействительный токен.") from exc
 
     if payload.get("type") != expected_type:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.")
+        raise rejected("Недействительный токен.")
 
     return payload
 

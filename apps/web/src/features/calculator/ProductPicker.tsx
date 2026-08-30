@@ -1,8 +1,10 @@
-import { ErrorState } from "@ketocare/ui";
+import { Button, ErrorState } from "@ketocare/ui";
+import { PackageSearch } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { useProductSearch, type ProductOption } from "./useProducts";
 
@@ -33,6 +35,14 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
   // Упавший поиск без сообщения неотличим от «ничего не нашлось»: подсказок
   // нет в обоих случаях. Показываем ошибку с повтором (П15 канона).
   const searchFailed = isError && query.trim().length >= 2;
+
+  // «Ничего не нашлось» и «ещё ищем» на экране выглядели одинаково — никак:
+  // список просто не появлялся. Семья у плиты не понимала, продолжать ли
+  // ждать, и повторяла запрос по буквам. Ответ нужен явный, и вместе с ним —
+  // выход: справочник по тому же слову, где видно, что продукта нет вовсе, а
+  // не что опечатка в наборе.
+  const nothingFound =
+    query.trim().length >= 2 && !isFetching && !isError && options.length === 0;
 
   function pick(product: ProductOption | undefined) {
     if (!product) return;
@@ -84,6 +94,21 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
             ? t("optionsFound", { count: options.length })
             : ""}
       </span>
+
+      {nothingFound && (
+        <div
+          role="status"
+          className="mt-field flex flex-wrap items-center gap-field text-sm text-muted-foreground"
+        >
+          <PackageSearch aria-hidden="true" className="size-4 shrink-0" />
+          <span>{t("noMatches", { query: query.trim() })}</span>
+          <Button asChild variant="outline" size="sm" className="min-h-touch">
+            <SectionLink section="products" query={query.trim()}>
+              {t("openCatalog")}
+            </SectionLink>
+          </Button>
+        </div>
+      )}
 
       {searchFailed && (
         <ErrorState

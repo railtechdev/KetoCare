@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { api, setAccessToken } from "../../lib/api";
+import { api, onSessionExpired, setAccessToken } from "../../lib/api";
 import { readTokenClaims, type Session } from "./claims";
 import { SessionContext, type SessionState } from "./sessionContext";
 
@@ -38,6 +38,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     setSession(null);
     queryClient.clear();
+  }, [queryClient]);
+
+  useEffect(() => {
+    // Сессия истекла окончательно: refresh-cookie больше не принимается.
+    // Клиент API к этому моменту уже попытался обновиться и не смог, поэтому
+    // здесь остаётся увести человека на вход — иначе он остаётся в кабинете,
+    // где каждый запрос отвечает отказом, и не понимает, почему.
+    return onSessionExpired(() => {
+      setSession(null);
+      queryClient.clear();
+    });
   }, [queryClient]);
 
   useEffect(() => {

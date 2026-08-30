@@ -1,14 +1,6 @@
-import {
-  Button,
-  EmptyState,
-  MacroBar,
-  RatioBadge,
-  WarningBanner,
-} from "@ketocare/ui";
-import { CalendarDays } from "lucide-react";
+import { MacroBar, RatioBadge, WarningBanner } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { SectionLink } from "../../components/SectionLink";
 import { dayVerdict } from "../patients/dayVerdict";
 import { Panel } from "./Panel";
 import type { DaySummary } from "./types";
@@ -30,18 +22,14 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
   const { t } = useTranslation("home");
 
   if (day === null) {
+    // Пустое состояние на экране одно (правило П27 канона). Об отсутствующем
+    // меню уже сказал блок «Ближайший приём пищи» выше — он же предлагает его
+    // составить. Второй такой же блок с той же кнопкой занимал высоту ради
+    // повторения того, что читатель только что прочёл, поэтому здесь остаётся
+    // строка.
     return (
       <Panel title={t("day.title")}>
-        <EmptyState
-          icon={CalendarDays}
-          title={t("day.emptyTitle")}
-          description={t("day.empty")}
-          action={
-            <Button asChild className="min-h-touch">
-              <SectionLink section="menu">{t("day.planMenu")}</SectionLink>
-            </Button>
-          }
-        />
+        <p className="m-0 text-sm text-muted-foreground">{t("day.empty")}</p>
       </Panel>
     );
   }

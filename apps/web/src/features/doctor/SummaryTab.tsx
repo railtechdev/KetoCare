@@ -13,8 +13,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { CareTeamPanel } from "./CareTeamPanel";
 import { MedicalProfileForm } from "./MedicalProfileForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
+import { useIntakeOptions } from "../intake/useIntake";
 import { dayVerdict } from "../patients/dayVerdict";
 import { usePatientOverview } from "../patients/overview";
 import { useMedicalProfile } from "./doctorQueries";
@@ -67,6 +69,8 @@ export function SummaryTab({
       </AsyncSection>
 
       {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
+
+      <CareTeamPanel patientId={patient.id} />
     </div>
   );
 }
@@ -326,6 +330,15 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
   const { t } = useTranslation("doctor");
   const genetics = profile.genetics ?? null;
 
+  // Число сменённых ПЭП хранится ссылкой на справочник, а не числом: шкала
+  // задана медицинской командой («1-2», «3 и более»), и подписи берутся оттуда.
+  // Выведенные из употребления варианты запрашиваются вместе с действующими —
+  // иначе прежний ответ показался бы прочерком.
+  const options = useIntakeOptions();
+  const aedSwitchCount =
+    options.data?.find((option) => option.id === profile.aed_switch_count_id)
+      ?.name_ru ?? null;
+
   return (
     <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
       <dt className="text-muted-foreground">{t("profile.fields.diagnosis")}</dt>
@@ -359,6 +372,11 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
         {t("profile.fields.comorbidities")}
       </dt>
       <dd className="m-0">{profile.comorbidities ?? "—"}</dd>
+
+      <dt className="text-muted-foreground">
+        {t("profile.fields.aedSwitchCount")}
+      </dt>
+      <dd className="m-0">{aedSwitchCount ?? "—"}</dd>
 
       <dt className="text-muted-foreground">{t("profile.fields.updatedAt")}</dt>
       <dd className="m-0 tabular-nums">

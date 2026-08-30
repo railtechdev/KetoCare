@@ -21,7 +21,12 @@ from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
 from ..errors import ApiError, ErrorCode
-from ..security import Channel, decode_token, token_predates_password_change
+from ..security import (
+    Channel,
+    auth_challenge,
+    decode_token,
+    token_predates_password_change,
+)
 from .bot import assert_route_allowed_for_bot
 
 
@@ -61,7 +66,7 @@ def _bearer_token(request: Request) -> str:
     if cookie_token:
         return cookie_token
 
-    raise ApiError(ErrorCode.UNAUTHORIZED, "Требуется вход в систему.")
+    raise auth_challenge("Требуется вход в систему.")
 
 
 async def get_current_user(request: Request, session: SessionDep) -> CurrentUser:
@@ -71,23 +76,23 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
         user_id = uuid.UUID(payload["sub"])
         role = UserRole(payload["role"])
     except (KeyError, ValueError) as exc:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+        raise auth_challenge("Недействительный токен.") from exc
 
     user = await users_repo.get(session, user_id)
     if user is None or not user.is_active:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Учётная запись недоступна.")
+        raise auth_challenge("Учётная запись недоступна.")
 
     # Роль берётся из БД, а не из токена: понижение прав должно действовать сразу,
     # не дожидаясь истечения выданного access-токена.
     if user.role is not role:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Права учётной записи изменились, войдите заново.")
+        raise auth_challenge("Права учётной записи изменились, войдите заново.")
 
     # Смена пароля обрывает все прежние сессии (раздел 11 ТЗ). Проверка здесь, а
     # не только при обновлении токена: иначе угнанный access-токен продолжал бы
     # работать до пятнадцати минут после того, как владелец сменил пароль.
     # Дополнительного запроса это не стоит — пользователь уже прочитан выше.
     if token_predates_password_change(payload, user.password_changed_at):
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Пароль изменён, войдите заново.")
+        raise auth_challenge("Пароль изменён, войдите заново.")
 
     scope_raw = payload.get("patient_scope")
     patient_scope = uuid.UUID(scope_raw) if scope_raw else None
@@ -129,7 +134,7 @@ async def _assert_binding_alive(
     несколько, и отзыв одного чата гасил бы все.
     """
 
-    denied = ApiError(ErrorCode.UNAUTHORIZED, "Привязка отозвана, требуется повторная привязка.")
+    denied = auth_challenge("Привязка отозвана, требуется повторная привязка.")
 
     raw = payload.get("tg")
     if not isinstance(raw, str):
@@ -163,7 +168,7 @@ def _channel_of(payload: dict[str, Any]) -> Channel:
         return "web"
     if raw in get_args(Channel):
         return cast(Channel, raw)
-    raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.")
+    raise auth_challenge("Недействительный токен.")
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
@@ -273,11 +278,11 @@ async def get_totp_setup_user(request: Request, session: SessionDep) -> CurrentU
     try:
         user_id = uuid.UUID(payload["sub"])
     except (KeyError, ValueError) as exc:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+        raise auth_challenge("Недействительный токен.") from exc
 
     user = await users_repo.get(session, user_id)
     if user is None or not user.is_active:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Учётная запись недоступна.")
+        raise auth_challenge("Учётная запись недоступна.")
 
     return CurrentUser(id=user.id, role=user.role)
 

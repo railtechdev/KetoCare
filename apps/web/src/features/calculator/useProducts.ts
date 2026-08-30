@@ -45,3 +45,37 @@ export function useProductSearch(query: string) {
     },
   });
 }
+
+/**
+ * Один продукт по идентификатору.
+ *
+ * Нужен, когда продукт выбран не поиском, а приходом из справочника
+ * (`/app/calculator?item=<id>`): справочник знает идентификатор, а состав на
+ * 100 г для расчёта — нет.
+ *
+ * `retry: false` — несуществующий идентификатор из чужой или устаревшей ссылки
+ * повтором не оживёт.
+ */
+export function useProduct(productId: string | undefined) {
+  return useQuery({
+    queryKey: ["products", "one", productId],
+    enabled: productId !== undefined,
+    retry: false,
+    queryFn: async (): Promise<ProductOption> => {
+      const { data, error } = await api.GET("/api/v1/products/{product_id}", {
+        params: { path: { product_id: productId as string } },
+      });
+      if (error || !data) throw error ?? new Error("Empty product response");
+
+      return {
+        id: data.id,
+        name: data.name_ru,
+        kcal: data.kcal_100g,
+        fat: data.fat_100g,
+        protein: data.protein_100g,
+        carbs: data.carbs_100g,
+        fiber: data.fiber_100g,
+      };
+    },
+  });
+}

@@ -103,6 +103,15 @@ class TestChangePassword:
         # И сессия при неудаче остаётся живой: пользователь просто ошибся.
         assert (await client.get("/api/v1/users/me", headers=auth_headers(user))).status_code == 200
 
+        # Заголовок вызова аутентификации здесь не ставится: 401 относится к
+        # содержанию запроса, а не к предъявленному токену. По нему кабинет и
+        # отличает «пароль не тот» от «токен протух»: без различия он на
+        # опечатку в пароле молча обновлял сессию, повторял запрос, получал тот
+        # же отказ — и вместо «текущий пароль указан неверно» показывал
+        # «что-то пошло не так».
+        assert "WWW-Authenticate" not in response.headers
+        assert response.json()["error"]["message"] == "Текущий пароль указан неверно."
+
     async def test_same_password_rejected(self, client, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)
 
@@ -130,3 +139,6 @@ class TestChangePassword:
             URL, json={"current_password": "x", "new_password": NEW_PASSWORD}
         )
         assert response.status_code == 401
+        # А вот отказ уровня токена заголовок вызова несёт (RFC 9110, §11.6.1) —
+        # это и есть признак, по которому клиент решает обновлять сессию.
+        assert response.headers["WWW-Authenticate"] == "Bearer"

@@ -77,3 +77,33 @@ export function useSectionItem(): [
 
   return [search.item, set];
 }
+
+/**
+ * Строка поиска раздела — в адресе.
+ *
+ * Поиск, живущий в `useState`, нельзя ни переслать, ни передать другому
+ * экрану. Калькулятор, не нашедший продукт, ведёт в справочник с уже введённым
+ * запросом; в состоянии компонента такую ссылку составить нечем.
+ *
+ * Переход — `replace`: набор строки не должен копить историю, иначе «Назад»
+ * пришлось бы нажимать по разу на каждую букву.
+ */
+export function useSectionQuery(): [string, (value: string) => void] {
+  const search = useSearch({ from: "/app/$section" });
+  const navigate = useNavigate({ from: "/app/$section" });
+
+  const set = useCallback(
+    (next: string) => {
+      void navigate({
+        replace: true,
+        search: (previous) => ({
+          ...previous,
+          q: next.trim() === "" ? undefined : next,
+        }),
+      });
+    },
+    [navigate],
+  );
+
+  return [search.q ?? "", set];
+}

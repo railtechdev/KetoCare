@@ -9,6 +9,7 @@ import { NotesTab } from "./NotesTab";
 import { PatientDiaryTab } from "./PatientDiaryTab";
 import { PrescriptionTab } from "./PrescriptionTab";
 import { SummaryTab } from "./SummaryTab";
+import { ReportsView } from "../reports/ReportsView";
 import { ageInMonths, formatIsoDate } from "./dates";
 import { isDoctor, type Patient } from "./types";
 
@@ -17,12 +18,20 @@ const TABS = [
   "prescription",
   "medications",
   "diary",
+  "reports",
   "notes",
 ] as const;
 
 type TabKey = (typeof TABS)[number];
 
-/** Карта пациента: сводка, назначение, лекарства, дневники, заметки (раздел 8.3 ТЗ). */
+/**
+ * Карта пациента: сводка, назначение, лекарства, дневники, отчёт, заметки
+ * (раздел 8.3 ТЗ).
+ *
+ * Отчёт — здесь, а не отдельным разделом меню: у врача пациентов много, и
+ * раздел верхнего уровня потребовал бы выбирать пациента заново. Экран отчёта
+ * при этом общий с семьёй — числа в нём и в PDF обязаны совпадать.
+ */
 export function PatientCard({
   patient,
   onBack,
@@ -117,6 +126,9 @@ export function PatientCard({
         </TabsContent>
         <TabsContent value="diary" className="pt-screen">
           <PatientDiaryTab patientId={patient.id} />
+        </TabsContent>
+        <TabsContent value="reports" className="pt-screen">
+          <ReportsView patientId={patient.id} />
         </TabsContent>
         {clinicalAllowed && (
           <TabsContent value="notes" className="pt-screen">

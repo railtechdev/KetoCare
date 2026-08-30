@@ -12,6 +12,7 @@ import { SECTIONS_BY_ROLE, type Role } from "./features/auth/roles";
 import type { Session } from "./features/auth/claims";
 import { AppLayout } from "./layouts/AppLayout";
 import { UiShowcase } from "./routes/UiShowcase";
+import { NotFoundPage } from "./routes/NotFoundPage";
 import { SectionRoute } from "./routes/SectionRoute";
 
 export interface RouterContext {
@@ -115,6 +116,14 @@ export interface SectionSearch {
    * страницу — F5 возвращал в список, а «Назад» браузера уводил из раздела.
    */
   item?: string;
+  /**
+   * Строка поиска раздела.
+   *
+   * В адресе, потому что поиск — это ссылка: калькулятор, не нашедший продукт,
+   * отправляет в справочник с тем же запросом, и переспрашивать его у семьи,
+   * стоящей у плиты, незачем.
+   */
+  q?: string;
 }
 
 /** Непустая строка или ничего: `?tab=` в адресе — то же самое, что его отсутствие. */
@@ -136,10 +145,12 @@ const sectionRoute = createRoute({
     const tab = text(search.tab);
     const kind = text(search.kind);
     const item = text(search.item);
+    const q = text(search.q);
     if (patient !== undefined) result.patient = patient;
     if (tab !== undefined) result.tab = tab;
     if (kind !== undefined) result.kind = kind;
     if (item !== undefined) result.item = item;
+    if (q !== undefined) result.q = q;
     return result;
   },
   beforeLoad: ({ context, params }) => {
@@ -185,6 +196,10 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { session: null },
+  // Несуществующий адрес — свой экран с выходом, а не англоязычная заглушка
+  // маршрутизатора без единой ссылки (правило П22 и здравый смысл: из тупика
+  // должен быть выход).
+  defaultNotFoundComponent: NotFoundPage,
 });
 
 declare module "@tanstack/react-router" {
