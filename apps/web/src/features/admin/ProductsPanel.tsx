@@ -3,6 +3,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  Section,
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -208,9 +209,16 @@ export function ProductsPanel() {
         }
       />
 
-      <fieldset className="m-0 flex flex-wrap items-end gap-block border-0 p-0">
-        <legend className="sr-only">{t("products.filters.legend")}</legend>
-
+      {/* Панель фильтров — блок экрана, а значит `Section` со скрытым
+          заголовком (правило П23). `fieldset` остаётся внутри форм, где
+          группирует поля общей подписью, — как в уже приведённых к канону
+          экранах родителя. */}
+      <Section
+        title={t("products.filters.legend")}
+        titleHidden
+        density="compact"
+        contentClassName="flex flex-wrap items-end gap-block"
+      >
         <div className="min-w-56 flex-1 sm:max-w-md">
           <Field
             id="admin-product-search"
@@ -242,7 +250,7 @@ export function ProductsPanel() {
             })}
           </Button>
         )}
-      </fieldset>
+      </Section>
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection

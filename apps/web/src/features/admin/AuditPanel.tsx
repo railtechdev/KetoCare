@@ -4,6 +4,7 @@ import {
   DataTable,
   EmptyState,
   formatOccurredAt,
+  Section,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ScrollText } from "lucide-react";
@@ -143,9 +144,17 @@ export function AuditPanel() {
     <div className="flex flex-col gap-block">
       <SubPageHeader title={t("audit.title")} intro={t("audit.intro")} />
 
-      <fieldset className="m-0 grid gap-block border-0 p-0 sm:grid-cols-2 lg:grid-cols-3">
-        <legend className="sr-only">{t("audit.filters.legend")}</legend>
-
+      {/* Панель фильтров — `Section` со скрытым заголовком, а не голый
+          `fieldset`: блок экрана выделяется одним способом (правило П23), а
+          `fieldset` остаётся там, где обязателен семантически — у группы
+          радиокнопок или флажков с общей подписью. Здесь же это поля разных
+          типов, и `Section` с `titleHidden` описан ровно для этого случая. */}
+      <Section
+        title={t("audit.filters.legend")}
+        titleHidden
+        density="compact"
+        contentClassName="grid gap-block sm:grid-cols-2 lg:grid-cols-3"
+      >
         <Field
           id="audit-user"
           label={t("audit.filters.user")}
@@ -214,7 +223,7 @@ export function AuditPanel() {
             {t("audit.filters.reset")}
           </Button>
         </div>
-      </fieldset>
+      </Section>
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
