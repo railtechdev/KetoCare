@@ -1,3 +1,4 @@
+import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -139,6 +140,9 @@ function renderPage(section: string) {
               правило П1), поэтому экрану нужен роутер — как и в работающем
               приложении. */}
           <SectionRouter section={section}>{children}</SectionRouter>
+          {/* Toaster монтируется в AppLayout, а тест рендерит экран отдельно:
+              без него подтверждению успеха некуда показаться (правило П16). */}
+          <Toaster />
         </SessionProvider>
       </QueryClientProvider>
     );
@@ -245,8 +249,11 @@ describe("AdminPage — импорт продуктов", () => {
 
     await user.click(screen.getByRole("button", { name: "Импортировать" }));
 
-    expect(await screen.findByText("Импорт выполнен")).toBeInTheDocument();
-    expect(screen.getByText("Импортировано строк: 3")).toBeInTheDocument();
+    // Успех — тостом, а не «вечным» баннером в потоке страницы (правило П16):
+    // баннер оставался висеть и после перехода к следующему файлу.
+    expect(
+      await screen.findByText("Импортировано строк: 3"),
+    ).toBeInTheDocument();
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/products/import",
       expect.objectContaining({ params: { query: { dry_run: false } } }),
