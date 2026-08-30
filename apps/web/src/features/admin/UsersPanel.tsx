@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  FormSheet,
   Button,
   DataTable,
   EmptyState,
@@ -7,11 +8,11 @@ import {
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Users } from "lucide-react";
+import { UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { InvitePanel } from "../invitations/InvitePanel";
+import { InviteForm } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
@@ -38,6 +39,7 @@ export function UsersPanel() {
   const users = useAdminUsers();
   const update = useUpdateUserMutation();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const currentUserId = session?.userId ?? null;
   const resetUpdate = update.reset;
@@ -109,35 +111,66 @@ export function UsersPanel() {
 
   return (
     <div className="flex flex-col gap-block">
-      <SubPageHeader title={t("users.title")} intro={t("users.intro")} />
+      <SubPageHeader
+        title={t("users.title")}
+        intro={t("users.intro")}
+        actions={
+          <Button type="button" onClick={() => setInviteOpen(true)}>
+            <UserPlus aria-hidden="true" />
+            {t("users.inviteAction")}
+          </Button>
+        }
+      />
 
       {/* Администратор заводит персонал; семью приглашает её врач или диетолог,
-          он же становится ведущим специалистом (ADR-0003). */}
-      <InvitePanel roles={STAFF_ROLES} />
+          он же становится ведущим специалистом (ADR-0003).
 
-      {editing !== null && (
-        <UserAccountForm
-          // Форма пересоздаётся при выборе другой учётной записи: react-hook-form
-          // читает defaultValues только при монтировании, и без этого в ней
-          // остались бы роль и активность предыдущего пользователя.
-          key={editing.id}
-          user={editing}
-          pending={update.isPending}
-          error={update.error}
-          onCancel={() => setEditingId(null)}
-          onSubmit={(changes) =>
-            update.mutate(
-              { userId: editing.id, changes },
-              {
-                onSuccess: (saved) => {
-                  setEditingId(null);
-                  toast.success(t("users.saved", { name: saved.full_name }));
+          Панелью, а не блоком над списком: администратор приходит сюда
+          управлять учётными записями, а приглашает сотрудника изредка
+          (правило П32 канона). */}
+      <FormSheet
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        title={t("invitations:title")}
+        description={t("invitations:intro")}
+      >
+        <InviteForm roles={STAFF_ROLES} />
+      </FormSheet>
+
+      {/* Правка учётной записи — тоже панелью: раньше форма раскрывалась над
+          таблицей и отодвигала её вниз ровно в тот момент, когда нужно было
+          свериться со списком. */}
+      <FormSheet
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingId(null);
+        }}
+        title={t("users.editTitle")}
+      >
+        {editing !== null && (
+          <UserAccountForm
+            // Форма пересоздаётся при выборе другой учётной записи: react-hook-form
+            // читает defaultValues только при монтировании, и без этого в ней
+            // остались бы роль и активность предыдущего пользователя.
+            key={editing.id}
+            user={editing}
+            pending={update.isPending}
+            error={update.error}
+            onCancel={() => setEditingId(null)}
+            onSubmit={(changes) =>
+              update.mutate(
+                { userId: editing.id, changes },
+                {
+                  onSuccess: (saved) => {
+                    setEditingId(null);
+                    toast.success(t("users.saved", { name: saved.full_name }));
+                  },
                 },
-              },
-            )
-          }
-        />
-      )}
+              )
+            }
+          />
+        )}
+      </FormSheet>
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
