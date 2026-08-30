@@ -1,0 +1,199 @@
+name: Deploy
+
+# Автодеплой пред-прода: main → VPS (docs/DEPLOY.md).
+#
+# Запускается ПОСЛЕ зелёного CI, а не по самому push: событие push приходит
+# раньше, чем известен результат тестов, и деплой по нему выкатывал бы
+# непроверенный код.
+#
+# Репозиторий ПУБЛИЧНЫЙ, и это определяет половину решений здесь:
+#   • журнал прогона читает кто угодно — логи контейнеров сюда не выводятся:
+#     в access-логе uvicorn пути вида /api/v1/patients/<uuid>/logs, то есть
+#     следы клинических данных;
+#   • `workflow_run` приходит и от прогонов из форков, а `head_branch` там —
+#     имя ветки в форке, и она вполне может называться `main`. Поэтому условие
+#     проверяет ещё и репозиторий-источник, и событие;
+#   • `pull_request_target` не используется нигде и не должен: он идёт с
+#     секретами в контексте базового репозитория.
+#
+# Ключ доступа ограничен на стороне сервера: в authorized_keys он записан с
+# `restrict,command="…/remote-deploy.sh"`, и ничего другого выполнить не может.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Коммит или ветка для выкатки (по умолчанию — вершина main)"
+        required: false
+        default: "main"
+
+# Два деплоя одновременно ломают стенд: миграции и `compose up` из разных
+# прогонов встретятся на одной базе. cancel-in-progress намеренно false —
+# оборванный посреди `rsync --delete` деплой оставит пустой /var/www, то есть
+# белый экран вместо кабинета.
+concurrency:
+  group: deploy-preprod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Выкатка на пред-прод
+    runs-on: ubuntu-latest
+    # Четыре условия, а не одно: успех прогона, событие push (а не
+    # pull_request), ветка main И тот же репозиторий — иначе форк с веткой
+    # «main» дотянулся бы до боевого стенда.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    permissions:
+      contents: read
+    timeout-minutes: 40
+
+    steps:
+      - name: Определить и проверить коммит
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REF='${{ inputs.ref }}'
+          else
+            # head_sha прогона, а не вершина main: пока шёл CI, в main мог
+            # уехать ещё один коммит, и выкатился бы непроверенный.
+            REF='${{ github.event.workflow_run.head_sha }}'
+          fi
+
+          # Повторный запуск СТАРОГО зелёного прогона (обычное дело при флаки-
+          # тесте) присылает устаревший head_sha — без этой сверки стенд молча
+          # откатился бы на предыдущую версию, и при аддитивных миграциях этого
+          # какое-то время никто бы не заметил.
+          TIP=$(gh api repos/${{ github.repository }}/commits/main --jq .sha)
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "$REF" != "$TIP" ]; then
+            echo "::notice::Прогон относится к $REF, а вершина main — $TIP."
+            echo "::error::Деплой отменён: это повторный запуск устаревшего прогона, он откатил бы стенд."
+            exit 1
+          fi
+
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Выкатывается: $REF"
+
+      - name: Собрать окружение из секретов
+        env:
+          # Секреты
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # Переменные стенда
+          BOT_USERNAME: ${{ vars.BOT_USERNAME }}
+          TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
+          WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
+          MINIAPP_ORIGIN: ${{ vars.MINIAPP_ORIGIN }}
+          LANDING_SITE_URL: ${{ vars.LANDING_SITE_URL }}
+          LANDING_INDEXABLE: ${{ vars.LANDING_INDEXABLE }}
+          PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
+          PUBLIC_CONTACT_EMAIL: ${{ vars.PUBLIC_CONTACT_EMAIL }}
+          PUBLIC_TELEGRAM_URL: ${{ vars.PUBLIC_TELEGRAM_URL }}
+          ATTACHMENT_QUOTA_MB: ${{ vars.ATTACHMENT_QUOTA_MB }}
+          ATTACHMENT_PURGE_DAYS: ${{ vars.ATTACHMENT_PURGE_DAYS }}
+          REPORT_LINK_TTL_HOURS: ${{ vars.REPORT_LINK_TTL_HOURS }}
+          TZ: ${{ vars.TZ }}
+        run: |
+          umask 077
+          # Значения экранируются shlex.quote: deploy.sh не парсит окружение, а
+          # ИСПОЛНЯЕТ его (`set -a; . ./.env`). Токен с `&` или пароль с кавычкой
+          # без этого превращаются в команду.
+          #
+          # Пустые значения пропускаются: Settings подставит свой дефолт, а
+          # пустая строка его затирает — так пустой MINIAPP_ORIGIN открыл бы CORS
+          # пустому origin вместо того, чтобы оставить умолчание.
+          #
+          # DATABASE_URL, REDIS_URL, *_DIR и BOT_API_BASE_URL здесь намеренно
+          # отсутствуют: их задаёт `environment:` в compose, а он сильнее
+          # `env_file`. Дубль выглядел бы настройкой, ничего не настраивая.
+          python3 - > env.rendered <<'PY'
+          import os, shlex
+
+          NAMES = [
+              "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
+              "BOT_USERNAME", "ANTHROPIC_API_KEY", "SENTRY_DSN",
+              "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN",
+              "LANDING_SITE_URL", "LANDING_INDEXABLE", "PUBLIC_APP_URL",
+              "PUBLIC_CONTACT_EMAIL", "PUBLIC_TELEGRAM_URL",
+              "ATTACHMENT_QUOTA_MB", "ATTACHMENT_PURGE_DAYS",
+              "REPORT_LINK_TTL_HOURS", "TZ",
+          ]
+          print("# Собран автоматически .github/workflows/deploy.yml — правки")
+          print("# руками затираются следующим деплоем. Источник значений —")
+          print("# Settings → Secrets and variables репозитория.")
+          for name in NAMES:
+              value = os.environ.get(name, "")
+              if value:
+                  print(f"{name}={shlex.quote(value)}")
+          PY
+
+          # Проверка до отправки: неполный файл затрёт рабочее окружение на
+          # сервере и уронит стенд молча. Чаще всего это значит, что секрет не
+          # заведён — например, потеряна строка `environment:` в job.
+          for required in POSTGRES_PASSWORD SECRET_KEY BOT_API_TOKEN; do
+            grep -q "^${required}=" env.rendered || {
+              echo "::error::Не задан секрет ${required} — деплой остановлен"
+              exit 1
+            }
+          done
+          echo "переменных в окружении: $(grep -c '^[A-Z]' env.rendered)"
+
+      - name: Выкатить
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_REF: ${{ steps.target.outputs.ref }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          # known_hosts, а не StrictHostKeyChecking=no: иначе первый же перехват
+          # соединения останется незамеченным, а через этот ключ ходят на машину
+          # с клиническими данными. Сценарий не выдуманный: VPS пересоздают, и
+          # адрес достаётся другому клиенту хостера.
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+          # Один вызов на весь деплой. Ключ на сервере ограничен
+          # `command="…/remote-deploy.sh"`, поэтому строка команды — это не
+          # команда, а аргумент: скрипт читает её из SSH_ORIGINAL_COMMAND.
+          # Окружение уходит потоком: аргументы видны в `ps aux` любому
+          # локальному пользователю сервера, а там пароль базы и SECRET_KEY.
+          # Keepalive обязателен: сборка образов на 2 vCPU идёт двадцать минут,
+          # и молчащее соединение рвётся раньше, чем она закончится. Проверено —
+          # рвалось. На сервере при этом стоит `trap '' HUP` и flock, поэтому
+          # обрыв не оставляет полудеплой и не пускает второй запуск.
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o IdentitiesOnly=yes \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" "$DEPLOY_REF" < env.rendered
+          rm -f env.rendered ~/.ssh/deploy_key
+
+      - name: Стенд отвечает снаружи
+        run: |
+          for url in https://ketocare.railtech.uz/ https://app.ketocare.railtech.uz/; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$url")
+            echo "$url → $code"
+            [ "$code" = "200" ] || { echo "::error::$url отдаёт $code"; exit 1; }
+          done
+
+      - name: Что делать при провале
+        if: failure()
+        run: |
+          echo "::notice::Если упал шаг сборки фронта — на сервере продолжает работать предыдущая версия."
+          echo "::notice::Если упала проверка живости — состояние сервисов напечатано выше, логи смотреть на сервере:"
+          echo "::notice::  docker compose --env-file .env -f infra/docker-compose.prod.yml logs --tail=100 api"
+          echo "::notice::Повторить деплой без нового коммита: вкладка Actions → Deploy → Run workflow."
