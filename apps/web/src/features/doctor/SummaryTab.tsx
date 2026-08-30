@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { AttachmentsPanel } from "./AttachmentsPanel";
 import { CareTeamPanel } from "./CareTeamPanel";
 import { FamilyPanel } from "./FamilyPanel";
 import { MedicalProfileForm } from "./MedicalProfileForm";
@@ -76,6 +77,10 @@ export function SummaryTab({
       <IntakeView patientId={patient.id} />
 
       {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
+
+      {/* Документы — сразу после анкеты и профиля: анамнез и то, чем он
+          подтверждён, читаются вместе. */}
+      <AttachmentsPanel patientId={patient.id} />
 
       {/* Два ответа на один вопрос «с кем говорить»: кто ведёт ребёнка дома
           и кто ведёт его в клинике. Семья первой — к ней обращаются, когда

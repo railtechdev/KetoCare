@@ -41,8 +41,10 @@ from .diary import (
     SideEffectLog,
     WeightLog,
 )
+from .files import Attachment
 
 __all__ = [
+    "Attachment",
     "Base",
     # accounts
     "User",

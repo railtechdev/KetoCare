@@ -137,7 +137,11 @@ export function RecipeList({
                 фокус там становился невидимым. Outline система перекрашивает,
                 но не убирает. */}
             <Card className="relative h-full gap-0 overflow-hidden py-0 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
-              <RecipePhoto src={recipe.photo_path} className="h-40 w-full" />
+              <RecipePhoto
+                recipeId={recipe.id}
+                photoPath={recipe.photo_path}
+                className="h-40 w-full"
+              />
 
               <div className="flex flex-1 flex-col gap-field p-4">
                 <h2 className="m-0 text-card-title font-semibold text-foreground">

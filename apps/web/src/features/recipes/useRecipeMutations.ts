@@ -79,3 +79,43 @@ export function useDeleteRecipeMutation() {
     onSuccess: invalidate,
   });
 }
+
+/**
+ * Загрузка фото рецепта.
+ *
+ * Отдельным действием, а не полем формы: владелец вложения обязателен, а
+ * рецепт до сохранения идентификатора не имеет (ADR-0013, решение 8).
+ *
+ * `body` — `FormData`: сгенерированный клиент типизирует тело по OpenAPI, но
+ * multipart он не сериализует, и объект здесь передаётся как есть.
+ */
+export function useUploadRecipePhotoMutation() {
+  const invalidate = useRecipesInvalidation();
+
+  return useMutation({
+    mutationFn: async ({
+      recipeId,
+      file,
+    }: {
+      recipeId: string;
+      file: File;
+    }) => {
+      const form = new FormData();
+      form.append("file", file);
+
+      const { data, error } = await api.PUT(
+        "/api/v1/recipes/{recipe_id}/photo",
+        {
+          params: { path: { recipe_id: recipeId } },
+          body: form as unknown as { file: string },
+          // Заголовок ставит браузер: он обязан нести boundary, а заданный руками
+          // Content-Type его теряет, и сервер не разберёт тело.
+          bodySerializer: (body: unknown) => body as FormData,
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty photo response");
+      return data;
+    },
+    onSuccess: invalidate,
+  });
+}

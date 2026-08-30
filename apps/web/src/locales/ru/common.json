@@ -45,7 +45,9 @@
     "save": "Сохранить",
     "back": "Назад",
     "saving": "Сохраняем…",
-    "delete": "Удалить"
+    "delete": "Удалить",
+    "chooseFile": "Выбрать файл",
+    "noFileChosen": "Файл не выбран"
   },
   "patientGate": {
     "chooseTitle": "Выберите ребёнка",

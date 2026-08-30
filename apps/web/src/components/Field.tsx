@@ -1,5 +1,5 @@
 import { Input, Label, Textarea, cn } from "@ketocare/ui";
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -194,6 +194,83 @@ export function TextAreaField({
         className={cn(WIDTH_CLASS[width], className)}
         {...props}
       />
+    </FieldShell>
+  );
+}
+
+/**
+ * Выбор файла.
+ *
+ * Родной `<input type="file">` остаётся — он и только он даёт клавиатуру,
+ * скринридер и системный диалог. Но его кнопку браузер подписывает сам и
+ * по-английски («Choose File»), а атрибутами это не меняется: правило 8
+ * требует русского текста через i18n, и подпись рисуем мы.
+ *
+ * Поэтому поле визуально скрыто, но остаётся в потоке фокуса (`sr-only`, а не
+ * `display: none` — скрытый так элемент выпадает из табуляции), а видимую
+ * кнопку изображает связанный с ним `<label>`. Кольцо фокуса переносится на
+ * label через `focus-within`, иначе фокус становится невидим.
+ */
+export function FileField({
+  label,
+  error,
+  hint,
+  optional,
+  id,
+  className,
+  width = "full",
+  ...props
+}: FieldBaseProps & ComponentProps<"input">) {
+  const { t } = useTranslation();
+  const [chosen, setChosen] = useState<string | null>(null);
+
+  return (
+    <FieldShell
+      label={label}
+      error={error}
+      hint={hint}
+      optional={optional}
+      id={id}
+    >
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-field",
+          WIDTH_CLASS[width],
+          className,
+        )}
+      >
+        <input
+          id={id}
+          type="file"
+          className="sr-only"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={useDescribedBy(id, error, hint)}
+          {...props}
+          onChange={(event) => {
+            setChosen(event.target.files?.[0]?.name ?? null);
+            props.onChange?.(event);
+          }}
+        />
+
+        {/* `htmlFor` вместо кнопки с ref: клик по label открывает системный
+            диалог сам, без обработчика, — и делает это в том числе с
+            клавиатуры, потому что фокус стоит на самом поле. */}
+        <label
+          htmlFor={id}
+          className={cn(
+            "inline-flex min-h-touch cursor-pointer items-center rounded-md border border-input",
+            "bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground",
+            "hover:bg-secondary/80",
+            "has-[+*:focus-visible]:outline-2 has-[+*:focus-visible]:outline-ring",
+          )}
+        >
+          {t("actions.chooseFile")}
+        </label>
+
+        <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+          {chosen ?? t("actions.noFileChosen")}
+        </span>
+      </div>
     </FieldShell>
   );
 }

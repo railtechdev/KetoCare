@@ -16,10 +16,12 @@ import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { formatGrams } from "./format";
+import { FileField } from "../../components/Field";
 import { RecipePhoto } from "./RecipePhoto";
 import {
   useDeleteRecipeMutation,
   usePublishRecipeMutation,
+  useUploadRecipePhotoMutation,
 } from "./useRecipeMutations";
 import { useProductNames, useRecipe } from "./useRecipes";
 
@@ -42,6 +44,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
 
   const publish = usePublishRecipeMutation();
   const remove = useDeleteRecipeMutation();
+  const uploadPhoto = useUploadRecipePhotoMutation();
 
   const data = recipe.data;
 
@@ -183,10 +186,51 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
         </FormError>
       )}
 
-      <RecipePhoto
-        src={data.photo_path}
-        className="h-56 w-full max-w-xl rounded-xl"
-      />
+      <Section title={t("detail.photo")} density="compact">
+        <RecipePhoto
+          recipeId={data.id}
+          photoPath={data.photo_path}
+          className="h-56 w-full max-w-xl rounded-xl"
+        />
+
+        {canEdit && (
+          <>
+            <FileField
+              id="recipe-photo"
+              width="wide"
+              accept="image/jpeg,image/png,image/webp"
+              label={t("detail.photoUpload")}
+              hint={t("detail.photoHint")}
+              disabled={uploadPhoto.isPending}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                uploadPhoto.mutate(
+                  { recipeId: data.id, file },
+                  { onSuccess: () => toast.success(t("detail.photoSaved")) },
+                );
+                // Поле сбрасывается: иначе повторный выбор того же файла не
+                // вызовет `change`, и починить неудачную загрузку было бы
+                // нечем, кроме перезагрузки страницы.
+                event.target.value = "";
+              }}
+            />
+
+            {uploadPhoto.isPending && (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                {t("detail.photoUploading")}
+              </p>
+            )}
+
+            {uploadPhoto.isError && (
+              <FormError>
+                {errorMessageOf(uploadPhoto.error) ??
+                  t("common:errors.unexpected")}
+              </FormError>
+            )}
+          </>
+        )}
+      </Section>
 
       <Section title={t("detail.nutrition")}>
         {computed === null ? (
