@@ -6,9 +6,10 @@ import { z } from "zod";
 
 import { FormFooter, Section, toast } from "@ketocare/ui";
 
-import { Field, TextAreaField } from "../../components/Field";
+import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import { optionsOfScale, useIntakeOptions } from "../intake/useIntake";
 import { useSaveMedicalProfile } from "./doctorMutations";
 import type { MedicalProfile, MedicalProfileBody } from "./types";
 
@@ -30,6 +31,7 @@ const medicalProfileSchema = z.object({
   variant: z.string(),
   interpretation: z.string(),
   comorbidities: z.string(),
+  aedSwitchCountId: z.string(),
 });
 
 type MedicalProfileFormValues = z.infer<typeof medicalProfileSchema>;
@@ -58,6 +60,7 @@ function toBody(values: MedicalProfileFormValues): MedicalProfileBody {
         ? null
         : { gene, variant, interpretation },
     comorbidities: emptyToNull(values.comorbidities),
+    aed_switch_count_id: emptyToNull(values.aedSwitchCountId),
   };
 }
 
@@ -66,6 +69,12 @@ function toBody(values: MedicalProfileFormValues): MedicalProfileBody {
  *
  * PUT заменяет профиль целиком, поэтому форма всегда показывает все поля и
  * отправляет их вместе: частичное сохранение стёрло бы непоказанное.
+ *
+ * Отсюда же и число сменённых ПЭП. Семья на шаге «Лекарства» читает обещание,
+ * что его заполняет врач (ADR-0007, таблица «Кто заполняет»), но поля в форме
+ * не было — а раз PUT заменяет профиль целиком, любая правка диагноза ещё и
+ * молча обнуляла значение, если оно попало в базу другим путём. Врач при этом
+ * не видел ни прежнего значения, ни факта его потери.
  */
 export function MedicalProfileForm({
   patientId,
@@ -81,10 +90,12 @@ export function MedicalProfileForm({
   const { t } = useTranslation("doctor");
   const ids = useId();
   const save = useSaveMedicalProfile(patientId);
+  const options = useIntakeOptions();
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<MedicalProfileFormValues>({
     resolver: zodResolver(medicalProfileSchema),
@@ -98,8 +109,18 @@ export function MedicalProfileForm({
       variant: profile?.genetics?.variant ?? "",
       interpretation: profile?.genetics?.interpretation ?? "",
       comorbidities: profile?.comorbidities ?? "",
+      aedSwitchCountId: profile?.aed_switch_count_id ?? "",
     },
   });
+
+  // Выведенный из употребления вариант остаётся в списке, пока он выбран:
+  // скрыть его — значит подменить прежний ответ пустотой (то же правило, что
+  // в анкете семьи, — `optionsOfScale`).
+  const aedSwitchOptions = optionsOfScale(
+    options.data ?? [],
+    "aed_switch_count",
+    watch("aedSwitchCountId"),
+  );
 
   return (
     <Section title={t("profile.title")} description={t("profile.formHint")}>
@@ -176,6 +197,22 @@ export function MedicalProfileForm({
           label={t("profile.fields.comorbidities")}
           {...register("comorbidities")}
         />
+
+        <SelectField
+          id={`${ids}-aed-switch-count`}
+          width="wide"
+          optional
+          label={t("profile.fields.aedSwitchCount")}
+          hint={t("profile.fields.aedSwitchCountHint")}
+          {...register("aedSwitchCountId")}
+        >
+          <option value="">{t("profile.fields.notAnswered")}</option>
+          {aedSwitchOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name_ru}
+            </option>
+          ))}
+        </SelectField>
 
         {save.isError && (
           <FormError>
