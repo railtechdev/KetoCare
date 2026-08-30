@@ -28,6 +28,13 @@ const alternates = LOCALES.map((l) => ({
 }));
 
 const ogImage = new URL(`/og/${locale}.png`, Astro.site).href;
+
+/**
+ * Пред-прод не индексируется. Временный домен в выдаче даёт дубли страниц,
+ * которые после переезда на домен клиента придётся убирать вручную.
+ * На настоящем домене сборка запускается с LANDING_INDEXABLE=1.
+ */
+const indexable = process.env.LANDING_INDEXABLE === "1";
 const ogLocale = { ru: "ru_RU", uz: "uz_UZ", en: "en_US" }[locale];
 ---
 
@@ -41,7 +48,10 @@ const ogLocale = { ru: "ru_RU", uz: "uz_UZ", en: "en_US" }[locale];
 {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
 <link rel="alternate" hreflang="x-default" href={new URL(pagePath(page, "ru"), Astro.site).href} />
 
-<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta
+  name="robots"
+  content={indexable ? "index, follow, max-image-preview:large" : "noindex, nofollow"}
+/>
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="KetoCare" />

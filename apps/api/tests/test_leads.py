@@ -7,10 +7,12 @@ happy path, но и то, что она не превращается в отк�
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy import func, select
 
-from core.models import Lead
+from core.models import AuditLog, Lead
 from core.models.enums import LeadAudience, UserRole
 
 pytestmark = pytest.mark.asyncio
@@ -69,7 +71,7 @@ class TestCreateLead:
             json={
                 "email": "bot@example.com",
                 "audience": "family",
-                "company": "Acme Marketing",
+                "website": "https://spam.example",
             },
         )
         assert response.status_code == 202, "боту отвечаем как всем — иначе он подберёт обход"
@@ -127,3 +129,69 @@ class TestListLeads:
 
         response = await client.get("/api/v1/leads")
         assert response.status_code == 401
+
+
+class TestDeleteLead:
+    """Человек вправе попросить убрать свой контакт — способ должен быть."""
+
+    async def test_admin_deletes_lead(self, client, session, make_user, auth_headers):
+        await client.post("/api/v1/leads", json={"email": "bye@example.com", "audience": "family"})
+        admin = await make_user(UserRole.ADMIN)
+        lead = await session.scalar(select(Lead))
+        assert lead is not None
+
+        response = await client.delete(f"/api/v1/leads/{lead.id}", headers=auth_headers(admin))
+        assert response.status_code == 204, response.text
+        assert await _count(session) == 0
+
+    async def test_missing_lead_is_404(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        response = await client.delete(f"/api/v1/leads/{uuid.uuid4()}", headers=auth_headers(admin))
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.PARENT, UserRole.DIETITIAN])
+    async def test_other_roles_cannot_delete(self, client, session, make_user, auth_headers, role):
+        await client.post("/api/v1/leads", json={"email": "keep@example.com", "audience": "family"})
+        user = await make_user(role)
+        lead = await session.scalar(select(Lead))
+        assert lead is not None
+
+        response = await client.delete(f"/api/v1/leads/{lead.id}", headers=auth_headers(user))
+        assert response.status_code == 403
+        assert await _count(session) == 1
+
+
+class TestAudit:
+    """Список заявок — это контакты семей, где `audience=family` сам по себе
+    говорит о болезни ребёнка. Чтение и удаление такой базы журналируются."""
+
+    async def test_listing_is_audited(self, client, session, make_user, auth_headers):
+        await client.post("/api/v1/leads", json={"email": "a@example.com", "audience": "family"})
+        admin = await make_user(UserRole.ADMIN)
+
+        await client.get("/api/v1/leads", headers=auth_headers(admin))
+
+        entry = await session.scalar(select(AuditLog).where(AuditLog.action == "leads.list"))
+        assert entry is not None
+        assert entry.user_id == admin.id
+
+    async def test_deletion_is_audited(self, client, session, make_user, auth_headers):
+        await client.post("/api/v1/leads", json={"email": "b@example.com", "audience": "doctor"})
+        admin = await make_user(UserRole.ADMIN)
+        lead = await session.scalar(select(Lead))
+        assert lead is not None
+
+        await client.delete(f"/api/v1/leads/{lead.id}", headers=auth_headers(admin))
+
+        entry = await session.scalar(select(AuditLog).where(AuditLog.action == "leads.delete"))
+        assert entry is not None
+        assert entry.entity_id == lead.id
+
+    async def test_public_submit_is_not_audited(self, client, session):
+        """Записи о заявке в журнале быть не должно: пользователя, от чьего
+        имени её писать, не существует (ADR-0012)."""
+
+        await client.post("/api/v1/leads", json={"email": "c@example.com", "audience": "family"})
+
+        entries = list(await session.scalars(select(AuditLog)))
+        assert entries == []

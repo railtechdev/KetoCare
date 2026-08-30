@@ -46,10 +46,12 @@ const isDoctor = variant === "doctor";
         spellcheck="false"
         placeholder={isDoctor ? f.emailPlaceholderDoctor : f.emailPlaceholderFamily}
       />
-      {/* Приманка для ботов: живой человек это поле не видит и не заполняет. */}
+      {/* Приманка для ботов: живой человек это поле не видит и не заполняет.
+          Имя не `company`: менеджеры паролей подставляют организацию даже
+          в скрытое поле, и живой посетитель молча терял бы заявку. */}
       <input
         type="text"
-        name="company"
+        name="website"
         tabindex="-1"
         autocomplete="off"
         class="visually-hidden"

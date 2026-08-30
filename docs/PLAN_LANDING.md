@@ -49,43 +49,28 @@ robots согласованы.
 - [x] смягчено безусловное «диетотерапия помогает детям»
 - [x] добавлена видимая оговорка у калькулятора: это демонстрация формулы,
       а не инструмент планирования питания
-- [ ] перенести всё то же в `uz.ts` и `en.ts` (новый ключ `home.calc.disclaimer`
-      обязателен во всех трёх словарях, иначе не пройдёт `astro check`)
+- [x] перенесено в `uz.ts` и `en.ts`; `astro check` — 0 ошибок
 
-### 2. Серверная часть заявок — восстановить с исправлениями
+### 2. Серверная часть заявок — сделано
 
-Была написана и проходила 15 тестов, затем стёрта. Восстанавливать **в ветке
-`feat/landing-site`**, сразу с правками ревью:
+- [x] модель `Lead` с enum через `pg_enum` — в базе `family`/`doctor`, как везде
+- [x] репозиторий на `ON CONFLICT DO NOTHING` — двойное нажатие больше не даёт 500
+- [x] публичный `POST`, `GET` и `DELETE` под админом, аудит на чтение и удаление
+- [x] `locale` ограничен перечислением языков сайта
+- [x] 23 теста: happy, 403, 401, 404, валидация, приманка, дубли, лимит, аудит
+- [x] миграция: тип `lead_audience`, строчные значения, `DROP TYPE` в откате;
+      `alembic check` — диффа нет
+- [x] `docs/adr/0012-landing-site-and-leads.md`
 
-- [ ] `packages/core/src/core/models/marketing.py` — модель `Lead`;
-      enum **через `pg_enum(LeadAudience, "lead_audience")`**, иначе в базу
-      лягут `FAMILY`/`DOCTOR` вместо `family`/`doctor`, как везде в проекте
-- [ ] `packages/core/src/core/repositories/leads.py` — **`ON CONFLICT DO NOTHING`**
-      вместо «сначала SELECT, потом INSERT»: две одновременные отправки одного
-      адреса дают 500 на уникальном ограничении
-- [ ] `apps/api/src/api/routers/leads.py` — публичный `POST`, `GET` под админом,
-      **`DELETE` под админом** (сейчас человек не может попросить убрать себя),
-      запись в `audit_log` на чтение и удаление списка
-- [ ] `apps/api/src/api/schemas_leads.py` — `locale` ограничить перечислением,
-      а не «любые 16 символов»
-- [ ] `apps/api/tests/test_leads.py` — 15 тестов (happy, 403, 401, валидация,
-      приманка, дубли, лимит частоты)
-- [ ] миграция: имя типа `lead_audience`, значения строчные, `DROP TYPE` в
-      `downgrade` (иначе повторный `upgrade` падает)
-- [ ] `docs/adr/0012-landing-site-and-leads.md`
+### 3. Мелкое — сделано
 
-### 3. Мелкое, но нужное до публикации
-
-- [ ] `.env.example`: объявить `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
+- [x] `.env.example`: `LANDING_SITE_URL`, `LANDING_INDEXABLE`, `PUBLIC_APP_URL`,
       `PUBLIC_CONTACT_EMAIL`, `PUBLIC_TELEGRAM_URL`
-- [ ] `robots.txt`: домен захардкожен — после передачи клиенту sitemap будет
-      указывать на прежний хост; плюс закрыть пред-прод от индексации
-- [ ] `KetoCalculator.astro`: экранировать `</script>` в `JSON.stringify`
-- [ ] тест, сверяющий `TOLERANCE` в `packages/landing/src/lib/keto.ts` с
-      `RATIO_TOLERANCE` в `keto_engine/constants.py` — иначе разойдутся молча
-      (у пакета сейчас вообще нет скрипта `test`, `make test` его пропускает)
-- [ ] переименовать поле-приманку `company`: менеджеры паролей его заполняют,
-      и живой посетитель молча потеряет заявку
+- [x] `robots.txt` собирается маршрутом из `LANDING_SITE_URL`; пред-прод закрыт от
+      индексации (`LANDING_INDEXABLE` пуст по умолчанию)
+- [x] `</script>` экранируется в блоке данных калькулятора
+- [x] `scripts/check-constants.mjs` в `pnpm test` сверяет допуск с `keto_engine`
+- [x] поле-приманка переименовано в `website`: `company` заполняли менеджеры паролей
 
 ### 4. Решения, которые нужны от вас
 

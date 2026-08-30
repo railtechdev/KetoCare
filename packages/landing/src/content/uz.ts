@@ -100,7 +100,7 @@ export const uz: Dict = {
     mission: {
       eyebrow: "Missiya",
       h2: "Uyda ham terapiya klinikadagidek aniq bajarilishi uchun",
-      lead: "Ketogen dietoterapiya dorilar yordam bermagan bolalarga yordam beradi — lekin faqat aniq bajarilgandagina ishlaydi. Qabullar orasida oila hisob-kitoblar bilan yolg‘iz qoladi. KetoCare oila va shifokorni bitta konturga birlashtiradi: tayinlov, hisob-kitoblar, kundaliklar va dinamika — bitta tizimda.",
+      lead: "Ketogen dietoterapiya dorilar yordam bermagan bolalarning bir qismiga yordam berishi mumkin — lekin faqat tayinlov aniq bajarilgandagina. Qabullar orasida oila hisob-kitoblar bilan yolg‘iz qoladi. KetoCare oila va shifokorni bitta konturga birlashtiradi: tayinlov, hisob-kitoblar, kundaliklar va dinamika — bitta tizimda.",
       families: {
         title: "Oilalarni nima kutadi",
         items: [
@@ -144,12 +144,15 @@ export const uz: Dict = {
         "Keto nisbati — bu yog‘larning oqsil va uglevodlar yig‘indisiga nisbati. Har bir taom shifokor tayinloviga yo‘l qo‘yiladigan chetlanish doirasida tushishi kerak.",
       lead2:
         "Slayderlarni suring — hisob bir zumda chiqadi. Hayotda buni platforma bajaradi: har bir ovqatlanishda tarozi-kalkulyator-daftarsiz.",
-      note: "Mahsulotlar ma’lumotlari — USDA FoodData Central. Platformada hisobni tibbiy jamoaning etalon stsenariylarida tekshirilgan alohida hisob yadrosi bajaradi.",
+      note: "Mahsulotlar ma’lumotlari — USDA FoodData Central. Platformada hisobni alohida yadro bajaradi; u texnik topshiriq formulalari bo‘yicha hisoblangan etalon stsenariylarda tekshiriladi. Tibbiy jamoaning tasdig‘i esa hali oldinda.",
       dish: "Qaymoq va brokkolili omlet",
       ingredients: ["Tovuq tuxumi", "Qaymoq 33%", "Sariyog‘", "Brokkoli"],
+      /** Видимая оговорка: посетитель не должен считать этим завтрак ребёнку. */
+      disclaimer:
+        "Bu — formulaning namoyishi, ovqatlanishni rejalashtirish vositasi emas. Bolaning ovqatlanishi kabinetda, shifokorning amaldagi tayinlovi bo‘yicha hisoblanadi.",
       /** Подпись ползунка для читателя с экранного диктора: «Яйцо куриное, граммы». */
       sliderLabel: "{name}, gramm",
-      verdictOk: "3,5 : 1 tayinloviga mos keladi (chetlanish ±0,15)",
+      verdictOk: "3,5 : 1 tayinloviga mos keladi (dastlabki chetlanish ±0,15)",
       verdictLow: "Tayinlovdan past — yog‘ qo‘shing yoki uglevodni kamaytiring",
       verdictHigh: "Tayinlovdan yuqori — yog‘ tayinlanganidan ko‘p",
     },
@@ -178,12 +181,12 @@ export const uz: Dict = {
     telegram: {
       eyebrow: "Telegram",
       h2: "Yozuv — to‘g‘ridan-to‘g‘ri messenjerdan",
-      lead: "Keton o‘lchovi — botga bitta xabar. Eslatmalar ham o‘sha yerga keladi. Bot va mini-ilova — platformaning bir qismi: hammasi o‘sha kundalikka tushadi va shifokorga ko‘rinadi.",
+      lead: "Keton o‘lchovi — botga bitta xabar. Bot va mini-ilova — platformaning bir qismi: hammasi o‘sha kundalikka tushadi va shifokorga ko‘rinadi. Bot bosqichma-bosqich chiqarilmoqda, shuning uchun quyidagi stsenariylarning bir qismi allaqachon ishlaydi, bir qismi esa tayyorlanmoqda.",
       items: [
-        "Ketonlar, vazn, xuruj — tugmalar bilan 2–4 marta bosib",
-        "Ovqat — erkin matn bilan: sun’iy intellekt tahlil qiladi, siz tasdiqlaysiz",
-        "O‘lchovlar va dorilar haqida eslatmalar",
-        "Ota-ona kabineti — Telegram ichidagi mini-ilova sifatida",
+        "Ketonlar, vazn va o‘zini his qilish — tugmalar bilan 2–4 marta bosib",
+        "Tayyorlanmoqda: ovqat erkin matn bilan — sun’iy intellekt tahlil qiladi, siz tasdiqlaysiz",
+        "Tayyorlanmoqda: o‘lchovlar va dorilar haqida eslatmalar",
+        "Tayyorlanmoqda: ota-ona kabineti Telegram ichidagi mini-ilova sifatida",
       ],
       botLabel: "bot",
       replay: "Yana bir bor",
@@ -203,17 +206,17 @@ export const uz: Dict = {
           text: "Yozildi ✓ Ketonlar 2,6 mmol/l (qon), bugun soat 08:12 da. Kundalikda yozuv bor — shifokor ko‘radi.",
           time: "08:12",
         },
-        { from: "user", text: "Xuruj · hozir", time: "14:05" },
+        { from: "user", text: "vazn 21,4", time: "14:05" },
         {
           from: "bot",
-          text: "Xuruj turi qanday?",
+          text: "Vazn 21,4 kg. Bugunga yozib qo‘yaymi?",
           time: "14:05",
-          chips: ["Toniko-klonik", "Mioklonik", "Absans"],
+          chips: ["Ha, bugunga", "Boshqa sana"],
         },
-        { from: "user", text: "Toniko-klonik", time: "14:05" },
+        { from: "user", text: "Ha, bugunga", time: "14:05" },
         {
           from: "bot",
-          text: "Yozildi ✓ Davomiyligi va tafsilotlarini keyinroq — hammasi tinchiganda qo‘shsa bo‘ladi.",
+          text: "Yozildi ✓ Vazn 21,4 kg, bugun. Dinamikani shifokor kartada ko‘radi.",
           time: "14:06",
         },
       ] as ChatMsg[],
@@ -257,7 +260,7 @@ export const uz: Dict = {
       items: [
         {
           title: "Hisob etalonlar bilan tekshirilgan",
-          text: "Hisob yadrosi qolgan koddan ajratilgan va tibbiy jamoa tayyorlagan etalon stsenariylar bo‘yicha tekshiriladi.",
+          text: "Hisob yadrosi qolgan koddan ajratilgan va har bir o‘zgarishda etalon stsenariylar to‘plami bilan solishtiriladi. Etalonlarning o‘zi esa texnik topshiriq formulalari bo‘yicha hisoblangan va tibbiy jamoaning tasdig‘ini kutmoqda.",
         },
         {
           title: "Rollar bo‘yicha kirish",
@@ -265,7 +268,7 @@ export const uz: Dict = {
         },
         {
           title: "Sun’iy intellekt odam o‘rniga qaror qilmaydi",
-          text: "Yordamchi erkin matnni tahlil qilishga ko‘maklashadi va xulosa qoralamalarini tayyorlaydi, lekin har bir yozuvni odam tasdiqlaydi. Sun’iy intellektga yuboriladigan so‘rovlarga na ismlar, na aloqa ma’lumotlari tushadi — ma’lumotlar shaxssizlantiriladi.",
+          text: "Sun’iy intellekt yordamchisi keyingi bosqichda paydo bo‘ladi va u allaqachon shunday loyihalangan: erkin matnni tahlil qiladi hamda xulosa qoralamalarini tayyorlaydi, lekin har bir yozuvni odam tasdiqlaydi, so‘rovlarga esa na ismlar, na aloqa ma’lumotlari tushadi.",
         },
         {
           title: "Kanallar — tanlovingizga ko‘ra",
@@ -298,7 +301,7 @@ export const uz: Dict = {
         },
         {
           q: "Bolaning ma’lumotlari qayerda saqlanadi?",
-          a: "Kirish qat’iy rollar bo‘yicha: ota-ona o‘z bolasini, shifokor o‘z bemorlarini ko‘radi, tizim administratorining esa klinik ma’lumotlarga kirishi umuman yo‘q. Kirish ikkinchi omil bilan himoyalangan, ma’lumotlar bilan bajarilgan amallar jurnalga yoziladi, zaxira nusxalar shifrlanadi. Oilaning so‘roviga ko‘ra ma’lumotlar to‘liq o‘chiriladi.",
+          a: "Kirish qat’iy rollar bo‘yicha: ota-ona o‘z bolasini, shifokor o‘z bemorlarini ko‘radi, tizim administratorining esa klinik ma’lumotlarga kirishi umuman yo‘q. Kirish ikkinchi omil bilan himoyalangan, ma’lumotlar bilan bajarilgan amallar jurnalga yoziladi. Oilaning so‘roviga ko‘ra ma’lumotlar to‘liq o‘chiriladi.",
         },
       ],
     },
@@ -347,7 +350,7 @@ export const uz: Dict = {
           "Ota-ona mahsulot va grammlarni tanlaydi — platforma bir zumda kaloriya, oqsil, yog‘, uglevod va nisbatni hisoblaydi hamda taom tayinlovga tushayotgan-tushmayotganini aytadi. Ovqatni kiritish bo‘sh qidiruvdan emas, «So‘nggilar» va «Tez-tez ishlatiladiganlar» ro‘yxatidan boshlanadi.",
         ],
         verdictBadge: "3,52 : 1",
-        verdictText: "Tayinlovga mos keladi · chetlanish ±0,15",
+        verdictText: "Tayinlovga mos keladi · dastlabki chetlanish ±0,15",
         chips: [],
       },
       {
@@ -403,7 +406,7 @@ export const uz: Dict = {
       nowTitle: "Bugun ishlaydi",
       now: [
         "Ota-ona, shifokor va administrator kabinetlari",
-        "Tibbiy jamoaning etalon testlari bilan hisob yadrosi",
+        "Etalon testlari bilan hisob yadrosi",
         "Tayinlovlar, mahsulotlar bazasi, menyu va oltita kundalik",
         "2FA bilan kirish, kirish rollari, audit jurnali",
       ],
@@ -446,7 +449,7 @@ export const uz: Dict = {
         carbsValue: "≤ 12 g/kun",
         mealsLabel: "Kuniga ovqatlanish soni",
         mealsValue: "4",
-        note: "Oila bu maqsadlarni o‘z kabinetida ko‘radi; har bir taom va kun ular bilan avtomatik solishtiriladi, nisbat bo‘yicha ±0,15 chetlanishga yo‘l qo‘yiladi.",
+        note: "Oila bu maqsadlarni o‘z kabinetida ko‘radi; har bir taom va kun ular bilan avtomatik solishtiriladi, nisbat bo‘yicha yo‘l qo‘yiladigan chetlanish esa hozircha dastlabki — ±0,15 — va tibbiy jamoa bilan birga aniqlashtirilmoqda.",
       },
     },
     benefits: {
@@ -510,8 +513,8 @@ export const uz: Dict = {
           text: "Kaloriya, oqsil, yog‘, uglevod va nisbat hisobini interfeys hamda API bilan aralashmagan alohida modul bajaradi. Uni qo‘shni koddan «tezda tuzatib» bo‘lmaydi.",
         },
         {
-          title: "Tibbiy jamoaning etalon stsenariylari",
-          text: "Yadro tibbiy jamoa tayyorlagan stsenariylar bo‘yicha, to‘liq test qamrovi talabi bilan tekshiriladi. Etalondan chetga chiqish — reliz uchun to‘xtash.",
+          title: "Etalon stsenariylar",
+          text: "Yadro to‘liq test qamrovi talabi bilan etalon stsenariylar to‘plamiga solishtiriladi; etalondan chetga chiqish — reliz uchun to‘xtash. Hozircha etalonlar texnik topshiriq formulalari bo‘yicha hisoblangan va biz ularni sizning klinikangiz bilan kelishamiz.",
         },
         {
           title: "Rollar, 2FA, audit jurnali",

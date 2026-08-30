@@ -29,7 +29,6 @@ from .content import (
     Recipe,
     RecipeIngredient,
 )
-from .marketing import Lead
 from .diary import (
     KetoneLog,
     KetoneMethodDict,
@@ -42,6 +41,7 @@ from .diary import (
     SideEffectLog,
     WeightLog,
 )
+from .marketing import Lead
 
 __all__ = [
     "Base",

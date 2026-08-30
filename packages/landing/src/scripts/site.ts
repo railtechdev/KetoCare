@@ -276,7 +276,7 @@ function initLeadForms(): void {
         'button[type="submit"]',
       );
       const honeypot = form.querySelector<HTMLInputElement>(
-        'input[name="company"]',
+        'input[name="website"]',
       );
       if (!fields || !done || !error || !messages || !input || !submit) return;
 

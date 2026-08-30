@@ -17,7 +17,7 @@ from sqlalchemy import Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, UUIDPkMixin
-from .enums import LeadAudience
+from .enums import LeadAudience, pg_enum
 
 
 class Lead(Base, UUIDPkMixin, CreatedAtMixin):

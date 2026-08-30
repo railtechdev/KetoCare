@@ -201,17 +201,17 @@ export const en: Dict = {
           text: "Saved ✓ Ketones 2.6 mmol/L (blood), today at 08:12. It is in the diary — the clinician will see it.",
           time: "08:12",
         },
-        { from: "user", text: "Seizure · now", time: "14:05" },
+        { from: "user", text: "weight 21.4", time: "14:05" },
         {
           from: "bot",
-          text: "What type of seizure was it?",
+          text: "Weight 21.4 kg. Log it for today?",
           time: "14:05",
-          chips: ["Tonic-clonic", "Myoclonic", "Absence"],
+          chips: ["Yes, today", "Another date"],
         },
-        { from: "user", text: "Tonic-clonic", time: "14:05" },
+        { from: "user", text: "Yes, today", time: "14:05" },
         {
           from: "bot",
-          text: "Saved ✓ Duration and details can be added later, once things are calm.",
+          text: "Saved ✓ Weight 21.4 kg, today. Your clinician will see the trend.",
           time: "14:06",
         },
       ] as ChatMsg[],
@@ -253,8 +253,8 @@ export const en: Dict = {
       h2: "A calculation error is a clinical risk. We design from that.",
       items: [
         {
-          title: "Calculations checked against reference cases",
-          text: "The calculation engine is isolated from the rest of the code and validated against reference cases prepared by the medical team.",
+          title: "Calculations are checked against reference cases",
+          text: "The calculation engine is isolated from the rest of the code and is checked against a set of reference cases on every change. The reference cases themselves are computed from the formulas in the specification and are still awaiting confirmation by the medical team.",
         },
         {
           title: "Role-based access",
@@ -262,7 +262,7 @@ export const en: Dict = {
         },
         {
           title: "The AI does not decide for people",
-          text: "The assistant helps parse plain text and drafts summaries, but every entry is confirmed by a person. Names and contacts never reach the AI — the data is de-identified first.",
+          text: "The AI assistant arrives at the next stage, and it is already designed this way: it parses plain text and drafts summaries, but every entry is confirmed by a person, and neither names nor contacts ever reach the requests.",
         },
         {
           title: "Your choice of channel",
@@ -295,7 +295,7 @@ export const en: Dict = {
         },
         {
           q: "Where is our child's data kept?",
-          a: "Access is strictly role-based: a parent sees their own child, a clinician sees their own patients, and the system administrator has no access to clinical data at all. Log-in is protected by a second factor, actions on data are recorded in the audit log, and backups are encrypted. At the family's request the data is deleted completely.",
+          a: "Access is strictly role-based: a parent sees their own child, a clinician sees their own patients, and the system administrator has no access to clinical data at all. Log-in is protected by a second factor, and actions on data are recorded in the audit log. At the family's request the data is deleted completely.",
         },
       ],
     },
@@ -344,7 +344,7 @@ export const en: Dict = {
           "The parent picks foods and weights — the platform instantly calculates calories, macros and the ratio, and says whether the meal lands on the prescription. Entering food starts from “Recent” and “Frequent”, not from an empty search box.",
         ],
         verdictBadge: "3.52 : 1",
-        verdictText: "Matches the prescription · tolerance ±0.15",
+        verdictText: "Matches the prescription · preliminary tolerance ±0.15",
         chips: [],
       },
       {
@@ -400,7 +400,7 @@ export const en: Dict = {
       nowTitle: "Working today",
       now: [
         "Workspaces for the parent, the clinician and the administrator",
-        "A calculation engine with the medical team's reference tests",
+        "A calculation engine with reference tests",
         "Prescriptions, the food database, menus and six diaries",
         "Log-in with 2FA, access roles, audit log",
       ],
@@ -443,7 +443,7 @@ export const en: Dict = {
         carbsValue: "≤ 12 g/day",
         mealsLabel: "Meals per day",
         mealsValue: "4",
-        note: "The family sees these targets in their own workspace; every meal and every day is checked against them automatically, with a ±0.15 tolerance on the ratio.",
+        note: "The family sees these targets in their own workspace; every meal and every day is checked against them automatically, with a tolerance on the ratio — preliminary for now, ±0.15, and being refined together with the medical team.",
       },
     },
     benefits: {
@@ -507,8 +507,8 @@ export const en: Dict = {
           text: "Calories, macros and the ratio are computed by a separate module, kept apart from the interface and the API. It cannot be “quickly tweaked” from neighbouring code.",
         },
         {
-          title: "Reference cases from the medical team",
-          text: "The engine is validated against cases prepared by the medical team, with full test coverage required. A divergence from a reference case stops the release.",
+          title: "Reference cases",
+          text: "The engine is checked against a set of reference cases with full test coverage; a divergence from a reference case stops the release. For now the reference cases are computed from the formulas in the specification, and we align them with your clinic.",
         },
         {
           title: "Roles, 2FA, audit log",

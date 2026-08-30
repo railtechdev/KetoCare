@@ -10,7 +10,8 @@
     "preview": "astro preview",
     "typecheck": "astro check",
     "format:check": "prettier --check src scripts",
-    "format": "prettier --write src scripts"
+    "format": "prettier --write src scripts",
+    "test": "node scripts/check-constants.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.0",

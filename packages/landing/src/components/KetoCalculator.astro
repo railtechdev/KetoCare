@@ -24,15 +24,21 @@ const verdictText = {
   high: d.home.calc.verdictHigh,
 };
 
-/** Строки, которые скрипту нужны в браузере: он не имеет доступа к словарю. */
-const config = {
+/**
+ * Строки, которые скрипту нужны в браузере: он не имеет доступа к словарю.
+ *
+ * `<` экранируется вручную: JSON.stringify его не трогает, и строка перевода,
+ * содержащая `</script>`, закрыла бы блок и вывалила остаток в разметку.
+ * Сейчас таких строк нет — но перевод правят люди, а ошибка тихая.
+ */
+const configJson = JSON.stringify({
   ingredients: INGREDIENTS,
   target: TARGET_RATIO,
   tolerance: TOLERANCE,
   locale,
   grams: d.common.grams,
   verdict: verdictText,
-};
+}).replaceAll("<", "\\u003c");
 ---
 
 <div class="calc" data-calc>
@@ -116,9 +122,13 @@ const config = {
       </span>
       <span class="calc__verdict-text" data-calc-verdict-text>{verdictText[r.state]}</span>
     </div>
+
+    {/* Оговорка стоит внутри карточки, а не в стороне: посетитель, который
+        считает этим завтрак ребёнку, смотрит именно сюда. */}
+    <p class="calc__disclaimer">{d.home.calc.disclaimer}</p>
   </div>
 
   {/* Не скрипт, а данные для скрипта: значения словаря, которых он иначе не
       узнает. is:inline — чтобы сборщик не пытался его обрабатывать. */}
-  <script is:inline type="application/json" data-calc-config set:html={JSON.stringify(config)} />
+  <script is:inline type="application/json" data-calc-config set:html={configJson} />
 </div>
