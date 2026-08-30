@@ -46,3 +46,34 @@ export function useSectionTab<T extends string>(
 
   return [value, set];
 }
+
+/**
+ * Объект или задача второго уровня внутри раздела (`?item=`).
+ *
+ * Отдельно от `useSectionTab` потому, что значение здесь не выбирается из
+ * короткого списка: это идентификатор открытой позиции. Проверять его на
+ * принадлежность списку нечем и не нужно — несуществующий идентификатор
+ * отработает как обычный 404 экрана, а не как молчаливый откат к умолчанию.
+ *
+ * Переход — обычный, не `replace`: открытие карточки продукта это шаг в глубину
+ * раздела, и «Назад» браузера обязан возвращать к списку (правило П2 канона).
+ * У вкладок наоборот — они историю не копят.
+ */
+export function useSectionItem(): [
+  string | undefined,
+  (value?: string) => void,
+] {
+  const search = useSearch({ from: "/app/$section" });
+  const navigate = useNavigate({ from: "/app/$section" });
+
+  const set = useCallback(
+    (next?: string) => {
+      void navigate({
+        search: (previous) => ({ ...previous, item: next }),
+      });
+    },
+    [navigate],
+  );
+
+  return [search.item, set];
+}

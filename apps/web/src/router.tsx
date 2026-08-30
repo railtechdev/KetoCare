@@ -104,6 +104,17 @@ export interface SectionSearch {
   tab?: string;
   /** Разновидность внутри вкладки: вид дневника, выбранный справочник. */
   kind?: string;
+  /**
+   * Объект или задача второго уровня внутри раздела: открытый продукт
+   * (`item=<id>`), заведение новой позиции (`item=new`), импорт
+   * (`item=import`).
+   *
+   * В адресе, а не в состоянии экрана: правило П1 канона требует адрес у
+   * каждого объекта второго уровня. Пока параметра не было, администратор,
+   * правивший продукт, не мог ни переслать ссылку коллеге, ни обновить
+   * страницу — F5 возвращал в список, а «Назад» браузера уводил из раздела.
+   */
+  item?: string;
 }
 
 /** Непустая строка или ничего: `?tab=` в адресе — то же самое, что его отсутствие. */
@@ -124,9 +135,11 @@ const sectionRoute = createRoute({
     const patient = text(search.patient);
     const tab = text(search.tab);
     const kind = text(search.kind);
+    const item = text(search.item);
     if (patient !== undefined) result.patient = patient;
     if (tab !== undefined) result.tab = tab;
     if (kind !== undefined) result.kind = kind;
+    if (item !== undefined) result.item = item;
     return result;
   },
   beforeLoad: ({ context, params }) => {

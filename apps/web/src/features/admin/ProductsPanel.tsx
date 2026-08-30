@@ -8,6 +8,8 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { Apple, Plus, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
+
+import { useSectionItem } from "../../routes/useSectionTab";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
@@ -25,24 +27,29 @@ import {
   type ProductFilters,
 } from "./useAdminProducts";
 
-type View =
-  | { kind: "list" }
-  /** `product: null` — заведение новой позиции */
-  | { kind: "form"; product: Product | null }
-  | { kind: "import" };
+/** Значение `?item=`, означающее заведение новой позиции. */
+const NEW_ITEM = "new";
+/** Значение `?item=`, означающее экран импорта. */
+const IMPORT_ITEM = "import";
 
 /**
  * Справочник продуктов администратора (раздел 8.3 ТЗ, «Админ / Продукты»).
  *
  * Список, карточка позиции и импорт живут в одном разделе маршрута:
- * `/app/$section` не знает о вложенных путях, поэтому что показывать, решает
- * состояние экрана.
+ * `/app/$section` не знает о вложенных путях. Но что именно открыто, хранится
+ * в адресе (`?item=`), а не в состоянии экрана: правило П1 канона требует
+ * адрес у каждого объекта второго уровня, и докстрока `FormSheet` прямо
+ * относит продукт к тому, что остаётся отдельным экраном, а не панелью.
+ *
+ * До этого администратор, правивший позицию, не мог ни переслать ссылку
+ * коллеге, ни обновить страницу: F5 возвращал в список, а «Назад» браузера
+ * уводил из раздела целиком.
  */
 export function ProductsPanel() {
   const { t } = useTranslation("admin");
 
   const [filters, setFilters] = useState<ProductFilters>(EMPTY_PRODUCT_FILTERS);
-  const [view, setView] = useState<View>({ kind: "list" });
+  const [item, setItem] = useSectionItem();
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
   const debouncedQuery = useDebouncedValue(filters.q, 300);
@@ -142,30 +149,38 @@ export function ProductsPanel() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setView({ kind: "form", product: row.original })}
+            onClick={() => setItem(row.original.id)}
           >
             {t("products.edit")}
           </Button>
         ),
       },
     ],
-    [t, categoryNames],
+    [t, categoryNames, setItem],
   );
 
-  if (view.kind === "import") {
-    return <ProductImportPanel onDone={() => setView({ kind: "list" })} />;
+  if (item === IMPORT_ITEM) {
+    return <ProductImportPanel onDone={() => setItem(undefined)} />;
   }
 
-  if (view.kind === "form") {
+  if (item !== undefined) {
+    // Позиция ищется в уже загруженном списке. Прямой переход по ссылке на
+    // строку, которой нет в текущей выборке (другая страница, другой фильтр),
+    // отдаёт `undefined` — и открывается форма заведения. Полноценное чтение
+    // позиции по идентификатору требует отдельной ручки и вложенного маршрута
+    // (открытая тема в CLAUDE.md); до неё ссылка работает в пределах выборки.
+    const editing =
+      item === NEW_ITEM ? null : (rows.find((p) => p.id === item) ?? null);
+
     return (
       <ProductEditor
-        product={view.product}
+        product={editing}
         categories={categories.data ?? []}
         onSaved={(product) => {
-          setView({ kind: "list" });
+          setItem(undefined);
           toast.success(t("products.saved", { name: product.name_ru }));
         }}
-        onCancel={() => setView({ kind: "list" })}
+        onCancel={() => setItem(undefined)}
       />
     );
   }
@@ -177,17 +192,14 @@ export function ProductsPanel() {
         intro={t("products.intro")}
         actions={
           <>
-            <Button
-              type="button"
-              onClick={() => setView({ kind: "form", product: null })}
-            >
+            <Button type="button" onClick={() => setItem(NEW_ITEM)}>
               <Plus aria-hidden="true" />
               {t("products.create")}
             </Button>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setView({ kind: "import" })}
+              onClick={() => setItem(IMPORT_ITEM)}
             >
               <Upload aria-hidden="true" />
               {t("products.importCsv")}
@@ -255,10 +267,7 @@ export function ProductsPanel() {
             title={t("products.empty.title")}
             description={t("products.empty.description")}
             action={
-              <Button
-                type="button"
-                onClick={() => setView({ kind: "form", product: null })}
-              >
+              <Button type="button" onClick={() => setItem(NEW_ITEM)}>
                 <Plus aria-hidden="true" />
                 {t("products.create")}
               </Button>

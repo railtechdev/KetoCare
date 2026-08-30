@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
+import { SectionRouter } from "../../test/SectionRouter";
 import { SessionProvider } from "../auth/session";
 import i18n from "../../lib/i18n";
 import adminRu from "../../locales/ru/admin.json";
@@ -133,7 +134,12 @@ function renderPage(section: string) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          {/* Второй уровень раздела продуктов живёт в адресе (`?item=`,
+              правило П1), поэтому экрану нужен роутер — как и в работающем
+              приложении. */}
+          <SectionRouter section={section}>{children}</SectionRouter>
+        </SessionProvider>
       </QueryClientProvider>
     );
   }
