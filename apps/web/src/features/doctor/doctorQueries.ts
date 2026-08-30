@@ -41,6 +41,12 @@ export function usePatientOverviews(patientIds: readonly string[]) {
       ),
       pending: results.some((result) => result.isPending),
       failed: results.some((result) => result.isError),
+      // Повтор запроса сводок. Без него единственным выходом из «часть сводок
+      // получить не удалось» была перезагрузка страницы: правило П15 требует
+      // у ошибки кнопку «Повторить», а повторять было нечем.
+      refetch: () => {
+        for (const result of results) void result.refetch();
+      },
     }),
   });
 }

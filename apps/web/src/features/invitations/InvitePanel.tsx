@@ -29,13 +29,30 @@ const inviteSchema = z.object({
 type InviteValues = z.infer<typeof inviteSchema>;
 
 /**
- * Выдача приглашения.
+ * Выдача приглашения блоком экрана.
  *
  * `roles` задаёт вызывающий экран: администратор зовёт персонал, врач и
  * диетолог — семьи (ADR-0003). Это оформление; сервер проверяет то же самое и
  * отвечает 403 на попытку позвать не ту роль.
+ *
+ * Отдельно от `InviteForm` потому, что на экране, куда приходят смотреть
+ * список, форма обязана открываться панелью, а не стоять над списком
+ * (правило П32 канона). Панель даёт свой заголовок, поэтому `Section` там
+ * лишний — и вместо флага «рисовать ли рамку» разделены сам блок и его
+ * содержимое.
  */
 export function InvitePanel({ roles }: { roles: readonly Role[] }) {
+  const { t } = useTranslation("invitations");
+
+  return (
+    <Section title={t("title")} description={t("intro")}>
+      <InviteForm roles={roles} />
+    </Section>
+  );
+}
+
+/** Форма приглашения без обёртки: для панели, у которой свой заголовок. */
+export function InviteForm({ roles }: { roles: readonly Role[] }) {
   const { t } = useTranslation("invitations");
   const ids = useId();
   const invite = useCreateInvitationMutation();
@@ -54,7 +71,7 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
     invite.data === undefined ? null : invitationLink(invite.data.token);
 
   return (
-    <Section title={t("title")} description={t("intro")}>
+    <>
       <form
         onSubmit={handleSubmit((values) => {
           invite.mutate(values, {
@@ -134,6 +151,6 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
           </p>
         </WarningBanner>
       )}
-    </Section>
+    </>
   );
 }

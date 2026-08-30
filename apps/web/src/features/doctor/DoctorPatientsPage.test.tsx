@@ -209,7 +209,14 @@ describe("Список пациентов", () => {
     // Именно в таблице: тот же текст есть в расшифровке флагов под ней.
     const table = within(screen.getByRole("table"));
     expect(table.getByText("Кетосоотношение вне допуска")).toBeInTheDocument();
-    expect(table.getByText("Без замечаний")).toBeInTheDocument();
+    // Спокойная строка тоже несёт давность данных: правило П19 требует её в
+    // каждой строке, иначе врач не отличает ребёнка с утренним замером от
+    // ребёнка с записью позавчера.
+    expect(
+      table.getByText(
+        /Без замечаний · данные \d+ дн\. назад|Без замечаний · данные сегодня/,
+      ),
+    ).toBeInTheDocument();
 
     const names = screen
       .getAllByRole("row")
