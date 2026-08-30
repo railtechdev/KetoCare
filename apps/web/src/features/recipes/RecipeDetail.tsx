@@ -83,6 +83,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
   }
 
   const computed = data.computed;
+  const perPortion = data.per_portion;
 
   return (
     <PageLayout
@@ -255,6 +256,25 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
               carbsG={computed.carbs}
             />
           </>
+        )}
+
+        {/* Показатели выше — на весь выход рецепта. Человеку у плиты нужно
+            другое число: сколько в одной порции. Пока его не было рядом, семья
+            делила в уме — а по этой же порции считается день ребёнка. */}
+        {perPortion !== null && data.servings > 1 && (
+          <p className="m-0 flex flex-wrap items-center gap-block tabular-nums">
+            <span className="font-medium">{t("detail.perPortion")}</span>
+            <span>
+              {t("detail.kcal", { value: perPortion.kcal.toFixed(0) })}
+            </span>
+            <span className="text-muted-foreground">
+              {t("detail.macros", {
+                fat: formatGrams(perPortion.fat),
+                protein: formatGrams(perPortion.protein),
+                carbs: formatGrams(perPortion.carbs),
+              })}
+            </span>
+          </p>
         )}
 
         <p className="m-0 flex flex-wrap gap-block text-sm text-muted-foreground tabular-nums">

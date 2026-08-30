@@ -19,6 +19,15 @@ const RECIPE: Recipe = {
   instructions: "Смешать и запечь.",
   status: "published",
   computed: { kcal: 900, fat: 80, protein: 20, carbs: 5, fiber: 1, ratio: 3.2 },
+  // Рецепт на две порции: количества делятся, соотношение — нет.
+  per_portion: {
+    kcal: 450,
+    fat: 40,
+    protein: 10,
+    carbs: 2.5,
+    fiber: 0.5,
+    ratio: 3.2,
+  },
   engine_version: "1.0.0",
   author_id: "22222222-2222-2222-2222-222222222222",
   ingredients: [

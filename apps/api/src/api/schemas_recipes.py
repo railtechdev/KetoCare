@@ -48,7 +48,11 @@ class RecipeIngredientRead(BaseModel):
 
 
 class RecipeComputed(BaseModel):
-    """Итоги рецепта, посчитанные ядром (раздел 4.2 ТЗ: `computed jsonb`)."""
+    """Итоги рецепта, посчитанные ядром (раздел 4.2 ТЗ: `computed jsonb`).
+
+    Это показатели ВСЕГО выхода — суммы по составу. Сколько приходится на одну
+    порцию, отвечает `RecipeRead.per_portion`.
+    """
 
     kcal: float
     fat: float
@@ -56,6 +60,26 @@ class RecipeComputed(BaseModel):
     carbs: float
     fiber: float
     ratio: float | None
+
+    def per_serving(self, servings: int) -> RecipeComputed:
+        """Доля одной порции.
+
+        Делятся только количества. Кетосоотношение — отношение, оно от размера
+        порции не зависит: F/(P+C) при делении числителя и знаменателя на одно и
+        то же число не меняется. Пересчитывать его отдельно значило бы получить
+        то же значение с накопленной ошибкой округления.
+        """
+
+        if servings <= 1:
+            return self
+        return RecipeComputed(
+            kcal=self.kcal / servings,
+            fat=self.fat / servings,
+            protein=self.protein / servings,
+            carbs=self.carbs / servings,
+            fiber=self.fiber / servings,
+            ratio=self.ratio,
+        )
 
 
 class RecipeRead(BaseModel):
@@ -70,6 +94,11 @@ class RecipeRead(BaseModel):
     instructions: str
     status: RecipeStatus
     computed: RecipeComputed | None
+    #: Показатели ОДНОЙ порции. Отдельным полем, а не вместо `computed`: диетологу
+    #: при правке состава нужен весь выход, семье у плиты — порция. Считается на
+    #: чтении, в базе не хранится: `servings` может измениться, и сохранённое
+    #: значение молча разошлось бы с составом.
+    per_portion: RecipeComputed | None
     engine_version: str | None
     author_id: uuid.UUID
     ingredients: list[RecipeIngredientRead]

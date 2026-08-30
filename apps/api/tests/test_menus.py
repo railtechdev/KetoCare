@@ -83,12 +83,13 @@ async def _recipe(
     *,
     ingredients: Sequence[tuple[Product, float]],
     status: RecipeStatus = RecipeStatus.PUBLISHED,
+    servings: int = 1,
 ) -> Recipe:
     recipe = Recipe(
         title=f"Рецепт {uuid.uuid4().hex[:8]}",
         category=RecipeCategory.BREAKFAST,
         yield_g=100,
-        servings=1,
+        servings=servings,
         instructions="Смешать",
         status=status,
         author_id=author.id,
@@ -185,6 +186,85 @@ class TestUpsert:
         assert response.status_code == 200, response.text
         # Половина порции: 25 г масла вместо 50 г
         assert response.json()["totals"]["fat"] == pytest.approx(20.275, abs=0.01)
+
+    async def test_one_portion_of_a_four_serving_recipe_is_a_quarter(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Множитель — это ЧИСЛО ПОРЦИЙ, а не доля выхода рецепта.
+
+        Состав рецепта записан на весь выход. Пока `servings` не участвовал в
+        расчёте, множитель 1 означал противень: блюдо на четверых уходило в день
+        ребёнка целиком. Ошибка тихая — день сходился как «переедание», то есть
+        выглядела поведением семьи, а не подстановкой. Весь набор её не видел
+        ровно потому, что каждый тест брал рецепт на одну порцию.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 200)], servings=4)
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        # 200 г масла на 4 порции = 50 г в порции: жиры 81.1 × 0.5 = 40.55.
+        # До правки здесь было бы 162.2 — четырёхкратная норма.
+        assert response.json()["totals"]["fat"] == pytest.approx(40.55, abs=0.01)
+
+    async def test_two_portions_of_a_four_serving_recipe_is_a_half(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 200)], servings=4)
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id), "portion_factor": 2}
+                ],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        # Две порции из четырёх — половина выхода: 100 г масла, жиры 81.1.
+        assert response.json()["totals"]["fat"] == pytest.approx(81.1, abs=0.01)
+
+    async def test_custom_dish_is_one_portion_by_definition(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Своё блюдо родитель приготовил под этот приём пищи, а не на семью.
+
+        Знаменатель у него единица, поэтому смысл поля одинаков в обеих ветках,
+        а числа своих блюд правкой не затронуты.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        dish = await _custom_dish(session, patient, ingredients=[(chicken, 100)])
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "lunch", "custom_dish_id": str(dish.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["totals"]["protein"] == pytest.approx(31.0, abs=0.01)
 
     async def test_portion_factor_is_rounded_to_stored_precision(
         self, client, session, make_user, make_patient, auth_headers
