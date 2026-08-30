@@ -23,6 +23,7 @@ from ..deps.auth import (
 from ..errors import ApiError, ErrorCode
 from ..schemas import (
     ColleagueRead,
+    FamilyMemberRead,
     Page,
     PatientCreate,
     PatientDoctorAdd,
@@ -166,6 +167,31 @@ async def list_patient_doctors(
     doctor_ids = await patients_repo.list_doctor_ids(session, patient_id=patient_id)
     doctors = [await users_repo.get(session, did) for did in doctor_ids]
     return [ColleagueRead.model_validate(d) for d in doctors if d is not None]
+
+
+@router.get(
+    "/{patient_id}/parents",
+    response_model=list[FamilyMemberRead],
+    summary="Кто ведёт ребёнка дома",
+)
+async def list_patient_parents(
+    patient_id: Annotated[uuid.UUID, Path()],
+    session: SessionDep,
+    _: PatientAccessDep,
+) -> list[FamilyMemberRead]:
+    """Зеркало `/doctors`, но с контактами.
+
+    Флаг «семья молчит N дней» существует, чтобы вызвать действие, а
+    единственное осмысленное действие — связаться с семьёй — интерфейсом не
+    поддерживалось: контактов родителя в продукте не было нигде.
+
+    Видит и семья: там же, где родитель узнаёт, кто из специалистов имеет
+    доступ к данным ребёнка, он видит и второго родителя.
+    """
+
+    parent_ids = await patients_repo.list_parent_ids(session, patient_id=patient_id)
+    parents = [await users_repo.get(session, pid) for pid in parent_ids]
+    return [FamilyMemberRead.model_validate(p) for p in parents if p is not None]
 
 
 @router.post(

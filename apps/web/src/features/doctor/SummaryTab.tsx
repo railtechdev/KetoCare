@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { CareTeamPanel } from "./CareTeamPanel";
+import { FamilyPanel } from "./FamilyPanel";
 import { MedicalProfileForm } from "./MedicalProfileForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { IntakeView } from "../intake/IntakeView";
@@ -75,6 +76,11 @@ export function SummaryTab({
       <IntakeView patientId={patient.id} />
 
       {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
+
+      {/* Два ответа на один вопрос «с кем говорить»: кто ведёт ребёнка дома
+          и кто ведёт его в клинике. Семья первой — к ней обращаются, когда
+          дневники пусты, а это самый частый повод. */}
+      <FamilyPanel patientId={patient.id} />
 
       <CareTeamPanel patientId={patient.id} />
     </div>
