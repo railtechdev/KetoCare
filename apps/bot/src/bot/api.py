@@ -162,6 +162,29 @@ class BotApi:
                 return None
             raise
 
+    async def active_medications(
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        day: date,
+    ) -> list[dict[str, Any]]:
+        """Препараты, которые ребёнок принимает в этот день.
+
+        Единственная клиническая ручка, открытая семье, и открыта она ровно ради
+        этого сценария: препараты ребёнку даёт родитель, а схему ведёт врач.
+        """
+
+        token = await self._token(link_id=link_id, secret=secret)
+        body = await self._request(
+            "GET",
+            f"/api/v1/patients/{patient_id}/medications?active_on={day.isoformat()}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        items: list[dict[str, Any]] = body.get("items", [])
+        return items
+
     async def mark_eaten(
         self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
     ) -> dict[str, Any]:

@@ -71,6 +71,10 @@ class Meal(StatesGroup):
     choice = State()
 
 
+class Medication(StatesGroup):
+    choice = State()
+
+
 class Wellbeing(StatesGroup):
     symptom = State()
     note = State()
@@ -95,7 +99,7 @@ def _answerable(callback: CallbackQuery) -> Message | None:
 
 
 async def ask_when(
-    message: Message, state: FSMContext, *, kind: str, payload: dict[str, str]
+    message: Message, state: FSMContext, *, kind: str, payload: dict[str, Any]
 ) -> None:
     """Спрашивает момент события и запоминает, что именно отправлять.
 
@@ -283,6 +287,79 @@ async def weight_value(
         return
 
     await ask_when(message, state, kind="weight", payload={"weight_kg": str(value)})
+
+
+# --- Лекарства ---
+#
+# Схему терапии ведёт врач в карте, семья по ней даёт препараты. Кнопка была,
+# обработчика не было: отметить приём из чата было нельзя.
+
+
+@router.message(F.text == texts.BTN_MEDICATION)
+async def medication_start(
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    binding = await require_binding(message, store)
+    if binding is None:
+        return
+
+    today = datetime.now(ZoneInfo(settings.tz)).date()
+    try:
+        items = await api.active_medications(
+            link_id=binding.link_id,
+            secret=binding.secret,
+            patient_id=binding.patient_id,
+            day=today,
+        )
+    except LinkRevokedError:
+        await store.delete(message.chat.id)
+        await state.clear()
+        await message.answer(texts.LINK_REVOKED)
+        return
+    except BotApiError as exc:
+        logger.warning("medications_fetch_failed", status=exc.status, code=exc.code)
+        await message.answer(texts.API_UNAVAILABLE)
+        return
+
+    if not items:
+        await message.answer(texts.MEDICATION_NONE, reply_markup=keyboards.MAIN_MENU)
+        return
+
+    await state.set_state(Medication.choice)
+    await message.answer(
+        texts.MEDICATION_ASK,
+        reply_markup=keyboards.medications(
+            [
+                (
+                    str(item["id"]),
+                    texts.MEDICATION_DOSE.format(name=item["drug_name"], dose=item["dose"]),
+                )
+                for item in items
+            ]
+        ),
+    )
+
+
+@router.callback_query(Medication.choice, F.data.startswith(keyboards.MEDICATION_PREFIX))
+async def medication_choice(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    medication_id = (callback.data or "").removeprefix(keyboards.MEDICATION_PREFIX)
+    # Время спрашивается тем же шагом, что и у замеров: приём препарата часто
+    # отмечают позже, чем он был, а по времени приёма врач судит о схеме.
+    await ask_when(
+        message,
+        state,
+        kind="medications",
+        payload={"medication_id": medication_id, "taken": True},
+    )
 
 
 # --- Еда ---
