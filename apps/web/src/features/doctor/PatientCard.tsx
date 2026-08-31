@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { PageLayout } from "../../components/PageLayout";
 import { useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
+import { allergyNames } from "../patients/allergies";
 import { MedicationsTab } from "./MedicationsTab";
 import { NotesTab } from "./NotesTab";
 import { PatientDiaryTab } from "./PatientDiaryTab";
@@ -50,6 +51,8 @@ export function PatientCard({
 }) {
   const { t } = useTranslation("doctor");
   const { session } = useSession();
+
+  const allergies = allergyNames(patient, t("card.unknownProduct"));
 
   // Заметки сервер отдаёт только роли doctor; диетологу вкладка не показывается,
   // чтобы он не открывал заведомый 403. Права проверяет сервер.
@@ -108,10 +111,23 @@ export function PatientCard({
 
           <dt className="text-muted-foreground">{t("card.allergies")}</dt>
           <dd className="m-0">
-            {patient.allergies.length === 0
+            {/* Названия, а не идентификаторы: поле хранит ссылки на продукты
+                вперемешку со свободными метками, и «dcf7df2c-349b…» в карте —
+                это мусор в клинически значимой строке. */}
+            {allergies.length === 0
               ? t("card.noAllergies")
-              : patient.allergies.join(", ")}
+              : allergies.join(", ")}
           </dd>
+
+          {/* Заметки семьи. Родитель пишет их в разделе «Ребёнок» — про уход,
+              непереносимости сверх списка аллергий, поведение. Читателя у поля
+              не было ни одного: семья писала в пустоту. */}
+          {patient.notes !== null && patient.notes.trim() !== "" && (
+            <>
+              <dt className="text-muted-foreground">{t("card.familyNotes")}</dt>
+              <dd className="m-0 whitespace-pre-line">{patient.notes}</dd>
+            </>
+          )}
         </dl>
       </Section>
 

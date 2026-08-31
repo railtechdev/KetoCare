@@ -23,6 +23,11 @@ export function NotFoundPage() {
   return (
     <div className="flex min-h-dvh items-center justify-center p-screen">
       <div className="w-full max-w-form">
+        {/* Заголовок страницы — скрытый: видимую роль заголовка играет подпись
+            EmptyState, а показать её дважды значит написать одно и то же два
+            раза. Но страницы без `h1` не бывает: для скринридера это страница
+            без имени (правило П24 канона). */}
+        <h1 className="sr-only">{t("notFound.title")}</h1>
         <EmptyState
           icon={MapPinOff}
           title={t("notFound.title")}

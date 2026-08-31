@@ -32,6 +32,7 @@ import {
   useUpdateChildMutation,
   type Patient,
 } from "../patients/useChildren";
+import { allergyNames } from "../patients/allergies";
 import { usePatients } from "../patients/usePatients";
 
 type View =
@@ -170,13 +171,10 @@ export function ChildPage() {
                       {child.allergies.length === 0
                         ? t("children.noAllergies")
                         : t("children.allergies", {
-                            list: [
-                              ...child.excluded_products.map(
-                                (entry) =>
-                                  entry.name_ru ?? t("children.unknownProduct"),
-                              ),
-                              ...child.allergy_labels,
-                            ].join(", "),
+                            list: allergyNames(
+                              child,
+                              t("children.unknownProduct"),
+                            ).join(", "),
                           })}
                     </span>
                   </div>

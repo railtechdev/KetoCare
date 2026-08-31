@@ -15,7 +15,7 @@ vi.mock("../../lib/api", () => ({
   onSessionExpired: () => () => undefined,
 }));
 
-const { api } = await import("../../lib/api");
+const { api, setAccessToken } = await import("../../lib/api");
 
 const PATIENT_KEY = ["patient", "p1", "overview"];
 
@@ -28,7 +28,11 @@ function token(sub: string): string {
 }
 
 function Probe() {
-  const { signIn, signOut } = useSession();
+  const { signIn, signOut, restoring } = useSession();
+
+  // Пока идёт восстановление, App показывает заглушку вместо роутера — здесь
+  // ровно то же: экран, на котором человеку недоступно ничего.
+  if (restoring) return <p>Восстанавливаем сессию…</p>;
 
   return (
     <>
@@ -73,16 +77,57 @@ describe("сессия и кэш запросов", () => {
     const user = userEvent.setup();
     const client = renderProbe();
 
-    await user.click(screen.getByRole("button", { name: "Выйти" }));
+    await user.click(await screen.findByRole("button", { name: "Выйти" }));
 
     expect(client.getQueryData(PATIENT_KEY)).toBeUndefined();
+  });
+
+  it("выход гасит сессию, даже если сервер недоступен", async () => {
+    // Человек нажимает «Выйти» на чужом компьютере. Раньше отказ сети
+    // отклонял весь обработчик: локальная сессия оставалась живой, кабинет
+    // ребёнка — открытым, и по экрану этого было не видно.
+    // Именно mockImplementation, а не mockRejectedValue: последний создаёт
+    // отклонённое обещание сразу при настройке, и Node сообщает о необработанном
+    // отказе ещё до того, как обработчик его поймает.
+    (api.POST as unknown as Mock).mockImplementation(() =>
+      Promise.reject(new Error("сеть недоступна")),
+    );
+    const user = userEvent.setup();
+    const client = renderProbe();
+
+    await user.click(await screen.findByRole("button", { name: "Выйти" }));
+
+    expect(client.getQueryData(PATIENT_KEY)).toBeUndefined();
+    expect(setAccessToken).toHaveBeenCalledWith(null);
+  });
+
+  it("недоступный сервер не оставляет кабинет в восстановлении навсегда", async () => {
+    // Найдено этим же тестом: восстановление сессии при загрузке не имело
+    // перехвата, и при отказе сети приложение застревало, не пуская даже на
+    // экран входа.
+    (api.POST as unknown as Mock).mockImplementation(() =>
+      Promise.reject(new Error("сеть недоступна")),
+    );
+
+    renderProbe();
+
+    // Кнопка рисуется только после того, как восстановление кончилось: пока оно
+    // идёт, приложение показывает заглушку и не пускает даже на вход.
+    expect(
+      await screen.findByRole("button", { name: "Выйти" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Восстанавливаем сессию…"),
+    ).not.toBeInTheDocument();
   });
 
   it("вход другим пользователем не оставляет данные предыдущего", async () => {
     const user = userEvent.setup();
     const client = renderProbe();
 
-    await user.click(screen.getByRole("button", { name: "Войти другим" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Войти другим" }),
+    );
 
     expect(client.getQueryData(PATIENT_KEY)).toBeUndefined();
   });

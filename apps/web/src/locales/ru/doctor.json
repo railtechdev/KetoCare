@@ -85,7 +85,9 @@
       "reports": "Отчёт",
       "notes": "Заметки"
     },
-    "passportTitle": "Данные пациента"
+    "passportTitle": "Данные пациента",
+    "unknownProduct": "продукт удалён из справочника",
+    "familyNotes": "Заметки семьи"
   },
   "fields": {
     "ratio": "Кетосоотношение",

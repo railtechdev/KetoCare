@@ -127,6 +127,24 @@ describe("главная родителя", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("даёт записать приступ прямо с главной", async () => {
+    // Самое срочное действие семьи, и записывают его с телефона в тот момент,
+    // когда ребёнку плохо. Путь к нему был длиннее всех остальных: раздел,
+    // потом вкладка.
+    (api.GET as Mock).mockResolvedValue({
+      data: overview(PRESCRIPTION),
+      error: undefined,
+    });
+
+    renderHome();
+
+    const link = await screen.findByRole("link", { name: /Записать приступ/ });
+    expect(link).toHaveAttribute(
+      "href",
+      expect.stringContaining("kind=seizures"),
+    );
+  });
+
   it("с назначением подсказки нет — она была бы шумом", async () => {
     (api.GET as Mock).mockResolvedValue({
       data: overview(PRESCRIPTION),
