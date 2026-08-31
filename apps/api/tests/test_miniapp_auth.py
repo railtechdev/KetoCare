@@ -225,10 +225,18 @@ class TestTelegramInit:
 
         await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
 
-        entry = await session.scalar(select(AuditLog).where(AuditLog.action == "login_miniapp"))
+        # Запрос сужен до привязки, созданной этим тестом. База у прогона общая
+        # с ручной работой: «любая запись с action=login_miniapp» находила
+        # чужую, и тест падал не на своей ошибке (та же ловушка описана в
+        # `test_leads.py`).
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "login_miniapp", AuditLog.entity_id == link.id
+            )
+        )
         assert entry is not None
         assert entry.user_id == parent.id
-        assert entry.entity_id == link.id
+        assert entry.entity == "telegram_accounts"
 
 
 class TestScopeSurvivesRefresh:
