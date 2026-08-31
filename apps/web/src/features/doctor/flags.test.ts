@@ -3,11 +3,28 @@ import { describe, expect, it } from "vitest";
 import { attentionRank, computePatientFlags, NO_DATA_FLAG_DAYS } from "./flags";
 import type { PatientOverview } from "./types";
 
+/**
+ * Назначение в наборе по умолчанию: молчание семьи и вердикт о допуске имеют
+ * смысл только у ребёнка, которому уже назначена терапия. Случай «назначения
+ * нет» проверяется отдельно и явно.
+ */
+const PRESCRIPTION = {
+  id: "rx1",
+  patient_id: "p1",
+  ratio: 3.5,
+  kcal_per_day: 1200,
+  protein_g: 12,
+  carbs_limit_g: 35,
+  meals_per_day: 4,
+  starts_on: "2026-08-01",
+  created_at: "2026-08-01T10:00:00Z",
+} as unknown as NonNullable<PatientOverview["prescription"]>;
+
 function overview(patch: Partial<PatientOverview> = {}): PatientOverview {
   return {
     patient_id: "p1",
     date: "2026-08-28",
-    prescription: null,
+    prescription: PRESCRIPTION,
     day: null,
     last_ketone: null,
     last_weight: null,
@@ -128,6 +145,38 @@ describe("computePatientFlags", () => {
     expect(flags?.staleData).toBe(true);
   });
 
+  it("помечает пациента без назначения — и не считает его молчащим", () => {
+    // Ребёнок прикрепляется к врачу молча, в момент, когда семья его заводит.
+    // Первое, что от врача требуется, — назначение; до него не с чем сверять
+    // день. А «замеров нет трое суток» у такого пациента говорит не о семье, а
+    // о том же самом: терапии ещё не назначено. Второй красный значок рядом
+    // делит внимание и ничего не добавляет.
+    const flags = computePatientFlags(overview({ prescription: null }));
+
+    expect(flags?.noPrescription).toBe(true);
+    expect(flags?.staleData).toBe(false);
+  });
+
+  it("ставит ожидание назначения выше молчания и отклонения вместе", () => {
+    const waiting = computePatientFlags(overview({ prescription: null }));
+    const worst = computePatientFlags(
+      overview({
+        day: {
+          totals: TOTALS,
+          tolerance: {
+            ratio_within_tolerance: false,
+            kcal_within_tolerance: false,
+          },
+          engine_version: "1.0.0",
+        },
+      }),
+    );
+
+    expect(worst?.staleData).toBe(true);
+    expect(worst?.nutritionOff).toBe(true);
+    expect(attentionRank(waiting)).toBeGreaterThan(attentionRank(worst));
+  });
+
   it("отклонение питания берёт из вердикта сервера", () => {
     const off = computePatientFlags(
       overview({
@@ -179,7 +228,7 @@ describe("computePatientFlags", () => {
     expect(flags?.nutritionOff).toBe(false);
   });
 
-  it("без назначения вердикта нет — и флага тоже", () => {
+  it("без вердикта сервера флага отклонения нет", () => {
     const flags = computePatientFlags(
       overview({ day: { totals: TOTALS, tolerance: null } }),
     );
@@ -192,12 +241,14 @@ describe("attentionRank", () => {
   it("поднимает молчание выше отклонения питания", () => {
     expect(
       attentionRank({
+        noPrescription: false,
         daysSinceLastReading: 5,
         staleData: true,
         nutritionOff: false,
       }),
     ).toBeGreaterThan(
       attentionRank({
+        noPrescription: false,
         daysSinceLastReading: 0,
         staleData: false,
         nutritionOff: true,
