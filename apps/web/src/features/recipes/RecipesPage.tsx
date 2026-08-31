@@ -1,12 +1,15 @@
-import { AsyncSection, Button } from "@ketocare/ui";
+import { AsyncSection, Button, Tabs, TabsBar, TabsContent } from "@ketocare/ui";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { useSectionTab } from "../../routes/useSectionTab";
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useSession } from "../auth/useSession";
+import { MyDishesPanel } from "../dishes/MyDishesPanel";
+import { useSelectedPatient } from "../patients/useSelectedPatient";
 import { RecipeDetail } from "./RecipeDetail";
 import { RecipeFiltersPanel } from "./RecipeFiltersPanel";
 import { RecipeFormPanel } from "./RecipeFormPanel";
@@ -33,9 +36,19 @@ type View =
  * Список, карточка и форма живут в одном разделе маршрута: `/app/$section` не
  * знает о вложенных путях, поэтому что показывать, решает состояние экрана.
  */
+const TABS = ["recipes", "dishes"] as const;
+
+type Tab = (typeof TABS)[number];
+
 export function RecipesPage() {
   const { t } = useTranslation("recipes");
   const { session } = useSession();
+
+  // «Мои блюда» — только у семьи: своё блюдо принадлежит ребёнку, у врача и
+  // диетолога такого списка нет вовсе.
+  const familyView = session?.role === "parent";
+  const [tab, setTab] = useSectionTab<Tab>("tab", TABS, "recipes");
+  const { patientId } = useSelectedPatient();
 
   // Кнопки правки видят только admin/dietitian (раздел 5.3 ТЗ). Это UX:
   // сами ручки закрыты ролевой проверкой на сервере.
@@ -108,56 +121,129 @@ export function RecipesPage() {
         )
       }
     >
-      <RecipeFiltersPanel
-        filters={filters}
-        rangeInvalid={rangeInvalid}
-        onChange={patchFilters}
-        onReset={() => setFilters(EMPTY_RECIPE_FILTERS)}
-      />
-
-      {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
-          ошибка не должна прятать уже показанную выдачу. */}
-      <AsyncSection
-        loading={recipes.isLoading}
-        skeleton={<RecipeListSkeleton />}
-        error={
-          recipes.isError
-            ? {
-                title: t("list.errorTitle"),
-                description:
-                  errorMessageOf(recipes.error) ??
-                  t("common:errors.unexpected"),
-              }
-            : null
-        }
-        retryLabel={t("common:actions.retry")}
-        onRetry={() => void recipes.refetch()}
-        isEmpty={items.length === 0}
-        empty={
-          <RecipeListEmpty
-            filtersActive={hasActiveFilters(filters)}
-            onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
-            onCreate={
-              canEdit
-                ? () => setView({ kind: "form", recipeId: null })
-                : undefined
-            }
+      {familyView ? (
+        <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
+          {/* Вкладка, а не отдельный раздел меню: «Мои блюда» — это тот же
+              вопрос «что приготовить», только из своей кухни, а не из общей
+              базы (правило П29 канона). */}
+          <TabsBar
+            label={t("tabsLabel")}
+            items={TABS.map((value) => ({ value, label: t(`tabs.${value}`) }))}
           />
-        }
-      >
-        <RecipeList
-          recipes={items}
-          total={recipes.data?.total ?? items.length}
-          showStatus={canEdit}
-          onOpen={(recipeId) => setView({ kind: "detail", recipeId })}
-          onShowMore={() =>
-            setFilters((current) => ({
-              ...current,
-              limit: current.limit + RECIPES_PAGE_SIZE,
-            }))
-          }
-        />
-      </AsyncSection>
+
+          <TabsContent value="recipes" className="pt-screen">
+            <div className="flex flex-col gap-block">
+              <RecipeFiltersPanel
+                filters={filters}
+                rangeInvalid={rangeInvalid}
+                onChange={patchFilters}
+                onReset={() => setFilters(EMPTY_RECIPE_FILTERS)}
+              />
+
+              {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+          ошибка не должна прятать уже показанную выдачу. */}
+              <AsyncSection
+                loading={recipes.isLoading}
+                skeleton={<RecipeListSkeleton />}
+                error={
+                  recipes.isError
+                    ? {
+                        title: t("list.errorTitle"),
+                        description:
+                          errorMessageOf(recipes.error) ??
+                          t("common:errors.unexpected"),
+                      }
+                    : null
+                }
+                retryLabel={t("common:actions.retry")}
+                onRetry={() => void recipes.refetch()}
+                isEmpty={items.length === 0}
+                empty={
+                  <RecipeListEmpty
+                    filtersActive={hasActiveFilters(filters)}
+                    onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
+                    onCreate={
+                      canEdit
+                        ? () => setView({ kind: "form", recipeId: null })
+                        : undefined
+                    }
+                  />
+                }
+              >
+                <RecipeList
+                  recipes={items}
+                  total={recipes.data?.total ?? items.length}
+                  showStatus={canEdit}
+                  onOpen={(recipeId) => setView({ kind: "detail", recipeId })}
+                  onShowMore={() =>
+                    setFilters((current) => ({
+                      ...current,
+                      limit: current.limit + RECIPES_PAGE_SIZE,
+                    }))
+                  }
+                />
+              </AsyncSection>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="dishes" className="pt-screen">
+            <MyDishesPanel patientId={patientId} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="flex flex-col gap-block">
+          <RecipeFiltersPanel
+            filters={filters}
+            rangeInvalid={rangeInvalid}
+            onChange={patchFilters}
+            onReset={() => setFilters(EMPTY_RECIPE_FILTERS)}
+          />
+
+          {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+          ошибка не должна прятать уже показанную выдачу. */}
+          <AsyncSection
+            loading={recipes.isLoading}
+            skeleton={<RecipeListSkeleton />}
+            error={
+              recipes.isError
+                ? {
+                    title: t("list.errorTitle"),
+                    description:
+                      errorMessageOf(recipes.error) ??
+                      t("common:errors.unexpected"),
+                  }
+                : null
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void recipes.refetch()}
+            isEmpty={items.length === 0}
+            empty={
+              <RecipeListEmpty
+                filtersActive={hasActiveFilters(filters)}
+                onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
+                onCreate={
+                  canEdit
+                    ? () => setView({ kind: "form", recipeId: null })
+                    : undefined
+                }
+              />
+            }
+          >
+            <RecipeList
+              recipes={items}
+              total={recipes.data?.total ?? items.length}
+              showStatus={canEdit}
+              onOpen={(recipeId) => setView({ kind: "detail", recipeId })}
+              onShowMore={() =>
+                setFilters((current) => ({
+                  ...current,
+                  limit: current.limit + RECIPES_PAGE_SIZE,
+                }))
+              }
+            />
+          </AsyncSection>
+        </div>
+      )}
     </PageLayout>
   );
 }
