@@ -7,6 +7,8 @@ import {
   WarningBanner,
 } from "@ketocare/ui";
 import { useEffect, useState } from "react";
+
+import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
@@ -31,6 +33,14 @@ import {
 type Mode = "verify" | "solve" | "scale";
 
 const MODES = ["verify", "solve", "scale"] as const;
+
+/**
+ * Задержка автоматического пересчёта.
+ *
+ * Правка граммовки — это несколько нажатий подряд; без задержки каждое
+ * уходило бы в расчёт. Та же величина, что у поисковых полей.
+ */
+const AUTO_CALC_DELAY_MS = 400;
 
 /**
  * Цели по умолчанию, пока назначение не загрузилось.
@@ -142,8 +152,51 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         ? (verify.data?.kcal_within_tolerance ?? undefined)
         : undefined;
 
+  /**
+   * «Проверить» считает сам, по мере правки.
+   *
+   * Раньше расчёт запускала только кнопка, и она стояла в СЛЕДУЮЩЕМ блоке, а
+   * результат — в третьем. Замер на живом экране: на ноутбуке 1280×800 итог
+   * оказывался ниже сгиба, на телефоне 390×844 — ниже сгиба сама кнопка.
+   * Человек добавлял продукт, смотрел на экран и не видел ничего: изменение
+   * происходило за его границей. Отсюда «добавляю продукты — ничего не
+   * происходит».
+   *
+   * Задержка в 400 мс — чтобы правка граммовки не отправляла запрос на каждое
+   * нажатие; тот же приём, что у поисковых полей.
+   *
+   * «Подобрать» и «Пересчитать» так делать нельзя: они ПЕРЕЗАПИСЫВАЮТ состав,
+   * и запуск по ходу набора вырывал бы поля из-под рук. Там кнопка остаётся.
+   */
+  const debouncedRows = useDebouncedValue(rows, AUTO_CALC_DELAY_MS);
+  const debouncedTargets = useDebouncedValue(targets, AUTO_CALC_DELAY_MS);
+  const verifyMutate = verify.mutate;
+
+  useEffect(() => {
+    if (mode !== "verify" || debouncedRows.length === 0) return;
+    verifyMutate({ rows: debouncedRows, targets: debouncedTargets });
+  }, [mode, debouncedRows, debouncedTargets, verifyMutate]);
+
+  /**
+   * Показанный результат посчитан не по тому, что сейчас в полях.
+   *
+   * Число на экране остаётся: гасить его на каждое нажатие — значит очищать
+   * тот самый экран, по которому человек сверяется. А вот вердикт снимается.
+   * Зелёный значок «в допуске», посчитанный при прежней цели, рядом с новым
+   * числом в поле — не устаревшая выдача, а неверное утверждение: по нему
+   * готовят еду ребёнку.
+   */
+  const stale =
+    mode === "verify" &&
+    (rows !== debouncedRows ||
+      targets !== debouncedTargets ||
+      verify.isPending);
+
   function resetResults() {
-    verify.reset();
+    // В «Проверить» прошлый результат НЕ гасится: пересчёт придёт через
+    // доли секунды и заменит его. Гасить — значит на каждое нажатие в поле
+    // граммов очищать экран, по которому человек как раз и сверяется.
+    if (mode !== "verify") verify.reset();
     solve.reset();
     scale.reset();
   }
@@ -235,6 +288,31 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         />
       </Section>
 
+      {/* Результат стоит РЯДОМ с составом, а не в конце страницы.
+          Замер на живом экране: при прежнем порядке (состав → параметры →
+          результат) итог оказывался ниже сгиба на ноутбуке 1280×800, а на
+          телефоне ниже сгиба была и кнопка. Человек правил граммовку и не
+          видел, что от этого меняется. */}
+      {dish && (
+        <div
+          aria-busy={stale}
+          className={stale ? "opacity-60 transition-opacity" : undefined}
+        >
+          <DishResultView
+            dish={dish}
+            ratioWithinTolerance={
+              stale ? undefined : (ratioWithin ?? undefined)
+            }
+            kcalWithinTolerance={stale ? undefined : (kcalWithin ?? undefined)}
+          />
+          {stale && (
+            <p role="status" className="m-0 text-sm text-muted-foreground">
+              {t("recalculating")}
+            </p>
+          )}
+        </div>
+      )}
+
       <Section title={t("params.title")}>
         {mode === "scale" ? (
           <ScaleFields
@@ -251,28 +329,28 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
             onChange={(next) => {
               if (next.ratio !== targets.ratio) setRatioTouched(true);
               setTargets(next);
-              // Вердикт относится к тем целям, при которых его посчитали:
-              // зелёный значок от прежнего соотношения рядом с новым числом в
-              // поле опаснее обычной устаревшей выдачи — по нему готовят.
               resetResults();
             }}
             showLimits={mode === "solve"}
           />
         )}
 
-        {/* Кнопка расчёта — внутри блока параметров, а не голой в корне
-            страницы: она действует над тем, что над ней, и была единственным
-            таким местом в приложении (правило П31). */}
-        <Button
-          type="button"
-          size="lg"
-          onClick={run}
-          disabled={rows.length === 0 || active.isPending}
-          aria-busy={active.isPending}
-          className="min-h-touch w-full sm:w-auto sm:self-start"
-        >
-          {active.isPending ? t("calculating") : t("calculate")}
-        </Button>
+        {/* Кнопка только там, где расчёт НЕ идёт сам: «Подобрать» и
+            «Пересчитать» перезаписывают состав, и запускать их по ходу набора
+            нельзя. В «Проверить» кнопки нет — она обещала бы действие, которое
+            уже произошло (правило П3 канона). */}
+        {mode !== "verify" && (
+          <Button
+            type="button"
+            size="lg"
+            onClick={run}
+            disabled={rows.length === 0 || active.isPending}
+            aria-busy={active.isPending}
+            className="min-h-touch w-full sm:w-auto sm:self-start"
+          >
+            {active.isPending ? t("calculating") : t("calculate")}
+          </Button>
+        )}
       </Section>
 
       {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3 ТЗ):
@@ -293,12 +371,6 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
 
       {dish && (
         <>
-          <DishResultView
-            dish={dish}
-            ratioWithinTolerance={ratioWithin ?? undefined}
-            kcalWithinTolerance={kcalWithin ?? undefined}
-          />
-
           {/* Пересчитанные граммовки — отдельным блоком, а не подменой ввода:
               исходные массы остаются доступными для правки, потому что они и
               есть ввод этого режима. В «подобрать» иначе — там массы задаёт
