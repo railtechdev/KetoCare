@@ -60,8 +60,9 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
         items=[
             MenuItemRead(
                 **MenuItemRead.model_validate(item).model_dump(
-                    exclude={"has_snapshot", "changed_since_saved"}
+                    exclude={"title", "has_snapshot", "changed_since_saved"}
                 ),
+                title=None if item.snapshot is None else item.snapshot.get("title"),
                 has_snapshot=item.snapshot is not None,
                 changed_since_saved=_changed_since_saved(item, live.get(item.id, [])),
             )

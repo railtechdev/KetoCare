@@ -394,3 +394,85 @@ class TestEventTimeStep:
 
         assert typed.last == texts.WHEN_IN_FUTURE
         assert not api.logs
+
+
+class TestMeal:
+    """Кнопка «Еда» была, обработчика не было: нажатие уходило в «не понял».
+
+    Свободного текста здесь нет до этапа 4: разбор «съел кашу с маслом» — это
+    `POST /ai/parse`, а придуманная ботом еда попадёт в итоги дня наравне с
+    настоящей.
+    """
+
+    MENU = {
+        "items": [
+            {
+                "id": "item-1",
+                "meal_slot": "breakfast",
+                "title": "Омлет с маслом",
+                "eaten": False,
+            },
+            {
+                "id": "item-2",
+                "meal_slot": "dinner",
+                "title": "Курица с брокколи",
+                "eaten": True,
+            },
+        ]
+    }
+
+    @pytest.mark.asyncio
+    async def test_offers_only_what_is_not_eaten_yet(self, api, linked_store, state):
+        api.menu = self.MENU
+        message = FakeMessage(text=texts.BTN_MEAL)
+
+        await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.MEAL_ASK
+        buttons = [button.text for row in message.answers[-1][1].inline_keyboard for button in row]
+        assert "Завтрак: Омлет с маслом" in buttons
+        assert all("Курица" not in text for text in buttons), "съеденное не предлагается"
+
+    @pytest.mark.asyncio
+    async def test_marks_the_chosen_item(self, api, linked_store, state):
+        api.menu = self.MENU
+        message = FakeMessage(text=texts.BTN_MEAL)
+        await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
+
+        callback = FakeCallback(data=f"{keyboards.MEAL_ITEM_PREFIX}item-1", message=message)
+        await scenarios.meal_mark(callback, state, api, linked_store)
+
+        assert api.eaten == ["item-1"]
+        assert message.last == texts.MEAL_MARKED
+        assert await state.get_state() is None
+
+    @pytest.mark.asyncio
+    async def test_no_menu_explains_what_to_do(self, api, linked_store, state):
+        """Отсутствие меню — обычное состояние, а не сбой."""
+
+        api.menu = None
+        message = FakeMessage(text=texts.BTN_MEAL)
+
+        await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.MEAL_NO_MENU
+        assert await state.get_state() is None
+
+    @pytest.mark.asyncio
+    async def test_all_eaten_says_so(self, api, linked_store, state):
+        api.menu = {"items": [{**self.MENU["items"][1]}]}
+        message = FakeMessage(text=texts.BTN_MEAL)
+
+        await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.MEAL_ALL_EATEN
+
+    @pytest.mark.asyncio
+    async def test_revoked_binding_is_forgotten(self, api, linked_store, state):
+        api.menu_error = LinkRevokedError("unauthorized", "отозвана", 401)
+        message = FakeMessage(text=texts.BTN_MEAL)
+
+        await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.LINK_REVOKED
+        assert await linked_store.get(CHAT_ID) is None
