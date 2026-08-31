@@ -97,13 +97,18 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
     scope_raw = payload.get("patient_scope")
     patient_scope = uuid.UUID(scope_raw) if scope_raw else None
 
-    channel = _channel_of(payload)
+    channel = channel_of(payload)
     if channel == "bot":
         # Единственная точка, через которую проходит любой пользовательский
         # токен, — здесь и стоит ограничение маршрутов для бота. Отдельная
         # зависимость, которую надо не забыть навесить на ручку, однажды
         # окажется не навешенной.
         assert_route_allowed_for_bot(request)
+    if channel in ("bot", "miniapp"):
+        # Оба канала живут привязкой чата, а не паролем: отозвали привязку —
+        # доступ кончился сейчас, а не через пятнадцать минут. Ограничения
+        # маршрутов у Mini App нет: там работает человек, вошедший в кабинет
+        # ребёнка, а не автоматика по секрету (раздел 9 ТЗ).
         await _assert_binding_alive(session, payload, user_id=user.id, patient_scope=patient_scope)
 
     return CurrentUser(
@@ -154,8 +159,11 @@ async def _assert_binding_alive(
         raise denied
 
 
-def _channel_of(payload: dict[str, Any]) -> Channel:
+def channel_of(payload: dict[str, Any]) -> Channel:
     """Канал из claim `chan`. Неизвестное значение — не «web по умолчанию».
+
+    Публичная: обновление токенов в `/auth/refresh` обязано знать канал, иначе
+    оно повышало бы сужённый токен до полноценной веб-сессии.
 
     Неизвестный канал означает токен, выпущенный кодом, которого эта версия API
     не знает. Считать его самым доверенным вариантом нельзя: так новый канал с
@@ -272,7 +280,7 @@ async def get_totp_setup_user(request: Request, session: SessionDep) -> CurrentU
     # второй фактор — это личная вещь человека: с ботовым токеном можно было бы
     # перевыпустить TOTP-секрет родителя и тем самым превратить временный доступ
     # к чату в постоянный вход в кабинет (ADR-0009).
-    if _channel_of(payload) != "web":
+    if channel_of(payload) != "web":
         raise ApiError(ErrorCode.FORBIDDEN, "Это действие недоступно из Telegram-бота.")
 
     try:

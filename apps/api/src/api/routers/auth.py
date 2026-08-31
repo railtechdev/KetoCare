@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Path, Request, Response
 
@@ -25,6 +25,7 @@ from ..deps.auth import (
     PasswordResetUserDep,
     SessionDep,
     TotpSetupUserDep,
+    channel_of,
     require_roles,
 )
 from ..deps.query import PaginationDep
@@ -50,7 +51,9 @@ from ..schemas import (
     TotpVerifyRequest,
     UserRead,
 )
+from ..schemas_telegram import MiniAppInitRequest, MiniAppSession
 from ..security import (
+    Channel,
     create_token,
     decode_token,
     generate_totp_secret,
@@ -61,6 +64,7 @@ from ..security import (
     verify_totp,
     waste_password_verification_async,
 )
+from ..services import telegram as telegram_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -218,9 +222,65 @@ async def refresh(
     if token_predates_password_change(claims, user.password_changed_at):
         raise ApiError(ErrorCode.UNAUTHORIZED, "Пароль изменён, войдите заново.")
 
+    channel = channel_of(claims)
+    if channel != "web":
+        # Обновление не повышает канал. Иначе токен Mini App, сужённый до
+        # одного ребёнка и живущий привязкой чата, разменивался бы на
+        # полноценную веб-сессию родителя — то есть сужение не значило бы
+        # ничего. Привязка проверяется на живость при каждом запросе
+        # (`get_current_user`), поэтому отзыв гасит и обновлённую пару.
+        tokens = _reissue_scoped(user, claims, channel)
+        return tokens
+
     tokens = _issue_tokens(user)
     set_auth_cookies(response, tokens)
     return tokens
+
+
+def _reissue_scoped(user: User, claims: dict[str, Any], channel: Channel) -> TokenPair:
+    """Пара токенов того же канала, с тем же сужением и той же привязкой."""
+
+    scope_raw = claims.get("patient_scope")
+    binding_raw = claims.get("tg")
+    try:
+        patient_scope = uuid.UUID(scope_raw) if scope_raw else None
+        binding_id = uuid.UUID(binding_raw) if binding_raw else None
+    except (TypeError, ValueError) as exc:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+
+    def token(token_type: Literal["access", "refresh"]) -> str:
+        return create_token(
+            user_id=user.id,
+            role=user.role,
+            token_type=token_type,
+            patient_scope=patient_scope,
+            password_changed_at=user.password_changed_at,
+            channel=channel,
+            binding_id=binding_id,
+        )
+
+    return TokenPair(access_token=token("access"), refresh_token=token("refresh"))
+
+
+@router.post(
+    "/telegram-init",
+    response_model=MiniAppSession,
+    summary="Вход в Mini App по подписи Telegram",
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def telegram_init(
+    payload: MiniAppInitRequest, request: Request, session: SessionDep
+) -> MiniAppSession:
+    """Меняет подписанную строку запуска на сессию родителя (раздел 5.2 ТЗ).
+
+    Пароль здесь не участвует: личность подтверждает Telegram подписью
+    `initData`, а право на ребёнка — живая привязка чата. Cookie не ставятся —
+    Mini App работает во встроенном браузере Telegram и носит токен заголовком.
+    """
+
+    return await telegram_service.issue_miniapp_session(
+        session, init_data=payload.init_data, ip=client_address(request)
+    )
 
 
 @router.post("/logout", status_code=204, summary="Выход")

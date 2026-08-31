@@ -65,6 +65,34 @@ class BotSession(BaseModel):
     patient_id: uuid.UUID
 
 
+class MiniAppInitRequest(BaseModel):
+    """Строка `initData`, которую Telegram отдаёт приложению при запуске.
+
+    Передаётся как есть, без разбора на клиенте: подпись считается по всей
+    строке целиком, и любая пересборка на клиенте её ломает.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    init_data: str = Field(min_length=1, max_length=4096)
+
+
+class MiniAppSession(BaseModel):
+    """Сессия Mini App: пара токенов и ребёнок, к которому она сужена.
+
+    Токены — в теле, а не в cookie: Mini App живёт во встроенном браузере
+    Telegram, где сторонние cookie не выживают (раздел 5.2 ТЗ — «для Mini App
+    заголовок»).
+    """
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    patient_id: uuid.UUID
+    patient_name: str
+
+
 class TelegramLinkRead(BaseModel):
     """Привязка в кабинете: кто и когда привязал, отозвана ли."""
 

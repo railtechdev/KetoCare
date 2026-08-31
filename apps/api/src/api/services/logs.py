@@ -31,6 +31,7 @@ from ..security import Channel
 _SOURCE_BY_CHANNEL: dict[Channel, DiarySource] = {
     "web": DiarySource.WEB,
     "bot": DiarySource.BOT,
+    "miniapp": DiarySource.MINIAPP,
 }
 
 
