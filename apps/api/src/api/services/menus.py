@@ -17,7 +17,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.models import CustomDish, Menu, MenuItem, Product
+from core.models import CustomDish, Menu, MenuItem, Product, Recipe
 from core.models.enums import RecipeStatus
 from core.repositories import menus as menus_repo
 from core.repositories.menus import MenuItemSpec
@@ -66,7 +66,7 @@ async def compute_totals(
     данным — а по этому меню кормят ребёнка.
     """
 
-    compositions = await _compositions(session, patient_id=patient_id, items=items)
+    compositions, recipes = await _compositions(session, patient_id=patient_id, items=items)
     products = await _products(session, compositions=compositions)
 
     scaled: list[tuple[Ingredient, float]] = []
@@ -77,7 +77,15 @@ async def compute_totals(
                 for pid, grams in composition
             ]
         )
-        portion = scale(dish, item.portion_factor)
+        # `portion_factor` — это ЧИСЛО ПОРЦИЙ, а состав рецепта записан на весь
+        # выход. Без деления на `servings` множитель 1 означал бы противень:
+        # блюдо на четверых уходило в день ребёнка целиком, день сходился как
+        # «переедание», и ошибка выглядела бы поведением семьи, а не подстановкой.
+        #
+        # У своего блюда порция одна по определению: родитель приготовил именно
+        # это и именно сейчас. Поэтому знаменатель общий, и поле означает одно и
+        # то же в обеих ветках.
+        portion = scale(dish, item.portion_factor / _servings(item, recipes))
         scaled.extend((amount.ingredient, amount.grams) for amount in portion.items)
 
     # Итоги дня считает ядро по всем позициям сразу — складывать показатели
@@ -86,12 +94,28 @@ async def compute_totals(
     return composition_service.totals_of(day), ENGINE_VERSION
 
 
+def _servings(item: MenuItemWrite, recipes: dict[uuid.UUID, Recipe]) -> int:
+    """На сколько порций рассчитан состав позиции.
+
+    У рецепта это его `servings`; у своего блюда — единица: оно приготовлено под
+    конкретный приём пищи, а не как раскладка на семью.
+    """
+
+    if item.recipe_id is None:
+        return 1
+    return recipes[item.recipe_id].servings
+
+
 async def _compositions(
     session: AsyncSession, *, patient_id: uuid.UUID, items: Sequence[MenuItemWrite]
-) -> list[Composition]:
-    """Состав каждой позиции в порядке присланного плана."""
+) -> tuple[list[Composition], dict[uuid.UUID, Recipe]]:
+    """Состав каждой позиции в порядке присланного плана и рецепты этих позиций.
 
-    await _check_recipes(session, items=items)
+    Рецепты возвращаются наружу, а не выбрасываются: по ним считается порция, и
+    второй запрос к базе за тем же самым был бы лишним.
+    """
+
+    recipes = await _check_recipes(session, items=items)
     ingredients = await menus_repo.get_recipe_ingredients(
         session, recipe_ids=list({item.recipe_id for item in items if item.recipe_id is not None})
     )
@@ -112,10 +136,12 @@ async def _compositions(
                 ErrorCode.VALIDATION_ERROR,
                 "Укажите ровно одно: рецепт или своё блюдо.",
             )
-    return compositions
+    return compositions, recipes
 
 
-async def _check_recipes(session: AsyncSession, *, items: Sequence[MenuItemWrite]) -> None:
+async def _check_recipes(
+    session: AsyncSession, *, items: Sequence[MenuItemWrite]
+) -> dict[uuid.UUID, Recipe]:
     """Рецепты позиций. В меню попадают только опубликованные (раздел 5.3 ТЗ):
     черновик — незавершённая работа диетолога, его состав и показатели ещё не
     проверены, а по меню кормят ребёнка.
@@ -141,6 +167,8 @@ async def _check_recipes(session: AsyncSession, *, items: Sequence[MenuItemWrite
             "В меню можно добавлять только опубликованные рецепты.",
             details={"recipe_ids": unusable},
         )
+
+    return recipes
 
 
 async def _custom_dishes(

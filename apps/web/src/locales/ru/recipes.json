@@ -64,7 +64,9 @@
     "photoUpload": "Загрузить фото",
     "photoHint": "JPEG, PNG или WebP, не больше 10 МБ. Новое фото заменит прежнее.",
     "photoUploading": "Загружаем фото…",
-    "photoSaved": "Фото загружено"
+    "photoSaved": "Фото загружено",
+    "perPortion": "На порцию:",
+    "macros": "жиры {{fat}} г · белки {{protein}} г · углеводы {{carbs}} г"
   },
   "actions": {
     "create": "Добавить рецепт",

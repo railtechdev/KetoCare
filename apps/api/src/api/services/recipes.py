@@ -56,6 +56,10 @@ def to_read(recipe: Recipe, ingredients: Sequence[RecipeIngredient]) -> RecipeRe
     """Состав хранится отдельной таблицей, поэтому ответ собирается явно, а не
     `model_validate(recipe)`."""
 
+    computed = (
+        RecipeComputed.model_validate(recipe.computed) if recipe.computed is not None else None
+    )
+
     return RecipeRead(
         id=recipe.id,
         title=recipe.title,
@@ -65,9 +69,10 @@ def to_read(recipe: Recipe, ingredients: Sequence[RecipeIngredient]) -> RecipeRe
         servings=recipe.servings,
         instructions=recipe.instructions,
         status=recipe.status,
-        computed=(
-            RecipeComputed.model_validate(recipe.computed) if recipe.computed is not None else None
-        ),
+        computed=computed,
+        # Считается здесь, а не хранится: `servings` правится вместе с составом,
+        # и сохранённая доля порции однажды разошлась бы с ним молча.
+        per_portion=computed.per_serving(recipe.servings) if computed is not None else None,
         engine_version=recipe.engine_version,
         author_id=recipe.author_id,
         ingredients=[RecipeIngredientRead.model_validate(row) for row in ingredients],

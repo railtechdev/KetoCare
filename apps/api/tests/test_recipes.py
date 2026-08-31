@@ -144,6 +144,65 @@ class TestWriteAccess:
         assert response.status_code == 201, response.text
 
 
+class TestPerPortion:
+    """Показатели одной порции — то, что нужно человеку у плиты.
+
+    `computed` — это суммы по ВСЕМУ выходу рецепта. Пока рядом не было доли
+    порции, семья делила в уме, а поле «порций» выглядело справочным.
+    """
+
+    async def test_per_portion_divides_amounts_but_not_ratio(
+        self, client, session, make_user, auth_headers
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+
+        response = await client.post(
+            "/api/v1/recipes",
+            json={
+                "title": f"Рецепт на четверых {uuid.uuid4().hex[:6]}",
+                "category": "breakfast",
+                "yield_g": 200,
+                "servings": 4,
+                "instructions": "Растопить",
+                "ingredients": [{"product_id": str(butter.id), "grams": 200}],
+            },
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        whole, portion = body["computed"], body["per_portion"]
+
+        assert portion["fat"] == pytest.approx(whole["fat"] / 4, abs=0.01)
+        assert portion["kcal"] == pytest.approx(whole["kcal"] / 4, abs=0.01)
+        # Соотношение — отношение, от размера порции не зависит.
+        assert portion["ratio"] == whole["ratio"]
+
+    async def test_single_serving_recipe_reports_the_same_numbers(
+        self, client, session, make_user, auth_headers
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+
+        response = await client.post(
+            "/api/v1/recipes",
+            json={
+                "title": f"Рецепт на одного {uuid.uuid4().hex[:6]}",
+                "category": "breakfast",
+                "yield_g": 50,
+                "servings": 1,
+                "instructions": "Растопить",
+                "ingredients": [{"product_id": str(butter.id), "grams": 50}],
+            },
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["per_portion"] == body["computed"]
+
+
 class TestCreate:
     async def test_creates_draft_with_computed_from_database(
         self, client, session, make_user, auth_headers
