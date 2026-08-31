@@ -69,21 +69,30 @@ jobs:
             REF='${{ github.event.workflow_run.head_sha }}'
           fi
 
-          # Повторный запуск СТАРОГО зелёного прогона (обычное дело при флаки-
-          # тесте) присылает устаревший head_sha — без этой сверки стенд молча
-          # откатился бы на предыдущую версию, и при аддитивных миграциях этого
-          # какое-то время никто бы не заметил.
+          # Прогон относится не к вершине main — выкатывать его нельзя: стенд
+          # молча откатился бы на предыдущую версию, и при аддитивных миграциях
+          # этого какое-то время никто бы не заметил. Так бывает в двух
+          # случаях, и оба нормальны: повторный запуск старого зелёного прогона
+          # (обычное дело при флаки-тесте) и два слияния подряд, когда CI
+          # первого финиширует уже после второго.
+          #
+          # Это ОТКАЗ ОТ ДЕЙСТВИЯ, а не сбой: выкатится следующий прогон, тот
+          # самый, что относится к вершине. Красный крест здесь означал бы
+          # поломку там, где всё сработало правильно, — а на серии слияний он
+          # загорался бы каждый раз, и настоящий сбой деплоя перестал бы
+          # отличаться от штатной работы.
           TIP=$(gh api repos/${{ github.repository }}/commits/main --jq .sha)
           if [ "${{ github.event_name }}" = "workflow_run" ] && [ "$REF" != "$TIP" ]; then
-            echo "::notice::Прогон относится к $REF, а вершина main — $TIP."
-            echo "::error::Деплой отменён: это повторный запуск устаревшего прогона, он откатил бы стенд."
-            exit 1
+            echo "::notice::Прогон относится к $REF, а вершина main — $TIP. Выкатку делает прогон вершины."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "Выкатывается: $REF"
 
       - name: Собрать окружение из секретов
+        if: steps.target.outputs.stale != 'true'
         env:
           # Секреты
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -161,6 +170,7 @@ jobs:
           echo "переменных в окружении: $(grep -c '^[A-Z]' env.rendered)"
 
       - name: Выкатить
+        if: steps.target.outputs.stale != 'true'
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -192,6 +202,7 @@ jobs:
           rm -f env.rendered ~/.ssh/deploy_key
 
       - name: Стенд отвечает снаружи
+        if: steps.target.outputs.stale != 'true'
         run: |
           for url in https://ketocare.railtech.uz/ https://app.ketocare.railtech.uz/; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$url")
@@ -200,7 +211,7 @@ jobs:
           done
 
       - name: Что делать при провале
-        if: failure()
+        if: failure() && steps.target.outputs.stale != 'true'
         run: |
           echo "::notice::Если упал шаг сборки фронта — на сервере продолжает работать предыдущая версия."
           echo "::notice::Если упала проверка живости — состояние сервисов напечатано выше, логи смотреть на сервере:"
