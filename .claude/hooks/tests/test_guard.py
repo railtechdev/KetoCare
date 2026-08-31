@@ -464,8 +464,6 @@ class TestHeredocBodyIsData:
     @pytest.mark.parametrize(
         "command",
         [
-            # Текст сообщения коммита: там встречаются и пути, и команды.
-            "git commit -F - <<'EOF'\nправка docs/medical/OPEN_QUESTIONS.md\nEOF",
             # Содержимое файла, а не команда над защищённым путём.
             "cat > /tmp/note.md <<'EOF'\nсм. docs/medical/calculation-engine-spec.md\nEOF",
             # Скрипт для удалённой машины целиком.
@@ -474,6 +472,23 @@ class TestHeredocBodyIsData:
     )
     def test_data_in_body_allowed(self, command: str) -> None:
         assert check_command(command) == ALLOW, f"тело heredoc принято за команды: {command}"
+
+    def test_commit_message_mentioning_a_protected_path_allowed(
+        self, repo_on_main: Path
+    ) -> None:
+        """Текст сообщения коммита — данные: в нём встречаются и пути, и команды.
+
+        Проверяется в СВОЁМ репозитории на своей ветке. В настоящем проекте
+        результат зависел бы от того, какая ветка выбрана сейчас: на main
+        `git commit` блокируется по другому правилу, и тест то проходил бы, то
+        падал. На CI он и упал, хотя локально был зелёным.
+        """
+
+        subprocess.run(
+            ["git", "switch", "-c", "feat/x"], cwd=repo_on_main, check=True, capture_output=True
+        )
+        command = "git commit -F - <<'EOF'\nправка docs/medical/OPEN_QUESTIONS.md\nEOF"
+        assert check_command(command, cwd=repo_on_main) == ALLOW
 
     @pytest.mark.parametrize(
         "command",
