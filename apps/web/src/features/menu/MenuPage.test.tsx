@@ -71,7 +71,13 @@ function respond(path: string) {
         patient_id: "p1",
         date: todayIso(),
         // Нормы назначения — источник строки «осталось до цели» (правило П18).
-        prescription: { kcal_per_day: 1600, carbs_limit_g: 15 },
+        prescription: {
+          kcal_per_day: 1600,
+          carbs_limit_g: 15,
+          // Число приёмов врач задаёт с первого назначения; до сих пор оно не
+          // доходило ни до одного экрана семьи.
+          meals_per_day: 5,
+        },
         day: {
           totals: TOTALS,
           // Вердикт приходит от сервера — экран его только показывает.
@@ -244,6 +250,40 @@ describe("MenuPage", () => {
       await screen.findByText(menuRu.day.empty as string),
     ).toBeInTheDocument();
     expect(screen.queryByText(menuRu.totals.none as string)).toBeNull();
+  });
+
+  it("называет назначенное число приёмов и сколько их в плане", async () => {
+    // Семья планировала день по четырём слотам, не зная, что назначено пять
+    // приёмов: `meals_per_day` не доходил ни до одного её экрана.
+    //
+    // В дне три блюда, но приёма два: второе блюдо стоит в том же завтраке.
+    // Врач назначает именно приёмы, поэтому считаются они, а не позиции.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? {
+              data: {
+                ...MENU,
+                items: [
+                  ...MENU.items,
+                  {
+                    ...MENU.items[1],
+                    id: "item-3",
+                    meal_slot: "breakfast",
+                  },
+                ],
+              },
+            }
+          : respond(path),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText(/Назначено приёмов в день: 5/),
+    ).toBeInTheDocument();
+    // Приёмы, а не блюда: в завтраке две позиции, и это один приём.
+    expect(screen.getByText(/В плане на этот день: 2/)).toBeInTheDocument();
   });
 
   it("называет выведенный продукт и блюдо, в котором он остался", async () => {

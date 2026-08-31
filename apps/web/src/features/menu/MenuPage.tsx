@@ -57,6 +57,9 @@ export function MenuPage({ patientId }: { patientId: string }) {
   const items = useMemo(() => menu.data?.items ?? [], [menu.data]);
   const withdrawn = withdrawnByItem(menu.data?.withdrawn_products);
   const titles = useMenuItemTitles(patientId, items);
+  // Приёмы, а не блюда: в один приём их может быть несколько, а врач назначает
+  // именно число приёмов.
+  const plannedSlots = new Set(items.map((item) => item.meal_slot)).size;
 
   function addItem(input: {
     slot: MealSlot;
@@ -153,9 +156,22 @@ export function MenuPage({ patientId }: { patientId: string }) {
           </FormError>
         )}
 
+        {/* Сколько приёмов назначил врач — и сколько в плане на этот день.
+            Поле `meals_per_day` заполняется с первого назначения и до сих пор
+            не доходило ни до одного экрана семьи: она планировала день, не
+            зная, о скольких приёмах договорились. */}
         <Section
           title={t("meals.title")}
-          description={items.length === 0 ? t("day.empty") : undefined}
+          description={
+            items.length === 0
+              ? t("day.empty")
+              : targets === null
+                ? undefined
+                : t("meals.planned", {
+                    prescribed: targets.mealsPerDay,
+                    planned: plannedSlots,
+                  })
+          }
           contentClassName="gap-0 divide-y divide-border"
         >
           {MEAL_SLOTS.map((slot) => (
