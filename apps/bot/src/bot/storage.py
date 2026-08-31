@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable
 from dataclasses import dataclass
+from typing import cast
 
 from redis.asyncio import Redis
 
@@ -39,7 +41,12 @@ class BindingStore:
         self._redis = redis
 
     async def get(self, chat_id: int) -> Binding | None:
-        raw = await self._redis.hgetall(_key(chat_id))
+        # `cast` из-за типов redis-py: методы объявлены общими для sync и async
+        # клиентов и возвращают `Awaitable[T] | T`. У асинхронного клиента это
+        # всегда первое, но статически это не выражено.
+        raw: dict[str, str] = await cast(
+            "Awaitable[dict[str, str]]", self._redis.hgetall(_key(chat_id))
+        )
         if not raw:
             return None
         try:
@@ -57,15 +64,20 @@ class BindingStore:
             return None
 
     async def put(self, chat_id: int, binding: Binding) -> None:
-        await self._redis.hset(
-            _key(chat_id),
-            mapping={
-                "link_id": str(binding.link_id),
-                "secret": binding.secret,
-                "patient_id": str(binding.patient_id),
-                "patient_name": binding.patient_name,
-            },
+        await cast(
+            "Awaitable[int]",
+            self._redis.hset(
+                _key(chat_id),
+                mapping={
+                    "link_id": str(binding.link_id),
+                    "secret": binding.secret,
+                    "patient_id": str(binding.patient_id),
+                    "patient_name": binding.patient_name,
+                },
+            ),
         )
 
     async def delete(self, chat_id: int) -> None:
-        await self._redis.delete(_key(chat_id))
+        # Тот же `cast`, что и в `get`: у redis-py методы объявлены общими для
+        # синхронного и асинхронного клиентов.
+        await cast("Awaitable[int]", self._redis.delete(_key(chat_id)))

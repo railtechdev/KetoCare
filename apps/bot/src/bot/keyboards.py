@@ -37,6 +37,28 @@ def cancel_only() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[_cancel_row()])
 
 
+WHEN_NOW_DATA = "when:now"
+WHEN_MANUAL_DATA = "when:manual"
+
+
+def when() -> InlineKeyboardMarkup:
+    """«Сейчас» или «Указать время».
+
+    «Сейчас» первым и одной кнопкой: в большинстве записей замер только что
+    сделали, и лишний шаг там, где ребёнок на руках, — это несделанная запись.
+    """
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=texts.BTN_WHEN_NOW, callback_data=WHEN_NOW_DATA),
+                InlineKeyboardButton(text=texts.BTN_WHEN_MANUAL, callback_data=WHEN_MANUAL_DATA),
+            ],
+            _cancel_row(),
+        ]
+    )
+
+
 KETONE_METHOD_PREFIX = "ketone_method:"
 
 

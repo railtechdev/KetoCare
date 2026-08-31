@@ -98,7 +98,7 @@ class BotApi:
                 raise LinkRevokedError(exc.code, exc.message, exc.status) from exc
             raise
 
-        token = payload["access_token"]
+        token: str = payload["access_token"]
         self._sessions[link_id] = _Session(
             token=token,
             expires_at=datetime.now(UTC)

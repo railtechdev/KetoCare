@@ -44,6 +44,7 @@ async def submit_log(
     binding: Binding,
     kind: str,
     payload: dict[str, Any],
+    occurred_at: datetime | None = None,
 ) -> None:
     """Отправляет запись и закрывает сценарий.
 
@@ -52,7 +53,10 @@ async def submit_log(
     привязка удаляется — иначе бот бесконечно предъявлял бы мёртвый секрет.
     """
 
-    body = {"occurred_at": datetime.now(UTC).isoformat(), **payload}
+    # Момент события задаёт семья: бот ставит «сейчас» только тогда, когда она
+    # сама так ответила.
+    moment = occurred_at or datetime.now(UTC)
+    body = {"occurred_at": moment.isoformat(), **payload}
     try:
         await api.create_log(
             link_id=binding.link_id,
