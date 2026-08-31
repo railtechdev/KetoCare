@@ -37,6 +37,25 @@ def cancel_only() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[_cancel_row()])
 
 
+MEAL_ITEM_PREFIX = "meal:"
+
+
+def meal_items(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Кнопка на каждую несъеденную позицию плюс «Отмена».
+
+    По кнопке на позицию, а не ввод номера: у родителя ребёнок на руках, и
+    «напишите цифру» — это лишний шаг там, где хватает одного нажатия.
+    """
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=title, callback_data=f"{MEAL_ITEM_PREFIX}{item_id}")]
+            for item_id, title in items
+        ]
+        + [_cancel_row()]
+    )
+
+
 WHEN_NOW_DATA = "when:now"
 WHEN_MANUAL_DATA = "when:manual"
 

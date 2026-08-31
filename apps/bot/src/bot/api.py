@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -133,6 +133,51 @@ class BotApi:
             f"/api/v1/patients/{patient_id}/logs/{kind}",
             headers={"Authorization": f"Bearer {token}"},
             json=payload,
+        )
+
+    async def get_menu(
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        day: date,
+    ) -> dict[str, Any] | None:
+        """План дня. `None` — меню на эту дату не составлено.
+
+        Отсутствие меню — обычное состояние, а не сбой: семья могла не
+        планировать день. Поэтому 404 разбирается здесь, а не поднимается
+        наверх ошибкой.
+        """
+
+        token = await self._token(link_id=link_id, secret=secret)
+        try:
+            return await self._request(
+                "GET",
+                f"/api/v1/patients/{patient_id}/menus?date={day.isoformat()}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except BotApiError as exc:
+            if exc.status == 404:
+                return None
+            raise
+
+    async def mark_eaten(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
+    ) -> dict[str, Any]:
+        """Отметка «съедено» по позиции плана.
+
+        Свободного текста здесь нет и не будет до этапа 4: разбор «съел кашу с
+        маслом» — это `POST /ai/parse`, а придуманная ботом еда попадёт в итоги
+        дня наравне с настоящей.
+        """
+
+        token = await self._token(link_id=link_id, secret=secret)
+        return await self._request(
+            "POST",
+            f"/api/v1/patients/{patient_id}/menus/items/{item_id}/eaten",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"eaten": True},
         )
 
     # --- низкий уровень ---

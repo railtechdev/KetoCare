@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 import pytest
@@ -38,6 +39,11 @@ class FakeApi:
     verified: LinkVerified | None = None
     verify_error: BotApiError | None = None
     log_error: Exception | None = None
+    #: План дня для сценария «Еда»; None — меню не составлено.
+    menu: dict[str, Any] | None = None
+    menu_error: Exception | None = None
+    eaten: list[str] = field(default_factory=list)
+    eaten_error: Exception | None = None
 
     async def verify_link_code(self, *, code: str, chat_id: int) -> LinkVerified:
         if self.verify_error is not None:
@@ -66,6 +72,26 @@ class FakeApi:
             }
         )
         return {"id": str(uuid.uuid4())}
+
+    async def get_menu(
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        day: date,
+    ) -> dict[str, Any] | None:
+        if self.menu_error is not None:
+            raise self.menu_error
+        return self.menu
+
+    async def mark_eaten(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
+    ) -> dict[str, Any]:
+        if self.eaten_error is not None:
+            raise self.eaten_error
+        self.eaten.append(item_id)
+        return {"id": item_id, "eaten": True}
 
     def forget_session(self, link_id: uuid.UUID) -> None:  # pragma: no cover - не нужен тестам
         pass

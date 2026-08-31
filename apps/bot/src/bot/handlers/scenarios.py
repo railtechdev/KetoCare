@@ -18,18 +18,23 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
+from zoneinfo import ZoneInfo
 
+import structlog
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 
 from .. import keyboards, texts
-from ..api import BotApi
+from ..api import BotApi, BotApiError, LinkRevokedError
 from ..config import BotSettings
 from ..deps import require_binding, submit_log
 from ..event_time import TimeError, parse_moment
 from ..storage import BindingStore
+
+logger = structlog.get_logger(__name__)
 
 router = Router(name="scenarios")
 
@@ -60,6 +65,10 @@ class Ketones(StatesGroup):
 
 class Weight(StatesGroup):
     value = State()
+
+
+class Meal(StatesGroup):
+    choice = State()
 
 
 class Wellbeing(StatesGroup):
@@ -274,6 +283,110 @@ async def weight_value(
         return
 
     await ask_when(message, state, kind="weight", payload={"weight_kg": str(value)})
+
+
+# --- Еда ---
+#
+# Отметка «съедено» по позициям плана дня. Свободного текста нет до этапа 4:
+# разбор «съел кашу с маслом» — это `POST /ai/parse`, а придуманная ботом еда
+# попадёт в итоги дня наравне с настоящей.
+
+
+@router.message(F.text == texts.BTN_MEAL)
+async def meal_start(
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    binding = await require_binding(message, store)
+    if binding is None:
+        return
+
+    today = datetime.now(ZoneInfo(settings.tz)).date()
+    try:
+        menu = await api.get_menu(
+            link_id=binding.link_id,
+            secret=binding.secret,
+            patient_id=binding.patient_id,
+            day=today,
+        )
+    except LinkRevokedError:
+        await store.delete(message.chat.id)
+        await state.clear()
+        await message.answer(texts.LINK_REVOKED)
+        return
+    except BotApiError as exc:
+        logger.warning("menu_fetch_failed", status=exc.status, code=exc.code)
+        await message.answer(texts.API_UNAVAILABLE)
+        return
+
+    if menu is None:
+        await message.answer(texts.MEAL_NO_MENU, reply_markup=keyboards.MAIN_MENU)
+        return
+
+    pending = [item for item in menu.get("items", []) if not item.get("eaten")]
+    if not pending:
+        await message.answer(texts.MEAL_ALL_EATEN, reply_markup=keyboards.MAIN_MENU)
+        return
+
+    await state.set_state(Meal.choice)
+    await message.answer(texts.MEAL_ASK, reply_markup=keyboards.meal_items(_meal_buttons(pending)))
+
+
+def _meal_buttons(items: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """Подпись кнопки: приём пищи и блюдо.
+
+    Название берётся из снимка позиции: рецепт могли переименовать или снять с
+    публикации, а показать надо то, что стоит в плане на сегодня. Снимка нет
+    только у позиций, сохранённых до его появления, — там остаётся приём пищи.
+    """
+
+    return [
+        (
+            str(item["id"]),
+            f"{texts.MEAL_SLOTS.get(item['meal_slot'], item['meal_slot'])}: "
+            f"{item.get('title') or texts.MEAL_UNKNOWN_DISH}",
+        )
+        for item in items
+    ]
+
+
+@router.callback_query(Meal.choice, F.data.startswith(keyboards.MEAL_ITEM_PREFIX))
+async def meal_mark(
+    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+) -> None:
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    binding = await require_binding(message, store)
+    if binding is None:
+        await state.clear()
+        return
+
+    item_id = (callback.data or "").removeprefix(keyboards.MEAL_ITEM_PREFIX)
+    try:
+        await api.mark_eaten(
+            link_id=binding.link_id,
+            secret=binding.secret,
+            patient_id=binding.patient_id,
+            item_id=item_id,
+        )
+    except LinkRevokedError:
+        await store.delete(message.chat.id)
+        await state.clear()
+        await message.answer(texts.LINK_REVOKED)
+        return
+    except BotApiError as exc:
+        logger.warning("meal_mark_failed", status=exc.status, code=exc.code)
+        await message.answer(texts.API_UNAVAILABLE)
+        return
+
+    await state.clear()
+    await message.answer(texts.MEAL_MARKED, reply_markup=keyboards.MAIN_MENU)
 
 
 # --- Самочувствие ---
