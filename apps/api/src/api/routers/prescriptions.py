@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, Path
 
 from core.models.enums import UserRole
@@ -20,6 +21,9 @@ from ..deps.auth import PatientAccessDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page, PrescriptionCreate, PrescriptionRead
+from ..services import queue as queue_service
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/patients/{patient_id}/prescriptions", tags=["prescriptions"])
 
@@ -114,7 +118,23 @@ async def create_prescription(
         },
     )
 
-    # TODO(этап 3): поставить задачу воркеру notify_family (раздел 5.4 ТЗ) —
-    # ARQ и бот появляются на этапе 3, здесь пока только запись назначения.
+    # Семья узнаёт о новом назначении в тот же день (раздел 5.4 ТЗ): сутки
+    # готовки по старому кетосоотношению — это сутки не той терапии.
+    #
+    # Отказ очереди не отменяет назначение: оно уже записано и уже действует.
+    # Уронить ручку значит потерять запись врача из-за недоступного Redis.
+    try:
+        await queue_service.enqueue(
+            "notify_family",
+            str(patient_id),
+            {
+                "ratio": float(prescription.ratio),
+                "kcal_per_day": prescription.kcal_per_day,
+                "protein_g": float(prescription.protein_g),
+                "carbs_limit_g": float(prescription.carbs_limit_g),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 — причина не важна, важно не потерять назначение
+        logger.warning("notify_family_not_queued", patient_id=str(patient_id), reason=str(exc))
 
     return PrescriptionRead.model_validate(prescription)

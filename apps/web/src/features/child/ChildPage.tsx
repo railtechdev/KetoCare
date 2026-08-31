@@ -23,6 +23,7 @@ import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
 import { CareTeamPanel } from "../doctor/CareTeamPanel";
 import { errorMessageOf } from "../../lib/api";
 import { IntakeForm } from "../intake/IntakeForm";
+import { RemindersPanel } from "../telegram/RemindersPanel";
 import { TelegramPanel } from "../telegram/TelegramPanel";
 import { ChildForm } from "./ChildForm";
 import { toChildBody, toChildUpdateBody } from "./childSchemas";
@@ -373,6 +374,10 @@ function ChildTelegram({
   return (
     <PageLayout title={t("title")} intro={t("intro")} onBack={onDone}>
       <TelegramPanel patientId={child.id} childName={child.full_name} />
+
+      {/* Напоминания — там же, где привязка: без чата им некуда приходить,
+          и настраивать их до привязки значит обещать несуществующее. */}
+      <RemindersPanel patientId={child.id} />
     </PageLayout>
   );
 }

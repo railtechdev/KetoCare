@@ -671,3 +671,80 @@ class TestCodeInput:
             json={"code": code, "chat_id": CHAT_ID},
         )
         assert retry.status_code == 200, "код не должен был сгореть из-за чужой привязки"
+
+
+class TestReminderSettings:
+    """Раздел 7.4 ТЗ: напоминания настраиваются в кабинете.
+
+    Настроек не было нигде, а задача воркера, которая по ним работает, не
+    существовала: обещание «бот напомнит» держалось ни на чём.
+    """
+
+    async def test_defaults_before_first_edit(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Строка заводится при первой правке, а не при заведении ребёнка."""
+
+        parent, patient = await _family(session, make_user, make_patient)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/reminders", headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["enabled"] is True
+        # Единственное включённое из коробки — мягкое «за сегодня нет записей».
+        assert body["no_records_at"] == "20:00:00"
+        assert body["ketones_at"] is None
+
+    async def test_saved_settings_are_returned(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _family(session, make_user, make_patient)
+
+        saved = await client.put(
+            f"/api/v1/patients/{patient.id}/reminders",
+            json={
+                "enabled": True,
+                "ketones_at": "07:30:00",
+                "weight_at": None,
+                "medications_at": "21:00:00",
+                "no_records_at": "20:00:00",
+            },
+            headers=auth_headers(parent),
+        )
+        assert saved.status_code == 200, saved.text
+
+        again = await client.get(
+            f"/api/v1/patients/{patient.id}/reminders", headers=auth_headers(parent)
+        )
+        assert again.json()["ketones_at"] == "07:30:00"
+        assert again.json()["weight_at"] is None
+
+    async def test_disabled_is_stored(self, client, session, make_user, make_patient, auth_headers):
+        """Выключатель на все разом: семье в больнице не до напоминаний."""
+
+        parent, patient = await _family(session, make_user, make_patient)
+
+        await client.put(
+            f"/api/v1/patients/{patient.id}/reminders",
+            json={"enabled": False},
+            headers=auth_headers(parent),
+        )
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/reminders", headers=auth_headers(parent)
+        )
+        assert response.json()["enabled"] is False
+
+    async def test_someone_elses_child_is_forbidden(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, patient = await _family(session, make_user, make_patient)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/reminders", headers=auth_headers(stranger)
+        )
+        assert response.status_code == 403

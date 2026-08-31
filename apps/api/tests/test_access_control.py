@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from unittest.mock import ANY
 
 import pytest
 
+from api.services import queue as queue_service
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
 
@@ -300,3 +302,54 @@ class TestPrescriptionArithmeticFeasibility:
             headers=auth_headers(doctor),
         )
         assert response.status_code == 201, response.text
+
+
+class TestPrescriptionNotice:
+    """Семья узнаёт о новом назначении (раздел 5.4 ТЗ).
+
+    Сутки готовки по старому кетосоотношению — это сутки не той терапии,
+    поэтому уведомление ставится в очередь тут же, при записи назначения.
+    """
+
+    async def test_creation_queues_family_notice(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json=VALID_PRESCRIPTION,
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 201
+        assert ("notify_family", (str(patient.id), ANY)) in [
+            (task, args) for task, args in enqueued
+        ]
+        payload = next(args[1] for task, args in enqueued if task == "notify_family")
+        assert payload["ratio"] == VALID_PRESCRIPTION["ratio"]
+        assert payload["kcal_per_day"] == VALID_PRESCRIPTION["kcal_per_day"]
+
+    async def test_queue_failure_does_not_lose_the_prescription(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """Назначение уже действует; недоступный Redis не повод его потерять."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        async def boom(*args, **kwargs):
+            raise ConnectionError("redis недоступен")
+
+        monkeypatch.setattr(queue_service, "enqueue", boom)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json=VALID_PRESCRIPTION,
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 201
