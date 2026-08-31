@@ -124,16 +124,10 @@ async def create_prescription(
     # Отказ очереди не отменяет назначение: оно уже записано и уже действует.
     # Уронить ручку значит потерять запись врача из-за недоступного Redis.
     try:
-        await queue_service.enqueue(
-            "notify_family",
-            str(patient_id),
-            {
-                "ratio": float(prescription.ratio),
-                "kcal_per_day": prescription.kcal_per_day,
-                "protein_g": float(prescription.protein_g),
-                "carbs_limit_g": float(prescription.carbs_limit_g),
-            },
-        )
+        # В задачу уходит только ребёнок: сами цифры боту не нужны и по разделу
+        # 7.5 ТЗ ему запрещены — он зовёт открыть кабинет, а не пересказывает
+        # назначение.
+        await queue_service.enqueue("notify_family", str(patient_id))
     except Exception as exc:  # noqa: BLE001 — причина не важна, важно не потерять назначение
         logger.warning("notify_family_not_queued", patient_id=str(patient_id), reason=str(exc))
 

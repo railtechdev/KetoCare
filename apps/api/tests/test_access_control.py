@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from unittest.mock import ANY
 
 import pytest
 
@@ -325,12 +324,9 @@ class TestPrescriptionNotice:
         )
 
         assert response.status_code == 201
-        assert ("notify_family", (str(patient.id), ANY)) in [
-            (task, args) for task, args in enqueued
-        ]
-        payload = next(args[1] for task, args in enqueued if task == "notify_family")
-        assert payload["ratio"] == VALID_PRESCRIPTION["ratio"]
-        assert payload["kcal_per_day"] == VALID_PRESCRIPTION["kcal_per_day"]
+        # В задаче только ребёнок: параметры назначения боту запрещены
+        # (раздел 7.5 ТЗ), и передавать их туда незачем.
+        assert ("notify_family", (str(patient.id),)) in enqueued
 
     async def test_queue_failure_does_not_lose_the_prescription(
         self, client, session, make_user, make_patient, auth_headers, monkeypatch

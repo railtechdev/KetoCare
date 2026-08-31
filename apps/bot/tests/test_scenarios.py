@@ -31,6 +31,7 @@ SETTINGS = BotSettings(bot_token="t", bot_api_token="s")
 @dataclass
 class FakeChat:
     id: int = CHAT_ID
+    type: str = "private"
 
 
 @dataclass
@@ -91,6 +92,23 @@ class TestLinking:
         binding = await store.get(CHAT_ID)
         assert binding is not None
         assert binding.secret == SECRET, "секрет обязан сохраниться: восстановить его нельзя"
+
+    @pytest.mark.asyncio
+    async def test_group_chat_cannot_be_linked(self, api, store):
+        """Привязка — к семье, а не к комнате.
+
+        В группе `chat.id` принадлежит группе: дневник ребёнка вёлся бы от её
+        имени, уведомление о смене назначения приходило бы всем участникам, а
+        Mini App искал бы привязку по идентификатору человека и не находил её.
+        """
+
+        message = FakeMessage(chat=FakeChat(id=-1001234567890, type="supergroup"))
+
+        await start._link(message, api=api, store=store, code="ABCD2345")
+
+        assert message.last == texts.LINK_ONLY_PRIVATE
+        assert api.verified_code is None, "код не должен уходить в API вовсе"
+        assert await store.get(-1001234567890) is None
 
     @pytest.mark.asyncio
     async def test_invalid_code_explains_where_to_get_a_new_one(self, api, store):
