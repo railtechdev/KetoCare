@@ -22,6 +22,9 @@ const BUTTER = "22222222-2222-4222-8222-222222222222";
 
 const PRESCRIBED_RATIO = 3.5;
 
+/** Задержка автопересчёта (400 мс) плюс запас: findBy по умолчанию ждёт 1 с. */
+const AUTO_CALC_TIMEOUT_MS = 3000;
+
 const OVERVIEW = {
   patient_id: PATIENT_ID,
   date: new Date().toISOString().slice(0, 10),
@@ -138,28 +141,51 @@ describe("калькулятор", () => {
     ).toBeInTheDocument();
   });
 
-  it("гасит результат при смене цели", async () => {
+  it("считает сам, без нажатия кнопки", async () => {
     const user = userEvent.setup();
     renderCalculator();
     await addButter(user);
 
-    await user.click(screen.getByRole("button", { name: /^Рассчитать/ }));
+    // «Добавляю продукты — ничего не происходит»: расчёт запускала кнопка,
+    // которая на ноутбуке стояла ниже сгиба, а на телефоне — тем более.
     expect(
-      await screen.findByText("Сохранить как моё блюдо"),
+      await screen.findByText("Сохранить как моё блюдо", undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/calc/verify",
+      expect.anything(),
+    );
+
+    // И кнопки в этом режиме нет: она обещала бы действие, которое уже
+    // произошло.
+    expect(
+      screen.queryByRole("button", { name: /^Рассчитать/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("снимает вердикт, пока пересчёт не догнал новую цель", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+    await addButter(user);
+
+    expect(
+      await screen.findByText(/выходит за допуски/, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
     ).toBeInTheDocument();
 
-    // Зелёный вердикт от прежней цели рядом с новым числом в поле опаснее
-    // обычной устаревшей выдачи: по нему готовят еду ребёнку.
+    // Вердикт от прежней цели рядом с новым числом в поле опаснее обычной
+    // устаревшей выдачи: по нему готовят еду ребёнку. Само число остаётся —
+    // гасить его на каждое нажатие значит очищать экран, по которому сверяются.
     const ratio = screen.getByLabelText(/Кетосоотношение/);
     await user.clear(ratio);
-    await user.type(ratio, "3");
 
     await waitFor(() =>
-      expect(
-        screen.queryByText("Сохранить как моё блюдо"),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByText(/выходит за допуски/)).not.toBeInTheDocument(),
     );
-    expect(screen.getByText(/Изменено вами/)).toBeInTheDocument();
+    expect(screen.getByText(/374 ккал/)).toBeInTheDocument();
   });
 
   it("переносит подобранные массы в состав, оставляя их редактируемыми", async () => {
