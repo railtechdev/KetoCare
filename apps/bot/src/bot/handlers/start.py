@@ -61,6 +61,15 @@ async def handle_bare_code(message: Message, api: BotApi, store: BindingStore) -
 
 
 async def _link(message: Message, *, api: BotApi, store: BindingStore, code: str) -> None:
+    if message.chat.type != "private":
+        # Привязка — к семье, а не к комнате. В группе `chat.id` принадлежит
+        # группе: дневник ребёнка вёлся бы от её имени, уведомления о смене
+        # назначения приходили бы всем её участникам, а Mini App искал бы
+        # привязку по идентификатору человека и не находил её вовсе. Всё это
+        # обнаружилось бы уже на клинических данных.
+        await message.answer(texts.LINK_ONLY_PRIVATE)
+        return
+
     verified = None
     try:
         verified = await api.verify_link_code(code=code.strip(), chat_id=message.chat.id)

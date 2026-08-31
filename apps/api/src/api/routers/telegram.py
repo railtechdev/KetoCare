@@ -76,9 +76,11 @@ async def create_link_code(
         # имеет доступа.
         raise ApiError(ErrorCode.FORBIDDEN, "Код привязки выпускает родитель.")
     if user.channel != "web":
-        # Ботовому токену выпуск новых кодов закрыт: иначе временный доступ к
-        # одному чату размножался бы в новые привязки.
-        raise ApiError(ErrorCode.FORBIDDEN, "Это действие недоступно из Telegram-бота.")
+        # Сессиям, открытым самой привязкой (бот, Mini App), выпуск новых кодов
+        # закрыт: иначе временный доступ к одному чату размножался бы в новые
+        # привязки. Текст называет кабинет, а не бота: из Mini App это увидел бы
+        # человек, которому «недоступно из бота» ничего не объясняет.
+        raise ApiError(ErrorCode.FORBIDDEN, "Код привязки выпускается только в веб-кабинете.")
 
     code = await telegram_repo.create_code(session, parent_id=user.id, patient_id=patient_id)
 

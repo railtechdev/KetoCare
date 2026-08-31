@@ -748,3 +748,45 @@ class TestReminderSettings:
             f"/api/v1/patients/{patient.id}/reminders", headers=auth_headers(stranger)
         )
         assert response.status_code == 403
+
+    async def test_someone_elses_child_cannot_be_changed(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Запись проверяется отдельно от чтения: закрытый GET при открытом PUT
+        выглядит защищённым и не защищает."""
+
+        _, patient = await _family(session, make_user, make_patient)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/reminders",
+            json={"enabled": False},
+            headers=auth_headers(stranger),
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"enabled": True, "ketones_at": "четверть восьмого"},
+            {"enabled": True, "ketones_at": "25:00:00"},
+            {"enabled": "может быть"},
+            # `extra="forbid"`: лишнее поле означает клиента, который считает
+            # контракт другим, — принять его молча значит однажды не заметить,
+            # что он присылает настройку, которую никто не сохраняет.
+            {"enabled": True, "seizures_at": "07:30:00"},
+        ],
+    )
+    async def test_invalid_settings_are_rejected(
+        self, client, session, make_user, make_patient, auth_headers, payload
+    ):
+        parent, patient = await _family(session, make_user, make_patient)
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/reminders",
+            json=payload,
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"

@@ -102,6 +102,28 @@ class TestSignature:
         recent = datetime.now(UTC) - MAX_AGE + timedelta(minutes=1)
         assert parse_init_data(init_data(at=recent), bot_token=BOT_TOKEN).user_id == CHAT_ID
 
+    def test_rejects_a_repeated_key(self) -> None:
+        """Повторяющийся ключ отвергается, даже если подпись сходится.
+
+        Строка собрана так, что словарь «последнее значение побеждает» даёт
+        ровно те пары, для которых считалась подпись. Без явного отказа такая
+        строка прошла бы — а по документации Telegram в проверочную строку
+        входят ВСЕ пары, и значит подпись относится не к тем данным, которые мы
+        приняли бы.
+        """
+
+        moment = datetime.now(UTC)
+        fields = {
+            "user": json.dumps({"id": CHAT_ID}),
+            "auth_date": str(int(moment.timestamp())),
+            "query_id": "ПОСЛЕДНИЙ",
+        }
+        raw = urlencode({**fields, "hash": sign(fields)})
+        doubled = f"query_id=ПЕРВЫЙ&{raw}"
+
+        with pytest.raises(InitDataError):
+            parse_init_data(doubled, bot_token=BOT_TOKEN)
+
     def test_rejects_a_string_without_signature(self) -> None:
         with pytest.raises(InitDataError):
             parse_init_data("user=%7B%22id%22%3A1%7D&auth_date=1", bot_token=BOT_TOKEN)
@@ -272,3 +294,66 @@ class TestScopeSurvivesRefresh:
             headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
         )
         assert response.status_code in (403, 404)
+
+
+class TestRefreshDefends:
+    """Обновление токенов не должно быть слабее самой выдачи."""
+
+    pytestmark = pytest.mark.asyncio
+
+    async def test_revoked_binding_cannot_be_refreshed(
+        self, client, session, make_user, make_patient
+    ):
+        """Иначе отозванный чат тридцать дней менял бы refresh на новый refresh.
+
+        К данным его бы не пустили, но сессия не кончалась бы никогда.
+        """
+
+        _, _, link = await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+        await telegram_repo.revoke(session, link.id)
+
+        response = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": opened.json()["refresh_token"]}
+        )
+
+        assert response.status_code == 401
+
+    async def test_role_change_ends_the_session(self, client, session, make_user, make_patient):
+        """Смена роли родителя на сотрудника не должна превращать сессию Mini App
+        в токен врача — с правом писать назначения."""
+
+        parent, _, _ = await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        parent.role = UserRole.DOCTOR
+        await session.flush()
+
+        response = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": opened.json()["refresh_token"]}
+        )
+
+        assert response.status_code == 401
+
+
+class TestRequestValidation:
+    """Валидация тела: раздел 5.1 ТЗ — 422 и `validation_error`."""
+
+    pytestmark = pytest.mark.asyncio
+
+    async def test_empty_init_data_is_rejected(self, client):
+        response = await client.post("/api/v1/auth/telegram-init", json={"init_data": ""})
+
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+
+    async def test_unknown_field_is_rejected(self, client):
+        # `extra="forbid"`: лишнее поле означает клиента, который считает
+        # контракт другим, — и молча принять его значит однажды не заметить,
+        # что он передаёт patient_id и ждёт, что его учтут.
+        response = await client.post(
+            "/api/v1/auth/telegram-init",
+            json={"init_data": init_data(), "patient_id": "любой"},
+        )
+
+        assert response.status_code == 422

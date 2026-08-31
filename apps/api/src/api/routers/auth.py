@@ -10,12 +10,14 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Path, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import Invitation, User
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import invitations as invitations_repo
+from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
@@ -229,16 +231,32 @@ async def refresh(
         # полноценную веб-сессию родителя — то есть сужение не значило бы
         # ничего. Привязка проверяется на живость при каждом запросе
         # (`get_current_user`), поэтому отзыв гасит и обновлённую пару.
-        tokens = _reissue_scoped(user, claims, channel)
-        return tokens
+        return await _reissue_scoped(session, user, claims, channel)
 
     tokens = _issue_tokens(user)
     set_auth_cookies(response, tokens)
     return tokens
 
 
-def _reissue_scoped(user: User, claims: dict[str, Any], channel: Channel) -> TokenPair:
-    """Пара токенов того же канала, с тем же сужением и той же привязкой."""
+async def _reissue_scoped(
+    session: AsyncSession, user: User, claims: dict[str, Any], channel: Channel
+) -> TokenPair:
+    """Пара токенов того же канала, с тем же сужением и той же привязкой.
+
+    Здесь повторяются обе проверки точки выдачи, а не только сужение.
+
+    Роль: сессия этих каналов открыта привязкой чата, и она означает родителя.
+    Если родителю однажды сменят роль на врача, открытая сессия Mini App без
+    этой проверки пережила бы смену и стала бы токеном сотрудника — с правом
+    писать назначения.
+
+    Привязка: без неё отозванный чат ещё тридцать дней обменивал бы refresh на
+    новый refresh. Доступ к данным отказывался бы (`get_current_user` смотрит
+    привязку на каждом запросе), но сама сессия не кончалась бы никогда.
+    """
+
+    if user.role is not UserRole.PARENT:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Права учётной записи изменились, войдите заново.")
 
     scope_raw = claims.get("patient_scope")
     binding_raw = claims.get("tg")
@@ -247,6 +265,13 @@ def _reissue_scoped(user: User, claims: dict[str, Any], channel: Channel) -> Tok
         binding_id = uuid.UUID(binding_raw) if binding_raw else None
     except (TypeError, ValueError) as exc:
         raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.") from exc
+
+    if binding_id is None:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Недействительный токен.")
+
+    link = await telegram_repo.get_active_link(session, binding_id)
+    if link is None or link.parent_id != user.id or link.patient_id != patient_scope:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Привязка отозвана, войдите заново.")
 
     def token(token_type: Literal["access", "refresh"]) -> str:
         return create_token(

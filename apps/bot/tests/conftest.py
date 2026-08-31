@@ -38,6 +38,8 @@ class FakeApi:
     logs: list[dict[str, Any]] = field(default_factory=list)
     verified: LinkVerified | None = None
     verify_error: BotApiError | None = None
+    #: Код, дошедший до API. None — обмена не было вовсе.
+    verified_code: str | None = None
     log_error: Exception | None = None
     #: План дня для сценария «Еда»; None — меню не составлено.
     menu: dict[str, Any] | None = None
@@ -49,6 +51,7 @@ class FakeApi:
     medications_error: Exception | None = None
 
     async def verify_link_code(self, *, code: str, chat_id: int) -> LinkVerified:
+        self.verified_code = code
         if self.verify_error is not None:
             raise self.verify_error
         assert self.verified is not None, "тест обязан задать ответ verify_link_code"

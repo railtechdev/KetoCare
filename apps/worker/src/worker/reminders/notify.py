@@ -5,8 +5,11 @@
 каждый приём пищи: сутки готовки по старому назначению — это сутки не той
 терапии.
 
-Текст называет числа, а не «назначение изменилось»: последнее заставляет
-открыть кабинет, чтобы понять, изменилось ли то, что важно прямо сейчас.
+Текст не называет чисел. Соблазн назвать их был — «назначение изменилось»
+заставляет открыть кабинет, чтобы понять, изменилось ли важное, — но раздел 7.5
+ТЗ запрещает боту показывать параметры назначения, а раздел 5.4 задаёт саму
+формулировку. Причина не в формальности: чат мог быть привязан к групповому, и
+кетосоотношение с калорийностью ушли бы всем его участникам.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from .telegram import TelegramSendError, send_message
 logger = structlog.get_logger(__name__)
 
 
-async def notify_family(ctx: dict[str, Any], patient_id: str, prescription: dict[str, Any]) -> int:
+async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
     """Сообщить семье о новом назначении. Возвращает число доставленных чатов."""
 
     settings = Settings()  # type: ignore[call-arg]
@@ -35,7 +38,6 @@ async def notify_family(ctx: dict[str, Any], patient_id: str, prescription: dict
         # доставки просто нет.
         return 0
 
-    text = _text(prescription)
     sessionmaker = get_sessionmaker()
     delivered = 0
 
@@ -46,7 +48,7 @@ async def notify_family(ctx: dict[str, Any], patient_id: str, prescription: dict
                 continue
             try:
                 await send_message(
-                    client, token=settings.bot_token, chat_id=link.chat_id, text=text
+                    client, token=settings.bot_token, chat_id=link.chat_id, text=NOTICE
                 )
             except TelegramSendError as exc:
                 # Один заблокированный чат не отменяет уведомление остальным:
@@ -62,32 +64,11 @@ async def notify_family(ctx: dict[str, Any], patient_id: str, prescription: dict
     return delivered
 
 
-def _text(prescription: dict[str, Any]) -> str:
-    """Текст уведомления.
-
-    ФИО и контактов здесь нет: чат привязан к одному ребёнку, и называть его
-    по имени незачем — а Telegram не то место, где стоит хранить лишнее
-    (раздел 13 ТЗ).
-    """
-
-    lines = [
-        "Врач изменил назначение.",
-        f"Кетосоотношение: {_ratio(prescription['ratio'])}",
-        f"Калорийность: {prescription['kcal_per_day']} ккал в сутки",
-        f"Белок: {_number(prescription['protein_g'])} г",
-        f"Углеводы, не более: {_number(prescription['carbs_limit_g'])} г",
-        "",
-        "Меню на ближайшие дни нужно пересчитать под новые цифры.",
-    ]
-    return "\n".join(lines)
-
-
-def _ratio(value: Any) -> str:
-    """«4:1», а не «4.0»: семья знает соотношение в этой записи."""
-
-    number = float(value)
-    return f"{number:g}:1"
-
-
-def _number(value: Any) -> str:
-    return f"{float(value):g}"
+#: Текст уведомления (раздел 5.4 ТЗ — формулировка оттуда).
+#:
+#: Ни цифр, ни ФИО: параметры назначения бот не показывает (раздел 7.5), а имя
+#: ребёнка в чате незачем — чат и так привязан к нему одному.
+NOTICE = (
+    "Врач обновил назначение. Откройте кабинет: меню на ближайшие дни нужно "
+    "пересчитать под новые цели."
+)
