@@ -66,7 +66,7 @@ function product(id: string, name: string, isActive: boolean) {
   };
 }
 
-function renderDetail() {
+function renderDetail(canEdit = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -82,7 +82,7 @@ function renderDetail() {
   return render(
     <RecipeDetail
       recipeId={RECIPE_ID}
-      canEdit={false}
+      canEdit={canEdit}
       onBack={() => {}}
       onEdit={() => {}}
     />,
@@ -108,6 +108,19 @@ describe("карточка рецепта", () => {
         return { data: RECIPE };
       },
     );
+  });
+
+  it("у опубликованного рецепта предлагает снять с публикации", async () => {
+    // Публикация была необратимой — при том что отказ удалить использованный
+    // рецепт сам советовал «снимите его с публикации».
+    renderDetail(true);
+
+    expect(
+      await screen.findByRole("button", { name: /Снять с публикации/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Опубликовать/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("называет выведенный из оборота продукт в составе", async () => {

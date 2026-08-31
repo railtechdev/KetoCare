@@ -184,6 +184,19 @@ async def publish(
     return recipe
 
 
+async def unpublish(session: AsyncSession, *, recipe: Recipe) -> Recipe:
+    """Возвращает рецепт в черновики: семьям он больше не виден.
+
+    Сохранённые `computed` и `engine_version` не стираются: по ним считались
+    дни, и обнулить их значило бы потерять то, чем эти дни объясняются.
+    Публикация пересчитает их заново.
+    """
+
+    recipe.status = RecipeStatus.DRAFT
+    await session.flush()
+    return recipe
+
+
 async def _replace_ingredients(
     session: AsyncSession, *, recipe_id: uuid.UUID, ingredients: Sequence[tuple[uuid.UUID, float]]
 ) -> None:

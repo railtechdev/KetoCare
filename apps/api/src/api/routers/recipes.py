@@ -367,6 +367,53 @@ async def publish_recipe(
     return after
 
 
+@router.post(
+    "/{recipe_id}/unpublish",
+    response_model=RecipeRead,
+    summary="Снять рецепт с публикации",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def unpublish_recipe(
+    recipe_id: Annotated[uuid.UUID, Path()], user: CurrentUserDep, session: SessionDep
+) -> RecipeRead:
+    """Публикация была необратимой — при том что система сама советовала обратное.
+
+    Отказ удалить использованный рецепт заканчивался словами «снимите его с
+    публикации», а такой ручки не существовало. Ошибка в опубликованном рецепте
+    означала одно из двух: оставить его семьям или удалить вместе с составом
+    прошлых дней.
+
+    Снятый рецепт исчезает из поиска семьи и из выбора блюда, но уже
+    составленные дни не трогает: их состав заморожен снимком (ADR-0016), и
+    подменять прошлое нельзя.
+    """
+
+    recipe = await _visible_recipe(session, recipe_id, user)
+    stored = await recipes_repo.list_ingredients(session, recipe_id=recipe.id)
+    before = recipes_service.to_read(recipe, stored)
+
+    if recipe.status is not RecipeStatus.PUBLISHED:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Рецепт и так не опубликован.",
+            details={"status": recipe.status.value},
+        )
+
+    updated = await recipes_repo.unpublish(session, recipe=recipe)
+    after = recipes_service.to_read(updated, stored)
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="unpublish",
+        entity="recipes",
+        entity_id=recipe_id,
+        before=before.model_dump(mode="json"),
+        after=after.model_dump(mode="json"),
+    )
+    return after
+
+
 @router.delete(
     "/{recipe_id}",
     status_code=204,
