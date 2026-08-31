@@ -10,6 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 WEB_ROOT=/var/www/ketocare-app
+MINIAPP_ROOT=/var/www/ketocare-miniapp
 LANDING_ROOT=/var/www/ketocare-landing
 COMPOSE="docker compose --env-file .env -f infra/docker-compose.prod.yml"
 
@@ -77,6 +78,13 @@ if [ "${1:-}" != "--api-only" ]; then
     pnpm --filter @ketocare/api-client run generate
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/web run build
     rsync -a --delete apps/web/dist/ "$WEB_ROOT"/
+
+    # Telegram Mini App (ADR-0017). Каталог создаётся здесь же: пока в nginx нет
+    # его server-блока, собранные файлы просто лежат и никому не мешают — выкат
+    # приложения и настройка домена разнесены намеренно, домен заводит человек.
+    NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/miniapp run build
+    mkdir -p "$MINIAPP_ROOT"
+    rsync -a --delete apps/miniapp/dist/ "$MINIAPP_ROOT"/
 
     # Посадочная страница (Astro, ADR-0012). Адреса домена и кабинета уходят в
     # сборку: из них собираются canonical, hreflang, sitemap и ссылки «Войти».

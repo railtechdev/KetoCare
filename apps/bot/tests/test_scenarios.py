@@ -70,7 +70,7 @@ async def answer_when_now(message: FakeMessage, state: FSMContext, api: Any, sto
 
     assert message.last == texts.WHEN_ASK, "перед отправкой бот спрашивает о времени"
     callback = FakeCallback(data=keyboards.WHEN_NOW_DATA, message=message)
-    await scenarios.when_now(callback, state, api, store)
+    await scenarios.when_now(callback, state, api, store, SETTINGS)
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ class TestLinking:
     async def test_start_with_code_stores_binding(self, api, store):
         message = FakeMessage(text="/start ABCD2345")
 
-        await start._link(message, api=api, store=store, code="ABCD2345")
+        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
 
         assert PATIENT_NAME in message.last
         binding = await store.get(CHAT_ID)
@@ -104,7 +104,7 @@ class TestLinking:
 
         message = FakeMessage(chat=FakeChat(id=-1001234567890, type="supergroup"))
 
-        await start._link(message, api=api, store=store, code="ABCD2345")
+        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
 
         assert message.last == texts.LINK_ONLY_PRIVATE
         assert api.verified_code is None, "код не должен уходить в API вовсе"
@@ -115,7 +115,7 @@ class TestLinking:
         api.verify_error = BotApiError("not_found", "нет", 404)
         message = FakeMessage()
 
-        await start._link(message, api=api, store=store, code="ZZZZZZZZ")
+        await start._link(message, api=api, store=store, settings=SETTINGS, code="ZZZZZZZZ")
 
         assert "15 минут" in message.last
         assert await store.get(CHAT_ID) is None
@@ -125,7 +125,7 @@ class TestLinking:
         api.verify_error = BotApiError("conflict", "занято", 409)
         message = FakeMessage()
 
-        await start._link(message, api=api, store=store, code="ABCD2345")
+        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
 
         assert message.last == texts.LINK_CHAT_BUSY
 
@@ -135,7 +135,7 @@ class TestLinking:
 
         message = FakeMessage(text="ABCD2345")
 
-        await fallback.unknown(message, api=api, store=store)
+        await fallback.unknown(message, api=api, store=store, settings=SETTINGS)
 
         assert PATIENT_NAME in message.last
         assert await store.get(CHAT_ID) is not None
@@ -146,7 +146,7 @@ class TestLinking:
 
         message = FakeMessage(text="а какое соотношение у моего ребёнка?")
 
-        await fallback.unknown(message, api=api, store=linked_store)
+        await fallback.unknown(message, api=api, store=linked_store, settings=SETTINGS)
 
         assert message.last == texts.UNKNOWN_INPUT
 
@@ -289,7 +289,7 @@ class TestCancelAndFailures:
         await state.set_state(scenarios.Ketones.value)
         callback = FakeCallback(data=keyboards.CANCEL_DATA)
 
-        await scenarios.cancel(callback, state)
+        await scenarios.cancel(callback, state, SETTINGS)
 
         assert await state.get_state() is None
         assert callback.message.last == texts.CANCELLED
@@ -340,7 +340,10 @@ class TestWiring:
     def test_main_menu_has_every_scenario_of_the_spec(self):
         """Раздел 7.2 перечисляет семь кнопок — состав меню проверяется, а не подразумевается."""
 
-        labels = {button.text for row in keyboards.MAIN_MENU.keyboard for button in row}
+        with_app = BotSettings(
+            bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
+        )
+        labels = {button.text for row in keyboards.main_menu(with_app).keyboard for button in row}
         assert labels == {
             texts.BTN_SEIZURE,
             texts.BTN_KETONES,
@@ -350,6 +353,37 @@ class TestWiring:
             texts.BTN_WELLBEING,
             texts.BTN_APP,
         }
+
+    def test_app_button_opens_the_mini_app(self):
+        """Кнопка обязана нести адрес: без `web_app` она просто текст, и
+        Telegram ничего не откроет."""
+
+        settings = BotSettings(
+            bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
+        )
+        buttons = [b for row in keyboards.main_menu(settings).keyboard for b in row]
+        app_button = next(b for b in buttons if b.text == texts.BTN_APP)
+
+        assert app_button.web_app is not None
+        assert app_button.web_app.url == "https://tma.example.uz"
+
+    def test_app_button_is_absent_until_the_mini_app_is_deployed(self):
+        """Кнопка, которая никуда не ведёт, хуже отсутствующей.
+
+        Хуже буквально: Telegram отвергает `web_app` с пустым или http-адресом,
+        и тогда не приходит ВСЁ сообщение — то есть меню исчезает целиком.
+        """
+
+        labels = {b.text for row in keyboards.main_menu(SETTINGS).keyboard for b in row}
+        assert texts.BTN_APP not in labels
+
+    def test_http_address_is_not_offered_to_telegram(self):
+        # Telegram принимает в `web_app` только https.
+        insecure = BotSettings(
+            bot_token="t", bot_api_token="s", miniapp_url="http://tma.example.uz"
+        )
+        labels = {b.text for row in keyboards.main_menu(insecure).keyboard for b in row}
+        assert texts.BTN_APP not in labels
 
 
 class TestEventTimeStep:
@@ -458,7 +492,7 @@ class TestMeal:
         await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
 
         callback = FakeCallback(data=f"{keyboards.MEAL_ITEM_PREFIX}item-1", message=message)
-        await scenarios.meal_mark(callback, state, api, linked_store)
+        await scenarios.meal_mark(callback, state, api, linked_store, SETTINGS)
 
         assert api.eaten == ["item-1"]
         assert message.last == texts.MEAL_MARKED

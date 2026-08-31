@@ -16,6 +16,7 @@ from aiogram.types import Message
 
 from . import keyboards, texts
 from .api import BotApi, BotApiError, LinkRevokedError
+from .config import BotSettings
 from .storage import Binding, BindingStore
 
 logger = structlog.get_logger(__name__)
@@ -44,6 +45,7 @@ async def submit_log(
     binding: Binding,
     kind: str,
     payload: dict[str, Any],
+    settings: BotSettings,
     occurred_at: datetime | None = None,
 ) -> None:
     """Отправляет запись и закрывает сценарий.
@@ -78,4 +80,4 @@ async def submit_log(
         return
 
     await state.clear()
-    await message.answer(texts.SAVED, reply_markup=keyboards.MAIN_MENU)
+    await message.answer(texts.SAVED, reply_markup=keyboards.main_menu(settings))

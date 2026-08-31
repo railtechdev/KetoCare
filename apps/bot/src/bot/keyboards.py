@@ -7,22 +7,42 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    WebAppInfo,
 )
 
 from . import texts
+from .config import BotSettings
 
-# Главное меню — ReplyKeyboard, как требует раздел 7.2: оно всегда под рукой и не
-# исчезает после нажатия, в отличие от инлайновой клавиатуры.
-MAIN_MENU = ReplyKeyboardMarkup(
-    keyboard=[
+
+def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
+    """Главное меню (раздел 7.2 ТЗ).
+
+    ReplyKeyboard, а не инлайновая: она всегда под рукой и не исчезает после
+    нажатия.
+
+    Кнопка «Приложение» появляется, только если Mini App куда-то выложен.
+    Telegram принимает в `web_app` исключительно https, и кнопка с пустым или
+    http-адресом — это не «ничего не произойдёт», а ошибка отправки всего
+    сообщения: меню не пришло бы вовсе. Пока адреса нет, кнопки просто нет —
+    так же, как её не было до появления Mini App.
+    """
+
+    keyboard = [
         [KeyboardButton(text=texts.BTN_SEIZURE), KeyboardButton(text=texts.BTN_KETONES)],
         [KeyboardButton(text=texts.BTN_WEIGHT), KeyboardButton(text=texts.BTN_MEAL)],
         [KeyboardButton(text=texts.BTN_MEDICATION), KeyboardButton(text=texts.BTN_WELLBEING)],
-        [KeyboardButton(text=texts.BTN_APP)],
-    ],
-    resize_keyboard=True,
-    input_field_placeholder=texts.MENU_PROMPT,
-)
+    ]
+
+    url = settings.miniapp_url.strip()
+    if url.startswith("https://"):
+        keyboard.append([KeyboardButton(text=texts.BTN_APP, web_app=WebAppInfo(url=url))])
+
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,
+        input_field_placeholder=texts.MENU_PROMPT,
+    )
+
 
 CANCEL_DATA = "cancel"
 
