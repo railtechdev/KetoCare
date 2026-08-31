@@ -44,8 +44,18 @@ def check_file(path: str) -> int:
     return run_guard("file", {"tool_input": {"file_path": path}})
 
 
-def check_command(command: str, cwd: Path | None = None) -> int:
-    return run_guard("command", {"tool_input": {"command": command}}, cwd=cwd)
+def check_command(command: str, cwd: Path | None = None, run_in: Path | None = None) -> int:
+    """`cwd` — каталог проекта для хука, `run_in` — каталог, где идёт команда.
+
+    Раньше это было одно и то же, и в этом состоял дефект: правило про main
+    читало ветку всегда в каталоге проекта, даже когда команда выполнялась в
+    другом репозитории.
+    """
+
+    payload: dict = {"tool_input": {"command": command}}
+    if run_in is not None:
+        payload["cwd"] = str(run_in)
+    return run_guard("command", payload, cwd=cwd)
 
 
 @pytest.fixture
@@ -439,3 +449,96 @@ class TestSettingsWiring:
             assert result.returncode == ALLOW, (
                 f"хук вернул {result.returncode} на разрешённом файле: {command}"
             )
+
+
+class TestHeredocBodyIsData:
+    """Тело `<<EOF … EOF` — данные команды, а не команды.
+
+    Раньше оно резалось по переводам строк наравне с кодом, и каждая строка
+    выглядела отдельной локальной командой. Два ложных срабатывания подряд:
+    сообщение коммита, где упомянута работа с main, упиралось в правило про
+    main; скрипт для сервера, отправленный по ssh, — в защиту локальных
+    секретов. Оба раза защита мешала работе, ничего не защищая.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # Текст сообщения коммита: там встречаются и пути, и команды.
+            "git commit -F - <<'EOF'\nправка docs/medical/OPEN_QUESTIONS.md\nEOF",
+            # Содержимое файла, а не команда над защищённым путём.
+            "cat > /tmp/note.md <<'EOF'\nсм. docs/medical/calculation-engine-spec.md\nEOF",
+            # Скрипт для удалённой машины целиком.
+            "ssh ketocare@example.com <<'EOF'\ncat > /srv/ketocare/.env\nEOF",
+        ],
+    )
+    def test_data_in_body_allowed(self, command: str) -> None:
+        assert check_command(command) == ALLOW, f"тело heredoc принято за команды: {command}"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # Оболочка ИСПОЛНЯЕТ тело: каждая строка обязана проверяться.
+            "bash <<'EOF'\nrm .env\nEOF",
+            "sh <<'EOF'\nrm docs/medical/calculation-engine-spec.md\nEOF",
+            "python3 - <<'EOF'\nopen('docs/medical/x','w')\nEOF",
+            # Цель записи стоит в самой команде, а не в теле.
+            "cat > docs/medical/spec.md <<'EOF'\nтекст\nEOF",
+        ],
+    )
+    def test_code_in_body_still_blocked(self, command: str) -> None:
+        assert check_command(command) == BLOCK, f"исполняемое тело пропущено: {command}"
+
+    def test_commit_message_mentioning_main_is_not_a_main_operation(
+        self, repo_on_main: Path
+    ) -> None:
+        subprocess.run(
+            ["git", "switch", "-c", "feat/x"], cwd=repo_on_main, check=True, capture_output=True
+        )
+        command = "git commit -F - <<'EOF'\nfix: описано, почему git push origin main запрещён\nEOF"
+        assert check_command(command, cwd=repo_on_main) == ALLOW
+
+
+class TestMainRuleAppliesToThisProjectOnly:
+    """Правило защищает main ЭТОГО репозитория.
+
+    Ветка читалась всегда в каталоге проекта, а команда могла выполняться в
+    другом: одноразовый репозиторий под scratchpad, куда агент складывает
+    проверки, блокировался за то, что в KetoCare сейчас выбрана main. Правило
+    мешало работе и не защищало ничего: чужой main нам не деплой и не ревью.
+    """
+
+    @pytest.fixture
+    def foreign_repo(self, tmp_path: Path) -> Path:
+        repo = tmp_path / "foreign"
+        repo.mkdir()
+        run = lambda *a: subprocess.run(a, cwd=repo, check=True, capture_output=True)  # noqa: E731
+        run("git", "init", "-b", "main")
+        run("git", "config", "user.email", "t@example.com")
+        run("git", "config", "user.name", "t")
+        (repo / "x.txt").write_text("x", encoding="utf-8")
+        run("git", "add", "x.txt")
+        run("git", "commit", "-m", "init")
+        return repo
+
+    def test_commit_in_foreign_repo_allowed(self, repo_on_main: Path, foreign_repo: Path) -> None:
+        assert (
+            check_command(
+                f'cd {foreign_repo} && git commit -m "проверка"',
+                cwd=repo_on_main,
+            )
+            == ALLOW
+        )
+
+    def test_commit_from_foreign_cwd_allowed(self, repo_on_main: Path, foreign_repo: Path) -> None:
+        assert (
+            check_command('git commit -m "проверка"', cwd=repo_on_main, run_in=foreign_repo)
+            == ALLOW
+        )
+
+    def test_commit_in_project_still_blocked(self, repo_on_main: Path) -> None:
+        # Тот же вызов, но каталог — сам проект: правило работает как прежде.
+        assert (
+            check_command('git commit -m "прямо в main"', cwd=repo_on_main, run_in=repo_on_main)
+            == BLOCK
+        )
