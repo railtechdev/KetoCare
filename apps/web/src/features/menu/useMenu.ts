@@ -222,6 +222,14 @@ export function useDayTolerance(
 export interface DayTargets {
   kcalPerDay: number;
   carbsLimitG: number;
+  /**
+   * Сколько приёмов пищи в день назначил врач.
+   *
+   * Поле назначения существует с первой миграции, врач его заполняет — и до
+   * сих пор оно не доходило ни до одного экрана семьи. Семья планировала день
+   * по четырём слотам, не зная, что назначено пять приёмов.
+   */
+  mealsPerDay: number;
 }
 
 /**
@@ -246,6 +254,7 @@ export function useDayTargets(
   return {
     kcalPerDay: prescription.kcal_per_day,
     carbsLimitG: prescription.carbs_limit_g,
+    mealsPerDay: prescription.meals_per_day,
   };
 }
 

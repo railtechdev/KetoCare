@@ -11,6 +11,7 @@ import { NextMealCard } from "./NextMealCard";
 import { PrescriptionCard } from "./PrescriptionCard";
 import { QuickActions } from "./QuickActions";
 import { SeizuresCard } from "./SeizuresCard";
+import { NewPrescriptionNotice } from "./NewPrescriptionNotice";
 import { WaitingForPrescription } from "./WaitingForPrescription";
 import { formatOverviewDate } from "./date";
 
@@ -30,6 +31,7 @@ export function HomePage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("home");
   const overview = usePatientOverview(patientId);
   const data = overview.data;
+  const prescription = data?.prescription ?? null;
 
   return (
     <PageLayout
@@ -67,7 +69,14 @@ export function HomePage({ patientId }: { patientId: string }) {
             {/* Первым блоком и только в этот период: пока назначения нет,
                 остальная главная состоит из пустых карточек, и подсказка о
                 том, чего ждём и что уже можно делать, важнее их всех. */}
-            {(data.prescription ?? null) === null && <WaitingForPrescription />}
+            {prescription === null ? (
+              <WaitingForPrescription />
+            ) : (
+              <NewPrescriptionNotice
+                patientId={patientId}
+                prescription={prescription}
+              />
+            )}
 
             <QuickActions />
 
