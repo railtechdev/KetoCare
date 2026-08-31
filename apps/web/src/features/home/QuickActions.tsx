@@ -1,17 +1,22 @@
 import { Button } from "@ketocare/ui";
-import { CalendarDays, Droplets, Scale } from "lucide-react";
+import { CalendarDays, Droplets, Scale, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SectionLink } from "../../components/SectionLink";
 
 /**
- * Три быстрые кнопки (раздел 8.3 ТЗ).
+ * Быстрые кнопки главной (раздел 8.3 ТЗ).
  *
- * Ведут не «в раздел», а к действию: записать кетоны, записать вес, открыть
+ * Ведут не «в раздел», а к действию: записать приступ, кетоны, вес, открыть
  * меню на день. Замер — то, что родитель делает ежедневно и в спешке, поэтому
  * вид дневника передаётся в адресе, и вкладку не приходится искать руками.
+ *
+ * Приступ — первым и намеренно: это самое срочное, что записывает семья, и
+ * записывают его с телефона в тот момент, когда ребёнку плохо. До этого путь к
+ * нему был длиннее всех остальных — раздел, потом вкладка.
  */
 const ACTIONS = [
+  { key: "seizure", icon: Zap, section: "diary", kind: "seizures" },
   { key: "ketones", icon: Droplets, section: "diary", kind: "ketones" },
   { key: "weight", icon: Scale, section: "diary", kind: "weight" },
   { key: "menu", icon: CalendarDays, section: "menu", kind: undefined },

@@ -20,7 +20,7 @@ import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { formatTimestamp } from "./dates";
 import { useCreateClinicalNote } from "./doctorMutations";
-import { useClinicalNotes } from "./doctorQueries";
+import { useClinicalNotes, useColleagues } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import type { ClinicalNote } from "./types";
 
@@ -46,6 +46,13 @@ export function NotesTab({ patientId }: { patientId: string }) {
 
   const notes = useClinicalNotes(patientId, true);
   const create = useCreateClinicalNote(patientId);
+
+  // Справочник персонала: заметки подписываются именем, а не «коллегой».
+  // Запрашивается всегда, а не по открытию формы: подписи нужны при чтении.
+  const colleagues = useColleagues(true);
+  const authorNames = Object.fromEntries(
+    (colleagues.data ?? []).map((person) => [person.id, person.full_name]),
+  );
 
   const {
     register,
@@ -120,6 +127,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
                 <NoteItem
                   note={note}
                   own={note.author_id === session?.userId}
+                  authorName={authorNames[note.author_id]}
                 />
               </li>
             ))}
@@ -172,7 +180,15 @@ export function NotesTab({ patientId }: { patientId: string }) {
   );
 }
 
-function NoteItem({ note, own }: { note: ClinicalNote; own: boolean }) {
+function NoteItem({
+  note,
+  own,
+  authorName,
+}: {
+  note: ClinicalNote;
+  own: boolean;
+  authorName: string | undefined;
+}) {
   const { t } = useTranslation("doctor");
   const createdAt = formatTimestamp(note.created_at);
 
@@ -180,9 +196,12 @@ function NoteItem({ note, own }: { note: ClinicalNote; own: boolean }) {
     <article className="rounded-xl border border-border p-3">
       <header className="flex flex-wrap items-baseline justify-between gap-block">
         <span className="text-sm font-semibold">
-          {/* Имени автора сервер не отдаёт — только идентификатор, поэтому
-              различаются лишь свои и чужие заметки. */}
-          {own ? t("notes.authorSelf") : t("notes.authorOther")}
+          {/* Имя коллеги берётся из справочника персонала: «Заметка коллеги»
+              не отвечает на вопрос, с кем сверяться — а заметку в карте
+              пишут именно для того, чтобы следующий специалист знал, кто и что
+              решил. Справочника может не быть под рукой (он грузится отдельно)
+              — тогда остаётся прежняя безличная подпись. */}
+          {own ? t("notes.authorSelf") : (authorName ?? t("notes.authorOther"))}
         </span>
         {createdAt !== null && (
           <time

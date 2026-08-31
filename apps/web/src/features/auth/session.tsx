@@ -34,10 +34,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
-    await api.POST("/api/v1/auth/logout", {});
-    setAccessToken(null);
-    setSession(null);
-    queryClient.clear();
+    // Сессия на устройстве гасится ВСЕГДА, даже если сервер не ответил.
+    //
+    // Порядок был обратным, и при недоступном сервере запрос отклонялся
+    // исключением — до очистки дело не доходило вовсе. Человек нажимал «Выйти»
+    // на чужом компьютере, видел, что ничего не произошло, и уходил: кабинет
+    // ребёнка оставался открытым.
+    //
+    // Серверная часть выхода (сброс refresh-cookie) при этом всё равно нужна —
+    // поэтому запрос отправляется, но его отказ ничего не отменяет.
+    try {
+      await api.POST("/api/v1/auth/logout", {});
+    } catch {
+      // Отказ сети. Локальная сессия гасится ниже в любом случае.
+    } finally {
+      setAccessToken(null);
+      setSession(null);
+      queryClient.clear();
+    }
   }, [queryClient]);
 
   useEffect(() => {
@@ -57,14 +71,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     void (async () => {
-      const { data } = await api.POST("/api/v1/auth/refresh", { body: {} });
-      if (cancelled) return;
+      // Отказ сети здесь ничего не восстанавливает, но и не должен оставлять
+      // приложение в подвешенном состоянии. Без перехвата обещание
+      // отклонялось, `setRestoring(false)` не выполнялся вовсе — и кабинет при
+      // недоступном сервере навсегда застревал на «восстанавливаем сессию»,
+      // не пуская даже на страницу входа.
+      try {
+        const { data } = await api.POST("/api/v1/auth/refresh", { body: {} });
+        if (cancelled) return;
 
-      if (data?.access_token) {
-        setAccessToken(data.access_token);
-        setSession(readTokenClaims(data.access_token));
+        if (data?.access_token) {
+          setAccessToken(data.access_token);
+          setSession(readTokenClaims(data.access_token));
+        }
+      } catch {
+        // Сервер недоступен: сессии нет, но экран входа человеку доступен.
+      } finally {
+        if (!cancelled) setRestoring(false);
       }
-      setRestoring(false);
     })();
 
     return () => {
