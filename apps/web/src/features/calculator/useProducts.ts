@@ -90,3 +90,37 @@ export function useProduct(productId: string | undefined) {
     },
   });
 }
+
+/**
+ * Продукты, которые семья уже клала в дни ребёнка.
+ *
+ * Подсказка для пустого поля (правило П11 канона): поиск молчит, пока не
+ * набраны два символа, а семья изо дня в день кладёт в меню одни и те же
+ * двадцать продуктов. Источник — снимки уже составленных дней, то есть ровно
+ * то, что она действительно использовала.
+ */
+export function useRecentProducts(patientId: string | undefined) {
+  return useQuery({
+    queryKey: ["patient", patientId, "recent-products"],
+    enabled: patientId !== undefined,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<ProductOption[]> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/menus/recent-products",
+        { params: { path: { patient_id: patientId as string } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty recent response");
+
+      return data.map((item) => ({
+        id: item.id,
+        name: item.name_ru,
+        kcal: item.kcal_100g,
+        fat: item.fat_100g,
+        protein: item.protein_100g,
+        carbs: item.carbs_100g,
+        fiber: item.fiber_100g,
+        isActive: item.is_active,
+      }));
+    },
+  });
+}

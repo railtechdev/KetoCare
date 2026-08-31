@@ -865,6 +865,93 @@ class TestExcludedProductsAreNamed:
         assert response.json()["excluded_products"] == []
 
 
+class TestRecentProducts:
+    """Поле подбора молчало, пока не набраны два символа.
+
+    На пустом поле оно не помогало ничем, хотя семья изо дня в день кладёт в
+    меню одни и те же двадцать продуктов (правило П11 канона).
+    """
+
+    async def test_returns_products_from_saved_days(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50), (chicken, 40)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        response = await client.get(
+            f"{_url(patient)}/recent-products", headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 200, response.text
+        names = {item["name_ru"] for item in response.json()}
+        assert names == {butter.name_ru, chicken.name_ru}
+
+    async def test_empty_history_returns_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Пустая подсказка честнее выдуманной: «популярное вообще» — не то,
+        что эта семья готовила."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.get(
+            f"{_url(patient)}/recent-products", headers=auth_headers(parent)
+        )
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_withdrawn_product_is_not_suggested(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Поиск их не предлагает, и подсказка не должна возвращать в оборот
+        то, что из него вывели."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        butter.is_active = False
+        await session.flush()
+
+        response = await client.get(
+            f"{_url(patient)}/recent-products", headers=auth_headers(parent)
+        )
+        assert response.json() == []
+
+    async def test_someone_elses_child_is_forbidden(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, patient = await _linked_parent(session, make_user, make_patient)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            f"{_url(patient)}/recent-products", headers=auth_headers(stranger)
+        )
+        assert response.status_code == 403
+
+
 class TestAccessControl:
     async def test_menu_of_other_patient_forbidden(
         self, client, session, make_user, make_patient, auth_headers

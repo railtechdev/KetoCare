@@ -94,3 +94,99 @@ describe("поиск продукта в калькуляторе", () => {
     expect(screen.queryByText(/ничего не нашлось/)).not.toBeInTheDocument();
   });
 });
+
+describe("недавние продукты", () => {
+  const PATIENT_ID = "11111111-1111-4111-8111-111111111111";
+
+  const RECENT = [
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      name_ru: "Масло сливочное",
+      kcal_100g: 717,
+      fat_100g: 81.1,
+      protein_100g: 0.9,
+      carbs_100g: 0.1,
+      fiber_100g: 0,
+      is_active: true,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path.includes("recent-products")
+        ? { data: RECENT, error: undefined }
+        : { data: { items: [], total: 0 }, error: undefined },
+    );
+  });
+
+  it("на пустом поле предлагает то, что семья уже клала в меню", async () => {
+    // Поле молчало, пока не набраны два символа, — то есть до ввода не
+    // помогало ничем (правило П11 канона).
+    render(
+      <ProductPicker
+        onPick={() => {}}
+        excludeIds={[]}
+        patientId={PATIENT_ID}
+      />,
+      {
+        wrapper,
+      },
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Масло сливочное" }),
+    ).toBeInTheDocument();
+  });
+
+  it("выбранный из недавних уходит тем же путём, что и найденный", async () => {
+    const user = userEvent.setup();
+    const onPick = vi.fn();
+    render(
+      <ProductPicker onPick={onPick} excludeIds={[]} patientId={PATIENT_ID} />,
+      {
+        wrapper,
+      },
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Масло сливочное" }),
+    );
+
+    expect(onPick).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Масло сливочное", fat: 81.1 }),
+    );
+  });
+
+  it("после начала ввода подсказка уступает место поиску", async () => {
+    // Ответом на ввод должен быть поиск, а не история.
+    const user = userEvent.setup();
+    render(
+      <ProductPicker
+        onPick={() => {}}
+        excludeIds={[]}
+        patientId={PATIENT_ID}
+      />,
+      {
+        wrapper,
+      },
+    );
+
+    await screen.findByRole("button", { name: "Масло сливочное" });
+    await user.type(screen.getByLabelText(/Добавить продукт/), "кур");
+
+    expect(
+      screen.queryByRole("button", { name: "Масло сливочное" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("без выбранного ребёнка подсказки нет и запроса тоже", async () => {
+    render(<ProductPicker onPick={() => {}} excludeIds={[]} />, { wrapper });
+
+    await screen.findByLabelText(/Добавить продукт/);
+    expect(api.GET).not.toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/menus/recent-products",
+      expect.anything(),
+    );
+  });
+});

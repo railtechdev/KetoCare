@@ -15,9 +15,11 @@ from fastapi import APIRouter, Path, Query
 
 from core.models import Menu, MenuItem
 from core.repositories import menus as menus_repo
+from core.repositories import products as products_repo
 
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
+from ..schemas import ProductRead
 from ..schemas_menus import MenuItemEatenWrite, MenuItemRead, MenuRead, MenuWrite
 from ..services import menus as menus_service
 
@@ -56,6 +58,49 @@ async def get_menu(
     if menu is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Меню на эту дату не составлено.")
     return await _read(session, menu)
+
+
+#: Сколько недавних продуктов показывать до ввода.
+#:
+#: Список подсказки, а не справочник: длиннее десятка он перестаёт помогать —
+#: в нём приходится искать так же, как в поиске.
+RECENT_PRODUCTS_LIMIT = 10
+
+
+@router.get(
+    "/recent-products",
+    response_model=list[ProductRead],
+    summary="Продукты, которые семья уже использовала",
+)
+async def recent_products(
+    patient_id: PatientIdPath,
+    session: SessionDep,
+    _: PatientAccessDep,
+) -> list[ProductRead]:
+    """Подсказка для выбора продукта ДО ввода (правило П11 канона).
+
+    Поле подбора молчало, пока не набраны два символа, — то есть на пустом поле
+    не помогало ничем, хотя семья изо дня в день кладёт в меню одни и те же
+    двадцать продуктов.
+
+    Источник — снимки уже составленных дней: это ровно то, что семья
+    действительно использовала, а не то, что популярно вообще.
+    """
+
+    ids = await menus_repo.recent_product_ids(session, patient_id=patient_id)
+    if not ids:
+        return []
+
+    products = await products_repo.get_by_ids(session, product_ids=ids)
+
+    # Порядок сохраняется (от свежих к старым), выведенные из оборота
+    # отбрасываются: поиск их тоже не предлагает, и подсказка не должна
+    # возвращать в оборот то, что из него вывели.
+    return [
+        ProductRead.model_validate(products[pid])
+        for pid in ids
+        if pid in products and products[pid].is_active
+    ][:RECENT_PRODUCTS_LIMIT]
 
 
 @router.put("", response_model=MenuRead, summary="Сохранить меню дня")

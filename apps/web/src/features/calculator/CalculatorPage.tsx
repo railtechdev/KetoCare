@@ -275,6 +275,7 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         description={t("composition.description")}
       >
         <ProductPicker
+          patientId={patientId}
           excludeIds={rows.map((r) => r.product.id)}
           onPick={(product) => {
             setRows((current) => [...current, { product, grams: 50 }]);
