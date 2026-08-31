@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -346,6 +346,33 @@ class ProductRead(ProductBase):
                 )
             ]
         ).ratio
+
+
+class ReminderSettingsRead(BaseModel):
+    """Когда напоминать семье (раздел 7.4 ТЗ).
+
+    Время местное, без часового пояса: семья называет «восемь вечера», а не
+    момент UTC. `null` у вида — он выключен.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    patient_id: uuid.UUID
+    enabled: bool
+    ketones_at: time | None
+    weight_at: time | None
+    medications_at: time | None
+    no_records_at: time | None
+
+
+class ReminderSettingsWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    ketones_at: time | None = None
+    weight_at: time | None = None
+    medications_at: time | None = None
+    no_records_at: time | None = None
 
 
 class InvitationRead(BaseModel):

@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Request
@@ -35,6 +36,7 @@ from sqlalchemy.exc import IntegrityError
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
+from core.repositories import reminders as reminders_repo
 from core.repositories import telegram as telegram_repo
 
 from ..client_address import client_address
@@ -42,6 +44,7 @@ from ..deps.auth import PatientAccessDep, SessionDep
 from ..deps.bot import verify_bot_service_token
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import BOT_RATE_LIMIT, limiter
+from ..schemas import ReminderSettingsRead, ReminderSettingsWrite
 from ..schemas_telegram import (
     BotSession,
     BotSessionRequest,
@@ -94,6 +97,67 @@ async def create_link_code(
         expires_at=code.expires_at,
         deep_link=telegram_service.build_deep_link(code.code),
     )
+
+
+@router.get(
+    "/reminders",
+    response_model=ReminderSettingsRead,
+    summary="Настройки напоминаний ребёнка",
+)
+async def get_reminders(
+    patient_id: PatientIdPath, session: SessionDep, user: PatientAccessDep
+) -> ReminderSettingsRead:
+    """Настройки или значения по умолчанию.
+
+    Строка заводится при первой правке, а не при заведении ребёнка: сохранять
+    её заранее значит хранить строку, ничем не отличающуюся от умолчаний, и
+    однажды разойтись с ними при смене умолчания.
+    """
+
+    settings = await reminders_repo.get(session, patient_id=patient_id)
+    if settings is not None:
+        return ReminderSettingsRead.model_validate(settings)
+
+    return ReminderSettingsRead(
+        patient_id=patient_id,
+        enabled=True,
+        ketones_at=None,
+        weight_at=None,
+        medications_at=None,
+        # Единственное включённое из коробки — мягкое «за сегодня нет записей»
+        # в 20:00 (раздел 7.4 ТЗ).
+        no_records_at=time(hour=reminders_repo.DEFAULT_NO_RECORDS_HOUR),
+    )
+
+
+@router.put(
+    "/reminders",
+    response_model=ReminderSettingsRead,
+    summary="Изменить настройки напоминаний",
+)
+async def update_reminders(
+    patient_id: PatientIdPath,
+    payload: ReminderSettingsWrite,
+    session: SessionDep,
+    user: PatientAccessDep,
+) -> ReminderSettingsRead:
+    """Настройки задаёт тот, кто напоминания получает, — семья.
+
+    Врач их не трогает: время замера дома выбирает семья, а не расписание
+    клиники. Доступ проверяется обычной связью с пациентом.
+    """
+
+    settings = await reminders_repo.upsert(
+        session,
+        patient_id=patient_id,
+        updated_by=user.id,
+        enabled=payload.enabled,
+        ketones_at=payload.ketones_at,
+        weight_at=payload.weight_at,
+        medications_at=payload.medications_at,
+        no_records_at=payload.no_records_at,
+    )
+    return ReminderSettingsRead.model_validate(settings)
 
 
 @router.get(

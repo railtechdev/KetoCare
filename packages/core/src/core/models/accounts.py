@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import Boolean, Date, ForeignKey, Index, Numeric, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import BIGINT, CITEXT, JSONB
@@ -190,6 +190,67 @@ class TelegramAccount(Base, UUIDPkMixin):
     secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     linked_at: Mapped[datetime] = mapped_column(nullable=False)
     revoked_at: Mapped[datetime | None]
+
+
+class ReminderSettings(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
+    """Когда напоминать семье (раздел 7.4 ТЗ).
+
+    Одна строка на ребёнка: напоминания — про конкретного ребёнка, а не про
+    родителя. У родителя двоих детей время замеров у них разное, и общая
+    настройка означала бы напоминание не про того.
+
+    Время — местное (`Settings.tz`), без часового пояса в колонке: семья
+    называет «восемь вечера», а не момент UTC, и при переезде клиники в другой
+    пояс правильным остаётся именно «восемь вечера».
+
+    `None` у любого поля — этот вид напоминаний выключен. Выключено по
+    умолчанию всё, кроме мягкого «за сегодня нет записей» в 20:00, — его ТЗ
+    задаёт значением по умолчанию.
+    """
+
+    __tablename__ = "reminder_settings"
+    __table_args__ = (Index("uq_reminder_settings_patient", "patient_id", unique=True),)
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
+    )
+    #: Выключатель на все напоминания разом: семье в больнице не до них.
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    ketones_at: Mapped[time | None]
+    weight_at: Mapped[time | None]
+    medications_at: Mapped[time | None]
+    #: «За сегодня нет записей» — одно, мягкое (раздел 7.4 ТЗ).
+    no_records_at: Mapped[time | None]
+
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
+
+
+class ReminderDelivery(Base, UUIDPkMixin):
+    """Что уже отправлено — чтобы не отправить дважды.
+
+    Задача воркера идёт каждые пять минут, а окно попадания шире одного тика:
+    без следа об отправке одно напоминание уходило бы несколько раз подряд.
+    Уникальность по (ребёнок, вид, дата) делает повтор невозможным на уровне
+    базы, а не на уровне аккуратности кода.
+    """
+
+    __tablename__ = "reminder_deliveries"
+    __table_args__ = (
+        Index("uq_reminder_delivery_day", "patient_id", "kind", "sent_on", unique=True),
+    )
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
+    )
+    #: ketones | weight | medications | no_records | prescription
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Местная дата семьи, а не UTC: «сегодня» у неё своё.
+    sent_on: Mapped[date] = mapped_column(nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(nullable=False)
+    chat_id: Mapped[int] = mapped_column(BIGINT, nullable=False)
 
 
 class LinkCode(Base):

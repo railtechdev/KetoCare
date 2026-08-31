@@ -22,6 +22,7 @@ from api.deps.auth import get_session
 from api.main import create_app
 from api.ratelimit import limiter
 from api.security import create_token, hash_password
+from api.services import queue as queue_service
 from core.models.enums import Sex, UserRole
 from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
@@ -59,6 +60,24 @@ async def session() -> AsyncIterator[AsyncSession]:
 
 #: Счётчик тестов: из него получается уникальный адрес клиента (см. `client`).
 _test_client_seq = itertools.count(1)
+
+
+@pytest.fixture(autouse=True)
+def enqueued(monkeypatch) -> list[tuple[str, tuple]]:
+    """Очередь в тестах — список, а не живой Redis.
+
+    Иначе прогон складывал бы настоящие задачи в очередь разработчика, и
+    воркер, поднятый рядом, выполнял бы их — включая отправку сообщений в
+    Telegram. Тесты, которым важна постановка задачи, читают этот список.
+    """
+
+    calls: list[tuple[str, tuple]] = []
+
+    async def record(task: str, *args) -> None:
+        calls.append((task, args))
+
+    monkeypatch.setattr(queue_service, "enqueue", record)
+    return calls
 
 
 @pytest.fixture(autouse=True)

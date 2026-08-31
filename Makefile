@@ -176,7 +176,7 @@ test-engine: ## Только эталонные тесты keto_engine
 lint: openapi ## Линтеры и проверка типов (сначала генерирует api-client)
 	uv run ruff check apps packages
 	uv run ruff format --check apps packages
-	uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api apps/bot/src/bot
+	uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api apps/bot/src/bot apps/worker/src/worker
 	@# Шаги соединены через `&&`, а не `;`: при `;` код выхода блока — это код
 	@# последней команды, и падение prettier или eslint терялось. `make lint`
 	@# возвращал 0 при непройденной проверке форматирования, и её ловил уже CI.
