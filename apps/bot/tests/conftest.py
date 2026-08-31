@@ -19,6 +19,7 @@ import pytest
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.api import BotApiError, LinkVerified
+from bot.config import BotSettings
 from bot.main import build_dispatcher
 from bot.storage import Binding
 
@@ -113,4 +114,9 @@ def linked_store(store: FakeStore) -> FakeStore:
 
 @pytest.fixture
 def dispatcher(api: FakeApi, store: FakeStore):
-    return build_dispatcher(storage=MemoryStorage(), api=api, store=store)  # type: ignore[arg-type]
+    return build_dispatcher(  # type: ignore[arg-type]
+        storage=MemoryStorage(),
+        api=api,
+        store=store,
+        settings=BotSettings(bot_token="t", bot_api_token="s"),
+    )

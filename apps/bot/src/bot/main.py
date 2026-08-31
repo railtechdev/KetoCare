@@ -20,7 +20,7 @@ from aiogram.types import TelegramObject
 from redis.asyncio import Redis
 
 from .api import BotApi
-from .config import load_settings
+from .config import BotSettings, load_settings
 from .handlers import fallback, scenarios, start
 from .observability import init_sentry
 from .storage import BindingStore
@@ -29,15 +29,18 @@ logger = structlog.get_logger(__name__)
 
 
 class DepsMiddleware(BaseMiddleware):
-    """Кладёт клиент API и хранилище привязок в аргументы обработчиков.
+    """Кладёт клиент API, хранилище привязок и настройки в аргументы обработчиков.
 
     Глобальных объектов нет намеренно: тест подставляет свои и не трогает ни
-    сеть, ни Redis.
+    сеть, ни Redis. Настройки здесь же и по той же причине: шагу «когда это
+    было» нужен часовой пояс семьи, а читать его из глобального объекта значит
+    сделать разбор времени непроверяемым.
     """
 
-    def __init__(self, api: BotApi, store: BindingStore) -> None:
+    def __init__(self, api: BotApi, store: BindingStore, settings: BotSettings) -> None:
         self._api = api
         self._store = store
+        self._settings = settings
 
     async def __call__(
         self,
@@ -47,13 +50,16 @@ class DepsMiddleware(BaseMiddleware):
     ) -> Any:
         data["api"] = self._api
         data["store"] = self._store
+        data["settings"] = self._settings
         return await handler(event, data)
 
 
-def build_dispatcher(*, storage: RedisStorage, api: BotApi, store: BindingStore) -> Dispatcher:
+def build_dispatcher(
+    *, storage: RedisStorage, api: BotApi, store: BindingStore, settings: BotSettings
+) -> Dispatcher:
     dp = Dispatcher(storage=storage)
 
-    middleware = DepsMiddleware(api, store)
+    middleware = DepsMiddleware(api, store, settings)
     dp.message.middleware(middleware)
     dp.callback_query.middleware(middleware)
 
@@ -79,6 +85,7 @@ async def main() -> None:
         storage=RedisStorage(redis),
         api=BotApi(http, service_token=settings.bot_api_token),
         store=BindingStore(redis),
+        settings=settings,
     )
 
     try:

@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from aiogram.fsm.context import FSMContext
@@ -17,9 +19,13 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot import keyboards, texts
 from bot.api import BotApiError, LinkRevokedError
+from bot.config import BotSettings
 from bot.handlers import fallback, scenarios, start
 
 from .conftest import CHAT_ID, LINK_ID, PATIENT_ID, PATIENT_NAME, SECRET
+
+# Настройки нужны шагу «когда»: время вводится по местным часам семьи.
+SETTINGS = BotSettings(bot_token="t", bot_api_token="s")
 
 
 @dataclass
@@ -52,6 +58,18 @@ class FakeCallback:
 
     async def answer(self, *_: Any, **__: Any) -> None:
         self.answered = True
+
+
+async def answer_when_now(message: FakeMessage, state: FSMContext, api: Any, store: Any) -> None:
+    """Проходит шаг «когда это было», отвечая «Сейчас».
+
+    Шаг общий для всех сценариев: бот ставил моментом события момент отправки,
+    и вечерняя запись утреннего замера сдвигала его на десять часов.
+    """
+
+    assert message.last == texts.WHEN_ASK, "перед отправкой бот спрашивает о времени"
+    callback = FakeCallback(data=keyboards.WHEN_NOW_DATA, message=message)
+    await scenarios.when_now(callback, state, api, store)
 
 
 @pytest.fixture
@@ -168,6 +186,7 @@ class TestKetones:
 
         callback = FakeCallback(data=f"{keyboards.KETONE_METHOD_PREFIX}blood")
         await scenarios.ketones_method(callback, state, api, linked_store)
+        await answer_when_now(callback.message, state, api, linked_store)
 
         assert len(api.logs) == 1
         sent = api.logs[0]
@@ -200,6 +219,7 @@ class TestWeight:
         await state.set_state(scenarios.Weight.value)
 
         await scenarios.weight_value(message, state, api, linked_store)
+        await answer_when_now(message, state, api, linked_store)
 
         assert api.logs[0]["kind"] == "weight"
         assert api.logs[0]["payload"]["weight_kg"] == "18.4"
@@ -215,6 +235,7 @@ class TestWellbeing:
 
         second = FakeMessage(text="после обеда")
         await scenarios.wellbeing_note(second, state, api, linked_store)
+        await answer_when_now(second, state, api, linked_store)
 
         payload = api.logs[0]["payload"]
         assert api.logs[0]["kind"] == "side-effects"
@@ -229,6 +250,7 @@ class TestWellbeing:
 
         callback = FakeCallback(data=keyboards.WELLBEING_SKIP_DATA)
         await scenarios.wellbeing_skip_note(callback, state, api, linked_store)
+        await answer_when_now(callback.message, state, api, linked_store)
 
         assert "description" not in api.logs[0]["payload"]
 
@@ -268,6 +290,7 @@ class TestCancelAndFailures:
         await state.set_state(scenarios.Weight.value)
 
         await scenarios.weight_value(message, state, api, linked_store)
+        await answer_when_now(message, state, api, linked_store)
 
         assert message.last == texts.LINK_REVOKED
         assert await linked_store.get(CHAT_ID) is None
@@ -282,6 +305,7 @@ class TestCancelAndFailures:
         await state.set_state(scenarios.Weight.value)
 
         await scenarios.weight_value(message, state, api, linked_store)
+        await answer_when_now(message, state, api, linked_store)
 
         assert message.last == texts.API_UNAVAILABLE
         assert await linked_store.get(CHAT_ID) is not None
@@ -308,3 +332,65 @@ class TestWiring:
             texts.BTN_WELLBEING,
             texts.BTN_APP,
         }
+
+
+class TestEventTimeStep:
+    """Время события задаёт семья, а не момент отправки.
+
+    Родитель, записывающий вечером утренний замер, сдвигал его на десять часов —
+    а по времени замеров врач судит о динамике.
+    """
+
+    @pytest.mark.asyncio
+    async def test_manual_time_is_sent_instead_of_now(self, api, linked_store, state):
+        message = FakeMessage(text="18.4")
+        await state.set_state(scenarios.Weight.value)
+        await scenarios.weight_value(message, state, api, linked_store)
+
+        callback = FakeCallback(data=keyboards.WHEN_MANUAL_DATA, message=message)
+        await scenarios.when_manual(callback, state)
+        assert message.last == texts.WHEN_ASK_MANUAL
+
+        typed = FakeMessage(text="07:30")
+        await scenarios.when_typed(typed, state, api, linked_store, SETTINGS)
+
+        assert len(api.logs) == 1
+        occurred = api.logs[0]["payload"]["occurred_at"]
+        # 07:30 по Ташкенту — 02:30 UTC: сдвиг применён, а не проигнорирован.
+        assert occurred.endswith("+00:00") or occurred.endswith("Z")
+        assert "T02:30" in occurred
+        assert typed.last == texts.SAVED
+
+    @pytest.mark.asyncio
+    async def test_bad_time_is_re_asked_without_sending(self, api, linked_store, state):
+        message = FakeMessage(text="18.4")
+        await state.set_state(scenarios.Weight.value)
+        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.when_manual(
+            FakeCallback(data=keyboards.WHEN_MANUAL_DATA, message=message), state
+        )
+
+        typed = FakeMessage(text="вчера утром")
+        await scenarios.when_typed(typed, state, api, linked_store, SETTINGS)
+
+        assert typed.last == texts.WHEN_BAD_FORMAT
+        assert not api.logs, "до разбора времени запись не уходит"
+        assert await state.get_state() == scenarios.When.manual.state
+
+    @pytest.mark.asyncio
+    async def test_future_time_gets_its_own_explanation(self, api, linked_store, state):
+        """«Неверный формат» на будущее время отправило бы исправлять верное."""
+
+        message = FakeMessage(text="18.4")
+        await state.set_state(scenarios.Weight.value)
+        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.when_manual(
+            FakeCallback(data=keyboards.WHEN_MANUAL_DATA, message=message), state
+        )
+
+        tomorrow = datetime.now(ZoneInfo(SETTINGS.tz)) + timedelta(days=1)
+        typed = FakeMessage(text=tomorrow.strftime("%d.%m %H:%M"))
+        await scenarios.when_typed(typed, state, api, linked_store, SETTINGS)
+
+        assert typed.last == texts.WHEN_IN_FUTURE
+        assert not api.logs
