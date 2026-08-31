@@ -8,7 +8,7 @@ import {
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Apple, Plus, Upload, X } from "lucide-react";
+import { Apple, PackageSearch, Plus, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useSectionItem } from "../../routes/useSectionTab";
@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { useProductDetail } from "../products/useProductDetail";
 import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
 import { SubPageHeader } from "../../components/SubPageHeader";
@@ -83,6 +84,11 @@ export function ProductsPanel({
     setPage(0);
   };
   const [item, setItem] = useSectionItem();
+  // Дочитывание идёт только когда позиции нет в выборке: обычный переход из
+  // таблицы уже держит её строку и лишнего запроса не делает.
+  const missingFromRows =
+    item !== undefined && item !== NEW_ITEM && item !== IMPORT_ITEM;
+  const fetched = useProductDetail(missingFromRows ? item : null);
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
   const debouncedQuery = useDebouncedValue(filters.q, 300);
@@ -217,13 +223,33 @@ export function ProductsPanel({
   }
 
   if (item !== undefined) {
-    // Позиция ищется в уже загруженном списке. Прямой переход по ссылке на
-    // строку, которой нет в текущей выборке (другая страница, другой фильтр),
-    // отдаёт `undefined` — и открывается форма заведения. Полноценное чтение
-    // позиции по идентификатору требует отдельной ручки и вложенного маршрута
-    // (открытая тема в CLAUDE.md); до неё ссылка работает в пределах выборки.
-    const editing =
+    // Позиция сначала ищется в уже загруженной выборке, а если её там нет —
+    // дочитывается по идентификатору. Раньше второго шага не было: ссылка на
+    // строку с другой страницы или из-под другого фильтра открывала пустую
+    // форму «Новый продукт», и администратор заводил дубль вместо правки.
+    const loaded =
       item === NEW_ITEM ? null : (rows.find((p) => p.id === item) ?? null);
+    const editing =
+      loaded ?? (item === NEW_ITEM ? null : (fetched.data ?? null));
+
+    if (item !== NEW_ITEM && editing === null && fetched.isPending) {
+      return <TableSkeleton label={t("products.loading")} rows={4} />;
+    }
+
+    if (item !== NEW_ITEM && editing === null) {
+      return (
+        <EmptyState
+          icon={PackageSearch}
+          title={t("products.notFound")}
+          description={t("products.notFoundDescription")}
+          action={
+            <Button type="button" onClick={() => setItem(undefined)}>
+              {t("products.backToList")}
+            </Button>
+          }
+        />
+      );
+    }
 
     return (
       <ProductEditor

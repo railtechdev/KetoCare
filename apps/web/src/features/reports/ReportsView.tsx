@@ -1,6 +1,6 @@
 import { AsyncSection, Button, Section, Skeleton, toast } from "@ketocare/ui";
 import { Download, FileText } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
@@ -41,6 +41,10 @@ export function ReportsView({ patientId }: { patientId: string }) {
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(() => toDateInput(new Date()));
   const [jobId, setJobId] = useState<string | null>(null);
+  // Момент постановки задачи: по нему видно, что сборка затянулась. Воркер
+  // может быть не поднят вовсе (PDF требует системных pango и cairo), и тогда
+  // экран бесконечно показывал «Готовим файл», пока открыта вкладка.
+  const [requestedAt, setRequestedAt] = useState<number | null>(null);
 
   const range = useMemo<ReportRange>(() => ({ from, to }), [from, to]);
   const invalidRange = from === "" || to === "" || from > to;
@@ -48,8 +52,20 @@ export function ReportsView({ patientId }: { patientId: string }) {
   const report = useReport(patientId, range);
   const requestPdf = useRequestPdfMutation(patientId);
   const job = useReportJob(jobId);
+  const takingLong = useTakingLong(requestedAt, job.data?.status);
 
   const isDoctor = session?.role === "doctor";
+
+  function retry() {
+    requestPdf.mutate(range, {
+      onSuccess: (created) => {
+        setJobId(created.id);
+        setRequestedAt(Date.now());
+      },
+      onError: (error) =>
+        toast.error(errorMessageOf(error) ?? t("common:errors.unexpected")),
+    });
+  }
 
   const csvHref = `/api/v1/patients/${patientId}/report?from=${from}&to=${to}&format=csv`;
   const pdfHref =
@@ -74,6 +90,7 @@ export function ReportsView({ patientId }: { patientId: string }) {
               requestPdf.mutate(range, {
                 onSuccess: (created) => {
                   setJobId(created.id);
+                  setRequestedAt(Date.now());
                   toast.success(t("pdf.queued"));
                 },
                 onError: (error) =>
@@ -135,11 +152,38 @@ export function ReportsView({ patientId }: { patientId: string }) {
               </a>
             </Button>
           ) : job.data?.status === "failed" ? (
-            <p className="m-0 text-sm text-destructive">{t("pdf.failed")}</p>
+            /* У отказа обязано быть действие (правило П16 канона): раньше
+               здесь была одна красная строка, и дальше человек не мог ничего —
+               ни повторить, ни понять, ждать ли. */
+            <div className="flex flex-col items-start gap-field">
+              <p className="m-0 text-sm text-destructive">{t("pdf.failed")}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                disabled={requestPdf.isPending}
+                onClick={() => retry()}
+              >
+                {t("pdf.retry")}
+              </Button>
+            </div>
           ) : (
-            <p role="status" className="m-0 text-sm text-muted-foreground">
-              {t("pdf.building")}
-            </p>
+            <div className="flex flex-col items-start gap-field">
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                {takingLong ? t("pdf.slow") : t("pdf.building")}
+              </p>
+              {takingLong && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch"
+                  disabled={requestPdf.isPending}
+                  onClick={() => retry()}
+                >
+                  {t("pdf.retry")}
+                </Button>
+              )}
+            </div>
           )}
         </Section>
       )}
@@ -263,3 +307,32 @@ function Measurement({
     </div>
   );
 }
+
+/**
+ * Сборка идёт дольше обычного.
+ *
+ * Порог — не про производительность, а про честность экрана: воркер может быть
+ * не поднят вовсе, и тогда задача не соберётся никогда. Молча крутить
+ * «Готовим файл» в таком случае — обещание, которое некому выполнить.
+ */
+function useTakingLong(
+  requestedAt: number | null,
+  status: string | undefined,
+): boolean {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (requestedAt === null || status === "done" || status === "failed")
+      return;
+    const timer = setInterval(() => setNow(Date.now()), 2000);
+    return () => clearInterval(timer);
+  }, [requestedAt, status]);
+
+  if (requestedAt === null || status === "done" || status === "failed") {
+    return false;
+  }
+  return now - requestedAt > SLOW_AFTER_MS;
+}
+
+/** Полминуты: обычная сборка укладывается в несколько секунд. */
+const SLOW_AFTER_MS = 30_000;

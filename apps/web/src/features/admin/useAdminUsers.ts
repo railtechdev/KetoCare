@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
 import { MAX_PAGE_SIZE, type AdminUserUpdate } from "./types";
@@ -9,12 +14,43 @@ import { MAX_PAGE_SIZE, type AdminUserUpdate } from "./types";
  * Клинических данных в этих ответах нет и быть не может: администратор к ним
  * доступа не имеет, ручка отдаёт только профиль учётной записи.
  */
-export function useAdminUsers() {
+export interface UsersFilter {
+  q: string;
+  role: string;
+}
+
+export const EMPTY_USERS_FILTER: UsersFilter = { q: "", role: "" };
+
+/**
+ * Учётные записи с отбором на сервере.
+ *
+ * Список приходил страницей в двести строк без поиска и фильтра вовсе: найти
+ * учётку человека, который звонит прямо сейчас, было нечем, а о том, что видна
+ * только часть, экран говорил одной строкой внизу.
+ */
+export function useAdminUsers(filter: UsersFilter = EMPTY_USERS_FILTER) {
+  const q = filter.q.trim();
+
   return useQuery({
-    queryKey: ["admin", "users"],
+    queryKey: ["admin", "users", q, filter.role],
+    // Прошлая выдача держится, пока грузится новая: иначе таблица мигает
+    // пустотой на каждой набранной букве.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/admin/users", {
-        params: { query: { limit: MAX_PAGE_SIZE, offset: 0 } },
+        params: {
+          query: {
+            limit: MAX_PAGE_SIZE,
+            offset: 0,
+            ...(q === "" ? {} : { q }),
+            ...(filter.role === ""
+              ? {}
+              : {
+                  role: filter.role as
+                    "admin" | "doctor" | "dietitian" | "parent",
+                }),
+          },
+        },
       });
       if (error || !data) throw error ?? new Error("Empty users response");
       return data;
