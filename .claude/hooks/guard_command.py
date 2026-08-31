@@ -228,17 +228,30 @@ def mentions_protected(text: str) -> bool:
     return mentions_protected_paths(text) or mentions_env(text)
 
 
+HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+
+
 def split_segments(command: str) -> list[str]:
     """Разбивает команду на сегменты по ; && || | & и переводам строк.
 
     С учётом кавычек: `ssh host 'a && b'` — это ОДИН сегмент, обращённый к
     другой машине. Наивное разбиение регуляркой делило его пополам, второй
     кусок выглядел локальной командой, и разбор `ssh` не срабатывал никогда.
+
+    С учётом heredoc: тело `<<EOF … EOF` — это ДАННЫЕ команды, а не команды.
+    Раньше оно резалось по переводам строк наравне с кодом, и каждая его
+    строка выглядела отдельной локальной командой. Отсюда два ложных
+    срабатывания: сообщение коммита, в котором упомянут `git push origin
+    main`, упиралось в правило про main, а `ssh host <<EOF` с работой над
+    файлом секретов сервера — в защиту локального файла секретов. Тело
+    остаётся при своём сегменте; что с ним делать дальше, решают
+    `strip_heredocs` и `heredoc_bodies`.
     """
 
     segments: list[str] = []
     current: list[str] = []
     quote: str | None = None
+    pending: list[str] = []
     index = 0
     while index < len(command):
         char = command[index]
@@ -253,10 +266,25 @@ def split_segments(command: str) -> list[str]:
             current.append(char)
             index += 1
             continue
+        # `<<<` — это here-string, тела у него нет.
+        if command.startswith("<<", index) and not command.startswith("<<<", index):
+            match = HEREDOC_RE.match(command, index)
+            if match:
+                pending.append(match.group(2))
+                current.append(match.group(0))
+                index = match.end()
+                continue
         if command.startswith(("&&", "||"), index):
             segments.append("".join(current))
             current = []
             index += 2
+            continue
+        if char == "\n" and pending:
+            # Строка кончилась, а heredoc открыт: дальше идут данные до
+            # ограничителя, и делить их нельзя.
+            body, index = _consume_heredocs(command, index + 1, pending)
+            current.append("\n" + body)
+            pending = []
             continue
         if char in ";|&\n":
             segments.append("".join(current))
@@ -267,6 +295,77 @@ def split_segments(command: str) -> list[str]:
         index += 1
     segments.append("".join(current))
     return [s for s in segments if s.strip()]
+
+
+def _consume_heredocs(command: str, index: int, delimiters: list[str]) -> tuple[str, int]:
+    """Тело всех открытых heredoc от `index` до последнего ограничителя."""
+
+    body: list[str] = []
+    remaining = list(delimiters)
+    while remaining and index < len(command):
+        end = command.find("\n", index)
+        line = command[index:] if end == -1 else command[index:end]
+        body.append(line)
+        index = len(command) if end == -1 else end + 1
+        if line.strip() == remaining[0]:
+            remaining.pop(0)
+    return "\n".join(body), index
+
+
+def strip_heredocs(segment: str) -> str:
+    """Сегмент без тел heredoc — только то, что выполняет оболочка."""
+
+    result: list[str] = []
+    pending: list[str] = []
+    for line in segment.split("\n"):
+        if pending:
+            if line.strip() == pending[0]:
+                pending.pop(0)
+            continue
+        result.append(line)
+        for match in HEREDOC_RE.finditer(line):
+            pending.append(match.group(2))
+    return "\n".join(result)
+
+
+def heredoc_bodies(segment: str) -> str:
+    """Только тела heredoc: для команд, которые их ИСПОЛНЯЮТ."""
+
+    body: list[str] = []
+    pending: list[str] = []
+    for line in segment.split("\n"):
+        if pending:
+            if line.strip() == pending[0]:
+                pending.pop(0)
+                continue
+            body.append(line)
+            continue
+        for match in HEREDOC_RE.finditer(line):
+            pending.append(match.group(2))
+    return "\n".join(body)
+
+
+#: Команды, для которых тело heredoc — это код, а не данные. Для них тело
+#: разбирается наравне с остальным: оболочка, получившая скрипт на вход,
+#: выполняет его целиком, и защита обязана видеть каждую строку.
+HEREDOC_INTERPRETERS = {
+    "bash",
+    "sh",
+    "zsh",
+    "dash",
+    "ksh",
+    "python",
+    "python3",
+    "node",
+    "perl",
+    "ruby",
+    "php",
+    "psql",
+    "mysql",
+    "docker",
+    "kubectl",
+    "uv",
+}
 
 
 def _tokens(segment: str) -> list[str]:
@@ -364,33 +463,46 @@ def local_part(segment: str) -> str:
 
     if first_word(segment) != "ssh":
         return segment
-    # Остаётся то, что вне кавычек: там же окажется и `> .env`, если кто-то
-    # перенаправит вывод ssh в локальный файл.
-    return QUOTED_RE.sub(" ", segment)
+    # Остаётся то, что вне кавычек и вне тела heredoc: там же окажется и
+    # перенаправление в локальный файл, если кто-то его напишет. Тело heredoc
+    # уходит на ту сторону целиком — это скрипт удалённой машины, и наш
+    # репозиторий он не трогает по определению.
+    return QUOTED_RE.sub(" ", strip_heredocs(segment))
 
 
 def segment_blocked(segment: str) -> bool:
-    """Сегмент нарушает защиту путей?"""
+    """Сегмент нарушает защиту путей?
+
+    Тело heredoc разбирается отдельно и только у интерпретаторов. Для всех
+    остальных команд это данные: текст сообщения коммита, содержимое файла,
+    скрипт для удалённой машины. Разбирать их как локальные команды значило бы
+    блокировать работу за упоминание пути в тексте — что и происходило.
+    """
 
     segment = local_part(segment)
 
-    if mentions_protected_paths(segment) and not segment_is_read_only(segment):
+    if first_word(segment) in HEREDOC_INTERPRETERS:
+        body = heredoc_bodies(segment)
+        if body.strip() and any(segment_blocked(s) for s in split_segments(body)):
+            return True
+
+    command_part = strip_heredocs(segment)
+
+    if mentions_protected_paths(command_part) and not segment_is_read_only(command_part):
         return True
-    if mentions_env(segment) and not (
-        segment_is_read_only(segment) or env_usage_is_read_only(segment)
-    ):
-        return True
-    return False
+    return mentions_env(command_part) and not (
+        segment_is_read_only(command_part) or env_usage_is_read_only(command_part)
+    )
 
 
 # --- правило «main только через ветку и PR» --------------------------------
 
 
-def current_branch() -> str | None:
+def current_branch(cwd: str | None = None) -> str | None:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=_project_dir(),
+            cwd=cwd or _project_dir(),
             capture_output=True,
             text=True,
             timeout=5,
@@ -412,13 +524,57 @@ def _git_verb(segment: str) -> str | None:
     return None
 
 
-def _switches_to_main(segment: str) -> bool:
+_NEW_BRANCH_FLAGS = {"-b", "-B", "-c", "-C"}
+
+
+def _is_local_branch(name: str, cwd: str) -> bool:
+    """Существующая локальная ветка?
+
+    Нужно, чтобы отличить `git checkout feat/x` (переход) от `git checkout
+    файл` (восстановление файла): git различает их так же — сначала ищет ветку.
+    """
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"],
+            cwd=cwd,
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
+def _switch_target(segment: str, cwd: str) -> str | None:
+    """На какую ветку переводит сегмент; None — переключения нет.
+
+    Возвращает имя ветки и при уходе С главной, и при переходе НА неё. Раньше
+    распознавался только переход на main, и `git switch feat/x && git rebase
+    origin/main` блокировался: правило считало, что мы всё ещё на main, хотя
+    первая же команда с неё уходит.
+    """
+
     verb = _git_verb(segment)
     if verb not in {"switch", "checkout"}:
-        return False
-    args = [t for t in _tokens(segment)[2:] if not t.startswith("-")]
-    # `git checkout -b main` — тоже переход на main; `git checkout -- main.py` нет.
-    return "main" in args and "--" not in _tokens(segment)
+        return None
+
+    tokens = _tokens(segment)
+    if "--" in tokens:
+        # `git checkout -- main.py` — это восстановление файла.
+        return None
+
+    flags = {t for t in tokens if t.startswith("-")}
+    args = [t for t in tokens[2:] if not t.startswith("-")]
+    if not args:
+        return None
+
+    if flags & _NEW_BRANCH_FLAGS:
+        return args[0]
+    # Без флага создания аргумент может быть и веткой, и файлом. Ветка ли это,
+    # знает git — гадать здесь нельзя: ошибка в любую сторону либо открывает
+    # дыру, либо мешает работе.
+    return args[0] if _is_local_branch(args[0], cwd) else None
 
 
 def _pushes_main(segment: str, on_main: bool) -> bool:
@@ -445,22 +601,62 @@ MAIN_BLOCK_MESSAGE = """BLOCKED: работа с main идёт только че
 Если ветка уже создана, просто переключитесь на неё: git switch <ветка>."""
 
 
-def main_rule_violation(command: str) -> bool:
-    """Команда создаёт коммит в main или отправляет main напрямую?"""
+def _target_dir(command: str, cwd: str | None) -> str:
+    """Каталог, в котором команда на самом деле выполнится.
+
+    `cd /tmp/чужой-репозиторий && git commit` выполняется НЕ в проекте, а
+    правило про main читало ветку всегда в каталоге проекта. Из-за этого любой
+    коммит в одноразовом репозитории под scratchpad блокировался за то, что в
+    KetoCare сейчас выбрана main.
+    """
+
+    base = cwd or _project_dir()
+    for segment in split_segments(command):
+        if first_word(segment) != "cd":
+            continue
+        args = [t for t in _tokens(segment)[1:] if not t.startswith("-")]
+        if args:
+            base = os.path.abspath(os.path.join(base, os.path.expanduser(args[0])))
+    return base
+
+
+def _inside_project(path: str) -> bool:
+    project = os.path.realpath(_project_dir())
+    try:
+        return os.path.commonpath([os.path.realpath(path), project]) == project
+    except ValueError:
+        # Разные тома — общего пути нет, значит каталог точно чужой.
+        return False
+
+
+def main_rule_violation(command: str, cwd: str | None = None) -> bool:
+    """Команда создаёт коммит в main этого проекта или отправляет его напрямую?"""
 
     segments = split_segments(command)
     if not any(first_word(s) == "git" for s in segments):
         return False
 
-    branch = current_branch()
-    on_main = branch == "main"
-    goes_to_main = on_main or any(_switches_to_main(s) for s in segments)
+    target = _target_dir(command, cwd)
+    # Правило защищает main ЭТОГО проекта. Чужой репозиторий — не наша ветка и
+    # не наш деплой; блокировать там коммиты значит мешать работе, ничего не
+    # защищая.
+    if not _inside_project(target):
+        return False
+
+    # Ветка отслеживается ПО ХОДУ команды: `git switch feat/x && git commit`
+    # коммитит уже не в main, а `git switch main && git commit` — в main.
+    on_main = current_branch(target) == "main"
 
     for segment in segments:
+        moved = _switch_target(segment, target)
+        if moved is not None:
+            on_main = moved == "main"
+            continue
+
         verb = _git_verb(segment)
         if verb is None:
             continue
-        if verb in GIT_COMMIT_VERBS and goes_to_main:
+        if verb in GIT_COMMIT_VERBS and on_main:
             return True
         if _pushes_main(segment, on_main):
             return True
@@ -561,7 +757,7 @@ def main() -> int:
     if not command:
         return 0
 
-    if main_rule_violation(command):
+    if main_rule_violation(command, payload.get("cwd")):
         print(MAIN_BLOCK_MESSAGE, file=sys.stderr)
         return 2
 
