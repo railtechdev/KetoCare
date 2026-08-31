@@ -24,6 +24,7 @@ import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import { TableSkeleton } from "./skeletons";
 import type { Patient } from "./types";
+import { InvitationsList } from "../invitations/InvitationsList";
 import { InviteForm } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 
@@ -284,6 +285,10 @@ export function PatientsListView() {
         description={t("invitations:intro")}
       >
         <InviteForm roles={FAMILY_ROLES} />
+
+        {/* Список выданных под формой: ссылка показывается один раз, и вопрос
+            «я уже приглашал эту семью?» оставался без ответа. */}
+        <InvitationsList />
       </FormSheet>
     </PageLayout>
   );

@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Path, Request, Response
 
-from core.models import User
+from core.models import Invitation, User
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import backup_codes as backup_codes_repo
@@ -26,6 +27,7 @@ from ..deps.auth import (
     TotpSetupUserDep,
     require_roles,
 )
+from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
 from ..schemas import (
@@ -35,8 +37,10 @@ from ..schemas import (
     InvitationAccept,
     InvitationCreate,
     InvitationCreated,
+    InvitationRead,
     LoginRequest,
     LoginResponse,
+    Page,
     PasswordSet,
     RefreshRequest,
     TokenPair,
@@ -380,6 +384,125 @@ async def create_invitation(
         token=token,
         expires_at=invitation.expires_at,
     )
+
+
+@router.get(
+    "/invitations",
+    response_model=Page[InvitationRead],
+    summary="Выданные приглашения",
+    dependencies=[Depends(require_roles(*INVITER_ROLES))],
+)
+async def list_invitations(
+    user: CurrentUserDep, session: SessionDep, page: PaginationDep
+) -> Page[InvitationRead]:
+    """Списка выданных приглашений не было вовсе.
+
+    Ссылка показывается один раз и не восстанавливается, поэтому вопрос «я уже
+    приглашал эту семью?» оставался без ответа, а ошибка в адресе означала
+    действующее приглашение в чужой почтовый ящик.
+
+    Администратор видит все, врач и диетолог — только свои: список адресов
+    чужих семей это сведения о пациентах другого специалиста.
+    """
+
+    scope = None if user.role is UserRole.ADMIN else user.id
+    items, total = await invitations_repo.list_invitations(
+        session, created_by=scope, limit=page.limit, offset=page.offset
+    )
+
+    names = await users_repo.names_by_ids(
+        session, user_ids={i.created_by for i in items if i.created_by is not None}
+    )
+
+    return Page(
+        items=[
+            InvitationRead(
+                id=invitation.id,
+                email=invitation.email,
+                role=invitation.role,
+                status=_invitation_status(invitation),
+                expires_at=invitation.expires_at,
+                created_at=invitation.created_at,
+                invited_by_name=(
+                    None if invitation.created_by is None else names.get(invitation.created_by)
+                ),
+            )
+            for invitation in items
+        ],
+        total=total,
+    )
+
+
+@router.post(
+    "/invitations/{invitation_id}/revoke",
+    response_model=InvitationRead,
+    summary="Отозвать приглашение",
+    dependencies=[Depends(require_roles(*INVITER_ROLES))],
+)
+async def revoke_invitation(
+    invitation_id: Annotated[uuid.UUID, Path()],
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> InvitationRead:
+    """Гасит выданную ссылку.
+
+    Отозвать было нечем: единственным выходом при ошибке в адресе было ждать,
+    пока приглашение истечёт, — а это неделя действующей ссылки в чужом ящике.
+    """
+
+    invitation = await invitations_repo.get(session, invitation_id)
+    if invitation is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Приглашение не найдено.")
+
+    # Чужое приглашение недоступно даже на чтение, поэтому и на отзыв — тоже.
+    # Для администратора исключение: он ведёт учётные записи.
+    if user.role is not UserRole.ADMIN and invitation.created_by != user.id:
+        raise ApiError(ErrorCode.NOT_FOUND, "Приглашение не найдено.")
+
+    if invitation.accepted_at is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Приглашение уже принято: учётная запись создана. "
+            "Отключить её можно в разделе «Пользователи».",
+        )
+
+    if invitation.revoked_at is None:
+        await invitations_repo.revoke(session, invitation=invitation)
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="revoke",
+            entity="invitations",
+            entity_id=invitation.id,
+            after={"email": invitation.email, "role": invitation.role.value},
+        )
+
+    return InvitationRead(
+        id=invitation.id,
+        email=invitation.email,
+        role=invitation.role,
+        status=_invitation_status(invitation),
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+    )
+
+
+def _invitation_status(
+    invitation: Invitation,
+) -> Literal["pending", "accepted", "expired", "revoked"]:
+    """Состояние одним словом.
+
+    Считается на чтении: «истекло» — это про сравнение с текущим моментом, и
+    хранимое поле пришлось бы обновлять по расписанию, чтобы оно не врало.
+    """
+
+    if invitation.accepted_at is not None:
+        return "accepted"
+    if invitation.revoked_at is not None:
+        return "revoked"
+    if invitation.expires_at <= datetime.now(UTC):
+        return "expired"
+    return "pending"
 
 
 @router.post(

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
+import uuid
 
+import pytest
+from sqlalchemy import select
+
+from core.models import AuditLog
 from core.models.enums import UserRole
 from core.repositories import invitations as invitations_repo
 
@@ -199,3 +203,187 @@ class TestAcceptInvitation:
             await client.get(f"/api/v1/patients/{_uuid.uuid4()}", headers=headers)
         ).status_code == 401
         assert (await client.get("/api/v1/products", headers=headers)).status_code == 401
+
+
+class TestInvitationList:
+    """Списка выданных приглашений не было вовсе.
+
+    Ссылка показывается один раз и не восстанавливается, поэтому вопрос «я уже
+    приглашал эту семью?» оставался без ответа.
+    """
+
+    async def _invite(self, client, inviter, auth_headers, email: str, role: str = "parent"):
+        response = await client.post(
+            "/api/v1/auth/invitations",
+            json={"email": email, "role": role},
+            headers=auth_headers(inviter),
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    async def test_doctor_sees_only_own_invitations(self, client, session, make_user, auth_headers):
+        """Список адресов чужих семей — сведения о пациентах другого специалиста."""
+
+        mine = await make_user(UserRole.DOCTOR)
+        other = await make_user(UserRole.DOCTOR)
+
+        await self._invite(client, mine, auth_headers, "my.family@example.com")
+        await self._invite(client, other, auth_headers, "other.family@example.com")
+
+        response = await client.get("/api/v1/auth/invitations", headers=auth_headers(mine))
+
+        assert response.status_code == 200, response.text
+        emails = [item["email"] for item in response.json()["items"]]
+        assert emails == ["my.family@example.com"]
+
+    async def test_admin_sees_all_and_who_invited(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        await self._invite(client, doctor, auth_headers, "family@example.com")
+
+        response = await client.get("/api/v1/auth/invitations", headers=auth_headers(admin))
+
+        items = response.json()["items"]
+        assert any(item["email"] == "family@example.com" for item in items)
+        # «Кто-то» администратора не устраивает: приглашение семьи делает автора
+        # её ведущим специалистом.
+        invited = next(i for i in items if i["email"] == "family@example.com")
+        assert invited["invited_by_name"] == doctor.full_name
+
+    async def test_token_is_never_listed(self, client, session, make_user, auth_headers):
+        """Иначе список сам становится способом войти чужой учётной записью."""
+
+        admin = await make_user(UserRole.ADMIN)
+        await self._invite(client, admin, auth_headers, "staff@example.com", role="doctor")
+
+        response = await client.get("/api/v1/auth/invitations", headers=auth_headers(admin))
+
+        assert all("token" not in item for item in response.json()["items"])
+
+    async def test_status_reflects_acceptance(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        created = await self._invite(
+            client, admin, auth_headers, "accepts@example.com", role="doctor"
+        )
+
+        await client.post(
+            "/api/v1/auth/invitations/accept",
+            json={
+                "token": created["token"],
+                "full_name": "Новый Врач",
+                "password": STRONG_PASSWORD,
+            },
+        )
+
+        response = await client.get("/api/v1/auth/invitations", headers=auth_headers(admin))
+        item = next(i for i in response.json()["items"] if i["id"] == created["id"])
+        assert item["status"] == "accepted"
+
+    async def test_family_cannot_read_the_list(self, client, session, make_user, auth_headers):
+        parent = await make_user(UserRole.PARENT)
+        response = await client.get("/api/v1/auth/invitations", headers=auth_headers(parent))
+        assert response.status_code == 403
+
+
+class TestRevokeInvitation:
+    """Отозвать выданную ссылку было нечем.
+
+    Ошибка в адресе означала действующее приглашение в чужой почтовый ящик, и
+    единственным выходом было ждать неделю, пока оно истечёт.
+    """
+
+    async def test_revoked_link_stops_working(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        created = await client.post(
+            "/api/v1/auth/invitations",
+            json={"email": "typo@example.com", "role": "doctor"},
+            headers=auth_headers(admin),
+        )
+        invitation = created.json()
+
+        revoked = await client.post(
+            f"/api/v1/auth/invitations/{invitation['id']}/revoke",
+            headers=auth_headers(admin),
+        )
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json()["status"] == "revoked"
+
+        # Главное: ссылка перестала работать, а не только пропала из списка.
+        accepted = await client.post(
+            "/api/v1/auth/invitations/accept",
+            json={
+                "token": invitation["token"],
+                "full_name": "Кто-то",
+                "password": STRONG_PASSWORD,
+            },
+        )
+        assert accepted.status_code in (400, 404, 422), accepted.text
+
+    async def test_accepted_invitation_cannot_be_revoked(
+        self, client, session, make_user, auth_headers
+    ):
+        """Учётная запись уже создана: отзыв ссылки её не отключит."""
+
+        admin = await make_user(UserRole.ADMIN)
+        created = await client.post(
+            "/api/v1/auth/invitations",
+            json={"email": "already@example.com", "role": "doctor"},
+            headers=auth_headers(admin),
+        )
+        invitation = created.json()
+
+        await client.post(
+            "/api/v1/auth/invitations/accept",
+            json={
+                "token": invitation["token"],
+                "full_name": "Врач",
+                "password": STRONG_PASSWORD,
+            },
+        )
+
+        response = await client.post(
+            f"/api/v1/auth/invitations/{invitation['id']}/revoke",
+            headers=auth_headers(admin),
+        )
+        assert response.status_code == 409, response.text
+
+    async def test_someone_elses_invitation_is_not_found(
+        self, client, session, make_user, auth_headers
+    ):
+        """Чужое приглашение недоступно даже на чтение — значит, и на отзыв."""
+
+        mine = await make_user(UserRole.DOCTOR)
+        other = await make_user(UserRole.DOCTOR)
+        created = await client.post(
+            "/api/v1/auth/invitations",
+            json={"email": "not.yours@example.com", "role": "parent"},
+            headers=auth_headers(other),
+        )
+
+        response = await client.post(
+            f"/api/v1/auth/invitations/{created.json()['id']}/revoke",
+            headers=auth_headers(mine),
+        )
+        assert response.status_code == 404
+
+    async def test_revoke_is_audited(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        created = await client.post(
+            "/api/v1/auth/invitations",
+            json={"email": "audited@example.com", "role": "doctor"},
+            headers=auth_headers(admin),
+        )
+
+        await client.post(
+            f"/api/v1/auth/invitations/{created.json()['id']}/revoke",
+            headers=auth_headers(admin),
+        )
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "invitations",
+                AuditLog.action == "revoke",
+                AuditLog.entity_id == uuid.UUID(created.json()["id"]),
+            )
+        )
+        assert entry is not None, "операции с учётными записями пишутся в журнал"

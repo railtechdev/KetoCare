@@ -348,6 +348,28 @@ class ProductRead(ProductBase):
         ).ratio
 
 
+class InvitationRead(BaseModel):
+    """Выданное приглашение — без токена.
+
+    Токен показывается ровно один раз, при выдаче, и в базе от него остаётся
+    только sha256: список приглашений не должен позволять «подсмотреть ссылку
+    ещё раз», иначе он сам становится способом войти чужой учётной записью.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
+    role: UserRole
+    #: pending | accepted | expired | revoked — состояние одним словом.
+    status: Literal["pending", "accepted", "expired", "revoked"]
+    expires_at: datetime
+    created_at: datetime
+    #: Кто пригласил. Администратор видит чужие приглашения, и «кто-то» его не
+    #: устраивает: приглашение семьи делает автора её ведущим специалистом.
+    invited_by_name: str | None = None
+
+
 class ProductCategoryWrite(BaseModel):
     """Категория справочника продуктов.
 
