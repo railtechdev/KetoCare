@@ -6,12 +6,25 @@ import { useTranslation } from "react-i18next";
 import { Field } from "../../components/Field";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
-import { useProductSearch, type ProductOption } from "./useProducts";
+import {
+  useProductSearch,
+  useRecentProducts,
+  type ProductOption,
+} from "./useProducts";
 
 interface Props {
   onPick: (product: ProductOption) => void;
   /** Уже добавленные продукты не предлагаются повторно */
   excludeIds: string[];
+  /**
+   * Чей это выбор.
+   *
+   * Нужен подсказке «недавние»: до ввода поле не помогало ничем, хотя семья
+   * изо дня в день кладёт в меню одни и те же двадцать продуктов (правило П11
+   * канона). Без пациента подсказки нет — например, у диетолога, собирающего
+   * рецепт вообще.
+   */
+  patientId?: string;
 }
 
 /**
@@ -21,7 +34,7 @@ interface Props {
  * активный вариант — через aria-activedescendant. Без этого пользователь
  * скринридера не узнает ни о появлении подсказок, ни о выбранном варианте.
  */
-export function ProductPicker({ onPick, excludeIds }: Props) {
+export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
   const { t } = useTranslation("calculator");
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -30,7 +43,15 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
   const inputId = useId();
   const { data, isFetching, isError, error, refetch } = useProductSearch(query);
 
+  const recent = useRecentProducts(patientId);
+
   const options = (data ?? []).filter((p) => !excludeIds.includes(p.id));
+  // Недавние показываются, только пока поле пустое: как только человек начал
+  // набирать, ответом на его ввод должен быть поиск, а не история.
+  const recentOptions =
+    query.trim() === ""
+      ? (recent.data ?? []).filter((p) => !excludeIds.includes(p.id))
+      : [];
   const isOpen = query.trim().length >= 2 && options.length > 0;
   // Упавший поиск без сообщения неотличим от «ничего не нашлось»: подсказок
   // нет в обоих случаях. Показываем ошибку с повтором (П15 канона).
@@ -107,6 +128,30 @@ export function ProductPicker({ onPick, excludeIds }: Props) {
               {t("openCatalog")}
             </SectionLink>
           </Button>
+        </div>
+      )}
+
+      {/* Недавние — не выпадающий список, а строка кнопок под полем: список
+          перекрывал бы форму, а нажать на подсказку человек хочет сразу, не
+          вызывая её раскрытием. */}
+      {recentOptions.length > 0 && (
+        <div className="mt-field flex flex-col gap-field">
+          <span className="text-sm text-muted-foreground">{t("recent")}</span>
+          <ul className="m-0 flex list-none flex-wrap gap-field p-0">
+            {recentOptions.map((product) => (
+              <li key={product.id}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-touch"
+                  onClick={() => pick(product)}
+                >
+                  {product.name}
+                </Button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

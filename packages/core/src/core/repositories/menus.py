@@ -14,7 +14,7 @@ import uuid
 from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -69,6 +69,42 @@ async def list_items(session: AsyncSession, *, menu_id: uuid.UUID) -> list[MenuI
         .order_by(MenuItem.meal_slot, MenuItem.created_at, MenuItem.id)
     )
     return list(await session.scalars(stmt))
+
+
+async def recent_product_ids(
+    session: AsyncSession, *, patient_id: uuid.UUID, days: int = 30, limit: int = 200
+) -> list[uuid.UUID]:
+    """Продукты, которые семья уже клала в дни ребёнка, — от свежих к старым.
+
+    Источник — снимки позиций меню (ADR-0016): в них лежит состав ровно тот,
+    по которому считался день, и лишних запросов к рецептам не нужно.
+    Позиции без снимка (сохранённые до его появления) просто не участвуют.
+
+    Порядок — по времени добавления позиции: «недавние» это про то, что семья
+    готовила последним, а не про алфавит.
+    """
+
+    since = datetime.now(UTC) - timedelta(days=days)
+    stmt = (
+        select(MenuItem.snapshot)
+        .where(
+            MenuItem.patient_id == patient_id,
+            MenuItem.deleted_at.is_(None),
+            MenuItem.snapshot.is_not(None),
+            MenuItem.created_at >= since,
+        )
+        .order_by(MenuItem.created_at.desc())
+        .limit(limit)
+    )
+
+    seen: dict[uuid.UUID, None] = {}
+    for snapshot in await session.scalars(stmt):
+        for row in (snapshot or {}).get("ingredients", []):
+            try:
+                seen.setdefault(uuid.UUID(str(row["product_id"])), None)
+            except (KeyError, ValueError):
+                continue
+    return list(seen)
 
 
 async def get_item(session: AsyncSession, item_id: uuid.UUID) -> MenuItem | None:
