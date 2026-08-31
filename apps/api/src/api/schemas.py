@@ -294,6 +294,35 @@ class ProductRead(ProductBase):
     is_active: bool
 
 
+class ProductRevisionRead(BaseModel):
+    """Одна запись истории продукта (`product_revisions`, раздел 4.2 ТЗ).
+
+    История писалась с первого дня и не отдавалась ни одной ручкой. На экране
+    вместо неё показывался журнал аудита, отобранный по `entity_id`, — а импорт
+    пишет одну запись аудита на весь файл, без идентификатора продукта. Из-за
+    этого у всех импортированных позиций история выглядела пустой, хотя в базе
+    она была.
+
+    `snapshot` — состояние продукта ПОСЛЕ изменения, целиком. Разницу считает
+    тот, кто показывает: хранить её значило бы дублировать то, что и так есть.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    snapshot: dict[str, Any]
+    changed_by: uuid.UUID
+    #: Имя того, кто менял. Идентификатор без имени отвечает «кто-то», а вопрос
+    #: «кто поменял жиры» задают после инцидента, и отвечать на него надо сразу.
+    changed_by_name: str | None = None
+    changed_at: datetime
+
+
+class ProductRevisionPage(BaseModel):
+    items: list[ProductRevisionRead]
+    total: int
+
+
 class ProductCategoryRead(BaseModel):
     """Категория продукта.
 

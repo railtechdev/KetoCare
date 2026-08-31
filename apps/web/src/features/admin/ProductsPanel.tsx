@@ -202,7 +202,9 @@ export function ProductsPanel({
           toast.success(t("products.saved", { name: product.name_ru }));
         }}
         onCancel={() => setItem(undefined)}
-        showHistory={canImport}
+        // История доступна диетологу наравне с администратором: она читается
+        // из `product_revisions`, а не из журнала аудита, закрытого ролью admin.
+        showHistory
       />
     );
   }
