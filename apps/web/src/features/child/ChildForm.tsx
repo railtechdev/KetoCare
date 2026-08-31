@@ -1,14 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormFooter } from "@ketocare/ui";
 import { useId } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import type { Patient } from "../patients/useChildren";
-import { childSchema, type ChildValues } from "./childSchemas";
+import { childSchema, splitExclusions, type ChildValues } from "./childSchemas";
+import { ExcludedProductsField } from "./ExcludedProductsField";
 
 interface Props {
   /** null — заведение нового ребёнка */
@@ -38,6 +39,7 @@ export function ChildForm({
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<ChildValues>({
@@ -47,7 +49,10 @@ export function ChildForm({
       birthDate: child?.birth_date ?? "",
       sex: (child?.sex as "m" | "f") ?? "m",
       heightCm: child?.height_cm === null ? "" : String(child?.height_cm ?? ""),
-      allergies: (child?.allergies ?? []).join(", "),
+      // Свободные метки — в поле, продукты каталога — списком ниже: строка
+      // «3f2a…, орехи» не читается никем.
+      allergies: splitExclusions(child?.allergies ?? []).labels.join(", "),
+      excludedProductIds: splitExclusions(child?.allergies ?? []).productIds,
       notes: child?.notes ?? "",
     },
   });
@@ -102,11 +107,28 @@ export function ChildForm({
         {...register("heightCm")}
       />
 
+      {/* Продукты — ссылками на каталог. Свободная строка сопоставима только
+          с глазами человека: подбор раскладки и меню о ней не узнают, и
+          ребёнку с аллергией на арахис решатель предложит арахисовое масло
+          (раздел 6.3 ТЗ). */}
+      <Controller
+        control={control}
+        name="excludedProductIds"
+        render={({ field }) => (
+          <ExcludedProductsField
+            value={field.value}
+            onChange={field.onChange}
+            known={child?.excluded_products ?? []}
+          />
+        )}
+      />
+
       <Field
         id={`${ids}-allergies`}
         width="wide"
         optional
         label={t("child.fields.allergies")}
+        hint={t("child.fields.allergiesHint")}
         placeholder={t("child.fields.allergiesPlaceholder")}
         {...register("allergies")}
       />

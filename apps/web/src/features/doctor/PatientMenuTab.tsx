@@ -8,7 +8,10 @@ import { DayNavigator } from "../menu/DayNavigator";
 import { DayTotalsPanel } from "../menu/DayTotalsPanel";
 import { todayIso } from "../menu/dates";
 import { itemDishKey, useMenuItemTitles } from "../menu/useDishCatalog";
-import { WithdrawnProductsNotice } from "../menu/WithdrawnProductsNotice";
+import {
+  ExcludedProductsNotice,
+  WithdrawnProductsNotice,
+} from "../menu/WithdrawnProductsNotice";
 import { withdrawnByItem } from "../menu/withdrawn";
 import {
   MEAL_SLOTS,
@@ -75,6 +78,8 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
           />
         }
       >
+        <ExcludedProductsNotice excluded={menu.data?.excluded_products} />
+
         <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
 
         {MEAL_SLOTS.map((slot) => {

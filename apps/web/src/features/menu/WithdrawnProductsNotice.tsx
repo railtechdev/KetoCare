@@ -33,3 +33,30 @@ export function WithdrawnProductsNotice({
     </WarningBanner>
   );
 }
+
+/**
+ * Предупреждение: в блюдах дня есть продукт, исключённый ребёнку.
+ *
+ * Уровень `danger`, а не `warning`: выведенный из оборота продукт — повод
+ * перепроверить числа, а исключённый — повод не давать эту еду. День при этом
+ * не запрещается и не подменяется: исключения уточняются по ходу терапии, и
+ * вчерашний план мог быть согласован с врачом. Запрещать или предупреждать —
+ * вопрос 29 медицинской команде.
+ */
+export function ExcludedProductsNotice({
+  excluded,
+}: {
+  excluded: MenuRead["excluded_products"] | undefined;
+}) {
+  const { t } = useTranslation("menu");
+
+  if (excluded === undefined || excluded.length === 0) return null;
+
+  return (
+    <WarningBanner level="danger" title={t("excluded.title")}>
+      {t("excluded.body", {
+        list: excluded.map((entry) => entry.name_ru).join(", "),
+      })}
+    </WarningBanner>
+  );
+}

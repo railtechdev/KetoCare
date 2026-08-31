@@ -190,6 +190,21 @@ class PatientUpdate(BaseModel):
     notes: str | None = None
 
 
+class ExcludedProductRef(BaseModel):
+    """Продукт, исключённый ребёнку, — с названием.
+
+    Поле `allergies` хранит и идентификаторы продуктов, и свободные метки
+    (раздел 4.2 ТЗ). Идентификатор в карточке не читается: «3f2a…» не говорит
+    ничего ни семье, ни врачу, а список исключённого читают ровно тогда, когда
+    решают, чем кормить ребёнка.
+    """
+
+    id: uuid.UUID
+    #: `None` — продукт из каталога исчез; строка остаётся, чтобы исключение не
+    #: пропало молча.
+    name_ru: str | None = None
+
+
 class PatientRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -198,7 +213,12 @@ class PatientRead(BaseModel):
     birth_date: date
     sex: Sex
     height_cm: float | None
+    #: Как хранится: идентификаторы продуктов вперемешку со свободными метками.
     allergies: list[str]
+    #: То же самое, разобранное для показа: продукты с названиями…
+    excluded_products: list[ExcludedProductRef] = []
+    #: …и свободные метки («орехи вообще»), которые с каталогом не сопоставимы.
+    allergy_labels: list[str] = []
     notes: str | None
 
 

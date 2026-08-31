@@ -5,6 +5,8 @@ import {
   childSchema,
   parseAllergies,
   toChildBody,
+  looksLikeProductId,
+  splitExclusions,
   toChildUpdateBody,
 } from "./childSchemas";
 
@@ -14,6 +16,7 @@ const VALID = {
   sex: "f" as const,
   heightCm: "121.5",
   allergies: "орехи, молоко",
+  excludedProductIds: [],
   notes: "",
 };
 
@@ -78,5 +81,33 @@ describe("parseAllergies", () => {
 
   it("пустая строка — пустой список, а не список из пустой строки", () => {
     expect(parseAllergies("   ")).toEqual([]);
+  });
+});
+
+describe("исключения ребёнка", () => {
+  const PEANUT = "11111111-1111-4111-8111-111111111111";
+
+  it("делит хранимое поле на продукты и свободные метки", () => {
+    // Поле хранит и то и другое (раздел 4.2 ТЗ). Свободная метка «орехи»
+    // сопоставима только с глазами человека; продукт — ссылка на каталог, и
+    // только по ней подбор раскладки узнаёт об исключении.
+    expect(splitExclusions([PEANUT, "орехи", "  "])).toEqual({
+      productIds: [PEANUT],
+      labels: ["орехи"],
+    });
+  });
+
+  it("собирает поле обратно: продукты и метки вместе", () => {
+    expect(
+      toChildBody({ ...VALID, excludedProductIds: [PEANUT] }).allergies,
+    ).toEqual([PEANUT, "орехи", "молоко"]);
+  });
+
+  it("не принимает идентификатор за метку и наоборот", () => {
+    expect(looksLikeProductId(PEANUT)).toBe(true);
+    expect(looksLikeProductId("орехи")).toBe(false);
+    // Правило то же, что на сервере: разные правила означали бы, что часть
+    // системы считает исключение меткой, а часть — продуктом.
+    expect(looksLikeProductId("11111111-1111-4111-8111")).toBe(false);
   });
 });

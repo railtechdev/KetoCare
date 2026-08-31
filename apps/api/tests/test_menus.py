@@ -797,6 +797,74 @@ class TestSnapshotFreezesTheDay:
         assert stored.snapshot["ingredients"][0]["fat_100g"] == BUTTER["fat_100g"]
 
 
+class TestExcludedProductsAreNamed:
+    """План дня — то же, что вход расчёта: по нему кормят.
+
+    Раздел 6.3 ТЗ говорит об исключениях на входе решателя, но блюдо с
+    исключённым продуктом попадает в день и без него — из рецепта, составленного
+    для другого ребёнка.
+    """
+
+    async def test_day_with_an_excluded_product_is_marked_but_kept(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        patient.allergies = [str(butter.id), "цитрусовые"]
+        await session.flush()
+
+        response = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+
+        # День не запрещается и не подменяется: исключения уточняются по ходу
+        # терапии, и вчерашний план мог быть согласован с врачом.
+        assert body["totals"] is not None
+        assert [e["name_ru"] for e in body["excluded_products"]] == [butter.name_ru]
+        assert body["excluded_products"][0]["item_ids"] == [body["items"][0]["id"]]
+
+    async def test_free_label_alone_marks_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«Орехи» сопоставить с каталогом нечем — в этом и была вся проблема."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        patient.allergies = ["масло", "орехи"]
+        await session.flush()
+
+        response = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert response.json()["excluded_products"] == []
+
+
 class TestAccessControl:
     async def test_menu_of_other_patient_forbidden(
         self, client, session, make_user, make_patient, auth_headers

@@ -135,6 +135,15 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
     return row ? [{ ...row, grams: item.grams }] : [];
   });
 
+  // Исключения приходят от сервера: сопоставить состав с тем, что ребёнку
+  // нельзя, может только он — в браузере нет ни аллергий, ни каталога.
+  const excluded =
+    (
+      active.data as {
+        excluded?: { product_id: string; name_ru: string | null }[];
+      }
+    )?.excluded ?? [];
+
   const dish: DishView | null = active.data
     ? ((active.data as { dish: DishView }).dish ?? null)
     : null;
@@ -174,8 +183,12 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
 
   useEffect(() => {
     if (mode !== "verify" || debouncedRows.length === 0) return;
-    verifyMutate({ rows: debouncedRows, targets: debouncedTargets });
-  }, [mode, debouncedRows, debouncedTargets, verifyMutate]);
+    verifyMutate({
+      rows: debouncedRows,
+      targets: debouncedTargets,
+      patientId,
+    });
+  }, [mode, debouncedRows, debouncedTargets, patientId, verifyMutate]);
 
   /**
    * Показанный результат посчитан не по тому, что сейчас в полях.
@@ -202,8 +215,8 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
   }
 
   function run() {
-    if (mode === "verify") verify.mutate({ rows, targets });
-    else if (mode === "solve") solve.mutate({ rows, targets });
+    if (mode === "verify") verify.mutate({ rows, targets, patientId });
+    else if (mode === "solve") solve.mutate({ rows, targets, patientId });
     else scale.mutate({ rows, factor });
   }
 
@@ -287,6 +300,20 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
           }}
         />
       </Section>
+
+      {/* Что ребёнку нельзя — над результатом, а не под ним: в «подобрать»
+          продукт со входа снят, и по числам этого не видно; в «проверить»
+          состав остался как есть, и решать человеку.
+          Запрещать или предупреждать — вопрос 29 медицинской команде. */}
+      {excluded.length > 0 && (
+        <WarningBanner level="danger" title={t("excluded.title")}>
+          {t(mode === "solve" ? "excluded.solve" : "excluded.verify", {
+            list: excluded
+              .map((entry) => entry.name_ru ?? entry.product_id)
+              .join(", "),
+          })}
+        </WarningBanner>
+      )}
 
       {/* Результат стоит РЯДОМ с составом, а не в конце страницы.
           Замер на живом экране: при прежнем порядке (состав → параметры →

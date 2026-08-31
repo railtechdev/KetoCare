@@ -28,6 +28,15 @@ export const childSchema = z.object({
     .string()
     .refine((value) => value.trim() === "" || isPlausibleHeight(value)),
   allergies: z.string(),
+  /**
+   * Исключённые продукты каталога — идентификаторами.
+   *
+   * Свободная метка («орехи») остаётся в `allergies`: сопоставить её с
+   * каталогом нечем. А вот конкретный продукт обязан быть ссылкой — иначе ни
+   * подбор раскладки, ни меню о нём не узнают, и ребёнку с аллергией на арахис
+   * решатель предложит арахисовое масло (раздел 6.3 ТЗ).
+   */
+  excludedProductIds: z.array(z.string()),
   notes: z.string(),
 });
 
@@ -43,6 +52,35 @@ function isPlausibleHeight(value: string): boolean {
 /** Пустое необязательное поле — это «не указано», а не ноль и не пустая строка. */
 function optional(value: string): string | null {
   return value.trim() === "" ? null : value.trim();
+}
+
+/** Строка похожа на идентификатор продукта, а не на свободную метку? */
+export function looksLikeProductId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
+/**
+ * Хранимое поле `allergies` → значения формы.
+ *
+ * Поле хранит и идентификаторы продуктов, и свободные метки (раздел 4.2 ТЗ).
+ * Разбор идёт по тому же правилу, что и на сервере: другое правило означало бы,
+ * что часть системы считает исключение меткой, а часть — продуктом.
+ */
+export function splitExclusions(allergies: readonly string[]): {
+  productIds: string[];
+  labels: string[];
+} {
+  const productIds: string[] = [];
+  const labels: string[] = [];
+  for (const entry of allergies) {
+    const value = entry.trim();
+    if (value === "") continue;
+    if (looksLikeProductId(value)) productIds.push(value);
+    else labels.push(value);
+  }
+  return { productIds, labels };
 }
 
 /**
@@ -64,7 +102,12 @@ export function toChildBody(values: ChildValues) {
     birth_date: values.birthDate,
     sex: values.sex,
     height_cm: height === null ? null : Number(height),
-    allergies: parseAllergies(values.allergies),
+    // Продукты идут первыми: порядок сохраняется как есть, и в карточке
+    // сначала видно то, что сопоставлено с каталогом.
+    allergies: [
+      ...values.excludedProductIds,
+      ...parseAllergies(values.allergies),
+    ],
     notes: optional(values.notes),
   };
 }
