@@ -7,6 +7,7 @@ import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { LeadsPanel } from "./LeadsPanel";
 import { ProductsPanel } from "./ProductsPanel";
+import { ProductCategoriesPanel } from "../products/ProductCategoriesPanel";
 import { UsersPanel } from "./UsersPanel";
 import { ADMIN_SECTIONS, isAdminSection, type AdminSection } from "./types";
 
@@ -76,6 +77,11 @@ export function AdminPage({ section }: { section?: string }) {
         </TabsContent>
         <TabsContent value="products">
           <ProductsPanel />
+
+          {/* Категории — часть того же справочника: заводить продукт можно
+              только в существующую категорию, а до этого её нельзя было ни
+              завести, ни переименовать, ни свести с одноимённой. */}
+          <ProductCategoriesPanel />
         </TabsContent>
         <TabsContent value="dictionaries">
           <DictionariesPanel />

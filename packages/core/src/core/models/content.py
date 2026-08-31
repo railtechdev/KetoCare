@@ -17,6 +17,21 @@ from .enums import RecipeCategory, RecipeStatus, pg_enum
 
 class ProductCategory(Base, UUIDPkMixin):
     __tablename__ = "product_categories"
+    __table_args__ = (
+        # Категория рождалась побочным эффектом импорта, а сверка имени шла
+        # точным совпадением: файл с колонкой «жиры» заводил вторую категорию
+        # рядом с «Жиры». Разъехавшийся справочник означает, что часть
+        # продуктов не находится по фильтру, а заметить это можно было только
+        # глазами в выпадающем списке.
+        #
+        # Функциональный индекс, как у названия продукта: name_ru — String,
+        # а не CITEXT.
+        Index(
+            "uq_product_categories_name_ru_normalized",
+            text("lower(btrim(name_ru))"),
+            unique=True,
+        ),
+    )
 
     name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
