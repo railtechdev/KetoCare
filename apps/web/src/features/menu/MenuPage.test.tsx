@@ -246,6 +246,44 @@ describe("MenuPage", () => {
     expect(screen.queryByText(menuRu.totals.none as string)).toBeNull();
   });
 
+  it("называет выведенный продукт и блюдо, в котором он остался", async () => {
+    // Вывод продукта из оборота убирает его из поиска, но не из уже
+    // сохранённого дня — и правильно: подменять то, чем ребёнка кормили,
+    // нельзя. Плохо было другое: день считался по нему без единой пометки, а
+    // выводят продукт обычно потому, что его числа оказались неверными.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? {
+              data: {
+                ...MENU,
+                withdrawn_products: [
+                  {
+                    product_id: "prod-1",
+                    name_ru: "Масло льняное",
+                    item_ids: ["item-1"],
+                  },
+                ],
+              },
+            }
+          : respond(path),
+      ),
+    );
+    renderPage();
+
+    // Баннер над днём: числа посчитаны в том числе по этому продукту.
+    // Баннер над днём: числа посчитаны в том числе по этому продукту.
+    const banner = await screen.findByText(menuRu.withdrawn.title as string);
+    expect(banner.parentElement).toHaveTextContent(/Масло льняное/);
+
+    // День при этом читается и считается как прежде — запрета нет.
+    expect(screen.getByText("Каша на кокосовом масле")).toBeInTheDocument();
+
+    // Пометка стоит у той позиции, где продукт действительно есть.
+    const marks = screen.getAllByText(/Выведен из оборота: Масло льняное/);
+    expect(marks).toHaveLength(1);
+  });
+
   it("удаление позиции подтверждается диалогом с названием блюда", async () => {
     const user = userEvent.setup();
     renderPage();

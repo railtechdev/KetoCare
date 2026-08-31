@@ -8,6 +8,8 @@ import { DayNavigator } from "../menu/DayNavigator";
 import { DayTotalsPanel } from "../menu/DayTotalsPanel";
 import { todayIso } from "../menu/dates";
 import { itemDishKey, useMenuItemTitles } from "../menu/useDishCatalog";
+import { WithdrawnProductsNotice } from "../menu/WithdrawnProductsNotice";
+import { withdrawnByItem } from "../menu/withdrawn";
 import {
   MEAL_SLOTS,
   useDayTargets,
@@ -38,6 +40,9 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
 
   const items = menu.data?.items ?? [];
   const titles = useMenuItemTitles(patientId, items);
+  // Тот же баннер, что у семьи: врач смотрит на те же итоги дня и должен
+  // видеть то же основание им не доверять.
+  const withdrawn = withdrawnByItem(menu.data?.withdrawn_products);
 
   return (
     <div className="flex flex-col gap-block">
@@ -70,6 +75,8 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
           />
         }
       >
+        <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
+
         {MEAL_SLOTS.map((slot) => {
           const slotItems = items.filter((item) => item.meal_slot === slot);
           if (slotItems.length === 0) return null;
@@ -101,6 +108,14 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
                       <Badge variant={item.eaten ? "secondary" : "outline"}>
                         {item.eaten ? t("menu.eaten") : t("menu.notEaten")}
                       </Badge>
+
+                      {(withdrawn[item.id]?.length ?? 0) > 0 && (
+                        <p className="m-0 w-full text-sm text-warning">
+                          {t("menu:withdrawn.inItem", {
+                            list: (withdrawn[item.id] ?? []).join(", "),
+                          })}
+                        </p>
+                      )}
                     </li>
                   );
                 })}

@@ -28,7 +28,7 @@ PatientIdPath = Annotated[uuid.UUID, Path()]
 
 async def _read(session: SessionDep, menu: Menu) -> MenuRead:
     items = await menus_repo.list_items(session, menu_id=menu.id)
-    return menus_service.to_read(menu, items)
+    return await menus_service.to_read(session, menu, items)
 
 
 async def _owned_item(session: SessionDep, item_id: uuid.UUID, patient_id: uuid.UUID) -> MenuItem:
@@ -87,7 +87,7 @@ async def upsert_menu(
         items=[menus_service.to_spec(item) for item in payload.items],
         created_by=user.id,
     )
-    return menus_service.to_read(menu, items)
+    return await menus_service.to_read(session, menu, items)
 
 
 @router.post(
