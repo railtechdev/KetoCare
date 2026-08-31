@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from decimal import Decimal
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Path, Request, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
@@ -22,7 +23,9 @@ from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import IMPORT_RATE_LIMIT, limiter
 from ..schemas import (
+    ImportFieldChange,
     ImportRowError,
+    ImportRowUpdate,
     Page,
     ProductCategoryMerge,
     ProductCategoryMergeResult,
@@ -35,7 +38,7 @@ from ..schemas import (
     ProductRevisionRead,
     ProductUpdate,
 )
-from ..services.product_import import parse_csv
+from ..services.product_import import ValidRow, parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -470,10 +473,17 @@ async def import_products(
     session: SessionDep,
     file: Annotated[UploadFile, File()],
     dry_run: bool = True,
+    update_existing: bool = False,
 ) -> ProductImportReport:
     """`dry_run=true` (по умолчанию) — только превью и построчный отчёт об ошибках.
 
-    Запись выполняется единой транзакцией: файл с ошибками не импортируется частично.
+    `update_existing=true` — обновляющий импорт: строка с уже существующим
+    названием не отбрасывается как дубль, а переписывает позицию. Нужен при
+    выходе новой версии базы состава: без него 98 позиций обновляются руками по
+    одной карточке.
+
+    Запись выполняется единой транзакцией: файл с ошибками не импортируется
+    частично.
     """
 
     content = await _read_within_limit(file)
@@ -483,37 +493,63 @@ async def import_products(
         ImportRowError(line=e.line, column=e.column, message=e.message) for e in report.errors
     ]
 
-    # Дубли — не ошибка формата, но импортировать их молча нельзя: одинаковое имя
-    # с разными значениями означает риск выбрать «не тот» продукт при расчёте меню.
-    existing = await products_repo.find_duplicate_names(
+    existing = await products_repo.get_by_names(
         session, names=[row.values["name_ru"] for row in report.valid_rows]
     )
-    if existing:
-        # Номер строки берётся из самой строки, а не из позиции в списке:
-        # valid_rows не сплошной (строки с ошибками в него не попали), поэтому
-        # нумерация по индексу приписала бы дубль не той строке файла.
+
+    def _key(row: ValidRow) -> str:
+        return str(row.values["name_ru"]).casefold().strip()
+
+    matched = [row for row in report.valid_rows if _key(row) in existing]
+    report.valid_rows = [row for row in report.valid_rows if _key(row) not in existing]
+
+    updates: list[ImportRowUpdate] = []
+    if update_existing:
+        for row in matched:
+            product = existing[_key(row)]
+            changes = _import_changes(product, row.values)
+            signature = _import_signature_error(product, row)
+            if signature is not None:
+                errors.append(signature)
+                continue
+            if changes:
+                updates.append(
+                    ImportRowUpdate(
+                        line=row.line,
+                        product_id=product.id,
+                        name_ru=product.name_ru,
+                        changes=changes,
+                    )
+                )
+    else:
+        # Дубли — не ошибка формата, но импортировать их молча нельзя: одинаковое
+        # имя с разными значениями означает риск выбрать «не тот» продукт при
+        # расчёте меню. Номер строки берётся из самой строки: `valid_rows` не
+        # сплошной, и нумерация по индексу приписала бы дубль не той строке файла.
         errors.extend(
             ImportRowError(
                 line=row.line,
                 column="name_ru",
-                message=f"Продукт «{row.values['name_ru']}» уже есть в базе — строка пропущена.",
+                message=(
+                    f"Продукт «{row.values['name_ru']}» уже есть в базе — строка пропущена. "
+                    "Чтобы обновить существующие позиции, включите обновляющий импорт."
+                ),
             )
-            for row in report.valid_rows
-            if row.values["name_ru"].casefold().strip() in existing
+            for row in matched
         )
-        report.valid_rows = [
-            row
-            for row in report.valid_rows
-            if row.values["name_ru"].casefold().strip() not in existing
-        ]
 
-    if dry_run or not report.ok:
+    if dry_run or not report.ok or errors:
         # `dry_run` в ответе отражает то, что запросил клиент. Файл с ошибками
         # разбора не импортируется целиком (частичный импорт базы продуктов хуже
         # отказа), но выдавать отказ за превью нельзя: интерфейс, ориентирующийся
         # на флаг, зациклится на «предпросмотр готов, нажмите импорт».
         return ProductImportReport(
-            total_rows=report.total_rows, imported=0, errors=errors, dry_run=dry_run
+            total_rows=report.total_rows,
+            imported=0,
+            updated=len(updates),
+            updates=updates,
+            errors=errors,
+            dry_run=dry_run,
         )
 
     imported = 0
@@ -525,14 +561,132 @@ async def import_products(
         await products_repo.create(session, changed_by=user.id, category_id=category.id, **values)
         imported += 1
 
+    updated = 0
+    for update in updates:
+        row = next(r for r in matched if r.line == update.line)
+        values = dict(row.values)
+        category = await products_repo.get_or_create_category(
+            session, name_ru=values.pop("category")
+        )
+        product = existing[_key(row)]
+        before = ProductRead.model_validate(product).model_dump(mode="json")
+        changed = await products_repo.update(
+            session, product=product, changed_by=user.id, category_id=category.id, **values
+        )
+        # Каждая правка — своя запись аудита с before/after: «обновлено 412
+        # позиций» одной строкой не отвечает на вопрос, что именно изменилось в
+        # конкретной карточке, а спрашивают об этом после инцидента.
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="update",
+            entity="products",
+            entity_id=product.id,
+            before=before,
+            after=ProductRead.model_validate(changed).model_dump(mode="json"),
+        )
+        updated += 1
+
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,
         action="import",
         entity="products",
-        after={"imported": imported, "filename": file.filename},
+        after={"imported": imported, "updated": updated, "filename": file.filename},
     )
 
     return ProductImportReport(
-        total_rows=report.total_rows, imported=imported, errors=errors, dry_run=False
+        total_rows=report.total_rows,
+        imported=imported,
+        updated=updated,
+        updates=updates,
+        errors=errors,
+        dry_run=False,
+    )
+
+
+#: Поля, которые обновляющий импорт переписывает и показывает в превью.
+_IMPORT_FIELDS = (
+    "name_ru",
+    "name_uz",
+    "name_en",
+    "kcal_100g",
+    "fat_100g",
+    "protein_100g",
+    "carbs_100g",
+    "fiber_100g",
+    "source",
+    "source_version",
+    "verified_at",
+)
+
+
+def _import_changes(product: Product, values: dict[str, Any]) -> list[ImportFieldChange]:
+    """Чем строка файла отличается от того, что уже в базе."""
+
+    changes: list[ImportFieldChange] = []
+    for field in _IMPORT_FIELDS:
+        if field not in values:
+            continue
+        before = getattr(product, field)
+        after = values[field]
+        if isinstance(before, Decimal) or isinstance(after, float):
+            if abs(float(before or 0) - float(after or 0)) < 1e-9:
+                continue
+        elif str(before or "") == str(after or ""):
+            continue
+        changes.append(
+            ImportFieldChange(field=field, before=_format_value(before), after=_format_value(after))
+        )
+    return changes
+
+
+def _format_value(value: object) -> str:
+    """Значение для человека: «81.1», а не «81.10».
+
+    В базе жиры лежат как `Numeric`, в файле приходят строкой, и без приведения
+    строка различий выглядела бы как «81.10 → 82.5» — читается как разные
+    форматы, а не как правка одного числа.
+    """
+
+    if value is None:
+        return ""
+    if isinstance(value, Decimal | float | int) and not isinstance(value, bool):
+        return f"{float(value):g}"
+    return str(value)
+
+
+def _import_signature_error(product: Product, row: ValidRow) -> ImportRowError | None:
+    """Та же подпись источника, что и при ручной правке.
+
+    Файл новой версии базы состава приходит с новой `source_version`, и это
+    нормальный случай. А вот та же версия с другими числами означает, что
+    значения кто-то поправил и подписал прежним источником — проверить их по
+    нему станет нельзя (правило EuroFIR).
+    """
+
+    values = row.values
+    macros_changed = any(
+        abs(float(getattr(product, field)) - float(values[field])) > 1e-9
+        for field in _MACRO_FIELDS
+        if field in values
+    )
+    if not macros_changed:
+        return None
+
+    same_signature = (product.source, product.source_version) == (
+        values.get("source"),
+        values.get("source_version"),
+    )
+    if not same_signature:
+        return None
+
+    return ImportRowError(
+        line=row.line,
+        column="source_version",
+        message=(
+            f"У продукта «{product.name_ru}» изменились числа, а источник остался "
+            "прежним. Укажите версию источника новых значений: подписывать их "
+            "прежним нельзя — по такой записи значение уже не проверить."
+        ),
     )

@@ -574,9 +574,35 @@ class ImportRowError(BaseModel):
     message: str
 
 
+class ImportFieldChange(BaseModel):
+    """Что именно меняется у существующей позиции."""
+
+    field: str
+    before: str
+    after: str
+
+
+class ImportRowUpdate(BaseModel):
+    """Строка файла, обновляющая уже существующий продукт.
+
+    Показывается в превью до записи: обновляющий импорт перезаписывает числа, по
+    которым считают еду ребёнку, и «обновлено 412 позиций» без перечня — это
+    отчёт, который нечем проверить.
+    """
+
+    line: int
+    product_id: uuid.UUID
+    name_ru: str
+    changes: list[ImportFieldChange]
+
+
 class ProductImportReport(BaseModel):
     total_rows: int
     imported: int
+    #: Сколько существующих позиций обновлено (или будет обновлено в превью).
+    updated: int = 0
+    #: Что именно меняется — до записи и после неё.
+    updates: list[ImportRowUpdate] = []
     errors: list[ImportRowError]
     dry_run: bool
 

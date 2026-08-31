@@ -139,9 +139,21 @@ export function useImportProductsMutation() {
   const invalidate = useProductsInvalidation();
 
   return useMutation({
-    mutationFn: async (input: { file: File; dryRun: boolean }) => {
+    mutationFn: async (input: {
+      file: File;
+      dryRun: boolean;
+      // Обновляющий импорт: строка с уже существующим названием переписывает
+      // позицию, а не отбрасывается как дубль. По умолчанию выключен — обычный
+      // импорт не должен внезапно начать переписывать базу.
+      updateExisting?: boolean;
+    }) => {
       const { data, error } = await api.POST("/api/v1/products/import", {
-        params: { query: { dry_run: input.dryRun } },
+        params: {
+          query: {
+            dry_run: input.dryRun,
+            update_existing: input.updateExisting ?? false,
+          },
+        },
         // В OpenAPI поле файла описано строкой (binary), поэтому File
         // приводится к типу схемы: по сети уходит multipart/form-data, который
         // собирает bodySerializer — сам File до сериализатора не меняется.
@@ -158,7 +170,9 @@ export function useImportProductsMutation() {
     onSuccess: (report) => {
       // Превью ничего не меняет в базе, и неудачный импорт — тоже: перечитывать
       // справочник есть смысл только после реальной записи строк.
-      if (!report.dry_run && report.imported > 0) invalidate();
+      if (!report.dry_run && (report.imported > 0 || report.updated > 0)) {
+        invalidate();
+      }
     },
   });
 }

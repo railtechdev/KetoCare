@@ -890,3 +890,177 @@ class TestImportEndpointLimits:
 
         assert 429 in codes, "ограничение частоты не сработало"
         assert codes.index(429) >= 20, "лимит сработал раньше объявленных 20 запросов в час"
+
+
+class TestUpdatingImport:
+    """Повторная заливка того же файла давала `imported=0`.
+
+    Выход новой версии базы состава означал обновление 98 позиций руками, по
+    одной карточке. Делать это раньше было опасно: перезапись чисел без
+    читаемой истории — как раз то, чего в системе не было до появления
+    паспорта позиции.
+    """
+
+    async def _existing(self, client, session, admin, auth_headers, **overrides):
+        category = await _category(session)
+        payload = {**_product_payload(category.id), **overrides}
+        created = await client.post("/api/v1/products", json=payload, headers=auth_headers(admin))
+        assert created.status_code == 201, created.text
+        return category, created.json()
+
+    def _row(self, name: str, *, fat: float, version: str, category: str) -> str:
+        return f"{name},{category},717,{fat},0.9,0.1,0.0,USDA,{version},2026-01-01"
+
+    async def test_preview_shows_what_changes(self, client, session, make_user, auth_headers):
+        """«Обновлено 412 позиций» без перечня — отчёт, который нечем проверить."""
+
+        admin = await make_user(UserRole.ADMIN)
+        category, product = await self._existing(client, session, admin, auth_headers)
+
+        csv = (
+            f"{CSV_HEADER}\n"
+            + self._row(
+                product["name_ru"], fat=82.5, version="SR Legacy 2024", category=category.name_ru
+            )
+            + "\n"
+        )
+        response = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", csv.encode(), "text/csv")},
+            params={"dry_run": "true", "update_existing": "true"},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["updated"] == 1
+        assert body["imported"] == 0
+
+        changes = {c["field"]: c for c in body["updates"][0]["changes"]}
+        assert changes["fat_100g"]["before"] == "81.1"
+        assert changes["fat_100g"]["after"] == "82.5"
+        assert changes["source_version"]["after"] == "SR Legacy 2024"
+
+        # Превью ничего не пишет.
+        current = await client.get(f"/api/v1/products/{product['id']}", headers=auth_headers(admin))
+        assert current.json()["fat_100g"] == 81.1
+
+    async def test_import_updates_and_keeps_history(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        category, product = await self._existing(client, session, admin, auth_headers)
+
+        csv = (
+            f"{CSV_HEADER}\n"
+            + self._row(
+                product["name_ru"], fat=82.5, version="SR Legacy 2024", category=category.name_ru
+            )
+            + "\n"
+        )
+        response = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", csv.encode(), "text/csv")},
+            params={"dry_run": "false", "update_existing": "true"},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["updated"] == 1
+
+        current = await client.get(f"/api/v1/products/{product['id']}", headers=auth_headers(admin))
+        assert current.json()["fat_100g"] == 82.5
+
+        # История: заведение и обновление — по ней и видно, откуда взялись числа.
+        revisions = await client.get(
+            f"/api/v1/products/{product['id']}/revisions", headers=auth_headers(admin)
+        )
+        assert revisions.json()["total"] == 2
+        assert revisions.json()["items"][0]["snapshot"]["fat_100g"] == 82.5
+
+        # Каждая правка — своя запись аудита: «обновлено N позиций» одной
+        # строкой не отвечает, что изменилось в конкретной карточке.
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "products",
+                AuditLog.action == "update",
+                AuditLog.entity_id == uuid.UUID(product["id"]),
+            )
+        )
+        assert entry is not None and entry.before["fat_100g"] == 81.1
+
+    async def test_same_source_with_new_numbers_is_refused(
+        self, client, session, make_user, auth_headers
+    ):
+        """Та же подпись источника, что и при ручной правке (правило EuroFIR)."""
+
+        admin = await make_user(UserRole.ADMIN)
+        category, product = await self._existing(client, session, admin, auth_headers)
+
+        csv = (
+            f"{CSV_HEADER}\n"
+            + self._row(product["name_ru"], fat=90.0, version="SR28", category=category.name_ru)
+            + "\n"
+        )
+        response = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", csv.encode(), "text/csv")},
+            params={"dry_run": "false", "update_existing": "true"},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["updated"] == 0
+        assert any(e["column"] == "source_version" for e in body["errors"]), body["errors"]
+
+        current = await client.get(f"/api/v1/products/{product['id']}", headers=auth_headers(admin))
+        assert current.json()["fat_100g"] == 81.1, "числа не переписаны"
+
+    async def test_without_the_flag_duplicates_are_still_skipped(
+        self, client, session, make_user, auth_headers
+    ):
+        """Обычный импорт не должен внезапно начать переписывать базу."""
+
+        admin = await make_user(UserRole.ADMIN)
+        category, product = await self._existing(client, session, admin, auth_headers)
+
+        csv = (
+            f"{CSV_HEADER}\n"
+            + self._row(
+                product["name_ru"], fat=82.5, version="SR Legacy 2024", category=category.name_ru
+            )
+            + "\n"
+        )
+        response = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", csv.encode(), "text/csv")},
+            params={"dry_run": "false"},
+            headers=auth_headers(admin),
+        )
+
+        body = response.json()
+        assert body["updated"] == 0
+        assert body["imported"] == 0
+        assert any("уже есть в базе" in e["message"] for e in body["errors"])
+
+    async def test_unchanged_rows_are_not_counted_as_updates(
+        self, client, session, make_user, auth_headers
+    ):
+        """Повторная заливка того же файла ничего не меняет и говорит об этом."""
+
+        admin = await make_user(UserRole.ADMIN)
+        category, product = await self._existing(client, session, admin, auth_headers)
+
+        csv = (
+            f"{CSV_HEADER}\n"
+            + self._row(product["name_ru"], fat=81.1, version="SR28", category=category.name_ru)
+            + "\n"
+        )
+        response = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", csv.encode(), "text/csv")},
+            params={"dry_run": "true", "update_existing": "true"},
+            headers=auth_headers(admin),
+        )
+
+        assert response.json()["updated"] == 0
+        assert response.json()["updates"] == []
