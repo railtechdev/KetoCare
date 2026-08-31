@@ -150,6 +150,15 @@ web: check-env ## Запустить веб-кабинет (Vite); /api прок
 	@# `.env` строку WEB_PORT — и кабинет поднимется там же.
 	pnpm --filter @ketocare/web run dev
 
+.PHONY: miniapp
+miniapp: check-env ## Запустить Mini App (Vite); /api проксируется на API_PROXY_TARGET
+	@# Порт — MINIAPP_PORT в корневом `.env`, читает его сам vite. Открывать
+	@# приложение осмысленно только из Telegram: без строки запуска оно покажет
+	@# экран «открывается из Telegram» (ADR-0017). Для проверки на телефоне
+	@# нужен адрес снаружи (туннель) и BOT_MINIAPP_URL, иначе кнопка в боте
+	@# ведёт на localhost телефона.
+	pnpm --filter @ketocare/miniapp run dev
+
 .PHONY: landing
 landing: check-env ## Запустить посадочную страницу (astro dev); /api проксируется на API_PROXY_TARGET
 	@# Порт — LANDING_PORT в корневом файле настроек, читает его сам astro.

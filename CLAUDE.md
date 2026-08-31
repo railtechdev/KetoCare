@@ -55,9 +55,12 @@ KetoCare — платформа сопровождения кетогенной 
 Не сделано и почему: сценарий «Приступ» ждёт ответа медкоманды (вопрос 23 в
 `docs/medical/OPEN_QUESTIONS.md` — шкала длительности у бота теряет пороги ILAE 10 и
 30 минут); «Еда → свободный текст» — это `POST /ai/parse`, то есть п. 19 **этапа 4**.
-Осталось по п. 15-17: сам `apps/miniapp`. Вход в него уже есть —
-`POST /auth/telegram-init` меняет подписанную строку запуска на сессию родителя,
-сужённую до ребёнка из привязки ([ADR-0017](docs/adr/0017-miniapp-authentication.md)).
+`apps/miniapp` (п. 17) начат: вход по подписи Telegram
+(`POST /auth/telegram-init` → сессия родителя, сужённая до ребёнка из привязки,
+[ADR-0017](docs/adr/0017-miniapp-authentication.md)), тема и безопасная зона из
+клиента, главная-сводка. Нет пока: меню с отметками «съедено», калькулятор,
+рецепты, графики — и кнопки «Приложение» в боте: ей нужен публичный адрес, то
+есть выкат Mini App (`MINIAPP_URL`).
 
 Отдельно от этапов прошёл **аудит клиентского пути по ролям** —
 [`docs/AUDIT_JOURNEY.md`](docs/AUDIT_JOURNEY.md), 72 находки. Закрыто по нему:
@@ -148,7 +151,7 @@ Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `
 - **`apps/api`** — FastAPI, префикс `/api/v1`, структура `src/{routers,deps,services}`. В роутерах бизнес-логики нет; БД — только через репозитории `core`; `/calc/*` — тонкие обёртки над keto_engine, ответы включают `engine_version`.
 - **`apps/bot`** — aiogram 3, FSM-сценарии дневников. Собственного доступа к БД нет — только вызовы API по сервисному токену `BOT_API_TOKEN`.
 - **`apps/worker`** — ARQ + Redis: AI-задачи, PDF-отчёты (jinja2 → weasyprint), напоминания по cron, `notify_family`.
-- **`apps/web`** (React 18 + Vite + TanStack Router/Query/Table) и **`apps/miniapp`** (Telegram Mini App) — оба поверх `packages/ui` (Tailwind 4 + shadcn/ui) и `packages/api-client`.
+- **`apps/web`** (React 18 + Vite + TanStack Router/Query/Table) и **`apps/miniapp`** (Telegram Mini App) — оба поверх `packages/ui` (Tailwind 4 + shadcn/ui) и `packages/api-client`. У Mini App нет роутера и cookie: экран один, а токены живут в памяти вкладки и приходят заголовком (раздел 5.2 ТЗ). Всё, что приложение знает о Telegram, — в `apps/miniapp/src/lib/{telegram,theme}.ts`: вне Telegram оно тоже открывается, и забытая проверка роняет его целиком.
 - **`packages/api-client`** — TypeScript-клиент, **генерируется** из OpenAPI (`make openapi`). Ручных `fetch` во фронтенде быть не должно.
 
 Поток данных всегда однонаправленный: канал (web/bot/miniapp) → API → репозитории `core` → БД, а расчёты — API → keto_engine. Бот и Mini App не имеют привилегий помимо API.
