@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { ProductsPanel } from "../admin/ProductsPanel";
+import { ProductCategoriesPanel } from "./ProductCategoriesPanel";
 
 /**
  * Справочник продуктов для того, кто его ведёт, — но вне раздела
@@ -26,6 +27,11 @@ export function CatalogPage() {
   return (
     <PageLayout title={t("catalog.title")} intro={t("catalog.intro")}>
       <ProductsPanel canImport={false} chrome="screen" />
+
+      {/* Категории ведёт тот же, кто ведёт каталог: сервер разрешает правку
+          диетологу наравне с администратором (`_EDITOR_ROLES`), а до этого
+          справочник категорий не был доступен ни одной роли. */}
+      <ProductCategoriesPanel />
     </PageLayout>
   );
 }

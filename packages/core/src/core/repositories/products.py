@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Product, ProductCategory, ProductRevision
@@ -173,19 +174,103 @@ async def list_categories(session: AsyncSession) -> list[ProductCategory]:
     return list(await session.scalars(stmt))
 
 
-async def get_or_create_category(session: AsyncSession, *, name_ru: str) -> ProductCategory:
-    """Категория из CSV задаётся именем: справочник небольшой и ведётся админом."""
+async def count_products_by_category(session: AsyncSession) -> dict[uuid.UUID, int]:
+    """Сколько позиций в каждой категории — одним запросом на весь список.
 
-    existing = await session.scalar(
-        select(ProductCategory).where(ProductCategory.name_ru == name_ru)
+    Запрос на категорию в цикле дал бы столько же ответов и вдесятеро больше
+    обращений к базе на экране, который открывают ради одного взгляда.
+    """
+
+    rows = await session.execute(
+        select(Product.category_id, func.count()).group_by(Product.category_id)
     )
-    if existing is not None:
-        return existing
+    return {row[0]: int(row[1]) for row in rows}
 
-    category = ProductCategory(name_ru=name_ru, sort=0)
+
+async def get_category(session: AsyncSession, category_id: uuid.UUID) -> ProductCategory | None:
+    return await session.get(ProductCategory, category_id)
+
+
+async def find_category_by_name(
+    session: AsyncSession, *, name_ru: str, exclude_id: uuid.UUID | None = None
+) -> ProductCategory | None:
+    """Категория с таким именем — без учёта регистра и внешних пробелов.
+
+    Сверка шла точным совпадением, поэтому «Жиры» и «жиры» заводились как две
+    разные категории. Заметить это можно было только глазами в выпадающем
+    списке, а разъехавшийся справочник означает, что часть продуктов не
+    находится по фильтру.
+    """
+
+    conditions = [func.lower(func.trim(ProductCategory.name_ru)) == name_ru.casefold().strip()]
+    if exclude_id is not None:
+        conditions.append(ProductCategory.id != exclude_id)
+    found: ProductCategory | None = await session.scalar(select(ProductCategory).where(*conditions))
+    return found
+
+
+async def create_category(session: AsyncSession, *, name_ru: str, sort: int = 0) -> ProductCategory:
+    category = ProductCategory(name_ru=name_ru, sort=sort)
     session.add(category)
     await session.flush()
     return category
+
+
+async def update_category(
+    session: AsyncSession, *, category: ProductCategory, **fields: Any
+) -> ProductCategory:
+    for key, value in fields.items():
+        setattr(category, key, value)
+    await session.flush()
+    return category
+
+
+async def count_products_in_category(session: AsyncSession, *, category_id: uuid.UUID) -> int:
+    """Сколько позиций в категории — включая выведенные из оборота.
+
+    Выведенная позиция остаётся в рецептах и меню, где уже стоит, и удалять
+    вместе с категорией её нельзя.
+    """
+
+    total = await session.scalar(
+        select(func.count()).select_from(Product).where(Product.category_id == category_id)
+    )
+    return int(total or 0)
+
+
+async def merge_categories(
+    session: AsyncSession, *, source: ProductCategory, target: ProductCategory
+) -> int:
+    """Переносит продукты в другую категорию и удаляет опустевшую.
+
+    Слияние — единственный способ свести разъехавшийся справочник: удалить
+    непустую категорию нельзя (продукты остались бы без неё), а переносить
+    позиции по одной вручную — работа на день.
+
+    Возвращает число перенесённых позиций: оно попадает в журнал аудита, и по
+    нему видно масштаб операции.
+    """
+
+    result = await session.execute(
+        sql_update(Product).where(Product.category_id == source.id).values(category_id=target.id)
+    )
+    await session.delete(source)
+    await session.flush()
+    return int(result.rowcount or 0)  # type: ignore[attr-defined]
+
+
+async def get_or_create_category(session: AsyncSession, *, name_ru: str) -> ProductCategory:
+    """Категория из CSV задаётся именем: справочник небольшой и ведётся админом.
+
+    Сверка без учёта регистра и внешних пробелов: файл с колонкой «жиры» не
+    должен заводить вторую категорию рядом с «Жиры».
+    """
+
+    existing = await find_category_by_name(session, name_ru=name_ru)
+    if existing is not None:
+        return existing
+
+    return await create_category(session, name_ru=name_ru)
 
 
 async def find_duplicate_names(session: AsyncSession, *, names: list[str]) -> set[str]:

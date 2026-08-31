@@ -328,6 +328,36 @@ class ProductRead(ProductBase):
         ).ratio
 
 
+class ProductCategoryWrite(BaseModel):
+    """Категория справочника продуктов.
+
+    Категория рождалась побочным эффектом импорта: чем была написана колонка
+    файла, то и появлялось в справочнике. Переименовать или слить было нечем, а
+    на пустом справочнике завести продукт руками нельзя вовсе — форма требует
+    `category_id`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name_ru: RequiredName
+    #: Порядок в списке; дубликаты допустимы — при равенстве сортировка по имени.
+    sort: Annotated[int, Field(ge=0, le=9999)] = 0
+
+
+class ProductCategoryMerge(BaseModel):
+    """Куда перенести продукты сливаемой категории."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    into_id: uuid.UUID
+
+
+class ProductCategoryMergeResult(BaseModel):
+    category: ProductCategoryRead
+    #: Сколько позиций переехало — по этому числу видно масштаб операции.
+    moved: int
+
+
 class ProductRevisionRead(BaseModel):
     """Одна запись истории продукта (`product_revisions`, раздел 4.2 ТЗ).
 
@@ -371,6 +401,12 @@ class ProductCategoryRead(BaseModel):
     id: uuid.UUID
     name_ru: str
     sort: int
+    #: Сколько позиций в категории.
+    #:
+    #: Нужно там, где категории ведут: пустую можно удалить, непустую — только
+    #: слить, а при слиянии двух одноимённых счётчик отвечает, какая из них
+    #: настоящая. Считается на чтении одним запросом на весь список.
+    products: int = 0
 
 
 # --- users / admin --------------------------------------------------------

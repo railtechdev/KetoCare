@@ -227,6 +227,172 @@ class TestSameChecksAtEveryDoor:
         assert "уже есть" in second.json()["error"]["message"]
 
 
+class TestCategoriesAreManaged:
+    """Категория была побочным эффектом импорта.
+
+    Чем написана колонка файла — то и появлялось в справочнике; сверка шла
+    точным совпадением, поэтому «Жиры» и «жиры» заводились как две разные
+    категории. Переименовать или слить было нечем, а на пустом справочнике
+    завести продукт руками нельзя вовсе: форма требует `category_id`.
+    """
+
+    async def test_editor_creates_and_renames(self, client, session, make_user, auth_headers):
+        dietitian = await make_user(UserRole.DIETITIAN)
+
+        created = await client.post(
+            "/api/v1/products/categories",
+            json={"name_ru": f"Жиры {uuid.uuid4().hex[:6]}", "sort": 3},
+            headers=auth_headers(dietitian),
+        )
+        assert created.status_code == 201, created.text
+        category_id = created.json()["id"]
+
+        renamed = await client.put(
+            f"/api/v1/products/categories/{category_id}",
+            json={"name_ru": f"Жиры и масла {uuid.uuid4().hex[:6]}", "sort": 1},
+            headers=auth_headers(dietitian),
+        )
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json()["sort"] == 1
+
+    async def test_case_only_difference_is_a_conflict(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        name = f"Жиры {uuid.uuid4().hex[:6]}"
+
+        first = await client.post(
+            "/api/v1/products/categories",
+            json={"name_ru": name},
+            headers=auth_headers(admin),
+        )
+        assert first.status_code == 201
+
+        second = await client.post(
+            "/api/v1/products/categories",
+            json={"name_ru": f"  {name.upper()}  "},
+            headers=auth_headers(admin),
+        )
+        # 409 с объяснением, а не 500 от уникального индекса.
+        assert second.status_code == 409, second.text
+        assert second.json()["error"]["code"] == "conflict"
+
+    async def test_family_cannot_touch_the_dictionary(
+        self, client, session, make_user, auth_headers
+    ):
+        parent = await make_user(UserRole.PARENT)
+        response = await client.post(
+            "/api/v1/products/categories",
+            json={"name_ru": "Жиры"},
+            headers=auth_headers(parent),
+        )
+        assert response.status_code == 403
+
+    async def test_merge_moves_products_and_removes_the_source(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        source = await _category(session)
+        target = ProductCategory(name_ru=f"Целевая {uuid.uuid4().hex[:6]}", sort=0)
+        session.add(target)
+        await session.flush()
+
+        product = await client.post(
+            "/api/v1/products",
+            json=_product_payload(source.id),
+            headers=auth_headers(admin),
+        )
+        assert product.status_code == 201
+
+        merged = await client.post(
+            f"/api/v1/products/categories/{source.id}/merge",
+            json={"into_id": str(target.id)},
+            headers=auth_headers(admin),
+        )
+        assert merged.status_code == 200, merged.text
+        assert merged.json()["moved"] == 1
+        assert merged.json()["category"]["id"] == str(target.id)
+
+        moved = await client.get(
+            f"/api/v1/products/{product.json()['id']}", headers=auth_headers(admin)
+        )
+        assert moved.json()["category_id"] == str(target.id)
+
+        gone = await session.get(ProductCategory, source.id)
+        assert gone is None
+
+        # Слияние — операция над справочником продуктов, она обязана попадать
+        # в журнал (правило 7 CLAUDE.md).
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "product_categories",
+                AuditLog.action == "merge",
+                AuditLog.entity_id == source.id,
+            )
+        )
+        assert entry is not None and entry.after["moved"] == 1
+
+    async def test_delete_refuses_while_products_remain(
+        self, client, session, make_user, auth_headers
+    ):
+        """Иначе продукты остались бы без категории — а по ней их ищут."""
+
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+        await client.post(
+            "/api/v1/products",
+            json=_product_payload(category.id),
+            headers=auth_headers(admin),
+        )
+
+        refused = await client.delete(
+            f"/api/v1/products/categories/{category.id}", headers=auth_headers(admin)
+        )
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error"]["details"]["products"] == 1
+
+    async def test_empty_category_is_deleted(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+
+        response = await client.delete(
+            f"/api/v1/products/categories/{category.id}", headers=auth_headers(admin)
+        )
+        assert response.status_code == 204, response.text
+        assert await session.get(ProductCategory, category.id) is None
+
+    async def test_import_does_not_split_a_category_by_case(
+        self, client, session, make_user, auth_headers
+    ):
+        """Тот самый случай: колонка файла написана иначе, чем в справочнике."""
+
+        admin = await make_user(UserRole.ADMIN)
+        name = f"Жиры {uuid.uuid4().hex[:6]}"
+        session.add(ProductCategory(name_ru=name, sort=0))
+        await session.flush()
+
+        csv = (
+            f"{CSV_HEADER}\n"
+            f"Масло импортное {uuid.uuid4().hex[:6]},{name.lower()},717,81.1,0.9,0.1,0.0,"
+            "USDA,SR28,2026-01-01\n"
+        )
+        report = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", csv.encode(), "text/csv")},
+            params={"dry_run": "false"},
+            headers=auth_headers(admin),
+        )
+        assert report.status_code == 200, report.text
+        assert report.json()["imported"] == 1
+
+        same = await session.scalars(
+            select(ProductCategory).where(
+                func.lower(func.trim(ProductCategory.name_ru)) == name.casefold()
+            )
+        )
+        assert len(list(same)) == 1, "категория не должна раздваиваться из-за регистра"
+
+
 class TestRatioComesFromTheEngine:
     """Кетосоотношение позиции считает ядро, а не интерфейс.
 

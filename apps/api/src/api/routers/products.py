@@ -8,10 +8,10 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Path, UploadFile
+from fastapi import APIRouter, Depends, File, Path, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
 
-from core.models import Product
+from core.models import Product, ProductCategory
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import products as products_repo
@@ -23,7 +23,10 @@ from ..errors import ApiError, ErrorCode
 from ..schemas import (
     ImportRowError,
     Page,
+    ProductCategoryMerge,
+    ProductCategoryMergeResult,
     ProductCategoryRead,
+    ProductCategoryWrite,
     ProductCreate,
     ProductImportReport,
     ProductRead,
@@ -86,7 +89,177 @@ async def search_products(
 )
 async def list_categories(session: SessionDep, _: CurrentUserDep) -> list[ProductCategoryRead]:
     categories = await products_repo.list_categories(session)
-    return [ProductCategoryRead.model_validate(c) for c in categories]
+    counts = await products_repo.count_products_by_category(session)
+    return [
+        ProductCategoryRead.model_validate(c).model_copy(update={"products": counts.get(c.id, 0)})
+        for c in categories
+    ]
+
+
+@router.post(
+    "/categories",
+    response_model=ProductCategoryRead,
+    status_code=201,
+    summary="Добавить категорию продуктов",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def create_category(
+    payload: ProductCategoryWrite, user: CurrentUserDep, session: SessionDep
+) -> ProductCategoryRead:
+    await _category_name_is_free(session, name_ru=payload.name_ru)
+
+    category = await products_repo.create_category(
+        session, name_ru=payload.name_ru, sort=payload.sort
+    )
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="create",
+        entity="product_categories",
+        entity_id=category.id,
+        after=ProductCategoryRead.model_validate(category).model_dump(mode="json"),
+    )
+    return ProductCategoryRead.model_validate(category)
+
+
+@router.put(
+    "/categories/{category_id}",
+    response_model=ProductCategoryRead,
+    summary="Изменить категорию продуктов",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def update_category(
+    category_id: Annotated[uuid.UUID, Path()],
+    payload: ProductCategoryWrite,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> ProductCategoryRead:
+    category = await _category_or_404(session, category_id)
+    await _category_name_is_free(session, name_ru=payload.name_ru, exclude_id=category_id)
+
+    before = ProductCategoryRead.model_validate(category).model_dump(mode="json")
+    updated = await products_repo.update_category(
+        session, category=category, name_ru=payload.name_ru, sort=payload.sort
+    )
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="update",
+        entity="product_categories",
+        entity_id=category_id,
+        before=before,
+        after=ProductCategoryRead.model_validate(updated).model_dump(mode="json"),
+    )
+    return ProductCategoryRead.model_validate(updated)
+
+
+@router.post(
+    "/categories/{category_id}/merge",
+    response_model=ProductCategoryMergeResult,
+    summary="Слить категорию с другой",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def merge_category(
+    category_id: Annotated[uuid.UUID, Path()],
+    payload: ProductCategoryMerge,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> ProductCategoryMergeResult:
+    """Переносит продукты в другую категорию и удаляет опустевшую.
+
+    Единственный способ свести разъехавшийся справочник: удалить непустую
+    категорию нельзя — продукты остались бы без неё, — а переносить позиции по
+    одной руками это работа на день.
+    """
+
+    source = await _category_or_404(session, category_id)
+    target = await _category_or_404(session, payload.into_id)
+    if source.id == target.id:
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Категория сливается сама с собой.")
+
+    before = ProductCategoryRead.model_validate(source).model_dump(mode="json")
+    moved = await products_repo.merge_categories(session, source=source, target=target)
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="merge",
+        entity="product_categories",
+        entity_id=category_id,
+        before=before,
+        after={
+            "into": ProductCategoryRead.model_validate(target).model_dump(mode="json"),
+            "moved": moved,
+        },
+    )
+    return ProductCategoryMergeResult(
+        category=ProductCategoryRead.model_validate(target), moved=moved
+    )
+
+
+@router.delete(
+    "/categories/{category_id}",
+    status_code=204,
+    summary="Удалить пустую категорию",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def delete_category(
+    category_id: Annotated[uuid.UUID, Path()],
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> Response:
+    category = await _category_or_404(session, category_id)
+
+    used = await products_repo.count_products_in_category(session, category_id=category_id)
+    if used:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            f"В категории {used} позиций. Слейте её с другой категорией "
+            "или перенесите продукты — иначе они останутся без категории.",
+            details={"products": used},
+        )
+
+    before = ProductCategoryRead.model_validate(category).model_dump(mode="json")
+    await session.delete(category)
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="delete",
+        entity="product_categories",
+        entity_id=category_id,
+        before=before,
+    )
+    return Response(status_code=204)
+
+
+async def _category_or_404(session: SessionDep, category_id: uuid.UUID) -> ProductCategory:
+    category = await products_repo.get_category(session, category_id)
+    if category is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Категория не найдена.")
+    return category
+
+
+async def _category_name_is_free(
+    session: SessionDep, *, name_ru: str, exclude_id: uuid.UUID | None = None
+) -> None:
+    """Имя занято — 409 с объяснением, а не 500 от уникального индекса.
+
+    Сверка идёт без учёта регистра и внешних пробелов, как и сам индекс: «Жиры»
+    и «жиры» — одна категория, и разъезжаться справочнику больше нельзя.
+    """
+
+    existing = await products_repo.find_category_by_name(
+        session, name_ru=name_ru, exclude_id=exclude_id
+    )
+    if existing is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            f"Категория «{existing.name_ru}» уже есть — названия различаются только "
+            "регистром или пробелами.",
+            details={"category_id": str(existing.id)},
+        )
 
 
 @router.get("/{product_id}", response_model=ProductRead, summary="Карточка продукта")
