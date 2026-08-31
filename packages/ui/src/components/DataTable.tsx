@@ -20,9 +20,26 @@ export interface DataTableProps<TData> {
   labels: DataTableLabels;
   /** 0 отключает постраничность — вся выборка на экране */
   pageSize?: number;
+  /**
+   * Страницы считает сервер.
+   *
+   * Нужно там, где выборка не помещается в один запрос: клиентская
+   * постраничность делит то, что уже пришло, и на «первых 200 строках из 3000»
+   * молча выдаёт часть за целое — человек видит «страница 10 из 10» и уверен,
+   * что дочитал справочник до конца.
+   */
+  serverPagination?: ServerPagination;
   /** Доступное описание таблицы для скринридера */
   caption: string;
   className?: string;
+}
+
+export interface ServerPagination {
+  /** Номер страницы с нуля */
+  pageIndex: number;
+  /** Сколько страниц всего — по `total` из ответа сервера */
+  pageCount: number;
+  onPageChange: (pageIndex: number) => void;
 }
 
 export interface DataTableLabels {
@@ -45,6 +62,7 @@ export function DataTable<TData>({
   emptyState,
   labels,
   pageSize = 20,
+  serverPagination,
   caption,
   className,
 }: DataTableProps<TData>) {
@@ -57,7 +75,8 @@ export function DataTable<TData>({
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    ...(pageSize > 0
+    // Сервер уже отдал ровно одну страницу — делить её ещё раз нечем.
+    ...(serverPagination === undefined && pageSize > 0
       ? {
           getPaginationRowModel: getPaginationRowModel(),
           initialState: { pagination: { pageIndex: 0, pageSize } },
@@ -71,8 +90,23 @@ export function DataTable<TData>({
     );
   }
 
-  const pageCount = table.getPageCount();
-  const showPagination = pageSize > 0 && pageCount > 1;
+  const pageCount = serverPagination?.pageCount ?? table.getPageCount();
+  const pageIndex =
+    serverPagination?.pageIndex ?? table.getState().pagination.pageIndex;
+  const canPrevious =
+    serverPagination === undefined ? table.getCanPreviousPage() : pageIndex > 0;
+  const canNext =
+    serverPagination === undefined
+      ? table.getCanNextPage()
+      : pageIndex + 1 < pageCount;
+  const goTo = (next: number) =>
+    serverPagination === undefined
+      ? table.setPageIndex(next)
+      : serverPagination.onPageChange(next);
+  const showPagination =
+    serverPagination !== undefined
+      ? pageCount > 1
+      : pageSize > 0 && pageCount > 1;
 
   return (
     <div className={className}>
@@ -155,8 +189,8 @@ export function DataTable<TData>({
         <nav className="mt-3 flex items-center gap-3" aria-label={caption}>
           <button
             type="button"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() => goTo(pageIndex - 1)}
+            disabled={!canPrevious}
             className="min-h-touch rounded-lg border border-border px-3 disabled:opacity-50"
           >
             {labels.previousPage}
@@ -165,15 +199,12 @@ export function DataTable<TData>({
             role="status"
             className="text-sm text-muted-foreground tabular-nums"
           >
-            {labels.pageStatus(
-              table.getState().pagination.pageIndex + 1,
-              pageCount,
-            )}
+            {labels.pageStatus(pageIndex + 1, pageCount)}
           </span>
           <button
             type="button"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => goTo(pageIndex + 1)}
+            disabled={!canNext}
             className="min-h-touch rounded-lg border border-border px-3 disabled:opacity-50"
           >
             {labels.nextPage}

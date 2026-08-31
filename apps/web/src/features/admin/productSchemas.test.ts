@@ -117,6 +117,8 @@ describe("toProductFormValues", () => {
       source_version: "SR Legacy 2018",
       verified_at: "2026-03-01",
       is_active: false,
+      // Считается сервером на чтении: 81.1 / (0.9 + 0.1).
+      ratio: 81.1,
     };
 
     const values = toProductFormValues(product);

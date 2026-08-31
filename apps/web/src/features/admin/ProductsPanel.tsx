@@ -3,6 +3,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  RatioBadge,
   Section,
   toast,
 } from "@ketocare/ui";
@@ -23,6 +24,7 @@ import { Field } from "../../components/Field";
 import type { Product } from "./types";
 import {
   EMPTY_PRODUCT_FILTERS,
+  PRODUCTS_PAGE_SIZE,
   useAdminProducts,
   useProductCategories,
   type ProductFilters,
@@ -68,13 +70,29 @@ export function ProductsPanel({
   const { t } = useTranslation("admin");
 
   const [filters, setFilters] = useState<ProductFilters>(EMPTY_PRODUCT_FILTERS);
+  const [page, setPage] = useState(0);
+
+  /**
+   * Смена отбора возвращает на первую страницу.
+   *
+   * Иначе выдача из двух строк открывалась бы на седьмой странице — то есть
+   * пустой, и человек решил бы, что не нашлось ничего.
+   */
+  const setFiltersAndResetPage: typeof setFilters = (update) => {
+    setFilters(update);
+    setPage(0);
+  };
   const [item, setItem] = useSectionItem();
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
   const debouncedQuery = useDebouncedValue(filters.q, 300);
-  const products = useAdminProducts({ ...filters, q: debouncedQuery });
+  const products = useAdminProducts({ ...filters, q: debouncedQuery }, page);
 
   const rows = useMemo(() => products.data?.items ?? [], [products.data]);
+  const pageCount = Math.max(
+    1,
+    Math.ceil((products.data?.total ?? 0) / PRODUCTS_PAGE_SIZE),
+  );
 
   const categories = useProductCategories();
   const categoryNames = useMemo(
@@ -97,7 +115,7 @@ export function ProductsPanel({
             className="px-0"
             title={row.original.category_id}
             onClick={() =>
-              setFilters((current) => ({
+              setFiltersAndResetPage((current) => ({
                 ...current,
                 categoryId: row.original.category_id,
               }))
@@ -132,6 +150,20 @@ export function ProductsPanel({
         accessorKey: "fiber_100g",
         header: t("products.columns.fiber"),
         cell: numeric(1),
+      },
+      {
+        accessorKey: "ratio",
+        header: t("products.columns.ratio"),
+        // Считает ядро: у чистого жира знаменатель равен нулю, и «Infinity» в
+        // этой колонке был бы не числом, а сбоем.
+        cell: ({ row }) =>
+          row.original.ratio == null ? (
+            <span className="text-muted-foreground">
+              {t("products.noRatio")}
+            </span>
+          ) : (
+            <RatioBadge ratio={row.original.ratio} />
+          ),
       },
       { accessorKey: "source", header: t("products.columns.source") },
       {
@@ -259,7 +291,10 @@ export function ProductsPanel({
             placeholder={t("products.filters.searchPlaceholder")}
             value={filters.q}
             onChange={(event) =>
-              setFilters((current) => ({ ...current, q: event.target.value }))
+              setFiltersAndResetPage((current) => ({
+                ...current,
+                q: event.target.value,
+              }))
             }
           />
         </div>
@@ -272,7 +307,7 @@ export function ProductsPanel({
             className="size-4"
             checked={filters.includeInactive}
             onChange={(event) =>
-              setFilters((current) => ({
+              setFiltersAndResetPage((current) => ({
                 ...current,
                 includeInactive: event.target.checked,
               }))
@@ -287,7 +322,10 @@ export function ProductsPanel({
             variant="outline"
             className="min-h-touch"
             onClick={() =>
-              setFilters((current) => ({ ...current, categoryId: "" }))
+              setFiltersAndResetPage((current) => ({
+                ...current,
+                categoryId: "",
+              }))
             }
           >
             <X aria-hidden="true" />
@@ -339,17 +377,22 @@ export function ProductsPanel({
           labels={{
             previousPage: t("table.previousPage"),
             nextPage: t("table.nextPage"),
-            pageStatus: (page, total) => t("table.pageStatus", { page, total }),
+            pageStatus: (shown, total) =>
+              t("table.pageStatus", { page: shown, total }),
+          }}
+          serverPagination={{
+            pageIndex: page,
+            pageCount,
+            onPageChange: setPage,
           }}
         />
       </AsyncSection>
 
-      {products.data !== undefined && products.data.total > rows.length && (
+      {/* Сколько всего нашлось — рядом с постраничностью: «страница 1 из 7» не
+          отвечает на вопрос «а сколько их». */}
+      {products.data !== undefined && (
         <p className="m-0 text-sm text-muted-foreground">
-          {t("table.truncated", {
-            shown: rows.length,
-            total: products.data.total,
-          })}
+          {t("table.found", { total: products.data.total })}
         </p>
       )}
     </div>

@@ -227,6 +227,51 @@ class TestSameChecksAtEveryDoor:
         assert "уже есть" in second.json()["error"]["message"]
 
 
+class TestRatioComesFromTheEngine:
+    """Кетосоотношение позиции считает ядро, а не интерфейс.
+
+    Формула F / (P + C) выглядит тривиальной ровно до первого масла: у чистого
+    жира знаменатель равен нулю. `fat / (p + c)` в браузере дало бы `Infinity`
+    в колонке, по которой врач выбирает продукт; ядро отвечает «соотношения
+    нет», и это разные утверждения.
+    """
+
+    async def test_ratio_is_returned_and_matches_the_engine(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+
+        response = await client.post(
+            "/api/v1/products", json=_product_payload(category.id), headers=auth_headers(admin)
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        # Масло: 81.1 / (0.9 + 0.1) = 81.1
+        assert body["ratio"] == pytest.approx(81.1)
+
+    async def test_pure_fat_has_no_ratio(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+
+        response = await client.post(
+            "/api/v1/products",
+            json={
+                **_product_payload(category.id),
+                "kcal_100g": 884,
+                "fat_100g": 100,
+                "protein_100g": 0,
+                "carbs_100g": 0,
+                "fiber_100g": 0,
+            },
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 201, response.text
+        assert response.json()["ratio"] is None
+
+
 class TestSourceSignature:
     """Числа изменились — источник обязан измениться вместе с ними.
 

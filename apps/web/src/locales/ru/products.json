@@ -12,7 +12,8 @@
     "protein": "Белки",
     "carbs": "Углеводы",
     "fiber": "Клетчатка",
-    "source": "Источник"
+    "source": "Источник",
+    "ratio": "Соотношение"
   },
   "empty": {
     "noQuery": {
@@ -89,5 +90,10 @@
       "verifiedAt": "Сверено",
       "state": "Состояние"
     }
+  },
+  "noRatio": "нет",
+  "filters": {
+    "category": "Категория",
+    "allCategories": "Все категории"
   }
 }
