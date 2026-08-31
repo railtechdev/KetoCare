@@ -13,6 +13,7 @@ import { KeyRound, RotateCcwKey, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { InvitationsList } from "../invitations/InvitationsList";
 import { InviteForm } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 import { errorMessageOf } from "../../lib/api";
@@ -272,6 +273,10 @@ export function UsersPanel() {
         description={t("invitations:intro")}
       >
         <InviteForm roles={STAFF_ROLES} />
+
+        {/* Список выданных под формой: администратор видит все приглашения,
+            включая выданные врачами семьям. */}
+        <InvitationsList />
       </FormSheet>
 
       {/* Правка учётной записи — тоже панелью: раньше форма раскрывалась над

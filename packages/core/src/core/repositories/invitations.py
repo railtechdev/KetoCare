@@ -11,7 +11,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Invitation
@@ -63,6 +63,9 @@ async def claim(session: AsyncSession, token: str) -> Invitation | None:
         .where(
             Invitation.token_hash == hash_token(token),
             Invitation.accepted_at.is_(None),
+            # Отозванное приглашение не принимается: иначе отзыв означал бы
+            # только «пропало из списка», а ссылка продолжала бы работать.
+            Invitation.revoked_at.is_(None),
             Invitation.expires_at > now,
         )
         .values(accepted_at=now)
@@ -74,3 +77,40 @@ async def claim(session: AsyncSession, token: str) -> Invitation | None:
 
 async def get(session: AsyncSession, invitation_id: uuid.UUID) -> Invitation | None:
     return await session.get(Invitation, invitation_id)
+
+
+async def list_invitations(
+    session: AsyncSession,
+    *,
+    created_by: uuid.UUID | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[Invitation], int]:
+    """Выданные приглашения, новые сверху.
+
+    `created_by` сужает выборку до своих: администратор видит все, врач и
+    диетолог — только те, что выдали сами. Чужие приглашения им не нужны, а
+    список адресов чужих семей — это сведения о пациентах другого специалиста.
+    """
+
+    conditions = [] if created_by is None else [Invitation.created_by == created_by]
+
+    stmt = (
+        select(Invitation)
+        .where(*conditions)
+        .order_by(Invitation.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    items = list(await session.scalars(stmt))
+
+    total = await session.scalar(select(func.count()).select_from(Invitation).where(*conditions))
+    return items, int(total or 0)
+
+
+async def revoke(session: AsyncSession, *, invitation: Invitation) -> Invitation:
+    """Гасит приглашение. Принятое не гасится: учётная запись уже создана."""
+
+    invitation.revoked_at = datetime.now(UTC)
+    await session.flush()
+    return invitation

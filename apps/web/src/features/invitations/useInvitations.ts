@@ -1,10 +1,52 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
 import { api } from "../../lib/api";
 
 export type InvitationCreated = components["schemas"]["InvitationCreated"];
+export type Invitation = components["schemas"]["InvitationRead"];
 export type Role = components["schemas"]["UserRole"];
+
+/** Верхняя граница страницы на сервере (`MAX_PAGE_SIZE`, раздел 5.1 ТЗ). */
+const PAGE_LIMIT = 200;
+
+/**
+ * Выданные приглашения.
+ *
+ * Ссылка показывается один раз и не восстанавливается, поэтому вопрос «я уже
+ * приглашал эту семью?» оставался без ответа. Сервер сам решает, чьи
+ * приглашения показать: администратору все, врачу и диетологу — свои.
+ */
+export function useInvitations() {
+  return useQuery({
+    queryKey: ["invitations", "list"],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/auth/invitations", {
+        params: { query: { limit: PAGE_LIMIT, offset: 0 } },
+      });
+      if (error || !data)
+        throw error ?? new Error("Empty invitations response");
+      return data;
+    },
+  });
+}
+
+export function useRevokeInvitationMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (invitationId: string): Promise<Invitation> => {
+      const { data, error } = await api.POST(
+        "/api/v1/auth/invitations/{invitation_id}/revoke",
+        { params: { path: { invitation_id: invitationId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty revoke response");
+      return data;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["invitations"] }),
+  });
+}
 
 /**
  * Выдача приглашения.
@@ -14,6 +56,8 @@ export type Role = components["schemas"]["UserRole"];
  * показывает подходящий набор ролей.
  */
 export function useCreateInvitationMutation() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (body: {
       email: string;
@@ -25,6 +69,10 @@ export function useCreateInvitationMutation() {
       if (error || !data) throw error ?? new Error("Empty invitation response");
       return data;
     },
+    // Выданное приглашение сразу видно в списке: иначе он отвечал бы на вопрос
+    // «кого я звал» с задержкой в одно обновление страницы.
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["invitations"] }),
   });
 }
 
