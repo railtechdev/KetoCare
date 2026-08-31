@@ -17,6 +17,7 @@ import recipesRu from "../locales/ru/recipes.json";
 import attachmentsRu from "../locales/ru/attachments.json";
 import reportsRu from "../locales/ru/reports.json";
 import childRu from "../locales/ru/child.json";
+import telegramRu from "../locales/ru/telegram.json";
 
 /**
  * i18n-слой (раздел 8.5 ТЗ). Язык пока один, но все пользовательские строки
@@ -44,6 +45,7 @@ export const resources = {
     attachments: attachmentsRu,
     reports: reportsRu,
     child: childRu,
+    telegram: telegramRu,
   },
 } as const;
 

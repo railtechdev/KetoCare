@@ -12,7 +12,8 @@
     "noHeight": "Рост не указан",
     "allergies": "Аллергии: {{list}}",
     "noAllergies": "Аллергии не указаны",
-    "documents": "Документы"
+    "documents": "Документы",
+    "telegram": "Telegram"
   },
   "child": {
     "add": "Добавить ребёнка",
