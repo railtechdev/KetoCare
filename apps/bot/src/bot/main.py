@@ -22,6 +22,7 @@ from redis.asyncio import Redis
 from .api import BotApi
 from .config import load_settings
 from .handlers import fallback, scenarios, start
+from .observability import init_sentry
 from .storage import BindingStore
 
 logger = structlog.get_logger(__name__)
@@ -65,6 +66,10 @@ def build_dispatcher(*, storage: RedisStorage, api: BotApi, store: BindingStore)
 
 async def main() -> None:
     settings = load_settings()
+
+    # Бот падает так же молча, как воркер: у семьи это выглядит как «не
+    # отвечает». Ничего не делает, пока SENTRY_DSN пуст.
+    init_sentry(settings)
 
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     http = httpx.AsyncClient(base_url=settings.bot_api_base_url, timeout=10.0)

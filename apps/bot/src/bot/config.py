@@ -32,6 +32,12 @@ class BotSettings(BaseSettings):
     # часам, а сервер хранит UTC.
     tz: str = "Asia/Tashkent"
 
+    # Отправка ошибок. Значение то же, что у API и воркера, но читается своей
+    # настройкой: бот не зависит от `core` — у него нет доступа к БД, и тянуть
+    # ради одной строки SQLAlchemy в его образ незачем (раздел 7 ТЗ).
+    sentry_dsn: str = ""
+    sentry_environment: str = "development"
+
 
 def load_settings() -> BotSettings:
     """Настройки бота или понятный отказ — но без секретов в журнале.

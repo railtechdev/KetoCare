@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
+from core.observability import init_sentry
 
 from .errors import register_exception_handlers, register_unhandled_error_middleware
 from .ratelimit import register_rate_limiting
@@ -36,6 +37,10 @@ API_PREFIX = "/api/v1"
 
 def create_app() -> FastAPI:
     settings = get_settings()
+
+    # До создания приложения: иначе ошибки, возникшие при подключении роутеров,
+    # никуда не уйдут. Ничего не делает, пока SENTRY_DSN пуст.
+    init_sentry("api")
 
     app = FastAPI(
         title="KetoCare API",

@@ -187,7 +187,8 @@ restrict,command="/srv/ketocare-deploy.sh" ssh-ed25519 …
 при появлении — `ANTHROPIC_API_KEY`, `SENTRY_DSN`.
 Переменные (там же, вкладка Variables): `WEB_ORIGIN`, `MINIAPP_ORIGIN`,
 `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
-`PUBLIC_CONTACT_EMAIL`, `PUBLIC_TELEGRAM_URL`, `LANDING_INDEXABLE`, `TZ`.
+`PUBLIC_CONTACT_EMAIL`, `PUBLIC_TELEGRAM_URL`, `LANDING_INDEXABLE`, `TZ`,
+`SENTRY_ENVIRONMENT` (по умолчанию `production`).
 
 **`POSTGRES_PASSWORD` не ротируется перезаписью секрета.** Postgres применяет
 эту переменную только при инициализации пустого тома. После первого деплоя новый
@@ -366,10 +367,17 @@ docker compose --env-file .env -f infra/docker-compose.prod.yml \
 
 - Логи: `docker compose ... logs -f api` (ротация настроена в compose,
   10 МБ × 3 на сервис).
-- Отслеживания ошибок нет. Переменная `SENTRY_DSN` в `.env` объявлена, но
-  ничего не инициализирует: зависимости `sentry-sdk` в проекте нет и вызова
-  `sentry_sdk.init()` тоже. Заполнять её бессмысленно — об ошибках вы узнаёте
-  только из `docker compose logs` и от участников. Подключить до фокус-группы.
+- **Отслеживание ошибок.** Заполните `SENTRY_DSN` (и `SENTRY_ENVIRONMENT`,
+  например `production`) — api, воркер и бот начнут отправлять необработанные
+  ошибки. Пусто по умолчанию: ничего никуда не уходит.
+
+  Что уходит, а что нет. Тело запроса и строка параметров не отправляются
+  **никогда**: через них ходят состав дня, замеры и заметки врача. Заголовки,
+  куки и данные пользователя тоже отключены. В событии остаётся путь запроса, а
+  в нём — идентификаторы пациентов: это псевдонимы, сами по себе они никого не
+  называют, но без пути невозможно понять, где сломалось. Настройки —
+  `packages/core/src/core/observability.py` и `apps/bot/src/bot/observability.py`
+  (у бота своя копия: он не зависит от `core`, потому что не ходит в БД).
 - Внешний uptime-мониторинг на оба домена (например, UptimeRobot).
 - Место на диске: старые образы копятся при каждом деплое —
   `docker image prune -f` раз в месяц или в cron. Отдельно смотреть том

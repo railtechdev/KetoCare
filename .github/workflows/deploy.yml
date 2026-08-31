@@ -101,6 +101,9 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # Имя окружения в Sentry: без него боевые ошибки лежали бы вперемешку
+          # с ошибками с машины разработчика. Не секрет — переменная репозитория.
+          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT || 'production' }}
           # Учётные данные первого администратора. На диск сервера НЕ попадают:
           # remote-deploy.sh забирает их из потока и не пишет в файл окружения.
           # Учётка создаётся один раз; если она уже есть, пароль не трогается —
@@ -141,7 +144,8 @@ jobs:
 
           NAMES = [
               "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
-              "BOT_USERNAME", "ANTHROPIC_API_KEY", "SENTRY_DSN",
+              "BOT_USERNAME", "ANTHROPIC_API_KEY",
+              "SENTRY_DSN", "SENTRY_ENVIRONMENT",
               "ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME",
               "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN",
               "LANDING_SITE_URL", "LANDING_INDEXABLE", "PUBLIC_APP_URL",
