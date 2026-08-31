@@ -71,6 +71,17 @@ export function PrescriptionCard({
             })}
           </dd>
         </div>
+
+        {/* Число приёмов врач задаёт с первого назначения, а семье его до сих
+            пор не показывали нигде — при том что план дня составляет она. */}
+        <div>
+          <dt className="text-sm text-muted-foreground">
+            {t("prescription.meals")}
+          </dt>
+          <dd className="m-0 mt-1 tabular-nums">
+            {prescription.meals_per_day}
+          </dd>
+        </div>
       </dl>
     </Panel>
   );
