@@ -10,6 +10,15 @@ export interface ProductOption {
   protein: number;
   carbs: number;
   fiber: number;
+  /**
+   * Продукт в обороте.
+   *
+   * Поиск выведенные не отдаёт, но в состав продукт попадает и другим путём —
+   * приходом из справочника (`?item=`), где редактору видны все. Считать по
+   * нему не запрещено (история должна считаться), а вот молчать об этом
+   * нельзя: выводят продукт обычно потому, что его числа оказались неверными.
+   */
+  isActive: boolean;
 }
 
 /**
@@ -41,6 +50,7 @@ export function useProductSearch(query: string) {
         protein: item.protein_100g,
         carbs: item.carbs_100g,
         fiber: item.fiber_100g,
+        isActive: item.is_active,
       }));
     },
   });
@@ -75,6 +85,7 @@ export function useProduct(productId: string | undefined) {
         protein: data.protein_100g,
         carbs: data.carbs_100g,
         fiber: data.fiber_100g,
+        isActive: data.is_active,
       };
     },
   });

@@ -8,6 +8,7 @@ import {
   Section,
   Skeleton,
   toast,
+  WarningBanner,
 } from "@ketocare/ui";
 import { Pencil, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -291,6 +292,16 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
         </p>
       </Section>
 
+      {/* Показатели рецепта посчитаны в том числе по выведенному продукту —
+          знать об этом нужно до того, как по рецепту приготовят. */}
+      {Object.keys(productNames.withdrawn).length > 0 && (
+        <WarningBanner level="warning" title={t("detail.withdrawnTitle")}>
+          {t("detail.withdrawnBody", {
+            list: Object.values(productNames.withdrawn).join(", "),
+          })}
+        </WarningBanner>
+      )}
+
       <Section title={t("detail.composition")}>
         {data.ingredients.length === 0 ? (
           <p className="m-0 text-muted-foreground">
@@ -315,6 +326,12 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                 <span>
                   {productNames.byId[ingredient.product_id] ??
                     t("detail.unknownProduct")}
+                  {productNames.withdrawn[ingredient.product_id] !==
+                    undefined && (
+                    <span className="ml-2 text-sm text-warning">
+                      {t("detail.withdrawn")}
+                    </span>
+                  )}
                 </span>
                 <span className="text-muted-foreground tabular-nums">
                   {t("detail.grams", {

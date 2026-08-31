@@ -47,6 +47,15 @@ export function useRecipe(recipeId: string | null) {
 export interface ProductNames {
   /** Название продукта по его идентификатору; отсутствует, пока запрос не завершён */
   byId: Record<string, string>;
+  /**
+   * Продукты состава, выведенные из оборота.
+   *
+   * Вывод убирает продукт из поиска, но не из уже сохранённых рецептов — и
+   * правильно: рецепт, по которому кормили, не подменяется задним числом.
+   * Молчать об этом нельзя: выводят продукт обычно потому, что его числа
+   * оказались неверными, а по ним посчитаны показатели рецепта.
+   */
+  withdrawn: Record<string, string>;
   isLoading: boolean;
 }
 
@@ -78,9 +87,16 @@ export function useProductNames(productIds: string[]): ProductNames {
   });
 
   const byId: Record<string, string> = {};
+  const withdrawn: Record<string, string> = {};
   for (const result of results) {
-    if (result.data) byId[result.data.id] = result.data.name_ru;
+    if (!result.data) continue;
+    byId[result.data.id] = result.data.name_ru;
+    if (!result.data.is_active) withdrawn[result.data.id] = result.data.name_ru;
   }
 
-  return { byId, isLoading: results.some((result) => result.isLoading) };
+  return {
+    byId,
+    withdrawn,
+    isLoading: results.some((result) => result.isLoading),
+  };
 }

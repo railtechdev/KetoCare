@@ -20,12 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.models import CustomDish, Menu, MenuItem, Product, Recipe
 from core.models.enums import RecipeStatus
 from core.repositories import menus as menus_repo
+from core.repositories import products as products_repo
 from core.repositories.menus import MenuItemSpec
 from keto_engine import ENGINE_VERSION, Ingredient, scale, verify
 
 from ..errors import ApiError, ErrorCode
 from ..schemas import DishComputed
-from ..schemas_menus import MenuItemRead, MenuItemWrite, MenuRead
+from ..schemas_menus import MenuItemRead, MenuItemWrite, MenuRead, WithdrawnProduct
 from . import composition as composition_service
 
 # Состав блюда: продукт и его масса в граммах.
@@ -41,7 +42,7 @@ def to_spec(item: MenuItemWrite) -> MenuItemSpec:
     )
 
 
-def to_read(menu: Menu, items: Sequence[MenuItem]) -> MenuRead:
+async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) -> MenuRead:
     """Позиции хранятся отдельной таблицей, поэтому ответ собирается явно,
     а не `model_validate(menu)`."""
 
@@ -52,7 +53,59 @@ def to_read(menu: Menu, items: Sequence[MenuItem]) -> MenuRead:
         totals=DishComputed.model_validate(menu.totals) if menu.totals is not None else None,
         engine_version=menu.engine_version,
         items=[MenuItemRead.model_validate(item) for item in items],
+        withdrawn_products=await withdrawn_products(session, menu=menu, items=items),
         created_at=menu.created_at,
+    )
+
+
+async def withdrawn_products(
+    session: AsyncSession, *, menu: Menu, items: Sequence[MenuItem]
+) -> list[WithdrawnProduct]:
+    """Продукты дня, выведенные из оборота.
+
+    Состав читается тем же путём, что и при расчёте итогов, но снисходительно:
+    рецепт мог быть снят с публикации, своё блюдо — удалено, продукт — исчезнуть
+    из базы. Ни один из этих случаев не повод отказать в чтении уже сохранённого
+    дня, поэтому проверок, ронявших бы `PUT`, здесь нет.
+    """
+
+    recipe_ids = list({item.recipe_id for item in items if item.recipe_id is not None})
+    dish_ids = list({item.custom_dish_id for item in items if item.custom_dish_id is not None})
+
+    ingredients = await menus_repo.get_recipe_ingredients(session, recipe_ids=recipe_ids)
+    dishes = await menus_repo.get_custom_dishes_by_ids(
+        session, patient_id=menu.patient_id, dish_ids=dish_ids
+    )
+
+    by_item: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for item in items:
+        if item.recipe_id is not None:
+            by_item[item.id] = [row.product_id for row in ingredients.get(item.recipe_id, [])]
+        elif item.custom_dish_id is not None:
+            dish = dishes.get(item.custom_dish_id)
+            by_item[item.id] = [] if dish is None else [pid for pid, _ in _dish_composition(dish)]
+
+    product_ids = list({pid for ids in by_item.values() for pid in ids})
+    products = await products_repo.get_by_ids(session, product_ids=product_ids)
+
+    withdrawn = {pid: product for pid, product in products.items() if not product.is_active}
+    if not withdrawn:
+        return []
+
+    item_ids: dict[uuid.UUID, list[uuid.UUID]] = {pid: [] for pid in withdrawn}
+    for item_id, ids in by_item.items():
+        for pid in dict.fromkeys(ids):
+            if pid in withdrawn:
+                item_ids[pid].append(item_id)
+
+    # Порядок по названию: список показывается человеку, а порядок словаря —
+    # порядок запроса к базе, то есть случайный с его точки зрения.
+    return sorted(
+        (
+            WithdrawnProduct(product_id=pid, name_ru=product.name_ru, item_ids=item_ids[pid])
+            for pid, product in withdrawn.items()
+        ),
+        key=lambda entry: entry.name_ru,
     )
 
 

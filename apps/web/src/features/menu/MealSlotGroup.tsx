@@ -12,6 +12,8 @@ interface Props {
   items: readonly MenuItemRead[];
   /** Названия блюд по ключу источника: позиция меню несёт только ссылку */
   titles: Record<string, string>;
+  /** Выведенные из оборота продукты в составе позиции: id позиции → названия */
+  withdrawnByItem: Record<string, string[]>;
   /** Меню дня не может остаться пустым — последнюю позицию убрать нельзя */
   canRemove: boolean;
   pending: boolean;
@@ -33,6 +35,7 @@ export function MealSlotGroup({
   slot,
   items,
   titles,
+  withdrawnByItem,
   canRemove,
   pending,
   onAdd,
@@ -76,6 +79,7 @@ export function MealSlotGroup({
             const key = itemDishKey(item);
             const title =
               (key === null ? undefined : titles[key]) ?? t("item.unknown");
+            const withdrawn = withdrawnByItem[item.id] ?? [];
 
             return (
               <li
@@ -132,6 +136,15 @@ export function MealSlotGroup({
                   cancelLabel={t("common:actions.cancel")}
                   onConfirm={() => onRemove(item.id)}
                 />
+
+                {/* Названия продуктов прямо в строке: баннер над днём говорит,
+                    что выведенный продукт есть, а семье у плиты нужно знать, в
+                    каком блюде. */}
+                {withdrawn.length > 0 && (
+                  <p className="m-0 w-full text-sm text-warning">
+                    {t("withdrawn.inItem", { list: withdrawn.join(", ") })}
+                  </p>
+                )}
               </li>
             );
           })}
