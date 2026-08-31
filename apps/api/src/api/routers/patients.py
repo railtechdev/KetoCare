@@ -102,12 +102,17 @@ async def list_patients(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    q: Annotated[str | None, Query(max_length=255, description="Поиск по имени")] = None,
 ) -> Page[PatientRead]:
     """Область видимости целиком определяется зависимостью `accessible_patient_ids`
-    (связи пользователя + сужение по patient_scope), а не логикой этой ручки."""
+    (связи пользователя + сужение по patient_scope), а не логикой этой ручки.
+
+    Поиск идёт по той же области видимости: `q` сужает выдачу, но не расширяет
+    её — найти чужого пациента этой ручкой нельзя.
+    """
 
     items, total = await patients_repo.list_for_ids(
-        session, patient_ids=patient_ids, limit=limit, offset=offset
+        session, patient_ids=patient_ids, query=q, limit=limit, offset=offset
     )
     return Page(items=await _read_many(session, items), total=total)
 

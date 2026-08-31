@@ -349,3 +349,61 @@ class TestPrescriptionNotice:
         )
 
         assert response.status_code == 201
+
+
+class TestPatientSearch:
+    """Поиск по списку пациентов ищет на сервере, а не по загруженной странице.
+
+    Раньше врач искал среди уже полученных строк: у клиники с тремя сотнями
+    семей поле отвечало «не найдено» о пациенте, который есть, — и выглядел
+    этот ответ достоверным.
+    """
+
+    async def test_finds_by_part_of_the_name(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+        for name in ("Иванова Аня", "Петров Пётр", "Сидорова Мария"):
+            patient = await make_patient(name)
+            await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.get("/api/v1/patients?q=иванов", headers=auth_headers(doctor))
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [item["full_name"] for item in body["items"]] == ["Иванова Аня"]
+        # `total` тоже про найденное: иначе пагинация обещала бы страницы,
+        # которых нет.
+        assert body["total"] == 1
+
+    async def test_search_does_not_reach_other_doctors_patients(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Поиск сужает область видимости, а не расширяет её."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+        mine = await make_patient("Иванова Аня")
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=mine.id)
+        await make_patient("Иванов Чужой")
+
+        response = await client.get("/api/v1/patients?q=иванов", headers=auth_headers(doctor))
+
+        assert [item["full_name"] for item in response.json()["items"]] == ["Иванова Аня"]
+
+    async def test_percent_is_a_character_not_a_wildcard(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Введённый процент ищет процент, а не «что угодно»."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient("Иванова Аня")
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        # Параметр передаётся клиентом, а не вписан в строку адреса руками:
+        # «%25» в адресе легко остаётся тремя символами, и тест проверял бы
+        # поиск по «%25», а не по проценту.
+        response = await client.get(
+            "/api/v1/patients", params={"q": "%"}, headers=auth_headers(doctor)
+        )
+
+        assert response.json()["items"] == []

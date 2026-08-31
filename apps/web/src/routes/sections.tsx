@@ -2,7 +2,6 @@ import {
   Bot,
   Calculator,
   CalendarDays,
-  ClipboardList,
   FileText,
   Home,
   Inbox,
@@ -99,12 +98,15 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
 /**
  * Разделы, объявленные в ролевой таблице, но пока без экрана.
  *
- * Список короткий намеренно: пункт меню, за которым ничего нет, хуже его
- * отсутствия (правило П3 канона). «Отчёты» и «Ассистент» убраны из навигации
- * родителя до своих этапов и вернутся вместе с работой; здесь остаётся только
- * то, что роль всё же видит.
+ * Пуст — и это правильное состояние: пункт меню, за которым ничего нет, хуже
+ * его отсутствия (правило П3 канона). «Отчёты», «Ассистент» и «Сводки» убраны
+ * из навигации до своих этапов и вернутся вместе с работой.
+ *
+ * Список оставлен намеренно: он нужен, когда раздел уже объявлен в ролевой
+ * таблице, а экран ещё пишется, — иначе роутер уронил бы тест на отсутствии
+ * экрана. Пустым он значит «таких разделов сейчас нет».
  */
-export const PENDING_SECTIONS: readonly string[] = ["summaries"];
+export const PENDING_SECTIONS: readonly string[] = [];
 
 /**
  * Значок раздела в навигации.
@@ -124,7 +126,6 @@ export const SECTION_ICONS: Record<string, LucideIcon> = {
   assistant: Bot,
   child: Baby,
   patients: Users,
-  summaries: ClipboardList,
   users: UserCog,
   leads: Inbox,
   dictionaries: ListTree,
