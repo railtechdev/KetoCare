@@ -37,13 +37,30 @@ _EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN)
 @router.get("", response_model=Page[ProductRead], summary="Поиск продуктов")
 async def search_products(
     session: SessionDep,
-    _: CurrentUserDep,
+    user: CurrentUserDep,
     page: PaginationDep,
     q: str | None = None,
     category_id: uuid.UUID | None = None,
+    include_inactive: bool = False,
 ) -> Page[ProductRead]:
+    """`include_inactive` доступен только тем, кто ведёт справочник.
+
+    Выведенная из оборота позиция не должна попадаться семье при составлении
+    меню — в этом и смысл вывода. Но тот, кто её вывел, обязан иметь возможность
+    вернуть: раньше параметр существовал в репозитории и не пробрасывался
+    ниоткуда, поэтому снятие флажка было НЕОБРАТИМЫМ — позиция исчезала из
+    выдачи для всех, включая администратора, и вернуть её можно было только
+    через базу.
+    """
+
+    only_active = not (include_inactive and user.role in _EDITOR_ROLES)
     items, total = await products_repo.search(
-        session, q=q, category_id=category_id, limit=page.limit, offset=page.offset
+        session,
+        q=q,
+        category_id=category_id,
+        only_active=only_active,
+        limit=page.limit,
+        offset=page.offset,
     )
     return Page(items=[ProductRead.model_validate(p) for p in items], total=total)
 

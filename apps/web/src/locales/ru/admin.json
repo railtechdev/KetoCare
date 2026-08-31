@@ -203,7 +203,8 @@
       "legend": "Отбор продуктов",
       "search": "Поиск по названию",
       "searchPlaceholder": "Например: масло",
-      "clearCategory": "Категория {{id}} — снять фильтр"
+      "clearCategory": "Категория {{id}} — снять фильтр",
+      "includeInactive": "Показывать выведенные из оборота"
     },
     "columns": {
       "name": "Название",

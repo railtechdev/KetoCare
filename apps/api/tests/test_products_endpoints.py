@@ -363,3 +363,74 @@ class TestProductNameUniqueness:
         )
         with pytest.raises(IntegrityError):
             await session.flush()
+
+
+class TestDeactivationIsReversible:
+    """Клиническое не удаляется, а выводится из оборота (правило 4) — но вывод
+    обязан быть обратимым.
+
+    Параметр `only_active` жил в репозитории и не пробрасывался ниоткуда,
+    поэтому снятие флажка было необратимым: позиция исчезала из выдачи для ВСЕХ,
+    включая администратора, и вернуть её можно было только через базу.
+    """
+
+    async def _deactivated(self, client, session, admin, auth_headers):
+        category = await _category(session)
+        created = await client.post(
+            "/api/v1/products",
+            json=_product_payload(category.id),
+            headers=auth_headers(admin),
+        )
+        assert created.status_code == 201, created.text
+        product = created.json()
+
+        turned_off = await client.put(
+            f"/api/v1/products/{product['id']}",
+            json={**_product_payload(category.id, name=product["name_ru"]), "is_active": False},
+            headers=auth_headers(admin),
+        )
+        assert turned_off.status_code == 200, turned_off.text
+        return product
+
+    async def test_hidden_from_the_ordinary_list(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        product = await self._deactivated(client, session, admin, auth_headers)
+
+        response = await client.get(
+            "/api/v1/products", params={"q": product["name_ru"]}, headers=auth_headers(admin)
+        )
+
+        assert response.status_code == 200
+        assert product["id"] not in [row["id"] for row in response.json()["items"]]
+
+    async def test_editor_can_find_it_again(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        product = await self._deactivated(client, session, admin, auth_headers)
+
+        response = await client.get(
+            "/api/v1/products",
+            params={"q": product["name_ru"], "include_inactive": True},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200
+        assert product["id"] in [row["id"] for row in response.json()["items"]]
+
+    async def test_family_does_not_see_it_even_when_asking(
+        self, client, session, make_user, auth_headers
+    ):
+        """Смысл вывода из оборота в том, чтобы позиция не попадалась при
+        составлении меню. Параметр в адресе этого не отменяет."""
+
+        admin = await make_user(UserRole.ADMIN)
+        parent = await make_user(UserRole.PARENT)
+        product = await self._deactivated(client, session, admin, auth_headers)
+
+        response = await client.get(
+            "/api/v1/products",
+            params={"q": product["name_ru"], "include_inactive": True},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200
+        assert product["id"] not in [row["id"] for row in response.json()["items"]]
