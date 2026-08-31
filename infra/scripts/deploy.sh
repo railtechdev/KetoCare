@@ -79,12 +79,20 @@ if [ "${1:-}" != "--api-only" ]; then
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/web run build
     rsync -a --delete apps/web/dist/ "$WEB_ROOT"/
 
-    # Telegram Mini App (ADR-0017). Каталог создаётся здесь же: пока в nginx нет
-    # его server-блока, собранные файлы просто лежат и никому не мешают — выкат
-    # приложения и настройка домена разнесены намеренно, домен заводит человек.
+    # Telegram Mini App (ADR-0017). Каталог создаёт человек при настройке домена
+    # (docs/DEPLOY.md): /var/www принадлежит root, и `mkdir` отсюда — это отказ
+    # прав, который роняет ВЕСЬ деплой. Именно так и вышло: стенд не выкатился
+    # из-за каталога, которого ещё нет ни у кого.
+    #
+    # Нет каталога — приложение не выкладывается, и это не ошибка: домен
+    # заводится отдельно от кода.
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/miniapp run build
-    mkdir -p "$MINIAPP_ROOT"
-    rsync -a --delete apps/miniapp/dist/ "$MINIAPP_ROOT"/
+    if [ -d "$MINIAPP_ROOT" ]; then
+        rsync -a --delete apps/miniapp/dist/ "$MINIAPP_ROOT"/
+    else
+        echo "Нет $MINIAPP_ROOT — Mini App собран, но не выложен."
+        echo "Создайте каталог и заведите домен: docs/DEPLOY.md, «nginx и TLS»."
+    fi
 
     # Посадочная страница (Astro, ADR-0012). Адреса домена и кабинета уходят в
     # сборку: из них собираются canonical, hreflang, sitemap и ссылки «Войти».

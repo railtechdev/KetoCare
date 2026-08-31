@@ -39,6 +39,8 @@ x86-64-v2. Контейнер здесь не спасает — процесс�
 - `/srv/ketocare` — клон репозитория (compose, `.env`, деплой-скрипт);
 - `/var/www/ketocare-landing` — посадочная (собирается из `packages/landing`);
 - `/var/www/ketocare-app` — собранный `apps/web/dist`, кладёт `deploy.sh`;
+- `/var/www/ketocare-miniapp` — собранный `apps/miniapp/dist` (Telegram Mini App);
+  пока каталога нет, деплой его пропускает и говорит об этом;
 - `/srv/backups` — дампы postgres;
 - данные postgres/redis и PDF-отчёты — named volumes docker
   (`ketocare_pgdata`, `ketocare_redisdata`, `ketocare_reports`, `ketocare_attachments`,
@@ -77,8 +79,8 @@ x86-64-v2. Контейнер здесь не спасает — процесс�
 ## Первый запуск
 
 ```bash
-sudo mkdir -p /srv/ketocare /var/www/ketocare-landing /var/www/ketocare-app /srv/backups
-sudo chown "$USER" /srv/ketocare /var/www/ketocare-landing /var/www/ketocare-app /srv/backups
+sudo mkdir -p /srv/ketocare /var/www/ketocare-{landing,app,miniapp} /srv/backups
+sudo chown "$USER" /srv/ketocare /var/www/ketocare-{landing,app,miniapp} /srv/backups
 git clone <repo> /srv/ketocare && cd /srv/ketocare
 cp .env.example .env   # и заполнить, см. ниже
 ```
@@ -125,8 +127,11 @@ App живёт ровно в ней — в веб-версии Telegram прил
 него. Домен `tma.<домен>` нужно завести в DNS до выпуска сертификата — certbot
 проверяет доступность снаружи.
 
-Пока домена нет, деплой всё равно собирает приложение и кладёт в
-`/var/www/ketocare-miniapp`: файлы просто лежат. Кнопки «Приложение» в боте при
+Пока домена нет, деплой собирает приложение, но не выкладывает его: каталога
+`/var/www/ketocare-miniapp` на сервере может не быть, а создать его деплой не
+может — `/var/www` принадлежит root, и попытка отказом прав уронила бы весь
+выкат (так и вышло однажды). Каталог создаётся строкой из «Однократной
+настройки» выше. Кнопки «Приложение» в боте при
 этом тоже нет — она появляется вместе с `MINIAPP_URL`.
 
 `--redirect` обязателен: refresh-токен живёт в httpOnly-cookie и по чистому
