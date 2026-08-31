@@ -3,6 +3,7 @@ import {
   CircleAlert,
   CircleCheck,
   CircleHelp,
+  ClipboardList,
   TriangleAlert,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -61,6 +62,16 @@ export function PatientFlagsView({
     icon: typeof CircleAlert;
     label: string;
   }[] = [];
+
+  if (flags.noPrescription) {
+    // Первым: это не отклонение в наблюдении, а отсутствие самого наблюдения.
+    badges.push({
+      key: "no-prescription",
+      className: "bg-destructive text-destructive-foreground",
+      icon: ClipboardList,
+      label: t("flags.noPrescription"),
+    });
+  }
 
   if (flags.staleData) {
     badges.push({
@@ -132,6 +143,11 @@ export function PatientFlagsLegend() {
 
   return (
     <dl className="m-0 grid gap-1 text-sm text-muted-foreground sm:grid-cols-[auto_1fr] sm:gap-x-3">
+      <dt className="flex items-center gap-1.5 font-semibold">
+        <ClipboardList aria-hidden="true" className="size-4 text-destructive" />
+        {t("flags.legend.noPrescriptionTerm")}
+      </dt>
+      <dd className="m-0">{t("flags.legend.noPrescription")}</dd>
       <dt className="flex items-center gap-1.5 font-semibold">
         <CircleAlert aria-hidden="true" className="size-4 text-destructive" />
         {t("flags.legend.noReadingsTerm")}

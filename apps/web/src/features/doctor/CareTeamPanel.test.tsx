@@ -29,11 +29,17 @@ const ACCESS_TOKEN = `header.${btoa(
   JSON.stringify({ sub: MINE, role: "doctor" }),
 )}.signature`;
 
+const PARENT_TOKEN = `header.${btoa(
+  JSON.stringify({ sub: MINE, role: "parent" }),
+)}.signature`;
+
 const TEAM = [{ id: MINE, role: "doctor", full_name: "Иван Врач" }];
 const COLLEAGUES = [
   ...TEAM,
   { id: OTHER, role: "dietitian", full_name: "Анна Диетолог" },
 ];
+
+let token = ACCESS_TOKEN;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -55,9 +61,10 @@ function wrapper({ children }: { children: ReactNode }) {
 describe("кто ведёт пациента", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    token = ACCESS_TOKEN;
     (api.POST as Mock).mockImplementation(async (path: string) => {
       if (path === "/api/v1/auth/refresh") {
-        return { data: { access_token: ACCESS_TOKEN }, error: undefined };
+        return { data: { access_token: token }, error: undefined };
       }
       return { data: undefined, error: undefined };
     });
@@ -84,6 +91,22 @@ describe("кто ведёт пациента", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: /Иван Врач/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("родителю показывает состав, но не даёт его менять", async () => {
+    // Ручка `/patients/{id}/doctors` родителю прямо разрешена: он вправе знать,
+    // кто имеет доступ к данным его ребёнка. Действия при этом чужие — сервер
+    // ответил бы 403, а кнопка обещала бы то, чего нет (правило П3 канона).
+    token = PARENT_TOKEN;
+    render(<CareTeamPanel patientId={PATIENT_ID} />, { wrapper });
+
+    expect(await screen.findByText("Иван Врач")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Подключить коллегу/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Снять ведение/ }),
     ).not.toBeInTheDocument();
   });
 

@@ -19,6 +19,7 @@ i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
 const SILENT = "11111111-1111-4111-8111-111111111111";
 const CALM = "22222222-2222-4222-8222-222222222222";
 const BROKEN = "33333333-3333-4333-8333-333333333333";
+const WAITING = "44444444-4444-4444-8444-444444444444";
 
 function patient(id: string, name: string) {
   return {
@@ -37,8 +38,22 @@ const PATIENTS = {
     patient(SILENT, "Молчащий Пациент"),
     patient(CALM, "Спокойный Пациент"),
     patient(BROKEN, "Неизвестный Пациент"),
+    patient(WAITING, "Новый Пациент"),
   ],
-  total: 3,
+  total: 4,
+};
+
+/** Назначение: молчание и вердикт о допуске существуют только при нём. */
+const PRESCRIPTION = {
+  id: "rx1",
+  patient_id: SILENT,
+  ratio: 3.5,
+  kcal_per_day: 1200,
+  protein_g: 12,
+  carbs_limit_g: 35,
+  meals_per_day: 4,
+  starts_on: "2026-08-01",
+  created_at: "2026-08-01T10:00:00Z",
 };
 
 const NOW = new Date();
@@ -50,7 +65,7 @@ function overview(id: string, calm: boolean) {
     // «Сегодня» берётся из самой сводки, а не с часов браузера: сервер собирает
     // её в часовом поясе установки (`computePatientFlags`).
     date: TODAY,
-    prescription: null,
+    prescription: id === WAITING ? null : PRESCRIPTION,
     day: calm
       ? {
           totals: {
@@ -123,6 +138,23 @@ describe("главная врача", () => {
     // Спокойного в очереди нет вовсе: очередь отвечает «кем заняться», а не
     // «кто у меня есть» — для второго вопроса существует раздел «Пациенты».
     expect(screen.queryByText("Спокойный Пациент")).not.toBeInTheDocument();
+  });
+
+  it("поднимает наверх очереди пациента, которому не задано назначение", async () => {
+    renderHome();
+
+    // Ребёнок прикрепляется к врачу молча, а назначение — первое, что от врача
+    // требуется: до него не работает ничего остального. Такой пациент стоит
+    // выше молчащего, и ссылка ведёт прямо туда, где задают назначение.
+    const link = await screen.findByRole("link", { name: "Новый Пациент" });
+    const queue = screen.getAllByRole("link").map((row) => row.textContent);
+    expect(queue.indexOf("Новый Пациент")).toBeLessThan(
+      queue.indexOf("Молчащий Пациент"),
+    );
+
+    const href = decodeURIComponent(link.getAttribute("href") ?? "");
+    expect(href).toContain(`patient=${WAITING}`);
+    expect(href).toContain("tab=prescription");
   });
 
   it("пациента без сводки не выдаёт за спокойного, а считает отдельно", async () => {

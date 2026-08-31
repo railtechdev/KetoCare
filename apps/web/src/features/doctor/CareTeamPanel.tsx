@@ -34,7 +34,23 @@ import { isCareRole } from "./types";
  * Снять последнего специалиста сервер не даёт и объясняет это по-русски —
  * дублировать проверку на клиенте незачем, она разошлась бы с серверной.
  */
-export function CareTeamPanel({ patientId }: { patientId: string }) {
+export function CareTeamPanel({
+  patientId,
+  title,
+  description,
+}: {
+  patientId: string;
+  /**
+   * Заголовок и пояснение блока.
+   *
+   * Список один и тот же, а обращены эти две строки к разным людям:
+   * специалисту — «кто ведёт пациента, семья видит этот же список», семье —
+   * «кто имеет доступ к данным ребёнка». Свои тексты дешевле пары пропсов и
+   * несравнимо дешевле второй копии панели.
+   */
+  title?: string;
+  description?: string;
+}) {
   const { t } = useTranslation("doctor");
   const { session } = useSession();
   const ids = useId();
@@ -58,8 +74,8 @@ export function CareTeamPanel({ patientId }: { patientId: string }) {
 
   return (
     <Section
-      title={t("careTeam.title")}
-      description={t("careTeam.intro")}
+      title={title ?? t("careTeam.title")}
+      description={description ?? t("careTeam.intro")}
       density="compact"
       action={
         canWrite && (
