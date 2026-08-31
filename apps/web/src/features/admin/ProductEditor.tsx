@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ProductForm } from "./ProductForm";
-import { ProductRevisions } from "./ProductRevisions";
+import { ProductRevisions } from "../products/ProductRevisions";
 import {
   EMPTY_PRODUCT_FORM_VALUES,
   toProductCreateBody,
@@ -24,9 +24,13 @@ interface Props {
   onSaved: (product: Product) => void;
   onCancel: () => void;
   /**
-   * Показывать историю правок. Она читается из `/admin/audit-log`, а он закрыт
-   * ролью admin: диетологу этот блок дал бы 403 вместо содержимого. Показывать
-   * неработающее — хуже, чем не показывать (правило П3 канона).
+   * Показывать историю правок.
+   *
+   * Раньше она читалась из `/admin/audit-log`, закрытого ролью admin, и
+   * диетологу этот блок дал бы 403 вместо содержимого. Теперь история берётся
+   * из `product_revisions` — настоящей истории позиции, открытой и диетологу
+   * тоже, — и признак остаётся ради одного: у новой позиции истории нет, а
+   * пустой блок в форме заведения ни о чём не говорит.
    */
   showHistory?: boolean;
 }

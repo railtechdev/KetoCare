@@ -16,7 +16,8 @@ import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { api, errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
-import { useSectionQuery } from "../../routes/useSectionTab";
+import { useSectionItem, useSectionQuery } from "../../routes/useSectionTab";
+import { ProductCard } from "./ProductCard";
 
 interface ProductRow {
   id: string;
@@ -40,6 +41,11 @@ export function ProductsPage() {
   // навигации.
   const [urlQuery, setUrlQuery] = useSectionQuery();
   const [query, setQuery] = useState(urlQuery);
+
+  // Открытая карточка живёт в адресе (правило П1): ссылку на позицию можно
+  // переслать и открыть заново, а возврат в список — обычная кнопка «назад»
+  // шаблона, а не «найдите продукт ещё раз».
+  const [openId, setOpenId] = useSectionItem();
 
   // Запрос уходит с задержкой: иначе полнотекстовый поиск дёргается на каждой букве.
   const debounced = useDebouncedValue(query, 300);
@@ -70,7 +76,22 @@ export function ProductsPage() {
 
   const columns = useMemo<ColumnDef<ProductRow, unknown>[]>(
     () => [
-      { accessorKey: "name", header: t("columns.name") },
+      {
+        accessorKey: "name",
+        header: t("columns.name"),
+        // Имя — ссылка, а не текст: карточка живёт по адресу, и её открывают
+        // в новой вкладке, копируют и пересылают.
+        cell: ({ row }) => (
+          <SectionLink
+            section="products"
+            item={row.original.id}
+            query={trimmed || undefined}
+            className="font-medium underline-offset-2 hover:underline"
+          >
+            {row.original.name}
+          </SectionLink>
+        ),
+      },
       { accessorKey: "kcal", header: t("columns.kcal"), cell: numeric(0) },
       { accessorKey: "fat", header: t("columns.fat"), cell: numeric(1) },
       {
@@ -97,7 +118,7 @@ export function ProductsPage() {
         ),
       },
     ],
-    [t],
+    [t, trimmed],
   );
 
   const rows = products.data ?? [];
@@ -130,6 +151,12 @@ export function ProductsPage() {
         }
       />
     );
+
+  if (openId !== undefined) {
+    return (
+      <ProductCard productId={openId} onBack={() => setOpenId(undefined)} />
+    );
+  }
 
   return (
     <PageLayout title={t("title")} intro={t("intro")}>

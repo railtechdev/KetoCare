@@ -97,7 +97,15 @@ class TestProductWrites:
 
         updated = await client.put(
             f"/api/v1/products/{product_id}",
-            json={**_product_payload(category.id), "fat_100g": 82.5, "is_active": True},
+            json={
+                **_product_payload(category.id),
+                "fat_100g": 82.5,
+                # Источник меняется вместе с числами: иначе строка утверждала бы,
+                # что новое значение опубликовал USDA (см. TestSourceSignature).
+                "source": "Лаборатория клиники",
+                "source_version": "измерение 2026-08",
+                "is_active": True,
+            },
             headers=auth_headers(admin),
         )
         assert updated.status_code == 200, updated.text
@@ -217,6 +225,198 @@ class TestSameChecksAtEveryDoor:
 
         assert second.status_code == 409, second.text
         assert "уже есть" in second.json()["error"]["message"]
+
+
+class TestSourceSignature:
+    """Числа изменились — источник обязан измениться вместе с ними.
+
+    У каждой позиции справочника есть подпись: откуда взяты значения, какая это
+    версия базы, когда сверяли. Пока подпись стоит от USDA, строка утверждает,
+    что её числа опубликовал USDA. Правка жиров с сохранением подписи делает
+    утверждение ложным — и проверить значение по источнику становится нельзя
+    ни задним числом, ни при следующем обновлении базы. Это правило работы с
+    базами состава продуктов (EuroFIR), а не наша выдумка.
+
+    Запрета на правку здесь нет: менять числа можно, нельзя оставлять чужую
+    подпись под своими числами.
+    """
+
+    async def _create(self, client, session, admin, auth_headers):
+        category = await _category(session)
+        created = await client.post(
+            "/api/v1/products", json=_product_payload(category.id), headers=auth_headers(admin)
+        )
+        return category, created.json()["id"]
+
+    async def test_changing_numbers_under_the_old_source_rejected(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        category, product_id = await self._create(client, session, admin, auth_headers)
+
+        response = await client.put(
+            f"/api/v1/products/{product_id}",
+            json={**_product_payload(category.id), "fat_100g": 90.0, "is_active": True},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422, response.text
+        body = response.json()["error"]
+        assert body["code"] == "validation_error"
+        assert body["details"]["fields"] == ["fat_100g"]
+
+    async def test_changing_numbers_with_a_new_source_allowed(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        category, product_id = await self._create(client, session, admin, auth_headers)
+
+        response = await client.put(
+            f"/api/v1/products/{product_id}",
+            json={
+                **_product_payload(category.id),
+                "fat_100g": 90.0,
+                "source": "Лаборатория клиники",
+                "source_version": "измерение 2026-08",
+                "is_active": True,
+            },
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["fat_100g"] == 90.0
+
+    async def test_editing_name_under_the_same_source_allowed(
+        self, client, session, make_user, auth_headers
+    ):
+        """Правило про ЧИСЛА, а не про карточку.
+
+        Опечатка в названии, смена категории, вывод из оборота — всё это не
+        меняет того, что утверждает источник, и требовать новую подпись значило
+        бы мешать работе без причины.
+        """
+
+        admin = await make_user(UserRole.ADMIN)
+        category, product_id = await self._create(client, session, admin, auth_headers)
+
+        response = await client.put(
+            f"/api/v1/products/{product_id}",
+            json={
+                **_product_payload(category.id),
+                "name_ru": f"Масло сливочное 82,5% {uuid.uuid4().hex[:8]}",
+                "is_active": False,
+            },
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["is_active"] is False
+
+
+class TestRevisionsAreReadable:
+    """История продукта писалась с первого дня и не отдавалась никуда.
+
+    Экран показывал вместо неё журнал аудита, отобранный по `entity_id`, — а
+    импорт пишет одну запись на весь файл, без идентификатора продукта. Поэтому
+    у всех импортированных позиций история выглядела пустой, хотя в базе она
+    была с самого их появления.
+    """
+
+    async def test_returns_history_newest_first_with_author_names(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+        created = await client.post(
+            "/api/v1/products", json=_product_payload(category.id), headers=auth_headers(admin)
+        )
+        product_id = created.json()["id"]
+
+        await client.put(
+            f"/api/v1/products/{product_id}",
+            json={
+                **_product_payload(category.id),
+                "fat_100g": 82.5,
+                "source": "Лаборатория клиники",
+                "source_version": "измерение 2026-08",
+                "is_active": True,
+            },
+            headers=auth_headers(admin),
+        )
+
+        response = await client.get(
+            f"/api/v1/products/{product_id}/revisions", headers=auth_headers(admin)
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == 2
+        # От новых к старым: последнее изменение — то, по которому сейчас считают.
+        assert body["items"][0]["snapshot"]["fat_100g"] == 82.5
+        assert body["items"][1]["snapshot"]["fat_100g"] == 81.1
+        # Идентификатор без имени отвечает «кто-то», а вопрос «кто поменял жиры»
+        # задают после инцидента.
+        assert body["items"][0]["changed_by_name"] == admin.full_name
+
+    async def test_doctor_may_read_but_parent_may_not(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+        created = await client.post(
+            "/api/v1/products", json=_product_payload(category.id), headers=auth_headers(admin)
+        )
+        product_id = created.json()["id"]
+
+        doctor = await make_user(UserRole.DOCTOR)
+        parent = await make_user(UserRole.PARENT)
+
+        allowed = await client.get(
+            f"/api/v1/products/{product_id}/revisions", headers=auth_headers(doctor)
+        )
+        assert allowed.status_code == 200, allowed.text
+
+        # Содержимое справочника открыто всем ролям, а имена сотрудников рядом с
+        # правками — сведения о работе клиники, и семье они не нужны ни для чего.
+        denied = await client.get(
+            f"/api/v1/products/{product_id}/revisions", headers=auth_headers(parent)
+        )
+        assert denied.status_code == 403
+
+    async def test_unknown_product_is_404(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        response = await client.get(
+            f"/api/v1/products/{uuid.uuid4()}/revisions", headers=auth_headers(admin)
+        )
+        assert response.status_code == 404
+
+    async def test_imported_products_have_history(self, client, session, make_user, auth_headers):
+        """Тот самый случай: у всех 98 позиций прода история выглядела пустой."""
+
+        admin = await make_user(UserRole.ADMIN)
+        csv = (
+            f"{CSV_HEADER}\n"
+            "Авокадо импортное,Жиры,160,14.7,2,8.5,6.7,USDA FoodData Central,SR Legacy,2026-01-01\n"
+        )
+        report = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", csv.encode(), "text/csv")},
+            params={"dry_run": "false"},
+            headers=auth_headers(admin),
+        )
+        assert report.status_code == 200, report.text
+        assert report.json()["imported"] == 1
+
+        product = await session.scalar(
+            select(Product).where(Product.name_ru == "Авокадо импортное")
+        )
+        assert product is not None
+
+        response = await client.get(
+            f"/api/v1/products/{product.id}/revisions", headers=auth_headers(admin)
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] == 1
 
 
 class TestCsvImportEndpoint:

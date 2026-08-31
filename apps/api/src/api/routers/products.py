@@ -11,9 +11,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Path, UploadFile
 from sqlalchemy.exc import IntegrityError
 
+from core.models import Product
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import products as products_repo
+from core.repositories import users as users_repo
 
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
@@ -25,6 +27,8 @@ from ..schemas import (
     ProductCreate,
     ProductImportReport,
     ProductRead,
+    ProductRevisionPage,
+    ProductRevisionRead,
     ProductUpdate,
 )
 from ..services.product_import import parse_csv
@@ -32,6 +36,14 @@ from ..services.product_import import parse_csv
 router = APIRouter(prefix="/products", tags=["products"])
 
 _EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN)
+
+#: Кому видно, кто и когда правил карточку. Само содержимое справочника открыто
+#: всем ролям, а вот имена сотрудников рядом с правками — сведения о работе
+#: клиники, и семье они не нужны ни для чего.
+_HISTORY_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN, UserRole.DOCTOR)
+
+#: Поля, изменение которых меняет РЕЗУЛЬТАТ расчёта.
+_MACRO_FIELDS = ("kcal_100g", "fat_100g", "protein_100g", "carbs_100g", "fiber_100g")
 
 
 @router.get("", response_model=Page[ProductRead], summary="Поиск продуктов")
@@ -140,6 +152,8 @@ async def update_product(
     if product is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Продукт не найден.")
 
+    _source_must_match_numbers(product, payload)
+
     before = ProductRead.model_validate(product).model_dump(mode="json")
     updated = await products_repo.update(
         session, product=product, changed_by=user.id, **payload.model_dump()
@@ -155,6 +169,88 @@ async def update_product(
         after=ProductRead.model_validate(updated).model_dump(mode="json"),
     )
     return ProductRead.model_validate(updated)
+
+
+def _source_must_match_numbers(product: Product, payload: ProductUpdate) -> None:
+    """Числа изменились — источник обязан измениться вместе с ними.
+
+    У каждой позиции справочника есть подпись: откуда взяты значения
+    (`source`), какая это версия базы (`source_version`) и когда сверяли
+    (`verified_at`). Пока подпись стоит от USDA, строка утверждает, что её
+    числа опубликовал USDA. Правка жиров с сохранением этой подписи превращает
+    утверждение в ложное — и проверить значение по источнику становится нельзя
+    ни задним числом, ни при следующем обновлении базы.
+
+    Это правило работы с базами состава продуктов (EuroFIR: у каждого значения
+    прослеживаемый источник), а не наша выдумка. Запрета на правку здесь нет:
+    менять числа можно, нельзя оставлять чужую подпись под своими числами.
+    """
+
+    changed = [
+        field
+        for field in _MACRO_FIELDS
+        if abs(float(getattr(product, field)) - float(getattr(payload, field))) > 1e-9
+    ]
+    if not changed:
+        return
+
+    if (product.source, product.source_version) != (payload.source, payload.source_version):
+        return
+
+    raise ApiError(
+        ErrorCode.VALIDATION_ERROR,
+        "Числа изменились, а источник остался прежним. Укажите, откуда взяты "
+        "новые значения: подписывать их прежним источником нельзя — по такой "
+        "записи значение уже не проверить.",
+        details={"fields": changed, "source": product.source},
+    )
+
+
+@router.get(
+    "/{product_id}/revisions",
+    response_model=ProductRevisionPage,
+    summary="История изменений продукта",
+    dependencies=[Depends(require_roles(*_HISTORY_ROLES))],
+)
+async def list_product_revisions(
+    product_id: Annotated[uuid.UUID, Path()],
+    session: SessionDep,
+    _: CurrentUserDep,
+    page: PaginationDep,
+) -> ProductRevisionPage:
+    """История пишется репозиторием с первого дня и не отдавалась никуда.
+
+    Экран показывал вместо неё журнал аудита, отобранный по `entity_id`, — а
+    импорт пишет одну запись на весь файл, без идентификатора продукта. Поэтому
+    у всех импортированных позиций история выглядела пустой, хотя в базе она
+    была с самого их появления.
+    """
+
+    product = await products_repo.get(session, product_id)
+    if product is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Продукт не найден.")
+
+    revisions = await products_repo.list_revisions(session, product_id=product_id)
+    window = revisions[page.offset : page.offset + page.limit]
+
+    # Имена — одним запросом на страницу, а не по одному на строку.
+    names = await users_repo.names_by_ids(
+        session, user_ids={revision.changed_by for revision in window}
+    )
+
+    return ProductRevisionPage(
+        items=[
+            ProductRevisionRead(
+                id=revision.id,
+                snapshot=revision.snapshot,
+                changed_by=revision.changed_by,
+                changed_by_name=names.get(revision.changed_by),
+                changed_at=revision.changed_at,
+            )
+            for revision in window
+        ],
+        total=len(revisions),
+    )
 
 
 # 5 МБ: база продуктов — тысячи строк, а не десятки тысяч; ограничение защищает

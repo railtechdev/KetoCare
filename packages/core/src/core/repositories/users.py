@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any
 
 from sqlalchemy import func, select
@@ -80,3 +80,20 @@ async def update(session: AsyncSession, *, user: User, **fields: Any) -> User:
         setattr(user, key, value)
     await session.flush()
     return user
+
+
+async def names_by_ids(
+    session: AsyncSession, *, user_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Имена по идентификаторам — одним запросом.
+
+    Нужна там, где рядом со списком записей надо назвать автора: идентификатор
+    без имени отвечает «кто-то», а вопрос «кто это поменял» задают после
+    инцидента, и ответ нужен сразу.
+    """
+
+    if not user_ids:
+        return {}
+
+    rows = await session.execute(select(User.id, User.full_name).where(User.id.in_(list(user_ids))))
+    return {row.id: row.full_name for row in rows}

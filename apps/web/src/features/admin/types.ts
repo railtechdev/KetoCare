@@ -41,7 +41,4 @@ export function isAdminSection(value: string): value is AdminSection {
  */
 export const MAX_PAGE_SIZE = 200;
 
-/** Значение `audit_log.entity` для правок продуктов — по нему строится история ревизий. */
-export const PRODUCTS_AUDIT_ENTITY = "products";
-
 export type ProductCategory = components["schemas"]["ProductCategoryRead"];
