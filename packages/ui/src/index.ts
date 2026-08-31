@@ -41,7 +41,11 @@ export { FormFooter } from "./components/FormFooter";
 export type { FormFooterProps } from "./components/FormFooter";
 
 export { DataTable } from "./components/DataTable";
-export type { DataTableProps, DataTableLabels } from "./components/DataTable";
+export type {
+  DataTableProps,
+  DataTableLabels,
+  ServerPagination,
+} from "./components/DataTable";
 
 export { TrendChart } from "./components/TrendChart";
 export type {

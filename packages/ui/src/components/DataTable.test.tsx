@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DataTable, type DataTableLabels } from "./DataTable";
 
@@ -105,6 +105,58 @@ describe("DataTable", () => {
     expect(screen.getByRole("button", { name: "Назад" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Вперёд" }));
     expect(screen.getByText("Страница 2 из 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Вперёд" })).toBeDisabled();
+  });
+});
+
+describe("постраничность на стороне сервера", () => {
+  /**
+   * Клиентская постраничность делит то, что уже пришло. На выборке, не
+   * помещающейся в один запрос, она молча выдаёт часть за целое: человек видит
+   * «страница 10 из 10» и уверен, что дочитал справочник до конца.
+   */
+  const PAGE: Row[] = [{ name: "Первый", value: 1 }];
+
+  function renderServerTable(
+    pageIndex: number,
+    onPageChange = () => {},
+    pageCount = 15,
+  ) {
+    return render(
+      <DataTable
+        columns={COLUMNS}
+        data={PAGE}
+        emptyState="Записей пока нет"
+        labels={LABELS}
+        serverPagination={{ pageIndex, pageCount, onPageChange }}
+        caption="Тестовая таблица"
+      />,
+    );
+  }
+
+  it("показывает число страниц сервера, а не число полученных строк", () => {
+    renderServerTable(0);
+    expect(screen.getByRole("status")).toHaveTextContent("Страница 1 из 15");
+  });
+
+  it("сообщает о переходе наружу, а не листает пришедшую страницу", async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
+    renderServerTable(3, onPageChange);
+
+    await user.click(screen.getByRole("button", { name: "Вперёд" }));
+    expect(onPageChange).toHaveBeenCalledWith(4);
+
+    await user.click(screen.getByRole("button", { name: "Назад" }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  it("на краях выборки кнопки выключены", () => {
+    const { unmount } = renderServerTable(0);
+    expect(screen.getByRole("button", { name: "Назад" })).toBeDisabled();
+    unmount();
+
+    renderServerTable(14);
     expect(screen.getByRole("button", { name: "Вперёд" })).toBeDisabled();
   });
 });

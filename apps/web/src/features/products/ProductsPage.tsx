@@ -3,6 +3,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  RatioBadge,
   Skeleton,
 } from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -11,12 +12,13 @@ import { Calculator, PackageSearch, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { api, errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useSectionItem, useSectionQuery } from "../../routes/useSectionTab";
+import { useProductCategories } from "../admin/useAdminProducts";
 import { ProductCard } from "./ProductCard";
 
 interface ProductRow {
@@ -27,9 +29,21 @@ interface ProductRow {
   protein: number;
   carbs: number;
   fiber: number;
+  /** Кетосоотношение 100 г — считает ядро; null у чистого жира */
+  ratio: number | null;
   source: string;
   sourceVersion: string;
 }
+
+/**
+ * Сколько строк на странице.
+ *
+ * Страницы считает сервер. Клиентская постраничность делила первые 200 строк и
+ * молчала об остальных: справочник из 98 позиций помещался целиком, справочник
+ * из трёх тысяч — нет, и человек видел «страница 10 из 10», уверенный, что
+ * дочитал его до конца.
+ */
+const PAGE_SIZE = 20;
 
 /** Справочник продуктов для родителя (раздел 8.1 ТЗ, раздел «products»). */
 export function ProductsPage() {
@@ -46,31 +60,45 @@ export function ProductsPage() {
   // переслать и открыть заново, а возврат в список — обычная кнопка «назад»
   // шаблона, а не «найдите продукт ещё раз».
   const [openId, setOpenId] = useSectionItem();
+  const [categoryId, setCategoryId] = useState("");
+  const [page, setPage] = useState(0);
+  const categories = useProductCategories();
 
   // Запрос уходит с задержкой: иначе полнотекстовый поиск дёргается на каждой букве.
   const debounced = useDebouncedValue(query, 300);
   const trimmed = debounced.trim();
 
+  const listQuery = {
+    q: trimmed || undefined,
+    category_id: categoryId || undefined,
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  };
+
   const products = useQuery({
-    queryKey: ["products", "list", trimmed],
+    queryKey: ["products", "list", listQuery],
     placeholderData: keepPreviousData,
-    queryFn: async (): Promise<ProductRow[]> => {
+    queryFn: async (): Promise<{ rows: ProductRow[]; total: number }> => {
       const { data, error } = await api.GET("/api/v1/products", {
-        params: { query: { q: trimmed || undefined, limit: 200, offset: 0 } },
+        params: { query: listQuery },
       });
       if (error || !data) throw error ?? new Error("Empty products response");
 
-      return data.items.map((item) => ({
-        id: item.id,
-        name: item.name_ru,
-        kcal: item.kcal_100g,
-        fat: item.fat_100g,
-        protein: item.protein_100g,
-        carbs: item.carbs_100g,
-        fiber: item.fiber_100g,
-        source: item.source,
-        sourceVersion: item.source_version,
-      }));
+      return {
+        rows: data.items.map((item) => ({
+          id: item.id,
+          name: item.name_ru,
+          kcal: item.kcal_100g,
+          fat: item.fat_100g,
+          protein: item.protein_100g,
+          carbs: item.carbs_100g,
+          fiber: item.fiber_100g,
+          ratio: item.ratio ?? null,
+          source: item.source,
+          sourceVersion: item.source_version,
+        })),
+        total: data.total,
+      };
     },
   });
 
@@ -101,6 +129,20 @@ export function ProductsPage() {
       },
       { accessorKey: "carbs", header: t("columns.carbs"), cell: numeric(1) },
       { accessorKey: "fiber", header: t("columns.fiber"), cell: numeric(1) },
+      {
+        accessorKey: "ratio",
+        header: t("columns.ratio"),
+        // Считает ядро: у чистого жира знаменатель равен нулю, и «Infinity» в
+        // этой колонке был бы не числом, а сбоем. Врач по ней выбирает продукт.
+        cell: ({ row }) =>
+          row.original.ratio == null ? (
+            <span className="text-sm text-muted-foreground">
+              {t("noRatio")}
+            </span>
+          ) : (
+            <RatioBadge ratio={row.original.ratio} />
+          ),
+      },
       { accessorKey: "source", header: t("columns.source") },
       {
         id: "actions",
@@ -121,7 +163,9 @@ export function ProductsPage() {
     [t, trimmed],
   );
 
-  const rows = products.data ?? [];
+  const rows = products.data?.rows ?? [];
+  const total = products.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Пустых состояний два: до поиска показывается, что здесь будет, а по
   // неудачному запросу — как его исправить, с кнопкой сброса.
@@ -170,8 +214,31 @@ export function ProductsPage() {
         onChange={(event) => {
           setQuery(event.target.value);
           setUrlQuery(event.target.value);
+          // Новый отбор — снова с первой страницы: иначе выдача из двух строк
+          // открывалась бы на седьмой странице, то есть пустой.
+          setPage(0);
         }}
       />
+
+      {/* Фильтра по категории у семьи не было вовсе: найти «все жиры» можно
+          было только перебором названий. */}
+      <SelectField
+        id="product-category"
+        width="wide"
+        label={t("filters.category")}
+        value={categoryId}
+        onChange={(event) => {
+          setCategoryId(event.target.value);
+          setPage(0);
+        }}
+      >
+        <option value="">{t("filters.allCategories")}</option>
+        {(categories.data ?? []).map((category) => (
+          <option key={category.id} value={category.id}>
+            {category.name_ru}
+          </option>
+        ))}
+      </SelectField>
 
       {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
           обновление не должно прятать уже показанную выдачу (П15 канона).
@@ -199,6 +266,11 @@ export function ProductsPage() {
           data={rows}
           caption={t("table.caption")}
           emptyState={null}
+          serverPagination={{
+            pageIndex: page,
+            pageCount,
+            onPageChange: setPage,
+          }}
           labels={{
             previousPage: t("table.previousPage"),
             nextPage: t("table.nextPage"),

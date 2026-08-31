@@ -6,11 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
-import {
-  MAX_PAGE_SIZE,
-  type ProductCreateBody,
-  type ProductUpdateBody,
-} from "./types";
+import { type ProductCreateBody, type ProductUpdateBody } from "./types";
 
 export interface ProductFilters {
   q: string;
@@ -33,6 +29,16 @@ export const EMPTY_PRODUCT_FILTERS: ProductFilters = {
   categoryId: "",
   includeInactive: false,
 };
+
+/**
+ * Сколько строк на странице.
+ *
+ * Страницы считает сервер. Раньше запрашивались первые 200 строк, а таблица
+ * делила уже полученное: на справочнике из трёх тысяч позиций «страница 10 из
+ * 10» означала «дальше есть, но мы не покажем». Подпись об этом внизу была, но
+ * она объясняла обрезку, а не отменяла её.
+ */
+export const PRODUCTS_PAGE_SIZE = 20;
 
 /**
  * Справочник продуктов для администратора (раздел 8.3 ТЗ, «Админ / Продукты»).
@@ -59,13 +65,13 @@ export function useProductCategories() {
   });
 }
 
-export function useAdminProducts(filters: ProductFilters) {
+export function useAdminProducts(filters: ProductFilters, page = 0) {
   const query = {
     q: filters.q.trim() || undefined,
     category_id: filters.categoryId.trim() || undefined,
     include_inactive: filters.includeInactive || undefined,
-    limit: MAX_PAGE_SIZE,
-    offset: 0,
+    limit: PRODUCTS_PAGE_SIZE,
+    offset: page * PRODUCTS_PAGE_SIZE,
   };
 
   return useQuery({

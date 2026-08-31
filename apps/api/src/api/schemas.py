@@ -12,10 +12,12 @@ from pydantic import (
     EmailStr,
     Field,
     StringConstraints,
+    computed_field,
     model_validator,
 )
 
 from core.models.enums import Sex, UserRole
+from keto_engine import Ingredient, verify
 
 
 def _required(max_length: int) -> Any:
@@ -292,6 +294,38 @@ class ProductRead(ProductBase):
 
     id: uuid.UUID
     is_active: bool
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ratio(self) -> float | None:
+        """Кетосоотношение 100 г продукта — F / (P + C).
+
+        Считает ядро, а не интерфейс. Формула выглядит тривиальной ровно до
+        первого масла: у чистого жира знаменатель равен нулю, и `fat / (p + c)`
+        в браузере дало бы `Infinity` в колонке, по которой врач выбирает
+        продукт. Ядро в этом случае отвечает «соотношения нет» — и это разные
+        утверждения.
+
+        Считается на чтении и не хранится: значение полностью определяется
+        макронутриентами позиции, а сохранённая копия однажды разошлась бы с
+        ними после правки.
+        """
+
+        return verify(
+            [
+                (
+                    Ingredient(
+                        product_id=str(self.id),
+                        kcal=self.kcal_100g,
+                        fat=self.fat_100g,
+                        protein=self.protein_100g,
+                        carbs=self.carbs_100g,
+                        fiber=self.fiber_100g,
+                    ),
+                    100.0,
+                )
+            ]
+        ).ratio
 
 
 class ProductRevisionRead(BaseModel):
