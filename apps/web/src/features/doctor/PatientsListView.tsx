@@ -46,19 +46,14 @@ export function PatientsListView() {
   const [query, setQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  const patients = usePatients();
+  // Поиск уходит на сервер (см. `usePatients`), поэтому список уже отобран.
+  const debouncedQuery = useDebouncedValue(query, 300);
+  const patients = usePatients(debouncedQuery);
   const items = useMemo(() => patients.data?.items ?? [], [patients.data]);
 
   const overviews = usePatientOverviews(
     useMemo(() => items.map((patient) => patient.id), [items]),
   );
-
-  // Отбор идёт по уже загруженному списку: ручка `/patients` отдаёт пациентов,
-  // связанных с врачом, целиком, и повторный запрос на каждую букву ничего бы
-  // не уточнил. Задержка всё равно нужна — она отделяет ввод от пересборки
-  // таблицы вместе со всеми её ячейками.
-  const debouncedQuery = useDebouncedValue(query, 200);
-  const needle = debouncedQuery.trim().toLocaleLowerCase("ru-RU");
 
   const settled = !overviews.pending;
 
@@ -80,10 +75,6 @@ export function PatientsListView() {
           attention: attentionRank(flags),
         };
       })
-      .filter(
-        (row) =>
-          needle === "" || row.name.toLocaleLowerCase("ru-RU").includes(needle),
-      )
       .sort(
         (left, right) =>
           // Порядок по умолчанию — требующие внимания сверху: врач открывает
@@ -96,7 +87,7 @@ export function PatientsListView() {
           (settled ? right.attention - left.attention : 0) ||
           left.name.localeCompare(right.name, "ru-RU"),
       );
-  }, [items, needle, overviews.byPatientId, settled]);
+  }, [items, overviews.byPatientId, settled]);
 
   const columns = useMemo<ColumnDef<PatientRow, unknown>[]>(
     () => [
@@ -210,7 +201,7 @@ export function PatientsListView() {
         onRetry={() => void patients.refetch()}
         isEmpty={rows.length === 0}
         empty={
-          needle === "" ? (
+          debouncedQuery.trim() === "" ? (
             <EmptyState
               icon={Users}
               title={t("list.empty")}

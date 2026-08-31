@@ -1,6 +1,6 @@
 import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -166,7 +166,16 @@ beforeEach(() => {
       options: { params?: { path?: { patient_id?: string } } },
     ) => {
       if (path === "/api/v1/patients") {
-        return Promise.resolve({ data: PATIENTS });
+        // Поиск делает сервер: тест отвечает так же, как ответил бы он.
+        const q = (options.params as { query?: { q?: string } } | undefined)
+          ?.query?.q;
+        const items =
+          q === undefined
+            ? PATIENTS.items
+            : PATIENTS.items.filter((patient) =>
+                patient.full_name.toLowerCase().includes(q.toLowerCase()),
+              );
+        return Promise.resolve({ data: { items, total: items.length } });
       }
       if (path === "/api/v1/patients/{patient_id}/overview") {
         return Promise.resolve({
@@ -298,5 +307,28 @@ describe("Форма назначения", () => {
     // Номер версии берётся из обновлённой истории, а не из «было плюс один»,
     // и сообщается тостом, а не зелёной строкой в потоке страницы.
     expect(await screen.findByText("Создана версия 3")).toBeInTheDocument();
+  });
+});
+
+describe("поиск пациентов", () => {
+  it("спрашивает сервер, а не отбирает загруженную страницу", async () => {
+    // Список приходит первыми двумя сотнями строк. Поиск по ним отвечал «не
+    // найдено» о пациенте, который есть, — и выглядел этот ответ достоверным.
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Иван Петров");
+    await user.type(screen.getByLabelText(/Поиск по имени/), "петров");
+
+    await waitFor(() => {
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/patients",
+        expect.objectContaining({
+          params: expect.objectContaining({
+            query: expect.objectContaining({ q: "петров" }),
+          }),
+        }),
+      );
+    });
   });
 });

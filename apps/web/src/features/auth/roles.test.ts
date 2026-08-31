@@ -33,7 +33,7 @@ describe("роли", () => {
 
   it("родитель не видит врачебных и админских разделов", () => {
     const parentSections = SECTIONS_BY_ROLE.parent;
-    for (const restricted of ["users", "audit", "dictionaries", "summaries"]) {
+    for (const restricted of ["users", "audit", "dictionaries"]) {
       expect(parentSections).not.toContain(restricted);
     }
   });

@@ -6,8 +6,9 @@ import uuid
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..models import DoctorPatient, ParentPatient, Patient
 from ..models.enums import Sex
@@ -123,12 +124,34 @@ async def list_parent_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> li
 
 
 async def list_for_ids(
-    session: AsyncSession, *, patient_ids: list[uuid.UUID], limit: int = 50, offset: int = 0
+    session: AsyncSession,
+    *,
+    patient_ids: list[uuid.UUID],
+    query: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> tuple[list[Patient], int]:
+    """Пациенты из области видимости, при необходимости — с поиском по имени.
+
+    Поиск делает база, а не экран. Раньше врач искал среди уже загруженной
+    страницы: у клиники с тремя сотнями семей поле поиска отвечало «не найдено»
+    о пациенте, который есть, — и это худший из ответов, потому что выглядит он
+    как достоверный.
+    """
+
     if not patient_ids:
         return [], 0
 
-    condition = Patient.id.in_(patient_ids)
+    condition: ColumnElement[bool] = Patient.id.in_(patient_ids)
+    if query:
+        # ILIKE по подстроке: имена вводят как придётся, и «иванов» обязано
+        # находить «Иванова Аня». Экранируются `%` и `_` — иначе введённый
+        # процент означал бы «что угодно» вместо самого себя.
+        pattern = (
+            "%" + query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        )
+        condition = and_(condition, Patient.full_name.ilike(pattern, escape="\\"))
+
     stmt = select(Patient).where(condition).order_by(Patient.full_name).limit(limit).offset(offset)
     items = list(await session.scalars(stmt))
     total = await session.scalar(select(func.count()).select_from(Patient).where(condition))
