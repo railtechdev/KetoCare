@@ -23,6 +23,12 @@ interface Props {
   /** Сохранённая позиция — возвращается, чтобы список подтвердил, что записано */
   onSaved: (product: Product) => void;
   onCancel: () => void;
+  /**
+   * Показывать историю правок. Она читается из `/admin/audit-log`, а он закрыт
+   * ролью admin: диетологу этот блок дал бы 403 вместо содержимого. Показывать
+   * неработающее — хуже, чем не показывать (правило П3 канона).
+   */
+  showHistory?: boolean;
 }
 
 /**
@@ -39,6 +45,7 @@ export function ProductEditor({
   categories,
   onSaved,
   onCancel,
+  showHistory = true,
 }: Props) {
   const { t } = useTranslation("admin");
 
@@ -78,7 +85,9 @@ export function ProductEditor({
         }}
       />
 
-      {product !== null && <ProductRevisions productId={product.id} />}
+      {showHistory && product !== null && (
+        <ProductRevisions productId={product.id} />
+      )}
     </div>
   );
 }

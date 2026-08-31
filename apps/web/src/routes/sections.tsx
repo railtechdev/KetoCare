@@ -29,7 +29,9 @@ import { DoctorPatientsPage } from "../features/doctor/DoctorPatientsPage";
 import { HomePage } from "../features/home/HomePage";
 import { PatientGate } from "../features/patients/PatientGate";
 import { MenuPage } from "../features/menu/MenuPage";
+import { CatalogPage } from "../features/products/CatalogPage";
 import { ProductsPage } from "../features/products/ProductsPage";
+import { canEditCatalog } from "../features/products/types";
 import { RecipesPage } from "../features/recipes/RecipesPage";
 import { ReportsPage } from "../features/reports/ReportsPage";
 import { ProfilePage } from "../features/profile/ProfilePage";
@@ -75,10 +77,17 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
     />
   ),
   patients: () => <DoctorPatientsPage />,
-  // Справочник продуктов на чтение — семье, врачу и диетологу; администратору
-  // тот же справочник с правкой и импортом.
+  // Справочник продуктов: семье и врачу на чтение, диетологу — с правкой,
+  // администратору — с правкой, импортом и историей. Право проверяет сервер
+  // (`_EDITOR_ROLES` в routers/products.py); здесь только UX.
   products: (role) =>
-    role === "admin" ? <AdminPage section="products" /> : <ProductsPage />,
+    role === "admin" ? (
+      <AdminPage section="products" />
+    ) : canEditCatalog(role) ? (
+      <CatalogPage />
+    ) : (
+      <ProductsPage />
+    ),
   users: () => <AdminPage section="users" />,
   leads: () => <AdminPage section="leads" />,
   dictionaries: () => <AdminPage section="dictionaries" />,
