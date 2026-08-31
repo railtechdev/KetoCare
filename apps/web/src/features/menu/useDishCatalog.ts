@@ -3,6 +3,9 @@ import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { api } from "../../lib/api";
+// Список своих блюд один на приложение: у него есть свой экран, и вторая
+// копия запроса разошлась бы с ним в обработке.
+import { useCustomDishes } from "../dishes/useCustomDishes";
 import type { DishKind, MenuItemRead } from "./useMenu";
 
 type RecipeRead = components["schemas"]["RecipeRead"];
@@ -133,29 +136,6 @@ export function useMenuItemTitles(
     titles[dishKey("recipe", recipe.id)] = recipe.title;
   }
   return titles;
-}
-
-/** Свои блюда пациента. Ключ общий с калькулятором — список там же и меняется. */
-function useCustomDishes(patientId: string | null) {
-  return useQuery({
-    queryKey: ["patient", patientId, "custom-dishes"],
-    enabled: patientId !== null,
-    queryFn: async (): Promise<CustomDishRead[]> => {
-      if (patientId === null) throw new Error("patientId is required");
-
-      const { data, error } = await api.GET(
-        "/api/v1/patients/{patient_id}/custom-dishes",
-        {
-          params: {
-            path: { patient_id: patientId },
-            query: { limit: 200, offset: 0 },
-          },
-        },
-      );
-      if (error || !data) throw error ?? new Error("Empty dishes response");
-      return data.items;
-    },
-  });
 }
 
 function toRecipeOption(recipe: RecipeRead): DishOption {
