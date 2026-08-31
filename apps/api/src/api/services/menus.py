@@ -33,12 +33,13 @@ from . import composition as composition_service
 type Composition = list[tuple[uuid.UUID, float]]
 
 
-def to_spec(item: MenuItemWrite) -> MenuItemSpec:
+def to_spec(item: MenuItemWrite, snapshot: dict[str, Any] | None = None) -> MenuItemSpec:
     return MenuItemSpec(
         meal_slot=item.meal_slot,
         recipe_id=item.recipe_id,
         custom_dish_id=item.custom_dish_id,
         portion_factor=item.portion_factor,
+        snapshot=snapshot,
     )
 
 
@@ -46,27 +47,84 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
     """Позиции хранятся отдельной таблицей, поэтому ответ собирается явно,
     а не `model_validate(menu)`."""
 
+    live = await _live_compositions(session, menu=menu, items=items)
+
     return MenuRead(
         id=menu.id,
         patient_id=menu.patient_id,
         date=menu.date,
         totals=DishComputed.model_validate(menu.totals) if menu.totals is not None else None,
         engine_version=menu.engine_version,
-        items=[MenuItemRead.model_validate(item) for item in items],
-        withdrawn_products=await withdrawn_products(session, menu=menu, items=items),
+        items=[
+            MenuItemRead(
+                **MenuItemRead.model_validate(item).model_dump(
+                    exclude={"has_snapshot", "changed_since_saved"}
+                ),
+                has_snapshot=item.snapshot is not None,
+                changed_since_saved=_changed_since_saved(item, live.get(item.id, [])),
+            )
+            for item in items
+        ],
+        withdrawn_products=_withdrawn_products(items, live),
         created_at=menu.created_at,
     )
 
 
-async def withdrawn_products(
-    session: AsyncSession, *, menu: Menu, items: Sequence[MenuItem]
-) -> list[WithdrawnProduct]:
-    """Продукты дня, выведенные из оборота.
+def _changed_since_saved(item: MenuItem, live: list[tuple[uuid.UUID, float, Product]]) -> bool:
+    """Блюдо изменилось с того дня, когда его сохранили?
 
-    Состав читается тем же путём, что и при расчёте итогов, но снисходительно:
-    рецепт мог быть снят с публикации, своё блюдо — удалено, продукт — исчезнуть
-    из базы. Ни один из этих случаев не повод отказать в чтении уже сохранённого
-    дня, поэтому проверок, ронявших бы `PUT`, здесь нет.
+    Сравнивается снимок с тем, что рецепт (или своё блюдо) представляет собой
+    сейчас: состав, граммовки и значения продуктов на 100 г. День от этого не
+    меняется — в том и смысл снимка, — но знать об этом надо: рецепт правят,
+    когда в нём нашли ошибку, и семье решать, пересобрать день или оставить.
+
+    У позиции без снимка сравнивать не с чем: она сохранена до появления
+    снимков, и её состав и так читается по ссылке.
+    """
+
+    snapshot = item.snapshot
+    if snapshot is None:
+        return False
+
+    saved = [
+        (
+            str(row["product_id"]),
+            float(row["grams"]),
+            float(row["kcal_100g"]),
+            float(row["fat_100g"]),
+            float(row["protein_100g"]),
+            float(row["carbs_100g"]),
+            float(row["fiber_100g"]),
+        )
+        for row in snapshot["ingredients"]
+    ]
+    current = [
+        (
+            str(product_id),
+            float(grams),
+            float(product.kcal_100g),
+            float(product.fat_100g),
+            float(product.protein_100g),
+            float(product.carbs_100g),
+            float(product.fiber_100g),
+        )
+        for product_id, grams, product in live
+    ]
+    return saved != current
+
+
+async def _live_compositions(
+    session: AsyncSession, *, menu: Menu, items: Sequence[MenuItem]
+) -> dict[uuid.UUID, list[tuple[uuid.UUID, float, Product]]]:
+    """Состав каждой позиции ТАКОЙ, КАКОЙ ОН СЕЙЧАС, с продуктами.
+
+    Читается снисходительно: рецепт мог быть снят с публикации, своё блюдо —
+    удалено, продукт — исчезнуть из базы. Ни один из этих случаев не повод
+    отказать в чтении уже сохранённого дня, поэтому проверок, ронявших бы
+    `PUT`, здесь нет.
+
+    Один проход на оба вопроса чтения: какие продукты выведены из оборота и
+    изменилось ли блюдо с того дня, когда его сохранили.
     """
 
     recipe_ids = list({item.recipe_id for item in items if item.recipe_id is not None})
@@ -77,18 +135,48 @@ async def withdrawn_products(
         session, patient_id=menu.patient_id, dish_ids=dish_ids
     )
 
-    by_item: dict[uuid.UUID, list[uuid.UUID]] = {}
+    raw: dict[uuid.UUID, list[tuple[uuid.UUID, float]]] = {}
     for item in items:
         if item.recipe_id is not None:
-            by_item[item.id] = [row.product_id for row in ingredients.get(item.recipe_id, [])]
+            raw[item.id] = [
+                (row.product_id, float(row.grams)) for row in ingredients.get(item.recipe_id, [])
+            ]
         elif item.custom_dish_id is not None:
             dish = dishes.get(item.custom_dish_id)
-            by_item[item.id] = [] if dish is None else [pid for pid, _ in _dish_composition(dish)]
+            raw[item.id] = [] if dish is None else _dish_composition(dish)
 
-    product_ids = list({pid for ids in by_item.values() for pid in ids})
+    product_ids = list({pid for rows in raw.values() for pid, _ in rows})
     products = await products_repo.get_by_ids(session, product_ids=product_ids)
 
-    withdrawn = {pid: product for pid, product in products.items() if not product.is_active}
+    return {
+        item_id: [(pid, grams, products[pid]) for pid, grams in rows if pid in products]
+        for item_id, rows in raw.items()
+    }
+
+
+def _withdrawn_products(
+    items: Sequence[MenuItem],
+    live: dict[uuid.UUID, list[tuple[uuid.UUID, float, Product]]],
+) -> list[WithdrawnProduct]:
+    """Продукты дня, выведенные из оборота.
+
+    У позиции со снимком берутся продукты СНИМКА: именно по ним посчитаны итоги
+    этого дня, а живой состав рецепта мог с тех пор смениться целиком.
+    """
+
+    by_item: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for item in items:
+        if item.snapshot is not None:
+            by_item[item.id] = [
+                uuid.UUID(str(row["product_id"])) for row in item.snapshot["ingredients"]
+            ]
+        else:
+            by_item[item.id] = [pid for pid, _, _ in live.get(item.id, [])]
+
+    known: dict[uuid.UUID, Product] = {
+        pid: product for rows in live.values() for pid, _, product in rows
+    }
+    withdrawn = {pid: product for pid, product in known.items() if not product.is_active}
     if not withdrawn:
         return []
 
@@ -109,42 +197,106 @@ async def withdrawn_products(
     )
 
 
-async def compute_totals(
+async def build_snapshots(
     session: AsyncSession, *, patient_id: uuid.UUID, items: Sequence[MenuItemWrite]
-) -> tuple[dict[str, Any], str]:
-    """Возвращает (totals дня, engine_version) для присланного плана.
+) -> list[dict[str, Any]]:
+    """Снимок каждой позиции: всё, что нужно для повторного расчёта без
+    обращения к текущим рецептам и продуктам.
 
-    Состав берётся из базы, а не из тела запроса: иначе клиент мог бы прислать
-    произвольные макронутриенты и получить «правильные» итоги по выдуманным
-    данным — а по этому меню кормят ребёнка.
+    Позиция ссылается на рецепт или своё блюдо, а те живут своей жизнью:
+    диетолог правит рецепт, администратор — числа продукта. Пока снимка не
+    было, правка задним числом меняла прошлые дни при первом же их сохранении,
+    и ответить, чем ребёнок питался первого мая, было нельзя.
+
+    Поэтому в снимок идут и значения продуктов на 100 г: без них пересчёт
+    опирался бы на сегодняшние числа, то есть ровно на то, что мы замораживаем.
+    Название продукта — тоже: продукт могут переименовать, а прочитать состав
+    прошлого дня надо и через год.
+
+    Здесь же происходит проверка плана: рецепт опубликован, своё блюдо
+    принадлежит пациенту, продукты существуют. Отказ на этом шаге означает, что
+    день не сохранится вовсе, — частично сохранённый день хуже отказа.
     """
 
     compositions, recipes = await _compositions(session, patient_id=patient_id, items=items)
     products = await _products(session, compositions=compositions)
+    dishes = await _custom_dishes(session, patient_id=patient_id, items=items)
 
-    scaled: list[tuple[Ingredient, float]] = []
+    snapshots: list[dict[str, Any]] = []
     for item, composition in zip(items, compositions, strict=True):
+        ingredients = [
+            {
+                "product_id": str(product_id),
+                "name_ru": products[product_id].name_ru,
+                "grams": grams,
+                "kcal_100g": float(products[product_id].kcal_100g),
+                "fat_100g": float(products[product_id].fat_100g),
+                "protein_100g": float(products[product_id].protein_100g),
+                "carbs_100g": float(products[product_id].carbs_100g),
+                "fiber_100g": float(products[product_id].fiber_100g),
+            }
+            for product_id, grams in composition
+        ]
         dish = verify(
             [
                 (composition_service.to_ingredient(products[pid]), grams)
                 for pid, grams in composition
             ]
         )
-        # `portion_factor` — это ЧИСЛО ПОРЦИЙ, а состав рецепта записан на весь
-        # выход. Без деления на `servings` множитель 1 означал бы противень:
-        # блюдо на четверых уходило в день ребёнка целиком, день сходился как
-        # «переедание», и ошибка выглядела бы поведением семьи, а не подстановкой.
-        #
-        # У своего блюда порция одна по определению: родитель приготовил именно
-        # это и именно сейчас. Поэтому знаменатель общий, и поле означает одно и
-        # то же в обеих ветках.
-        portion = scale(dish, item.portion_factor / _servings(item, recipes))
+        title = (
+            recipes[item.recipe_id].title
+            if item.recipe_id is not None
+            else dishes[item.custom_dish_id].title
+            if item.custom_dish_id is not None
+            # Схема MenuItemWrite это исключает; ветка оставлена, чтобы её
+            # ослабление не превратилось в снимок без названия.
+            else ""
+        )
+
+        snapshots.append(
+            {
+                "title": title,
+                "servings": _servings(item, recipes),
+                "ingredients": ingredients,
+                "totals": composition_service.totals_of(dish),
+                "engine_version": ENGINE_VERSION,
+            }
+        )
+    return snapshots
+
+
+def totals_from_items(items: Sequence[MenuItem]) -> tuple[dict[str, Any], str]:
+    """Итоги дня по снимкам сохранённых позиций.
+
+    Складывать показатели блюд руками нельзя — соотношение не аддитивно, —
+    поэтому масштабированные составы всех позиций уходят в `verify()` разом,
+    как и раньше. Изменилось одно: числа берутся из снимка, а не из текущих
+    строк, и день не меняется от того, что кто-то поправил рецепт.
+    """
+
+    scaled: list[tuple[Ingredient, float]] = []
+    for item in items:
+        snapshot = item.snapshot
+        if snapshot is None:
+            continue
+        dish = verify(
+            [(_snapshot_ingredient(row), float(row["grams"])) for row in snapshot["ingredients"]]
+        )
+        portion = scale(dish, float(item.portion_factor) / int(snapshot["servings"]))
         scaled.extend((amount.ingredient, amount.grams) for amount in portion.items)
 
-    # Итоги дня считает ядро по всем позициям сразу — складывать показатели
-    # блюд руками нельзя: соотношение не аддитивно.
-    day = verify(scaled)
-    return composition_service.totals_of(day), ENGINE_VERSION
+    return composition_service.totals_of(verify(scaled)), ENGINE_VERSION
+
+
+def _snapshot_ingredient(row: dict[str, Any]) -> Ingredient:
+    return Ingredient(
+        product_id=str(row["product_id"]),
+        kcal=float(row["kcal_100g"]),
+        fat=float(row["fat_100g"]),
+        protein=float(row["protein_100g"]),
+        carbs=float(row["carbs_100g"]),
+        fiber=float(row["fiber_100g"]),
+    )
 
 
 def _servings(item: MenuItemWrite, recipes: dict[uuid.UUID, Recipe]) -> int:

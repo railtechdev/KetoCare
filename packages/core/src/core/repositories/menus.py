@@ -36,6 +36,10 @@ class MenuItemSpec:
     recipe_id: uuid.UUID | None
     custom_dish_id: uuid.UUID | None
     portion_factor: float
+    #: Состав и показатели блюда на момент сохранения. Собирает сервис: состав
+    #: читается из рецептов и продуктов, а репозиторий меню в чужие таблицы не
+    #: ходит.
+    snapshot: dict[str, Any] | None = None
 
 
 async def get_by_date(
@@ -79,8 +83,8 @@ async def upsert(
     *,
     patient_id: uuid.UUID,
     menu_date: date,
-    totals: dict[str, Any],
-    engine_version: str,
+    totals: dict[str, Any] | None = None,
+    engine_version: str | None = None,
     created_by: uuid.UUID | None,
 ) -> Menu:
     """Меню дня одно: `unique(patient_id, date)` (раздел 4.2 ТЗ).
@@ -92,6 +96,10 @@ async def upsert(
     `deleted_at` сбрасывается, потому что уникальность мягкое удаление не
     учитывает: иначе однажды удалённый день нельзя было бы составить заново.
     `created_by` при конфликте не трогаем — автором остаётся тот, кто завёл день.
+
+    Итоги необязательны: они считаются по снимкам уже сохранённых позиций, то
+    есть после `replace_items`, и проставляются `set_totals` в той же
+    транзакции.
     """
 
     stmt = (
@@ -120,6 +128,22 @@ async def upsert(
     return result.one()
 
 
+async def set_totals(
+    session: AsyncSession, *, menu: Menu, totals: dict[str, Any], engine_version: str
+) -> Menu:
+    """Итоги дня и версия ядра, которой они получены (раздел 4.1 ТЗ).
+
+    Отдельным шагом от `upsert`, потому что считаются по снимкам позиций: до
+    `replace_items` неизвестно, какие позиции переиспользованы, а у
+    переиспользованных снимок остаётся прежним — в этом и смысл снимка.
+    """
+
+    menu.totals = totals
+    menu.engine_version = engine_version
+    await session.flush()
+    return menu
+
+
 async def replace_items(
     session: AsyncSession,
     *,
@@ -135,6 +159,11 @@ async def replace_items(
     отметки «съедено», проставленные утром, и оставляло бы записи дневника еды
     ссылаться на удалённую позицию. Меняется у такой позиции только множитель
     порции. Всё, что в новый план не попало, удаляется мягко.
+
+    Снимок состава у переиспользованной позиции НЕ обновляется: он и существует
+    затем, чтобы правка рецепта не меняла уже сохранённый день. Исключение —
+    позиция, сохранённая до появления снимков: у неё снимка нет, и первое же
+    сохранение дня его берёт.
     """
 
     reusable: dict[_ItemKey, deque[MenuItem]] = defaultdict(deque)
@@ -148,6 +177,8 @@ async def replace_items(
         if bucket:
             kept = bucket.popleft()
             kept.portion_factor = spec.portion_factor
+            if kept.snapshot is None:
+                kept.snapshot = spec.snapshot
             continue
 
         session.add(
@@ -158,6 +189,7 @@ async def replace_items(
                 recipe_id=spec.recipe_id,
                 custom_dish_id=spec.custom_dish_id,
                 portion_factor=spec.portion_factor,
+                snapshot=spec.snapshot,
                 eaten=False,
                 created_by=created_by,
             )

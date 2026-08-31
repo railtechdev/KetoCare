@@ -69,23 +69,33 @@ async def upsert_menu(
     в меню остались бы показатели прежнего плана, и семья готовила бы один набор
     блюд, глядя на цифры другого."""
 
-    totals, engine_version = await menus_service.compute_totals(
+    # Порядок важен. Снимок собирается ДО записи — там же проверяется план
+    # (рецепт опубликован, своё блюдо принадлежит пациенту, продукты есть), и
+    # отказ означает, что день не сохранится вовсе. Итоги считаются ПОСЛЕ
+    # замены позиций: у переиспользованной позиции снимок остаётся прежним, и
+    # до `replace_items` неизвестно, какие позиции переиспользованы.
+    snapshots = await menus_service.build_snapshots(
         session, patient_id=patient_id, items=payload.items
     )
     menu = await menus_repo.upsert(
         session,
         patient_id=patient_id,
         menu_date=payload.date,
-        totals=totals,
-        engine_version=engine_version,
         created_by=user.id,
     )
     items = await menus_repo.replace_items(
         session,
         menu=menu,
         patient_id=patient_id,
-        items=[menus_service.to_spec(item) for item in payload.items],
+        items=[
+            menus_service.to_spec(item, snapshot)
+            for item, snapshot in zip(payload.items, snapshots, strict=True)
+        ],
         created_by=user.id,
+    )
+    totals, engine_version = menus_service.totals_from_items(items)
+    menu = await menus_repo.set_totals(
+        session, menu=menu, totals=totals, engine_version=engine_version
     )
     return await menus_service.to_read(session, menu, items)
 
