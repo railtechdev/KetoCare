@@ -7,7 +7,13 @@ import {
   Skeleton,
   toast,
 } from "@ketocare/ui";
-import { Baby, ClipboardList, Plus, Paperclip } from "lucide-react";
+import {
+  Baby,
+  ClipboardList,
+  MessageCircle,
+  Paperclip,
+  Plus,
+} from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -15,6 +21,7 @@ import { PageLayout } from "../../components/PageLayout";
 import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
 import { errorMessageOf } from "../../lib/api";
 import { IntakeForm } from "../intake/IntakeForm";
+import { TelegramPanel } from "../telegram/TelegramPanel";
 import { ChildForm } from "./ChildForm";
 import { toChildBody, toChildUpdateBody } from "./childSchemas";
 import {
@@ -29,7 +36,8 @@ type View =
   | { kind: "add" }
   | { kind: "edit"; child: Patient }
   | { kind: "intake"; child: Patient }
-  | { kind: "documents"; child: Patient };
+  | { kind: "documents"; child: Patient }
+  | { kind: "telegram"; child: Patient };
 
 /**
  * Раздел «Ребёнок»: профили детей семьи.
@@ -56,6 +64,14 @@ export function ChildPage() {
   if (view.kind === "documents") {
     return (
       <ChildDocuments
+        child={view.child}
+        onDone={() => setView({ kind: "list" })}
+      />
+    );
+  }
+  if (view.kind === "telegram") {
+    return (
+      <ChildTelegram
         child={view.child}
         onDone={() => setView({ kind: "list" })}
       />
@@ -169,6 +185,19 @@ export function ChildPage() {
                     >
                       <Paperclip aria-hidden="true" />
                       {t("children.documents")}
+                    </Button>
+                    {/* Бот — канал семьи (раздел 7 ТЗ). Кнопка стоит здесь,
+                        потому что привязка относится к ребёнку, а не к
+                        родителю: у одной семьи может быть двое детей и два
+                        разных чата. */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      onClick={() => setView({ kind: "telegram", child })}
+                    >
+                      <MessageCircle aria-hidden="true" />
+                      {t("children.telegram")}
                     </Button>
                     <Button
                       type="button"
@@ -290,6 +319,29 @@ function ChildDocuments({
       onBack={onDone}
     >
       <AttachmentsPanel patientId={child.id} />
+    </PageLayout>
+  );
+}
+
+/**
+ * Подключение Telegram-бота для конкретного ребёнка.
+ *
+ * Отдельным экраном, а не панелью в карточке: код привязки живёт 15 минут и
+ * показывается один раз, а список чатов — это про доступ к клиническим данным.
+ * И то и другое требует внимания, а не беглого взгляда в списке детей.
+ */
+function ChildTelegram({
+  child,
+  onDone,
+}: {
+  child: Patient;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation("telegram");
+
+  return (
+    <PageLayout title={t("title")} intro={t("intro")} onBack={onDone}>
+      <TelegramPanel patientId={child.id} childName={child.full_name} />
     </PageLayout>
   );
 }
