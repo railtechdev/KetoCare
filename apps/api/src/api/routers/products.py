@@ -9,6 +9,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Path, UploadFile
+from sqlalchemy.exc import IntegrityError
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
@@ -79,7 +80,22 @@ async def get_product(
 async def create_product(
     payload: ProductCreate, user: CurrentUserDep, session: SessionDep
 ) -> ProductRead:
-    product = await products_repo.create(session, changed_by=user.id, **payload.model_dump())
+    # Уникальность имени держит функциональный индекс по lower(btrim(name_ru)).
+    # Без перехвата он давал «Внутренняя ошибка сервера»: администратор,
+    # добавляющий «Масло сливочное», которое уже пришло из USDA, видел отказ
+    # сервера и не понимал, что это дубль.
+    #
+    # Проверка «прочитать, затем вставить» тут не годится: два одновременных
+    # заведения проходят её оба, а индекс — последняя защита от двух записей с
+    # одним названием и разными числами.
+    try:
+        product = await products_repo.create(session, changed_by=user.id, **payload.model_dump())
+        await session.flush()
+    except IntegrityError as error:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            f"Продукт «{payload.name_ru}» уже есть в справочнике.",
+        ) from error
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,

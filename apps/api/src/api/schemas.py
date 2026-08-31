@@ -6,7 +6,14 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 from core.models.enums import Sex, UserRole
 
@@ -240,6 +247,36 @@ class ProductBase(BaseModel):
     source: RequiredName
     source_version: RequiredShortText
     verified_at: date
+
+    @model_validator(mode="after")
+    def _macros_are_physically_possible(self) -> ProductBase:
+        """Те же две проверки состава, что и у CSV-импорта.
+
+        Раньше они жили только в импорте
+        (`api/services/product_import.py`), а ручное заведение проверяло лишь
+        границы отдельных полей. Продукт, который импорт отклонял, диетолог
+        заводил руками — и по нему потом считали ребёнку.
+
+        Дверей две, данные одни, значит и проверка обязана быть одна.
+        """
+
+        macro_sum = self.fat_100g + self.protein_100g + self.carbs_100g
+        if macro_sum > 100:
+            raise ValueError(
+                f"Сумма жиров, белков и углеводов ({macro_sum:g} г) "
+                "превышает 100 г на 100 г продукта."
+            )
+
+        # TODO(med): вопрос 6 в docs/medical/OPEN_QUESTIONS.md — клетчатка
+        # считается частью общих углеводов (согласуется с NET_CARBS_DEFAULT=False).
+        # Источники с раздельным учётом клетчатки это правило отклонит.
+        if self.fiber_100g > self.carbs_100g:
+            raise ValueError(
+                f"Клетчатка ({self.fiber_100g:g} г) не может превышать "
+                f"общие углеводы ({self.carbs_100g:g} г)."
+            )
+
+        return self
 
 
 class ProductCreate(ProductBase):

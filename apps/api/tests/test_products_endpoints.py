@@ -151,6 +151,74 @@ class TestProductWrites:
         assert response.status_code == 404
 
 
+class TestSameChecksAtEveryDoor:
+    """Проверки состава не должны зависеть от того, какой дверью зашли.
+
+    Раньше сумму макронутриентов и «клетчатка ≤ углеводы» сверял только
+    CSV-импорт, а ручное заведение — лишь границы отдельных полей. Продукт,
+    который импорт отклонял, диетолог заводил руками, и по нему потом считали
+    ребёнку.
+    """
+
+    async def test_macro_sum_over_100_is_rejected(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+
+        response = await client.post(
+            "/api/v1/products",
+            json={
+                **_product_payload(category.id),
+                "fat_100g": 60,
+                "protein_100g": 30,
+                "carbs_100g": 20,
+            },
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422, response.text
+
+    async def test_fiber_over_carbs_is_rejected(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+
+        response = await client.post(
+            "/api/v1/products",
+            json={**_product_payload(category.id), "carbs_100g": 2, "fiber_100g": 5},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422, response.text
+
+    async def test_duplicate_name_is_a_conflict_not_a_server_error(
+        self, client, session, make_user, auth_headers
+    ):
+        """Уникальность держит индекс, и без перехвата это был 500.
+
+        Администратор, добавляющий «Масло сливочное», которое уже пришло из
+        USDA, видел «Внутренняя ошибка сервера» и не понимал, что это дубль.
+        """
+
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+        name = f"Масло сливочное {uuid.uuid4().hex[:8]}"
+
+        first = await client.post(
+            "/api/v1/products",
+            json=_product_payload(category.id, name=name),
+            headers=auth_headers(admin),
+        )
+        assert first.status_code == 201, first.text
+
+        second = await client.post(
+            "/api/v1/products",
+            json=_product_payload(category.id, name=name),
+            headers=auth_headers(admin),
+        )
+
+        assert second.status_code == 409, second.text
+        assert "уже есть" in second.json()["error"]["message"]
+
+
 class TestCsvImportEndpoint:
     def _file(self, *rows: str, suffix: str | None = None) -> dict:
         # Названия уникальны в пределах прогона: уникальный индекс на products
