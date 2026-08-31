@@ -273,6 +273,24 @@ async def get_or_create_category(session: AsyncSession, *, name_ru: str) -> Prod
     return await create_category(session, name_ru=name_ru)
 
 
+async def get_by_names(session: AsyncSession, *, names: list[str]) -> dict[str, Product]:
+    """Продукты по нормализованным именам — для обновляющего импорта.
+
+    Ключ словаря — имя, приведённое так же, как в уникальном индексе: файл
+    новой версии базы состава приходит с другим написанием («Масло сливочное»
+    и «масло сливочное»), а это одна и та же позиция.
+    """
+
+    if not names:
+        return {}
+
+    folded = {name.casefold().strip() for name in names}
+    rows = await session.scalars(
+        select(Product).where(func.lower(func.trim(Product.name_ru)).in_(folded))
+    )
+    return {product.name_ru.casefold().strip(): product for product in rows}
+
+
 async def find_duplicate_names(session: AsyncSession, *, names: list[str]) -> set[str]:
     """Какие из имён уже есть в базе продуктов.
 

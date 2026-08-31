@@ -27,6 +27,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const importProducts = useImportProductsMutation();
+  const [updateExisting, setUpdateExisting] = useState(false);
 
   const report = importProducts.data ?? null;
   const errors = useMemo(() => report?.errors ?? [], [report]);
@@ -106,13 +107,40 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
         />
       </div>
 
+      {/* Режим выбирается ДО проверки: превью обновляющего импорта показывает
+          не то же самое, что превью обычного, — там различия существующих
+          позиций, а здесь список пропущенных дублей. */}
+      <label className="flex items-start gap-field text-sm">
+        <input
+          type="checkbox"
+          className="mt-1 size-5 accent-primary"
+          checked={updateExisting}
+          onChange={(event) => {
+            setUpdateExisting(event.target.checked);
+            // Отчёт относится к прежнему режиму: оставить его на экране значит
+            // показывать ответ на другой вопрос.
+            importProducts.reset();
+          }}
+        />
+        <span>
+          <span className="font-medium">
+            {t("products.import.updateExisting")}
+          </span>
+          <span className="block text-muted-foreground">
+            {t("products.import.updateExistingHint")}
+          </span>
+        </span>
+      </label>
+
       <div className="flex flex-wrap gap-block">
         <Button
           type="button"
           disabled={file === null || importProducts.isPending}
           aria-busy={importProducts.isPending}
           onClick={() => {
-            if (file !== null) importProducts.mutate({ file, dryRun: true });
+            if (file !== null) {
+              importProducts.mutate({ file, dryRun: true, updateExisting });
+            }
           }}
         >
           <FileUp aria-hidden="true" />
@@ -144,7 +172,46 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
             })}
             {" · "}
             {t("products.import.preview.errorRows", { value: errorRows })}
+            {report.updated > 0 && (
+              <>
+                {" · "}
+                {t("products.import.preview.updatedRows", {
+                  value: report.updated,
+                })}
+              </>
+            )}
           </p>
+
+          {/* Что именно перезаписывается — до записи. «Обновлено 412 позиций»
+              без перечня это отчёт, который нечем проверить, а переписываются
+              числа, по которым считают еду ребёнку. */}
+          {report.updates.length > 0 && (
+            <ul className="m-0 flex list-none flex-col gap-field p-0">
+              {report.updates.map((update) => (
+                <li key={update.product_id} className="text-sm">
+                  <span className="font-medium">{update.name_ru}</span>
+                  <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0 pl-4">
+                    {update.changes.map((change) => (
+                      <li key={change.field} className="tabular-nums">
+                        <span className="text-muted-foreground">
+                          {t(`revisions.fields.${change.field}`, {
+                            ns: "products",
+                            defaultValue: change.field,
+                          })}
+                          :{" "}
+                        </span>
+                        {change.before || "—"}
+                        <span aria-hidden="true"> → </span>
+                        <span className="font-medium">
+                          {change.after || "—"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {report.dry_run ? (
             <>
@@ -159,13 +226,20 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
                   onClick={() => {
                     if (file === null) return;
                     importProducts.mutate(
-                      { file, dryRun: false },
+                      { file, dryRun: false, updateExisting },
                       {
                         onSuccess: (result) => {
                           if (result.imported > 0) {
                             toast.success(
                               t("products.import.result.imported", {
                                 value: result.imported,
+                              }),
+                            );
+                          }
+                          if (result.updated > 0) {
+                            toast.success(
+                              t("products.import.result.updated", {
+                                value: result.updated,
                               }),
                             );
                           }

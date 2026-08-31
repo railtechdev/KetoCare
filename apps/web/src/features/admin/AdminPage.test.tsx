@@ -113,6 +113,8 @@ const AUDIT_ENTRIES = {
 const DRY_RUN_REPORT = {
   total_rows: 4,
   imported: 0,
+  updated: 0,
+  updates: [],
   errors: [
     { line: 3, column: "fat_100g", message: "Ожидалось число." },
     { line: 3, column: "verified_at", message: "Ожидалась дата." },
@@ -123,6 +125,8 @@ const DRY_RUN_REPORT = {
 const IMPORT_REPORT = {
   total_rows: 4,
   imported: 3,
+  updated: 0,
+  updates: [],
   errors: [{ line: 5, column: "name_ru", message: "Продукт уже есть в базе." }],
   dry_run: false,
 };
@@ -244,7 +248,9 @@ describe("AdminPage — импорт продуктов", () => {
 
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/products/import",
-      expect.objectContaining({ params: { query: { dry_run: true } } }),
+      expect.objectContaining({
+        params: { query: { dry_run: true, update_existing: false } },
+      }),
     );
 
     await user.click(screen.getByRole("button", { name: "Импортировать" }));
@@ -256,7 +262,9 @@ describe("AdminPage — импорт продуктов", () => {
     ).toBeInTheDocument();
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/products/import",
-      expect.objectContaining({ params: { query: { dry_run: false } } }),
+      expect.objectContaining({
+        params: { query: { dry_run: false, update_existing: false } },
+      }),
     );
   });
 });
@@ -278,5 +286,60 @@ describe("AdminPage — журнал аудита", () => {
         "Скрыто: клинические данные администратору не показываются",
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("AdminPage — обновляющий импорт", () => {
+  const UPDATE_PREVIEW = {
+    total_rows: 1,
+    imported: 0,
+    updated: 1,
+    updates: [
+      {
+        line: 2,
+        product_id: "11111111-1111-4111-8111-111111111111",
+        name_ru: "Масло сливочное",
+        changes: [
+          { field: "fat_100g", before: "81.1", after: "82.5" },
+          { field: "source_version", before: "SR28", after: "SR Legacy 2024" },
+        ],
+      },
+    ],
+    errors: [],
+    dry_run: true,
+  };
+
+  it("превью называет, что именно перезапишется", async () => {
+    // «Обновлено 412 позиций» без перечня — отчёт, который нечем проверить,
+    // а переписываются числа, по которым считают еду ребёнку.
+    const user = userEvent.setup();
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/auth/refresh")
+        return Promise.resolve({ data: { access_token: ACCESS_TOKEN } });
+      return Promise.resolve({ data: UPDATE_PREVIEW });
+    });
+
+    renderPage("products");
+    await user.click(await screen.findByRole("button", { name: "Импорт CSV" }));
+
+    const file = new File(["name_ru,category\n"], "products.csv", {
+      type: "text/csv",
+    });
+    await user.upload(screen.getByLabelText("Файл CSV"), file);
+    await user.click(
+      screen.getByRole("checkbox", { name: /Обновить существующие/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Проверить файл" }));
+
+    expect(await screen.findByText("Масло сливочное")).toBeInTheDocument();
+    expect(screen.getByText(/81.1/)).toBeInTheDocument();
+    expect(screen.getByText("82.5")).toBeInTheDocument();
+
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/products/import",
+      expect.objectContaining({
+        params: { query: { dry_run: true, update_existing: true } },
+      }),
+    );
   });
 });
