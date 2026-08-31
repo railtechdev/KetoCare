@@ -16,9 +16,23 @@ export interface ProductFilters {
   q: string;
   /** Пустая строка — фильтр по категории не задан */
   categoryId: string;
+  /**
+   * Показывать выведенные из оборота позиции.
+   *
+   * По умолчанию их не видно — в этом и смысл вывода. Но тот, кто вывел, обязан
+   * иметь возможность вернуть: без этого флажка снятие «активен» было
+   * необратимым, позиция исчезала из выдачи насовсем.
+   *
+   * Сервер отдаёт их только ролям, которые ведут справочник, — здесь это UX.
+   */
+  includeInactive: boolean;
 }
 
-export const EMPTY_PRODUCT_FILTERS: ProductFilters = { q: "", categoryId: "" };
+export const EMPTY_PRODUCT_FILTERS: ProductFilters = {
+  q: "",
+  categoryId: "",
+  includeInactive: false,
+};
 
 /**
  * Справочник продуктов для администратора (раздел 8.3 ТЗ, «Админ / Продукты»).
@@ -49,6 +63,7 @@ export function useAdminProducts(filters: ProductFilters) {
   const query = {
     q: filters.q.trim() || undefined,
     category_id: filters.categoryId.trim() || undefined,
+    include_inactive: filters.includeInactive || undefined,
     limit: MAX_PAGE_SIZE,
     offset: 0,
   };

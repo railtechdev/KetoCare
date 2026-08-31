@@ -233,6 +233,23 @@ export function ProductsPanel() {
           />
         </div>
 
+        {/* Без этого флажка снятие «активен» было необратимым: позиция
+            исчезала из выдачи для всех, включая того, кто её вывел. */}
+        <label className="flex min-h-touch items-center gap-field text-sm">
+          <input
+            type="checkbox"
+            className="size-4"
+            checked={filters.includeInactive}
+            onChange={(event) =>
+              setFilters((current) => ({
+                ...current,
+                includeInactive: event.target.checked,
+              }))
+            }
+          />
+          {t("products.filters.includeInactive")}
+        </label>
+
         {filters.categoryId !== "" && (
           <Button
             type="button"
