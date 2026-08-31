@@ -845,3 +845,48 @@ class TestDeactivationIsReversible:
 
         assert response.status_code == 200
         assert product["id"] not in [row["id"] for row in response.json()["items"]]
+
+
+class TestImportEndpointLimits:
+    """Ручка импорта читает файл и пишет тысячи строк одной транзакцией.
+
+    Лимита частоты у неё не было вовсе, а предел размера проверялся ПОСЛЕ
+    `await file.read()` — то есть после того, как весь файл оказывался в памяти
+    процесса.
+    """
+
+    def _file(self, size: int) -> bytes:
+        header = f"{CSV_HEADER}\n".encode()
+        row = "Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01\n".encode()
+        body = row * max(1, (size - len(header)) // len(row))
+        return header + body
+
+    async def test_oversized_file_is_rejected(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("big.csv", self._file(6 * 1024 * 1024), "text/csv")},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422, response.text
+        assert "5 МБ" in response.json()["error"]["message"]
+
+    async def test_import_is_rate_limited(self, client, make_user, auth_headers):
+        """Лимит существует и срабатывает."""
+
+        admin = await make_user(UserRole.ADMIN)
+        csv = f"{CSV_HEADER}\n".encode()
+
+        codes = []
+        for _ in range(25):
+            response = await client.post(
+                "/api/v1/products/import",
+                files={"file": ("products.csv", csv, "text/csv")},
+                headers=auth_headers(admin),
+            )
+            codes.append(response.status_code)
+
+        assert 429 in codes, "ограничение частоты не сработало"
+        assert codes.index(429) >= 20, "лимит сработал раньше объявленных 20 запросов в час"

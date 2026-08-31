@@ -156,3 +156,35 @@ class TestLineNumbersWithGaps:
         )
         lines = [row.line for row in report.valid_rows]
         assert lines == [2, 4], f"номера строк должны быть реальными, получено {lines}"
+
+
+class TestFieldLengthsAreCheckedInPreview:
+    """Предел длины — тот же, что в схеме БД (`String(255)`).
+
+    Разбор его не проверял: строка с длинным названием проходила превью без
+    единого замечания, а на самом импорте база отвечала отказом — то есть 500
+    и непонятно на какой строке. Превью, обещающее успех и не выполняющее
+    обещание, хуже отсутствия превью.
+    """
+
+    def test_long_name_is_a_row_error_not_a_server_error(self) -> None:
+        long_name = "М" * 256
+        report = parse_csv(_csv(f"{long_name},Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01"))
+
+        assert not report.ok
+        assert any(
+            error.column == "name_ru" and "256" in error.message for error in report.errors
+        ), report.errors
+
+    def test_long_source_is_caught_too(self) -> None:
+        """Отказ базы одинаков для любой длинной колонки, а не только названия."""
+
+        report = parse_csv(_csv(f"Масло,Жиры,717,81.1,0.9,0.1,0,{'U' * 256},SR28,2026-01-01"))
+
+        assert not report.ok
+        assert any(error.column == "source" for error in report.errors), report.errors
+
+    def test_exactly_at_the_limit_is_accepted(self) -> None:
+        report = parse_csv(_csv(f"{'М' * 255},Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01"))
+
+        assert report.ok, report.errors

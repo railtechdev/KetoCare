@@ -135,23 +135,57 @@ def _flag_duplicates_within_file(report: ImportReport) -> None:
     report.valid_rows = kept
 
 
+#: Предел длины текстовых полей — тот же, что в схеме БД (`String(255)`).
+#:
+#: Разбор его не проверял, и строка с длинным названием проходила превью без
+#: единого замечания, а на самом импорте база отвечала отказом — то есть 500 и
+#: непонятно на какой строке. Превью, которое обещает успех и не выполняет
+#: обещание, хуже отсутствия превью.
+_TEXT_MAX = 255
+
+
+def _text_field(
+    row: dict[str, str | None],
+    column: str,
+    line_no: int,
+    *,
+    required: bool,
+    required_message: str = "Поле обязательно.",
+) -> tuple[str, list[RowError]]:
+    errors: list[RowError] = []
+    value = (row.get(column) or "").strip()
+
+    if required and not value:
+        errors.append(RowError(line_no, column, required_message))
+    elif len(value) > _TEXT_MAX:
+        errors.append(
+            RowError(
+                line_no,
+                column,
+                f"Длина {len(value)} символов превышает допустимые {_TEXT_MAX}.",
+            )
+        )
+    return value, errors
+
+
 def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any], list[RowError]]:
     errors: list[RowError] = []
     parsed: dict[str, Any] = {}
 
-    name = (row.get("name_ru") or "").strip()
-    if not name:
-        errors.append(RowError(line_no, "name_ru", "Название обязательно."))
+    name, name_errors = _text_field(
+        row, "name_ru", line_no, required=True, required_message="Название обязательно."
+    )
+    errors.extend(name_errors)
     parsed["name_ru"] = name
 
     for column in OPTIONAL_COLUMNS:
-        value = (row.get(column) or "").strip()
+        value, column_errors = _text_field(row, column, line_no, required=False)
+        errors.extend(column_errors)
         parsed[column] = value or None
 
     for column in ("source", "source_version", "category"):
-        value = (row.get(column) or "").strip()
-        if not value:
-            errors.append(RowError(line_no, column, "Поле обязательно."))
+        value, column_errors = _text_field(row, column, line_no, required=True)
+        errors.extend(column_errors)
         parsed[column] = value
 
     for column, limit in (

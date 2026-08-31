@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Path, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Path, Request, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
 
 from core.models import Product, ProductCategory
@@ -20,6 +20,7 @@ from core.repositories import users as users_repo
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
+from ..ratelimit import IMPORT_RATE_LIMIT, limiter
 from ..schemas import (
     ImportRowError,
     Page,
@@ -430,6 +431,31 @@ async def list_product_revisions(
 # воркер от разбора произвольно большого файла в памяти.
 MAX_IMPORT_BYTES = 5 * 1024 * 1024
 
+#: Размер куска при чтении загруженного файла.
+_IMPORT_CHUNK = 64 * 1024
+
+
+async def _read_within_limit(file: UploadFile) -> bytes:
+    """Читает файл, останавливаясь на превышении предела.
+
+    Предел проверялся ПОСЛЕ `await file.read()`, то есть после того, как весь
+    файл оказывался в памяти процесса. Ограничение, которое срабатывает уже
+    после того, как ущерб нанесён, защищает только от аккуратных: гигабайтный
+    файл сначала прочитывался целиком и лишь затем отвергался.
+    """
+
+    chunks: list[bytes] = []
+    size = 0
+    while chunk := await file.read(_IMPORT_CHUNK):
+        size += len(chunk)
+        if size > MAX_IMPORT_BYTES:
+            raise ApiError(
+                ErrorCode.VALIDATION_ERROR,
+                f"Файл больше {MAX_IMPORT_BYTES // (1024 * 1024)} МБ.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
 
 @router.post(
     "/import",
@@ -437,7 +463,9 @@ MAX_IMPORT_BYTES = 5 * 1024 * 1024
     summary="Импорт продуктов из CSV (с превью)",
     dependencies=[Depends(require_roles(UserRole.ADMIN))],
 )
+@limiter.limit(IMPORT_RATE_LIMIT)
 async def import_products(
+    request: Request,
     user: CurrentUserDep,
     session: SessionDep,
     file: Annotated[UploadFile, File()],
@@ -448,12 +476,7 @@ async def import_products(
     Запись выполняется единой транзакцией: файл с ошибками не импортируется частично.
     """
 
-    content = await file.read()
-    if len(content) > MAX_IMPORT_BYTES:
-        raise ApiError(
-            ErrorCode.VALIDATION_ERROR,
-            f"Файл больше {MAX_IMPORT_BYTES // (1024 * 1024)} МБ.",
-        )
+    content = await _read_within_limit(file)
 
     report = parse_csv(content)
     errors = [
