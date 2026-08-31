@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
+from core import exclusions
+from core.models import Patient
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
+from core.repositories import products as products_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
@@ -23,6 +27,7 @@ from ..deps.auth import (
 from ..errors import ApiError, ErrorCode
 from ..schemas import (
     ColleagueRead,
+    ExcludedProductRef,
     FamilyMemberRead,
     Page,
     PatientCreate,
@@ -34,6 +39,61 @@ from ..schemas import (
 CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+async def _read(session: SessionDep, patient: Patient) -> PatientRead:
+    """Карточка ребёнка с разобранным полем исключений.
+
+    Поле `allergies` хранит идентификаторы продуктов вперемешку со свободными
+    метками (раздел 4.2 ТЗ). Хранение остаётся прежним, но наружу оно уходит
+    разобранным: показывать «3f2a…» вместо «Арахисовое масло» — то же, что не
+    показывать ничего, а список исключённого читают, решая, чем кормить.
+    """
+
+    return (await _read_many(session, [patient]))[0]
+
+
+async def _read_many(session: SessionDep, patients: Sequence[Patient]) -> list[PatientRead]:
+    """То же для списка — одним запросом к каталогу на всех детей сразу."""
+
+    wanted: set[uuid.UUID] = set()
+    for patient in patients:
+        wanted |= exclusions.excluded_ids(patient.allergies)
+
+    products = await products_repo.get_by_ids(session, product_ids=list(wanted))
+
+    result: list[PatientRead] = []
+    for patient in patients:
+        ids, labels = exclusions.parse(patient.allergies)
+        result.append(
+            PatientRead.model_validate(patient).model_copy(
+                update={
+                    "excluded_products": [
+                        ExcludedProductRef(
+                            id=pid,
+                            name_ru=products[pid].name_ru if pid in products else None,
+                        )
+                        # Порядок исходного поля: его задавал тот, кто заполнял.
+                        for pid in [
+                            uuid.UUID(entry)
+                            for entry in patient.allergies
+                            if _looks_like_uuid(entry)
+                        ]
+                        if pid in ids
+                    ],
+                    "allergy_labels": labels,
+                }
+            )
+        )
+    return result
+
+
+def _looks_like_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value.strip())
+    except ValueError:
+        return False
+    return True
 
 
 @router.get("", response_model=Page[PatientRead], summary="Доступные пациенты")
@@ -49,7 +109,7 @@ async def list_patients(
     items, total = await patients_repo.list_for_ids(
         session, patient_ids=patient_ids, limit=limit, offset=offset
     )
-    return Page(items=[PatientRead.model_validate(p) for p in items], total=total)
+    return Page(items=await _read_many(session, items), total=total)
 
 
 @router.post("", response_model=PatientRead, status_code=201, summary="Создать профиль ребёнка")
@@ -87,7 +147,7 @@ async def create_patient(
     # захвата, и появляется ровно у того, кто выдал приглашение лично.
     await _link_inviting_specialist(session, parent_id=user.id, patient_id=patient.id)
 
-    return PatientRead.model_validate(patient)
+    return await _read(session, patient)
 
 
 async def _link_inviting_specialist(
@@ -113,7 +173,7 @@ async def get_patient(
     patient = await patients_repo.get(session, patient_id)
     if patient is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
-    return PatientRead.model_validate(patient)
+    return await _read(session, patient)
 
 
 @router.patch("/{patient_id}", response_model=PatientRead, summary="Изменить профиль ребёнка")
@@ -149,7 +209,7 @@ async def update_patient(
         after=after,
         ip=client_address(request),
     )
-    return PatientRead.model_validate(updated)
+    return await _read(session, updated)
 
 
 @router.get(

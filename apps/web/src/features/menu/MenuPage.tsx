@@ -11,7 +11,10 @@ import { CopyDayForm } from "./CopyDayForm";
 import { DayNavigator } from "./DayNavigator";
 import { DayTotalsPanel } from "./DayTotalsPanel";
 import { MealSlotGroup } from "./MealSlotGroup";
-import { WithdrawnProductsNotice } from "./WithdrawnProductsNotice";
+import {
+  ExcludedProductsNotice,
+  WithdrawnProductsNotice,
+} from "./WithdrawnProductsNotice";
 import { withdrawnByItem } from "./withdrawn";
 import { MenuSkeleton } from "./MenuSkeleton";
 import { todayIso } from "./dates";
@@ -128,6 +131,10 @@ export function MenuPage({ patientId }: { patientId: string }) {
       >
         {/* Над итогами: числа дня посчитаны в том числе по выведенному
             продукту, и знать об этом нужно раньше, чем смотреть на них. */}
+        {/* Исключённое ребёнку — выше выведенного из оборота: первое про то,
+            можно ли это давать, второе — про то, верны ли числа. */}
+        <ExcludedProductsNotice excluded={menu.data?.excluded_products} />
+
         <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
 
         {/* Итогов у пустого дня нет, и говорить об этом отдельным блоком не

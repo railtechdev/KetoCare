@@ -17,9 +17,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core import exclusions
 from core.models import CustomDish, Menu, MenuItem, Product, Recipe
 from core.models.enums import RecipeStatus
 from core.repositories import menus as menus_repo
+from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
 from core.repositories.menus import MenuItemSpec
 from keto_engine import ENGINE_VERSION, Ingredient, scale, verify
@@ -66,7 +68,62 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
             for item in items
         ],
         withdrawn_products=_withdrawn_products(items, live),
+        excluded_products=await _excluded_products(session, menu=menu, items=items, live=live),
         created_at=menu.created_at,
+    )
+
+
+async def _excluded_products(
+    session: AsyncSession,
+    *,
+    menu: Menu,
+    items: Sequence[MenuItem],
+    live: dict[uuid.UUID, list[tuple[uuid.UUID, float, Product]]],
+) -> list[WithdrawnProduct]:
+    """Продукты дня, исключённые этому ребёнку.
+
+    Раздел 6.3 ТЗ говорит об исключениях на входе расчёта, но план дня — то же
+    самое другими словами: по нему кормят. Исключения уточняются по ходу
+    терапии, и вчерашний план мог быть согласован с врачом, поэтому день не
+    запрещается и не подменяется — он только помечается.
+    """
+
+    patient = await patients_repo.get(session, menu.patient_id)
+    if patient is None or not patient.allergies:
+        return []
+
+    by_item = _product_ids_by_item(items, live)
+    names = {pid: product.name_ru for rows in live.values() for pid, _, product in rows}
+
+    excluded = exclusions.excluded_ids(patient.allergies)
+    item_ids: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for item_id, ids in by_item.items():
+        for pid in dict.fromkeys(ids):
+            if pid in excluded:
+                item_ids.setdefault(pid, []).append(item_id)
+
+    if not item_ids:
+        return []
+
+    snapshot_names = {
+        uuid.UUID(str(row["product_id"])): str(row["name_ru"])
+        for item in items
+        if item.snapshot is not None
+        for row in item.snapshot["ingredients"]
+    }
+
+    return sorted(
+        (
+            WithdrawnProduct(
+                product_id=pid,
+                # Название из каталога, а при его отсутствии — из снимка дня:
+                # продукт мог исчезнуть, а сказать, чем кормили, всё равно надо.
+                name_ru=names.get(pid) or snapshot_names.get(pid, str(pid)),
+                item_ids=ids,
+            )
+            for pid, ids in item_ids.items()
+        ),
+        key=lambda entry: entry.name_ru,
     )
 
 
@@ -154,11 +211,11 @@ async def _live_compositions(
     }
 
 
-def _withdrawn_products(
+def _product_ids_by_item(
     items: Sequence[MenuItem],
     live: dict[uuid.UUID, list[tuple[uuid.UUID, float, Product]]],
-) -> list[WithdrawnProduct]:
-    """Продукты дня, выведенные из оборота.
+) -> dict[uuid.UUID, list[uuid.UUID]]:
+    """Продукты каждой позиции дня.
 
     У позиции со снимком берутся продукты СНИМКА: именно по ним посчитаны итоги
     этого дня, а живой состав рецепта мог с тех пор смениться целиком.
@@ -172,6 +229,16 @@ def _withdrawn_products(
             ]
         else:
             by_item[item.id] = [pid for pid, _, _ in live.get(item.id, [])]
+    return by_item
+
+
+def _withdrawn_products(
+    items: Sequence[MenuItem],
+    live: dict[uuid.UUID, list[tuple[uuid.UUID, float, Product]]],
+) -> list[WithdrawnProduct]:
+    """Продукты дня, выведенные из оборота."""
+
+    by_item = _product_ids_by_item(items, live)
 
     known: dict[uuid.UUID, Product] = {
         pid: product for rows in live.values() for pid, _, product in rows

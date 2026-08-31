@@ -163,10 +163,19 @@ export function ChildPage() {
                         : t("children.height", { value: child.height_cm })}
                     </span>
                     <span className="text-sm text-muted-foreground">
+                      {/* Названия, а не идентификаторы: поле хранит ссылки на
+                          продукты вперемешку со свободными метками, и «3f2a…»
+                          в карточке не читается никем. */}
                       {child.allergies.length === 0
                         ? t("children.noAllergies")
                         : t("children.allergies", {
-                            list: child.allergies.join(", "),
+                            list: [
+                              ...child.excluded_products.map(
+                                (entry) =>
+                                  entry.name_ru ?? t("children.unknownProduct"),
+                              ),
+                              ...child.allergy_labels,
+                            ].join(", "),
                           })}
                     </span>
                   </div>

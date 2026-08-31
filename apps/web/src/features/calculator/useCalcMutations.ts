@@ -22,12 +22,19 @@ function targetsBody(targets: TargetsInput) {
 
 export function useVerifyMutation() {
   return useMutation({
-    mutationFn: async (input: { rows: DishRow[]; targets?: TargetsInput }) => {
+    mutationFn: async (input: {
+      rows: DishRow[];
+      targets?: TargetsInput;
+      // Чей расчёт: по нему сервер называет продукты, исключённые ребёнку.
+      // Состав при этом не меняется — его задал человек.
+      patientId?: string;
+    }) => {
       const { data, error } = await api.POST("/api/v1/calc/verify", {
         body: {
           ingredients: toCalcIngredients(input.rows),
           items: toCalcItems(input.rows),
           targets: input.targets ? targetsBody(input.targets) : null,
+          patient_id: input.patientId ?? null,
         },
       });
       if (error || !data) throw error ?? new Error("Empty verify response");
@@ -38,11 +45,18 @@ export function useVerifyMutation() {
 
 export function useSolveMutation() {
   return useMutation({
-    mutationFn: async (input: { rows: DishRow[]; targets: TargetsInput }) => {
+    mutationFn: async (input: {
+      rows: DishRow[];
+      targets: TargetsInput;
+      // Здесь важнее, чем в проверке: подбор сам выбирает, из чего составить
+      // блюдо, и исключённые продукты сервер снимает со входа.
+      patientId?: string;
+    }) => {
       const { data, error } = await api.POST("/api/v1/calc/solve", {
         body: {
           ingredients: toCalcIngredients(input.rows),
           targets: targetsBody(input.targets),
+          patient_id: input.patientId ?? null,
         },
       });
       if (error || !data) throw error ?? new Error("Empty solve response");
