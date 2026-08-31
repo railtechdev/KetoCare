@@ -236,6 +236,96 @@ class TestProductRevisions:
         assert any("Брокколи" in p.name_ru for p in found)
 
 
+class TestProductSearchFindsPartialWords:
+    """Поиск обязан работать по мере ввода, а не по готовому слову.
+
+    Было: `plainto_tsquery` ищет целыми лексемами, поэтому «мас» не находило
+    ничего, и список оживал только когда «масло» набрано полностью. На базе из
+    сотни продуктов это выглядит как неработающий поиск.
+    """
+
+    async def _product(self, session, name_ru: str, name_uz: str | None = None):
+        from core.models import ProductCategory
+
+        admin = await _make_user(session, UserRole.ADMIN)
+        category = ProductCategory(name_ru=f"Категория {uuid.uuid4().hex[:8]}", sort=0)
+        session.add(category)
+        await session.flush()
+        return await products.create(
+            session,
+            changed_by=admin.id,
+            name_ru=name_ru,
+            name_uz=name_uz,
+            name_en="Butter, salted",
+            category_id=category.id,
+            kcal_100g=717,
+            fat_100g=81.1,
+            protein_100g=0.9,
+            carbs_100g=0.1,
+            fiber_100g=0.0,
+            source="USDA",
+            source_version="SR28",
+            verified_at=date(2026, 1, 1),
+        )
+
+    async def _finds(self, session, query: str, name: str) -> bool:
+        found, _ = await products.search(session, q=query)
+        return any(p.name_ru == name for p in found)
+
+    async def test_prefix_of_a_word(self, session):
+        name = f"Масло сливочное {uuid.uuid4().hex[:8]}"
+        await self._product(session, name)
+        assert await self._finds(session, "мас", name), "поиск должен идти по мере ввода"
+
+    async def test_middle_of_a_word(self, session):
+        """То, что не решается никаким префиксным поиском, включая `to_tsquery('мас:*')`."""
+
+        name = f"Масло сливочное {uuid.uuid4().hex[:8]}"
+        await self._product(session, name)
+        assert await self._finds(session, "ливоч", name)
+
+    async def test_inflected_form_still_works(self, session):
+        """Полнотекст никуда не делся: словоформы обязаны находиться."""
+
+        name = f"Масло сливочное {uuid.uuid4().hex[:8]}"
+        await self._product(session, name)
+        assert await self._finds(session, "маслом", name)
+
+    async def test_word_order_does_not_matter(self, session):
+        name = f"Масло сливочное {uuid.uuid4().hex[:8]}"
+        await self._product(session, name)
+        assert await self._finds(session, "сливочное масло", name)
+
+    async def test_uzbek_name_is_searched(self, session):
+        """Второе имя, которое видит человек, тоже обязано находиться."""
+
+        name = f"Масло сливочное {uuid.uuid4().hex[:8]}"
+        await self._product(session, name, name_uz="Sariyog'")
+        assert await self._finds(session, "sariyog", name)
+
+    async def test_provenance_field_is_not_searched(self, session):
+        """`name_en` — это описание позиции в источнике, а не название для показа.
+
+        Иначе врач, набрав «butter», получил бы продукты, у которых такого слова
+        нет ни в одном видимом ему названии.
+        """
+
+        name = f"Масло сливочное {uuid.uuid4().hex[:8]}"
+        await self._product(session, name)
+        assert not await self._finds(session, "salted", name)
+
+    @pytest.mark.parametrize("query", ["100%", "жир_", "масло & сыр", "a:b", "!", "'"])
+    async def test_special_characters_do_not_break_the_query(self, session, query: str):
+        """Строка из формы попадает в SQL как есть.
+
+        `to_tsquery` на таком вводе падает — поэтому используется
+        `websearch_to_tsquery`; `%` и `_` экранируются, иначе «100%» означал бы
+        «что угодно».
+        """
+
+        await products.search(session, q=query)
+
+
 class TestAuditLog:
     async def test_writes_entry_with_before_after(self, session):
         admin = await _make_user(session, UserRole.ADMIN)
