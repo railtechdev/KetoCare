@@ -28,6 +28,21 @@ import {
   type ProductFilters,
 } from "./useAdminProducts";
 
+interface Props {
+  /**
+   * Импорт CSV и история правок доступны только администратору: обе ручки
+   * закрыты `require_roles(ADMIN)` на сервере. Диетолог видит тот же список и
+   * ту же форму, но без этих двух дверей — иначе он упирался бы в 403.
+   */
+  canImport?: boolean;
+  /**
+   * `tab` — панель внутри вкладок администрирования, заголовок свой (`h2`).
+   * `screen` — самостоятельный экран, заголовок даёт `PageLayout`, и второй
+   * такой же был бы дублем (правило П23 канона).
+   */
+  chrome?: "tab" | "screen";
+}
+
 /** Значение `?item=`, означающее заведение новой позиции. */
 const NEW_ITEM = "new";
 /** Значение `?item=`, означающее экран импорта. */
@@ -46,7 +61,10 @@ const IMPORT_ITEM = "import";
  * коллеге, ни обновить страницу: F5 возвращал в список, а «Назад» браузера
  * уводил из раздела целиком.
  */
-export function ProductsPanel() {
+export function ProductsPanel({
+  canImport = true,
+  chrome = "tab",
+}: Props = {}) {
   const { t } = useTranslation("admin");
 
   const [filters, setFilters] = useState<ProductFilters>(EMPTY_PRODUCT_FILTERS);
@@ -160,7 +178,9 @@ export function ProductsPanel() {
     [t, categoryNames, setItem],
   );
 
-  if (item === IMPORT_ITEM) {
+  // Проверка и по адресу тоже: `?item=import` вводится руками, и без неё
+  // диетолог попал бы на экран, чья ручка ответит ему 403.
+  if (item === IMPORT_ITEM && canImport) {
     return <ProductImportPanel onDone={() => setItem(undefined)} />;
   }
 
@@ -182,32 +202,41 @@ export function ProductsPanel() {
           toast.success(t("products.saved", { name: product.name_ru }));
         }}
         onCancel={() => setItem(undefined)}
+        showHistory={canImport}
       />
     );
   }
 
+  const actions = (
+    <>
+      <Button type="button" onClick={() => setItem(NEW_ITEM)}>
+        <Plus aria-hidden="true" />
+        {t("products.create")}
+      </Button>
+      {canImport && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setItem(IMPORT_ITEM)}
+        >
+          <Upload aria-hidden="true" />
+          {t("products.importCsv")}
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-block">
-      <SubPageHeader
-        title={t("products.title")}
-        intro={t("products.intro")}
-        actions={
-          <>
-            <Button type="button" onClick={() => setItem(NEW_ITEM)}>
-              <Plus aria-hidden="true" />
-              {t("products.create")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setItem(IMPORT_ITEM)}
-            >
-              <Upload aria-hidden="true" />
-              {t("products.importCsv")}
-            </Button>
-          </>
-        }
-      />
+      {chrome === "tab" ? (
+        <SubPageHeader
+          title={t("products.title")}
+          intro={t("products.intro")}
+          actions={actions}
+        />
+      ) : (
+        <div className="flex flex-wrap gap-field">{actions}</div>
+      )}
 
       {/* Панель фильтров — блок экрана, а значит `Section` со скрытым
           заголовком (правило П23). `fieldset` остаётся внутри форм, где
