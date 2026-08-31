@@ -11,6 +11,7 @@ from aiogram.types import Message
 
 from .. import keyboards, texts
 from ..api import BotApi
+from ..config import BotSettings
 from ..storage import BindingStore
 from .start import handle_bare_code, looks_like_code
 
@@ -18,16 +19,18 @@ router = Router(name="fallback")
 
 
 @router.message()
-async def unknown(message: Message, api: BotApi, store: BindingStore) -> None:
+async def unknown(
+    message: Message, api: BotApi, store: BindingStore, settings: BotSettings
+) -> None:
     text = (message.text or "").strip()
 
     # Код привязки, присланный сообщением. Проверяется до отбойника: родитель,
     # переписавший код с экрана компьютера, иначе получил бы «я умею записывать
     # данные» в ответ на ровно то, что бот и просил прислать.
     if looks_like_code(text) and await store.get(message.chat.id) is None:
-        await handle_bare_code(message, api=api, store=store)
+        await handle_bare_code(message, api=api, store=store, settings=settings)
         return
 
     # Раздел 7.5: бот не отвечает на медицинские вопросы и не поддерживает
     # свободную беседу. Ответ один и тот же на что угодно.
-    await message.answer(texts.UNKNOWN_INPUT, reply_markup=keyboards.MAIN_MENU)
+    await message.answer(texts.UNKNOWN_INPUT, reply_markup=keyboards.main_menu(settings))

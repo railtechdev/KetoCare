@@ -117,6 +117,9 @@ jobs:
           TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
           WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
           MINIAPP_ORIGIN: ${{ vars.MINIAPP_ORIGIN }}
+          # Публичный адрес Mini App. Пока переменная пуста, кнопки
+          # «Приложение» в меню бота нет (apps/bot/src/bot/keyboards.py).
+          MINIAPP_URL: ${{ vars.MINIAPP_URL }}
           LANDING_SITE_URL: ${{ vars.LANDING_SITE_URL }}
           LANDING_INDEXABLE: ${{ vars.LANDING_INDEXABLE }}
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
@@ -147,7 +150,7 @@ jobs:
               "BOT_USERNAME", "ANTHROPIC_API_KEY",
               "SENTRY_DSN", "SENTRY_ENVIRONMENT",
               "ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME",
-              "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN",
+              "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN", "MINIAPP_URL",
               "LANDING_SITE_URL", "LANDING_INDEXABLE", "PUBLIC_APP_URL",
               "PUBLIC_CONTACT_EMAIL", "PUBLIC_TELEGRAM_URL",
               "ATTACHMENT_QUOTA_MB", "ATTACHMENT_PURGE_DAYS",

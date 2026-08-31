@@ -9,6 +9,7 @@ from aiogram.types import Message
 
 from .. import keyboards, texts
 from ..api import BotApi, BotApiError
+from ..config import BotSettings
 from ..storage import Binding, BindingStore
 
 router = Router(name="start")
@@ -31,25 +32,30 @@ async def start_with_code(
     state: FSMContext,
     api: BotApi,
     store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     await state.clear()
-    await _link(message, api=api, store=store, code=(command.args or ""))
+    await _link(message, api=api, store=store, settings=settings, code=(command.args or ""))
 
 
 @router.message(CommandStart())
-async def start_without_code(message: Message, state: FSMContext, store: BindingStore) -> None:
+async def start_without_code(
+    message: Message, state: FSMContext, store: BindingStore, settings: BotSettings
+) -> None:
     await state.clear()
     binding = await store.get(message.chat.id)
     if binding is not None:
         await message.answer(
             texts.START_ALREADY_LINKED.format(patient_name=binding.patient_name),
-            reply_markup=keyboards.MAIN_MENU,
+            reply_markup=keyboards.main_menu(settings),
         )
         return
     await message.answer(texts.START_NEED_CODE)
 
 
-async def handle_bare_code(message: Message, api: BotApi, store: BindingStore) -> None:
+async def handle_bare_code(
+    message: Message, api: BotApi, store: BindingStore, settings: BotSettings
+) -> None:
     """Код, присланный сообщением, а не по ссылке.
 
     Deep-link открывается с телефона одним нажатием, но родитель, читающий
@@ -57,10 +63,12 @@ async def handle_bare_code(message: Message, api: BotApi, store: BindingStore) -
     незачем.
     """
 
-    await _link(message, api=api, store=store, code=message.text or "")
+    await _link(message, api=api, store=store, settings=settings, code=message.text or "")
 
 
-async def _link(message: Message, *, api: BotApi, store: BindingStore, code: str) -> None:
+async def _link(
+    message: Message, *, api: BotApi, store: BindingStore, settings: BotSettings, code: str
+) -> None:
     if message.chat.type != "private":
         # Привязка — к семье, а не к комнате. В группе `chat.id` принадлежит
         # группе: дневник ребёнка вёлся бы от её имени, уведомления о смене
@@ -94,5 +102,5 @@ async def _link(message: Message, *, api: BotApi, store: BindingStore, code: str
     )
     await message.answer(
         texts.LINK_SUCCESS.format(patient_name=verified.patient_name),
-        reply_markup=keyboards.MAIN_MENU,
+        reply_markup=keyboards.main_menu(settings),
     )

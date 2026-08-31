@@ -100,19 +100,34 @@ cp .env.example .env   # и заполнить, см. ниже
 | `ERASED_DIR` | не менять: внутри контейнеров задан compose'ом (`/data/erased`). Архивы удалённых по требованию пациентов — тоже в бэкап |
 | `ATTACHMENT_QUOTA_MB` | сколько всего вложений на одного пациента; по умолчанию 100 МБ — около двадцати сканов. Считать от размера диска |
 | `ATTACHMENT_PURGE_DAYS` | через сколько дней после удаления ночная задача снимает байты с диска; по умолчанию 30 — столько же живут дампы, то есть пока удаление обратимо руками |
-| `MINIAPP_ORIGIN` | до появления Mini App выставить равным `WEB_ORIGIN`: значение уходит в CORS вместе с `allow_credentials`, и `http://localhost:5174` из примера в проде лишний |
+| `MINIAPP_ORIGIN` | адрес Mini App для CORS (`https://tma.<домен>`). Пока приложение не выложено — равным `WEB_ORIGIN`: значение уходит в CORS вместе с `allow_credentials`, и `http://localhost:5174` из примера в проде лишний |
+| `MINIAPP_URL` | тот же адрес для кнопки «Приложение» в боте. Пустое значение — кнопки нет: Telegram принимает в `web_app` только https, и кнопка с http-адресом ломает отправку всего меню |
 | `ANTHROPIC_API_KEY` | оставить заглушкой — AI-функции появляются на этапе 4 |
 
 ### nginx и TLS
 
 ```bash
-sudo cp infra/nginx/ketocare-landing.conf infra/nginx/ketocare-app.conf /etc/nginx/sites-available/
-sudo ln -s /etc/nginx/sites-available/ketocare-{landing,app}.conf /etc/nginx/sites-enabled/
+sudo cp infra/nginx/ketocare-landing.conf infra/nginx/ketocare-app.conf \
+        infra/nginx/ketocare-miniapp.conf /etc/nginx/sites-available/
+sudo ln -s /etc/nginx/sites-available/ketocare-{landing,app,miniapp}.conf /etc/nginx/sites-enabled/
 sudo cp infra/nginx/server-names-hash.conf /etc/nginx/conf.d/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d ketocare.railtech.uz -d app.ketocare.railtech.uz --redirect
+sudo certbot --nginx -d ketocare.railtech.uz -d app.ketocare.railtech.uz \
+        -d tma.ketocare.railtech.uz --redirect
 ```
+
+**Mini App — отдельный host (`tma.`), а не путь внутри кабинета.** Так требует
+раздел 13 ТЗ, и причина в заголовках: кабинет запрещает вставку в рамку, а Mini
+App живёт ровно в ней — в веб-версии Telegram приложение открывается в iframe.
+Его конфигурация разрешает рамку только клиентам Telegram: открытое разрешение
+позволило бы любому сайту встроить кабинет ребёнка и снимать нажатия поверх
+него. Домен `tma.<домен>` нужно завести в DNS до выпуска сертификата — certbot
+проверяет доступность снаружи.
+
+Пока домена нет, деплой всё равно собирает приложение и кладёт в
+`/var/www/ketocare-miniapp`: файлы просто лежат. Кнопки «Приложение» в боте при
+этом тоже нет — она появляется вместе с `MINIAPP_URL`.
 
 `--redirect` обязателен: refresh-токен живёт в httpOnly-cookie и по чистому
 HTTP утекает.

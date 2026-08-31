@@ -117,6 +117,7 @@ async def _submit_pending(
     *,
     api: BotApi,
     store: BindingStore,
+    settings: BotSettings,
     occurred_at: datetime | None,
 ) -> None:
     binding = await require_binding(message, store)
@@ -133,19 +134,24 @@ async def _submit_pending(
         binding=binding,
         kind=data["pending_kind"],
         payload=data["pending_payload"],
+        settings=settings,
         occurred_at=occurred_at,
     )
 
 
 @router.callback_query(When.choice, F.data == keyboards.WHEN_NOW_DATA)
 async def when_now(
-    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     await callback.answer()
     message = _answerable(callback)
     if message is None:
         return
-    await _submit_pending(message, state, api=api, store=store, occurred_at=None)
+    await _submit_pending(message, state, api=api, store=store, settings=settings, occurred_at=None)
 
 
 @router.callback_query(When.choice, F.data == keyboards.WHEN_MANUAL_DATA)
@@ -180,7 +186,9 @@ async def when_typed(
         )
         return
 
-    await _submit_pending(message, state, api=api, store=store, occurred_at=moment)
+    await _submit_pending(
+        message, state, api=api, store=store, settings=settings, occurred_at=moment
+    )
 
 
 def _parse_number(raw: str) -> Decimal | None:
@@ -200,10 +208,10 @@ def _parse_number(raw: str) -> Decimal | None:
 
 
 @router.callback_query(F.data == keyboards.CANCEL_DATA)
-async def cancel(callback: CallbackQuery, state: FSMContext) -> None:
+async def cancel(callback: CallbackQuery, state: FSMContext, settings: BotSettings) -> None:
     await state.clear()
     if callback.message is not None:
-        await callback.message.answer(texts.CANCELLED, reply_markup=keyboards.MAIN_MENU)
+        await callback.message.answer(texts.CANCELLED, reply_markup=keyboards.main_menu(settings))
     await callback.answer()
 
 
@@ -324,7 +332,7 @@ async def medication_start(
         return
 
     if not items:
-        await message.answer(texts.MEDICATION_NONE, reply_markup=keyboards.MAIN_MENU)
+        await message.answer(texts.MEDICATION_NONE, reply_markup=keyboards.main_menu(settings))
         return
 
     await state.set_state(Medication.choice)
@@ -398,12 +406,12 @@ async def meal_start(
         return
 
     if menu is None:
-        await message.answer(texts.MEAL_NO_MENU, reply_markup=keyboards.MAIN_MENU)
+        await message.answer(texts.MEAL_NO_MENU, reply_markup=keyboards.main_menu(settings))
         return
 
     pending = [item for item in menu.get("items", []) if not item.get("eaten")]
     if not pending:
-        await message.answer(texts.MEAL_ALL_EATEN, reply_markup=keyboards.MAIN_MENU)
+        await message.answer(texts.MEAL_ALL_EATEN, reply_markup=keyboards.main_menu(settings))
         return
 
     await state.set_state(Meal.choice)
@@ -430,7 +438,11 @@ def _meal_buttons(items: list[dict[str, Any]]) -> list[tuple[str, str]]:
 
 @router.callback_query(Meal.choice, F.data.startswith(keyboards.MEAL_ITEM_PREFIX))
 async def meal_mark(
-    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     await callback.answer()
     message = _answerable(callback)
@@ -461,7 +473,7 @@ async def meal_mark(
         return
 
     await state.clear()
-    await message.answer(texts.MEAL_MARKED, reply_markup=keyboards.MAIN_MENU)
+    await message.answer(texts.MEAL_MARKED, reply_markup=keyboards.main_menu(settings))
 
 
 # --- Самочувствие ---
