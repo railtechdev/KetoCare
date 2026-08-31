@@ -44,6 +44,8 @@ const MENU = {
       custom_dish_id: null,
       portion_factor: 1,
       eaten: false,
+      has_snapshot: true,
+      changed_since_saved: false,
     },
     {
       id: "item-2",
@@ -54,6 +56,8 @@ const MENU = {
       custom_dish_id: "d1",
       portion_factor: 0.5,
       eaten: false,
+      has_snapshot: true,
+      changed_since_saved: false,
     },
   ],
 };
@@ -284,6 +288,31 @@ describe("MenuPage", () => {
     ).toBeInTheDocument();
     // Приёмы, а не блюда: в завтраке две позиции, и это один приём.
     expect(screen.getByText(/В плане на этот день: 2/)).toBeInTheDocument();
+  });
+
+  it("говорит, что блюдо изменили после составления дня", async () => {
+    // День от правки рецепта не меняется — состав заморожен снимком. Но
+    // рецепт правят, когда в нём нашли ошибку, и решать семье: пересобрать
+    // день или оставить как есть.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? {
+              data: {
+                ...MENU,
+                items: [
+                  { ...MENU.items[0], changed_since_saved: true },
+                  MENU.items[1],
+                ],
+              },
+            }
+          : respond(path),
+      ),
+    );
+    renderPage();
+
+    const marks = await screen.findAllByText(/Блюдо изменили после того/);
+    expect(marks).toHaveLength(1);
   });
 
   it("называет выведенный продукт и блюдо, в котором он остался", async () => {

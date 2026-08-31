@@ -95,6 +95,14 @@ class MenuItemRead(BaseModel):
     custom_dish_id: uuid.UUID | None
     portion_factor: float
     eaten: bool
+    #: Состав блюда заморожен на момент сохранения дня.
+    has_snapshot: bool = False
+    #: Рецепт или своё блюдо изменились с того дня, когда его сохранили.
+    #:
+    #: День от этого не меняется — в том и смысл снимка, — но знать об этом
+    #: надо: рецепт правят, когда в нём нашли ошибку, и семье решать,
+    #: пересобрать день или оставить как есть.
+    changed_since_saved: bool = False
 
 
 class WithdrawnProduct(BaseModel):

@@ -615,6 +615,188 @@ class TestGet:
         assert response.status_code == 422
 
 
+class TestSnapshotFreezesTheDay:
+    """Позиция дня хранит снимок состава.
+
+    Позиция ссылается на рецепт, а тот живёт своей жизнью: диетолог правит
+    состав, администратор — числа продукта. Пока снимка не было, правка задним
+    числом меняла прошлые дни при первом же их сохранении, и ответить, чем
+    ребёнок питался первого мая, было нельзя — при том что запрет удалять
+    использованный рецепт обоснован как раз сохранностью истории.
+    """
+
+    async def test_recipe_edit_does_not_change_a_saved_day(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        saved = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+        assert saved.status_code == 200, saved.text
+        before = saved.json()["totals"]
+
+        # Диетолог переписывает рецепт целиком.
+        session.add(
+            RecipeIngredient(recipe_id=recipe.id, product_id=chicken.id, grams=200, position=1)
+        )
+        await session.flush()
+
+        read = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert read.json()["totals"] == before, "правка рецепта не меняет сохранённый день"
+
+        # И повторное сохранение того же дня — тоже: позиция переиспользуется,
+        # снимок у неё остаётся прежним.
+        again = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+        assert again.json()["totals"] == before
+
+        # Но об изменении сказано: рецепт правят, когда в нём нашли ошибку, и
+        # семье решать, пересобрать день или оставить.
+        item = again.json()["items"][0]
+        assert item["has_snapshot"] is True
+        assert item["changed_since_saved"] is True
+
+    async def test_product_numbers_change_does_not_change_a_saved_day(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Заморожены и значения продуктов на 100 г.
+
+        Без них пересчёт опирался бы на сегодняшние числа — ровно на то, что мы
+        замораживаем.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        saved = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+        before = saved.json()["totals"]
+
+        butter.fat_100g = 60
+        butter.kcal_100g = 540
+        await session.flush()
+
+        read = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert read.json()["totals"] == before
+        assert read.json()["items"][0]["changed_since_saved"] is True
+
+    async def test_new_day_uses_the_current_recipe(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Замораживается день, а не рецепт: новый день берёт нынешний состав."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        first = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        session.add(
+            RecipeIngredient(recipe_id=recipe.id, product_id=chicken.id, grams=200, position=1)
+        )
+        await session.flush()
+
+        second = await client.put(
+            _url(patient),
+            json={
+                "date": "2026-03-09",
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert second.json()["totals"]["protein"] > first.json()["totals"]["protein"]
+        assert second.json()["items"][0]["changed_since_saved"] is False
+
+    async def test_unchanged_recipe_is_not_reported_as_changed(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        read = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert read.json()["items"][0]["changed_since_saved"] is False
+
+    async def test_snapshot_keeps_names_for_reading_the_past(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Название продукта — тоже в снимке.
+
+        Продукт могут переименовать, а прочитать состав прошлого дня надо и
+        через год.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        stored = await session.scalar(select(MenuItem).where(MenuItem.patient_id == patient.id))
+        assert stored is not None and stored.snapshot is not None
+        assert stored.snapshot["title"] == recipe.title
+        assert stored.snapshot["ingredients"][0]["name_ru"] == butter.name_ru
+        assert stored.snapshot["ingredients"][0]["fat_100g"] == BUTTER["fat_100g"]
+
+
 class TestAccessControl:
     async def test_menu_of_other_patient_forbidden(
         self, client, session, make_user, make_patient, auth_headers

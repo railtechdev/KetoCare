@@ -153,6 +153,22 @@ class MenuItem(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixi
     )
     portion_factor: Mapped[float] = mapped_column(Numeric(4, 2), nullable=False, default=1)
     eaten: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: Состав и показатели блюда на момент сохранения дня.
+    #:
+    #: Позиция ссылается на рецепт или своё блюдо, а те живут своей жизнью:
+    #: диетолог правит рецепт, администратор — числа продукта. Без снимка
+    #: правка задним числом меняла прошлые дни при первом же их сохранении, и
+    #: ответить, чем ребёнок питался первого мая, было нельзя — при том что
+    #: запрет удалять использованный рецепт обоснован как раз сохранностью
+    #: истории.
+    #:
+    #: Хранится всё, что нужно для повторного расчёта БЕЗ обращения к текущим
+    #: строкам: название, число порций, ингредиенты вместе с их значениями на
+    #: 100 г, итоги блюда и версия ядра.
+    #:
+    #: `None` — позиция, сохранённая до появления снимков: тогда состав
+    #: читается по ссылке, как и раньше.
+    snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id")
     )
