@@ -412,9 +412,7 @@ class TestEventTimeStep:
     """
 
     @pytest.mark.asyncio
-    async def test_manual_time_is_sent_instead_of_now(
-        self, api, linked_store, state, monkeypatch
-    ):
+    async def test_manual_time_is_sent_instead_of_now(self, api, linked_store, state, monkeypatch):
         # Часы обработчика подменяются, а не берутся настоящие. С настоящими
         # тест зависел от времени суток: «07:30» до половины восьмого утра — это
         # будущее, бот отвечал «время ещё не наступило», записи не было, и
