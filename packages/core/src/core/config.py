@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     miniapp_origin: str = "http://localhost:5174"
 
     sentry_dsn: str = ""
+    #: Имя окружения в Sentry: отличает боевой стенд от машины разработчика.
+    #: Одно значение на все компоненты — их разделяет тег `component`.
+    sentry_environment: str = "development"
     tz: str = "Asia/Tashkent"
 
 

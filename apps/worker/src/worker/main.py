@@ -15,11 +15,17 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from core.config import Settings
+from core.observability import init_sentry
 
 from .maintenance import purge_files
 from .reports.task import render_report
 
 _settings = Settings()  # type: ignore[call-arg]
+
+# Воркер падает молча: у него нет ни ответа клиенту, ни экрана. Отчёт, который
+# не собрался ночью, обнаруживался утром по пустой ссылке. Ничего не делает,
+# пока SENTRY_DSN пуст.
+init_sentry("worker")
 
 
 class WorkerSettingsARQ:
