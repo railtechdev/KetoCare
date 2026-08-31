@@ -542,3 +542,56 @@ class TestMainRuleAppliesToThisProjectOnly:
             check_command('git commit -m "прямо в main"', cwd=repo_on_main, run_in=repo_on_main)
             == BLOCK
         )
+
+
+class TestLeavingMainInTheSameCommand:
+    """Уход С главной ветки распознаётся так же, как переход НА неё.
+
+    Распознавался только переход на main, и обычная связка `git switch feat/x
+    && git rebase origin/main` блокировалась: правило считало, что мы всё ещё
+    на main. Ветка теперь отслеживается по ходу команды.
+    """
+
+    @pytest.fixture
+    def repo_with_branch(self, repo_on_main: Path) -> Path:
+        subprocess.run(
+            ["git", "branch", "feat/x"], cwd=repo_on_main, check=True, capture_output=True
+        )
+        return repo_on_main
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'git switch feat/x && git commit -m "работа в ветке"',
+            "git checkout feat/x && git rebase origin/main",
+            'git switch -c feat/new && git commit -m "новая ветка"',
+        ],
+    )
+    def test_work_after_leaving_main_allowed(self, command: str, repo_with_branch: Path) -> None:
+        assert check_command(command, cwd=repo_with_branch) == ALLOW, (
+            f"ложное срабатывание после ухода с main: {command}"
+        )
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'git switch feat/x && git switch main && git commit -m "назад в main"',
+            'git switch main && git commit -m "в main"',
+        ],
+    )
+    def test_returning_to_main_still_blocked(self, command: str, repo_with_branch: Path) -> None:
+        assert check_command(command, cwd=repo_with_branch) == BLOCK, (
+            f"возврат на main пропущен: {command}"
+        )
+
+    def test_restoring_a_file_is_not_a_switch(self, repo_with_branch: Path) -> None:
+        """`git checkout README.md` восстанавливает файл, а не меняет ветку.
+
+        Считать это уходом с main значило бы открыть дыру: следующий коммит
+        ушёл бы в main без единого предупреждения.
+        """
+
+        assert (
+            check_command('git checkout README.md && git commit -m "в main"', cwd=repo_with_branch)
+            == BLOCK
+        )

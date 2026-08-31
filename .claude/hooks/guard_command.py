@@ -524,13 +524,57 @@ def _git_verb(segment: str) -> str | None:
     return None
 
 
-def _switches_to_main(segment: str) -> bool:
+_NEW_BRANCH_FLAGS = {"-b", "-B", "-c", "-C"}
+
+
+def _is_local_branch(name: str, cwd: str) -> bool:
+    """Существующая локальная ветка?
+
+    Нужно, чтобы отличить `git checkout feat/x` (переход) от `git checkout
+    файл` (восстановление файла): git различает их так же — сначала ищет ветку.
+    """
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"],
+            cwd=cwd,
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
+def _switch_target(segment: str, cwd: str) -> str | None:
+    """На какую ветку переводит сегмент; None — переключения нет.
+
+    Возвращает имя ветки и при уходе С главной, и при переходе НА неё. Раньше
+    распознавался только переход на main, и `git switch feat/x && git rebase
+    origin/main` блокировался: правило считало, что мы всё ещё на main, хотя
+    первая же команда с неё уходит.
+    """
+
     verb = _git_verb(segment)
     if verb not in {"switch", "checkout"}:
-        return False
-    args = [t for t in _tokens(segment)[2:] if not t.startswith("-")]
-    # `git checkout -b main` — тоже переход на main; `git checkout -- main.py` нет.
-    return "main" in args and "--" not in _tokens(segment)
+        return None
+
+    tokens = _tokens(segment)
+    if "--" in tokens:
+        # `git checkout -- main.py` — это восстановление файла.
+        return None
+
+    flags = {t for t in tokens if t.startswith("-")}
+    args = [t for t in tokens[2:] if not t.startswith("-")]
+    if not args:
+        return None
+
+    if flags & _NEW_BRANCH_FLAGS:
+        return args[0]
+    # Без флага создания аргумент может быть и веткой, и файлом. Ветка ли это,
+    # знает git — гадать здесь нельзя: ошибка в любую сторону либо открывает
+    # дыру, либо мешает работе.
+    return args[0] if _is_local_branch(args[0], cwd) else None
 
 
 def _pushes_main(segment: str, on_main: bool) -> bool:
@@ -599,15 +643,20 @@ def main_rule_violation(command: str, cwd: str | None = None) -> bool:
     if not _inside_project(target):
         return False
 
-    branch = current_branch(target)
-    on_main = branch == "main"
-    goes_to_main = on_main or any(_switches_to_main(s) for s in segments)
+    # Ветка отслеживается ПО ХОДУ команды: `git switch feat/x && git commit`
+    # коммитит уже не в main, а `git switch main && git commit` — в main.
+    on_main = current_branch(target) == "main"
 
     for segment in segments:
+        moved = _switch_target(segment, target)
+        if moved is not None:
+            on_main = moved == "main"
+            continue
+
         verb = _git_verb(segment)
         if verb is None:
             continue
-        if verb in GIT_COMMIT_VERBS and goes_to_main:
+        if verb in GIT_COMMIT_VERBS and on_main:
             return True
         if _pushes_main(segment, on_main):
             return True
