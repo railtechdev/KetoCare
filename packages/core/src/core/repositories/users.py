@@ -6,8 +6,9 @@ import uuid
 from collections.abc import Collection, Sequence
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..models import User
 from ..models.enums import UserRole
@@ -48,12 +49,46 @@ async def create(
 
 
 async def list_all(
-    session: AsyncSession, *, limit: int = 50, offset: int = 0
+    session: AsyncSession,
+    *,
+    query: str | None = None,
+    role: UserRole | None = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> tuple[list[User], int]:
-    stmt = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    """Учётные записи: все, либо отобранные по имени, почте и роли.
+
+    Отбор делает база. Список приходил страницей в двести строк без поиска и
+    фильтра вовсе: у клиники с сотней семей найти учётку человека, который
+    звонит прямо сейчас, было нечем.
+    """
+
+    condition: ColumnElement[bool] = true()
+    if query:
+        pattern = "%" + _escape_like(query.strip()) + "%"
+        condition = and_(
+            condition,
+            or_(
+                User.full_name.ilike(pattern, escape="\\"),
+                User.email.ilike(pattern, escape="\\"),
+            ),
+        )
+    if role is not None:
+        condition = and_(condition, User.role == role)
+
+    stmt = (
+        select(User).where(condition).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    )
     items = list(await session.scalars(stmt))
-    total = await session.scalar(select(func.count()).select_from(User))
+    total = await session.scalar(select(func.count()).select_from(User).where(condition))
     return items, int(total or 0)
+
+
+def _escape_like(value: str) -> str:
+    """Подстановочные знаки — обычные символы: иначе введённый процент
+    означал бы «что угодно» и находил бы всех."""
+
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 async def list_active_by_roles(session: AsyncSession, *, roles: Sequence[UserRole]) -> list[User]:

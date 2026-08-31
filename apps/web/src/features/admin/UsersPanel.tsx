@@ -5,11 +5,12 @@ import {
   Button,
   DataTable,
   EmptyState,
+  Section,
   formatOccurredAt,
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { KeyRound, RotateCcwKey, UserPlus, Users } from "lucide-react";
+import { KeyRound, RotateCcwKey, SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -17,17 +18,24 @@ import { InvitationsList } from "../invitations/InvitationsList";
 import { InviteForm } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 import { errorMessageOf } from "../../lib/api";
+import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { Field, SelectField } from "../../components/Field";
 import { useSession } from "../auth/useSession";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
 import { UserAccountForm } from "./UserAccountForm";
 import {
+  EMPTY_USERS_FILTER,
   useAdminUsers,
   useResetPasswordMutation,
   useResetTotpMutation,
   useUpdateUserMutation,
+  type UsersFilter,
 } from "./useAdminUsers";
 import type { AdminUser } from "./types";
+
+/** Роли для отбора — те же, что назначаются учётной записи. */
+const ROLE_OPTIONS = ["admin", "doctor", "dietitian", "parent"] as const;
 
 /**
  * Учётные записи (раздел 8.1 ТЗ, раздел админа `users`).
@@ -43,7 +51,11 @@ export function UsersPanel() {
   const { t } = useTranslation("admin");
   const { session } = useSession();
 
-  const users = useAdminUsers();
+  const [filter, setFilter] = useState<UsersFilter>(EMPTY_USERS_FILTER);
+  // Задержка — чтобы запрос уходил не на каждую букву; отбор всё равно делает
+  // сервер (см. `useAdminUsers`).
+  const debouncedQuery = useDebouncedValue(filter.q, 300);
+  const users = useAdminUsers({ ...filter, q: debouncedQuery });
   const update = useUpdateUserMutation();
   const resetTotp = useResetTotpMutation();
   const resetPassword = useResetPasswordMutation();
@@ -314,6 +326,51 @@ export function UsersPanel() {
         )}
       </FormSheet>
 
+      {/* Панель отбора — блок экрана, поэтому Section со скрытым заголовком
+          (правило П23 канона). */}
+      <Section
+        title={t("users.filters.legend")}
+        titleHidden
+        density="compact"
+        contentClassName="flex flex-wrap items-end gap-block"
+      >
+        <Field
+          id="users-search"
+          type="search"
+          label={t("users.filters.search")}
+          value={filter.q}
+          onChange={(event) =>
+            setFilter((current) => ({ ...current, q: event.target.value }))
+          }
+        />
+        <SelectField
+          id="users-role"
+          label={t("users.filters.role")}
+          width="narrow"
+          value={filter.role}
+          onChange={(event) =>
+            setFilter((current) => ({ ...current, role: event.target.value }))
+          }
+        >
+          <option value="">{t("users.filters.anyRole")}</option>
+          {ROLE_OPTIONS.map((role) => (
+            <option key={role} value={role}>
+              {t(`common:roles.${role}`)}
+            </option>
+          ))}
+        </SelectField>
+        {(filter.q !== "" || filter.role !== "") && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch"
+            onClick={() => setFilter(EMPTY_USERS_FILTER)}
+          >
+            {t("users.filters.reset")}
+          </Button>
+        )}
+      </Section>
+
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
         loading={users.isLoading}
@@ -331,11 +388,28 @@ export function UsersPanel() {
         onRetry={() => void users.refetch()}
         isEmpty={rows.length === 0}
         empty={
-          <EmptyState
-            icon={Users}
-            title={t("users.empty.title")}
-            description={t("users.empty.description")}
-          />
+          filter.q === "" && filter.role === "" ? (
+            <EmptyState
+              icon={Users}
+              title={t("users.empty.title")}
+              description={t("users.empty.description")}
+            />
+          ) : (
+            <EmptyState
+              icon={SearchX}
+              title={t("users.empty.searchTitle")}
+              description={t("users.empty.searchDescription")}
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setFilter(EMPTY_USERS_FILTER)}
+                >
+                  {t("users.filters.reset")}
+                </Button>
+              }
+            />
+          )
         }
       >
         <DataTable

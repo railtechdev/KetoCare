@@ -46,8 +46,12 @@ router = APIRouter(
 async def list_users(
     session: SessionDep,
     page: PaginationDep,
+    q: Annotated[str | None, Query(max_length=255, description="Поиск по имени и почте")] = None,
+    role: UserRole | None = None,
 ) -> Page[UserRead]:
-    items, total = await users_repo.list_all(session, limit=page.limit, offset=page.offset)
+    items, total = await users_repo.list_all(
+        session, query=q, role=role, limit=page.limit, offset=page.offset
+    )
     return Page(items=[UserRead.model_validate(u) for u in items], total=total)
 
 
