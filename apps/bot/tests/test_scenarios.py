@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -24,8 +24,26 @@ from bot.handlers import fallback, scenarios, start
 
 from .conftest import CHAT_ID, LINK_ID, PATIENT_ID, PATIENT_NAME, SECRET
 
-# Настройки нужны шагу «когда»: время вводится по местным часам семьи.
-SETTINGS = BotSettings(bot_token="t", bot_api_token="s")
+# Настройки нужны шагу «когда»: время вводится по местным часам семьи. Пояс
+# задан явно: `BotSettings` читает его из переменной `TZ`, и на машине с другим
+# поясом (или в CI) тест проверял бы не перевод времени, а настройку окружения.
+SETTINGS = BotSettings(bot_token="t", bot_api_token="s", tz="Asia/Tashkent")
+
+
+def frozen(moment: datetime) -> type[datetime]:
+    """Класс `datetime` с остановленным `now()`.
+
+    Подменяется в модуле обработчиков: сам разбор времени часы уже принимает
+    параметром (`parse_moment(now=...)`), а вот обработчик берёт их сам — и
+    другого шва, чтобы остановить их в тесте, нет.
+    """
+
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz: object | None = None) -> datetime:  # type: ignore[override]
+            return moment if tz is None else moment.astimezone(tz)  # type: ignore[arg-type]
+
+    return Frozen
 
 
 @dataclass
@@ -394,7 +412,13 @@ class TestEventTimeStep:
     """
 
     @pytest.mark.asyncio
-    async def test_manual_time_is_sent_instead_of_now(self, api, linked_store, state):
+    async def test_manual_time_is_sent_instead_of_now(self, api, linked_store, state, monkeypatch):
+        # Часы обработчика подменяются, а не берутся настоящие. С настоящими
+        # тест зависел от времени суток: «07:30» до половины восьмого утра — это
+        # будущее, бот отвечал «время ещё не наступило», записи не было, и
+        # прогон падал ночью. Ровно так `main` покраснел в 00:02 по Ташкенту.
+        monkeypatch.setattr(scenarios, "datetime", frozen(datetime(2026, 8, 31, 12, 0, tzinfo=UTC)))
+
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
         await scenarios.weight_value(message, state, api, linked_store)
