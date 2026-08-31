@@ -43,6 +43,11 @@ export function DishRows({
         >
           <span className="min-w-0 flex-1 basis-full break-words sm:basis-auto">
             {row.product.name}
+            {!row.product.isActive && (
+              <span className="ml-2 text-sm text-warning">
+                {t("withdrawn")}
+              </span>
+            )}
           </span>
 
           <div className="flex items-center gap-field sm:ml-auto">

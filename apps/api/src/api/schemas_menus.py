@@ -97,6 +97,27 @@ class MenuItemRead(BaseModel):
     eaten: bool
 
 
+class WithdrawnProduct(BaseModel):
+    """Продукт, выведенный из оборота, но оставшийся в составе блюд этого дня.
+
+    Вывод продукта (`is_active = false`) убирает его из поиска, но НЕ из уже
+    сохранённых рецептов, своих блюд и меню — и правильно: история должна
+    считаться так же, как считалась. Плохо было другое: об этом никто не узнавал.
+    Позиция продолжала участвовать в итогах дня без единой пометки, а вывели её
+    чаще всего потому, что числа оказались неверными.
+
+    Запрета здесь нет и не будет: убрать блюдо из прошлого дня — значит подменить
+    то, чем ребёнка кормили на самом деле.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: uuid.UUID
+    name_ru: str
+    #: Позиции меню, в составе которых он встретился.
+    item_ids: list[uuid.UUID]
+
+
 class MenuRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -108,4 +129,8 @@ class MenuRead(BaseModel):
     totals: DishComputed | None
     engine_version: str | None
     items: list[MenuItemRead]
+    #: Считается на чтении, а не хранится: продукт выводят из оборота уже после
+    #: того, как день сохранён, и сохранённая пометка молчала бы ровно в том
+    #: случае, ради которого нужна.
+    withdrawn_products: list[WithdrawnProduct] = []
     created_at: datetime

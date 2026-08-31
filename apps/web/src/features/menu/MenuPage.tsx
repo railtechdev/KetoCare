@@ -11,6 +11,8 @@ import { CopyDayForm } from "./CopyDayForm";
 import { DayNavigator } from "./DayNavigator";
 import { DayTotalsPanel } from "./DayTotalsPanel";
 import { MealSlotGroup } from "./MealSlotGroup";
+import { WithdrawnProductsNotice } from "./WithdrawnProductsNotice";
+import { withdrawnByItem } from "./withdrawn";
 import { MenuSkeleton } from "./MenuSkeleton";
 import { todayIso } from "./dates";
 import { useMenuItemTitles } from "./useDishCatalog";
@@ -53,6 +55,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
   const targets = useDayTargets(patientId, date);
 
   const items = useMemo(() => menu.data?.items ?? [], [menu.data]);
+  const withdrawn = withdrawnByItem(menu.data?.withdrawn_products);
   const titles = useMenuItemTitles(patientId, items);
 
   function addItem(input: {
@@ -120,6 +123,10 @@ export function MenuPage({ patientId }: { patientId: string }) {
         isEmpty={menu.data === undefined}
         empty={null}
       >
+        {/* Над итогами: числа дня посчитаны в том числе по выведенному
+            продукту, и знать об этом нужно раньше, чем смотреть на них. */}
+        <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
+
         {/* Итогов у пустого дня нет, и говорить об этом отдельным блоком не
             нужно: о пустом дне говорит подпись блока приёмов пищи. Раньше два
             блока подряд сообщали одно и то же на 332 px (правило П27). */}
@@ -157,6 +164,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
               slot={slot}
               items={items.filter((item) => item.meal_slot === slot)}
               titles={titles}
+              withdrawnByItem={withdrawn}
               canRemove={items.length > 1}
               pending={upsert.isPending}
               onAdd={() => setAddingSlot(slot)}

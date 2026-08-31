@@ -551,6 +551,64 @@ class TestGet:
         )
         assert other_day.status_code == 404
 
+    async def test_withdrawn_product_is_named_but_day_still_reads(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Вывод продукта из оборота не отменяет уже сохранённый день.
+
+        Он убирает продукт из поиска — но не из рецептов и меню, где тот уже
+        стоит. Так и должно быть: убрать блюдо из прошлого дня значит подменить
+        то, чем ребёнка кормили на самом деле. Молчать об этом нельзя: выводят
+        продукт обычно потому, что его числа оказались неверными, а по этим
+        числам считаются итоги дня.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50), (chicken, 40)])
+        dish = await _custom_dish(session, patient, ingredients=[(chicken, 30)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id)},
+                    {"meal_slot": "lunch", "custom_dish_id": str(dish.id)},
+                ],
+            },
+            headers=auth_headers(parent),
+        )
+
+        clean = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert clean.json()["withdrawn_products"] == []
+
+        butter.is_active = False
+        await session.flush()
+
+        response = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+
+        # День читается и считается как прежде — запрета нет.
+        assert body["totals"] is not None
+        assert len(body["items"]) == 2
+
+        withdrawn = body["withdrawn_products"]
+        assert [entry["name_ru"] for entry in withdrawn] == [butter.name_ru]
+
+        # Названы и позиции: в дне их несколько, и семья должна знать, какая.
+        breakfast = next(i for i in body["items"] if i["meal_slot"] == "breakfast")
+        lunch = next(i for i in body["items"] if i["meal_slot"] == "lunch")
+        assert withdrawn[0]["item_ids"] == [breakfast["id"]]
+        assert lunch["id"] not in withdrawn[0]["item_ids"]
+
     async def test_date_is_required(self, client, session, make_user, make_patient, auth_headers):
         parent, patient = await _linked_parent(session, make_user, make_patient)
         response = await client.get(_url(patient), headers=auth_headers(parent))

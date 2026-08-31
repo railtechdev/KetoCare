@@ -29,6 +29,7 @@
   "gramsUnit": "г",
   "gramsFor": "Масса продукта «{{name}}», граммы",
   "removeProduct": "Убрать продукт «{{name}}»",
+  "withdrawn": "выведен из оборота",
   "params": {
     "title": "Параметры расчёта"
   },
