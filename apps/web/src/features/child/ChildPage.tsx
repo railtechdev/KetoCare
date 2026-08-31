@@ -13,12 +13,14 @@ import {
   MessageCircle,
   Paperclip,
   Plus,
+  Stethoscope,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
+import { CareTeamPanel } from "../doctor/CareTeamPanel";
 import { errorMessageOf } from "../../lib/api";
 import { IntakeForm } from "../intake/IntakeForm";
 import { TelegramPanel } from "../telegram/TelegramPanel";
@@ -37,7 +39,8 @@ type View =
   | { kind: "edit"; child: Patient }
   | { kind: "intake"; child: Patient }
   | { kind: "documents"; child: Patient }
-  | { kind: "telegram"; child: Patient };
+  | { kind: "telegram"; child: Patient }
+  | { kind: "care"; child: Patient };
 
 /**
  * Раздел «Ребёнок»: профили детей семьи.
@@ -75,6 +78,11 @@ export function ChildPage() {
         child={view.child}
         onDone={() => setView({ kind: "list" })}
       />
+    );
+  }
+  if (view.kind === "care") {
+    return (
+      <ChildCare child={view.child} onDone={() => setView({ kind: "list" })} />
     );
   }
   if (view.kind === "intake") {
@@ -198,6 +206,20 @@ export function ChildPage() {
                     >
                       <MessageCircle aria-hidden="true" />
                       {t("children.telegram")}
+                    </Button>
+                    {/* Ручка `GET /patients/{id}/doctors` родителю прямо
+                        разрешена — «родитель вправе знать, кто имеет доступ к
+                        данным ребёнка», — а экрана у неё не было ни одного.
+                        Семья не знала ни имени врача, ни того, что к карте
+                        подключён диетолог. */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      onClick={() => setView({ kind: "care", child })}
+                    >
+                      <Stethoscope aria-hidden="true" />
+                      {t("children.care")}
                     </Button>
                     <Button
                       type="button"
@@ -342,6 +364,31 @@ function ChildTelegram({
   return (
     <PageLayout title={t("title")} intro={t("intro")} onBack={onDone}>
       <TelegramPanel patientId={child.id} childName={child.full_name} />
+    </PageLayout>
+  );
+}
+
+/**
+ * Кто ведёт ребёнка — глазами семьи.
+ *
+ * Тот же `CareTeamPanel`, что у специалиста: у родителя `canWrite` ложен, и
+ * панель остаётся списком без кнопок. Своя копия «только для чтения» разошлась
+ * бы с оригиналом на первой же правке — а расходится в таком месте состав
+ * людей, имеющих доступ к данным ребёнка.
+ */
+function ChildCare({ child, onDone }: { child: Patient; onDone: () => void }) {
+  const { t } = useTranslation("child");
+
+  return (
+    <PageLayout
+      title={t("care.title", { name: child.full_name })}
+      onBack={onDone}
+    >
+      <CareTeamPanel
+        patientId={child.id}
+        title={t("care.section")}
+        description={t("care.intro")}
+      />
     </PageLayout>
   );
 }

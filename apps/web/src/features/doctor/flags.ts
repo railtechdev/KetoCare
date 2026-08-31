@@ -14,6 +14,16 @@ export const NO_DATA_FLAG_DAYS = 3;
 
 export interface PatientFlags {
   /**
+   * Активного назначения нет.
+   *
+   * Ребёнок прикрепляется к врачу в момент, когда семья его заводит, и делает
+   * это молча: врач узнавал о новом пациенте, только открыв список и дочитав
+   * его до нужной строки. При этом задать назначение — первое, что от врача
+   * требуется, и до него не работает ничего остального: сверять день не с чем,
+   * калькулятор не знает цели, а вердикт о допуске не существует.
+   */
+  noPrescription: boolean;
+  /**
    * Сутки с последнего замера, известного серверу; null — замеров ещё не было.
    *
    * Именно «не было», а не «не удалось посчитать»: неразобранная дата сводки
@@ -112,12 +122,20 @@ export function computePatientFlags(
         );
 
   const tolerance = overview.day?.tolerance ?? null;
+  const noPrescription = (overview.prescription ?? null) === null;
 
   return {
+    noPrescription,
     daysSinceLastReading,
+    // Молчание семьи считается только там, где семье уже сказано, что делать.
+    // Без назначения кетодиеты ещё нет, и «замеров нет трое суток» — не сигнал
+    // о семье, а следствие того, что врач не дошёл до назначения. Флаг о
+    // назначении это и говорит; второй красный значок рядом ничего не
+    // добавляет, а внимание делит.
     staleData:
-      daysSinceLastReading === null ||
-      daysSinceLastReading >= NO_DATA_FLAG_DAYS,
+      !noPrescription &&
+      (daysSinceLastReading === null ||
+        daysSinceLastReading >= NO_DATA_FLAG_DAYS),
     nutritionOff: tolerance !== null && !tolerance.ratio_within_tolerance,
   };
 }
@@ -130,5 +148,11 @@ export function computePatientFlags(
  */
 export function attentionRank(flags: PatientFlags | null): number {
   if (flags === null) return 0;
-  return (flags.staleData ? 2 : 0) + (flags.nutritionOff ? 1 : 0);
+  return (
+    // Назначение — выше всего: пока его нет, остальные флаги не о чем судить,
+    // и это единственное действие, которое врач обязан сделать сам.
+    (flags.noPrescription ? 4 : 0) +
+    (flags.staleData ? 2 : 0) +
+    (flags.nutritionOff ? 1 : 0)
+  );
 }

@@ -37,6 +37,7 @@ interface QueueRow {
  * известно, куда именно идти.
  */
 function tabForFlags(flags: PatientFlags): string {
+  if (flags.noPrescription) return "prescription";
   return flags.staleData ? "diary" : "menu";
 }
 
@@ -67,46 +68,50 @@ export function DoctorHomePage() {
 
   const settled = !overviews.pending;
 
-  const { queue, flagged, silent, offTolerance, unknown } = useMemo(() => {
-    const rows: QueueRow[] = [];
-    let silent = 0;
-    let offTolerance = 0;
-    let unknown = 0;
+  const { queue, flagged, waiting, silent, offTolerance, unknown } =
+    useMemo(() => {
+      const rows: QueueRow[] = [];
+      let waiting = 0;
+      let silent = 0;
+      let offTolerance = 0;
+      let unknown = 0;
 
-    for (const patient of items) {
-      const overview = overviews.byPatientId.get(patient.id) ?? null;
-      const flags = computePatientFlags(overview);
+      for (const patient of items) {
+        const overview = overviews.byPatientId.get(patient.id) ?? null;
+        const flags = computePatientFlags(overview);
 
-      // Сводка не пришла — это «неизвестно», а не «замечаний нет». Такой
-      // пациент в очередь не попадает (порядок задан `attentionRank`), но и
-      // молчать о нём нельзя: триаж, выдающий «всё хорошо» там, где ничего не
-      // известно, — худшая из его ошибок (правило П19 канона).
-      if (flags === null) {
-        unknown += 1;
-        continue;
+        // Сводка не пришла — это «неизвестно», а не «замечаний нет». Такой
+        // пациент в очередь не попадает (порядок задан `attentionRank`), но и
+        // молчать о нём нельзя: триаж, выдающий «всё хорошо» там, где ничего не
+        // известно, — худшая из его ошибок (правило П19 канона).
+        if (flags === null) {
+          unknown += 1;
+          continue;
+        }
+
+        if (flags.noPrescription) waiting += 1;
+        if (flags.staleData) silent += 1;
+        if (flags.nutritionOff) offTolerance += 1;
+
+        const rank = attentionRank(flags);
+        if (rank > 0) rows.push({ patient, flags, rank });
       }
 
-      if (flags.staleData) silent += 1;
-      if (flags.nutritionOff) offTolerance += 1;
+      rows.sort(
+        (a, b) =>
+          b.rank - a.rank ||
+          a.patient.full_name.localeCompare(b.patient.full_name, "ru-RU"),
+      );
 
-      const rank = attentionRank(flags);
-      if (rank > 0) rows.push({ patient, flags, rank });
-    }
-
-    rows.sort(
-      (a, b) =>
-        b.rank - a.rank ||
-        a.patient.full_name.localeCompare(b.patient.full_name, "ru-RU"),
-    );
-
-    return {
-      queue: rows.slice(0, QUEUE_LIMIT),
-      flagged: rows.length,
-      silent,
-      offTolerance,
-      unknown,
-    };
-  }, [items, overviews.byPatientId]);
+      return {
+        queue: rows.slice(0, QUEUE_LIMIT),
+        flagged: rows.length,
+        waiting,
+        silent,
+        offTolerance,
+        unknown,
+      };
+    }, [items, overviews.byPatientId]);
 
   return (
     <PageLayout title={t("home.title")} intro={t("home.intro")}>
@@ -192,6 +197,11 @@ export function DoctorHomePage() {
         <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
           <dt className="text-muted-foreground">{t("home.cohort.total")}</dt>
           <dd className="m-0 tabular-nums">{items.length}</dd>
+
+          {/* Первой строкой: пациент без назначения ждёт не наблюдения, а
+              решения врача. */}
+          <dt className="text-muted-foreground">{t("home.cohort.waiting")}</dt>
+          <dd className="m-0 tabular-nums">{settled ? waiting : "…"}</dd>
 
           <dt className="text-muted-foreground">{t("home.cohort.silent")}</dt>
           <dd className="m-0 tabular-nums">{settled ? silent : "…"}</dd>

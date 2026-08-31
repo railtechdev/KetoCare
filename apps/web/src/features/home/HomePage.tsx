@@ -11,6 +11,7 @@ import { NextMealCard } from "./NextMealCard";
 import { PrescriptionCard } from "./PrescriptionCard";
 import { QuickActions } from "./QuickActions";
 import { SeizuresCard } from "./SeizuresCard";
+import { WaitingForPrescription } from "./WaitingForPrescription";
 import { formatOverviewDate } from "./date";
 
 /**
@@ -63,6 +64,11 @@ export function HomePage({ patientId }: { patientId: string }) {
       >
         {data !== undefined && (
           <>
+            {/* Первым блоком и только в этот период: пока назначения нет,
+                остальная главная состоит из пустых карточек, и подсказка о
+                том, чего ждём и что уже можно делать, важнее их всех. */}
+            {(data.prescription ?? null) === null && <WaitingForPrescription />}
+
             <QuickActions />
 
             <div className="grid gap-block lg:grid-cols-3">
