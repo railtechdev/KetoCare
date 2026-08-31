@@ -10,7 +10,7 @@ import {
   toast,
   WarningBanner,
 } from "@ketocare/ui";
-import { Pencil, Trash2, Upload } from "lucide-react";
+import { Download, Pencil, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
@@ -22,6 +22,7 @@ import { RecipePhoto } from "./RecipePhoto";
 import {
   useDeleteRecipeMutation,
   usePublishRecipeMutation,
+  useUnpublishRecipeMutation,
   useUploadRecipePhotoMutation,
 } from "./useRecipeMutations";
 import { useProductNames, useRecipe } from "./useRecipes";
@@ -44,6 +45,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
   );
 
   const publish = usePublishRecipeMutation();
+  const unpublish = useUnpublishRecipeMutation();
   const remove = useDeleteRecipeMutation();
   const uploadPhoto = useUploadRecipePhotoMutation();
 
@@ -112,7 +114,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
               {t("actions.edit")}
             </Button>
 
-            {data.status !== "published" && (
+            {data.status !== "published" ? (
               <Button
                 type="button"
                 className="min-h-touch"
@@ -128,6 +130,37 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                   ? t("actions.publishing")
                   : t("actions.publish")}
               </Button>
+            ) : (
+              /* Подтверждение называет рецепт: снятие с публикации убирает его
+                 у всех семей разом, а уже составленные дни не трогает —
+                 их состав заморожен снимком (ADR-0016). */
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-touch"
+                    disabled={unpublish.isPending}
+                  >
+                    <Download aria-hidden="true" />
+                    {unpublish.isPending
+                      ? t("actions.unpublishing")
+                      : t("actions.unpublish")}
+                  </Button>
+                }
+                title={t("actions.confirmUnpublish.title", {
+                  title: data.title,
+                })}
+                description={t("actions.confirmUnpublish.body")}
+                confirmLabel={t("actions.confirmUnpublish.confirm")}
+                cancelLabel={t("actions.cancel")}
+                onConfirm={() =>
+                  unpublish.mutate(data.id, {
+                    onSuccess: () =>
+                      toast.success(t("actions.unpublishSuccess")),
+                  })
+                }
+              />
             )}
 
             {/* Заголовок диалога называет рецепт: подтверждается исчезновение
@@ -179,6 +212,12 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
       {publish.isError && (
         <FormError>
           {errorMessageOf(publish.error) ?? t("common:errors.unexpected")}
+        </FormError>
+      )}
+
+      {unpublish.isError && (
+        <FormError>
+          {errorMessageOf(unpublish.error) ?? t("common:errors.unexpected")}
         </FormError>
       )}
 

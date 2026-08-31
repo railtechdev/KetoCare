@@ -64,6 +64,28 @@ export function usePublishRecipeMutation() {
   });
 }
 
+/**
+ * Снятие рецепта с публикации.
+ *
+ * До этого публикация была необратимой — при том что отказ удалить
+ * использованный рецепт сам советовал «снимите его с публикации».
+ */
+export function useUnpublishRecipeMutation() {
+  const invalidate = useRecipesInvalidation();
+
+  return useMutation({
+    mutationFn: async (recipeId: string) => {
+      const { data, error } = await api.POST(
+        "/api/v1/recipes/{recipe_id}/unpublish",
+        { params: { path: { recipe_id: recipeId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty unpublish response");
+      return data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
 export function useDeleteRecipeMutation() {
   const invalidate = useRecipesInvalidation();
 

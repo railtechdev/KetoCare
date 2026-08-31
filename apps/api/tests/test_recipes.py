@@ -312,6 +312,103 @@ class TestCreate:
         assert response.status_code == 422
 
 
+class TestUnpublish:
+    """Публикация была необратимой — при том что система сама советовала обратное.
+
+    Отказ удалить использованный рецепт заканчивался словами «снимите его с
+    публикации», а такой ручки не существовало. Ошибка в опубликованном рецепте
+    означала одно из двух: оставить его семьям или удалить вместе с составом
+    прошлых дней.
+    """
+
+    async def test_unpublish_hides_from_family_and_is_audited(
+        self, client, session, make_user, auth_headers, make_recipe, make_patient
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await make_recipe((butter, 50), author=dietitian)
+
+        await client.post(
+            f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(dietitian)
+        )
+
+        parent = await make_user(UserRole.PARENT)
+        visible = await client.get(f"/api/v1/recipes/{recipe['id']}", headers=auth_headers(parent))
+        assert visible.status_code == 200
+
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/unpublish", headers=auth_headers(dietitian)
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "draft"
+
+        # Черновик скрыт от семьи так же, как любой другой: кормить по
+        # незавершённой работе диетолога нельзя.
+        hidden = await client.get(f"/api/v1/recipes/{recipe['id']}", headers=auth_headers(parent))
+        assert hidden.status_code == 404
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "recipes",
+                AuditLog.action == "unpublish",
+                AuditLog.entity_id == uuid.UUID(recipe["id"]),
+            )
+        )
+        assert entry is not None, "снятие с публикации обязано попадать в audit_log"
+        assert entry.before is not None and entry.before["status"] == "published"
+        assert entry.after is not None and entry.after["status"] == "draft"
+
+    async def test_computed_survives_unpublish(
+        self, client, session, make_user, auth_headers, make_recipe
+    ):
+        """Показатели не стираются: по ним считались дни.
+
+        Обнулить их значило бы потерять то, чем эти дни объясняются.
+        """
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await make_recipe((butter, 100), author=dietitian)
+
+        await client.post(
+            f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(dietitian)
+        )
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/unpublish", headers=auth_headers(dietitian)
+        )
+
+        assert response.json()["computed"]["fat"] == pytest.approx(81.1, abs=0.01)
+        assert response.json()["engine_version"] == ENGINE_VERSION
+
+    async def test_draft_cannot_be_unpublished(
+        self, client, session, make_user, auth_headers, make_recipe
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await make_recipe((butter, 50), author=dietitian)
+
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/unpublish", headers=auth_headers(dietitian)
+        )
+        assert response.status_code == 422, response.text
+
+    async def test_family_cannot_unpublish(
+        self, client, session, make_user, auth_headers, make_recipe
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await make_recipe((butter, 50), author=dietitian)
+        await client.post(
+            f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(dietitian)
+        )
+
+        parent = await make_user(UserRole.PARENT)
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/unpublish", headers=auth_headers(parent)
+        )
+        assert response.status_code == 403
+
+
 class TestPublish:
     async def test_publish_fixes_computed_engine_version_and_audit(
         self, client, session, make_user, auth_headers, make_recipe
