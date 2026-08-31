@@ -44,6 +44,9 @@ class FakeApi:
     menu_error: Exception | None = None
     eaten: list[str] = field(default_factory=list)
     eaten_error: Exception | None = None
+    #: Схема терапии для сценария «Лекарства».
+    medications: list[dict[str, Any]] = field(default_factory=list)
+    medications_error: Exception | None = None
 
     async def verify_link_code(self, *, code: str, chat_id: int) -> LinkVerified:
         if self.verify_error is not None:
@@ -84,6 +87,18 @@ class FakeApi:
         if self.menu_error is not None:
             raise self.menu_error
         return self.menu
+
+    async def active_medications(
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        day: date,
+    ) -> list[dict[str, Any]]:
+        if self.medications_error is not None:
+            raise self.medications_error
+        return self.medications
 
     async def mark_eaten(
         self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str

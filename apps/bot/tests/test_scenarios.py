@@ -476,3 +476,56 @@ class TestMeal:
 
         assert message.last == texts.LINK_REVOKED
         assert await linked_store.get(CHAT_ID) is None
+
+
+class TestMedication:
+    """Схему терапии ведёт врач, препараты ребёнку даёт семья.
+
+    Кнопка была, обработчика не было: отметить приём из чата было нельзя, и
+    отмечали его где угодно, только не в системе.
+    """
+
+    MEDS = [
+        {"id": "med-1", "drug_name": "Депакин", "dose": "300 мг"},
+        {"id": "med-2", "drug_name": "Топамакс", "dose": "50 мг"},
+    ]
+
+    @pytest.mark.asyncio
+    async def test_offers_the_schedule_of_the_day(self, api, linked_store, state):
+        api.medications = self.MEDS
+        message = FakeMessage(text=texts.BTN_MEDICATION)
+
+        await scenarios.medication_start(message, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.MEDICATION_ASK
+        buttons = [button.text for row in message.answers[-1][1].inline_keyboard for button in row]
+        # Список, а не ввод названия: препарат называется так, как его записал
+        # врач, и опечатка семьи сделала бы запись несопоставимой со схемой.
+        assert "Депакин — 300 мг" in buttons
+
+    @pytest.mark.asyncio
+    async def test_choice_asks_when_and_then_sends(self, api, linked_store, state):
+        api.medications = self.MEDS
+        message = FakeMessage(text=texts.BTN_MEDICATION)
+        await scenarios.medication_start(message, state, api, linked_store, SETTINGS)
+
+        callback = FakeCallback(data=f"{keyboards.MEDICATION_PREFIX}med-1", message=message)
+        await scenarios.medication_choice(callback, state)
+
+        # Приём препарата часто отмечают позже, чем он был, — время спрашивается
+        # тем же шагом, что и у замеров.
+        await answer_when_now(message, state, api, linked_store)
+
+        assert api.logs[0]["kind"] == "medications"
+        assert api.logs[0]["payload"]["medication_id"] == "med-1"
+        assert api.logs[0]["payload"]["taken"] is True
+
+    @pytest.mark.asyncio
+    async def test_empty_schedule_explains_who_fills_it(self, api, linked_store, state):
+        api.medications = []
+        message = FakeMessage(text=texts.BTN_MEDICATION)
+
+        await scenarios.medication_start(message, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.MEDICATION_NONE
+        assert await state.get_state() is None

@@ -56,6 +56,25 @@ def meal_items(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
     )
 
 
+MEDICATION_PREFIX = "med:"
+
+
+def medications(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Кнопка на каждый препарат схемы.
+
+    Списком, а не вводом названия: препарат называется так, как его записал
+    врач, и любая опечатка семьи сделала бы запись не сопоставимой со схемой.
+    """
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=title, callback_data=f"{MEDICATION_PREFIX}{med_id}")]
+            for med_id, title in items
+        ]
+        + [_cancel_row()]
+    )
+
+
 WHEN_NOW_DATA = "when:now"
 WHEN_MANUAL_DATA = "when:manual"
 
