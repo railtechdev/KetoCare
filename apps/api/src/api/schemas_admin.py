@@ -88,6 +88,21 @@ class DictionaryEntryCreate(BaseModel):
     sort: Annotated[int, Field(ge=0, le=10_000)] = 0
 
 
+class SeizureTypeCreate(DictionaryEntryCreate):
+    """Тип приступа заводится вместе с коротким кодом (ADR-0007).
+
+    Без кода месячная сетка дневника подставляет в клетку полное название, а в
+    легенду тип не попадает вовсе — то есть новый тип, заведённый
+    администратором, ломал ровно то, ради чего коды и вводились. Код
+    необязателен: у части типов его может не быть (вопрос 4 медкоманде), и
+    пустое значение честнее выдуманного.
+    """
+
+    # Длина — как у колонки `seizure_types.code` (String(4)): за ней СУБД
+    # ответила бы ошибкой записи вместо понятного 422.
+    code: Annotated[str, Field(min_length=1, max_length=4)] | None = None
+
+
 class DictionaryEntryUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -98,9 +113,21 @@ class DictionaryEntryUpdate(BaseModel):
     def _check_changes(self) -> Self:
         if not self.model_fields_set:
             raise ValueError("Укажите хотя бы одно поле для изменения.")
-        if any(getattr(self, field) is None for field in self.model_fields_set):
+        if any(
+            getattr(self, field) is None
+            for field in self.model_fields_set
+            # `code` — единственное поле, которое очищают осознанно: тип может
+            # остаться без короткого кода.
+            if field != "code"
+        ):
             raise ValueError("Поля справочника нельзя очистить.")
         return self
+
+
+class SeizureTypeUpdate(DictionaryEntryUpdate):
+    # Длина — как у колонки `seizure_types.code` (String(4)): за ней СУБД
+    # ответила бы ошибкой записи вместо понятного 422.
+    code: Annotated[str, Field(min_length=1, max_length=4)] | None = None
 
 
 class AuditLogRead(BaseModel):

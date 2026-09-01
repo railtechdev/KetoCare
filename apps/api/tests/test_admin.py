@@ -704,3 +704,84 @@ class TestDeactivationKeepsPatientsVisible:
         rows = {item["id"]: item for item in response.json()["items"]}
         assert rows[str(doctor.id)]["sole_patients"] == 1
         assert rows[str(admin.id)]["sole_patients"] == 0
+
+
+class TestSeizureTypeCode:
+    """Короткий код типа приступа (ADR-0007).
+
+    Без кода месячная сетка дневника подставляет в клетку полное название, а в
+    легенду тип не попадает вовсе: новый тип, заведённый администратором, ломал
+    ровно то, ради чего коды и вводились.
+    """
+
+    async def test_code_is_saved_and_returned(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.post(
+            "/api/v1/admin/dictionaries/seizure-types",
+            json={"name_ru": "Тонико-клонический", "code": "TC", "sort": 10},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 201, response.text
+        assert response.json()["code"] == "TC"
+
+    async def test_code_can_be_cleared_but_name_cannot(self, client, make_user, auth_headers):
+        """Тип без кода — допустимое состояние (вопрос 4 медкоманде), а тип без
+        названия — нет."""
+
+        admin = await make_user(UserRole.ADMIN)
+        created = await client.post(
+            "/api/v1/admin/dictionaries/seizure-types",
+            json={"name_ru": "Атонический", "code": "A"},
+            headers=auth_headers(admin),
+        )
+        entry_id = created.json()["id"]
+
+        cleared = await client.patch(
+            f"/api/v1/admin/dictionaries/seizure-types/{entry_id}",
+            json={"code": None},
+            headers=auth_headers(admin),
+        )
+        assert cleared.status_code == 200
+        assert cleared.json()["code"] is None
+
+        empty_name = await client.patch(
+            f"/api/v1/admin/dictionaries/seizure-types/{entry_id}",
+            json={"name_ru": None},
+            headers=auth_headers(admin),
+        )
+        assert empty_name.status_code == 422
+
+    async def test_untouched_code_survives_rename(self, client, make_user, auth_headers):
+        """Переименование без упоминания кода код не стирает."""
+
+        admin = await make_user(UserRole.ADMIN)
+        created = await client.post(
+            "/api/v1/admin/dictionaries/seizure-types",
+            json={"name_ru": "Миоклонический", "code": "M"},
+            headers=auth_headers(admin),
+        )
+        entry_id = created.json()["id"]
+
+        renamed = await client.patch(
+            f"/api/v1/admin/dictionaries/seizure-types/{entry_id}",
+            json={"name_ru": "Миоклонические приступы"},
+            headers=auth_headers(admin),
+        )
+
+        assert renamed.json()["code"] == "M"
+
+    async def test_ketone_methods_have_no_code(self, client, make_user, auth_headers):
+        """У методов измерения кода нет и быть не должно: общая схема выдавала
+        бы им пустое поле и предлагала его заполнить."""
+
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.post(
+            "/api/v1/admin/dictionaries/ketone-methods",
+            json={"name_ru": "По слюне", "code": "S"},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422

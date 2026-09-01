@@ -39,19 +39,39 @@ async def list_entries[T: (SeizureType, KetoneMethodDict)](
 
 
 async def create[T: (SeizureType, KetoneMethodDict)](
-    session: AsyncSession, model: type[T], *, name_ru: str, sort: int
+    session: AsyncSession, model: type[T], *, name_ru: str, sort: int, code: str | None = None
 ) -> T:
+    """Код есть только у типов приступов: у методов измерения кетонов его нет и
+    быть не должно, и передавать его туда — значит заводить колонку, которой в
+    таблице не существует."""
+
     entry = model(name_ru=name_ru, sort=sort)
+    if code is not None and hasattr(entry, "code"):
+        entry.code = code
     session.add(entry)
     await session.flush()
     return entry
 
 
 async def update[T: (SeizureType, KetoneMethodDict)](
-    session: AsyncSession, *, entry: T, name_ru: str, sort: int
+    session: AsyncSession,
+    *,
+    entry: T,
+    name_ru: str,
+    sort: int,
+    code: str | None = None,
+    code_set: bool = False,
 ) -> T:
+    """`code_set` отделяет «код не трогали» от «код очистили».
+
+    Без этого различия очистка кода была бы неотличима от правки одного
+    названия, и вернуть тип в состояние «кода нет» стало бы нечем.
+    """
+
     entry.name_ru = name_ru
     entry.sort = sort
+    if code_set and hasattr(entry, "code"):
+        entry.code = code
     await session.flush()
     return entry
 

@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  ConfirmDialog,
   FormSheet,
   Button,
   DataTable,
@@ -21,6 +22,7 @@ import {
   DICTIONARY_KINDS,
   useCreateDictionaryEntryMutation,
   useDictionaryEntries,
+  useDeleteDictionaryEntryMutation,
   useUpdateDictionaryEntryMutation,
   type DictionaryKind,
 } from "./useDictionaries";
@@ -119,6 +121,7 @@ function DictionaryEditor({
   const entries = useDictionaryEntries(kind);
   const create = useCreateDictionaryEntryMutation(kind);
   const update = useUpdateDictionaryEntryMutation(kind);
+  const remove = useDeleteDictionaryEntryMutation(kind);
   const setEditing = onEditingChange;
 
   const resetUpdate = update.reset;
@@ -135,6 +138,21 @@ function DictionaryEditor({
   const columns = useMemo<ColumnDef<DictionaryEntry, unknown>[]>(
     () => [
       { accessorKey: "name_ru", header: t("dictionaries.columns.name") },
+      // Код показывается только там, где он есть: у методов измерения кетонов
+      // такой колонки нет и быть не должно.
+      ...(kind === "seizure-types"
+        ? [
+            {
+              accessorKey: "code",
+              header: t("dictionaries.columns.code"),
+              cell: ({ row }: { row: { original: DictionaryEntry } }) => (
+                <span className="tabular-nums">
+                  {(row.original as { code?: string | null }).code ?? "—"}
+                </span>
+              ),
+            } as ColumnDef<DictionaryEntry, unknown>,
+          ]
+        : []),
       {
         accessorKey: "sort",
         header: t("dictionaries.columns.sort"),
@@ -147,21 +165,58 @@ function DictionaryEditor({
         header: t("dictionaries.columns.actions"),
         enableSorting: false,
         cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              resetUpdate();
-              setEditing({ kind: "entry", entry: row.original });
-            }}
-          >
-            {t("dictionaries.edit")}
-          </Button>
+          <div className="flex flex-wrap gap-field">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                resetUpdate();
+                setEditing({ kind: "entry", entry: row.original });
+              }}
+            >
+              {t("dictionaries.edit")}
+            </Button>
+
+            {/* Опечатка в названии иначе остаётся в списках у всех семей
+                навсегда: переименование ретроспективно меняет смысл уже
+                записанных приступов. Значение, на которое ссылаются дневники,
+                сервер удалить не даст — и правильно. */}
+            <ConfirmDialog
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label={t("dictionaries.deleteEntry", {
+                    name: row.original.name_ru,
+                  })}
+                >
+                  {t("dictionaries.delete")}
+                </Button>
+              }
+              title={t("dictionaries.confirmDelete", {
+                name: row.original.name_ru,
+              })}
+              description={t("dictionaries.confirmDeleteBody")}
+              confirmLabel={t("common:actions.delete")}
+              cancelLabel={t("common:actions.cancel")}
+              destructive
+              onConfirm={() =>
+                remove.mutate(row.original.id, {
+                  onSuccess: () => toast.success(t("dictionaries.deleted")),
+                  onError: (error) =>
+                    toast.error(
+                      errorMessageOf(error) ?? t("common:errors.unexpected"),
+                    ),
+                })
+              }
+            />
+          </div>
         ),
       },
     ],
-    [t, resetUpdate, setEditing],
+    [t, kind, remove, resetUpdate, setEditing],
   );
 
   return (
@@ -183,7 +238,8 @@ function DictionaryEditor({
         {editing.kind === "create" && (
           <DictionaryEntryForm
             mode="create"
-            defaultValues={{ nameRu: "", sort: nextSort }}
+            withCode={kind === "seizure-types"}
+            defaultValues={{ nameRu: "", sort: nextSort, code: "" }}
             pending={create.isPending}
             error={create.error}
             onCancel={() => setEditing({ kind: "none" })}
@@ -206,9 +262,11 @@ function DictionaryEditor({
             // читает defaultValues только при монтировании.
             key={editing.entry.id}
             mode="edit"
+            withCode={kind === "seizure-types"}
             defaultValues={{
               nameRu: editing.entry.name_ru,
               sort: editing.entry.sort,
+              code: (editing.entry as { code?: string | null }).code ?? "",
             }}
             pending={update.isPending}
             error={update.error}
