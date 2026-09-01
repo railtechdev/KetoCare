@@ -36,7 +36,6 @@
     "pageStatus": "Страница {{page}} из {{total}}"
   },
   "loading": "Загружаем продукты…",
-  "sourceHint": "Значения приведены на 100 г продукта по данным источника {{source}} ({{version}}).",
   "actions": {
     "toCalculator": "В калькулятор"
   },
