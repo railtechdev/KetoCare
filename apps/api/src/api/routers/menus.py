@@ -145,6 +145,33 @@ async def upsert_menu(
     return await menus_service.to_read(session, menu, items)
 
 
+@router.delete("", status_code=204, summary="Убрать план на день")
+async def delete_menu(
+    patient_id: PatientIdPath,
+    session: SessionDep,
+    _: PatientAccessDep,
+    menu_date: Annotated[date, Query(alias="date", description="Дата меню, YYYY-MM-DD")],
+) -> None:
+    """Возвращает день в состояние «не спланирован» (ADR-0018).
+
+    Ручки не было, и ошибочный день оставался навсегда: удаление последней
+    позиции заблокировано (сервер не принимает пустой день), а другого выхода
+    не существовало. Такой день попадал в «Ближайший приём» на главной, в итоги
+    и в отчёт — то есть искажал картину выполнения плана, которую смотрит врач.
+
+    Удаление мягкое: на позиции ссылаются записи дневника еды, и по отметкам
+    «съедено» судят о выполнении. День при этом можно составить заново — при
+    сохранении `deleted_at` сбрасывается.
+    """
+
+    menu = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=menu_date)
+    if menu is None:
+        # Идемпотентно: «дня нет» — это ровно то состояние, которого добивались.
+        return
+
+    await menus_repo.soft_delete(session, menu=menu)
+
+
 @router.post(
     "/items/{item_id}/eaten",
     response_model=MenuItemRead,

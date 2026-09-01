@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -162,6 +162,29 @@ async def upsert(
     )
     result = await session.scalars(stmt, execution_options={"populate_existing": True})
     return result.one()
+
+
+async def soft_delete(session: AsyncSession, *, menu: Menu) -> Menu:
+    """Убирает день целиком — вместе с позициями.
+
+    Мягко: раздел 4.2 ТЗ даёт `menus` и `menu_items` колонку `deleted_at`, и
+    удалённый день должен остаться в базе — на него могут ссылаться записи
+    дневника еды, а по отметкам «съедено» врач судит о выполнении плана.
+
+    Позиции гасятся тем же временем, что и день: живая позиция под удалённым
+    днём попадала бы в выборки, которые ходят по `menu_items` напрямую
+    («недавние продукты», проверка ссылок из дневника).
+    """
+
+    moment = datetime.now(UTC)
+    menu.deleted_at = moment
+    await session.execute(
+        update(MenuItem)
+        .where(MenuItem.menu_id == menu.id, MenuItem.deleted_at.is_(None))
+        .values(deleted_at=moment)
+    )
+    await session.flush()
+    return menu
 
 
 async def set_totals(

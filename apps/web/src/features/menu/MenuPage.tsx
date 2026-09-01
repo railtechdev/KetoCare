@@ -1,5 +1,12 @@
-import { AsyncSection, Button, FormSheet, Section, toast } from "@ketocare/ui";
-import { CopyPlus } from "lucide-react";
+import {
+  AsyncSection,
+  Button,
+  ConfirmDialog,
+  FormSheet,
+  Section,
+  toast,
+} from "@ketocare/ui";
+import { CopyPlus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -17,7 +24,7 @@ import {
 } from "./WithdrawnProductsNotice";
 import { withdrawnByItem } from "./withdrawn";
 import { MenuSkeleton } from "./MenuSkeleton";
-import { todayIso } from "./dates";
+import { formatDayLabel, todayIso } from "./dates";
 import { useMenuItemTitles } from "./useDishCatalog";
 import {
   MEAL_SLOTS,
@@ -25,6 +32,7 @@ import {
   toWriteItems,
   useDayTargets,
   useDayTolerance,
+  useDeleteMenuMutation,
   useEatenMutation,
   useMenuQuery,
   useUpsertMenuMutation,
@@ -52,12 +60,15 @@ export function MenuPage({ patientId }: { patientId: string }) {
   const [copying, setCopying] = useState(false);
 
   const menu = useMenuQuery(patientId, date);
+  const removeDay = useDeleteMenuMutation(patientId);
   const upsert = useUpsertMenuMutation(patientId);
   const eaten = useEatenMutation(patientId, date);
   const tolerance = useDayTolerance(patientId, date);
   const targets = useDayTargets(patientId, date);
 
   const items = useMemo(() => menu.data?.items ?? [], [menu.data]);
+  const planned = menu.data !== undefined && items.length > 0;
+  const humanDate = formatDayLabel(date);
   const withdrawn = withdrawnByItem(menu.data?.withdrawn_products);
   const titles = useMenuItemTitles(patientId, items);
   // Приёмы, а не блюда: в один приём их может быть несколько, а врач назначает
@@ -95,14 +106,44 @@ export function MenuPage({ patientId }: { patientId: string }) {
       title={t("title")}
       intro={t("intro")}
       actions={
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setCopying(true)}
-        >
-          <CopyPlus aria-hidden="true" />
-          {t("copy.title")}
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCopying(true)}
+          >
+            <CopyPlus aria-hidden="true" />
+            {t("copy.title")}
+          </Button>
+
+          {/* Выход из ошибочно составленного дня. Показывается только когда
+              день есть: кнопка, которая ничего не убирает, — обещание без
+              содержания (ADR-0018). */}
+          {planned && (
+            <ConfirmDialog
+              trigger={
+                <Button type="button" variant="outline">
+                  <Trash2 aria-hidden="true" />
+                  {t("remove.action")}
+                </Button>
+              }
+              title={t("remove.confirmTitle", { date: humanDate })}
+              description={t("remove.confirmBody")}
+              confirmLabel={t("remove.confirm")}
+              cancelLabel={t("common:actions.cancel")}
+              destructive
+              onConfirm={() =>
+                removeDay.mutate(date, {
+                  onSuccess: () => toast.success(t("remove.done")),
+                  onError: (error) =>
+                    toast.error(
+                      errorMessageOf(error) ?? t("common:errors.unexpected"),
+                    ),
+                })
+              }
+            />
+          )}
+        </>
       }
     >
       <DayNavigator date={date} onChange={setDate} />

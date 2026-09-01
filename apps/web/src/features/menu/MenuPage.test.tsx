@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -11,7 +11,10 @@ import { todayIso } from "./dates";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
-  return { ...actual, api: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn() } };
+  return {
+    ...actual,
+    api: { GET: vi.fn(), PUT: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
+  };
 });
 
 // Пространство имён экрана подключает координатор (`lib/i18n.ts` — общий файл),
@@ -379,5 +382,36 @@ describe("MenuPage", () => {
         }),
       }),
     );
+  });
+});
+
+describe("убрать план на день", () => {
+  beforeEach(() => {
+    (api.DELETE as unknown as Mock).mockResolvedValue({ error: undefined });
+  });
+
+  it("день, составленный по ошибке, возвращается в «не спланирован»", async () => {
+    // Удаление последней позиции заблокировано (сервер не принимает пустой
+    // день), и другого выхода не было: ошибочный день попадал в «Ближайший
+    // приём», в итоги и в отчёт (ADR-0018).
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Омлет на сливках");
+    await user.click(screen.getByRole("button", { name: /Убрать план/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Убрать план" }),
+    );
+
+    await waitFor(() => {
+      expect(api.DELETE).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/menus",
+        expect.objectContaining({
+          params: expect.objectContaining({
+            query: expect.objectContaining({ date: expect.any(String) }),
+          }),
+        }),
+      );
+    });
   });
 });

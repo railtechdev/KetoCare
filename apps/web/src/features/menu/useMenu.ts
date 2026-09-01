@@ -130,6 +130,43 @@ export function useCopyDayMutation(patientId: string | null) {
 }
 
 /**
+ * Убрать план на день (ADR-0018).
+ *
+ * Ошибочно составленный день оставался навсегда: удаление последней позиции
+ * заблокировано (сервер не принимает пустой день), а другого выхода не было. Он
+ * при этом попадал в «Ближайший приём», в итоги и в отчёт — то есть искажал
+ * картину выполнения плана.
+ */
+export function useDeleteMenuMutation(patientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (date: string) => {
+      if (patientId === null)
+        throw new Error("patientId is required to delete a menu");
+
+      const { error } = await api.DELETE(
+        "/api/v1/patients/{patient_id}/menus",
+        {
+          params: { path: { patient_id: patientId }, query: { date } },
+        },
+      );
+      if (error) throw error;
+      return date;
+    },
+    onSuccess: (date) => {
+      // День исчез: кэш обнуляется, а не правится — иначе экран показывал бы
+      // прежний состав до следующей загрузки.
+      queryClient.removeQueries({ queryKey: menuKey(patientId, date) });
+      void queryClient.invalidateQueries({ queryKey: menusKey(patientId) });
+      void queryClient.invalidateQueries({
+        queryKey: patientOverviewKey(patientId),
+      });
+    },
+  });
+}
+
+/**
  * Отметка «съедено» с оптимистичным апдейтом.
  *
  * Раздел 8.4 ТЗ разрешает оптимистичные апдейты только для этих чекбоксов:
