@@ -16,9 +16,10 @@ import httpx
 import structlog
 from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.types import TelegramObject
+from aiogram.types import BotCommand, TelegramObject
 from redis.asyncio import Redis
 
+from . import texts
 from .api import BotApi
 from .config import BotSettings, load_settings
 from .handlers import fallback, scenarios, start
@@ -70,6 +71,31 @@ def build_dispatcher(
     return dp
 
 
+#: Команды синего меню Telegram. Без них меню пустое, и родителю негде увидеть,
+#: что здесь вообще есть /help.
+BOT_COMMANDS = [
+    BotCommand(command="start", description=texts.CMD_START_DESCRIPTION),
+    BotCommand(command="help", description=texts.CMD_HELP_DESCRIPTION),
+]
+
+
+async def setup_bot_profile(bot: Bot) -> None:
+    """Команды и описания бота — то, что родитель видит до первого сообщения.
+
+    Экран «Что умеет этот бот?» до /start и строка в списке чатов были пустыми.
+    Вызовы идемпотентны и повторяются при каждом старте; их отказ не роняет
+    бота — без описания он хуже выглядит, но работает, а вот не запуститься
+    из-за косметики нельзя.
+    """
+
+    try:
+        await bot.set_my_commands(BOT_COMMANDS)
+        await bot.set_my_description(description=texts.BOT_DESCRIPTION)
+        await bot.set_my_short_description(short_description=texts.BOT_SHORT_DESCRIPTION)
+    except Exception as exc:  # noqa: BLE001 — косметика не должна ронять запуск
+        logger.warning("bot_profile_setup_failed", reason=str(exc))
+
+
 async def main() -> None:
     settings = load_settings()
 
@@ -89,6 +115,7 @@ async def main() -> None:
     )
 
     try:
+        await setup_bot_profile(bot)
         await dp.start_polling(bot)
     finally:
         await http.aclose()

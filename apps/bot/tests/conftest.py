@@ -109,6 +109,11 @@ class FakeApi:
         if self.eaten_error is not None:
             raise self.eaten_error
         self.eaten.append(item_id)
+        # Позиция помечается и в меню: сценарий после отметки перечитывает план
+        # с сервера, и настоящая ручка вернула бы позицию уже съеденной.
+        for item in (self.menu or {}).get("items", []):
+            if str(item["id"]) == item_id:
+                item["eaten"] = True
         return {"id": item_id, "eaten": True}
 
     def forget_session(self, link_id: uuid.UUID) -> None:  # pragma: no cover - не нужен тестам
@@ -156,11 +161,15 @@ def linked_store(store: FakeStore) -> FakeStore:
     return store
 
 
-@pytest.fixture
-def dispatcher(api: FakeApi, store: FakeStore):
+# Один на весь прогон: роутеры — модульные объекты, и aiogram привязывает
+# роутер к диспетчеру навсегда. Второй build_dispatcher в том же процессе
+# падает «Router is already attached». Тесты через эту фикстуру проверяют
+# маршрутизацию, а не состояние, — общий экземпляр им не мешает.
+@pytest.fixture(scope="session")
+def dispatcher():
     return build_dispatcher(  # type: ignore[arg-type]
         storage=MemoryStorage(),
-        api=api,
-        store=store,
+        api=FakeApi(),
+        store=FakeStore(),
         settings=BotSettings(bot_token="t", bot_api_token="s"),
     )
