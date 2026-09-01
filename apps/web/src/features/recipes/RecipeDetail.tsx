@@ -10,11 +10,13 @@ import {
   toast,
   WarningBanner,
 } from "@ketocare/ui";
-import { Download, Pencil, Trash2, Upload } from "lucide-react";
+import { Calculator, Download, Pencil, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
+import { SectionLink } from "../../components/SectionLink";
+import { incomingRecipe } from "../calculator/incomingDish";
 import { errorMessageOf } from "../../lib/api";
 import { formatGrams } from "./format";
 import { FileField } from "../../components/Field";
@@ -102,98 +104,115 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
         </span>
       }
       actions={
-        canEdit && (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-touch"
-              onClick={() => onEdit(data.id)}
+        <>
+          {/* Карточка рецепта вела в никуда: посмотреть можно, сделать —
+              ничего. Отсюда рецепт уходит в калькулятор с уже заполненным
+              составом, и вкладка «Пересчитать» наконец получает источник. */}
+          <Button asChild variant="outline" className="min-h-touch">
+            <SectionLink
+              section="calculator"
+              tab="scale"
+              item={incomingRecipe(data.id)}
             >
-              <Pencil aria-hidden="true" />
-              {t("actions.edit")}
-            </Button>
+              <Calculator aria-hidden="true" />
+              {t("actions.toCalculator")}
+            </SectionLink>
+          </Button>
 
-            {data.status !== "published" ? (
+          {canEdit && (
+            <>
               <Button
                 type="button"
+                variant="outline"
                 className="min-h-touch"
-                disabled={publish.isPending}
-                onClick={() =>
-                  publish.mutate(data.id, {
-                    onSuccess: () => toast.success(t("actions.publishSuccess")),
-                  })
-                }
+                onClick={() => onEdit(data.id)}
               >
-                <Upload aria-hidden="true" />
-                {publish.isPending
-                  ? t("actions.publishing")
-                  : t("actions.publish")}
+                <Pencil aria-hidden="true" />
+                {t("actions.edit")}
               </Button>
-            ) : (
-              /* Подтверждение называет рецепт: снятие с публикации убирает его
+
+              {data.status !== "published" ? (
+                <Button
+                  type="button"
+                  className="min-h-touch"
+                  disabled={publish.isPending}
+                  onClick={() =>
+                    publish.mutate(data.id, {
+                      onSuccess: () =>
+                        toast.success(t("actions.publishSuccess")),
+                    })
+                  }
+                >
+                  <Upload aria-hidden="true" />
+                  {publish.isPending
+                    ? t("actions.publishing")
+                    : t("actions.publish")}
+                </Button>
+              ) : (
+                /* Подтверждение называет рецепт: снятие с публикации убирает его
                  у всех семей разом, а уже составленные дни не трогает —
                  их состав заморожен снимком (ADR-0016). */
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      disabled={unpublish.isPending}
+                    >
+                      <Download aria-hidden="true" />
+                      {unpublish.isPending
+                        ? t("actions.unpublishing")
+                        : t("actions.unpublish")}
+                    </Button>
+                  }
+                  title={t("actions.confirmUnpublish.title", {
+                    title: data.title,
+                  })}
+                  description={t("actions.confirmUnpublish.body")}
+                  confirmLabel={t("actions.confirmUnpublish.confirm")}
+                  cancelLabel={t("actions.cancel")}
+                  onConfirm={() =>
+                    unpublish.mutate(data.id, {
+                      onSuccess: () =>
+                        toast.success(t("actions.unpublishSuccess")),
+                    })
+                  }
+                />
+              )}
+
+              {/* Заголовок диалога называет рецепт: подтверждается исчезновение
+                конкретного блюда, а не абстрактное «вы уверены?». */}
               <ConfirmDialog
                 trigger={
                   <Button
                     type="button"
                     variant="outline"
                     className="min-h-touch"
-                    disabled={unpublish.isPending}
+                    disabled={remove.isPending}
                   >
-                    <Download aria-hidden="true" />
-                    {unpublish.isPending
-                      ? t("actions.unpublishing")
-                      : t("actions.unpublish")}
+                    <Trash2 aria-hidden="true" />
+                    {remove.isPending
+                      ? t("actions.deleting")
+                      : t("actions.delete")}
                   </Button>
                 }
-                title={t("actions.confirmUnpublish.title", {
-                  title: data.title,
-                })}
-                description={t("actions.confirmUnpublish.body")}
-                confirmLabel={t("actions.confirmUnpublish.confirm")}
+                title={t("actions.confirmDelete.title", { title: data.title })}
+                description={t("actions.confirmDelete.body")}
+                confirmLabel={t("actions.confirmDelete.confirm")}
                 cancelLabel={t("actions.cancel")}
                 onConfirm={() =>
-                  unpublish.mutate(data.id, {
-                    onSuccess: () =>
-                      toast.success(t("actions.unpublishSuccess")),
+                  remove.mutate(data.id, {
+                    onSuccess: () => {
+                      toast.success(t("actions.deleteSuccess"));
+                      onBack();
+                    },
                   })
                 }
               />
-            )}
-
-            {/* Заголовок диалога называет рецепт: подтверждается исчезновение
-                конкретного блюда, а не абстрактное «вы уверены?». */}
-            <ConfirmDialog
-              trigger={
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-touch"
-                  disabled={remove.isPending}
-                >
-                  <Trash2 aria-hidden="true" />
-                  {remove.isPending
-                    ? t("actions.deleting")
-                    : t("actions.delete")}
-                </Button>
-              }
-              title={t("actions.confirmDelete.title", { title: data.title })}
-              description={t("actions.confirmDelete.body")}
-              confirmLabel={t("actions.confirmDelete.confirm")}
-              cancelLabel={t("actions.cancel")}
-              onConfirm={() =>
-                remove.mutate(data.id, {
-                  onSuccess: () => {
-                    toast.success(t("actions.deleteSuccess"));
-                    onBack();
-                  },
-                })
-              }
-            />
-          </>
-        )
+            </>
+          )}
+        </>
       }
     >
       {/* Обновление рецепта не удалось, но сам рецепт на экране остаётся:

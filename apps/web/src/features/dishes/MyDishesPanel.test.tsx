@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import recipesRu from "../../locales/ru/recipes.json";
+import { SectionRouter } from "../../test/SectionRouter";
 import { MyDishesPanel } from "./MyDishesPanel";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -37,7 +38,11 @@ function renderPanel() {
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        {/* Список ведёт в калькулятор ссылкой — значит экрану нужен роутер,
+            как и в работающем приложении. */}
+        <SectionRouter section="recipes">{children}</SectionRouter>
+      </QueryClientProvider>
     );
   }
   return render(<MyDishesPanel patientId={PATIENT_ID} />, { wrapper: Wrapper });

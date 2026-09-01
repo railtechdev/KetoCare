@@ -9,11 +9,13 @@ import {
   Section,
   toast,
 } from "@ketocare/ui";
-import { CookingPot, Pencil, Trash2 } from "lucide-react";
+import { Calculator, CookingPot, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { SectionLink } from "../../components/SectionLink";
+import { incomingDish } from "../calculator/incomingDish";
 import { errorMessageOf } from "../../lib/api";
 import {
   useCustomDishes,
@@ -88,6 +90,19 @@ export function MyDishesPanel({ patientId }: { patientId: string | null }) {
               <span className="text-muted-foreground">
                 {t("myDishes.ingredients", { count: dish.ingredients.length })}
               </span>
+
+              {/* Своё блюдо тоже уходит в калькулятор: править состав здесь
+                  нечем и не нужно — считает ядро, а не форма списка. */}
+              <Button asChild variant="ghost" size="icon">
+                <SectionLink
+                  section="calculator"
+                  tab="scale"
+                  item={incomingDish(dish.id)}
+                  aria-label={t("myDishes.toCalculator", { title: dish.title })}
+                >
+                  <Calculator aria-hidden="true" className="size-4" />
+                </SectionLink>
+              </Button>
 
               <Button
                 type="button"

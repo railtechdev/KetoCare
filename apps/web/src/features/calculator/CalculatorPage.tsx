@@ -6,7 +6,7 @@ import {
   TabsContent,
   WarningBanner,
 } from "@ketocare/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useTranslation } from "react-i18next";
@@ -16,6 +16,7 @@ import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
+import { parseIncoming, useIncomingComposition } from "./incomingDish";
 import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { DishRows } from "./DishRows";
@@ -70,7 +71,14 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
   // калькулятор не знали друг о друге: найденный продукт приходилось искать
   // здесь заново по памяти.
   const [incomingId, setIncomingId] = useSectionItem();
-  const incoming = useProduct(incomingId);
+  const incoming = parseIncoming(incomingId);
+  const incomingProduct = useProduct(
+    incoming?.kind === "product" ? incoming.id : undefined,
+  );
+  // Готовое блюдо: рецепт или своя раскладка. Приходит из карточки рецепта и из
+  // списка своих блюд — до этого у вкладки «Пересчитать» источника не было
+  // вовсе, и она не давала ничего сверх «Проверить».
+  const incomingDish = useIncomingComposition(incoming, patientId);
   const [targets, setTargets] = useState<TargetsInput>(DEFAULT_TARGETS);
   const [factor, setFactor] = useState(2);
 
@@ -93,8 +101,25 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
     );
   }, [prescribedRatio, ratioTouched]);
 
+  // Какое блюдо уже разложено на экране. Ссылка из адреса НЕ снимается — в
+  // отличие от прихода одного продукта: она описывает, что открыто, и после F5
+  // состав должен вернуться. А вот применять её повторно нельзя: правки
+  // граммовки затирались бы исходным составом при каждой перерисовке.
+  const appliedDish = useRef<string | null>(null);
+
   useEffect(() => {
-    const product = incoming.data;
+    const composition = incomingDish.rows;
+    if (composition === null || composition.length === 0) return;
+    if (incoming === null || appliedDish.current === incomingId) return;
+
+    appliedDish.current = incomingId ?? null;
+    // Состав блюда ЗАМЕЩАЕТ набранный: человек пришёл пересчитать конкретное
+    // блюдо, а не дополнить им то, что было на экране.
+    setRows(composition);
+  }, [incomingDish.rows, incoming, incomingId]);
+
+  useEffect(() => {
+    const product = incomingProduct.data;
     if (product === undefined) return;
 
     // Параметр снимается сразу: он описывает не состояние экрана, а разовый
@@ -106,7 +131,7 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         ? current
         : [...current, { product, grams: 50 }],
     );
-  }, [incoming.data, setIncomingId]);
+  }, [incomingProduct.data, setIncomingId]);
 
   const verify = useVerifyMutation();
   const solve = useSolveMutation();
