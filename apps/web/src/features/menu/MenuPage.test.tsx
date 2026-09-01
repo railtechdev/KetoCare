@@ -48,6 +48,9 @@ const MENU = {
       portion_factor: 1,
       eaten: false,
       has_snapshot: true,
+      ingredients: [
+        { product_id: "prod-1", name_ru: "Яйцо куриное", grams: 60 },
+      ],
       changed_since_saved: false,
     },
     {
@@ -60,6 +63,7 @@ const MENU = {
       portion_factor: 0.5,
       eaten: false,
       has_snapshot: true,
+      ingredients: [{ product_id: "prod-2", name_ru: "Творог 9%", grams: 200 }],
       changed_since_saved: false,
     },
   ],
@@ -413,5 +417,32 @@ describe("убрать план на день", () => {
         }),
       );
     });
+  });
+});
+
+describe("что взвесить", () => {
+  it("состав позиции раскрывается прямо в дне", async () => {
+    // Из меню нельзя было открыть блюдо и увидеть граммовку: приходилось
+    // искать рецепт в другом разделе и надеяться, что он не изменился.
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Каша на кокосовом масле");
+    await user.click(screen.getAllByText("Что взвесить")[0] as HTMLElement);
+
+    expect(await screen.findByText("Яйцо куриное")).toBeInTheDocument();
+    expect(screen.getByText("60 г")).toBeInTheDocument();
+  });
+
+  it("граммовка умножается на множитель порции", async () => {
+    // Позиция «половина порции» иначе предлагала бы взвесить целую.
+    const user = userEvent.setup();
+    renderPage();
+
+    // Своё блюдо стоит с множителем 0.5: 200 г творога → 100 г.
+    await screen.findByText("Омлет на сливках");
+    await user.click(screen.getAllByText("Что взвесить")[1] as HTMLElement);
+
+    expect(await screen.findByText("100 г")).toBeInTheDocument();
   });
 });
