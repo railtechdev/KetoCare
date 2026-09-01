@@ -68,8 +68,15 @@ export function AcceptInvitePage() {
   const token = search.token ?? "";
 
   if (token === "") {
+    // Ссылка из мессенджера часто приходит обрезанной. Карточка без единой
+    // кнопки оставляла человека в тупике — при том что рядом, в состоянии
+    // «готово», кнопка «Войти» уже была (правило П15 канона).
     return (
-      <Shell title={t("accept.title")} description={t("accept.noToken")} />
+      <Shell title={t("accept.title")} description={t("accept.noToken")}>
+        <Button type="button" onClick={() => void navigate({ to: "/login" })}>
+          {t("accept.toLogin")}
+        </Button>
+      </Shell>
     );
   }
 

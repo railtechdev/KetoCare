@@ -37,9 +37,12 @@ import type { MedicalProfile, Patient, PatientOverview } from "./types";
 export function SummaryTab({
   patient,
   clinicalAllowed,
+  onOpenPrescriptions,
 }: {
   patient: Patient;
   clinicalAllowed: boolean;
+  /** Переключить карту на вкладку назначений: путь к первому действию врача. */
+  onOpenPrescriptions?: () => void;
 }) {
   const { t } = useTranslation("doctor");
   const overview = usePatientOverview(patient.id);
@@ -68,7 +71,12 @@ export function SummaryTab({
         isEmpty={overview.data === undefined}
         empty={null}
       >
-        {overview.data !== undefined && <OverviewPanels data={overview.data} />}
+        {overview.data !== undefined && (
+          <OverviewPanels
+            data={overview.data}
+            onOpenPrescriptions={onOpenPrescriptions}
+          />
+        )}
       </AsyncSection>
 
       {/* Анкета — рядом с медицинским профилем: врачебная часть анамнеза и
@@ -92,7 +100,13 @@ export function SummaryTab({
   );
 }
 
-function OverviewPanels({ data }: { data: PatientOverview }) {
+function OverviewPanels({
+  data,
+  onOpenPrescriptions,
+}: {
+  data: PatientOverview;
+  onOpenPrescriptions?: () => void;
+}) {
   const { t } = useTranslation("doctor");
 
   const prescription = data.prescription ?? null;
@@ -111,6 +125,16 @@ function OverviewPanels({ data }: { data: PatientOverview }) {
             icon={ClipboardList}
             title={t("summary.prescription.empty")}
             description={t("summary.prescription.emptyDescription")}
+            action={
+              // Текст звал на соседнюю вкладку, а перейти на неё нажатием было
+              // нельзя. Назначение — первое, что от врача требуется у нового
+              // пациента, и путь к нему не должен быть длиннее одного клика.
+              onOpenPrescriptions === undefined ? undefined : (
+                <Button type="button" onClick={onOpenPrescriptions}>
+                  {t("summary.prescription.toTab")}
+                </Button>
+              )
+            }
           />
         ) : (
           <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
