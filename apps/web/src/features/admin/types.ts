@@ -2,7 +2,7 @@ import type { components } from "@ketocare/api-client";
 
 type Schemas = components["schemas"];
 
-export type AdminUser = Schemas["UserRead"];
+export type AdminUser = Schemas["AdminUserRead"];
 export type AdminUserUpdate = Schemas["AdminUserUpdate"];
 export type AuditEntry = Schemas["AuditLogRead"];
 export type DictionaryEntry = Schemas["DictionaryEntryRead"];

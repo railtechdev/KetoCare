@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
@@ -110,6 +111,64 @@ async def list_doctor_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> li
 
     stmt = select(DoctorPatient.doctor_id).where(DoctorPatient.patient_id == patient_id)
     return list(await session.scalars(stmt))
+
+
+async def count_sole_doctor_patients(session: AsyncSession, *, doctor_id: uuid.UUID) -> int:
+    """Сколько пациентов останутся без ведущего специалиста, если убрать этого.
+
+    Инвариант «пациент не остаётся без ведущего» сервер уже защищает при снятии
+    специалиста вручную (`remove_patient_doctor`), но отключение учётной записи
+    его обходило: строки `doctor_patient` оставались, а войти по ним было
+    некому. Взять такого пациента другой врач тоже не может — ручки нет
+    намеренно (ADR-0003). Пациент становился невидим для всех клиницистов, и
+    администратор об этом не узнавал.
+    """
+
+    sole = (
+        select(DoctorPatient.patient_id)
+        .group_by(DoctorPatient.patient_id)
+        .having(func.count(DoctorPatient.doctor_id) == 1)
+        .subquery()
+    )
+    stmt = (
+        select(func.count())
+        .select_from(DoctorPatient)
+        .where(
+            DoctorPatient.doctor_id == doctor_id,
+            DoctorPatient.patient_id.in_(select(sole.c.patient_id)),
+        )
+    )
+    return int(await session.scalar(stmt) or 0)
+
+
+async def count_sole_doctor_patients_by_doctor(
+    session: AsyncSession, *, doctor_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """То же, что `count_sole_doctor_patients`, но сразу для списка врачей.
+
+    Одним запросом, а не по одному на строку: список учётных записей приходит
+    страницей в двести строк, и двести запросов ради счётчика — это не счётчик.
+    """
+
+    if not doctor_ids:
+        return {}
+
+    sole = (
+        select(DoctorPatient.patient_id)
+        .group_by(DoctorPatient.patient_id)
+        .having(func.count(DoctorPatient.doctor_id) == 1)
+        .subquery()
+    )
+    stmt = (
+        select(DoctorPatient.doctor_id, func.count())
+        .where(
+            DoctorPatient.doctor_id.in_(doctor_ids),
+            DoctorPatient.patient_id.in_(select(sole.c.patient_id)),
+        )
+        .group_by(DoctorPatient.doctor_id)
+    )
+    rows = await session.execute(stmt)
+    return {doctor_id: int(count) for doctor_id, count in rows}
 
 
 async def list_parent_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> list[uuid.UUID]:

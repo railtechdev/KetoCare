@@ -15,9 +15,11 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import AuditLog, KetoneMethodDict, SeizureType, User
+from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import dictionaries as dictionaries_repo
+from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
 
 from ..deps.auth import CurrentUser
@@ -87,6 +89,11 @@ def _account_snapshot(user: User) -> dict[str, Any]:
     }
 
 
+#: Роли, ведущие пациентов. Отключение такой учётной записи снимает с пациентов
+#: их специалиста, а «подобрать» осиротевшего пациента другой врач не может.
+_CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
+
+
 async def update_user(
     session: AsyncSession,
     *,
@@ -117,6 +124,23 @@ async def update_user(
                 ErrorCode.CONFLICT,
                 "Нельзя изменить роль собственной учётной записи. "
                 "Попросите другого администратора.",
+            )
+
+    # Отключение специалиста и его разжалование обходили инвариант «пациент не
+    # остаётся без ведущего»: связи в `doctor_patient` переживают отключение, а
+    # войти по ним больше некому. Отказ здесь — тот же, что при снятии
+    # специалиста вручную, и по той же причине.
+    losing_care = changes.get("is_active") is False or (
+        "role" in changes and changes["role"] is not user.role
+    )
+    if losing_care and user.role in _CARE_ROLES:
+        orphans = await patients_repo.count_sole_doctor_patients(session, doctor_id=user.id)
+        if orphans > 0:
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "У этого специалиста есть пациенты, которых больше никто не ведёт "
+                f"({orphans}). Сначала передайте их коллеге — это делает врач в "
+                "карте пациента.",
             )
 
     before = _account_snapshot(user)
