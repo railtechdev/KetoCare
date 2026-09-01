@@ -111,3 +111,18 @@ describe("DiaryPage", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("вкладка «Лекарства» без схемы", () => {
+  it("не предлагает добавить запись, когда добавлять не к чему", async () => {
+    // Препараты назначает врач, семья завести их не может: кнопка шапки
+    // обещала ввод на каждой вкладке и заводила в тупик (правило П3 канона).
+    renderPage({ kind: "medications" });
+
+    expect(
+      await screen.findByText(/Схему терапии ведёт врач/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Добавить запись/ }),
+    ).not.toBeInTheDocument();
+  });
+});

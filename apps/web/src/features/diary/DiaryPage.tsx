@@ -13,7 +13,7 @@ import {
   type PrescriptionMarker,
   type TrendPoint,
 } from "@ketocare/ui";
-import { NotebookPen, Plus } from "lucide-react";
+import { NotebookPen, Pill, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -84,6 +84,13 @@ export function DiaryPage({ patientId }: { patientId: string }) {
     setFormOpen(true);
   }
 
+  // Тот же запрос, что у формы записи: ключ общий, второго обращения нет.
+  const medications = usePatientMedications(patientId, kind === "medications");
+  const canAdd =
+    kind !== "medications" ||
+    medications.isPending ||
+    (medications.data ?? []).length > 0;
+
   function closeForm() {
     setFormOpen(false);
     setEditing(null);
@@ -94,10 +101,16 @@ export function DiaryPage({ patientId }: { patientId: string }) {
       title={t("title")}
       intro={t("intro")}
       actions={
-        <Button type="button" onClick={openNew}>
-          <Plus aria-hidden="true" />
-          {t("form.addAction")}
-        </Button>
+        // Кнопка обещает ввод на каждой вкладке, а на «Лекарствах» с пустой
+        // схемой заводила в тупик: препараты назначает врач, семья завести их
+        // не может. Кнопка, ведущая в никуда, хуже отсутствующей (правило П3
+        // канона).
+        canAdd ? (
+          <Button type="button" onClick={openNew}>
+            <Plus aria-hidden="true" />
+            {t("form.addAction")}
+          </Button>
+        ) : undefined
       }
     >
       <Tabs
@@ -186,6 +199,12 @@ function DiaryTab({
 
   const items = useMemo(() => logs.data?.items ?? [], [logs.data]);
   const total = logs.data?.total ?? 0;
+  // Схема терапии пуста: записывать приём нечего, и пустое состояние должно
+  // объяснять это, а не предлагать «добавить запись».
+  const schemeEmpty =
+    kind === "medications" &&
+    !medications.isPending &&
+    (medications.data ?? []).length === 0;
 
   const points = useMemo<TrendPoint[]>(
     () =>
@@ -346,16 +365,27 @@ function DiaryTab({
         onRetry={() => void logs.refetch()}
         isEmpty={items.length === 0}
         empty={
-          <EmptyState
-            icon={NotebookPen}
-            title={t("list.emptyTitle")}
-            description={t("list.emptyBody")}
-            action={
-              <Button type="button" onClick={onAdd}>
-                {t("list.emptyAction")}
-              </Button>
-            }
-          />
+          // На «Лекарствах» с пустой схемой добавлять нечего: препараты
+          // назначает врач. Пустое состояние объясняет это, а не предлагает
+          // действие, которого у семьи нет (правило П3 канона).
+          schemeEmpty ? (
+            <EmptyState
+              icon={Pill}
+              title={t("medications.noneTitle")}
+              description={t("medications.none")}
+            />
+          ) : (
+            <EmptyState
+              icon={NotebookPen}
+              title={t("list.emptyTitle")}
+              description={t("list.emptyBody")}
+              action={
+                <Button type="button" onClick={onAdd}>
+                  {t("list.emptyAction")}
+                </Button>
+              }
+            />
+          )
         }
       >
         {range !== null && (
