@@ -200,7 +200,11 @@ export function PatientCard({
         />
 
         <TabsContent value="summary" className="pt-screen">
-          <SummaryTab patient={patient} clinicalAllowed={clinicalAllowed} />
+          <SummaryTab
+            patient={patient}
+            clinicalAllowed={clinicalAllowed}
+            onOpenPrescriptions={() => setTab("prescription")}
+          />
         </TabsContent>
         <TabsContent
           value="prescription"
