@@ -87,6 +87,7 @@ async def search(
     q: str | None = None,
     category_id: uuid.UUID | None = None,
     only_active: bool = True,
+    verified_before: date | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Product], int]:
@@ -115,12 +116,32 @@ async def search(
         conditions.append(Product.category_id == category_id)
     if q:
         conditions.append(_name_matches(q))
+    if verified_before is not None:
+        # «Давно не сверялось»: дата сверки с источником старее указанной.
+        # Нужен и списком, и счётчиком — число на главной без перехода к самим
+        # позициям было бы тупиком.
+        conditions.append(Product.verified_at < verified_before)
 
     stmt = select(Product).where(*conditions).order_by(Product.name_ru).limit(limit).offset(offset)
     items = list(await session.scalars(stmt))
 
     total = await session.scalar(select(func.count()).select_from(Product).where(*conditions))
     return items, int(total or 0)
+
+
+async def count_by_state(session: AsyncSession, *, verified_before: date) -> tuple[int, int, int]:
+    """Сколько позиций всего, из них в обороте и давно не сверявшихся.
+
+    Одним обращением, а не тремя: счётчики нужны вместе, на одном экране.
+    """
+
+    stmt = select(
+        func.count(),
+        func.count().filter(Product.is_active.is_(True)),
+        func.count().filter(Product.verified_at < verified_before),
+    ).select_from(Product)
+    total, active, stale = (await session.execute(stmt)).one()
+    return int(total), int(active), int(stale)
 
 
 async def create(session: AsyncSession, *, changed_by: uuid.UUID, **fields: Any) -> Product:

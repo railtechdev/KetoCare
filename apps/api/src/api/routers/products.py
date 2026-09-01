@@ -6,10 +6,20 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Path, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Path,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from sqlalchemy.exc import IntegrityError
 
 from core.models import Product, ProductCategory
@@ -61,6 +71,10 @@ async def search_products(
     q: str | None = None,
     category_id: uuid.UUID | None = None,
     include_inactive: bool = False,
+    verified_before: Annotated[
+        date | None,
+        Query(description="Только позиции, сверявшиеся с источником раньше этой даты"),
+    ] = None,
 ) -> Page[ProductRead]:
     """`include_inactive` доступен только тем, кто ведёт справочник.
 
@@ -78,6 +92,7 @@ async def search_products(
         q=q,
         category_id=category_id,
         only_active=only_active,
+        verified_before=verified_before,
         limit=page.limit,
         offset=page.offset,
     )

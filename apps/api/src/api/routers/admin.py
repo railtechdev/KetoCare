@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
@@ -16,7 +16,9 @@ from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from core.models import KetoneMethodDict, SeizureType
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
+from core.repositories import products as products_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
@@ -25,12 +27,14 @@ from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import AdminPasswordReset, Page, UserRead
 from ..schemas_admin import (
+    AdminOverview,
     AdminUserRead,
     AdminUserUpdate,
     AuditLogRead,
     DictionaryEntryCreate,
     DictionaryEntryRead,
     DictionaryEntryUpdate,
+    RoleCount,
     SeizureTypeCreate,
     SeizureTypeRead,
     SeizureTypeUpdate,
@@ -45,6 +49,53 @@ router = APIRouter(
 
 
 # --- учётные записи -------------------------------------------------------
+
+
+#: С какого возраста сверка считается устаревшей.
+#:
+#: Год: базы состава продуктов (USDA и аналоги) выходят примерно раз в год, и
+#: позиция, не сверявшаяся дольше, скорее всего отстала от источника. Это
+#: эксплуатационный порог, а не медицинская константа: он говорит «пора
+#: перепроверить», а не «значение неверно».
+STALE_VERIFICATION_DAYS = 365
+
+
+@router.get(
+    "/overview",
+    response_model=AdminOverview,
+    summary="Состояние системы",
+)
+async def admin_overview(session: SessionDep) -> AdminOverview:
+    """Счётчики для главной администратора.
+
+    Считает база, а не экран: пересчёт первых двухсот строк на клиенте
+    переставал быть правдой ровно тогда, когда счётчик и нужен, — на большой
+    установке.
+    """
+
+    now = datetime.now(UTC)
+    stale_before = (now - timedelta(days=STALE_VERIFICATION_DAYS)).date()
+
+    by_role = await users_repo.count_by_role(session)
+    total, active, stale = await products_repo.count_by_state(session, verified_before=stale_before)
+    pending, expired = await invitations_repo.count_pending(session, now=now)
+
+    return AdminOverview(
+        users=[
+            RoleCount(
+                role=role,
+                active=by_role.get((role, True), 0),
+                inactive=by_role.get((role, False), 0),
+            )
+            for role in UserRole
+        ],
+        products_total=total,
+        products_active=active,
+        products_stale=stale,
+        stale_after_days=STALE_VERIFICATION_DAYS,
+        invitations_pending=pending,
+        invitations_expired=expired,
+    )
 
 
 @router.get("/users", response_model=Page[AdminUserRead], summary="Список учётных записей")

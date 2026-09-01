@@ -91,6 +91,19 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+async def count_by_role(session: AsyncSession) -> dict[tuple[UserRole, bool], int]:
+    """Учётные записи по ролям и признаку доступа.
+
+    Считает база. Раньше главная администратора пересчитывала первые двести
+    строк списка на клиенте: у клиники с сотней семей число на экране просто
+    переставало быть правдой, и заметить это было нечем.
+    """
+
+    stmt = select(User.role, User.is_active, func.count()).group_by(User.role, User.is_active)
+    rows = await session.execute(stmt)
+    return {(role, is_active): int(count) for role, is_active, count in rows}
+
+
 async def list_active_by_roles(session: AsyncSession, *, roles: Sequence[UserRole]) -> list[User]:
     """Активные учётные записи указанных ролей, по алфавиту.
 

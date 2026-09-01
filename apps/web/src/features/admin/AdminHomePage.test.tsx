@@ -16,26 +16,20 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 i18n.addResourceBundle("ru", "admin", adminRu, true, true);
 
-function user(id: string, role: string, isActive: boolean) {
-  return {
-    id,
-    email: `${id}@example.com`,
-    full_name: `Пользователь ${id}`,
-    phone: null,
-    role,
-    is_active: isActive,
-    created_at: "2026-01-01T10:00:00Z",
-  };
-}
-
-const USERS = {
-  items: [
-    user("a1", "admin", true),
-    user("d1", "doctor", true),
-    user("d2", "doctor", false),
-    user("p1", "parent", true),
+/** Ответ сводки: считает база, а не экран. */
+const OVERVIEW = {
+  users: [
+    { role: "admin", active: 1, inactive: 0 },
+    { role: "doctor", active: 1, inactive: 1 },
+    { role: "dietitian", active: 0, inactive: 0 },
+    { role: "parent", active: 1, inactive: 0 },
   ],
-  total: 4,
+  products_total: 128,
+  products_active: 120,
+  products_stale: 4,
+  stale_after_days: 365,
+  invitations_pending: 2,
+  invitations_expired: 1,
 };
 
 const AUDIT = {
@@ -80,11 +74,11 @@ describe("главная администратора", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (api.GET as Mock).mockImplementation(async (path: string) => {
-      if (path === "/api/v1/admin/users")
-        return { data: USERS, error: undefined };
+      if (path === "/api/v1/admin/overview")
+        return { data: OVERVIEW, error: undefined };
       if (path === "/api/v1/admin/audit-log")
         return { data: AUDIT, error: undefined };
-      return { data: { items: [], total: 128 }, error: undefined };
+      return { data: { items: [], total: 0 }, error: undefined };
     });
   });
 
@@ -97,11 +91,30 @@ describe("главная администратора", () => {
     ).toBeInTheDocument();
   });
 
-  it("берёт число позиций справочника из ответа, а не считает карточки", async () => {
+  it("берёт числа справочника у сервера, а не считает карточки", async () => {
     renderHome();
 
-    // Тянуть тысячи карточек ради одного числа незачем: сервер отдаёт `total`.
-    expect(await screen.findByText("128 позиций")).toBeInTheDocument();
+    // Считает база: пересчёт первых двухсот строк на клиенте переставал быть
+    // правдой ровно на большой установке.
+    expect(await screen.findByText(/128 позиций/)).toBeInTheDocument();
+    expect(screen.getByText(/в обороте: 120/)).toBeInTheDocument();
+  });
+
+  it("зовёт перепроверить позиции, которые давно не сверялись", async () => {
+    // Счётчик без перехода к самим позициям был бы тупиком: порог говорит
+    // «пора перепроверить», а сделать это можно только в списке.
+    renderHome();
+
+    const link = await screen.findByRole("link", { name: /не сверялись/ });
+    expect(link).toHaveAttribute("href", expect.stringContaining("products"));
+  });
+
+  it("называет невостребованные приглашения", async () => {
+    // Пока приглашение живо, по ссылке из него заводится учётная запись.
+    renderHome();
+
+    expect(await screen.findByText(/2 действующих/)).toBeInTheDocument();
+    expect(screen.getByText(/1 просрочено/)).toBeInTheDocument();
   });
 
   it("показывает последние операции значениями справочника, а не кодами", async () => {

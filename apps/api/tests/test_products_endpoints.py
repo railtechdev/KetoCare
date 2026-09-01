@@ -1082,3 +1082,59 @@ class TestUpdatingImport:
 
         assert response.json()["updated"] == 0
         assert response.json()["updates"] == []
+
+
+class TestStaleVerificationFilter:
+    """«Давно не сверялось»: счётчик на главной ведёт к самим позициям.
+
+    Число без перехода к ним было бы тупиком — порог говорит «пора
+    перепроверить», а сделать это можно только в списке.
+    """
+
+    async def test_filters_by_verification_date(self, client, session, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        category = ProductCategory(name_ru=f"Жиры {uuid.uuid4().hex[:6]}")
+        session.add(category)
+        await session.flush()
+
+        fresh_name = f"Свежий {uuid.uuid4().hex[:6]}"
+        stale_name = f"Старый {uuid.uuid4().hex[:6]}"
+        session.add_all(
+            [
+                Product(
+                    name_ru=fresh_name,
+                    category_id=category.id,
+                    kcal_100g=100,
+                    fat_100g=1,
+                    protein_100g=1,
+                    carbs_100g=1,
+                    fiber_100g=0,
+                    source="USDA",
+                    source_version="SR28",
+                    verified_at=date(2026, 8, 1),
+                ),
+                Product(
+                    name_ru=stale_name,
+                    category_id=category.id,
+                    kcal_100g=100,
+                    fat_100g=1,
+                    protein_100g=1,
+                    carbs_100g=1,
+                    fiber_100g=0,
+                    source="USDA",
+                    source_version="SR28",
+                    verified_at=date(2024, 1, 1),
+                ),
+            ]
+        )
+        await session.flush()
+
+        response = await client.get(
+            "/api/v1/products",
+            params={"verified_before": "2025-01-01", "limit": 200},
+            headers=auth_headers(admin),
+        )
+
+        names = [item["name_ru"] for item in response.json()["items"]]
+        assert stale_name in names
+        assert fresh_name not in names
