@@ -1055,3 +1055,121 @@ class TestEaten:
             headers=auth_headers(parent),
         )
         assert response.status_code == 404
+
+
+async def _save_day(client, auth_headers, parent, patient, session, day):
+    """День с одним блюдом: минимальный план, который можно убрать."""
+
+    butter = await _product(session, f"Масло {day.isoformat()}", **BUTTER)
+    dish = await _custom_dish(session, patient, ingredients=[(butter, 40)])
+    return await client.put(
+        _url(patient),
+        json={
+            "date": day.isoformat(),
+            "items": [{"meal_slot": "breakfast", "custom_dish_id": str(dish.id)}],
+        },
+        headers=auth_headers(parent),
+    )
+
+
+class TestMenuDayRemoval:
+    """Убрать план на день (ADR-0018).
+
+    Ошибочный день оставался навсегда: удаление последней позиции заблокировано
+    (сервер не принимает пустой день), а другого выхода не было. Такой день
+    попадал в «Ближайший приём», в итоги и в отчёт — искажал картину выполнения
+    плана, которую смотрит врач.
+    """
+
+    async def test_removed_day_is_gone_from_reading(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        day = date(2026, 9, 1)
+        await _save_day(client, auth_headers, parent, patient, session, day)
+
+        removed = await client.delete(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": day.isoformat()},
+            headers=auth_headers(parent),
+        )
+        assert removed.status_code == 204
+
+        read = await client.get(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": day.isoformat()},
+            headers=auth_headers(parent),
+        )
+        assert read.status_code == 404
+
+    async def test_removal_is_soft(self, client, session, make_user, make_patient, auth_headers):
+        """Строки остаются: на позиции ссылаются записи дневника еды, а по
+        отметкам «съедено» судят о выполнении плана."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        day = date(2026, 9, 2)
+        await _save_day(client, auth_headers, parent, patient, session, day)
+
+        await client.delete(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": day.isoformat()},
+            headers=auth_headers(parent),
+        )
+
+        menu = await session.scalar(
+            select(Menu).where(Menu.patient_id == patient.id, Menu.date == day)
+        )
+        assert menu is not None and menu.deleted_at is not None
+        items = list(await session.scalars(select(MenuItem).where(MenuItem.menu_id == menu.id)))
+        assert items, "позиции не должны исчезать физически"
+        # Позиция под удалённым днём иначе попадала бы в выборки, которые ходят
+        # по `menu_items` напрямую.
+        assert all(item.deleted_at is not None for item in items)
+
+    async def test_day_can_be_planned_again(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        day = date(2026, 9, 3)
+        await _save_day(client, auth_headers, parent, patient, session, day)
+        await client.delete(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": day.isoformat()},
+            headers=auth_headers(parent),
+        )
+
+        again = await _save_day(client, auth_headers, parent, patient, session, day)
+
+        assert again.status_code == 200, again.text
+        assert len(again.json()["items"]) == 1
+
+    async def test_removing_a_day_that_is_not_planned_is_not_an_error(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«Дня нет» — ровно то состояние, которого добивались."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.delete(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": "2026-09-04"},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 204
+
+    async def test_stranger_cannot_remove_a_day(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        day = date(2026, 9, 5)
+        await _save_day(client, auth_headers, parent, patient, session, day)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.delete(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": day.isoformat()},
+            headers=auth_headers(stranger),
+        )
+
+        assert response.status_code == 403
