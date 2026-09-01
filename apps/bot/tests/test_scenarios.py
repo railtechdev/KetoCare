@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -356,14 +357,19 @@ class TestWiring:
         assert names == ["start", "scenarios", "fallback"]
 
     def test_main_menu_has_every_scenario_of_the_spec(self):
-        """Раздел 7.2 перечисляет семь кнопок — состав меню проверяется, а не подразумевается."""
+        """Состав меню проверяется, а не подразумевается.
+
+        Раздел 7.2 перечисляет семь кнопок, в меню шесть: «Приступ» убран до
+        ответа медкоманды о шкале длительности (вопрос 23) — см.
+        `TestSeizureButton`. Отступление намеренное, и заметить его должен этот
+        тест, а не семья.
+        """
 
         with_app = BotSettings(
             bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
         )
         labels = {button.text for row in keyboards.main_menu(with_app).keyboard for button in row}
         assert labels == {
-            texts.BTN_SEIZURE,
             texts.BTN_KETONES,
             texts.BTN_WEIGHT,
             texts.BTN_MEAL,
@@ -402,6 +408,60 @@ class TestWiring:
         )
         labels = {b.text for row in keyboards.main_menu(insecure).keyboard for b in row}
         assert texts.BTN_APP not in labels
+
+
+class TestSeizureButton:
+    """Кнопка «Приступ»: в меню её нет, нажатие старой — обрабатывается.
+
+    Сценарий ждёт ответа медкоманды (вопрос 23), но кнопка в меню оставалась и
+    приводила в общий отбойник «Я умею записывать данные». То есть на самом
+    важном событии бот отвечал так, будто не понял слова.
+    """
+
+    def test_menu_does_not_promise_what_the_bot_cannot_do(self):
+        labels = {b.text for row in keyboards.main_menu(SETTINGS).keyboard for b in row}
+        assert texts.BTN_SEIZURE not in labels
+
+    @pytest.mark.asyncio
+    async def test_old_button_is_told_where_to_record(self):
+        """ReplyKeyboard живёт на устройстве: у семьи кнопка ещё на экране."""
+
+        message = FakeMessage(text=texts.BTN_SEIZURE)
+
+        await scenarios.seizure_not_here(message, SETTINGS)
+
+        assert "Дневники" in message.last and "Приступы" in message.last
+        assert message.last != texts.UNKNOWN_INPUT
+
+    @pytest.mark.asyncio
+    async def test_answer_replaces_the_stale_keyboard(self):
+        """Иначе кнопка останется на экране и будет нажата снова."""
+
+        message = FakeMessage(text=texts.BTN_SEIZURE)
+
+        await scenarios.seizure_not_here(message, SETTINGS)
+
+        _, markup = message.answers[-1]
+        assert markup is not None, "ответ без клавиатуры оставляет старую на экране"
+        labels = {b.text for row in markup.keyboard for b in row}
+        assert labels and texts.BTN_SEIZURE not in labels
+
+    def test_handler_stands_between_the_button_and_the_fallback(self):
+        """Обработчик зарегистрирован в `scenarios` и ловит именно эту кнопку.
+
+        Без проверки фильтра тест прошёл бы и на обработчике, до которого
+        нажатие не доходит: `fallback` подключён последним и разберёт всё, что
+        не поймали сценарии.
+        """
+
+        handlers = [
+            h for h in scenarios.router.message.handlers if h.callback is scenarios.seizure_not_here
+        ]
+        assert len(handlers) == 1
+
+        matches = handlers[0].filters[0].callback
+        assert matches(SimpleNamespace(text=texts.BTN_SEIZURE))
+        assert not matches(SimpleNamespace(text=texts.BTN_KETONES))
 
 
 class TestEventTimeStep:

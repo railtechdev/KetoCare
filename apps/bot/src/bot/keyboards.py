@@ -25,12 +25,18 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
     http-адресом — это не «ничего не произойдёт», а ошибка отправки всего
     сообщения: меню не пришло бы вовсе. Пока адреса нет, кнопки просто нет —
     так же, как её не было до появления Mini App.
+
+    Кнопки «Приступ» здесь нет по той же причине: сценарий ждёт ответа
+    медицинской команды о шкале длительности (вопрос 23 в
+    `docs/medical/OPEN_QUESTIONS.md`), а кнопка, которая приводит к «я вас не
+    понял», хуже отсутствующей — тем более на самом важном событии. Нажатие
+    старой кнопки, оставшейся у семьи на экране, разбирает `scenarios.py`.
     """
 
     keyboard = [
-        [KeyboardButton(text=texts.BTN_SEIZURE), KeyboardButton(text=texts.BTN_KETONES)],
-        [KeyboardButton(text=texts.BTN_WEIGHT), KeyboardButton(text=texts.BTN_MEAL)],
-        [KeyboardButton(text=texts.BTN_MEDICATION), KeyboardButton(text=texts.BTN_WELLBEING)],
+        [KeyboardButton(text=texts.BTN_KETONES), KeyboardButton(text=texts.BTN_WEIGHT)],
+        [KeyboardButton(text=texts.BTN_MEAL), KeyboardButton(text=texts.BTN_MEDICATION)],
+        [KeyboardButton(text=texts.BTN_WELLBEING)],
     ]
 
     url = settings.miniapp_url.strip()
