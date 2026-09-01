@@ -19,18 +19,18 @@ KetoCare — платформа сопровождения кетогенной 
 
 - `packages/keto_engine` — verify/solve/scale, 35 provisional-эталонов, property-тесты, покрытие 100%.
 - `packages/core` — все 31 таблица раздела 4.2, Alembic-миграции с сидом справочников, репозитории (`access`, `prescriptions`, `products`, `patients`, `users`, `audit`).
-- `apps/api` — JWT + TOTP, RBAC-зависимости, приглашения, `/auth`, `/patients`, `/prescriptions`, `/products` (включая CSV-импорт), `/calc`. 17 ручек.
+- `apps/api` — JWT + TOTP, RBAC-зависимости, приглашения, `/auth`, `/patients`, `/prescriptions`, `/products` (включая CSV-импорт), `/calc`. Всего в API сейчас 89 путей и 130 операций.
 - `packages/api-client` — генерируется из OpenAPI (`make openapi`).
 - `Makefile`, `infra/docker-compose.dev.yml`, `.github/workflows/ci.yml`.
 
-Идёт **этап 2 «Веб-кабинеты»**:
+**Этап 2 «Веб-кабинеты» завершён:**
 
-- `packages/ui` — **shadcn/ui** (25 компонентов в `src/components/ui`, ставятся и обновляются командой `shadcn add`) + предметные компоненты: `RatioBadge`, `MacroBar`, `TrendChart`, `DiaryEntryCard`, `DataTable`, а также общие состояния — `AsyncSection`, `EmptyState`, `ErrorState`, `ConfirmDialog`, `FormFooter`.
+- `packages/ui` — **shadcn/ui** (25 компонентов в `src/components/ui`, ставятся и обновляются командой `shadcn add`) + предметные компоненты: `RatioBadge`, `MacroBar`, `TrendChart`, `DiaryEntryCard`, `DataTable`, а также общие состояния — `AsyncSection`, `EmptyState`, `ErrorState`, `ConfirmDialog`, `FormFooter`, `Section`, `TabsBar`, `FormSheet`.
 - `apps/web` — React 19, Tailwind 4, TanStack Router/Query/Table, react-hook-form + zod, i18n, тёмная тема, сессия (access-токен в памяти, refresh в httpOnly cookie), вход с 2FA.
 - Экраны раздела 8.3: калькулятор, продукты, главная родителя, меню, дневники (6 видов), рецепты, кабинет врача, админка. Плюс сверх ТЗ: свой профиль, настройки с профилями детей, приглашения, витрина `/dev/ui`.
 - `apps/api` — `/logs`, `/menus`, `/overview`, `/recipes`, `/custom-dishes`, `/clinical`, `/admin`, `/dictionaries`, `/users` (свой профиль, смена пароля, справочник персонала), ведение пациента специалистом.
 
-Тестов: 528 pytest + 67 vitest (`packages/ui`) + 226 vitest (`apps/web`) + 5 vitest (`packages/api-client`).
+Тестов: 994 pytest (`apps/api` 683, `.claude/hooks` 113, `packages/keto_engine` 67, `apps/bot` 59, `packages/core` 46, `apps/worker` 26) и 448 vitest (`apps/web` 343, `packages/ui` 70, `apps/miniapp` 30, `packages/api-client` 5). Единственный пропуск — рендер PDF без системных pango и cairo.
 `make seed-demo` наполняет локальную БД демо-данными (три роли, продукты, две недели дневника).
 
 Сверх ТЗ, по материалам заказчика от 29.08.2026 ([ADR-0007](docs/adr/0007-patient-intake-and-seizure-diary.md)):
@@ -66,7 +66,8 @@ KetoCare — платформа сопровождения кетогенной 
 пересчёт в калькуляторе — они переписывают состав целиком.
 
 Отдельно от этапов прошёл **аудит клиентского пути по ролям** —
-[`docs/AUDIT_JOURNEY.md`](docs/AUDIT_JOURNEY.md), 72 находки. Закрыто по нему:
+[`docs/AUDIT_JOURNEY.md`](docs/AUDIT_JOURNEY.md), 75 находок; перепроверены построчно 01.09.2026 —
+закрыто 66, частично 3, открыто 2, ждёт решения клиники 4. Закрыто по нему:
 
 - **Сессия и вход.** Кабинет умирал через 15 минут (обновление токена шло один раз при
   загрузке). Отказ уровня токена теперь несёт `WWW-Authenticate` (RFC 9110 §11.6.1), и
@@ -167,7 +168,15 @@ Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `
 
 Полный список — раздел 0 ТЗ. Наиболее важное:
 
-1. **Медицинские константы не выдумываются.** Их источник — `docs/medical/calculation-engine-spec.md`. Если значения нет — берётся дефолт из ТЗ (раздел 6.2), место помечается `# TODO(med): подтвердить у медицинской команды`, вопрос добавляется в `docs/medical/OPEN_QUESTIONS.md`.
+1. **Медицинские константы не выдумываются.** Их источник — `docs/medical/calculation-engine-spec.md`.
+   Если значения нет — берётся дефолт из ТЗ (раздел 6.2), место помечается
+   `# TODO(med): подтвердить у медицинской команды`, вопрос добавляется в
+   `docs/medical/OPEN_QUESTIONS.md`. **Этот файл читают врачи, а не разработчики:** пишите
+   человеческим языком, без имён файлов, функций и переменных — что система делает сейчас,
+   что нужно решить, какие есть варианты. Всё техническое (где живёт допущение, что
+   придётся переписать после ответа) идёт в [`docs/open-questions-tech.md`](docs/open-questions-tech.md),
+   строкой с тем же номером. Нумерация вопросов сквозная и не переиспользуется: на неё
+   ссылаются комментарии в коде.
 2. **Keto Engine меняется только вместе с тестами.** Падает эталонный тест — правится код, а не тест; менять эталон можно только со ссылкой на новую версию медицинской спецификации. Любое изменение математики → bump `ENGINE_VERSION` (semver). Покрытие ядра — 100%. Эталонные тесты нельзя `skip`/`xfail`.
 3. **Схема БД — только через Alembic.** Никаких ручных `ALTER TABLE`, никаких правок миграций, уже попавших в `main`.
 4. **Клинические данные не удаляются физически** — только `deleted_at`. `prescriptions` — append-only: изменение назначения = новая строка, UPDATE/DELETE запрещены на уровне репозитория. Физическое удаление — только `python -m core.tools.erase_patient <id>`.
