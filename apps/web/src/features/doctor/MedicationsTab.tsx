@@ -20,11 +20,14 @@ import { MedicationForm } from "./MedicationForm";
 import { formatIsoDate } from "./dates";
 import { useMedicationMutations } from "./doctorMutations";
 import { useMedications } from "./doctorQueries";
+import { useAedDrugs, usePatientIntake } from "../intake/useIntake";
 import { TableSkeleton } from "./skeletons";
 import { isDoctor, type Medication } from "./types";
 
 type FormState =
-  { mode: "create" } | { mode: "edit"; medication: Medication } | null;
+  | { mode: "create"; drugName?: string }
+  | { mode: "edit"; medication: Medication }
+  | null;
 
 /** Схема лекарственной терапии пациента (раздел 8.3 ТЗ, карта пациента). */
 export function MedicationsTab({ patientId }: { patientId: string }) {
@@ -38,6 +41,25 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
 
   const canWrite = isDoctor(session?.role);
   const items = medications.data ?? [];
+
+  // Препараты, названные семьёй в анкете и ещё не попавшие в схему.
+  //
+  // Семья перечисляет их при регистрации, а схему пишет врач — связи между
+  // анкетой и `medications` не было никакой, и до первого приёма вкладка
+  // дневника оставалась нерабочей. Автоматически схема не заводится: назначение
+  // препарата — врачебное решение (правило «человек в контуре»).
+  const intake = usePatientIntake(patientId);
+  const drugs = useAedDrugs();
+  const namedInIntake = (drugs.data ?? [])
+    .filter((drug) => (intake.data?.current_aed_ids ?? []).includes(drug.id))
+    .filter(
+      (drug) =>
+        !items.some(
+          (medication) =>
+            medication.drug_name.trim().toLocaleLowerCase("ru-RU") ===
+            drug.name_ru.trim().toLocaleLowerCase("ru-RU"),
+        ),
+    );
 
   const columns = useMemo<ColumnDef<Medication, unknown>[]>(() => {
     const base: ColumnDef<Medication, unknown>[] = [
@@ -155,6 +177,32 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
         />
       </AsyncSection>
 
+      {canWrite && namedInIntake.length > 0 && (
+        <Section
+          title={t("medications.fromIntake.title")}
+          description={t("medications.fromIntake.description")}
+          level={3}
+          density="compact"
+        >
+          <ul className="m-0 flex list-none flex-wrap gap-field p-0">
+            {namedInIntake.map((drug) => (
+              <li key={drug.id}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setForm({ mode: "create", drugName: drug.name_ru })
+                  }
+                >
+                  <Plus aria-hidden="true" />
+                  {drug.name_ru}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       {/* Ошибка удаления — не ошибка загрузки: повторять нечего, врач решает
           заново. Поэтому она остаётся сообщением действия. */}
       {remove.isError && (
@@ -209,6 +257,7 @@ function MedicationFormSheet({
     >
       <MedicationForm
         medication={editing}
+        suggestedDrugName={form?.mode === "create" ? form.drugName : undefined}
         pending={mutation.isPending}
         error={mutation.error}
         onCancel={onClose}

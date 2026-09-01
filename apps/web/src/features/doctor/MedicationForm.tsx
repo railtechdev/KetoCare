@@ -56,6 +56,7 @@ function toBody(values: MedicationFormValues): MedicationBody {
  */
 export function MedicationForm({
   medication,
+  suggestedDrugName,
   pending,
   error,
   onSubmit,
@@ -63,6 +64,14 @@ export function MedicationForm({
 }: {
   /** null — назначение нового препарата */
   medication: Medication | null;
+  /**
+   * Название, названное семьёй в анкете.
+   *
+   * Только подстановка в поле: дозу и режим приёма назначает врач, и
+   * переносить их из анкеты нечего — их там нет. Решение остаётся за
+   * человеком (правило «человек в контуре»).
+   */
+  suggestedDrugName?: string;
   pending: boolean;
   error: unknown;
   onSubmit: (body: MedicationBody) => void;
@@ -78,7 +87,7 @@ export function MedicationForm({
   } = useForm<MedicationFormValues>({
     resolver: zodResolver(medicationSchema),
     defaultValues: {
-      drugName: medication?.drug_name ?? "",
+      drugName: medication?.drug_name ?? suggestedDrugName ?? "",
       dose: medication?.dose ?? "",
       frequency: medication?.frequency ?? "",
       startedAt: medication?.started_at ?? toDateInput(new Date()),
