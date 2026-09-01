@@ -73,6 +73,41 @@ export function useCreateDictionaryEntryMutation(kind: DictionaryKind) {
   });
 }
 
+/**
+ * Удаление значения справочника.
+ *
+ * Опечатка в названии типа приступа иначе остаётся в выпадающем списке у всех
+ * семей навсегда: переименование ретроспективно меняет смысл уже записанных
+ * приступов, а признака «выведено из употребления» у справочника нет.
+ *
+ * Значение, на которое уже ссылаются дневники, сервер удалить не даёт — и это
+ * правильно: физическое удаление здесь настоящее, колонки `deleted_at` у
+ * справочников нет.
+ */
+export function useDeleteDictionaryEntryMutation(kind: DictionaryKind) {
+  const invalidate = useDictionaryInvalidation(kind);
+
+  return useMutation({
+    mutationFn: async (entryId: string) => {
+      const params = { path: { entry_id: entryId } };
+
+      const { error } =
+        kind === "seizure-types"
+          ? await api.DELETE(
+              "/api/v1/admin/dictionaries/seizure-types/{entry_id}",
+              { params },
+            )
+          : await api.DELETE(
+              "/api/v1/admin/dictionaries/ketone-methods/{entry_id}",
+              { params },
+            );
+
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
 export function useUpdateDictionaryEntryMutation(kind: DictionaryKind) {
   const invalidate = useDictionaryInvalidation(kind);
 

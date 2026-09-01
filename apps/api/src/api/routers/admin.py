@@ -31,6 +31,9 @@ from ..schemas_admin import (
     DictionaryEntryCreate,
     DictionaryEntryRead,
     DictionaryEntryUpdate,
+    SeizureTypeCreate,
+    SeizureTypeRead,
+    SeizureTypeUpdate,
 )
 from ..services import admin as admin_service
 
@@ -193,40 +196,46 @@ async def list_audit_log(
 
 @router.post(
     "/dictionaries/seizure-types",
-    response_model=DictionaryEntryRead,
+    response_model=SeizureTypeRead,
     status_code=201,
     summary="Добавить тип приступа",
 )
 async def create_seizure_type(
-    payload: DictionaryEntryCreate,
+    payload: SeizureTypeCreate,
     request: Request,
     user: CurrentUserDep,
     session: SessionDep,
-) -> DictionaryEntryRead:
-    return await admin_service.create_dictionary_entry(
-        session, SeizureType, payload=payload, actor=user, ip=client_address(request)
+) -> SeizureTypeRead:
+    # Ответ с кодом: иначе форма после сохранения показывала бы тип без кода,
+    # который на самом деле сохранён.
+    return SeizureTypeRead.model_validate(
+        await admin_service.create_dictionary_entry(
+            session, SeizureType, payload=payload, actor=user, ip=client_address(request)
+        )
     )
 
 
 @router.patch(
     "/dictionaries/seizure-types/{entry_id}",
-    response_model=DictionaryEntryRead,
+    response_model=SeizureTypeRead,
     summary="Изменить тип приступа",
 )
 async def update_seizure_type(
     entry_id: Annotated[uuid.UUID, Path()],
-    payload: DictionaryEntryUpdate,
+    payload: SeizureTypeUpdate,
     request: Request,
     user: CurrentUserDep,
     session: SessionDep,
-) -> DictionaryEntryRead:
-    return await admin_service.update_dictionary_entry(
-        session,
-        SeizureType,
-        entry_id=entry_id,
-        payload=payload,
-        actor=user,
-        ip=client_address(request),
+) -> SeizureTypeRead:
+    return SeizureTypeRead.model_validate(
+        await admin_service.update_dictionary_entry(
+            session,
+            SeizureType,
+            entry_id=entry_id,
+            payload=payload,
+            actor=user,
+            ip=client_address(request),
+        )
     )
 
 
@@ -259,8 +268,10 @@ async def create_ketone_method(
     user: CurrentUserDep,
     session: SessionDep,
 ) -> DictionaryEntryRead:
-    return await admin_service.create_dictionary_entry(
-        session, KetoneMethodDict, payload=payload, actor=user, ip=client_address(request)
+    return DictionaryEntryRead.model_validate(
+        await admin_service.create_dictionary_entry(
+            session, KetoneMethodDict, payload=payload, actor=user, ip=client_address(request)
+        )
     )
 
 
@@ -276,13 +287,15 @@ async def update_ketone_method(
     user: CurrentUserDep,
     session: SessionDep,
 ) -> DictionaryEntryRead:
-    return await admin_service.update_dictionary_entry(
-        session,
-        KetoneMethodDict,
-        entry_id=entry_id,
-        payload=payload,
-        actor=user,
-        ip=client_address(request),
+    return DictionaryEntryRead.model_validate(
+        await admin_service.update_dictionary_entry(
+            session,
+            KetoneMethodDict,
+            entry_id=entry_id,
+            payload=payload,
+            actor=user,
+            ip=client_address(request),
+        )
     )
 
 

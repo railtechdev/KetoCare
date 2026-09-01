@@ -28,7 +28,6 @@ from ..schemas_admin import (
     AdminUserUpdate,
     AuditLogRead,
     DictionaryEntryCreate,
-    DictionaryEntryRead,
     DictionaryEntryUpdate,
 )
 from ..security import hash_password_async
@@ -323,9 +322,13 @@ async def create_dictionary_entry[T: (SeizureType, KetoneMethodDict)](
     payload: DictionaryEntryCreate,
     actor: CurrentUser,
     ip: str | None,
-) -> DictionaryEntryRead:
+) -> T:
     entry = await dictionaries_repo.create(
-        session, model, name_ru=payload.name_ru, sort=payload.sort
+        session,
+        model,
+        name_ru=payload.name_ru,
+        sort=payload.sort,
+        code=getattr(payload, "code", None),
     )
     await audit_repo.write_audit_log(
         session,
@@ -336,7 +339,10 @@ async def create_dictionary_entry[T: (SeizureType, KetoneMethodDict)](
         after=_entry_snapshot(entry),
         ip=ip,
     )
-    return DictionaryEntryRead.model_validate(entry)
+    # Возвращается строка, а не схема: у типов приступов и методов измерения
+    # кетонов схемы чтения разные (код есть только у первых), и выбирать её
+    # должен роутер — он знает, что именно отдаёт.
+    return entry
 
 
 async def update_dictionary_entry[T: (SeizureType, KetoneMethodDict)](
@@ -347,7 +353,7 @@ async def update_dictionary_entry[T: (SeizureType, KetoneMethodDict)](
     payload: DictionaryEntryUpdate,
     actor: CurrentUser,
     ip: str | None,
-) -> DictionaryEntryRead:
+) -> T:
     entry = await _entry_or_404(session, model, entry_id)
     before = _entry_snapshot(entry)
 
@@ -356,6 +362,10 @@ async def update_dictionary_entry[T: (SeizureType, KetoneMethodDict)](
         entry=entry,
         name_ru=payload.name_ru if payload.name_ru is not None else entry.name_ru,
         sort=payload.sort if payload.sort is not None else entry.sort,
+        code=getattr(payload, "code", None),
+        # «Код не трогали» и «код очистили» — разные намерения, и различает их
+        # только присутствие поля в запросе.
+        code_set="code" in payload.model_fields_set,
     )
 
     await audit_repo.write_audit_log(
@@ -368,7 +378,7 @@ async def update_dictionary_entry[T: (SeizureType, KetoneMethodDict)](
         after=_entry_snapshot(updated),
         ip=ip,
     )
-    return DictionaryEntryRead.model_validate(updated)
+    return updated
 
 
 async def delete_dictionary_entry[T: (SeizureType, KetoneMethodDict)](

@@ -18,12 +18,20 @@ const entryFormSchema = z.object({
   nameRu: z.string().trim().min(1),
   /** Порядок вывода в списках: целое, одинаковые значения допустимы */
   sort: z.number().int(),
+  /**
+   * Короткий код типа приступа (ADR-0007): в клетке месячной сетки
+   * «Тонико-клонический» не помещается, «TC» — да. Пустой допустим: своего кода
+   * у типов вне дневника KETO-STEP пока нет (вопрос 4 медкоманде).
+   */
+  code: z.string().trim().max(4),
 });
 
 type EntryFormValues = z.infer<typeof entryFormSchema>;
 
 interface Props {
   mode: "create" | "edit";
+  /** Код есть только у типов приступов — у методов измерения его нет. */
+  withCode: boolean;
   defaultValues: EntryFormValues;
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
@@ -41,6 +49,7 @@ interface Props {
  */
 export function DictionaryEntryForm({
   mode,
+  withCode,
   defaultValues,
   pending,
   error,
@@ -65,6 +74,7 @@ export function DictionaryEntryForm({
 
   const nameId = `${ids}-name`;
   const sortId = `${ids}-sort`;
+  const codeId = `${ids}-code`;
 
   const nameError = errors.nameRu && t("dictionaries.form.errors.name");
   const sortError = errors.sort && t("dictionaries.form.errors.sort");
@@ -86,7 +96,13 @@ export function DictionaryEntryForm({
       noValidate
       className="flex flex-col gap-block"
       onSubmit={handleSubmit((values) =>
-        onSubmit({ name_ru: values.nameRu.trim(), sort: values.sort }),
+        onSubmit({
+          name_ru: values.nameRu.trim(),
+          sort: values.sort,
+          // Код отправляется только там, где он есть у справочника: методам
+          // измерения кетонов сервер такое поле не примет.
+          ...(withCode ? { code: values.code.trim() || null } : {}),
+        }),
       )}
     >
       <FormErrorSummary
@@ -114,6 +130,18 @@ export function DictionaryEntryForm({
           error={nameError}
           {...register("nameRu")}
         />
+
+        {withCode && (
+          <Field
+            id={codeId}
+            width="narrow"
+            label={t("dictionaries.form.code")}
+            hint={t("dictionaries.form.codeHint")}
+            optional
+            maxLength={4}
+            {...register("code")}
+          />
+        )}
 
         <Field
           id={sortId}
