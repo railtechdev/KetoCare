@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
-import { useSectionTab } from "../../routes/useSectionTab";
+import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useSession } from "../auth/useSession";
@@ -24,11 +24,18 @@ import {
 } from "./types";
 import { useRecipeSearch } from "./useRecipes";
 
-type View =
-  | { kind: "list" }
-  | { kind: "detail"; recipeId: string }
-  /** `recipeId: null` — создание рецепта */
-  | { kind: "form"; recipeId: string | null };
+/**
+ * Открытый рецепт живёт в адресе (`?item=`, правило П30 канона).
+ *
+ * До этого карточка открывалась состоянием: адрес оставался `/app/recipes`,
+ * «Назад» браузера уводил из раздела, F5 возвращал к списку, а ссылку на рецепт
+ * нельзя было переслать — при том что по рецепту готовят и его обсуждают с
+ * диетологом.
+ *
+ * Форма правки остаётся состоянием: это шаг внутри карточки, а не отдельный
+ * предмет, и адресовать «наполовину заполненную форму» нечем.
+ */
+type FormView = { recipeId: string | null };
 
 /**
  * Раздел «Рецепты» (раздел 8.1 ТЗ).
@@ -55,7 +62,8 @@ export function RecipesPage() {
   const canEdit = canEditRecipes(session?.role);
 
   const [filters, setFilters] = useState<RecipeFilters>(EMPTY_RECIPE_FILTERS);
-  const [view, setView] = useState<View>({ kind: "list" });
+  const [openId, setOpenId] = useSectionItem();
+  const [form, setForm] = useState<FormView | null>(null);
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
   const debouncedQuery = useDebouncedValue(filters.q, 300);
@@ -75,29 +83,29 @@ export function RecipesPage() {
     }));
   }
 
-  if (view.kind === "form") {
+  if (form !== null) {
     return (
       <RecipeFormPanel
-        recipeId={view.recipeId}
-        onSaved={(recipeId) => setView({ kind: "detail", recipeId })}
-        onCancel={() =>
-          setView(
-            view.recipeId === null
-              ? { kind: "list" }
-              : { kind: "detail", recipeId: view.recipeId },
-          )
-        }
+        recipeId={form.recipeId}
+        onSaved={(recipeId) => {
+          setForm(null);
+          setOpenId(recipeId);
+        }}
+        onCancel={() => {
+          setForm(null);
+          if (form.recipeId === null) setOpenId(undefined);
+        }}
       />
     );
   }
 
-  if (view.kind === "detail") {
+  if (openId !== undefined) {
     return (
       <RecipeDetail
-        recipeId={view.recipeId}
+        recipeId={openId}
         canEdit={canEdit}
-        onBack={() => setView({ kind: "list" })}
-        onEdit={(recipeId) => setView({ kind: "form", recipeId })}
+        onBack={() => setOpenId(undefined)}
+        onEdit={(recipeId) => setForm({ recipeId })}
       />
     );
   }
@@ -113,7 +121,7 @@ export function RecipesPage() {
           <Button
             type="button"
             className="min-h-touch"
-            onClick={() => setView({ kind: "form", recipeId: null })}
+            onClick={() => setForm({ recipeId: null })}
           >
             <Plus aria-hidden="true" />
             {t("actions.create")}
@@ -163,9 +171,7 @@ export function RecipesPage() {
                     filtersActive={hasActiveFilters(filters)}
                     onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
                     onCreate={
-                      canEdit
-                        ? () => setView({ kind: "form", recipeId: null })
-                        : undefined
+                      canEdit ? () => setForm({ recipeId: null }) : undefined
                     }
                   />
                 }
@@ -174,7 +180,7 @@ export function RecipesPage() {
                   recipes={items}
                   total={recipes.data?.total ?? items.length}
                   showStatus={canEdit}
-                  onOpen={(recipeId) => setView({ kind: "detail", recipeId })}
+                  onOpen={(recipeId) => setOpenId(recipeId)}
                   onShowMore={() =>
                     setFilters((current) => ({
                       ...current,
@@ -222,9 +228,7 @@ export function RecipesPage() {
                 filtersActive={hasActiveFilters(filters)}
                 onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
                 onCreate={
-                  canEdit
-                    ? () => setView({ kind: "form", recipeId: null })
-                    : undefined
+                  canEdit ? () => setForm({ recipeId: null }) : undefined
                 }
               />
             }
@@ -233,7 +237,7 @@ export function RecipesPage() {
               recipes={items}
               total={recipes.data?.total ?? items.length}
               showStatus={canEdit}
-              onOpen={(recipeId) => setView({ kind: "detail", recipeId })}
+              onOpen={(recipeId) => setOpenId(recipeId)}
               onShowMore={() =>
                 setFilters((current) => ({
                   ...current,
