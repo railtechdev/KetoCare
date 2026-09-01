@@ -343,3 +343,23 @@ describe("AdminPage — обновляющий импорт", () => {
     );
   });
 });
+
+describe("AdminPage — навигация", () => {
+  it("не повторяет боковое меню полосой вкладок", async () => {
+    // Те же пять пунктов стояли и в меню, и вкладками на каждом экране: одна и
+    // та же навигация, показанная дважды, занимала верх экрана и заставляла
+    // выбирать, каким из двух способов ходить (правило П3 канона).
+    renderPage("users");
+
+    await screen.findByText("Мария Иванова");
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+  });
+
+  it("называет подраздел заголовком экрана, а не общим «Администрирование»", async () => {
+    renderPage("audit");
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Журнал аудита" }),
+    ).toBeInTheDocument();
+  });
+});

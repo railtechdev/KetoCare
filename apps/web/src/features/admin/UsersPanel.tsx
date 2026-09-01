@@ -47,7 +47,7 @@ const ROLE_OPTIONS = ["admin", "doctor", "dietitian", "parent"] as const;
  */
 const STAFF_ROLES: readonly Role[] = ["doctor", "dietitian", "admin"];
 
-export function UsersPanel() {
+export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   const { t } = useTranslation("admin");
   const { session } = useSession();
 
@@ -222,18 +222,25 @@ export function UsersPanel() {
     [t, currentUserId, resetUpdate, resetTotp, resetPassword],
   );
 
+  const inviteButton = (
+    <Button type="button" onClick={() => setInviteOpen(true)}>
+      <UserPlus aria-hidden="true" />
+      {t("users.inviteAction")}
+    </Button>
+  );
+
   return (
     <div className="flex flex-col gap-block">
-      <SubPageHeader
-        title={t("users.title")}
-        intro={t("users.intro")}
-        actions={
-          <Button type="button" onClick={() => setInviteOpen(true)}>
-            <UserPlus aria-hidden="true" />
-            {t("users.inviteAction")}
-          </Button>
-        }
-      />
+      {chrome === "tab" ? (
+        <SubPageHeader
+          title={t("users.title")}
+          intro={t("users.intro")}
+          actions={inviteButton}
+        />
+      ) : (
+        // Заголовок даёт экран; здесь остаётся только действие.
+        <div className="flex flex-wrap gap-field">{inviteButton}</div>
+      )}
 
       {/* Администратор заводит персонал; семью приглашает её врач или диетолог,
           он же становится ведущим специалистом (ADR-0003).

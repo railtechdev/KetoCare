@@ -1,5 +1,3 @@
-import { Tabs, TabsBar, TabsContent } from "@ketocare/ui";
-import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
@@ -9,21 +7,25 @@ import { LeadsPanel } from "./LeadsPanel";
 import { ProductsPanel } from "./ProductsPanel";
 import { ProductCategoriesPanel } from "../products/ProductCategoriesPanel";
 import { UsersPanel } from "./UsersPanel";
-import { ADMIN_SECTIONS, isAdminSection, type AdminSection } from "./types";
+import { isAdminSection, type AdminSection } from "./types";
 
 /**
  * Администрирование (раздел 8.1 ТЗ: users, products, dictionaries, audit).
  *
- * Один экран на четыре подраздела, но у каждого из них СВОЙ адрес
- * (`/app/users`, `/app/products`, `/app/dictionaries`, `/app/audit`) — они
- * перечислены и в меню кабинета. Неизвестное значение параметра открывает
- * учётные записи: пустой экран администратору не помогает.
+ * Один компонент на пять подразделов, у каждого свой адрес (`/app/users`,
+ * `/app/leads`, `/app/products`, `/app/dictionaries`, `/app/audit`).
+ * Неизвестное значение открывает учётные записи: пустой экран администратору
+ * не помогает.
  *
- * Поэтому вкладка не хранит выбор, а переходит по адресу (правило П29: другая
- * задача — отдельный адрес; правило П30: выбранное живёт в адресе). До этого
- * выбор жил в `useState`, и адрес расходился с содержимым: администратор,
- * открывший «Аудит» вкладкой, оставался на `/app/users` — переслать ссылку на
- * журнал было нельзя, а F5 возвращал на учётные записи.
+ * **Полосы вкладок здесь нет, и это правка по аудиту.** Те же пять пунктов
+ * стояли и в боковом меню, и вкладками на каждом экране: одна и та же
+ * навигация, показанная дважды, занимала верх экрана и заставляла выбирать,
+ * каким из двух способов ходить. Раздел называет себя заголовком, а переходы
+ * между разделами — дело меню (правило П3 канона).
+ *
+ * Заголовок берётся у подраздела: «Учётные записи», «Журнал аудита» — а не
+ * общее «Администрирование» с уточнением ниже. Экран отвечает на вопрос «где
+ * я» первой строкой.
  *
  * Клинических данных здесь нет: администратор к ним доступа не имеет
  * (раздел 5.1 ТЗ), и сервер вырезает нагрузку клинических записей даже из
@@ -32,64 +34,29 @@ import { ADMIN_SECTIONS, isAdminSection, type AdminSection } from "./types";
 export function AdminPage({ section }: { section?: string }) {
   const { t } = useTranslation("admin");
 
-  const navigate = useNavigate();
-  const tab = sectionFromRoute(section);
+  const current = sectionFromRoute(section);
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")}>
-      <Tabs
-        value={tab}
-        onValueChange={(value) => {
-          if (!isAdminSection(value)) return;
-          // Переход, а не состояние: адрес обязан совпадать с тем, что открыто.
-          // `tab` и `kind` принадлежат покинутому подразделу — на новом они
-          // означали бы уже другое, поэтому сбрасываются (как в SectionLink).
-          void navigate({
-            to: "/app/$section",
-            params: { section: value },
-            search: (previous) => ({
-              ...previous,
-              tab: undefined,
-              kind: undefined,
-            }),
-          });
-        }}
-        className="gap-block"
-      >
-        {/* Оформление полосы вкладок — общее для приложения: на шесть наборов
-            вкладок приходилось четыре разных набора классов и три ответа на
-            «что делать, когда не помещаются» (правило П29). */}
-        <TabsBar
-          label={t("tabsLabel")}
-          items={ADMIN_SECTIONS.map((value) => ({
-            value,
-            label: t(`tabs.${value}`),
-          }))}
-        />
+    <PageLayout
+      title={t(`${current}.title`)}
+      intro={t(`${current}.intro`, { defaultValue: "" }) || undefined}
+    >
+      <div className="flex flex-col gap-block">
+        {current === "users" && <UsersPanel chrome="screen" />}
+        {current === "leads" && <LeadsPanel chrome="screen" />}
+        {current === "products" && (
+          <>
+            <ProductsPanel chrome="screen" />
 
-        {/* Содержимое неактивной вкладки не монтируется, поэтому запросы уходят
-            только за открытым подразделом. */}
-        <TabsContent value="users">
-          <UsersPanel />
-        </TabsContent>
-        <TabsContent value="leads">
-          <LeadsPanel />
-        </TabsContent>
-        <TabsContent value="products">
-          <ProductsPanel />
-
-          {/* Категории — часть того же справочника: заводить продукт можно
-              только в существующую категорию, а до этого её нельзя было ни
-              завести, ни переименовать, ни свести с одноимённой. */}
-          <ProductCategoriesPanel />
-        </TabsContent>
-        <TabsContent value="dictionaries">
-          <DictionariesPanel />
-        </TabsContent>
-        <TabsContent value="audit">
-          <AuditPanel />
-        </TabsContent>
-      </Tabs>
+            {/* Категории — часть того же справочника: заводить продукт можно
+                только в существующую категорию, а до этого её нельзя было ни
+                завести, ни переименовать, ни свести с одноимённой. */}
+            <ProductCategoriesPanel />
+          </>
+        )}
+        {current === "dictionaries" && <DictionariesPanel chrome="screen" />}
+        {current === "audit" && <AuditPanel chrome="screen" />}
+      </div>
     </PageLayout>
   );
 }
