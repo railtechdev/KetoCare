@@ -11,7 +11,10 @@ description: Работа с расчётным ядром packages/keto_engine 
 
 1. Прочитай `docs/medical/calculation-engine-spec.md`. Если файла нет (сейчас его нет)
    или значения нет — бери дефолт из ТЗ §6.2, помечай `# TODO(med): подтвердить`,
-   добавь вопрос в `docs/medical/OPEN_QUESTIONS.md` (формат: дата, вопрос, где используется дефолт).
+   добавь вопрос в `docs/medical/OPEN_QUESTIONS.md` — человеческим языком, для врачей:
+   что система делает сейчас, что нужно решить, какие варианты. Технику (где живёт
+   дефолт, что переписывать после ответа) — строкой того же номера в
+   `docs/open-questions-tech.md`.
 2. Прочитай `packages/keto_engine/src/keto_engine/constants.py`, эталоны в
    `docs/medical/reference-cases/` и тесты пакета
    (`test_reference_cases.py`, `test_properties.py`, `test_engine_internals.py`).
