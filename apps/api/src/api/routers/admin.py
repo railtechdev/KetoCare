@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from core.models import KetoneMethodDict, SeizureType
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
@@ -24,6 +25,7 @@ from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import AdminPasswordReset, Page, UserRead
 from ..schemas_admin import (
+    AdminUserRead,
     AdminUserUpdate,
     AuditLogRead,
     DictionaryEntryCreate,
@@ -42,17 +44,30 @@ router = APIRouter(
 # --- учётные записи -------------------------------------------------------
 
 
-@router.get("/users", response_model=Page[UserRead], summary="Список учётных записей")
+@router.get("/users", response_model=Page[AdminUserRead], summary="Список учётных записей")
 async def list_users(
     session: SessionDep,
     page: PaginationDep,
     q: Annotated[str | None, Query(max_length=255, description="Поиск по имени и почте")] = None,
     role: UserRole | None = None,
-) -> Page[UserRead]:
+) -> Page[AdminUserRead]:
     items, total = await users_repo.list_all(
         session, query=q, role=role, limit=page.limit, offset=page.offset
     )
-    return Page(items=[UserRead.model_validate(u) for u in items], total=total)
+
+    # Сколько пациентов останутся без ведущего, если эту учётку отключить.
+    # Одним запросом на всю страницу: двести запросов ради счётчика — это не
+    # счётчик.
+    care_ids = [u.id for u in items if u.role in (UserRole.DOCTOR, UserRole.DIETITIAN)]
+    sole = await patients_repo.count_sole_doctor_patients_by_doctor(session, doctor_ids=care_ids)
+
+    return Page(
+        items=[
+            AdminUserRead.model_validate(u).model_copy(update={"sole_patients": sole.get(u.id, 0)})
+            for u in items
+        ],
+        total=total,
+    )
 
 
 @router.patch("/users/{user_id}", response_model=UserRead, summary="Изменить учётную запись")

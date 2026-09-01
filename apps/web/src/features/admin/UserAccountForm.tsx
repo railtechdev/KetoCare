@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FormFooter, Section } from "@ketocare/ui";
+import { FormFooter, Section, WarningBanner } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -60,6 +60,7 @@ export function UserAccountForm({
     reValidateMode: "onBlur",
   });
 
+  const sole = user.sole_patients ?? 0;
   const activeId = `${ids}-active`;
   const roleId = `${ids}-role`;
 
@@ -89,6 +90,18 @@ export function UserAccountForm({
         title={t("users.form.title", { name: user.full_name })}
         description={user.email}
       >
+        {/* Последствие называется до нажатия, а не после отказа: отключение
+            специалиста, который ведёт пациентов один, оставило бы их
+            невидимыми для всех клиницистов — сервер такое не пропустит. */}
+        {sole > 0 && (
+          <WarningBanner
+            level="warning"
+            title={t("users.form.solePatientsTitle")}
+          >
+            {t("users.form.solePatients", { count: sole })}
+          </WarningBanner>
+        )}
+
         {error !== null && error !== undefined && (
           <FormError>
             {errorMessageOf(error) ?? t("common:errors.unexpected")}

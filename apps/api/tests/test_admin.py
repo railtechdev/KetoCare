@@ -22,6 +22,7 @@ from api.routers.admin import router as admin_router
 from core.models import AuditLog, KetoneMethodDict, SeizureLog, SeizureType, User
 from core.models.enums import DiarySource, UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import patients as patients_repo
 
 pytestmark = pytest.mark.asyncio
 
@@ -112,6 +113,9 @@ class TestListUsers:
         assert set(card) == {
             "id",
             "has_totp",
+            # Счётчик связей, а не клинические данные: сколько пациентов
+            # останутся без ведущего, если учётку отключить.
+            "sole_patients",
             "role",
             "full_name",
             "email",
@@ -616,3 +620,87 @@ class TestDictionaries:
             f"{SEIZURE_TYPES_URL}/{entry_id}", json=payload, headers=auth_headers(admin)
         )
         assert response.status_code == 422, response.text
+
+
+class TestDeactivationKeepsPatientsVisible:
+    """Отключение специалиста не должно оставлять пациентов без ведущего.
+
+    Сервер защищает этот инвариант при снятии специалиста вручную
+    (`remove_patient_doctor`), но отключение учётной записи его обходило: связи
+    остаются, а войти по ним больше некому — и «взять» такого пациента другой
+    врач не может, ручки нет намеренно (ADR-0003).
+    """
+
+    async def test_cannot_deactivate_the_only_doctor_of_a_patient(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.patch(
+            f"/api/v1/admin/users/{doctor.id}",
+            json={"is_active": False},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 409
+        body = response.json()["error"]
+        assert body["code"] == "conflict"
+        # Сообщение называет число и следующий шаг, а не просто отказывает.
+        assert "1" in body["message"] and "коллеге" in body["message"]
+
+    async def test_role_change_is_guarded_too(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Разжалование врача в родителя снимает с пациента ведущего так же."""
+
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.patch(
+            f"/api/v1/admin/users/{doctor.id}",
+            json={"role": "parent"},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 409
+
+    async def test_second_specialist_makes_deactivation_possible(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Пациента передали коллеге — отключение проходит."""
+
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        colleague = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        await patients_repo.link_doctor(session, doctor_id=colleague.id, patient_id=patient.id)
+
+        response = await client.patch(
+            f"/api/v1/admin/users/{doctor.id}",
+            json={"is_active": False},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200
+
+    async def test_list_says_how_many_patients_depend_on_the_account(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Счётчик виден администратору до нажатия, а не после отказа."""
+
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.get("/api/v1/admin/users", headers=auth_headers(admin))
+
+        rows = {item["id"]: item for item in response.json()["items"]}
+        assert rows[str(doctor.id)]["sole_patients"] == 1
+        assert rows[str(admin.id)]["sole_patients"] == 0

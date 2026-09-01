@@ -29,6 +29,9 @@ const USERS = {
       role: "dietitian",
       is_active: true,
       created_at: "2026-08-01T10:00:00Z",
+      // Пациентов, которых ведёт только она: администратор видит это в форме
+      // до того, как снимет доступ.
+      sole_patients: 2,
     },
   ],
   total: 1,
@@ -105,5 +108,19 @@ describe("учётные записи", () => {
     expect(
       screen.getAllByRole("button", { name: "Сбросить отбор" }).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("отключение специалиста", () => {
+  it("называет последствие до нажатия, а не после отказа сервера", async () => {
+    // Отключение врача, который ведёт пациентов один, оставило бы их
+    // невидимыми для всех клиницистов: «взять» такого пациента другой врач не
+    // может, ручки нет намеренно (ADR-0003).
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Изменить" }));
+
+    expect(await screen.findByText(/ведёт только он/)).toBeInTheDocument();
   });
 });

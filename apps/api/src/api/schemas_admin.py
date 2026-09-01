@@ -14,10 +14,22 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.models.enums import UserRole
 
-from .schemas import RequiredName
+from .schemas import RequiredName, UserRead
 
 # Поля учётной записи, которые не могут стать null: в БД они NOT NULL.
 _NOT_NULLABLE_USER_FIELDS = ("full_name", "role", "is_active")
+
+
+class AdminUserRead(UserRead):
+    """Учётная запись в списке администратора.
+
+    Сверх обычного профиля — число пациентов, которых ведёт только этот
+    специалист. Это не клинические данные (администратору они закрыты), а
+    счётчик связей: без него отключение врача выглядело безобидной правкой
+    доступа, а на деле оставляло его пациентов невидимыми для всех клиницистов.
+    """
+
+    sole_patients: int = 0
 
 
 class AdminUserUpdate(BaseModel):
