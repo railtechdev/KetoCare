@@ -151,6 +151,25 @@ describe("калькулятор в Mini App", () => {
     expect(await screen.findByText("Арахис")).toBeInTheDocument();
   });
 
+  it("исключённый продукт без имени назван словами, а не идентификатором", async () => {
+    // Продукт могли удалить из справочника; 36 знаков UUID семье не говорят
+    // ничего (находка М6, тот же класс, что Н1 кабинета).
+    (api.POST as Mock).mockResolvedValue({
+      data: verifyResponse({
+        excluded: [{ product_id: "0f9b7c33-1111-4111-8111-222222222222" }],
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+
+    expect(
+      await screen.findByText(/продукт удалён из справочника/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/0f9b7c33/)).not.toBeInTheDocument();
+  });
+
   it("расхождение с назначением показано, а не спрятано", async () => {
     (api.POST as Mock).mockResolvedValue({
       data: verifyResponse({
@@ -189,6 +208,37 @@ describe("калькулятор в Mini App", () => {
       await screen.findByLabelText("Соотношение не определено"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/0\.0/)).not.toBeInTheDocument();
+  });
+
+  it("запятая в граммовке считается, а не глушит расчёт", async () => {
+    // Русская клавиатура телефона в числовом режиме даёт запятую: «12,5»
+    // превращалось в не-число, и расчёт молча не запускался (находка М5).
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.type(screen.getByLabelText("Найдите продукт"), "масло");
+    await user.click(
+      await screen.findByRole("button", { name: "Масло сливочное" }),
+    );
+    await user.type(
+      await screen.findByLabelText(/Масло сливочное, граммы/),
+      "12,5",
+    );
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/calc/verify",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            items: [expect.objectContaining({ grams: 12.5 })],
+          }),
+        }),
+      );
+    });
+    // Ввод остаётся на экране как набран: поле не «съедает» запятую.
+    expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+      "12,5",
+    );
   });
 
   it("пустой состав не уходит в расчёт", async () => {

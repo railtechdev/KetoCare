@@ -87,21 +87,32 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
 
 
 def _snapshot_ingredients(item: MenuItem) -> list[MenuItemIngredient]:
-    """Состав позиции из снимка: что и сколько взвесить.
+    """Состав позиции из снимка: что и сколько взвесить НА ЭТУ ПОЗИЦИЮ.
 
     Из меню нельзя было открыть блюдо и увидеть граммовку — приходилось искать
     рецепт в другом разделе и надеяться, что он с тех пор не изменился. Снимок
     отвечает на этот вопрос точно, потому что и создан для этого.
+
+    Граммовка масштабируется здесь, на сервере: снимок хранит раскладку ВСЕГО
+    рецепта и его `servings`, а клиент числа порций не видит и отмасштабировать
+    не может. Кабинет умножал сырую раскладку на `portion_factor` без деления
+    на порции — рецепт на четверых при одной порции предлагал взвесить 200 г
+    масла вместо 50 г. Итоги дня при этом считались верно (`totals_from_items`
+    делит на `servings`) — расходились именно граммы у плиты. Тесты дефекта не
+    видели по той же причине, что в ADR-0015: рецепт на одну порцию и своё
+    блюдо (у него `servings` = 1) дают правильный ответ и при неправильной
+    формуле.
     """
 
     if item.snapshot is None:
         return []
 
+    scale = float(item.portion_factor) / int(item.snapshot.get("servings", 1))
     return [
         MenuItemIngredient(
             product_id=uuid.UUID(str(row["product_id"])),
             name_ru=str(row.get("name_ru", "")),
-            grams=float(row["grams"]),
+            grams=float(row["grams"]) * scale,
         )
         for row in item.snapshot.get("ingredients", [])
     ]

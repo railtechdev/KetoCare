@@ -38,12 +38,23 @@ export const api = createApiClient({
   },
 
   onSessionExpired: () => {
-    setTokens(null);
-    sessionExpiredHandlers.forEach((handler) => {
-      handler();
-    });
+    notifySessionExpired();
   },
 });
+
+/**
+ * Смерть сессии: токены забыты, подписчики оповещены.
+ *
+ * Вынесено из конфигурации клиента отдельной функцией: это единственный путь,
+ * которым «истекло» доходит до экранов, и тест обязан уметь пройти по нему
+ * по-настоящему — а не подменой внутренностей.
+ */
+export function notifySessionExpired(): void {
+  setTokens(null);
+  sessionExpiredHandlers.forEach((handler) => {
+    handler();
+  });
+}
 
 export interface Tokens {
   access: string;

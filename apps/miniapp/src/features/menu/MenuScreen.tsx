@@ -1,4 +1,5 @@
 import { AsyncSection, MacroBar, Section, WarningBanner } from "@ketocare/ui";
+
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
@@ -7,6 +8,10 @@ import type { Menu, MenuItem } from "./useMenu";
 import { today, useMarkEaten, useMenu } from "./useMenu";
 
 const SLOTS = ["breakfast", "lunch", "dinner", "snack"] as const;
+/** Целые граммы — целыми: «50 г», а не «50.0 г». Дробные — с одним знаком. */
+function formatGrams(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
 
 /**
  * План питания на сегодня с отметками «съедено» (раздел 9 ТЗ).
@@ -115,6 +120,33 @@ function DayPlan({
                       )}
                     </span>
                   </label>
+
+                  {/* Что и сколько взвесить — по требованию, как в кабинете:
+                      у плиты нужна граммовка, при беглом взгляде — названия.
+                      Граммы приходят с сервера уже на эту позицию (М1):
+                      доумножать их здесь нечем — числа порций клиент не видит. */}
+                  {(item.ingredients ?? []).length > 0 && (
+                    <details className="pl-9 text-sm">
+                      <summary className="min-h-(--spacing-touch) cursor-pointer py-1 text-muted-foreground">
+                        {t("menu.composition")}
+                      </summary>
+                      <ul className="flex list-none flex-col gap-1 p-0 pt-1">
+                        {(item.ingredients ?? []).map((line) => (
+                          <li
+                            key={line.product_id}
+                            className="flex flex-wrap justify-between gap-field"
+                          >
+                            <span>{line.name_ru}</span>
+                            <span className="text-muted-foreground tabular-nums">
+                              {t("menu.grams", {
+                                value: formatGrams(line.grams),
+                              })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
                 </li>
               ))}
             </ul>

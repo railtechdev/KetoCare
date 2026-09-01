@@ -18,6 +18,7 @@ import {
   type DishRow,
   type ProductOption,
   type Targets,
+  parseAmount,
   useProductSearch,
   useVerify,
 } from "./useCalculator";
@@ -50,8 +51,8 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // рендер держал бы вердикт снятым навсегда — экран вечно «пересчитываем».
   const targets: Targets | null = useMemo(
     () =>
-      prescribedRatio !== null && Number(kcal) > 0
-        ? { ratio: prescribedRatio, kcal: Number(kcal) }
+      prescribedRatio !== null && parseAmount(kcal) > 0
+        ? { ratio: prescribedRatio, kcal: parseAmount(kcal) }
         : null,
     [prescribedRatio, kcal],
   );
@@ -81,13 +82,13 @@ export function CalculatorScreen({ session }: { session: Session }) {
             <li key={row.product.id} className="flex items-center gap-field">
               <span className="flex-1">{row.product.name}</span>
               <Input
-                type="number"
+                type="text"
                 inputMode="decimal"
                 className="w-24"
                 aria-label={t("calculator.grams", { name: row.product.name })}
-                value={row.grams === 0 ? "" : String(row.grams)}
+                value={row.grams}
                 onChange={(event) => {
-                  const grams = Number(event.target.value);
+                  const grams = event.target.value;
                   setRows(
                     rows.map((r, i) => (i === index ? { ...r, grams } : r)),
                   );
@@ -112,7 +113,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
             setRows((current) =>
               current.some((row) => row.product.id === product.id)
                 ? current
-                : [...current, { product, grams: 0 }],
+                : [...current, { product, grams: "" }],
             );
           }}
         />
@@ -172,7 +173,12 @@ export function CalculatorScreen({ session }: { session: Session }) {
               {verify.data.excluded.length > 0 && (
                 <WarningBanner level="danger" title={t("calculator.excluded")}>
                   {verify.data.excluded
-                    .map((item) => item.name_ru ?? item.product_id)
+                    // Словами, а не идентификатором: продукт могли удалить из
+                    // справочника, и 36 знаков UUID семье не говорят ничего
+                    // (тот же класс, что находка Н1 кабинета).
+                    .map(
+                      (item) => item.name_ru ?? t("calculator.unknownProduct"),
+                    )
                     .join(", ")}
                 </WarningBanner>
               )}
@@ -201,7 +207,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
         <label className="flex items-center gap-field">
           <span className="flex-1">{t("calculator.mealKcal")}</span>
           <Input
-            type="number"
+            type="text"
             inputMode="numeric"
             className="w-28"
             value={kcal}

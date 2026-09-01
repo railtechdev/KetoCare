@@ -110,6 +110,39 @@ describe("план дня в Mini App", () => {
     });
   });
 
+  it("позиция раскрывается в «что взвесить» с граммовкой сервера", async () => {
+    // Снимок отвечает, что и сколько взвесить, — прежде состав был недостижим
+    // с экрана, который семья держит в руках на кухне (находка М3 аудита).
+    // Граммы приходят уже на позицию (М1): клиент их не доумножает.
+    (api.GET as Mock).mockResolvedValue({
+      data: menu({
+        items: [
+          {
+            ...menu().items[0],
+            ingredients: [
+              { product_id: "prod-1", name_ru: "Яйцо куриное", grams: 50 },
+            ],
+          },
+        ],
+      }),
+      response: { status: 200 },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByText("Что взвесить"));
+
+    expect(await screen.findByText("Яйцо куриное")).toBeInTheDocument();
+    expect(screen.getByText("50 г")).toBeInTheDocument();
+  });
+
+  it("позиция без снимка не предлагает пустого раскрытия", async () => {
+    renderScreen();
+
+    await screen.findByText("Омлет на сливках");
+    expect(screen.queryByText("Что взвесить")).not.toBeInTheDocument();
+  });
+
   it("отсутствие плана — это состояние, а не ошибка", async () => {
     // Семья могла не планировать день; экран ошибки тут читался бы как поломка.
     (api.GET as Mock).mockResolvedValue({ response: { status: 404 } });

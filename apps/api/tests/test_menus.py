@@ -218,6 +218,42 @@ class TestUpsert:
         # До правки здесь было бы 162.2 — четырёхкратная норма.
         assert response.json()["totals"]["fat"] == pytest.approx(40.55, abs=0.01)
 
+    async def test_weigh_list_is_scaled_to_the_position(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """`ingredients` позиции — что взвесить НА НЕЁ, а не раскладка рецепта.
+
+        Итоги дня делились на `servings` (тесты выше), а список «что взвесить»
+        приходил сырой раскладкой, и клиент — не зная числа порций — умножал её
+        на `portion_factor`: рецепт на четверых при одной порции предлагал
+        семье 200 г масла вместо 50 г.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 200)], servings=4)
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id)},
+                    {"meal_slot": "dinner", "recipe_id": str(recipe.id), "portion_factor": 2},
+                ],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        items = response.json()["items"]
+        # Одна порция из четырёх — 50 г; две — 100 г. Раскладка целиком — 200 г.
+        assert items[0]["ingredients"][0]["grams"] == pytest.approx(50.0)
+        assert items[1]["ingredients"][0]["grams"] == pytest.approx(100.0)
+        # Помощник добавляет к имени уникальный суффикс — БД общая с ручной работой.
+        assert items[0]["ingredients"][0]["name_ru"].startswith("Масло сливочное")
+
     async def test_two_portions_of_a_four_serving_recipe_is_a_half(
         self, client, session, make_user, make_patient, auth_headers
     ):

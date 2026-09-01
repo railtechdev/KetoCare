@@ -2,6 +2,7 @@ import { EmptyState, ErrorState } from "@ketocare/ui";
 import { type ReactNode, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
+import { onSessionExpired } from "../../lib/api";
 import type { Session } from "./useSession";
 import { useOpenSession } from "./useSession";
 
@@ -24,6 +25,14 @@ export function SessionGate({
 
   useEffect(() => {
     mutate();
+    // Истечение сессии посреди работы — прежде всего отзыв привязки: refresh
+    // умирает, и каждый экран показывал «проверьте связь», хотя связь ни при
+    // чём. Вход открывается заново тем же путём, что при запуске: подпись
+    // Telegram ещё жива — семья ничего не замечает; привязка отозвана —
+    // честный экран «этот Telegram ещё не привязан».
+    return onSessionExpired(() => {
+      mutate();
+    });
   }, [mutate]);
 
   if (open.isPending || open.isIdle) {
