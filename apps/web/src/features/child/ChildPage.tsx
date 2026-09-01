@@ -15,7 +15,7 @@ import {
   Plus,
   Stethoscope,
 } from "lucide-react";
-import { useState } from "react";
+import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
@@ -35,14 +35,25 @@ import {
 import { allergyNames } from "../patients/allergies";
 import { usePatients } from "../patients/usePatients";
 
-type View =
-  | { kind: "list" }
-  | { kind: "add" }
-  | { kind: "edit"; child: Patient }
-  | { kind: "intake"; child: Patient }
-  | { kind: "documents"; child: Patient }
-  | { kind: "telegram"; child: Patient }
-  | { kind: "care"; child: Patient };
+/**
+ * Подэкраны раздела. Живут в адресе, а не в состоянии (правило П30 канона).
+ *
+ * До этого «Анкета», «Документы», «Telegram» и «Кто ведёт» открывались
+ * состоянием: адрес оставался `/app/child`, «Назад» браузера уводил из раздела
+ * вовсе, а F5 терял открытый экран — прямо посреди заполнения анкеты. Ссылку на
+ * анкету нельзя было ни переслать, ни сохранить.
+ */
+const TABS = [
+  "list",
+  "add",
+  "edit",
+  "intake",
+  "documents",
+  "telegram",
+  "care",
+] as const;
+
+type Tab = (typeof TABS)[number];
 
 /**
  * Раздел «Ребёнок»: профили детей семьи.
@@ -55,45 +66,35 @@ type View =
 export function ChildPage() {
   const { t } = useTranslation("child");
   const patients = usePatients();
-  const [view, setView] = useState<View>({ kind: "list" });
+  const [tab, setTab] = useSectionTab<Tab>("tab", TABS, "list");
+  const [openId, setOpenId] = useSectionItem();
 
   const children = patients.data?.items ?? [];
+  const child = children.find((item) => item.id === openId) ?? null;
 
-  if (view.kind === "add")
-    return <AddChild onDone={() => setView({ kind: "list" })} />;
-  if (view.kind === "edit") {
-    return (
-      <EditChild child={view.child} onDone={() => setView({ kind: "list" })} />
-    );
+  function backToList() {
+    setOpenId(undefined);
+    setTab("list");
   }
-  if (view.kind === "documents") {
-    return (
-      <ChildDocuments
-        child={view.child}
-        onDone={() => setView({ kind: "list" })}
-      />
-    );
+
+  function open(next: Tab, forChild: Patient) {
+    setOpenId(forChild.id);
+    setTab(next);
   }
-  if (view.kind === "telegram") {
-    return (
-      <ChildTelegram
-        child={view.child}
-        onDone={() => setView({ kind: "list" })}
-      />
-    );
-  }
-  if (view.kind === "care") {
-    return (
-      <ChildCare child={view.child} onDone={() => setView({ kind: "list" })} />
-    );
-  }
-  if (view.kind === "intake") {
-    return (
-      <ChildIntake
-        child={view.child}
-        onDone={() => setView({ kind: "list" })}
-      />
-    );
+
+  if (tab === "add") return <AddChild onDone={backToList} />;
+
+  // Подэкран без ребёнка (устаревшая ссылка, ребёнка уже удалили) — это список,
+  // а не пустой экран: адрес ведёт в раздел, а раздел существует.
+  if (tab !== "list" && child !== null) {
+    if (tab === "edit") return <EditChild child={child} onDone={backToList} />;
+    if (tab === "documents")
+      return <ChildDocuments child={child} onDone={backToList} />;
+    if (tab === "telegram")
+      return <ChildTelegram child={child} onDone={backToList} />;
+    if (tab === "care") return <ChildCare child={child} onDone={backToList} />;
+    if (tab === "intake")
+      return <ChildIntake child={child} onDone={backToList} />;
   }
 
   return (
@@ -101,7 +102,7 @@ export function ChildPage() {
       title={t("title")}
       intro={t("children.intro")}
       actions={
-        <Button type="button" onClick={() => setView({ kind: "add" })}>
+        <Button type="button" onClick={() => setTab("add")}>
           <Plus aria-hidden="true" />
           {t("child.add")}
         </Button>
@@ -141,7 +142,7 @@ export function ChildPage() {
             title={t("children.empty")}
             description={t("children.emptyHint")}
             action={
-              <Button type="button" onClick={() => setView({ kind: "add" })}>
+              <Button type="button" onClick={() => setTab("add")}>
                 <Plus aria-hidden="true" />
                 {t("child.add")}
               </Button>
@@ -184,7 +185,7 @@ export function ChildPage() {
                       type="button"
                       variant="outline"
                       className="min-h-touch"
-                      onClick={() => setView({ kind: "intake", child })}
+                      onClick={() => open("intake", child)}
                     >
                       <ClipboardList aria-hidden="true" />
                       {t("children.intake")}
@@ -197,7 +198,7 @@ export function ChildPage() {
                       type="button"
                       variant="outline"
                       className="min-h-touch"
-                      onClick={() => setView({ kind: "documents", child })}
+                      onClick={() => open("documents", child)}
                     >
                       <Paperclip aria-hidden="true" />
                       {t("children.documents")}
@@ -210,7 +211,7 @@ export function ChildPage() {
                       type="button"
                       variant="outline"
                       className="min-h-touch"
-                      onClick={() => setView({ kind: "telegram", child })}
+                      onClick={() => open("telegram", child)}
                     >
                       <MessageCircle aria-hidden="true" />
                       {t("children.telegram")}
@@ -224,7 +225,7 @@ export function ChildPage() {
                       type="button"
                       variant="outline"
                       className="min-h-touch"
-                      onClick={() => setView({ kind: "care", child })}
+                      onClick={() => open("care", child)}
                     >
                       <Stethoscope aria-hidden="true" />
                       {t("children.care")}
@@ -233,7 +234,7 @@ export function ChildPage() {
                       type="button"
                       variant="outline"
                       className="min-h-touch"
-                      onClick={() => setView({ kind: "edit", child })}
+                      onClick={() => open("edit", child)}
                     >
                       {t("children.edit")}
                     </Button>
