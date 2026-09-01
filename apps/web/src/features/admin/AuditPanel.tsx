@@ -35,7 +35,7 @@ import { Field, SelectField } from "../../components/Field";
  * Только чтение: записи не правятся и не удаляются, иначе журнал перестаёт быть
  * доказательством того, кто менял назначения, продукты и учётные записи.
  */
-export function AuditPanel() {
+export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   const { t } = useTranslation("admin");
 
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
@@ -142,7 +142,9 @@ export function AuditPanel() {
 
   return (
     <div className="flex flex-col gap-block">
-      <SubPageHeader title={t("audit.title")} intro={t("audit.intro")} />
+      {chrome === "tab" && (
+        <SubPageHeader title={t("audit.title")} intro={t("audit.intro")} />
+      )}
 
       {/* Панель фильтров — `Section` со скрытым заголовком, а не голый
           `fieldset`: блок экрана выделяется одним способом (правило П23), а

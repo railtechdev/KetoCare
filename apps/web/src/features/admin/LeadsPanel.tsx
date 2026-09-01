@@ -37,7 +37,7 @@ const LEADS_KEY = ["admin", "leads"] as const;
  * человека, попросившего себя убрать, — «мягко удалённый» контакт эту просьбу
  * не выполняет.
  */
-export function LeadsPanel() {
+export function LeadsPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   const { t } = useTranslation("admin");
   const queryClient = useQueryClient();
 
@@ -134,7 +134,11 @@ export function LeadsPanel() {
 
   return (
     <>
-      <SubPageHeader title={t("leads.title")} intro={t("leads.intro")} />
+      {/* На самостоятельном экране заголовок даёт `PageLayout`: второй такой
+          же был бы дублем (правило П23 канона). */}
+      {chrome === "tab" && (
+        <SubPageHeader title={t("leads.title")} intro={t("leads.intro")} />
+      )}
 
       <AsyncSection
         loading={leads.isPending}

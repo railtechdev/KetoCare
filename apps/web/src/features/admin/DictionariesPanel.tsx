@@ -38,7 +38,11 @@ type Editing =
  * метод измерения кетонов выбирает семья в дневнике, и добавляет их клиника, а
  * не разработчик.
  */
-export function DictionariesPanel() {
+export function DictionariesPanel({
+  chrome = "tab",
+}: {
+  chrome?: "tab" | "screen";
+}) {
   const { t } = useTranslation("admin");
   const selectId = useId();
 
@@ -55,17 +59,20 @@ export function DictionariesPanel() {
   // стоит в шапке панели (правило П31), а шапка принадлежит этому компоненту.
   const [editing, setEditing] = useState<Editing>({ kind: "none" });
 
+  const createButton = (
+    <Button type="button" onClick={() => setEditing({ kind: "create" })}>
+      <Plus aria-hidden="true" />
+      {t("dictionaries.create")}
+    </Button>
+  );
+
   return (
     <div className="flex flex-col gap-block">
-      <SubPageHeader
-        title={t("dictionaries.title")}
-        actions={
-          <Button type="button" onClick={() => setEditing({ kind: "create" })}>
-            <Plus aria-hidden="true" />
-            {t("dictionaries.create")}
-          </Button>
-        }
-      />
+      {chrome === "tab" ? (
+        <SubPageHeader title={t("dictionaries.title")} actions={createButton} />
+      ) : (
+        <div className="flex flex-wrap gap-field">{createButton}</div>
+      )}
 
       <SelectField
         id={selectId}
