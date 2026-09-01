@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import structlog
 from aiogram.fsm.context import FSMContext
@@ -36,6 +37,23 @@ async def require_binding(message: Message, store: BindingStore) -> Binding | No
     return binding
 
 
+def when_text(occurred_at: datetime | None, *, tz: str) -> str:
+    """Человеческое время для эха подтверждения.
+
+    «Только что» — когда семья ответила «Сейчас»; иначе то время, которое она
+    сама ввела, в её же формате: «сегодня в 07:30» или «29.08 в 21:00».
+    """
+
+    if occurred_at is None:
+        return texts.WHEN_JUST_NOW
+
+    zone = ZoneInfo(tz)
+    local = occurred_at.astimezone(zone)
+    if local.date() == datetime.now(zone).date():
+        return texts.WHEN_TODAY_AT.format(time=local.strftime("%H:%M"))
+    return texts.WHEN_DATE_AT.format(date=local.strftime("%d.%m"), time=local.strftime("%H:%M"))
+
+
 async def submit_log(
     message: Message,
     state: FSMContext,
@@ -45,10 +63,16 @@ async def submit_log(
     binding: Binding,
     kind: str,
     payload: dict[str, Any],
+    summary: str,
     settings: BotSettings,
     occurred_at: datetime | None = None,
 ) -> None:
-    """Отправляет запись и закрывает сценарий.
+    """Отправляет запись и закрывает сценарий эхом того, что записано.
+
+    Эхо, а не голое «Записано ✓»: подтверждение без содержимого не даёт
+    заметить опечатку (3,2 против 32 — клиническая запись), а два подряд
+    неотличимы друг от друга. `summary` собирает сценарий — только он знает,
+    что именно вводила семья.
 
     Отзыв привязки обрабатывается здесь: секрет перестал работать, значит запись
     не уйдёт никогда, и держать сценарий открытым бессмысленно. Локальная
@@ -80,4 +104,9 @@ async def submit_log(
         return
 
     await state.clear()
-    await message.answer(texts.SAVED, reply_markup=keyboards.main_menu(settings))
+    confirmation = (
+        texts.SAVED.format(summary=summary, when=when_text(occurred_at, tz=settings.tz))
+        if summary
+        else texts.SAVED_BARE
+    )
+    await message.answer(confirmation, reply_markup=keyboards.main_menu(settings))

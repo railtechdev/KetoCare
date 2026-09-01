@@ -39,9 +39,14 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
         [KeyboardButton(text=texts.BTN_WELLBEING)],
     ]
 
-    url = settings.miniapp_url.strip()
-    if url.startswith("https://"):
-        keyboard.append([KeyboardButton(text=texts.BTN_APP, web_app=WebAppInfo(url=url))])
+    if settings.has_miniapp:
+        keyboard.append(
+            [
+                KeyboardButton(
+                    text=texts.BTN_APP, web_app=WebAppInfo(url=settings.miniapp_url.strip())
+                )
+            ]
+        )
 
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
@@ -64,21 +69,31 @@ def cancel_only() -> InlineKeyboardMarkup:
 
 
 MEAL_ITEM_PREFIX = "meal:"
+DONE_DATA = "done"
 
 
-def meal_items(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
-    """Кнопка на каждую несъеденную позицию плюс «Отмена».
+def meal_items(items: list[tuple[str, str]], *, marked_any: bool = False) -> InlineKeyboardMarkup:
+    """Кнопка на каждую несъеденную позицию плюс выход из серии.
 
     По кнопке на позицию, а не ввод номера: у родителя ребёнок на руках, и
     «напишите цифру» — это лишний шаг там, где хватает одного нажатия.
+
+    Выход называется по-разному: пока ничего не отмечено — «Отмена», после
+    первой отметки — «Готово». Ответить «Отменено.» человеку, который только
+    что отметил два блюда, значит заставить его гадать, не отменились ли они.
     """
 
+    exit_button = (
+        [InlineKeyboardButton(text=texts.BTN_DONE, callback_data=DONE_DATA)]
+        if marked_any
+        else _cancel_row()
+    )
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=title, callback_data=f"{MEAL_ITEM_PREFIX}{item_id}")]
             for item_id, title in items
         ]
-        + [_cancel_row()]
+        + [exit_button]
     )
 
 

@@ -11,6 +11,14 @@
 Общая форма каждого сценария — 2-4 шага, инлайновые кнопки, «Отмена» на каждом
 шаге. Валидация чисел — только диапазон из ТЗ: интерпретировать значение бот не
 должен (раздел 7.5).
+
+Порядок регистрации — часть поведения, и правило одно: **кнопка меню всегда
+побеждает.** Все обработчики кнопок стоят раньше шагов сценариев, и каждый
+старт начинает с чистого состояния. Родитель не знает слова «FSM»: если он
+посреди ввода кетонов нажал «⚖️ Вес», он хочет записать вес — а не услышать
+«нужно число». До этого правила поведение зависело от места обработчика в
+файле: одна и та же кнопка в одном шаге переключала сценарий, в другом
+получала отказ.
 """
 
 from __future__ import annotations
@@ -36,6 +44,12 @@ from ..storage import BindingStore
 logger = structlog.get_logger(__name__)
 
 router = Router(name="scenarios")
+
+# Сценарии — только в личной переписке. В группе бот отвечал отбойником на
+# каждое видимое сообщение и предлагал меню, каждая кнопка которого просила
+# «пришлите код», хотя привязка в группах запрещена. Молчание честнее спама;
+# `/start` в группе по-прежнему объясняет, что нужен личный чат (роутер start).
+router.message.filter(F.chat.type == "private")
 
 # Диапазоны из раздела 7.3 ТЗ. Вне их бот переспрашивает, а не сохраняет.
 KETONES_MIN, KETONES_MAX = Decimal("0"), Decimal("12")
@@ -97,18 +111,188 @@ def _answerable(callback: CallbackQuery) -> Message | None:
     return message
 
 
+def _format_value(value: Decimal) -> str:
+    """Число для эха — с запятой: по-русски пишут 3,2, а не 3.2."""
+
+    return str(value).replace(".", ",")
+
+
+def _parse_number(raw: str) -> Decimal | None:
+    """Число из текста. Запятая — тоже разделитель: её набирают чаще точки.
+
+    Decimal, а не float: значение уходит в клиническую запись, и 3.2 должно
+    остаться 3.2, а не превратиться в 3.2000000000000002.
+    """
+
+    try:
+        return Decimal(raw.strip().replace(",", "."))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+# --- Запуск сценариев: кнопки меню --------------------------------------
+#
+# Все стартовые обработчики зарегистрированы РАНЬШЕ шагов и начинают с
+# `state.clear()`: нажатие кнопки меню посреди незаконченного ввода — это
+# смена намерения, а не ошибка формата.
+
+
+@router.message(F.text == texts.BTN_SEIZURE)
+async def seizure_not_here(message: Message, state: FSMContext, settings: BotSettings) -> None:
+    """Ответ на кнопку, которой в меню больше нет.
+
+    ReplyKeyboard живёт на устройстве, пока её не заменит следующее сообщение с
+    клавиатурой: у семьи, открывшей бота до её удаления, «Приступ» всё ещё на
+    экране. Без этого обработчика нажатие уходило в общий отбойник «Я умею
+    записывать данные» — то есть на самом важном событии бот отвечал так, будто
+    не понял слова.
+
+    Ответ приходит с меню: оно и заменяет устаревшую клавиатуру, так что второй
+    раз кнопки уже не будет. Привязка здесь не требуется — сообщение
+    информационное, ничего не читает и не пишет, а непривязанному родителю
+    незачем видеть «сначала привяжите чат» в ответ на вопрос «куда записать
+    приступ».
+    """
+
+    await state.clear()
+    await message.answer(texts.SEIZURE_IN_CABINET, reply_markup=keyboards.main_menu(settings))
+
+
+@router.message(F.text == texts.BTN_KETONES)
+async def ketones_start(message: Message, state: FSMContext, store: BindingStore) -> None:
+    await state.clear()
+    if await require_binding(message, store) is None:
+        return
+    await state.set_state(Ketones.value)
+    await message.answer(texts.KETONES_ASK_VALUE, reply_markup=keyboards.cancel_only())
+
+
+@router.message(F.text == texts.BTN_WEIGHT)
+async def weight_start(message: Message, state: FSMContext, store: BindingStore) -> None:
+    await state.clear()
+    if await require_binding(message, store) is None:
+        return
+    await state.set_state(Weight.value)
+    await message.answer(texts.WEIGHT_ASK_VALUE, reply_markup=keyboards.cancel_only())
+
+
+@router.message(F.text == texts.BTN_MEDICATION)
+async def medication_start(
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    # Схему терапии ведёт врач в карте, семья по ней даёт препараты.
+    await state.clear()
+    binding = await require_binding(message, store)
+    if binding is None:
+        return
+
+    today = datetime.now(ZoneInfo(settings.tz)).date()
+    try:
+        items = await api.active_medications(
+            link_id=binding.link_id,
+            secret=binding.secret,
+            patient_id=binding.patient_id,
+            day=today,
+        )
+    except LinkRevokedError:
+        await store.delete(message.chat.id)
+        await message.answer(texts.LINK_REVOKED)
+        return
+    except BotApiError as exc:
+        logger.warning("medications_fetch_failed", status=exc.status, code=exc.code)
+        await message.answer(texts.API_UNAVAILABLE)
+        return
+
+    if not items:
+        await message.answer(texts.MEDICATION_NONE, reply_markup=keyboards.main_menu(settings))
+        return
+
+    labels = {
+        str(item["id"]): texts.MEDICATION_DOSE.format(name=item["drug_name"], dose=item["dose"])
+        for item in items
+    }
+    await state.set_state(Medication.choice)
+    # Подписи запоминаются: в нажатии придёт только идентификатор, а эхо
+    # подтверждения обязано назвать препарат — иначе после трёх «Записано ✓»
+    # подряд не вспомнить, что уже отмечено.
+    await state.update_data(med_labels=labels)
+    await message.answer(
+        texts.MEDICATION_ASK,
+        reply_markup=keyboards.medications(list(labels.items())),
+    )
+
+
+@router.message(F.text == texts.BTN_MEAL)
+async def meal_start(
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    # Отметка «съедено» по позициям плана дня. Свободного текста нет до этапа
+    # 4: разбор «съел кашу с маслом» — это `POST /ai/parse`, а придуманная
+    # ботом еда попадёт в итоги дня наравне с настоящей.
+    await state.clear()
+    binding = await require_binding(message, store)
+    if binding is None:
+        return
+
+    pending = await _fetch_pending_meals(message, state, api=api, store=store, settings=settings)
+    if pending is None:
+        return
+
+    if not pending:
+        await message.answer(texts.MEAL_ALL_EATEN, reply_markup=keyboards.main_menu(settings))
+        return
+
+    await state.set_state(Meal.choice)
+    await state.update_data(meal_labels=dict(pending))
+    await message.answer(texts.MEAL_ASK, reply_markup=keyboards.meal_items(pending))
+
+
+@router.message(F.text == texts.BTN_WELLBEING)
+async def wellbeing_start(message: Message, state: FSMContext, store: BindingStore) -> None:
+    await state.clear()
+    if await require_binding(message, store) is None:
+        return
+    await state.set_state(Wellbeing.symptom)
+    await message.answer(texts.WELLBEING_ASK_SYMPTOM, reply_markup=keyboards.cancel_only())
+
+
+# --- Отмена: одна на все сценарии (раздел 7.3) ---
+
+
+@router.callback_query(F.data == keyboards.CANCEL_DATA)
+async def cancel(callback: CallbackQuery, state: FSMContext, settings: BotSettings) -> None:
+    await state.clear()
+    message = _answerable(callback)
+    if message is not None:
+        await message.answer(texts.CANCELLED, reply_markup=keyboards.main_menu(settings))
+    await callback.answer()
+
+
+# --- Когда это было: общий шаг перед отправкой ---
+
+
 async def ask_when(
-    message: Message, state: FSMContext, *, kind: str, payload: dict[str, Any]
+    message: Message, state: FSMContext, *, kind: str, payload: dict[str, Any], summary: str
 ) -> None:
     """Спрашивает момент события и запоминает, что именно отправлять.
 
     Запись откладывается до ответа: бот ставил моментом события момент
     отправки, и вечерняя запись утреннего замера сдвигала его на десять часов —
-    а по времени замеров врач судит о динамике.
+    а по времени замеров врач судит о динамике. `summary` — готовая строка для
+    эха подтверждения: к моменту отправки сценарий уже забыт, и собрать её
+    больше некому.
     """
 
     await state.set_state(When.choice)
-    await state.update_data(pending_kind=kind, pending_payload=payload)
+    await state.update_data(pending_kind=kind, pending_payload=payload, pending_summary=summary)
     await message.answer(texts.WHEN_ASK, reply_markup=keyboards.when())
 
 
@@ -135,6 +319,11 @@ async def _submit_pending(
         binding=binding,
         kind=data["pending_kind"],
         payload=data["pending_payload"],
+        # .get, а не []: состояние FSM живёт в Redis и переживает выкат. Семья,
+        # дошедшая до шага «когда» на прежней версии, нажмёт «Сейчас» уже на
+        # новой — и в её сохранённых данных ключа summary нет. KeyError здесь
+        # молча терял бы клиническую запись; без эха запись важнее эха.
+        summary=data.get("pending_summary", ""),
         settings=settings,
         occurred_at=occurred_at,
     )
@@ -192,62 +381,7 @@ async def when_typed(
     )
 
 
-def _parse_number(raw: str) -> Decimal | None:
-    """Число из текста. Запятая — тоже разделитель: её набирают чаще точки.
-
-    Decimal, а не float: значение уходит в клиническую запись, и 3.2 должно
-    остаться 3.2, а не превратиться в 3.2000000000000002.
-    """
-
-    try:
-        return Decimal(raw.strip().replace(",", "."))
-    except (InvalidOperation, ValueError):
-        return None
-
-
-# --- Отмена: одна на все сценарии (раздел 7.3) ---
-
-
-@router.callback_query(F.data == keyboards.CANCEL_DATA)
-async def cancel(callback: CallbackQuery, state: FSMContext, settings: BotSettings) -> None:
-    await state.clear()
-    if callback.message is not None:
-        await callback.message.answer(texts.CANCELLED, reply_markup=keyboards.main_menu(settings))
-    await callback.answer()
-
-
-# --- Приступ ---
-
-
-@router.message(F.text == texts.BTN_SEIZURE)
-async def seizure_not_here(message: Message, settings: BotSettings) -> None:
-    """Ответ на кнопку, которой в меню больше нет.
-
-    ReplyKeyboard живёт на устройстве, пока её не заменит следующее сообщение с
-    клавиатурой: у семьи, открывшей бота до этой правки, «Приступ» всё ещё на
-    экране. Без этого обработчика нажатие уходило в общий отбойник «Я умею
-    записывать данные» — то есть на самом важном событии бот отвечал так, будто
-    не понял слова.
-
-    Ответ приходит с меню: оно и заменяет устаревшую клавиатуру, так что второй
-    раз кнопки уже не будет. Привязка здесь не требуется — сообщение
-    информационное, ничего не читает и не пишет, а непривязанному родителю
-    незачем видеть «сначала привяжите чат» в ответ на вопрос «куда записать
-    приступ».
-    """
-
-    await message.answer(texts.SEIZURE_IN_CABINET, reply_markup=keyboards.main_menu(settings))
-
-
-# --- Кетоны ---
-
-
-@router.message(F.text == texts.BTN_KETONES)
-async def ketones_start(message: Message, state: FSMContext, store: BindingStore) -> None:
-    if await require_binding(message, store) is None:
-        return
-    await state.set_state(Ketones.value)
-    await message.answer(texts.KETONES_ASK_VALUE, reply_markup=keyboards.cancel_only())
+# --- Кетоны: шаги ---
 
 
 @router.message(Ketones.value)
@@ -286,18 +420,14 @@ async def ketones_method(
         state,
         kind="ketones",
         payload={"value": data["value"], "method": method},
+        summary=texts.SUMMARY_KETONES.format(
+            value=_format_value(Decimal(data["value"])),
+            method=texts.KETONE_METHOD_NAMES.get(method, method),
+        ),
     )
 
 
-# --- Вес ---
-
-
-@router.message(F.text == texts.BTN_WEIGHT)
-async def weight_start(message: Message, state: FSMContext, store: BindingStore) -> None:
-    if await require_binding(message, store) is None:
-        return
-    await state.set_state(Weight.value)
-    await message.answer(texts.WEIGHT_ASK_VALUE, reply_markup=keyboards.cancel_only())
+# --- Вес: шаги ---
 
 
 @router.message(Weight.value)
@@ -316,62 +446,16 @@ async def weight_value(
         await state.clear()
         return
 
-    await ask_when(message, state, kind="weight", payload={"weight_kg": str(value)})
-
-
-# --- Лекарства ---
-#
-# Схему терапии ведёт врач в карте, семья по ней даёт препараты. Кнопка была,
-# обработчика не было: отметить приём из чата было нельзя.
-
-
-@router.message(F.text == texts.BTN_MEDICATION)
-async def medication_start(
-    message: Message,
-    state: FSMContext,
-    api: BotApi,
-    store: BindingStore,
-    settings: BotSettings,
-) -> None:
-    binding = await require_binding(message, store)
-    if binding is None:
-        return
-
-    today = datetime.now(ZoneInfo(settings.tz)).date()
-    try:
-        items = await api.active_medications(
-            link_id=binding.link_id,
-            secret=binding.secret,
-            patient_id=binding.patient_id,
-            day=today,
-        )
-    except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await state.clear()
-        await message.answer(texts.LINK_REVOKED)
-        return
-    except BotApiError as exc:
-        logger.warning("medications_fetch_failed", status=exc.status, code=exc.code)
-        await message.answer(texts.API_UNAVAILABLE)
-        return
-
-    if not items:
-        await message.answer(texts.MEDICATION_NONE, reply_markup=keyboards.main_menu(settings))
-        return
-
-    await state.set_state(Medication.choice)
-    await message.answer(
-        texts.MEDICATION_ASK,
-        reply_markup=keyboards.medications(
-            [
-                (
-                    str(item["id"]),
-                    texts.MEDICATION_DOSE.format(name=item["drug_name"], dose=item["dose"]),
-                )
-                for item in items
-            ]
-        ),
+    await ask_when(
+        message,
+        state,
+        kind="weight",
+        payload={"weight_kg": str(value)},
+        summary=texts.SUMMARY_WEIGHT.format(value=_format_value(value)),
     )
+
+
+# --- Лекарства: шаги ---
 
 
 @router.callback_query(Medication.choice, F.data.startswith(keyboards.MEDICATION_PREFIX))
@@ -382,6 +466,8 @@ async def medication_choice(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     medication_id = (callback.data or "").removeprefix(keyboards.MEDICATION_PREFIX)
+    data = await state.get_data()
+    labels: dict[str, str] = data.get("med_labels", {})
     # Время спрашивается тем же шагом, что и у замеров: приём препарата часто
     # отмечают позже, чем он был, а по времени приёма врач судит о схеме.
     await ask_when(
@@ -389,27 +475,32 @@ async def medication_choice(callback: CallbackQuery, state: FSMContext) -> None:
         state,
         kind="medications",
         payload={"medication_id": medication_id, "taken": True},
+        summary=labels.get(medication_id, texts.MEDICATION_ASK),
     )
 
 
-# --- Еда ---
-#
-# Отметка «съедено» по позициям плана дня. Свободного текста нет до этапа 4:
-# разбор «съел кашу с маслом» — это `POST /ai/parse`, а придуманная ботом еда
-# попадёт в итоги дня наравне с настоящей.
+# --- Еда: шаги ---
 
 
-@router.message(F.text == texts.BTN_MEAL)
-async def meal_start(
+async def _fetch_pending_meals(
     message: Message,
     state: FSMContext,
+    *,
     api: BotApi,
     store: BindingStore,
     settings: BotSettings,
-) -> None:
+) -> list[tuple[str, str]] | None:
+    """Неотмеченные позиции плана на сегодня, или None при отказе.
+
+    None означает, что ответ семье уже отправлен (нет меню, отозвана привязка,
+    сбой API) и продолжать сценарий не с чем. Пустой список — план есть и весь
+    отмечен.
+    """
+
     binding = await require_binding(message, store)
     if binding is None:
-        return
+        await state.clear()
+        return None
 
     today = datetime.now(ZoneInfo(settings.tz)).date()
     try:
@@ -423,23 +514,19 @@ async def meal_start(
         await store.delete(message.chat.id)
         await state.clear()
         await message.answer(texts.LINK_REVOKED)
-        return
+        return None
     except BotApiError as exc:
         logger.warning("menu_fetch_failed", status=exc.status, code=exc.code)
+        await state.clear()
         await message.answer(texts.API_UNAVAILABLE)
-        return
+        return None
 
     if menu is None:
+        await state.clear()
         await message.answer(texts.MEAL_NO_MENU, reply_markup=keyboards.main_menu(settings))
-        return
+        return None
 
-    pending = [item for item in menu.get("items", []) if not item.get("eaten")]
-    if not pending:
-        await message.answer(texts.MEAL_ALL_EATEN, reply_markup=keyboards.main_menu(settings))
-        return
-
-    await state.set_state(Meal.choice)
-    await message.answer(texts.MEAL_ASK, reply_markup=keyboards.meal_items(_meal_buttons(pending)))
+    return _meal_buttons([item for item in menu.get("items", []) if not item.get("eaten")])
 
 
 def _meal_buttons(items: list[dict[str, Any]]) -> list[tuple[str, str]]:
@@ -479,6 +566,8 @@ async def meal_mark(
         return
 
     item_id = (callback.data or "").removeprefix(keyboards.MEAL_ITEM_PREFIX)
+    data = await state.get_data()
+    marked_title: str = data.get("meal_labels", {}).get(item_id, texts.MEAL_UNKNOWN_DISH)
     try:
         await api.mark_eaten(
             link_id=binding.link_id,
@@ -496,19 +585,43 @@ async def meal_mark(
         await message.answer(texts.API_UNAVAILABLE)
         return
 
-    await state.clear()
-    await message.answer(texts.MEAL_MARKED, reply_markup=keyboards.main_menu(settings))
-
-
-# --- Самочувствие ---
-
-
-@router.message(F.text == texts.BTN_WELLBEING)
-async def wellbeing_start(message: Message, state: FSMContext, store: BindingStore) -> None:
-    if await require_binding(message, store) is None:
+    # После отметки — остаток плана, а не выход в меню: завтрак из двух блюд
+    # должен быть двумя нажатиями подряд, а не двумя заходами через меню.
+    # Список берётся заново с сервера: второй родитель мог отметить своё из
+    # приложения, и показывать ему уже съеденное значило бы предложить съесть
+    # дважды.
+    pending = await _fetch_pending_meals(message, state, api=api, store=store, settings=settings)
+    if pending is None:
         return
-    await state.set_state(Wellbeing.symptom)
-    await message.answer(texts.WELLBEING_ASK_SYMPTOM, reply_markup=keyboards.cancel_only())
+
+    if not pending:
+        await state.clear()
+        await message.answer(
+            texts.MEAL_MARKED_LAST.format(title=marked_title),
+            reply_markup=keyboards.main_menu(settings),
+        )
+        return
+
+    await state.update_data(meal_labels=dict(pending))
+    await message.answer(
+        texts.MEAL_MARKED_MORE.format(title=marked_title),
+        reply_markup=keyboards.meal_items(pending, marked_any=True),
+    )
+
+
+@router.callback_query(Meal.choice, F.data == keyboards.DONE_DATA)
+async def meal_done(callback: CallbackQuery, state: FSMContext, settings: BotSettings) -> None:
+    """Выход из серии отметок. «Готово», а не «Отмена»: отметки уже сохранены,
+    и ответ «Отменено.» заставил бы гадать, не отменились ли они."""
+
+    await state.clear()
+    message = _answerable(callback)
+    if message is not None:
+        await message.answer(texts.MENU_PROMPT, reply_markup=keyboards.main_menu(settings))
+    await callback.answer()
+
+
+# --- Самочувствие: шаги ---
 
 
 @router.message(Wellbeing.symptom)
@@ -561,4 +674,10 @@ async def _save_wellbeing(
         # SideEffectLogCreate, угадывать имена полей нельзя.
         payload["description"] = note
 
-    await ask_when(message, state, kind="side-effects", payload=payload)
+    await ask_when(
+        message,
+        state,
+        kind="side-effects",
+        payload=payload,
+        summary=texts.SUMMARY_WELLBEING.format(symptom=data["symptom"]),
+    )

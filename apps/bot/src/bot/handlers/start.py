@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from aiogram import Router
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -51,6 +51,24 @@ async def start_without_code(
         )
         return
     await message.answer(texts.START_NEED_CODE)
+
+
+@router.message(Command("help"))
+async def help_command(message: Message, settings: BotSettings) -> None:
+    """Единственное место, где написано, что бот умеет.
+
+    И ответы на два вопроса, которые обязательно возникнут: «как исправить
+    ошибочную запись» и «как отвязать чат» — оба решаются в кабинете, и не
+    сказать об этом значит оставить родителя наедине с ошибкой в клинической
+    записи. Строка про приложение — только когда кнопка приложения есть.
+    """
+
+    if message.chat.type != "private":
+        return
+    await message.answer(
+        texts.HELP.format(app_line=texts.HELP_APP_LINE if settings.has_miniapp else ""),
+        reply_markup=keyboards.main_menu(settings),
+    )
 
 
 async def handle_bare_code(
