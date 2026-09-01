@@ -363,3 +363,31 @@ describe("AdminPage — навигация", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("AdminPage — превью импорта", () => {
+  it("говорит, сколько позиций будет заведено", async () => {
+    // «Строк в файле: 412» на этот вопрос не отвечает, а решают по нему:
+    // нажимать импорт или править файл.
+    const user = userEvent.setup();
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/auth/refresh")
+        return Promise.resolve({ data: { access_token: ACCESS_TOKEN } });
+      if (path === "/api/v1/products/import") {
+        return Promise.resolve({
+          data: { ...DRY_RUN_REPORT, imported: 3, errors: [] },
+        });
+      }
+      throw new Error(`Unexpected POST ${path}`);
+    });
+
+    renderPage("products");
+    await user.click(await screen.findByRole("button", { name: "Импорт CSV" }));
+    const file = new File(["name_ru,category\n"], "products.csv", {
+      type: "text/csv",
+    });
+    await user.upload(screen.getByLabelText("Файл CSV"), file);
+    await user.click(screen.getByRole("button", { name: "Проверить файл" }));
+
+    expect(await screen.findByText(/будет заведено: 3/)).toBeInTheDocument();
+  });
+});

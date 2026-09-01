@@ -545,7 +545,12 @@ async def import_products(
         # на флаг, зациклится на «предпросмотр готов, нажмите импорт».
         return ProductImportReport(
             total_rows=report.total_rows,
-            imported=0,
+            # В превью `imported` — сколько позиций БУДЕТ заведено, а не ноль.
+            # Ноль читался как «ничего не запишется» ровно там, где решают,
+            # нажимать ли импорт: администратор видел «строк в файле: 412» и не
+            # знал, сколько из них новые. При отказе (ошибки разбора) запись не
+            # состоится вовсе — там ноль честен.
+            imported=len(report.valid_rows) if dry_run and report.ok and not errors else 0,
             updated=len(updates),
             updates=updates,
             errors=errors,
