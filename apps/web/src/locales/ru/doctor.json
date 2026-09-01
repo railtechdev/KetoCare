@@ -87,7 +87,10 @@
     },
     "passportTitle": "Данные пациента",
     "unknownProduct": "продукт удалён из справочника",
-    "familyNotes": "Заметки семьи"
+    "familyNotes": "Заметки семьи",
+    "edit": "Изменить",
+    "editTitle": "Профиль: {{name}}",
+    "saved": "Профиль сохранён: {{name}}"
   },
   "fields": {
     "ratio": "Кетосоотношение",
