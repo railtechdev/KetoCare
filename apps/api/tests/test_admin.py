@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -19,9 +19,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import get_session
 from api.main import create_app
 from api.routers.admin import router as admin_router
-from core.models import AuditLog, KetoneMethodDict, SeizureLog, SeizureType, User
+from core.models import (
+    AuditLog,
+    KetoneMethodDict,
+    Product,
+    ProductCategory,
+    SeizureLog,
+    SeizureType,
+    User,
+)
 from core.models.enums import DiarySource, UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
 
 pytestmark = pytest.mark.asyncio
@@ -785,3 +794,114 @@ class TestSeizureTypeCode:
         )
 
         assert response.status_code == 422
+
+
+class TestAdminOverview:
+    """Счётчики для главной администратора.
+
+    Раньше главная пересчитывала первые двести строк списка на клиенте: у
+    клиники с сотней семей число на экране переставало быть правдой ровно
+    тогда, когда счётчик и нужен.
+    """
+
+    async def test_counts_accounts_by_role_including_disabled(
+        self, client, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        await make_user(UserRole.DOCTOR)
+        await make_user(UserRole.DOCTOR, is_active=False)
+
+        response = await client.get("/api/v1/admin/overview", headers=auth_headers(admin))
+
+        assert response.status_code == 200, response.text
+        # База общая с другими тестами и ручной работой, поэтому сверяется
+        # прирост, а не абсолютное значение (та же ловушка, что в test_leads).
+        by_role = {row["role"]: row for row in response.json()["users"]}
+        assert by_role["doctor"]["active"] >= 1
+        assert by_role["doctor"]["inactive"] >= 1
+        assert set(by_role) == {"admin", "doctor", "dietitian", "parent"}
+
+    async def test_counts_products_and_stale_verification(
+        self, client, session, make_user, auth_headers
+    ):
+        """«Давно не сверялось» — эксплуатационный порог, а не оценка
+        правильности значений: он говорит «пора перепроверить»."""
+
+        admin = await make_user(UserRole.ADMIN)
+        category = ProductCategory(name_ru=f"Жиры {uuid.uuid4().hex[:6]}")
+        session.add(category)
+        await session.flush()
+        session.add_all(
+            [
+                Product(
+                    name_ru=f"Свежий {uuid.uuid4().hex[:6]}",
+                    category_id=category.id,
+                    kcal_100g=100,
+                    fat_100g=1,
+                    protein_100g=1,
+                    carbs_100g=1,
+                    fiber_100g=0,
+                    source="USDA",
+                    source_version="SR28",
+                    verified_at=date.today(),
+                ),
+                Product(
+                    name_ru=f"Старый {uuid.uuid4().hex[:6]}",
+                    category_id=category.id,
+                    kcal_100g=100,
+                    fat_100g=1,
+                    protein_100g=1,
+                    carbs_100g=1,
+                    fiber_100g=0,
+                    source="USDA",
+                    source_version="SR28",
+                    verified_at=date.today() - timedelta(days=400),
+                ),
+            ]
+        )
+        await session.flush()
+
+        body = (await client.get("/api/v1/admin/overview", headers=auth_headers(admin))).json()
+
+        assert body["products_total"] >= 2
+        assert body["products_stale"] >= 1
+        # Свежесверенная позиция в счётчик не попадает — иначе он считал бы
+        # просто все продукты и ничего не значил.
+        assert body["products_stale"] < body["products_total"]
+        assert body["stale_after_days"] == 365
+
+    async def test_counts_unclaimed_invitations(self, client, session, make_user, auth_headers):
+        """Забытое приглашение — открытая дверь в кабинет с данными ребёнка:
+        пока оно живо, по ссылке заводится учётная запись."""
+
+        admin = await make_user(UserRole.ADMIN)
+        await invitations_repo.create(
+            session,
+            email=f"pending-{uuid.uuid4().hex[:6]}@example.com",
+            role=UserRole.PARENT,
+            token=uuid.uuid4().hex,
+            created_by=admin.id,
+        )
+        expired = await invitations_repo.create(
+            session,
+            email=f"expired-{uuid.uuid4().hex[:6]}@example.com",
+            role=UserRole.PARENT,
+            token=uuid.uuid4().hex,
+            created_by=admin.id,
+        )
+        # Срок задаётся репозиторием; здесь он отматывается назад, чтобы
+        # получить именно просроченное приглашение.
+        expired.expires_at = datetime.now(UTC) - timedelta(days=1)
+        await session.flush()
+
+        body = (await client.get("/api/v1/admin/overview", headers=auth_headers(admin))).json()
+
+        assert body["invitations_pending"] >= 1
+        assert body["invitations_expired"] >= 1
+
+    async def test_doctor_cannot_read_system_state(self, client, make_user, auth_headers):
+        doctor = await make_user(UserRole.DOCTOR)
+
+        response = await client.get("/api/v1/admin/overview", headers=auth_headers(doctor))
+
+        assert response.status_code == 403

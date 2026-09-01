@@ -32,6 +32,32 @@ class AdminUserRead(UserRead):
     sole_patients: int = 0
 
 
+class RoleCount(BaseModel):
+    role: UserRole
+    active: int
+    inactive: int
+
+
+class AdminOverview(BaseModel):
+    """Состояние системы для главной администратора.
+
+    Клинических данных здесь нет по построению: счётчики учётных записей,
+    справочника продуктов и приглашений. Считает их база — главная раньше
+    пересчитывала первые двести строк списка на клиенте, и у клиники с сотней
+    семей число на экране переставало быть правдой.
+    """
+
+    users: list[RoleCount]
+    products_total: int
+    products_active: int
+    #: Позиции, у которых дата сверки с источником старше `stale_after_days`.
+    products_stale: int
+    stale_after_days: int
+    #: Приглашения, по которым ещё не завели учётную запись.
+    invitations_pending: int
+    invitations_expired: int
+
+
 class AdminUserUpdate(BaseModel):
     """PATCH: меняются только переданные поля.
 

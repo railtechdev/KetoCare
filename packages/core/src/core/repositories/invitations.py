@@ -79,6 +79,21 @@ async def get(session: AsyncSession, invitation_id: uuid.UUID) -> Invitation | N
     return await session.get(Invitation, invitation_id)
 
 
+async def count_pending(session: AsyncSession, *, now: datetime) -> tuple[int, int]:
+    """Невостребованные приглашения: действующие и просроченные.
+
+    Приглашение, о котором забыли, — это открытая дверь в кабинет с данными
+    ребёнка: пока оно живо, по ссылке заводится учётная запись.
+    """
+
+    stmt = select(
+        func.count().filter(Invitation.accepted_at.is_(None), Invitation.expires_at > now),
+        func.count().filter(Invitation.accepted_at.is_(None), Invitation.expires_at <= now),
+    ).select_from(Invitation)
+    pending, expired = (await session.execute(stmt)).one()
+    return int(pending), int(expired)
+
+
 async def list_invitations(
     session: AsyncSession,
     *,
