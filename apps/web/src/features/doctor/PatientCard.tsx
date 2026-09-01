@@ -1,10 +1,23 @@
-import { Section, Tabs, TabsBar, TabsContent } from "@ketocare/ui";
+import {
+  Button,
+  FormSheet,
+  Section,
+  Tabs,
+  TabsBar,
+  TabsContent,
+  toast,
+} from "@ketocare/ui";
+import { Pencil } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
+import { ChildForm } from "../child/ChildForm";
+import { toChildUpdateBody } from "../child/childSchemas";
 import { allergyNames } from "../patients/allergies";
+import { useUpdateChildMutation } from "../patients/useChildren";
 import { MedicationsTab } from "./MedicationsTab";
 import { NotesTab } from "./NotesTab";
 import { PatientDiaryTab } from "./PatientDiaryTab";
@@ -53,6 +66,8 @@ export function PatientCard({
   const { session } = useSession();
 
   const allergies = allergyNames(patient, t("card.unknownProduct"));
+  const [editOpen, setEditOpen] = useState(false);
+  const update = useUpdateChildMutation(patient.id);
 
   // Заметки сервер отдаёт только роли doctor; диетологу вкладка не показывается,
   // чтобы он не открывал заведомый 403. Права проверяет сервер.
@@ -82,7 +97,27 @@ export function PatientCard({
           списка, а это блок экрана (правило П23 канона). Заголовок скрыт —
           паспорт узнаётся по содержимому, а надпись «Пациент» под именем
           пациента была бы шумом; скринридер его при этом слышит. */}
-      <Section title={t("card.passportTitle")} titleHidden density="compact">
+      <Section
+        title={t("card.passportTitle")}
+        titleHidden
+        density="compact"
+        /* Рост и аллергии правит и специалист, а не только семья: ребёнка
+           взвешивают на приёме, а непереносимость всплывает в разговоре с
+           врачом. Сервер это давно разрешает ведущему специалисту
+           (`PATCH /patients/{id}` через `require_patient_access`) — интерфейса
+           не было. */
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil aria-hidden="true" />
+            {t("card.edit")}
+          </Button>
+        }
+      >
         <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
           <dt className="text-muted-foreground">{t("card.birthDate")}</dt>
           <dd className="m-0 tabular-nums">
@@ -130,6 +165,30 @@ export function PatientCard({
           )}
         </dl>
       </Section>
+
+      <FormSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        title={t("card.editTitle", { name: patient.full_name })}
+      >
+        {/* Та же форма, что у семьи: два разных набора полей для одного профиля
+            однажды разошлись бы — и специалист правил бы не то, что видит
+            родитель. */}
+        <ChildForm
+          child={patient}
+          pending={update.isPending}
+          error={update.error}
+          onCancel={() => setEditOpen(false)}
+          onSubmit={(values) => {
+            update.mutate(toChildUpdateBody(values), {
+              onSuccess: (saved) => {
+                toast.success(t("card.saved", { name: saved.full_name }));
+                setEditOpen(false);
+              },
+            });
+          }}
+        />
+      </FormSheet>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TabKey)}>
         <TabsBar
