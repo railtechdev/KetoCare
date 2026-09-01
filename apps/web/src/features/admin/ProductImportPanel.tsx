@@ -172,6 +172,16 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
             })}
             {" · "}
             {t("products.import.preview.errorRows", { value: errorRows })}
+            {report.dry_run && (
+              <>
+                {" · "}
+                {/* Сколько строк реально запишется: «строк в файле: 412» на
+                    этот вопрос не отвечает, а решают по нему. */}
+                {t("products.import.preview.willImport", {
+                  value: report.imported,
+                })}
+              </>
+            )}
             {report.updated > 0 && (
               <>
                 {" · "}

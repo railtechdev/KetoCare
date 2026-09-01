@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { AuditPayload } from "./AuditPayload";
+import { useAdminUsers } from "./useAdminUsers";
 import {
   AUDIT_ACTIONS,
   AUDIT_ENTITIES,
@@ -23,6 +24,7 @@ import {
   type AuditFilters,
 } from "./auditFilters";
 import { shortId } from "./format";
+import { SectionLink } from "../../components/SectionLink";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
 import { useAuditLog } from "./useAuditLog";
@@ -67,6 +69,17 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
     setOffset(0);
   }
 
+  // Учётные записи — источник имён авторов. Запрашиваются раз и надолго:
+  // список сотрудников меняется реже, чем читают журнал.
+  const users = useAdminUsers();
+  const names = useMemo(
+    () =>
+      Object.fromEntries(
+        (users.data?.items ?? []).map((user) => [user.id, user.full_name]),
+      ),
+    [users.data],
+  );
+
   const columns = useMemo<ColumnDef<AuditEntry, unknown>[]>(
     () => [
       {
@@ -84,14 +97,25 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
       {
         accessorKey: "user_id",
         header: t("audit.columns.user"),
-        cell: ({ row }) =>
-          row.original.user_id === null ? (
-            <span className="text-muted-foreground">{t("audit.noUser")}</span>
-          ) : (
-            <span title={row.original.user_id} className="tabular-nums">
-              {shortId(row.original.user_id)}
+        cell: ({ row }) => {
+          const id = row.original.user_id;
+          if (id === null) {
+            return (
+              <span className="text-muted-foreground">{t("audit.noUser")}</span>
+            );
+          }
+          // Имя, а не обрезанный идентификатор: «3f2a…» не отвечает на вопрос
+          // «кто это сделал», ради которого журнал и открывают. Справочник
+          // учётных записей у администратора уже есть.
+          const name = names[id];
+          return name === undefined ? (
+            <span title={id} className="tabular-nums">
+              {shortId(id)}
             </span>
-          ),
+          ) : (
+            <span title={id}>{name}</span>
+          );
+        },
       },
       {
         accessorKey: "action",
@@ -114,14 +138,27 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
       {
         accessorKey: "entity_id",
         header: t("audit.columns.entityId"),
-        cell: ({ row }) =>
-          row.original.entity_id === null ? (
-            "—"
-          ) : (
-            <span title={row.original.entity_id} className="tabular-nums">
-              {shortId(row.original.entity_id)}
+        cell: ({ row }) => {
+          const id = row.original.entity_id;
+          if (id === null) return "—";
+
+          // К продукту можно перейти: он администратору доступен. К
+          // клиническим записям — нет и не будет (правило 5 CLAUDE.md), у них
+          // остаётся идентификатор, который можно скопировать целиком.
+          if (row.original.entity === "products") {
+            return (
+              <SectionLink section="products" item={id} className="underline">
+                {shortId(id)}
+              </SectionLink>
+            );
+          }
+
+          return (
+            <span title={id} className="tabular-nums">
+              {shortId(id)}
             </span>
-          ),
+          );
+        },
       },
       {
         accessorKey: "ip",
@@ -137,7 +174,7 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         cell: ({ row }) => <AuditPayload entry={row.original} />,
       },
     ],
-    [t],
+    [t, names],
   );
 
   return (

@@ -663,11 +663,29 @@ class TestCsvImportEndpoint:
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["dry_run"] is True
-        assert body["imported"] == 0
         assert body["total_rows"] == 1
+        # `imported` в превью — сколько позиций БУДЕТ заведено. Ноль читался
+        # как «ничего не запишется» ровно там, где решают, нажимать ли импорт.
+        assert body["imported"] == 1
 
         after = await session.scalar(select(func.count()).select_from(Product))
         assert after == before, "превью не должно ничего записывать"
+
+    async def test_preview_of_a_broken_file_promises_nothing(self, client, make_user, auth_headers):
+        """Файл с ошибками разбора не импортируется вовсе — обещать записи
+        нельзя: частичный импорт базы продуктов хуже отказа."""
+
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.post(
+            "/api/v1/products/import",
+            files=self._file("Масло,Жиры,не число,81.1,0.9,0.1,0,USDA,SR28,2026-01-01"),
+            headers=auth_headers(admin),
+        )
+
+        body = response.json()
+        assert body["errors"], "строка с текстом вместо числа обязана быть ошибкой"
+        assert body["imported"] == 0
 
     async def test_commit_imports_rows(self, client, session, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)
