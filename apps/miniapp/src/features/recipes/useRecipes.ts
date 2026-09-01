@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
 import { api } from "../../lib/api";
@@ -50,4 +50,41 @@ export function useRecipe(recipeId: string | null) {
       return data;
     },
   });
+}
+
+/**
+ * Названия продуктов состава — по их карточкам.
+ *
+ * Рецепт хранит только `product_id`: продукт могут переименовать, и снимка имён
+ * у рецепта нет. Ключ `['products','detail',id]` тот же, что в кабинете:
+ * повторно открытый рецепт берёт названия из кэша, а не из сети.
+ */
+export function useProductNames(productIds: string[]): {
+  byId: Record<string, string>;
+  isLoading: boolean;
+} {
+  const unique = Array.from(new Set(productIds));
+
+  const results = useQueries({
+    queries: unique.map((id) => ({
+      queryKey: ["products", "detail", id],
+      // Справочник меняется редко: перезапрашивать имя при каждом открытии
+      // карточки незачем.
+      staleTime: 5 * 60 * 1000,
+      queryFn: async () => {
+        const { data, error } = await api.GET("/api/v1/products/{product_id}", {
+          params: { path: { product_id: id } },
+        });
+        if (error || !data) throw error ?? new Error("Empty product response");
+        return data;
+      },
+    })),
+  });
+
+  const byId: Record<string, string> = {};
+  for (const result of results) {
+    if (result.data) byId[result.data.id] = result.data.name_ru;
+  }
+
+  return { byId, isLoading: results.some((result) => result.isLoading) };
 }

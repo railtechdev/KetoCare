@@ -5,14 +5,11 @@ import {
   Section,
   formatOccurredAt,
 } from "@ketocare/ui";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import type { components } from "@ketocare/api-client";
 
-import { api, errorMessageOf } from "../../lib/api";
+import { errorMessageOf } from "../../lib/api";
 import type { Session } from "../session/useSession";
-
-type Overview = components["schemas"]["PatientOverview"];
+import { type Overview, usePatientOverview } from "./useOverview";
 
 /**
  * Главная-сводка (раздел 9 ТЗ).
@@ -29,19 +26,9 @@ type Overview = components["schemas"]["PatientOverview"];
  */
 export function HomeScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
-  const overview = useQuery({
-    queryKey: ["patient", session.patientId, "overview"],
-    queryFn: async (): Promise<Overview> => {
-      const { data, error } = await api.GET(
-        "/api/v1/patients/{patient_id}/overview",
-        {
-          params: { path: { patient_id: session.patientId } },
-        },
-      );
-      if (error || !data) throw error ?? new Error("Empty overview response");
-      return data;
-    },
-  });
+  // Общий хук, а не своя копия запроса: хук ровно об этом и предупреждает —
+  // две копии делят кэш, но расходятся в обработке (находка М7 аудита).
+  const overview = usePatientOverview(session.patientId);
 
   return (
     <main className="flex flex-col gap-block p-block">

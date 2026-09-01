@@ -63,7 +63,9 @@ const MENU = {
       portion_factor: 0.5,
       eaten: false,
       has_snapshot: true,
-      ingredients: [{ product_id: "prod-2", name_ru: "Творог 9%", grams: 200 }],
+      // Граммы уже на позицию: сервер масштабирует состав сам (находка М1).
+      // 200 г творога в раскладке при половине порции — 100 г здесь.
+      ingredients: [{ product_id: "prod-2", name_ru: "Творог 9%", grams: 100 }],
       changed_since_saved: false,
     },
   ],
@@ -434,15 +436,17 @@ describe("что взвесить", () => {
     expect(screen.getByText("60 г")).toBeInTheDocument();
   });
 
-  it("граммовка умножается на множитель порции", async () => {
-    // Позиция «половина порции» иначе предлагала бы взвесить целую.
+  it("граммовка показывается как пришла: сервер уже отмасштабировал позицию", async () => {
+    // Клиент не знает числа порций рецепта. Домножение на множитель здесь
+    // завышало граммовку в `servings` раз — рецепт на четверых при одной
+    // порции предлагал взвесить вчетверо больше (находка М1 аудита Mini App).
     const user = userEvent.setup();
     renderPage();
 
-    // Своё блюдо стоит с множителем 0.5: 200 г творога → 100 г.
     await screen.findByText("Омлет на сливках");
     await user.click(screen.getAllByText("Что взвесить")[1] as HTMLElement);
 
     expect(await screen.findByText("100 г")).toBeInTheDocument();
+    expect(screen.queryByText("50 г")).not.toBeInTheDocument();
   });
 });

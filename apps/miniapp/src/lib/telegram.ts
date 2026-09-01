@@ -27,6 +27,13 @@ export interface ThemeParams {
   destructive_text_color?: string;
 }
 
+export interface TelegramBackButton {
+  show: () => void;
+  hide: () => void;
+  onClick: (handler: () => void) => void;
+  offClick: (handler: () => void) => void;
+}
+
 export interface TelegramWebApp {
   initData: string;
   colorScheme: "light" | "dark";
@@ -35,6 +42,7 @@ export interface TelegramWebApp {
   expand: () => void;
   onEvent: (event: string, handler: () => void) => void;
   offEvent: (event: string, handler: () => void) => void;
+  BackButton?: TelegramBackButton;
   safeAreaInset?: { top: number; bottom: number; left: number; right: number };
   contentSafeAreaInset?: {
     top: number;
@@ -73,4 +81,24 @@ export function launchData(): string | null {
     raw = webApp()?.initData;
   }
   return raw !== undefined && raw.length > 0 ? raw : null;
+}
+
+/**
+ * Кнопка «Назад» самого Telegram на время жизни вложенного экрана.
+ *
+ * Без неё аппаратная «Назад» на Android закрывает весь Mini App: родитель,
+ * открывший карточку рецепта, оказывался в чате вместо списка. Возвращает
+ * уборку для `useEffect`; вне Telegram ничего не делает — там остаётся
+ * внутренняя кнопка возврата.
+ */
+export function showBackButton(onBack: () => void): () => void {
+  const button = webApp()?.BackButton;
+  if (button === undefined) return () => undefined;
+
+  button.onClick(onBack);
+  button.show();
+  return () => {
+    button.offClick(onBack);
+    button.hide();
+  };
 }

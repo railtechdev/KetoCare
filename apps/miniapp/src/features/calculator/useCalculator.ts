@@ -15,10 +15,27 @@ export interface ProductOption {
   fiber: number;
 }
 
-/** Строка состава: продукт и его масса. */
+/** Строка состава: продукт и его масса — сырым вводом.
+
+Строка, а не число: поле контролируемое, и числовое состояние глотало бы
+запятую в момент набора («12,» превращалось в «12», и запятая исчезала
+из-под пальца). Разбор — в `parseAmount`, одном для граммовки и калорий. */
 export interface DishRow {
   product: ProductOption;
-  grams: number;
+  grams: string;
+}
+
+/**
+ * Число из поля — с запятой тоже.
+ *
+ * Русская клавиатура телефона в числовом режиме даёт запятую, а `Number`
+ * понимает только точку: «12,5» превращалось в не-число, расчёт молча не
+ * запускался, и экран не объяснял почему. Бот запятую принимает с самого
+ * начала — здесь то же правило (находка М5 аудита).
+ */
+export function parseAmount(raw: string): number {
+  const value = Number(raw.trim().replace(",", "."));
+  return Number.isFinite(value) ? value : 0;
 }
 
 /** Ниже двух символов выдача бесполезна, а индекс нагружается зря. */
@@ -67,14 +84,15 @@ export function useVerify(
   rows: DishRow[],
   targets: Targets | null,
 ) {
-  const ready = rows.length > 0 && rows.every((row) => row.grams > 0);
+  const ready =
+    rows.length > 0 && rows.every((row) => parseAmount(row.grams) > 0);
 
   return useQuery({
     queryKey: [
       "calc",
       "verify",
       patientId,
-      rows.map((r) => `${r.product.id}:${r.grams}`),
+      rows.map((r) => `${r.product.id}:${parseAmount(r.grams)}`),
       targets,
     ],
     enabled: ready,
@@ -92,7 +110,7 @@ export function useVerify(
           })),
           items: rows.map((row) => ({
             product_id: row.product.id,
-            grams: row.grams,
+            grams: parseAmount(row.grams),
           })),
           // `net_carbs: false` — то же значение, что по умолчанию у сервера.
           // Схема требует его явно, а выбирать режим «чистых углеводов» на

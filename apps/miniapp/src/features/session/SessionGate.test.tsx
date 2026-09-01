@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "../../lib/i18n";
+import { notifySessionExpired } from "../../lib/api";
 import { SessionGate } from "./SessionGate";
 
 const launchData = vi.hoisted(() => vi.fn<() => string | null>());
@@ -85,6 +86,35 @@ describe("вход в Mini App", () => {
 
     expect(
       await screen.findByRole("button", { name: "Повторить" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("истечение сессии посреди работы", () => {
+  it("переоткрывает вход и честно называет отзыв привязки", async () => {
+    // Отзыв привязки прежде выглядел как «проверьте связь» на каждом экране:
+    // refresh мёртв, а истечение сессии не слушал никто (находка М4 аудита).
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockResolvedValue({
+      data: {
+        access_token: "a",
+        refresh_token: "r",
+        patient_id: "11111111-1111-4111-8111-111111111111",
+        patient_name: "Амина",
+      },
+      response: { status: 200 },
+    });
+    renderGate();
+    await screen.findByText(/Кабинет Амина/);
+
+    // Привязку отозвали: повторный обмен строки запуска отвечает 404.
+    post.mockResolvedValue({ error: {}, response: { status: 404 } });
+    act(() => {
+      notifySessionExpired();
+    });
+
+    expect(
+      await screen.findByText(/Этот Telegram ещё не привязан/),
     ).toBeInTheDocument();
   });
 });

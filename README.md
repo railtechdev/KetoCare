@@ -29,7 +29,7 @@
 
 Отдельно от этапов пройден разбор клиентского пути по всем ролям — [`docs/AUDIT_JOURNEY.md`](docs/AUDIT_JOURNEY.md), 75 находок, перепроверены 01.09.2026: закрыто 66, частично 3, открыто 2, ждёт решения клиники 4. Пред-прод на VPS выкатывается автоматически при merge в `main` ([`docs/DEPLOY.md`](docs/DEPLOY.md)).
 
-Тестов: 1017 pytest и 448 vitest (`apps/web` 343, `packages/ui` 70, `apps/miniapp` 30, `packages/api-client` 5). Демо-данные — `make seed-demo`.
+Тестов: 1018 pytest и 455 vitest (`apps/web` 343, `packages/ui` 70, `apps/miniapp` 37, `packages/api-client` 5). Демо-данные — `make seed-demo`.
 
 ## Документация
 
@@ -43,6 +43,7 @@
 | [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md) | UI-канон: 32 правила композиции экранов, форм, состояний и доступности, с чек-листом ревью |
 | [`docs/AUDIT_JOURNEY.md`](docs/AUDIT_JOURNEY.md) | Разбор пути пользователя по ролям: где сценарий обрывается, что это блокирует, чем закрыто |
 | [`docs/AUDIT_BOT.md`](docs/AUDIT_BOT.md) | Продуктовый аудит Telegram-бота глазами родителя: 11 находок, чем закрыты, что отложено |
+| [`docs/AUDIT_MINIAPP.md`](docs/AUDIT_MINIAPP.md) | Продуктовый аудит Mini App: 8 находок, включая клинический дефект граммовки «Что взвесить» |
 | `docs/adr/` | Architecture decision records — отступления от ТЗ с обоснованием (18 штук) |
 | [`docs/DEPLOY.md`](docs/DEPLOY.md) | Развёртывание пред-прода на VPS: подготовка сервера, nginx, автодеплой, бэкапы, передача клиенту |
 | [`docs/PLAN_LANDING.md`](docs/PLAN_LANDING.md) | План работ по посадочной странице и заявкам — выполнен, оставлен как история решений |

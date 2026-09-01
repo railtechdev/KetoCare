@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -11,6 +11,14 @@ import { RecipesScreen } from "./RecipesScreen";
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
   return { ...actual, api: { GET: vi.fn() } };
+});
+
+const showBackButton = vi.hoisted(() =>
+  vi.fn<(onBack: () => void) => () => void>(() => () => undefined),
+);
+vi.mock("../../lib/telegram", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/telegram")>();
+  return { ...actual, showBackButton };
 });
 
 const RECIPE = {
@@ -44,12 +52,23 @@ function renderScreen() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (api.GET as Mock).mockImplementation((path: string) =>
-    path.endsWith("{recipe_id}")
-      ? Promise.resolve({ data: RECIPE })
-      : Promise.resolve({ data: { items: [RECIPE], total: 1 } }),
-  );
+  (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
+    if (path.endsWith("{recipe_id}")) return Promise.resolve({ data: RECIPE });
+    if (path.endsWith("{product_id}")) {
+      const id = (options as { params: { path: { product_id: string } } })
+        .params.path.product_id;
+      return Promise.resolve({
+        data: { id, name_ru: PRODUCT_NAMES[id] ?? "Продукт", is_active: true },
+      });
+    }
+    return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+  });
 });
+
+const PRODUCT_NAMES: Record<string, string> = {
+  "prod-1": "Яйцо куриное",
+  "prod-2": "Сливки 33%",
+};
 
 describe("рецепты в Mini App", () => {
   it("открывает карточку из списка", async () => {
@@ -92,6 +111,69 @@ describe("рецепты в Mini App", () => {
         params: expect.objectContaining({ path: { recipe_id: "r1" } }),
       }),
     );
+  });
+
+  it("карточка показывает состав с граммовкой и называет масштаб", async () => {
+    // По карточке готовят: показатели порции без «из чего и сколько» —
+    // инструкция без рецепта (находка М2 аудита). Рядом стоят показатели
+    // ОДНОЙ порции, поэтому заголовок состава называет масштаб — весь выход.
+    (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [
+              { product_id: "prod-1", grams: 120, position: 0 },
+              { product_id: "prod-2", grams: 60, position: 1 },
+            ],
+          },
+        });
+      if (path.endsWith("{product_id}")) {
+        const id = (options as { params: { path: { product_id: string } } })
+          .params.path.product_id;
+        return Promise.resolve({
+          data: {
+            id,
+            name_ru: PRODUCT_NAMES[id] ?? "Продукт",
+            is_active: true,
+          },
+        });
+      }
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Омлет на сливках/ }),
+    );
+
+    expect(
+      await screen.findByText(/Состав — на весь выход \(2 порции\)/),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Яйцо куриное")).toBeInTheDocument();
+    expect(screen.getByText("120 г")).toBeInTheDocument();
+    expect(screen.getByText("Сливки 33%")).toBeInTheDocument();
+  });
+
+  it("карточка включает системную «Назад» Telegram и она ведёт к списку", async () => {
+    // Аппаратная «Назад» на Android иначе закрывает весь Mini App: родитель
+    // из карточки попадал в чат, а не к списку (находка М8 аудита).
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Омлет на сливках/ }),
+    );
+    await screen.findByText("Как готовить");
+
+    expect(showBackButton).toHaveBeenCalledTimes(1);
+    const [onBack] = showBackButton.mock.calls[0] as [() => void];
+    act(() => {
+      onBack();
+    });
+
+    expect(await screen.findByLabelText("Найдите рецепт")).toBeInTheDocument();
   });
 
   it("пустая выдача — это «ничего не нашлось», а не ошибка", async () => {
