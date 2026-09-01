@@ -10,7 +10,13 @@ import type { DishRow } from "./types";
 import { useSaveDishMutation } from "./useCalcMutations";
 
 interface Props {
-  patientId: string | null;
+  /**
+   * Ребёнок известен всегда: экран калькулятора обёрнут в `PatientGate`, а он
+   * сам показывает и «выберите ребёнка», и «добавьте ребёнка». Ветка «ребёнка
+   * нет» здесь была недостижимой — и второй, расходящейся со временем
+   * формулировкой того же правила.
+   */
+  patientId: string;
   rows: DishRow[];
 }
 
@@ -20,12 +26,6 @@ export function SaveDishForm({ patientId, rows }: Props) {
   const queryClient = useQueryClient();
   const save = useSaveDishMutation(patientId);
   const [title, setTitle] = useState("");
-
-  if (patientId === null) {
-    return (
-      <p className="m-0 text-sm text-muted-foreground">{t("save.noPatient")}</p>
-    );
-  }
 
   return (
     <Section title={t("save.action")} description={t("save.description")}>

@@ -81,12 +81,9 @@ export function useScaleMutation() {
   });
 }
 
-export function useSaveDishMutation(patientId: string | null) {
+export function useSaveDishMutation(patientId: string) {
   return useMutation({
     mutationFn: async (input: { title: string; rows: DishRow[] }) => {
-      if (patientId === null)
-        throw new Error("patientId is required to save a dish");
-
       const { data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/custom-dishes",
         {
