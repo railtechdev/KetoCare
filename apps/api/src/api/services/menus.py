@@ -28,7 +28,13 @@ from keto_engine import ENGINE_VERSION, Ingredient, scale, verify
 
 from ..errors import ApiError, ErrorCode
 from ..schemas import DishComputed
-from ..schemas_menus import MenuItemRead, MenuItemWrite, MenuRead, WithdrawnProduct
+from ..schemas_menus import (
+    MenuItemIngredient,
+    MenuItemRead,
+    MenuItemWrite,
+    MenuRead,
+    WithdrawnProduct,
+)
 from . import composition as composition_service
 
 # Состав блюда: продукт и его масса в граммах.
@@ -60,9 +66,15 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
         items=[
             MenuItemRead(
                 **MenuItemRead.model_validate(item).model_dump(
-                    exclude={"title", "has_snapshot", "changed_since_saved"}
+                    exclude={
+                        "title",
+                        "ingredients",
+                        "has_snapshot",
+                        "changed_since_saved",
+                    }
                 ),
                 title=None if item.snapshot is None else item.snapshot.get("title"),
+                ingredients=_snapshot_ingredients(item),
                 has_snapshot=item.snapshot is not None,
                 changed_since_saved=_changed_since_saved(item, live.get(item.id, [])),
             )
@@ -72,6 +84,27 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
         excluded_products=await _excluded_products(session, menu=menu, items=items, live=live),
         created_at=menu.created_at,
     )
+
+
+def _snapshot_ingredients(item: MenuItem) -> list[MenuItemIngredient]:
+    """Состав позиции из снимка: что и сколько взвесить.
+
+    Из меню нельзя было открыть блюдо и увидеть граммовку — приходилось искать
+    рецепт в другом разделе и надеяться, что он с тех пор не изменился. Снимок
+    отвечает на этот вопрос точно, потому что и создан для этого.
+    """
+
+    if item.snapshot is None:
+        return []
+
+    return [
+        MenuItemIngredient(
+            product_id=uuid.UUID(str(row["product_id"])),
+            name_ru=str(row.get("name_ru", "")),
+            grams=float(row["grams"]),
+        )
+        for row in item.snapshot.get("ingredients", [])
+    ]
 
 
 async def _excluded_products(

@@ -84,6 +84,21 @@ class MenuItemEatenWrite(BaseModel):
     eaten: bool = True
 
 
+class MenuItemIngredient(BaseModel):
+    """Строка состава позиции меню — из снимка, а не из живого рецепта.
+
+    Ровно то, что надо взвесить: название продукта и граммы на момент, когда
+    день сохранили. Живой рецепт мог измениться с тех пор, и показывать по нему
+    значило бы предлагать готовить не тот день, который спланирован (ADR-0016).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: uuid.UUID
+    name_ru: str
+    grams: float
+
+
 class MenuItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,6 +119,9 @@ class MenuItemRead(BaseModel):
     title: str | None = None
     #: Состав блюда заморожен на момент сохранения дня.
     has_snapshot: bool = False
+    #: Что и сколько взвесить. Пусто у позиций без снимка (сохранённых до его
+    #: появления): состав таких позиций живёт в рецепте и мог измениться.
+    ingredients: list[MenuItemIngredient] = []
     #: Рецепт или своё блюдо изменились с того дня, когда его сохранили.
     #:
     #: День от этого не меняется — в том и смысл снимка, — но знать об этом

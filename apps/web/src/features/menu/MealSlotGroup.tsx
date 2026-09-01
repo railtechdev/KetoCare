@@ -4,6 +4,9 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatPortionFactor } from "./dates";
+// Округление граммов одно на приложение: в рецепте и в меню одно и то же
+// число обязано выглядеть одинаково.
+import { formatGrams } from "../recipes/format";
 import { itemDishKey } from "./useDishCatalog";
 import type { MealSlot, MenuItemRead } from "./useMenu";
 
@@ -136,6 +139,38 @@ export function MealSlotGroup({
                   cancelLabel={t("common:actions.cancel")}
                   onConfirm={() => onRemove(item.id)}
                 />
+
+                {/* Что и сколько взвесить. Раскрывается по требованию: у
+                    плиты нужен состав, а при беглом взгляде на день — только
+                    названия блюд. Состав из снимка, то есть тот, по которому
+                    день и посчитан (ADR-0016). */}
+                {/* Поле со значением по умолчанию на сервере, но здесь оно
+                    подстраховано: во время выката фронт какое-то время говорит
+                    со старым API, и день не должен исчезать целиком. */}
+                {(item.ingredients ?? []).length > 0 && (
+                  <details className="m-0 w-full text-sm">
+                    <summary className="min-h-touch cursor-pointer py-1 text-muted-foreground">
+                      {t("item.composition")}
+                    </summary>
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0 pt-1">
+                      {(item.ingredients ?? []).map((line) => (
+                        <li
+                          key={line.product_id}
+                          className="flex flex-wrap justify-between gap-field"
+                        >
+                          <span>{line.name_ru}</span>
+                          <span className="text-muted-foreground tabular-nums">
+                            {t("item.grams", {
+                              value: formatGrams(
+                                line.grams * item.portion_factor,
+                              ),
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
 
                 {/* Блюдо правили после того, как день сохранён. Сам день от
                     этого не изменился — состав заморожен снимком, — но рецепт

@@ -1072,6 +1072,79 @@ async def _save_day(client, auth_headers, parent, patient, session, day):
     )
 
 
+class TestItemComposition:
+    """Состав позиции — из снимка (ADR-0016).
+
+    Из меню нельзя было открыть блюдо и увидеть, что и сколько готовить:
+    приходилось искать рецепт в другом разделе и надеяться, что он с тех пор не
+    изменился.
+    """
+
+    async def test_item_carries_what_to_weigh(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        item = response.json()["items"][0]
+        # Имя продукта фабрика делает уникальным, поэтому сверяется по началу.
+        assert len(item["ingredients"]) == 1
+        line = item["ingredients"][0]
+        assert line["product_id"] == str(butter.id)
+        assert line["name_ru"].startswith("Масло сливочное")
+        assert line["grams"] == 50.0
+
+    async def test_composition_is_frozen_and_does_not_follow_the_recipe(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Правка рецепта не меняет уже спланированный день — в этом и смысл
+        снимка. Показывать по живому рецепту значило бы предлагать готовить не
+        тот день, который спланирован."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        # Диетолог поправил рецепт после того, как день сохранён.
+        ingredient = await session.scalar(
+            select(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id)
+        )
+        ingredient.grams = 80
+        await session.flush()
+
+        read = await client.get(
+            _url(patient),
+            params={"date": MENU_DATE},
+            headers=auth_headers(parent),
+        )
+        item = read.json()["items"][0]
+
+        assert item["ingredients"][0]["grams"] == 50.0
+        # Но о расхождении экран обязан сказать — это уже сделанная находка.
+        assert item["changed_since_saved"] is True
+
+
 class TestMenuDayRemoval:
     """Убрать план на день (ADR-0018).
 

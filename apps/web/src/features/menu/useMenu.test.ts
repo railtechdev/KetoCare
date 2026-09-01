@@ -18,6 +18,7 @@ const item = (over: Partial<MenuItemRead>): MenuItemRead => ({
   portion_factor: 1,
   eaten: false,
   has_snapshot: true,
+  ingredients: [],
   changed_since_saved: false,
   ...over,
 });
