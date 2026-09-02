@@ -10,11 +10,17 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 
 import pytest
 
-from worker.ai.pseudonymize import FORBIDDEN_KEYS, patient_label, pseudonymize
+from worker.ai.pseudonymize import (
+    FORBIDDEN_KEYS,
+    patient_label,
+    pseudonymize,
+    scrub_free_text,
+)
 
 PATIENT_ID = uuid.UUID("3f2a1c9d-1111-4111-8111-222222222222")
 
@@ -137,3 +143,76 @@ class TestPatientLabel:
         label = patient_label(patient_id=PATIENT_ID, birth_date=None, sex=None)
         assert label == "patient 3f2a1c9d"
         assert str(PATIENT_ID) not in label
+
+
+class TestPersonShapedDictionaries:
+    """Находка ревью: подмена срабатывала только для ключа ровно `patient`."""
+
+    def test_any_person_record_becomes_a_label(self) -> None:
+        # `child`, `sibling`, `subject` — искать их по имени ключа значит
+        # проигрывать первому же новому названию.
+        result = pseudonymize(
+            {"child": {"id": "3f2a1c9d", "birth_date": "2021-07-15", "sex": "f", "name": "Аня"}}
+        )
+        assert result["child"].startswith("patient 3f2a1c9d")
+        assert "Аня" not in json.dumps(result, ensure_ascii=False)
+
+    def test_birth_date_alone_never_survives(self) -> None:
+        """Дата рождения вместе с полом идентифицирует ребёнка не хуже имени."""
+
+        result = pseudonymize({"anketa": {"birth_date": "2021-07-15", "sex": "f"}})
+        assert "2021-07-15" not in json.dumps(result, ensure_ascii=False)
+
+    def test_a_product_is_not_a_person(self) -> None:
+        """У продукта тоже есть `id` — и он обязан дойти до модели целым:
+        по нему разбор еды сопоставляет названия с каталогом (раздел 10.3 ТЗ)."""
+
+        payload = {"products": [{"id": "77", "name_ru": "Масло сливочное", "fat_100g": 82.5}]}
+        assert pseudonymize(payload) == payload
+
+
+class TestJsonSafety:
+    def test_dates_decimals_and_uuids_survive_json(self) -> None:
+        """Репозитории `core` отдают именно их, а нагрузка едет через
+        `json.dumps` дважды — в промпт и в `ai_jobs.input`."""
+
+        payload = {
+            "day": date(2026, 8, 31),
+            "at": datetime(2026, 8, 31, 7, 30),
+            "grams": Decimal("12.5"),
+            "recipe_id": uuid.UUID("11111111-1111-4111-8111-111111111111"),
+        }
+        result = pseudonymize(payload)
+
+        json.dumps(result)  # падало бы TypeError до правки
+        assert result["day"] == "2026-08-31"
+        assert result["grams"] == 12.5
+        assert result["recipe_id"] == "11111111-1111-4111-8111-111111111111"
+
+
+class TestFreeText:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "напишите мне на mama@example.com",
+            "мой телефон +998 90 111-22-33",
+            "я в телеграме @anyamama",
+        ],
+    )
+    def test_contacts_are_masked(self, text: str) -> None:
+        """Раздел 10.2 ТЗ запрещает контакты в промптах без оговорок, и «это же
+        ввод пользователя» такой оговоркой не является (ADR-0019)."""
+
+        cleaned = scrub_free_text(text)
+        assert cleaned is not None
+        assert "@example.com" not in cleaned
+        assert "111-22-33" not in cleaned
+        assert "@anyamama" not in cleaned
+
+    def test_the_meal_itself_survives(self) -> None:
+        """Чистка не должна съесть текст, ради которого разбор и делается."""
+
+        assert scrub_free_text("Аня съела 2 яйца и 30 г масла") == "Аня съела 2 яйца и 30 г масла"
+
+    def test_none_stays_none(self) -> None:
+        assert scrub_free_text(None) is None

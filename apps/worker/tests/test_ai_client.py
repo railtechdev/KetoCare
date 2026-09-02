@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -26,7 +27,7 @@ from worker.ai.client import (
     AiUnavailable,
     NotConfigured,
 )
-from worker.ai.pricing import estimate_cost
+from worker.ai.pricing import PRICES_USD_PER_MTOK, base_model, estimate_cost, is_priced
 
 
 @dataclass
@@ -377,3 +378,129 @@ class TestPricing:
 
     def test_unknown_model_has_no_invented_price(self) -> None:
         assert estimate_cost("some-other-model", tokens_in=100, tokens_out=100) is None
+
+
+class TestBudgetCannotBeSilentlyDisabled:
+    """Находка ревью: неизвестная модель обнуляла дневной бюджет навсегда."""
+
+    async def test_unpriced_model_is_refused_not_billed_at_zero(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        # Цепочка была такая: нет цены → cost_usd NULL → сумма за день ноль →
+        # AI_DAILY_BUDGET_USD не срабатывает НИКОГДА, от одной опечатки в .env.
+        messages = FakeMessages(answer())
+        client = client_for(sessionmaker, messages, ai_model_smart="claude-opus-9000")
+
+        with pytest.raises(NotConfigured) as failure:
+            await client.ask(
+                kind=AiJobKind.ASSISTANT,
+                requested_by=user_id,
+                patient_id=None,
+                system="ты помощник",
+                payload={},
+            )
+
+        assert "прайс" in str(failure.value).lower()
+        assert messages.calls == []
+
+    def test_env_example_models_are_priced(self) -> None:
+        """Значения из `.env.example` обязаны находиться в прайсе: именно они
+        оказываются в свежем окружении, и именно на них проверяется бюджет."""
+
+        example = Path(__file__).resolve().parents[3] / ".env.example"
+        declared = dict(
+            line.split("#")[0].strip().split("=", 1)
+            for line in example.read_text().splitlines()
+            if line.startswith(("AI_MODEL_FAST=", "AI_MODEL_SMART="))
+        )
+
+        assert declared, "в .env.example пропали объявления моделей"
+        for variable, model in declared.items():
+            assert is_priced(model), f"{variable}={model} нет в worker/ai/pricing.py"
+
+    def test_dated_and_latest_aliases_resolve_to_the_model(self) -> None:
+        assert base_model("claude-opus-5-20260101") == "claude-opus-5"
+        assert base_model("claude-opus-5-latest") == "claude-opus-5"
+        assert all(base_model(name) == name for name in PRICES_USD_PER_MTOK)
+
+
+class TestReservation:
+    """Находка ревью: пока вызов идёт, его стоимость никто не учитывал."""
+
+    async def test_running_call_already_occupies_the_budget(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        client = client_for(sessionmaker, FakeMessages(answer()), ai_daily_budget_usd=10.0)
+
+        await client.ask(
+            kind=AiJobKind.DOCTOR_SUMMARY,
+            requested_by=user_id,
+            patient_id=None,
+            system="сводка",
+            payload={},
+            max_tokens=100_000,  # бронь по потолку ответа: 100k × $25/1M = $2.5
+        )
+
+        jobs = await jobs_of(sessionmaker)
+        assert jobs[0].cost_usd is not None
+
+    async def test_reservation_is_replaced_by_the_real_cost(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """Бронь завышена намеренно; после ответа в журнале должна стоять
+        настоящая цена, иначе отчёт о расходах врал бы в разы."""
+
+        client = client_for(sessionmaker, FakeMessages(answer(tokens_in=1000, tokens_out=200)))
+
+        result = await client.ask(
+            kind=AiJobKind.DOCTOR_SUMMARY,
+            requested_by=user_id,
+            patient_id=None,
+            system="сводка",
+            payload={},
+            max_tokens=100_000,
+        )
+
+        jobs = await jobs_of(sessionmaker)
+        assert float(jobs[0].cost_usd or 0) == pytest.approx(float(result.cost_usd or 0))
+        assert result.cost_usd == estimate_cost("claude-opus-5", tokens_in=1000, tokens_out=200)
+
+
+class TestFreeTextIsCleanedToo:
+    async def test_contacts_from_the_user_do_not_reach_the_model(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """Находка ревью: `user_text` уходил в промпт и в журнал сырым."""
+
+        messages = FakeMessages(answer())
+        client = client_for(sessionmaker, messages)
+
+        await client.ask(
+            kind=AiJobKind.ASSISTANT,
+            requested_by=user_id,
+            patient_id=None,
+            system="ты помощник",
+            payload={},
+            user_text="позвоните мне на +998 90 111-22-33 или mama@example.com",
+        )
+
+        sent = json.dumps(messages.calls[0]["messages"], ensure_ascii=False)
+        assert "mama@example.com" not in sent
+        assert "111-22-33" not in sent
+
+        jobs = await jobs_of(sessionmaker)
+        assert "mama@example.com" not in json.dumps(jobs[0].input, ensure_ascii=False)
+
+
+class TestSingleDoor:
+    def test_sdk_is_imported_only_by_the_client(self) -> None:
+        """Находка ревью: дисциплина «единственная дверь» держалась на честном
+        слове. Импорт SDK мимо клиента — это обход псевдонимизации и журнала."""
+
+        worker_src = Path(__file__).resolve().parents[1] / "src" / "worker"
+        offenders = [
+            path.relative_to(worker_src).as_posix()
+            for path in worker_src.rglob("*.py")
+            if "anthropic" in path.read_text() and path.name != "client.py"
+        ]
+        assert offenders == []

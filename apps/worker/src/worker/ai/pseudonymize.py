@@ -3,10 +3,25 @@
 Правило 6 `CLAUDE.md`: в промпты не уходят ФИО, контакты и `chat_id`. Пациент
 представляется строкой `patient <short-id>, возраст X лет Y мес, пол`.
 
-Подход — **список разрешённого наизнанку**: нагрузка чистится рекурсивно, и
-ключ, похожий на имя или контакт, снимается на любой глубине. Проверять только
-верхний уровень бессмысленно: ряды дневника, позиции меню и записи о семье
-приходят вложенными, и одно поле `full_name` внутри списка утекало бы молча.
+Чистка идёт рекурсивно и по трём правилам сразу — одного мало, у каждого своя
+дыра:
+
+1. **Запрещённые ключи** (`FORBIDDEN_KEYS`) снимаются на любой глубине. Это
+   список запретов, а не разрешений, и его слабость известна: ключ, которого в
+   списке нет, пройдёт насквозь. Проверять только верхний уровень было бы ещё
+   хуже: ряды дневника, позиции меню и записи о семье приходят вложенными, и
+   одно поле `full_name` внутри списка утекало бы молча.
+2. **Словарь, похожий на человека** (есть `id` и `birth_date`), заменяется
+   меткой — независимо от того, как назван ключ. Правило закрывает главную дыру
+   первого: `{"child": {...}}` и `{"sibling": {...}}` больше не проносят дату
+   рождения мимо запрета, потому что искать по имени ключа их бесполезно.
+3. **Значения приводятся к JSON-совместимым** (`date`, `Decimal`, `UUID`):
+   репозитории `core` отдают именно их, а нагрузка едет и в промпт, и в
+   `ai_jobs.input` — то есть через `json.dumps` дважды.
+
+Свободный текст человека чистит отдельная `scrub_free_text`: там нельзя убрать
+всё (имя ребёнка в фразе «Аня съела два яйца» неотличимо от слова), но контакты
+— можно, и они убираются (ADR-0019).
 
 Функция ничего не знает ни о конкретной задаче, ни о модели: её вызывает клиент
 (`client.py`) перед каждым обращением, и обойти её, не переписав клиент, нельзя.
@@ -14,8 +29,10 @@
 
 from __future__ import annotations
 
+import re
 import uuid
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 #: Ключи, которые не уходят в модель ни на какой глубине.
@@ -39,6 +56,18 @@ FORBIDDEN_KEYS: frozenset[str] = frozenset(
         "requested_by_name",
         "author_name",
         "display_name",
+        "child_name",
+        "nickname",
+        "mother",
+        "father",
+        "guardian",
+        "guardian_name",
+        "caregiver",
+        # Дата рождения. Вместе с полом она идентифицирует ребёнка не хуже
+        # имени, а модели нужен возраст — он приходит в метке.
+        "birth_date",
+        "birthday",
+        "dob",
         # Контакты
         "email",
         "phone",
@@ -48,6 +77,7 @@ FORBIDDEN_KEYS: frozenset[str] = frozenset(
         "address",
         "telegram",
         "telegram_username",
+        "tg_username",
         "username",
         # Телеграм: chat_id прямо назван в разделе 10.2 ТЗ
         "chat_id",
@@ -79,6 +109,12 @@ def pseudonymize(payload: Any) -> Any:
     """
 
     if isinstance(payload, dict):
+        if _looks_like_a_person(payload):
+            # Правило 2: словарь человека распознаётся по содержимому, а не по
+            # имени ключа. `patient`, `child`, `sibling`, `subject` — искать их
+            # списком имён значит проигрывать первому же новому названию.
+            return _patient_from(payload)
+
         result: dict[str, Any] = {}
         for key, value in payload.items():
             lowered = key.lower()
@@ -96,7 +132,65 @@ def pseudonymize(payload: Any) -> Any:
     if isinstance(payload, tuple):
         return tuple(pseudonymize(item) for item in payload)
 
-    return payload
+    return _as_json_value(payload)
+
+
+def _looks_like_a_person(node: dict[str, Any]) -> bool:
+    """Есть идентификатор и дата рождения — это карточка человека.
+
+    Пара, а не одно поле: `id` есть у продукта и рецепта, `birth_date` без
+    идентификатора встречается в анкете. Вместе они бывают только у человека.
+    """
+
+    keys = {key.lower() for key in node}
+    return "id" in keys and bool(keys & {"birth_date", "birthday", "dob"})
+
+
+def _as_json_value(value: Any) -> Any:
+    """Привести значение к тому, что переживёт `json.dumps`.
+
+    Репозитории `core` отдают `date`, `Decimal` (граммы и дозы — `Numeric`) и
+    `uuid.UUID`. Без приведения первая же настоящая задача падала бы голым
+    `TypeError` на записи в журнал — то есть до обращения к модели, но и мимо
+    обещанного «наружу идёт один понятный тип».
+    """
+
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    return value
+
+
+#: Что вырезается из свободного текста: почта, телефон, ник в Telegram.
+#:
+#: Имя человека не ищется намеренно: «Аня съела два яйца» — здесь имя от слова
+#: неотличимо, а попытка угадать испортила бы сам текст, ради которого разбор и
+#: делается. Остаток риска описан в ADR-0019.
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+_PHONE = re.compile(r"(?<!\d)\+?\d[\d\s()-]{8,}\d(?!\d)")
+_TG_USERNAME = re.compile(r"(?<![\w@])@[A-Za-z][A-Za-z0-9_]{4,}")
+
+MASK = "[скрыто]"
+
+
+def scrub_free_text(text: str | None) -> str | None:
+    """Убрать контакты из текста, который человек набрал сам.
+
+    Раздел 10.2 ТЗ запрещает контакты в промптах без оговорок — «это же ввод
+    пользователя» такой оговоркой не является. Родитель может написать телефон
+    или почту в вопросе ассистенту, и до этой функции они уходили бы и в модель,
+    и в `ai_jobs.input`.
+    """
+
+    if text is None:
+        return None
+
+    cleaned = _EMAIL.sub(MASK, text)
+    cleaned = _TG_USERNAME.sub(MASK, cleaned)
+    return _PHONE.sub(MASK, cleaned)
 
 
 def _patient_from(patient: dict[str, Any]) -> str:

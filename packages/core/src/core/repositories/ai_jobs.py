@@ -20,6 +20,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import AiJob
 from ..models.enums import AiJobKind, AiJobStatus
 
+#: Ключ транзакционной блокировки, под которой идут проверка предохранителей и
+#: запись строки.
+#:
+#: Без неё обе проверки — «прочитали, потом записали»: одновременные задачи
+#: воркера читают одну и ту же сумму за день и проходят предохранитель все
+#: разом. Блокировка транзакционная: снимается коммитом, отдельного release не
+#: требует, и висит ровно на время проверки и вставки.
+BUDGET_LOCK_KEY = 0x4B45544F  # «KETO» в ASCII — лишь бы ключ был свой и постоянный
+
+
+async def lock_budget(session: AsyncSession) -> None:
+    """Взять блокировку на время проверки предохранителей и записи строки."""
+
+    await session.execute(select(func.pg_advisory_xact_lock(BUDGET_LOCK_KEY)))
+
 
 async def get(session: AsyncSession, job_id: uuid.UUID) -> AiJob | None:
     job: AiJob | None = await session.get(AiJob, job_id)
@@ -34,13 +49,19 @@ async def create(
     patient_id: uuid.UUID | None,
     payload: dict[str, Any],
     model: str,
+    reserved_cost_usd: Decimal | None = None,
 ) -> AiJob:
-    """Завести строку до обращения к модели.
+    """Завести строку до обращения к модели, заняв под неё деньги.
 
     До, а не после: вызов может не вернуться вовсе — оборваться по таймауту или
     уронить процесс, — и тогда следа о нём не осталось бы, а деньги за него
     списались бы. Модель записывается сразу: имя берётся из окружения, и по
     журналу должно быть видно, какое именно значение стояло в тот день.
+
+    `reserved_cost_usd` — верхняя оценка стоимости, она же бронь: пока вызов
+    идёт, настоящей цены никто не знает, а бюджет считается по этому же полю.
+    Без брони одновременные вызовы видели бы нулевой расход, а оборванный не
+    попадал бы в бюджет никогда. Настоящая стоимость заменит её в `mark_done`.
     """
 
     job = AiJob(
@@ -50,6 +71,7 @@ async def create(
         patient_id=patient_id,
         input=payload,
         model=model,
+        cost_usd=float(reserved_cost_usd) if reserved_cost_usd is not None else None,
     )
     session.add(job)
     await session.flush()
@@ -101,6 +123,25 @@ async def mark_failed(
     job.finished_at = datetime.now(UTC)
     await session.flush()
     return job
+
+
+async def list_stuck(session: AsyncSession, *, older_than: datetime) -> list[AiJob]:
+    """Вызовы, застрявшие в `RUNNING`.
+
+    Процесс воркера может умереть посреди обращения, и тогда строка остаётся
+    «выполняется» навсегда: бронь под неё висит в бюджете, а по журналу не
+    видно, чем дело кончилось. Уборщик закрывает такие строки как неудачные,
+    бронь при этом остаётся потраченной — деньги-то ушли.
+    """
+
+    return list(
+        await session.scalars(
+            select(AiJob).where(
+                AiJob.status == AiJobStatus.RUNNING,
+                AiJob.created_at < older_than,
+            )
+        )
+    )
 
 
 async def count_since(

@@ -22,13 +22,21 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from core.config import Settings
 from core.db import get_sessionmaker
+from core.repositories import ai_jobs as ai_jobs_repo
 from core.repositories import attachments as attachments_repo
 from core.repositories import report_jobs as jobs_repo
+
+#: После какого простоя обращение к модели считается оборвавшимся.
+#:
+#: Час — с большим запасом к таймауту вызова (минута): задача, живая дольше,
+#: пережила смерть процесса, а не долгий ответ.
+AI_JOB_STUCK_AFTER = timedelta(hours=1)
 
 
 def _remove(directory: str, names: list[str]) -> int:
@@ -87,3 +95,32 @@ async def purge_files(ctx: dict[str, Any]) -> dict[str, int]:
         await session.commit()
 
     return {"reports": reports, "attachments": files}
+
+
+async def close_stuck_ai_jobs(ctx: dict[str, Any]) -> dict[str, int]:
+    """Закрыть обращения к модели, застрявшие в `RUNNING`.
+
+    Процесс воркера может умереть посреди вызова, и строка остаётся
+    «выполняется» навсегда: по журналу не видно, чем дело кончилось, а бронь под
+    неё продолжает занимать дневной бюджет. Бронь при этом НЕ снимается —
+    деньги за вызов ушли, и вычесть их обратно значило бы соврать бюджету в
+    более опасную сторону.
+    """
+
+    now = datetime.now(UTC)
+    sessionmaker = get_sessionmaker()
+
+    async with sessionmaker() as session:
+        stuck = await ai_jobs_repo.list_stuck(session, older_than=now - AI_JOB_STUCK_AFTER)
+        for job in stuck:
+            await ai_jobs_repo.mark_failed(
+                session,
+                job=job,
+                error="Обращение к модели не завершилось: процесс воркера прервался.",
+                tokens_in=job.tokens_in,
+                tokens_out=job.tokens_out,
+                cost_usd=Decimal(str(job.cost_usd)) if job.cost_usd is not None else None,
+            )
+        await session.commit()
+
+    return {"closed": len(stuck)}

@@ -32,8 +32,8 @@ from core.config import Settings
 from core.models.enums import AiJobKind
 from core.repositories import ai_jobs as jobs_repo
 
-from .pricing import estimate_cost
-from .pseudonymize import pseudonymize
+from .pricing import UnknownModelPrice, assert_priced, estimate_cost, reserve_cost
+from .pseudonymize import pseudonymize, scrub_free_text
 
 #: Задачи, к которым применяется суточный предел ПОЛЬЗОВАТЕЛЯ.
 #:
@@ -134,12 +134,21 @@ class AiClient:
         расходы на модель, которую никто не выбирал.
         """
 
+        variable = "AI_MODEL_FAST" if kind in FAST_KINDS else "AI_MODEL_SMART"
         model = (
             self._settings.ai_model_fast if kind in FAST_KINDS else self._settings.ai_model_smart
         )
         if not model:
-            variable = "AI_MODEL_FAST" if kind in FAST_KINDS else "AI_MODEL_SMART"
             raise NotConfigured(f"Не задана переменная {variable} — обращаться не к какой модели.")
+
+        # Модель без цены — это выключенный дневной бюджет: стоимость её вызовов
+        # неизвестна, сумма за день считается нулём, и предохранитель не
+        # срабатывает никогда. Поэтому отказ, а не молчаливое «посчитаем потом».
+        try:
+            assert_priced(model, variable=variable)
+        except UnknownModelPrice as error:
+            raise NotConfigured(str(error)) from error
+
         return model
 
     async def ask(
@@ -166,16 +175,27 @@ class AiClient:
 
         model = self.model_for(kind)
         safe_payload = pseudonymize(payload)
+        # Свободный текст пишет человек, и «это же его собственный ввод» —
+        # не оговорка к запрету контактов в промптах (ADR-0019).
+        safe_text = scrub_free_text(user_text)
+
+        reserved = reserve_cost(
+            model, max_tokens=max_tokens, prompt_tokens_guess=_prompt_tokens_guess(safe_payload)
+        )
 
         async with self._sessionmaker() as session:
+            # Проверка и запись — под одной блокировкой: иначе одновременные
+            # задачи читают одинаковый расход и проходят предохранитель разом.
+            await jobs_repo.lock_budget(session)
             await self._assert_within_limits(session, requested_by=requested_by, kind=kind)
             job = await jobs_repo.create(
                 session,
                 kind=kind,
                 requested_by=requested_by,
                 patient_id=patient_id,
-                payload={"payload": safe_payload, "user_text": user_text},
+                payload={"payload": safe_payload, "user_text": safe_text},
                 model=model,
+                reserved_cost_usd=reserved,
             )
             job_id = job.id
             await session.commit()
@@ -183,8 +203,8 @@ class AiClient:
         content: list[dict[str, Any]] = [
             {"type": "text", "text": json.dumps(safe_payload, ensure_ascii=False, sort_keys=True)}
         ]
-        if user_text:
-            content.append({"type": "text", "text": user_text})
+        if safe_text:
+            content.append({"type": "text", "text": safe_text})
 
         try:
             response = await self._anthropic.messages.create(
@@ -291,6 +311,18 @@ class AiClient:
                     cost_usd=cost,
                 )
                 await session.commit()
+
+
+#: Грубая оценка «символов на токен» для брони.
+#:
+#: Не `count_tokens`: он сам ходит в сеть, а бронь нужна ДО вызова и на каждый
+#: вызов. Оценка нужна не для отчёта, а чтобы бронь не была нулевой; настоящее
+#: число придёт с ответом и заменит её.
+_CHARS_PER_TOKEN = 3
+
+
+def _prompt_tokens_guess(payload: Any) -> int:
+    return max(len(json.dumps(payload, ensure_ascii=False)) // _CHARS_PER_TOKEN, 1)
 
 
 def _usage_of(response: Any) -> tuple[int | None, int | None]:
