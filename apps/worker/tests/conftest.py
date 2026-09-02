@@ -16,12 +16,14 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import AsyncIterator
+from datetime import date
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from core.models.enums import UserRole
+from core.models.enums import Sex, UserRole
+from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
 
 # Молчаливого запасного адреса здесь нет намеренно — см. те же строки в
@@ -62,5 +64,18 @@ async def user_id(sessionmaker: async_sessionmaker) -> uuid.UUID:
             password_hash="x",
         )
         identifier = user.id
+        await session.commit()
+    return identifier
+
+
+@pytest_asyncio.fixture
+async def patient_id(sessionmaker: async_sessionmaker) -> uuid.UUID:
+    """Про кого разбор: `ai_jobs.patient_id` — тоже внешний ключ."""
+
+    async with sessionmaker() as session:
+        patient = await patients_repo.create(
+            session, full_name="Ребёнок Тестовый", birth_date=date(2021, 7, 15), sex=Sex.F
+        )
+        identifier = patient.id
         await session.commit()
     return identifier

@@ -125,6 +125,24 @@ async def mark_failed(
     return job
 
 
+async def attach_parsed(session: AsyncSession, *, job: AiJob, parsed: dict[str, Any]) -> AiJob:
+    """Положить в журнал разобранную структуру рядом с сырым ответом модели.
+
+    Две записи о разном: `text` — что модель сказала, `parsed` — что мы приняли
+    после проверки. Расходятся они регулярно (придуманный `product_id`,
+    ограда ```json), и по одному сырому тексту потом не понять, что именно
+    ушло человеку на подтверждение.
+
+    Отсюда же берётся `meal_logs.parsed` при подтверждении: клиент присылает
+    идентификатор задачи, а не структуру, — иначе он мог бы прислать что угодно
+    под видом разбора.
+    """
+
+    job.output = {**(job.output or {}), "parsed": parsed}
+    await session.flush()
+    return job
+
+
 async def list_stuck(session: AsyncSession, *, older_than: datetime) -> list[AiJob]:
     """Вызовы, застрявшие в `RUNNING`.
 
