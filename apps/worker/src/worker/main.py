@@ -19,7 +19,7 @@ from arq.connections import RedisSettings
 from core.config import Settings
 from core.observability import init_sentry
 
-from .maintenance import purge_files
+from .maintenance import close_stuck_ai_jobs, purge_files
 from .reminders.notify import notify_family
 from .reminders.task import reminders_cron
 from .reports.task import render_report
@@ -38,6 +38,10 @@ class WorkerSettingsARQ:
     # а днём том занят выдачей отчётов и вложений.
     cron_jobs: list[Any] = [
         cron(purge_files, hour=3, minute=30),
+        # Раз в час, а не ночью: пока строка висит в `RUNNING`, её бронь
+        # занимает дневной бюджет — к вечеру помощник замолчал бы «по лимиту»
+        # из-за вызова, оборвавшегося утром.
+        cron(close_stuck_ai_jobs, minute={7}),
         # Каждые пять минут (раздел 10.1 ТЗ): напоминание в 07:30 должно уйти
         # в 07:30, а не в ближайший час.
         cron(reminders_cron, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
