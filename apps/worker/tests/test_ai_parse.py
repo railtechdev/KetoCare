@@ -95,6 +95,20 @@ class TestHappyPath:
         assert [item.product_id for item in parsed.result.meal.items] == ["a1", "b2"]
         assert parsed.result.meal.items[1].confidence == 0.7
 
+    async def test_names_come_from_the_catalogue_not_the_model(
+        self, sessionmaker, user_id, patient_id
+    ) -> None:
+        """Родитель подтверждает по названию, а не по UUID. Название берётся из
+        справочника: модель вернула бы своё, а считается раскладка по нашему."""
+
+        parsed = await run(sessionmaker, user_id, patient_id, says(MEAL))
+
+        assert parsed.result.meal is not None
+        assert [item.name_ru for item in parsed.result.meal.items] == [
+            "Масло сливочное",
+            "Яйцо куриное",
+        ]
+
     async def test_products_and_prompt_reach_the_model(
         self, sessionmaker, user_id, patient_id
     ) -> None:

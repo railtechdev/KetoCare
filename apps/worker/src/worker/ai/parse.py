@@ -54,6 +54,13 @@ class ParsedItem(BaseModel):
     #: Насколько модель уверена в граммовке. Показывается человеку: «два яйца»
     #: — это оценка, и родитель должен видеть, что её надо проверить.
     confidence: float = Field(ge=0, le=1)
+    #: Название продукта — подставляет сервер, не модель.
+    #:
+    #: Без него подтверждение выглядело бы как «3f2a1c9d… 30 г»: родитель не
+    #: может проверить то, чего не читает, а подтверждение без проверки —
+    #: не человек в контуре, а кнопка «согласен» (правило 6 CLAUDE.md).
+    #: Модели название не доверяем: она вернула бы своё, а не справочное.
+    name_ru: str | None = None
 
 
 class ParsedMeal(BaseModel):
@@ -140,7 +147,7 @@ async def parse(
     """Разобрать фразу. Возвращает черновик — сохранять его будет человек."""
 
     payload: dict[str, Any] = {"products": [product.model_dump() for product in products]}
-    known = {product.id for product in products}
+    catalogue = {product.id: product.name for product in products}
 
     complaint: str | None = None
     for attempt in (1, 2):
@@ -159,7 +166,9 @@ async def parse(
             raise
 
         try:
-            return Parsed(result=_validated(answer.text, known=known), ai_job_id=answer.job_id)
+            return Parsed(
+                result=_validated(answer.text, catalogue=catalogue), ai_job_id=answer.job_id
+            )
         except ValueError as error:
             if attempt == 2:
                 break
@@ -182,7 +191,7 @@ async def parse(
     )
 
 
-def _validated(raw: str, *, known: set[str]) -> ParseResult:
+def _validated(raw: str, *, catalogue: dict[str, str]) -> ParseResult:
     """JSON модели → структура ТЗ, с проверкой того, что мы ей давали."""
 
     try:
@@ -198,12 +207,17 @@ def _validated(raw: str, *, known: set[str]) -> ParseResult:
     unknown = [
         item.product_id
         for item in (result.meal.items if result.meal else [])
-        if item.product_id not in known
+        if item.product_id not in catalogue
     ]
     if unknown:
         # Придуманный идентификатор выглядит как настоящий и попал бы в дневник
         # питания молча — вместе с чужими жирами и белками в расчёте.
         raise ValueError(f"product_id {', '.join(unknown)} нет в переданном списке products")
+
+    # Название — из справочника, а не из ответа модели: показать человеку надо
+    # то, что лежит в базе и по чему потом считается раскладка.
+    for item in result.meal.items if result.meal else []:
+        item.name_ru = catalogue[item.product_id]
 
     return result
 
