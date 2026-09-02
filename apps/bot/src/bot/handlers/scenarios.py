@@ -82,6 +82,11 @@ class Weight(StatesGroup):
 
 class Meal(StatesGroup):
     choice = State()
+    #: «Написать словами» — второй путь записи еды (раздел 10.3 ТЗ). Отдельные
+    #: состояния, потому что и вопрос, и разбор здесь другие: по плану бот
+    #: отмечает готовое, а здесь — предлагает черновик на подтверждение.
+    text = State()
+    confirm = State()
 
 
 class Medication(StatesGroup):
@@ -247,7 +252,9 @@ async def meal_start(
         return
 
     if not pending:
-        await message.answer(texts.MEAL_ALL_EATEN, reply_markup=keyboards.main_menu(settings))
+        # Тоже не тупик: съесть могли и то, чего в плане не было.
+        await state.set_state(Meal.choice)
+        await message.answer(texts.MEAL_ALL_EATEN, reply_markup=keyboards.meal_text_only())
         return
 
     await state.set_state(Meal.choice)
@@ -522,8 +529,10 @@ async def _fetch_pending_meals(
         return None
 
     if menu is None:
-        await state.clear()
-        await message.answer(texts.MEAL_NO_MENU, reply_markup=keyboards.main_menu(settings))
+        # Не тупик: съеденное можно описать словами. Раньше отсюда не вело
+        # ничего, и родитель, уже покормивший ребёнка, оставался один.
+        await state.set_state(Meal.choice)
+        await message.answer(texts.MEAL_NO_MENU, reply_markup=keyboards.meal_text_only())
         return None
 
     return _meal_buttons([item for item in menu.get("items", []) if not item.get("eaten")])
@@ -606,6 +615,187 @@ async def meal_mark(
     await message.answer(
         texts.MEAL_MARKED_MORE.format(title=marked_title),
         reply_markup=keyboards.meal_items(pending, marked_any=True),
+    )
+
+
+@router.callback_query(Meal.choice, F.data == keyboards.MEAL_TEXT_DATA)
+async def meal_text_start(callback: CallbackQuery, state: FSMContext) -> None:
+    """«Написать словами» — переход ко второму пути записи еды."""
+
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    await state.set_state(Meal.text)
+    await message.answer(texts.MEAL_TEXT_ASK, reply_markup=keyboards.cancel_only())
+
+
+@router.message(Meal.text)
+async def meal_text_parse(
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    """Разбор фразы. Ничего не сохраняет — показывает черновик.
+
+    Запись появится только после «Подтвердить» (правило 6 CLAUDE.md): разбор —
+    это предположение модели о том, что съел ребёнок, а по нему считается
+    кетосоотношение.
+    """
+
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(texts.MEAL_TEXT_EMPTY, reply_markup=keyboards.cancel_only())
+        return
+
+    binding = await require_binding(message, store)
+    if binding is None:
+        await state.clear()
+        return
+
+    await message.answer(texts.MEAL_TEXT_WORKING)
+
+    try:
+        parsed = await api.parse_text(
+            link_id=binding.link_id,
+            secret=binding.secret,
+            patient_id=binding.patient_id,
+            text=text,
+        )
+    except LinkRevokedError:
+        await store.delete(message.chat.id)
+        await state.clear()
+        await message.answer(texts.LINK_REVOKED)
+        return
+    except BotApiError as exc:
+        logger.warning("meal_parse_failed", status=exc.status, code=exc.code)
+        await state.clear()
+        # Предел и бюджет — это «на сегодня хватит», а не «сломалось»: ответы
+        # разные, потому что разное и следующее действие человека.
+        answer = (
+            texts.MEAL_TEXT_LIMIT if exc.code == "rate_limited" else texts.MEAL_TEXT_UNAVAILABLE
+        )
+        await message.answer(answer, reply_markup=keyboards.main_menu(settings))
+        return
+
+    items = ((parsed.get("meal") or {}).get("items")) or []
+    if not items:
+        # Вопрос модели родителю — или наш, если она не спросила. Состояние
+        # остаётся: он допишет и пришлёт снова, не начиная сценарий заново.
+        question = parsed.get("clarification_needed") or texts.MEAL_TEXT_EMPTY
+        await message.answer(
+            texts.MEAL_TEXT_CLARIFY.format(question=question),
+            reply_markup=keyboards.cancel_only(),
+        )
+        return
+
+    await state.set_state(Meal.confirm)
+    await state.update_data(
+        meal_text=text,
+        meal_job_id=str(parsed["ai_job_id"]),
+        # Эхо для подтверждения собирается здесь: на шаге записи разбора уже
+        # нет, а «Записано ✓» без содержимого не даёт заметить, что принято
+        # не то (общее правило подтверждений — `deps.submit_log`).
+        meal_summary=_summary(items),
+    )
+    await message.answer(_draft_text(parsed, items), reply_markup=keyboards.confirm())
+
+
+def _draft_text(parsed: dict[str, Any], items: list[dict[str, Any]]) -> str:
+    """Черновик словами родителя, а не идентификаторами.
+
+    Граммовка со слов — оценка, и «примерно» стоит там, где модель сама
+    сказала, что не уверена (`confidence < 1`): родитель должен видеть, что
+    именно ему предлагают принять на веру.
+    """
+
+    lines = "\n".join(
+        (
+            texts.MEAL_TEXT_LINE if item.get("confidence", 0) >= 1 else texts.MEAL_TEXT_LINE_GUESS
+        ).format(
+            name=item.get("name_ru") or texts.MEAL_UNKNOWN_DISH,
+            grams=_grams(item.get("grams")),
+        )
+        for item in items
+    )
+
+    draft = texts.MEAL_TEXT_RESULT.format(lines=lines)
+    unmatched = (parsed.get("meal") or {}).get("unmatched") or []
+    if unmatched:
+        # Названное, но не найденное — самое опасное место: без этой строки
+        # родитель решил бы, что записан весь приём пищи целиком.
+        draft += texts.MEAL_TEXT_UNMATCHED.format(list=", ".join(unmatched))
+    return draft + texts.MEAL_TEXT_CONFIRM_HINT
+
+
+def _summary(items: list[dict[str, Any]]) -> str:
+    """Состав одной строкой — для подтверждения записи."""
+
+    return ", ".join(
+        f"{item.get('name_ru') or texts.MEAL_UNKNOWN_DISH} {_grams(item.get('grams'))} г"
+        for item in items
+    )
+
+
+def _grams(value: Any) -> str:
+    """Целые граммы — без хвоста: «30 г», а не «30.0 г»."""
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "?"
+    return str(int(number)) if number == int(number) else f"{number:.1f}"
+
+
+@router.callback_query(Meal.confirm, F.data == keyboards.CONFIRM_DATA)
+async def meal_text_confirm(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    """Подтверждение: только здесь появляется запись в дневнике.
+
+    В API уходит идентификатор разбора, а не разобранная структура: сервер
+    берёт её из своего журнала. Иначе бот мог бы прислать под видом разбора
+    что угодно — и это были бы клинические данные, которых никто не видел.
+    """
+
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    binding = await require_binding(message, store)
+    if binding is None:
+        await state.clear()
+        return
+
+    data = await state.get_data()
+    job_id: str | None = data.get("meal_job_id")
+    if not job_id:
+        await state.clear()
+        await message.answer(
+            texts.MEAL_TEXT_UNAVAILABLE, reply_markup=keyboards.main_menu(settings)
+        )
+        return
+
+    # Момент — «сейчас»: родитель пишет сразу после кормления, и лишний шаг
+    # «когда» здесь стоил бы больше, чем даёт (в отметке «съедено» его тоже нет).
+    await submit_log(
+        message,
+        state,
+        api=api,
+        store=store,
+        binding=binding,
+        kind="meals",
+        payload={"free_text": data.get("meal_text", ""), "ai_job_id": job_id},
+        summary=data.get("meal_summary", ""),
+        settings=settings,
     )
 
 

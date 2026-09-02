@@ -34,6 +34,38 @@ async def enqueue(task: str, *args: Any) -> None:
     await pool.enqueue_job(task, *args)
 
 
+class TaskTimeout(Exception):
+    """Задача не ответила за отведённое время."""
+
+
+class TaskLost(Exception):
+    """Задачу не удалось поставить или её результат не пришёл вовсе."""
+
+
+async def run(task: str, *args: Any, timeout_s: float) -> Any:
+    """Поставить задачу и дождаться результата (раздел 10.1 ТЗ).
+
+    Так работает только `parse_free_text`: ручка `POST /ai/parse` ждёт разбор
+    синхронно, потому что родитель стоит у плиты и ждёт ответа сейчас, а не
+    поллингом. Всё остальное ставится и забывается — отчёт собирается минуты, и
+    держать ради него соединение нечем.
+
+    Возвращается то, что вернула задача. Исключения воркера сюда не
+    протаскиваются: `apps/api` не зависит от `apps/worker`, и распаковать его
+    классы ей нечем — задача сама возвращает отказ значением.
+    """
+
+    pool = await get_pool()
+    job = await pool.enqueue_job(task, *args)
+    if job is None:
+        raise TaskLost(f"Задача {task} не поставлена в очередь")
+
+    try:
+        return await job.result(timeout=timeout_s)
+    except TimeoutError as error:
+        raise TaskTimeout(f"Задача {task} не ответила за {timeout_s} с") from error
+
+
 async def reset_pool() -> None:
     """Закрыть пул: нужен тестам и корректному завершению процесса."""
 

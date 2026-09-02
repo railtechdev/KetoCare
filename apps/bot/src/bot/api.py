@@ -185,14 +185,31 @@ class BotApi:
         items: list[dict[str, Any]] = body.get("items", [])
         return items
 
+    async def parse_text(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, text: str
+    ) -> dict[str, Any]:
+        """Разобрать фразу родителя (раздел 10.3 ТЗ).
+
+        Ничего не сохраняет: ответ — черновик, и записывается он отдельным
+        вызовом `create_log` с `ai_job_id`, когда родитель нажмёт
+        «Подтвердить». Разбор в дневник сам по себе не попадает.
+        """
+
+        token = await self._token(link_id=link_id, secret=secret)
+        return await self._request(
+            "POST",
+            "/api/v1/ai/parse",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"patient_id": str(patient_id), "text": text},
+        )
+
     async def mark_eaten(
         self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
     ) -> dict[str, Any]:
         """Отметка «съедено» по позиции плана.
 
-        Свободного текста здесь нет и не будет до этапа 4: разбор «съел кашу с
-        маслом» — это `POST /ai/parse`, а придуманная ботом еда попадёт в итоги
-        дня наравне с настоящей.
+        Второй путь — «Написать словами»: он идёт через `parse_text` и
+        `create_log`, потому что съеденное могло не совпасть с планом.
         """
 
         token = await self._token(link_id=link_id, secret=secret)
