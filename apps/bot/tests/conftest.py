@@ -17,6 +17,8 @@ from datetime import date
 from typing import Any
 
 import pytest
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.api import BotApiError, LinkVerified
@@ -49,6 +51,11 @@ class FakeApi:
     #: Схема терапии для сценария «Лекарства».
     medications: list[dict[str, Any]] = field(default_factory=list)
     medications_error: Exception | None = None
+    #: Ответ `POST /ai/parse` для сценария «Еда словами».
+    parsed: dict[str, Any] | None = None
+    parse_error: Exception | None = None
+    #: Фразы, дошедшие до разбора.
+    parsed_texts: list[str] = field(default_factory=list)
 
     async def verify_link_code(self, *, code: str, chat_id: int) -> LinkVerified:
         self.verified_code = code
@@ -102,6 +109,15 @@ class FakeApi:
         if self.medications_error is not None:
             raise self.medications_error
         return self.medications
+
+    async def parse_text(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, text: str
+    ) -> dict[str, Any]:
+        self.parsed_texts.append(text)
+        if self.parse_error is not None:
+            raise self.parse_error
+        assert self.parsed is not None, "тест обязан задать ответ parse_text"
+        return self.parsed
 
     async def mark_eaten(
         self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
@@ -172,4 +188,14 @@ def dispatcher():
         api=FakeApi(),
         store=FakeStore(),
         settings=BotSettings(bot_token="t", bot_api_token="s"),
+    )
+
+
+@pytest.fixture
+def state() -> FSMContext:
+    """Состояние FSM в памяти — общее для всех тестов сценариев."""
+
+    return FSMContext(
+        storage=MemoryStorage(),
+        key=StorageKey(bot_id=1, chat_id=CHAT_ID, user_id=CHAT_ID),
     )

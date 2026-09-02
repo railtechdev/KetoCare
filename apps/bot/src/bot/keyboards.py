@@ -70,6 +70,9 @@ def cancel_only() -> InlineKeyboardMarkup:
 
 MEAL_ITEM_PREFIX = "meal:"
 DONE_DATA = "done"
+#: «Написать словами» — второй путь записи еды (раздел 10.3 ТЗ).
+MEAL_TEXT_DATA = "meal-text"
+CONFIRM_DATA = "confirm"
 
 
 def meal_items(items: list[tuple[str, str]], *, marked_any: bool = False) -> InlineKeyboardMarkup:
@@ -93,7 +96,36 @@ def meal_items(items: list[tuple[str, str]], *, marked_any: bool = False) -> Inl
             [InlineKeyboardButton(text=title, callback_data=f"{MEAL_ITEM_PREFIX}{item_id}")]
             for item_id, title in items
         ]
+        # Ниже списка, а не выше: съеденное по плану — обычный случай, а словами
+        # описывают то, что от плана отклонилось.
+        + [[InlineKeyboardButton(text=texts.BTN_MEAL_TEXT, callback_data=MEAL_TEXT_DATA)]]
         + [exit_button]
+    )
+
+
+def meal_text_only() -> InlineKeyboardMarkup:
+    """Когда плана на сегодня нет вовсе.
+
+    Раньше отсюда не вело ничего: «меню не составлено» — и всё. Родитель,
+    который уже покормил ребёнка, оставался с этим один.
+    """
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=texts.BTN_MEAL_TEXT, callback_data=MEAL_TEXT_DATA)],
+            _cancel_row(),
+        ]
+    )
+
+
+def confirm() -> InlineKeyboardMarkup:
+    """Подтверждение разбора: ничего не сохранено, пока не нажата эта кнопка."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=texts.BTN_CONFIRM, callback_data=CONFIRM_DATA)],
+            _cancel_row(),
+        ]
     )
 
 

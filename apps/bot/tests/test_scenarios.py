@@ -15,8 +15,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.base import StorageKey
-from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot import deps, keyboards, texts
 from bot.api import BotApiError, LinkRevokedError
@@ -69,6 +67,11 @@ class FakeMessage:
         assert self.answers, "обработчик ничего не ответил"
         return self.answers[-1][0]
 
+    @property
+    def last_markup(self) -> Any:
+        assert self.answers, "обработчик ничего не ответил"
+        return self.answers[-1][1]
+
 
 @dataclass
 class FakeCallback:
@@ -90,14 +93,6 @@ async def answer_when_now(message: FakeMessage, state: FSMContext, api: Any, sto
     assert message.last == texts.WHEN_ASK, "перед отправкой бот спрашивает о времени"
     callback = FakeCallback(data=keyboards.WHEN_NOW_DATA, message=message)
     await scenarios.when_now(callback, state, api, store, SETTINGS)
-
-
-@pytest.fixture
-def state() -> FSMContext:
-    return FSMContext(
-        storage=MemoryStorage(),
-        key=StorageKey(bot_id=1, chat_id=CHAT_ID, user_id=CHAT_ID),
-    )
 
 
 class TestLinking:
@@ -662,8 +657,13 @@ class TestMeal:
         assert await state.get_state() is None
 
     @pytest.mark.asyncio
-    async def test_no_menu_explains_what_to_do(self, api, linked_store, state):
-        """Отсутствие меню — обычное состояние, а не сбой."""
+    async def test_no_menu_offers_free_text(self, api, linked_store, state):
+        """Отсутствие меню — обычное состояние, и теперь не тупик.
+
+        Раньше отсюда не вело ничего: «меню не составлено» — и всё. Родитель,
+        уже покормивший ребёнка, оставался с этим один; теперь съеденное можно
+        описать словами (раздел 10.3 ТЗ).
+        """
 
         api.menu = None
         message = FakeMessage(text=texts.BTN_MEAL)
@@ -671,7 +671,9 @@ class TestMeal:
         await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
 
         assert message.last == texts.MEAL_NO_MENU
-        assert await state.get_state() is None
+        assert await state.get_state() == scenarios.Meal.choice.state
+        buttons = [b.text for row in message.last_markup.inline_keyboard for b in row]
+        assert texts.BTN_MEAL_TEXT in buttons
 
     @pytest.mark.asyncio
     async def test_all_eaten_says_so(self, api, linked_store, state):
