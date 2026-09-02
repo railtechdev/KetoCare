@@ -5,6 +5,10 @@ description = "ARQ-воркер KetoCare (AI-задачи, PDF, напомина
 requires-python = ">=3.12"
 dependencies = [
     "arq>=0.26",
+    # Официальный SDK Anthropic — единственный способ обращения к модели
+    # (раздел 10.2 ТЗ). Импортируется лениво, внутри `ai.client.build_anthropic`:
+    # задачам отчётов и напоминаний он не нужен.
+    "anthropic>=1.3",
     "structlog>=24.4",
     "pydantic-settings>=2.6",
     "jinja2>=3.1",
