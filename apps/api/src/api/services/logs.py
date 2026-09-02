@@ -9,12 +9,14 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import MealLog
-from core.models.enums import DiarySource
+from core.models.enums import AiJobKind, AiJobStatus, DiarySource
+from core.repositories import ai_jobs as ai_jobs_repo
 from core.repositories import diary as diary_repo
 from core.repositories.diary import DiaryLog
 
@@ -79,6 +81,12 @@ async def create_log[M: DiaryLog, R: BaseModel](
     fields = payload.model_dump(exclude={"occurred_at"})
     if isinstance(payload, MealLogCreate):
         _check_meal_content(payload.menu_item_id, payload.free_text)
+        # Подтверждение разбора: структура берётся из журнала, а не из тела.
+        fields.pop("ai_job_id", None)
+        if payload.ai_job_id is not None:
+            fields["parsed"] = await _parsed_of_job(
+                session, ai_job_id=payload.ai_job_id, patient_id=patient_id, author=author
+            )
     await _check_references(session, patient_id=patient_id, fields=fields)
 
     log = await diary_repo.create(
@@ -141,6 +149,38 @@ async def _owned_log[M: DiaryLog](
     if log is None or log.patient_id != patient_id:
         raise ApiError(ErrorCode.NOT_FOUND, "Запись дневника не найдена.")
     return log
+
+
+async def _parsed_of_job(
+    session: AsyncSession,
+    *,
+    ai_job_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    author: CurrentUser,
+) -> dict[str, Any]:
+    """Разбор из журнала — с проверками, без которых он не разбор, а чужие данные.
+
+    Четыре условия, и каждое закрывает свой способ подсунуть в дневник то, чего
+    не было: задача существует; её заказывал ЭТОТ человек; она про ЭТОГО
+    ребёнка; она действительно разбор еды и он удался. Сообщение на все случаи
+    одно — по разнице ответов иначе устанавливалось бы, что чужая задача
+    существует.
+    """
+
+    job = await ai_jobs_repo.get(session, ai_job_id)
+    parsed = (job.output or {}).get("parsed") if job is not None else None
+
+    if (
+        job is None
+        or job.requested_by != author.id
+        or job.patient_id != patient_id
+        or job.kind != AiJobKind.PARSE_MEAL
+        or job.status != AiJobStatus.DONE
+        or not isinstance(parsed, dict)
+    ):
+        raise ApiError(ErrorCode.NOT_FOUND, "Разбор не найден. Повторите разбор текста.")
+
+    return parsed
 
 
 def _check_meal_content(menu_item_id: uuid.UUID | None, free_text: str | None) -> None:
