@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
 import { api } from "../../lib/api";
@@ -100,23 +100,12 @@ export function useVerify(
       const { data, error } = await api.POST("/api/v1/calc/verify", {
         body: {
           patient_id: patientId,
-          ingredients: rows.map((row) => ({
-            product_id: row.product.id,
-            kcal: row.product.kcal,
-            fat: row.product.fat,
-            protein: row.product.protein,
-            carbs: row.product.carbs,
-            fiber: row.product.fiber,
-          })),
+          ingredients: rows.map(ingredientOf),
           items: rows.map((row) => ({
             product_id: row.product.id,
             grams: parseAmount(row.grams),
           })),
-          // `net_carbs: false` — то же значение, что по умолчанию у сервера.
-          // Схема требует его явно, а выбирать режим «чистых углеводов» на
-          // клиенте нельзя: считать ли клетчатку в углеводах — вопрос 6
-          // медицинской команде, и до ответа режим не включается нигде.
-          targets: targets === null ? null : { ...targets, net_carbs: false },
+          targets: targets === null ? null : targetsBody(targets),
         },
       });
       if (error || !data) throw error ?? new Error("Empty verify response");
@@ -130,4 +119,97 @@ export interface Targets {
   kcal: number;
   protein_min_g?: number | null;
   carbs_max_g?: number | null;
+}
+
+/**
+ * Тело целей — одно на проверку и на подбор.
+ *
+ * `net_carbs: false` здесь тоже единственное допустимое значение: считать ли
+ * клетчатку в углеводах — вопрос 6 медицинской команде, и до ответа режим
+ * «чистых углеводов» не включается ни на одном канале.
+ */
+function targetsBody(targets: Targets) {
+  return {
+    ratio: targets.ratio,
+    kcal: targets.kcal,
+    protein_min_g: targets.protein_min_g ?? null,
+    carbs_max_g: targets.carbs_max_g ?? null,
+    net_carbs: false,
+  };
+}
+
+export type Solve = components["schemas"]["SolveResponse"];
+export type Scale = components["schemas"]["ScaleResponse"];
+
+/**
+ * Подбор раскладки под цели (раздел 6.2 ТЗ).
+ *
+ * Мутация, а не запрос: подбор ПЕРЕЗАПИСЫВАЕТ граммовку в полях, и запуск по
+ * ходу набора вырывал бы поля из-под пальцев. Запускает человек кнопкой — так
+ * же, как в кабинете.
+ *
+ * Массы задаёт решатель на сервере; клиент не считает ничего и здесь. Состав
+ * (какие продукты) остаётся за человеком, `patient_id` — чтобы сервер снял со
+ * входа исключённые ребёнку продукты (раздел 6.3 ТЗ): в подборе это не
+ * предупреждение, а вычёркивание, иначе решателю позволено предложить ребёнку
+ * то, что ему нельзя.
+ */
+export function useSolve(patientId: string) {
+  return useMutation({
+    mutationFn: async (input: {
+      rows: DishRow[];
+      targets: Targets;
+    }): Promise<Solve> => {
+      const { data, error } = await api.POST("/api/v1/calc/solve", {
+        body: {
+          patient_id: patientId,
+          ingredients: input.rows.map(ingredientOf),
+          targets: targetsBody(input.targets),
+        },
+      });
+      if (error || !data) throw error ?? new Error("Empty solve response");
+      return data;
+    },
+  });
+}
+
+/**
+ * Пересчёт блюда на другую порцию (раздел 6.4 ТЗ).
+ *
+ * Множитель применяет ядро, а не браузер: умножение «в уме» на клиенте — это
+ * второй источник клинического числа (правило 2 CLAUDE.md). Пациент серверу не
+ * нужен: состав не меняется, выбирать не из чего, исключать нечего.
+ */
+export function useScale() {
+  return useMutation({
+    mutationFn: async (input: {
+      rows: DishRow[];
+      factor: number;
+    }): Promise<Scale> => {
+      const { data, error } = await api.POST("/api/v1/calc/scale", {
+        body: {
+          ingredients: input.rows.map(ingredientOf),
+          items: input.rows.map((row) => ({
+            product_id: row.product.id,
+            grams: parseAmount(row.grams),
+          })),
+          factor: input.factor,
+        },
+      });
+      if (error || !data) throw error ?? new Error("Empty scale response");
+      return data;
+    },
+  });
+}
+
+/** Продукт на 100 г — как его ждёт `/calc`. */
+function ingredientOf(row: DishRow) {
+  return {
+    product_id: row.product.id,
+    kcal: row.product.kcal,
+    fat: row.product.fat,
+    protein: row.product.protein,
+    carbs: row.product.carbs,
+    fiber: row.product.fiber,
+  };
 }

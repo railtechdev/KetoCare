@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -46,6 +46,66 @@ function verifyResponse(overrides: Record<string, unknown> = {}) {
     excluded: [],
     ...overrides,
   };
+}
+
+function solveResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    dish: {
+      items: [{ product_id: "p1", grams: 42.5 }],
+      kcal: 300,
+      fat_g: 31.2,
+      protein_g: 4,
+      carbs_g: 4,
+      fiber_g: 0,
+      ratio: 3.5,
+      engine_version: "1.0.0",
+    },
+    ratio_within_tolerance: true,
+    kcal_within_tolerance: true,
+    excluded: [],
+    ...overrides,
+  };
+}
+
+function scaleResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    dish: {
+      items: [{ product_id: "p1", grams: 15 }],
+      kcal: 112,
+      fat_g: 12.4,
+      protein_g: 0.1,
+      carbs_g: 0.1,
+      fiber_g: 0,
+      ratio: 3.9,
+      engine_version: "1.0.0",
+    },
+    ...overrides,
+  };
+}
+
+/** Ответы по путям: экран ходит в три разные ручки, и общая заглушка их путает. */
+function respond(byPath: Record<string, unknown>) {
+  (api.POST as Mock).mockImplementation((path: string) => {
+    const found = Object.entries(byPath).find(([key]) => path.endsWith(key));
+    const body = found?.[1] ?? verifyResponse();
+    return body instanceof Error
+      ? Promise.resolve({ error: (body as ApiFailure).body })
+      : Promise.resolve({ data: body });
+  });
+}
+
+/** Отказ сервера в формате раздела 5.1 ТЗ. */
+class ApiFailure extends Error {
+  constructor(readonly body: unknown) {
+    super("api error");
+  }
+}
+
+async function switchTo(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(screen.getByRole("tab", { name }));
 }
 
 function renderScreen() {
@@ -239,6 +299,205 @@ describe("калькулятор в Mini App", () => {
     expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
       "12,5",
     );
+  });
+
+  it("подобранные массы попадают в состав, а не остаются в ответе", async () => {
+    // Иначе цепочка «подобрал → округлил под кухонные весы → проверил»
+    // рвётся на первом шаге: из подбора ведёт один выход — принять как есть.
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Подобрать");
+    await user.type(screen.getByLabelText("Ккал на приём"), "300");
+    await user.click(screen.getByRole("button", { name: "Подобрать массы" }));
+
+    expect(await screen.findByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+      "42.5",
+    );
+  });
+
+  it("подбор уходит с целями назначения и пределами", async () => {
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Подобрать");
+    await user.type(screen.getByLabelText("Ккал на приём"), "300");
+    await user.type(screen.getByLabelText("Белок не меньше, г"), "6");
+    await user.type(screen.getByLabelText("Углеводы не больше, г"), "4");
+    await user.click(screen.getByRole("button", { name: "Подобрать массы" }));
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/calc/solve",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            patient_id: SESSION.patientId,
+            targets: expect.objectContaining({
+              ratio: 3.5,
+              kcal: 300,
+              protein_min_g: 6,
+              carbs_max_g: 4,
+              net_carbs: false,
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
+  it("неразрешимая задача объясняется причиной, а не «ошибкой»", async () => {
+    // Раздел 8.3 ТЗ: infeasible показывается человекочитаемой причиной.
+    respond({
+      "/calc/solve": new ApiFailure({
+        error: {
+          code: "infeasible_calculation",
+          message: "Жиров набора не хватает на соотношение 3.5:1.",
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Подобрать");
+    await user.type(screen.getByLabelText("Ккал на приём"), "300");
+    await user.click(screen.getByRole("button", { name: "Подобрать массы" }));
+
+    expect(
+      await screen.findByText(/Жиров набора не хватает/),
+    ).toBeInTheDocument();
+  });
+
+  it("снятые со входа продукты названы: решатель работал не со всем набором", async () => {
+    respond({
+      "/calc/solve": solveResponse({
+        excluded: [{ product_id: "p1", name_ru: "Арахис" }],
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Подобрать");
+    await user.type(screen.getByLabelText("Ккал на приём"), "300");
+    await user.click(screen.getByRole("button", { name: "Подобрать массы" }));
+
+    expect(await screen.findByText(/сняты со входа/)).toBeInTheDocument();
+    expect(screen.getByText("Арахис")).toBeInTheDocument();
+  });
+
+  it("без калорийности приёма подбор не запускается", async () => {
+    // Подбирать не из чего: цель — это то, подо что решатель считает.
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Подобрать");
+
+    expect(
+      screen.getByRole("button", { name: "Подобрать массы" }),
+    ).toBeDisabled();
+    expect(
+      await screen.findByText(/без цели подбирать не из чего/),
+    ).toBeInTheDocument();
+  });
+
+  it("в режиме подбора проверка сама не считает", async () => {
+    // Иначе каждое нажатие в поле граммов уходило бы в ядро впустую.
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Подобрать");
+    await user.type(screen.getByLabelText("Ккал на приём"), "300");
+
+    // Ждать нужно ДОЛЬШЕ задержки автопересчёта (400 мс). Без этого проверка
+    // проходит и со снятым ограничителем — просто потому, что таймер ещё не
+    // сработал, и утверждение «не считает» ничего не проверяет. Ожидание
+    // внутри `act`: за эти 900 мс срабатывают отложенные таймеры экрана, и их
+    // обновления состояния обязаны попасть в тот же акт отрисовки.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+
+    expect(api.POST).not.toHaveBeenCalledWith(
+      "/api/v1/calc/verify",
+      expect.anything(),
+    );
+  });
+
+  it("пересчёт умножает раскладку на сервере, запятую понимает", async () => {
+    respond({ "/calc/scale": scaleResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Пересчитать");
+    const factor = screen.getByLabelText("Умножить на");
+    await user.clear(factor);
+    await user.type(factor, "0,5");
+    await user.click(screen.getByRole("button", { name: "Пересчитать" }));
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/calc/scale",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            factor: 0.5,
+            items: [expect.objectContaining({ grams: 30 })],
+          }),
+        }),
+      );
+    });
+    expect(await screen.findByText(/112.0 ккал/)).toBeInTheDocument();
+  });
+
+  it("пересчёт не выносит вердикта о допуске", async () => {
+    // Множитель меняет и калорийность: сравнивать с целью приёма нечего.
+    respond({ "/calc/scale": scaleResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Пересчитать");
+    await user.click(screen.getByRole("button", { name: "Пересчитать" }));
+
+    expect(
+      await screen.findByText(/не сравнивает блюдо с целями приёма/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/в допуске назначения/)).not.toBeInTheDocument();
+  });
+
+  it("правка состава снимает прежний подбор", async () => {
+    // Итог прежней раскладки рядом с новым составом — утверждение о блюде,
+    // которого на экране уже нет.
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await addProduct(user);
+    await switchTo(user, "Подобрать");
+    await user.type(screen.getByLabelText("Ккал на приём"), "300");
+    await user.click(screen.getByRole("button", { name: "Подобрать массы" }));
+    expect(
+      await screen.findByText(/Массы подставлены в состав/),
+    ).toBeInTheDocument();
+
+    await user.type(
+      await screen.findByLabelText(/Масло сливочное, граммы/),
+      "1",
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Массы подставлены в состав/),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("пустой состав не уходит в расчёт", async () => {
