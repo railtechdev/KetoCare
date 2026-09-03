@@ -72,15 +72,31 @@ export function webApp(): TelegramWebApp | null {
  * нельзя, и отличать её от отсутствия нечем.
  */
 export function launchData(): string | null {
-  let raw: string | undefined;
+  // Два источника, и берётся первый непустой.
+  //
+  // Раньше к `window.Telegram.WebApp` обращались только в `catch`, то есть
+  // когда SDK БРОСИЛ исключение. Но он умеет и не бросать: вернуть пустую
+  // строку или `undefined`, если строки запуска нет там, где он её ищет
+  // (адрес, хеш, хранилище клиента). В этом случае запасной источник не
+  // опрашивался вовсе, и приложение, открытое кнопкой в чате, объявляло себя
+  // открытым вне Telegram — тупик, из которого семье не выйти.
+  return firstNonEmpty(fromSdk(), webApp()?.initData);
+}
+
+function fromSdk(): string | undefined {
   try {
-    raw = retrieveRawInitData();
+    return retrieveRawInitData();
   } catch {
-    // Приложение открыто не из Telegram: строки запуска нет ни в одном из
-    // источников. Это не сбой — экран показывает, как привязать чат.
-    raw = webApp()?.initData;
+    // Открыто не из Telegram — это не сбой: экран объяснит, как привязать чат.
+    return undefined;
   }
-  return raw !== undefined && raw.length > 0 ? raw : null;
+}
+
+function firstNonEmpty(...values: (string | undefined)[]): string | null {
+  for (const value of values) {
+    if (value !== undefined && value.length > 0) return value;
+  }
+  return null;
 }
 
 /**
