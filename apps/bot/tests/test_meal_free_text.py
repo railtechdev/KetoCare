@@ -233,3 +233,51 @@ class TestWhenParsingFails:
         assert message.last == texts.MEAL_TEXT_EMPTY
         assert api.parsed_texts == []
         assert await state.get_state() == scenarios.Meal.text.state
+
+
+class TestTimeoutMatchesTheEndpoint:
+    def test_parse_waits_longer_than_the_endpoint(self) -> None:
+        """Находка ревью: общий таймаут клиента (10 с) короче, чем ждёт ручка
+        разбора (15 с). Родитель не увидел бы ничего: `httpx.ReadTimeout` — не
+        `BotApiError`, и до сообщения об отказе обработчик не дошёл бы."""
+
+        from api.routers.ai import PARSE_TIMEOUT_S as ENDPOINT_WAIT
+        from bot.api import PARSE_TIMEOUT_S as BOT_WAIT
+
+        assert BOT_WAIT > ENDPOINT_WAIT
+
+    @pytest.mark.asyncio
+    async def test_parse_request_carries_its_own_timeout(self) -> None:
+        """Своё ожидание — только у разбора: остальные вызовы должны падать
+        быстро, а не ждать шестнадцать секунд молчащего сервера."""
+
+        import httpx
+
+        from bot.api import PARSE_TIMEOUT_S, BotApi
+
+        seen: dict[str, object] = {}
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            seen["timeout"] = request.extensions.get("timeout")
+            if request.url.path.endswith("/auth/bot/session"):
+                return httpx.Response(200, json={"access_token": "t", "expires_in": 900})
+            return httpx.Response(200, json={"ai_job_id": str(uuid.uuid4()), "kind": "other"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://api", timeout=10.0
+        ) as http:
+            api = BotApi(http, service_token="s")
+            await api.parse_text(
+                link_id=uuid.uuid4(),
+                secret="secret",
+                patient_id=uuid.uuid4(),
+                text="30 г масла",
+            )
+
+        assert seen["timeout"] == {
+            "connect": PARSE_TIMEOUT_S,
+            "read": PARSE_TIMEOUT_S,
+            "write": PARSE_TIMEOUT_S,
+            "pool": PARSE_TIMEOUT_S,
+        }

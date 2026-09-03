@@ -143,6 +143,20 @@ async def attach_parsed(session: AsyncSession, *, job: AiJob, parsed: dict[str, 
     return job
 
 
+async def mark_confirmed(session: AsyncSession, *, job: AiJob, log_id: uuid.UUID) -> AiJob:
+    """Отметить, что разбор уже принят человеком и записан.
+
+    Разбор — одно предположение об одном приёме пищи, и подтверждается оно один
+    раз. Без отметки повторный запрос с тем же `ai_job_id` (двойное нажатие,
+    повтор запроса, любопытный клиент) создавал бы второй такой же приём пищи —
+    и день ребёнка получал бы лишние жиры, которых не было.
+    """
+
+    job.output = {**(job.output or {}), "confirmed_log_id": str(log_id)}
+    await session.flush()
+    return job
+
+
 async def list_stuck(session: AsyncSession, *, older_than: datetime) -> list[AiJob]:
     """Вызовы, застрявшие в `RUNNING`.
 

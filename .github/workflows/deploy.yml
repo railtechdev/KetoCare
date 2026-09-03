@@ -117,9 +117,15 @@ jobs:
           TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
           WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
           MINIAPP_ORIGIN: ${{ vars.MINIAPP_ORIGIN }}
-          # Публичный адрес Mini App. Пока переменная пуста, кнопки
-          # «Приложение» в меню бота нет (apps/bot/src/bot/keyboards.py).
-          MINIAPP_URL: ${{ vars.MINIAPP_URL }}
+          # Публичный адрес Mini App. Пока значение пусто, кнопки «Приложение»
+          # в меню бота нет (apps/bot/src/bot/keyboards.py).
+          #
+          # Читается и из переменных, и из секретов: адрес публичный и место ему
+          # в Variables, но положить его в Secrets — естественная ошибка (там уже
+          # лежат BOT_TOKEN и BOT_USERNAME), а расплата за неё несоразмерная:
+          # выкат проходит успешно, и кнопка молча не появляется. Так же
+          # разобран BOT_USERNAME парой строк выше.
+          MINIAPP_URL: ${{ vars.MINIAPP_URL || secrets.MINIAPP_URL }}
           LANDING_SITE_URL: ${{ vars.LANDING_SITE_URL }}
           LANDING_INDEXABLE: ${{ vars.LANDING_INDEXABLE }}
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}

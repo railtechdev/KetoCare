@@ -16,6 +16,7 @@ from core.models.enums import AiJobKind
 from worker.ai.client import AiClient, AiLimitExceeded
 from worker.ai.parse import (
     MAX_PRODUCTS,
+    MIN_PER_WORD,
     ProductOption,
     collect_products,
     parse,
@@ -239,6 +240,34 @@ class TestProductContext:
 
     async def test_catalogue_slice_is_capped(self) -> None:
         assert MAX_PRODUCTS <= 50
+
+    async def test_budget_is_split_between_words(self, sessionmaker) -> None:
+        """Находка ревью: первое слово забирало весь лимит.
+
+        «Масло и яйцо» уходило в модель сорока сортами масла — яйца в списке не
+        было вовсе, и продукт, который в справочнике есть, попадал в
+        `unmatched`.
+        """
+
+        asked: list[int] = []
+
+        async def search(session, *, q, limit, **kwargs):
+            asked.append(limit)
+            return [], 0
+
+        import worker.ai.parse as parse_module
+
+        original = parse_module.products_repo.search
+        parse_module.products_repo.search = search  # type: ignore[assignment]
+        try:
+            async with sessionmaker() as session:
+                await collect_products(session, text="масло сливочное яйцо куриное творог")
+        finally:
+            parse_module.products_repo.search = original  # type: ignore[assignment]
+
+        assert asked, "поиск не вызывался"
+        assert max(asked) < MAX_PRODUCTS
+        assert min(asked) >= MIN_PER_WORD
 
 
 def test_prompt_forbids_advice() -> None:
