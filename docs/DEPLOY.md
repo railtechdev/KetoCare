@@ -222,8 +222,21 @@ restrict,command="/srv/ketocare-deploy.sh" ssh-ed25519 …
 
 1. DNS: `A tma.<домен>` на адрес сервера. Без записи certbot не выпустит
    сертификат — проверка идёт по домену.
-2. Каталог и сайт nginx (см. «nginx и TLS» выше): `ketocare-miniapp.conf`
-   в `sites-enabled`, `nginx -t && systemctl reload nginx`.
+2. Каталог приложения и сайт nginx — **двумя действиями, а не одним**:
+
+   ```
+   sudo mkdir -p /var/www/ketocare-miniapp
+   sudo cp /srv/ketocare/infra/nginx/ketocare-miniapp.conf /etc/nginx/sites-available/
+   sudo ln -sf /etc/nginx/sites-available/ketocare-miniapp.conf /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+   Симлинк без `cp` даёт битую ссылку, и nginx перестаёт проходить проверку
+   целиком: `open() "/etc/nginx/sites-enabled/ketocare-miniapp.conf" failed
+   (2: No such file or directory)`. Работающий nginx при этом продолжает
+   отдавать старую конфигурацию — но следующий `reload` и certbot с плагином
+   nginx откажут оба, и выглядит это как поломка сертификата, а не ссылки.
+   Лечится тем же `cp`: битая ссылка сама станет рабочей.
 3. Сертификат — **расширением действующего**, а не новым:
    `sudo certbot --nginx --expand -d <домен> -d app.<домен> -d tma.<домен>`.
    Без `--expand` появится второй линидж, и обновляться они будут вразнобой.
