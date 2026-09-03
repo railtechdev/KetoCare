@@ -23,7 +23,11 @@ SETTINGS = BotSettings(bot_token="t", bot_api_token="s", tz="Asia/Tashkent")
 TYPE_ID = str(uuid.uuid4())
 OPTION_ID = str(uuid.uuid4())
 
-TYPES = [{"id": TYPE_ID, "name": "Тонико-клонический"}]
+# Форма — как у настоящего ответа `/dictionaries/seizure-types`
+# (`DictionaryEntryRead`: id, name_ru, sort). Придуманная форма фикстуры уже
+# один раз стоила рабочего сценария: бот читал `name`, API отдавал `name_ru`,
+# и обработчик падал на KeyError у семьи, а тесты были зелёными.
+TYPES = [{"id": TYPE_ID, "name_ru": "Тонико-клонический", "sort": 0}]
 # Шкала анкеты: границы 5, 10 и 30 минут — операциональное определение
 # эпилептического статуса ILAE (Trinka, 2015).
 DURATIONS = [
