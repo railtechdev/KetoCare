@@ -226,10 +226,25 @@ restrict,command="/srv/ketocare-deploy.sh" ssh-ed25519 …
 
    ```
    sudo mkdir -p /var/www/ketocare-miniapp
+   # Владелец — тот же, что у соседних каталогов: выкат идёт не от root, и в
+   # каталог, созданный через sudo, rsync писать не сможет.
+   sudo chown --reference=/var/www/ketocare-app /var/www/ketocare-miniapp
    sudo cp /srv/ketocare/infra/nginx/ketocare-miniapp.conf /etc/nginx/sites-available/
    sudo ln -sf /etc/nginx/sites-available/ketocare-miniapp.conf /etc/nginx/sites-enabled/
    sudo nginx -t && sudo systemctl reload nginx
    ```
+
+   Без `chown` выкат падает на переносе файлов, и падает **весь**:
+
+   ```
+   rsync: [receiver] mkstemp "/var/www/ketocare-miniapp/.index.html.Z8EkYW"
+   failed: Permission denied (13)
+   rsync error: some files/attrs were not transferred (code 23)
+   ```
+
+   Проверено на живом стенде. Каталог при этом уже существует, поэтому ветка
+   «нет каталога — приложение не выкладывается» не срабатывает: выкат считает,
+   что писать можно, и обрывается на середине.
 
    Симлинк без `cp` даёт битую ссылку, и nginx перестаёт проходить проверку
    целиком: `open() "/etc/nginx/sites-enabled/ketocare-miniapp.conf" failed

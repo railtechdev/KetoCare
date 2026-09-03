@@ -56,10 +56,30 @@ describe("проверки формы приступа", () => {
     occurredAt: OCCURRED_AT,
     seizureTypeId: "type-1",
     durationSec: "",
+    durationOptionId: "",
     count: "1",
     description: "",
     triggers: "",
   };
+
+  it("длительность — либо секунды, либо интервал, но не оба", () => {
+    // Два ответа об одной величине однажды разойдутся, и какой из них правда —
+    // по записи уже не установить (ADR-0020). Сервер проверяет то же самое;
+    // здесь — чтобы человек узнал до отправки.
+    expect(
+      seizureSchema.safeParse({ ...values, durationSec: "90" }).success,
+    ).toBe(true);
+    expect(
+      seizureSchema.safeParse({ ...values, durationOptionId: "opt-1" }).success,
+    ).toBe(true);
+    expect(
+      seizureSchema.safeParse({
+        ...values,
+        durationSec: "90",
+        durationOptionId: "opt-1",
+      }).success,
+    ).toBe(false);
+  });
 
   it("требует тип приступа", () => {
     expect(
@@ -130,6 +150,7 @@ describe("тело запроса", () => {
       occurredAt: OCCURRED_AT,
       seizureTypeId: "type-1",
       durationSec: "",
+      durationOptionId: "",
       count: "2",
       description: "  ",
       triggers: "",

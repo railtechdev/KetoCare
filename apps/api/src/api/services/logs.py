@@ -233,6 +233,14 @@ async def _check_references(
     ):
         raise ApiError(ErrorCode.VALIDATION_ERROR, "Тип приступа не найден в справочнике.")
 
+    duration_option_id = fields.get("duration_option_id")
+    if isinstance(duration_option_id, uuid.UUID) and not await diary_repo.duration_option_is_usable(
+        session, duration_option_id
+    ):
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR, "Такого варианта длительности нет в справочнике."
+        )
+
     medication_id = fields.get("medication_id")
     if isinstance(medication_id, uuid.UUID) and not await diary_repo.medication_belongs_to_patient(
         session, medication_id=medication_id, patient_id=patient_id

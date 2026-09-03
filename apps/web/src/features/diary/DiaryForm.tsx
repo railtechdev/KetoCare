@@ -50,6 +50,7 @@ interface DiaryFormProps extends FormCallbacks {
   /** Редактируемая запись или null для новой */
   editing: DiaryLog | null;
   seizureTypes: DictionaryOption[];
+  durationOptions: DictionaryOption[];
   medications: MedicationOption[];
 }
 
@@ -64,6 +65,7 @@ export function DiaryForm({
   kind,
   editing,
   seizureTypes,
+  durationOptions,
   medications,
   ...callbacks
 }: DiaryFormProps) {
@@ -73,6 +75,7 @@ export function DiaryForm({
         <SeizureForm
           editing={editing?.kind === "seizures" ? editing : null}
           seizureTypes={seizureTypes}
+          durationOptions={durationOptions}
           {...callbacks}
         />
       );
@@ -201,6 +204,7 @@ function DefaultFooter({
 function SeizureForm({
   editing,
   seizureTypes,
+  durationOptions,
   onSubmit,
   onCancel,
   pending,
@@ -208,6 +212,7 @@ function SeizureForm({
 }: FormCallbacks & {
   editing: (DiaryLog & { kind: "seizures" }) | null;
   seizureTypes: DictionaryOption[];
+  durationOptions: DictionaryOption[];
 }) {
   const { t } = useTranslation("diary");
   const [step, setStep] = useState(1);
@@ -216,6 +221,7 @@ function SeizureForm({
     occurredAt: editing ? occurredInput(editing.occurred_at) : nowInput(),
     seizureTypeId: editing?.seizure_type_id ?? "",
     durationSec: editing ? numberInput(editing.duration_sec) : "",
+    durationOptionId: editing?.duration_option_id ?? "",
     count: editing ? String(editing.count) : String(SEIZURE_COUNT_MIN),
     description: editing ? textInput(editing.description) : "",
     triggers: editing ? textInput(editing.triggers) : "",
@@ -337,9 +343,29 @@ function SeizureForm({
           step={1}
           optional
           label={t("seizures.duration")}
+          hint={t("seizures.durationHint")}
           error={errors.durationSec && t("seizures.durationInvalid")}
           {...register("durationSec")}
         />
+
+        {/* Интервал со слов — та же шкала, что у анкеты и у бота. Без него
+            кабинет умел бы только секунды, и семья отвечала бы на один вопрос
+            двумя способами: в чате интервалом, здесь числом. */}
+        <SelectField
+          id="seizure-duration-option"
+          width="narrow"
+          optional
+          label={t("seizures.durationChoice")}
+          error={errors.durationOptionId && t("seizures.durationBothInvalid")}
+          {...register("durationOptionId")}
+        >
+          <option value="">{t("seizures.durationChoicePlaceholder")}</option>
+          {durationOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </SelectField>
       </div>
 
       <div className={step === 2 ? "flex flex-col gap-block" : "hidden"}>

@@ -20,8 +20,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import get_session
 from api.main import create_app
 from api.routers.logs import router as logs_router
-from core.models import KetoneLog, Medication, Menu, MenuItem, SeizureLog, SeizureType
-from core.models.enums import MealSlot, UserRole
+from core.models import (
+    IntakeOption,
+    KetoneLog,
+    Medication,
+    Menu,
+    MenuItem,
+    SeizureLog,
+    SeizureType,
+)
+from core.models.enums import IntakeScale, MealSlot, UserRole
 from core.repositories import patients as patients_repo
 
 pytestmark = pytest.mark.asyncio
@@ -689,3 +697,139 @@ class TestDelete:
         assert (await client.delete(f"{url}/{log_id}", headers=headers)).status_code == 404
         patched = await client.patch(f"{url}/{log_id}", json={"value": 1.0}, headers=headers)
         assert patched.status_code == 404
+
+
+class TestSeizureDuration:
+    """Длительность приступа: измеренная и со слов — разные величины (ADR-0020).
+
+    Пересчитать интервал в секунды нельзя ни нижней границей, ни серединой:
+    получилось бы число, неотличимое от засечённого секундомером, а по нему
+    врач судит о течении болезни.
+    """
+
+    @staticmethod
+    async def _option(session: AsyncSession, *, scale: IntakeScale, retired: bool = False):
+        option = IntakeOption(
+            scale=scale,
+            code=f"code-{uuid.uuid4().hex[:8]}",
+            name_ru="От 10 до 30 минут",
+            sort=1,
+            retired=retired,
+        )
+        session.add(option)
+        await session.flush()
+        return option
+
+    @pytest.mark.asyncio
+    async def test_interval_from_the_scale_is_accepted(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        seizure_type = await _seizure_type(session)
+        option = await self._option(session, scale=IntakeScale.SEIZURE_DURATION)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/seizures",
+            json={
+                "occurred_at": OCCURRED_AT.isoformat(),
+                "seizure_type_id": str(seizure_type.id),
+                "duration_option_id": str(option.id),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["duration_option_id"] == str(option.id)
+        # Секунды остаются пустыми: интервал в них не пересчитывается.
+        assert body["duration_sec"] is None
+
+    @pytest.mark.asyncio
+    async def test_option_from_another_scale_rejected(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Справочник один на пять шкал анкеты: без проверки шкалы в
+        длительность приступа записалось бы «6 и более препаратов»."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        seizure_type = await _seizure_type(session)
+        option = await self._option(session, scale=IntakeScale.AED_SWITCH_COUNT)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/seizures",
+            json={
+                "occurred_at": OCCURRED_AT.isoformat(),
+                "seizure_type_id": str(seizure_type.id),
+                "duration_option_id": str(option.id),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_retired_option_rejected(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Выведенный вариант остаётся ради старых записей, а не ради новых."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        seizure_type = await _seizure_type(session)
+        option = await self._option(session, scale=IntakeScale.SEIZURE_DURATION, retired=True)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/seizures",
+            json={
+                "occurred_at": OCCURRED_AT.isoformat(),
+                "seizure_type_id": str(seizure_type.id),
+                "duration_option_id": str(option.id),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_both_kinds_of_duration_rejected(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Два ответа об одной величине однажды разойдутся, и какой из них
+        правда — по строке уже не установить."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        seizure_type = await _seizure_type(session)
+        option = await self._option(session, scale=IntakeScale.SEIZURE_DURATION)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/seizures",
+            json={
+                "occurred_at": OCCURRED_AT.isoformat(),
+                "seizure_type_id": str(seizure_type.id),
+                "duration_sec": 90,
+                "duration_option_id": str(option.id),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_measured_duration_still_works(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        seizure_type = await _seizure_type(session)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/seizures",
+            json={
+                "occurred_at": OCCURRED_AT.isoformat(),
+                "seizure_type_id": str(seizure_type.id),
+                "duration_sec": 90,
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["duration_sec"] == 90
+        assert response.json()["duration_option_id"] is None

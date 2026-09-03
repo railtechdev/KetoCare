@@ -15,7 +15,14 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
 from core.models.enums import DiarySource, KetoneMethod
 
@@ -95,24 +102,56 @@ class LogRead(BaseModel):
 
 
 class SeizureLogCreate(LogCreate):
+    """Длительность — либо измеренная, либо интервал со слов. Не оба сразу.
+
+    Два ответа об одной величине рано или поздно разойдутся: кто-то поправит
+    секунды и не тронет интервал, и запись станет утверждать две разные вещи о
+    приступе ребёнка. Какой из них правда — по строке уже не установить
+    (ADR-0020).
+    """
+
     seizure_type_id: uuid.UUID
     duration_sec: DurationSec | None = None
+    duration_option_id: uuid.UUID | None = None
     count: SeizureCount = 1
     description: FreeText | None = None
     triggers: FreeText | None = None
+
+    @model_validator(mode="after")
+    def _one_kind_of_duration(self) -> SeizureLogCreate:
+        return _check_one_duration(self)
 
 
 class SeizureLogUpdate(LogUpdate):
     seizure_type_id: NotNull[uuid.UUID] = None
     duration_sec: DurationSec | None = None
+    duration_option_id: uuid.UUID | None = None
     count: NotNull[SeizureCount] = None
     description: FreeText | None = None
     triggers: FreeText | None = None
+
+    @model_validator(mode="after")
+    def _one_kind_of_duration(self) -> SeizureLogUpdate:
+        return _check_one_duration(self)
+
+
+def _check_one_duration[T: BaseModel](payload: T) -> T:
+    if getattr(payload, "duration_sec", None) is not None and (
+        getattr(payload, "duration_option_id", None) is not None
+    ):
+        raise ValueError(
+            "Укажите либо точную длительность в секундах, либо интервал со слов — но не оба сразу."
+        )
+    return payload
 
 
 class SeizureLogRead(LogRead):
     seizure_type_id: uuid.UUID
     duration_sec: int | None
+    #: Интервал со слов семьи — вариант шкалы `seizure_duration` справочника
+    #: анкеты. Название клиент берёт из `/dictionaries/intake-options`, как и
+    #: для типов приступов: два источника одного словаря разошлись бы.
+    duration_option_id: uuid.UUID | None
     count: int
     description: str | None
     triggers: str | None

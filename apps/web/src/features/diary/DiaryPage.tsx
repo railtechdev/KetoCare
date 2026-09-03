@@ -44,6 +44,7 @@ import {
   useDiaryMutations,
   usePatientMedications,
   usePrescriptionVersions,
+  useDurationOptions,
   useSeizureTypes,
 } from "./useDiary";
 
@@ -196,6 +197,7 @@ function DiaryTab({
   const prescriptions = usePrescriptionVersions(patientId, withChart);
   const medications = usePatientMedications(patientId, kind === "medications");
   const seizureTypes = useSeizureTypes(kind === "seizures");
+  const durationOptions = useDurationOptions(kind === "seizures");
 
   const items = useMemo(() => logs.data?.items ?? [], [logs.data]);
   const total = logs.data?.total ?? 0;
@@ -235,6 +237,14 @@ function DiaryTab({
         label: t("chart.marker", { version: version.version }),
       }));
   }, [prescriptions.data, range, t]);
+
+  const durationOptionNames = useMemo(
+    () =>
+      new Map(
+        (durationOptions.data ?? []).map((option) => [option.id, option.name]),
+      ),
+    [durationOptions.data],
+  );
 
   const seizureTypeNames = useMemo(
     () =>
@@ -393,6 +403,7 @@ function DiaryTab({
             logs={items}
             currentUserId={session?.userId ?? null}
             seizureTypeNames={seizureTypeNames}
+            durationOptionNames={durationOptionNames}
             medicationNames={medicationNames}
             onEdit={(log) => {
               // Ошибка добавления относится к прежней попытке — при переходе
@@ -432,6 +443,7 @@ function DiaryTab({
           kind={kind}
           editing={editing}
           seizureTypes={seizureTypes.data ?? []}
+          durationOptions={durationOptions.data ?? []}
           medications={medicationOptions}
           onSubmit={submit}
           onCancel={onCloseForm}

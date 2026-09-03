@@ -96,7 +96,13 @@
     "unknownType": "Приступ",
     "durationValue": "Длительность: {{value}} с",
     "countValue": "Приступов: {{value}}",
-    "triggersValue": "Возможные причины: {{value}}"
+    "triggersValue": "Возможные причины: {{value}}",
+    "durationInterval": "Длительность: {{value}}",
+    "durationUnnamed": "указана словами",
+    "durationChoice": "Длительность со слов",
+    "durationChoicePlaceholder": "Выберите интервал",
+    "durationHint": "Секунды — если засекали. Иначе выберите интервал: одно из двух, не оба.",
+    "durationBothInvalid": "Либо секунды, либо интервал — но не оба сразу."
   },
   "ketones": {
     "value": "Кетоны, ммоль/л",
