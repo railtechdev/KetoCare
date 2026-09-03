@@ -199,7 +199,10 @@ async def seizure_start(
         await message.answer(texts.SEIZURE_NO_TYPES, reply_markup=keyboards.main_menu(settings))
         return
 
-    buttons = [(str(item["id"]), str(item["name"])) for item in types]
+    # `name_ru`, а не `name`: так называется поле в ответе API
+    # (`DictionaryEntryRead`). Ошибка в этом месте роняет обработчик целиком —
+    # родитель нажимает «Приступ» и не получает ничего.
+    buttons = [(str(item["id"]), str(item["name_ru"])) for item in types]
     await state.set_state(Seizure.type_choice)
     await state.update_data(seizure_type_names=dict(buttons))
     await message.answer(texts.SEIZURE_ASK_TYPE, reply_markup=keyboards.seizure_types(buttons))

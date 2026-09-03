@@ -6,6 +6,15 @@
          отступы безопасной зоны нечем считать. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>KetoCare</title>
+    <!-- Скрипт Telegram обязателен: он создаёт window.Telegram.WebApp, из
+         которого приложение берёт строку запуска, тему, безопасную зону и
+         кнопку «Назад». Без него приложение, открытое КНОПКОЙ В ЧАТЕ, считает
+         себя открытым вне Telegram и показывает «откройте кнопкой в чате» —
+         тупик, из которого семье не выйти. Проверено на живом стенде.
+
+         Загружается синхронно и до модуля приложения: `retrieveRawInitData`
+         из SDK опирается на этот же объект, когда строки нет в адресе. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
   <body>
     <div id="root"></div>

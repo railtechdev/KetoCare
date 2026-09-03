@@ -833,3 +833,53 @@ class TestSeizureDuration:
         assert response.status_code == 201
         assert response.json()["duration_sec"] == 90
         assert response.json()["duration_option_id"] is None
+
+
+class TestBotVisibleDictionaryShape:
+    """Форма справочников, которые читает бот, — часть контракта.
+
+    Бот разбирает ответ по именам полей, и переименование поля здесь ломает
+    сценарий у семьи, а не тест. Так уже случилось: бот читал `name`, API
+    отдавал `name_ru`, обработчик падал на KeyError — «Приступ» не работал в
+    бою, а тесты обеих сторон были зелёными, потому что подделка на стороне
+    бота повторяла выдуманную форму.
+    """
+
+    @pytest.mark.asyncio
+    async def test_seizure_types_return_name_ru(self, client, session, make_user, auth_headers):
+        user = await make_user(UserRole.PARENT)
+        await _seizure_type(session)
+
+        response = await client.get(
+            "/api/v1/dictionaries/seizure-types", headers=auth_headers(user)
+        )
+
+        assert response.status_code == 200
+        item = response.json()["items"][0]
+        # Именно эти ключи читает apps/bot/src/bot/handlers/scenarios.py.
+        assert "name_ru" in item
+        assert "id" in item
+
+    @pytest.mark.asyncio
+    async def test_intake_options_return_name_ru_and_code(
+        self, client, session, make_user, auth_headers
+    ):
+        user = await make_user(UserRole.PARENT)
+        option = IntakeOption(
+            scale=IntakeScale.SEIZURE_DURATION,
+            code="dur_test",
+            name_ru="От 10 до 30 минут",
+            sort=1,
+        )
+        session.add(option)
+        await session.flush()
+
+        response = await client.get(
+            "/api/v1/dictionaries/intake-options?scale=seizure_duration",
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 200
+        item = response.json()["items"][0]
+        assert "name_ru" in item
+        assert "id" in item
