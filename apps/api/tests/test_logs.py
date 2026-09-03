@@ -846,9 +846,7 @@ class TestBotVisibleDictionaryShape:
     """
 
     @pytest.mark.asyncio
-    async def test_seizure_types_return_name_ru(
-        self, client, session, make_user, auth_headers
-    ):
+    async def test_seizure_types_return_name_ru(self, client, session, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)
         await _seizure_type(session)
 
