@@ -191,6 +191,40 @@ export function usePatientMedications(
  * пуст или недоступен, форма добавления честно сообщает, что тип выбрать негде,
  * вместо того чтобы отправить выдуманный идентификатор.
  */
+/**
+ * Шкала длительности приступа — та же, что в анкете регистрации.
+ *
+ * Нужна и списку, и форме: приступ, записанный семьёй в боте интервалом,
+ * хранит ссылку на вариант справочника, а не секунды (ADR-0020). Без этого
+ * запроса кабинет показывал бы такую запись вовсе без длительности — родитель
+ * ответил, а врач ответа не увидел.
+ */
+export function useDurationOptions(enabled: boolean) {
+  return useQuery({
+    queryKey: ["dictionaries", "intake-options", "seizure_duration"],
+    enabled,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    queryFn: async (): Promise<DictionaryOption[]> => {
+      const { data, error } = await api.GET(
+        "/api/v1/dictionaries/intake-options",
+        {
+          params: { query: { scale: "seizure_duration" } },
+        },
+      );
+      if (error || !data) {
+        throw error ?? new Error("Empty duration options response");
+      }
+      return data.items.map((item) => ({
+        id: item.id,
+        name: item.name_ru,
+        code: item.code,
+      }));
+    },
+  });
+}
+
 export function useSeizureTypes(enabled: boolean) {
   return useQuery({
     queryKey: ["dictionaries", "seizure-types"],

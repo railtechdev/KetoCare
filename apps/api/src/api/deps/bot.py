@@ -61,6 +61,9 @@ BOT_ALLOWED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         # Справочники для кнопок FSM. Клинических данных в них нет.
         ("GET", "/dictionaries/seizure-types"),
         ("GET", "/dictionaries/ketone-methods"),
+        # Шкала длительности приступа: те же варианты, что в анкете, — семья
+        # отвечает на один вопрос одинаково в кабинете и в чате.
+        ("GET", "/dictionaries/intake-options"),
     }
 )
 

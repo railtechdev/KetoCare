@@ -6,6 +6,7 @@ import {
   Skeleton,
 } from "@ketocare/ui";
 import { NotebookPen } from "lucide-react";
+import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -17,6 +18,8 @@ interface DiaryListProps {
   /** Идентификатор текущего пользователя: свои записи можно править и удалять */
   currentUserId: string | null;
   seizureTypeNames: Map<string, string>;
+  /** Названия интервалов длительности: приступ из бота хранит ссылку на шкалу */
+  durationOptionNames: Map<string, string>;
   medicationNames: Map<string, string>;
   onEdit: (log: DiaryLog) => void;
   onDelete: (logId: string) => void;
@@ -30,6 +33,7 @@ export function DiaryList({
   logs,
   currentUserId,
   seizureTypeNames,
+  durationOptionNames,
   medicationNames,
   onEdit,
   onDelete,
@@ -54,6 +58,7 @@ export function DiaryList({
             log={log}
             own={log.created_by !== null && log.created_by === currentUserId}
             seizureTypeNames={seizureTypeNames}
+            durationOptionNames={durationOptionNames}
             medicationNames={medicationNames}
             deleting={deletingId === log.id}
             onEdit={() => onEdit(log)}
@@ -93,10 +98,40 @@ export function DiaryListSkeleton({ label }: { label: string }) {
   );
 }
 
+/**
+ * Строка длительности приступа — из того источника, который заполнен.
+ *
+ * Измеренная и со слов — разные величины, и показываются они по-разному:
+ * «Длительность: 90 с» против «Длительность: от 10 до 30 минут». Пересчитать
+ * интервал в секунды нельзя даже ради единообразия показа — получилось бы
+ * число, неотличимое от засечённого секундомером (ADR-0020).
+ */
+function durationLine(
+  entry: DiaryLog & { kind: "seizures" },
+  optionNames: Map<string, string>,
+  t: TFunction<"diary">,
+): string | null {
+  if (entry.duration_sec !== null) {
+    return t("seizures.durationValue", { value: entry.duration_sec });
+  }
+  if (entry.duration_option_id !== null) {
+    return t("seizures.durationInterval", {
+      // Названия варианта может не оказаться, если справочник не загрузился.
+      // Тогда честнее сказать «указана словами», чем не сказать ничего: врач
+      // должен видеть, что ответ семьи есть.
+      value:
+        optionNames.get(entry.duration_option_id) ??
+        t("seizures.durationUnnamed"),
+    });
+  }
+  return null;
+}
+
 interface DiaryEntryProps {
   log: DiaryLog;
   own: boolean;
   seizureTypeNames: Map<string, string>;
+  durationOptionNames: Map<string, string>;
   medicationNames: Map<string, string>;
   deleting: boolean;
   onEdit: () => void;
@@ -107,6 +142,7 @@ function DiaryEntry({
   log,
   own,
   seizureTypeNames,
+  durationOptionNames,
   medicationNames,
   deleting,
   onEdit,
@@ -125,9 +161,12 @@ function DiaryEntry({
             seizureTypeNames.get(entry.seizure_type_id) ??
             t("seizures.unknownType"),
           lines: [
-            entry.duration_sec === null
-              ? null
-              : t("seizures.durationValue", { value: entry.duration_sec }),
+            // Длительность приходит одним из двух способов и никогда обоими:
+            // измеренная — числом секунд, со слов семьи — вариантом шкалы
+            // (ADR-0020). Интервал не пересчитывается в секунды даже для
+            // показа: «10–30 минут», выведенные как «600 с», читались бы как
+            // измерение.
+            durationLine(entry, durationOptionNames, t),
             t("seizures.countValue", { value: entry.count }),
             entry.description,
             entry.triggers === null

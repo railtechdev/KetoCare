@@ -55,6 +55,11 @@ router.message.filter(F.chat.type == "private")
 KETONES_MIN, KETONES_MAX = Decimal("0"), Decimal("12")
 WEIGHT_MIN, WEIGHT_MAX = Decimal("2"), Decimal("150")
 
+# Предел длительности приступа — тот же, что у API (`schemas_logs.MAX_DURATION_SEC`):
+# сутки. Бот не решает, какая длительность правдоподобна (раздел 7.5 ТЗ), он
+# проверяет только то, что введено число.
+MAX_DURATION_SEC = 86_400
+
 # Ограничение поля `side_effect_logs.symptom` — String(255).
 SYMPTOM_MAX_LENGTH = 255
 
@@ -69,6 +74,21 @@ class When(StatesGroup):
 
     choice = State()
     manual = State()
+
+
+class Seizure(StatesGroup):
+    """Приступ (раздел 7.3 ТЗ).
+
+    Три шага плюс общий «когда»: тип из справочника, длительность из шкалы
+    анкеты (или точное число, если засекали), время. Комментария здесь нет
+    намеренно — ТЗ помечает его необязательным, а лишний вопрос человеку,
+    который только что видел приступ у ребёнка, стоит дороже, чем даёт: описать
+    подробности он может в кабинете.
+    """
+
+    type_choice = State()
+    duration = State()
+    duration_exact = State()
 
 
 class Ketones(StatesGroup):
@@ -143,24 +163,46 @@ def _parse_number(raw: str) -> Decimal | None:
 
 
 @router.message(F.text == texts.BTN_SEIZURE)
-async def seizure_not_here(message: Message, state: FSMContext, settings: BotSettings) -> None:
-    """Ответ на кнопку, которой в меню больше нет.
+async def seizure_start(
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    """Приступ: тип из справочника (раздел 7.3 ТЗ).
 
-    ReplyKeyboard живёт на устройстве, пока её не заменит следующее сообщение с
-    клавиатурой: у семьи, открывшей бота до её удаления, «Приступ» всё ещё на
-    экране. Без этого обработчика нажатие уходило в общий отбойник «Я умею
-    записывать данные» — то есть на самом важном событии бот отвечал так, будто
-    не понял слова.
-
-    Ответ приходит с меню: оно и заменяет устаревшую клавиатуру, так что второй
-    раз кнопки уже не будет. Привязка здесь не требуется — сообщение
-    информационное, ничего не читает и не пишет, а непривязанному родителю
-    незачем видеть «сначала привяжите чат» в ответ на вопрос «куда записать
-    приступ».
+    Справочник читается с сервера каждый раз, а не хранится у бота: типы
+    приступов ведёт медицинская команда, и список, застывший в коде, однажды
+    разошёлся бы с тем, что видит врач в карте.
     """
 
     await state.clear()
-    await message.answer(texts.SEIZURE_IN_CABINET, reply_markup=keyboards.main_menu(settings))
+    binding = await require_binding(message, store)
+    if binding is None:
+        return
+
+    try:
+        types = await api.seizure_types(link_id=binding.link_id, secret=binding.secret)
+    except LinkRevokedError:
+        await store.delete(message.chat.id)
+        await message.answer(texts.LINK_REVOKED)
+        return
+    except BotApiError as exc:
+        logger.warning("seizure_types_failed", status=exc.status, code=exc.code)
+        await message.answer(texts.API_UNAVAILABLE)
+        return
+
+    if not types:
+        # Пустой справочник — не «попробуйте позже»: сам по себе он не
+        # наполнится, и родителю нужно другое действие, а не повтор.
+        await message.answer(texts.SEIZURE_NO_TYPES, reply_markup=keyboards.main_menu(settings))
+        return
+
+    buttons = [(str(item["id"]), str(item["name"])) for item in types]
+    await state.set_state(Seizure.type_choice)
+    await state.update_data(seizure_type_names=dict(buttons))
+    await message.answer(texts.SEIZURE_ASK_TYPE, reply_markup=keyboards.seizure_types(buttons))
 
 
 @router.message(F.text == texts.BTN_KETONES)
@@ -483,6 +525,122 @@ async def medication_choice(callback: CallbackQuery, state: FSMContext) -> None:
         kind="medications",
         payload={"medication_id": medication_id, "taken": True},
         summary=labels.get(medication_id, texts.MEDICATION_ASK),
+    )
+
+
+# --- Приступ: шаги ---
+
+
+@router.callback_query(Seizure.type_choice, F.data.startswith(keyboards.SEIZURE_TYPE_PREFIX))
+async def seizure_type(
+    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+) -> None:
+    """Тип выбран — спрашиваем длительность по шкале анкеты."""
+
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    binding = await require_binding(message, store)
+    if binding is None:
+        await state.clear()
+        return
+
+    type_id = (callback.data or "").removeprefix(keyboards.SEIZURE_TYPE_PREFIX)
+
+    try:
+        options = await api.duration_options(link_id=binding.link_id, secret=binding.secret)
+    except LinkRevokedError:
+        await store.delete(message.chat.id)
+        await state.clear()
+        await message.answer(texts.LINK_REVOKED)
+        return
+    except BotApiError as exc:
+        logger.warning("duration_options_failed", status=exc.status, code=exc.code)
+        await state.clear()
+        await message.answer(texts.API_UNAVAILABLE)
+        return
+
+    buttons = [(str(item["id"]), str(item["name_ru"])) for item in options]
+    await state.set_state(Seizure.duration)
+    await state.update_data(seizure_type_id=type_id, seizure_duration_names=dict(buttons))
+    await message.answer(
+        texts.SEIZURE_ASK_DURATION, reply_markup=keyboards.seizure_durations(buttons)
+    )
+
+
+@router.callback_query(Seizure.duration, F.data == keyboards.SEIZURE_EXACT_DATA)
+async def seizure_duration_exact_ask(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    await state.set_state(Seizure.duration_exact)
+    await message.answer(texts.SEIZURE_ASK_EXACT, reply_markup=keyboards.cancel_only())
+
+
+@router.callback_query(Seizure.duration, F.data.startswith(keyboards.SEIZURE_DURATION_PREFIX))
+async def seizure_duration(callback: CallbackQuery, state: FSMContext) -> None:
+    """Интервал со слов — ссылкой на справочник, а не числом.
+
+    Пересчитать «от 10 до 30 минут» в секунды нельзя ни нижней границей, ни
+    серединой: получилось бы число, неотличимое от засечённого секундомером, а
+    по нему врач судит о течении болезни (ADR-0020).
+    """
+
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    option_id = (callback.data or "").removeprefix(keyboards.SEIZURE_DURATION_PREFIX)
+    data = await state.get_data()
+    await ask_when(
+        message,
+        state,
+        kind="seizures",
+        payload={
+            "seizure_type_id": data["seizure_type_id"],
+            "duration_option_id": option_id,
+        },
+        summary=texts.SEIZURE_SAVED.format(
+            type=data.get("seizure_type_names", {}).get(data["seizure_type_id"], "приступ"),
+            duration=data.get("seizure_duration_names", {}).get(option_id, "длительность указана"),
+        ),
+    )
+
+
+@router.message(Seizure.duration_exact)
+async def seizure_duration_exact(message: Message, state: FSMContext) -> None:
+    """Точная длительность — целым числом секунд.
+
+    Диапазон — тот же, что у API (сутки): бот не решает, какая длительность
+    правдоподобна, это дело медицинской команды. Он проверяет лишь то, что
+    введено число, — раздел 7.5 ТЗ прямо запрещает боту интерпретировать
+    значения.
+    """
+
+    raw = (message.text or "").strip()
+    if not raw.isdigit() or int(raw) > MAX_DURATION_SEC:
+        await message.answer(
+            texts.SEIZURE_EXACT_INVALID.format(limit=MAX_DURATION_SEC),
+            reply_markup=keyboards.cancel_only(),
+        )
+        return
+
+    seconds = int(raw)
+    data = await state.get_data()
+    await ask_when(
+        message,
+        state,
+        kind="seizures",
+        payload={"seizure_type_id": data["seizure_type_id"], "duration_sec": seconds},
+        summary=texts.SEIZURE_SAVED.format(
+            type=data.get("seizure_type_names", {}).get(data["seizure_type_id"], "приступ"),
+            duration=texts.SEIZURE_SAVED_EXACT_SEC.format(value=seconds),
+        ),
     )
 
 

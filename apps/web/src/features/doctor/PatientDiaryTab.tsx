@@ -26,6 +26,7 @@ import {
 import {
   useDiaryLogs,
   usePrescriptionVersions,
+  useDurationOptions,
   useSeizureTypes,
 } from "../diary/useDiary";
 import { useMedications } from "./doctorQueries";
@@ -114,6 +115,9 @@ function DiaryKindView({
   // видах записей запрос не уходит.
   const medications = useMedications(patientId, kind === "medications");
   const seizureTypes = useSeizureTypes(kind === "seizures");
+  // Врач обязан видеть длительность и тогда, когда семья ответила интервалом
+  // из бота: иначе родитель ответил, а в карте пусто (ADR-0020).
+  const durationOptions = useDurationOptions(kind === "seizures");
 
   const items = useMemo(() => logs.data?.items ?? [], [logs.data]);
   const total = logs.data?.total ?? 0;
@@ -147,6 +151,14 @@ function DiaryKindView({
         label: t("diary.marker", { version: version.version }),
       }));
   }, [prescriptions.data, range, t]);
+
+  const durationOptionNames = useMemo(
+    () =>
+      new Map(
+        (durationOptions.data ?? []).map((option) => [option.id, option.name]),
+      ),
+    [durationOptions.data],
+  );
 
   const seizureTypeNames = useMemo(
     () =>
@@ -251,6 +263,7 @@ function DiaryKindView({
             logs={items}
             currentUserId={null}
             seizureTypeNames={seizureTypeNames}
+            durationOptionNames={durationOptionNames}
             medicationNames={medicationNames}
             onEdit={noop}
             onDelete={noop}

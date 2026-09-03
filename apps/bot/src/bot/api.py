@@ -217,6 +217,35 @@ class BotApi:
             wait_s=PARSE_TIMEOUT_S,
         )
 
+    async def seizure_types(self, *, link_id: uuid.UUID, secret: str) -> list[dict[str, Any]]:
+        """Типы приступов — общий справочник, к пациенту не привязан."""
+
+        token = await self._token(link_id=link_id, secret=secret)
+        body = await self._request(
+            "GET",
+            "/api/v1/dictionaries/seizure-types",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        items: list[dict[str, Any]] = body.get("items", [])
+        return items
+
+    async def duration_options(self, *, link_id: uuid.UUID, secret: str) -> list[dict[str, Any]]:
+        """Шкала длительности приступа — та же, что в анкете регистрации.
+
+        Не своя шкала бота: семья отвечает на один и тот же вопрос в кабинете и
+        в чате, и два набора формулировок означали бы, что ряды за разные
+        месяцы нельзя сравнить между собой (вопрос 23 медицинской команде).
+        """
+
+        token = await self._token(link_id=link_id, secret=secret)
+        body = await self._request(
+            "GET",
+            "/api/v1/dictionaries/intake-options?scale=seizure_duration",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        items: list[dict[str, Any]] = body.get("items", [])
+        return items
+
     async def mark_eaten(
         self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
     ) -> dict[str, Any]:

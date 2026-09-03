@@ -78,14 +78,27 @@ const DURATION_MAX_SEC = 86_400;
 const SEIZURE_COUNT_MAX = 1_000;
 const HEIGHT_MAX_CM = 250;
 
-export const seizureSchema = z.object({
-  occurredAt,
-  seizureTypeId: requiredId,
-  durationSec: optionalInteger(0, DURATION_MAX_SEC),
-  count: integer(SEIZURE_COUNT_MIN, SEIZURE_COUNT_MAX),
-  description: freeText,
-  triggers: freeText,
-});
+export const seizureSchema = z
+  .object({
+    occurredAt,
+    seizureTypeId: requiredId,
+    durationSec: optionalInteger(0, DURATION_MAX_SEC),
+    // Интервал со слов семьи — вариант шкалы из справочника анкеты. Пустая
+    // строка означает «не отвечали», а не «ноль».
+    durationOptionId: z.string(),
+    count: integer(SEIZURE_COUNT_MIN, SEIZURE_COUNT_MAX),
+    description: freeText,
+    triggers: freeText,
+  })
+  // Одно из двух, а не оба: измеренная длительность и интервал со слов —
+  // разные величины, и два ответа об одной величине однажды разойдутся
+  // (ADR-0020). Сервер это тоже проверяет; здесь — чтобы человек узнал об
+  // этом до отправки, а не из ответа с ошибкой.
+  .refine(
+    (values) =>
+      values.durationSec.trim() === "" || values.durationOptionId === "",
+    { path: ["durationOptionId"], message: "both-durations" },
+  );
 
 export const ketoneSchema = z.object({
   occurredAt,
@@ -150,6 +163,8 @@ export function seizureBody(values: SeizureValues): DiaryBody | null {
       occurred_at,
       seizure_type_id: values.seizureTypeId,
       duration_sec: optionalNumberOf(values.durationSec),
+      duration_option_id:
+        values.durationOptionId === "" ? null : values.durationOptionId,
       count: Number(values.count),
       description: optionalTextOf(values.description),
       triggers: optionalTextOf(values.triggers),

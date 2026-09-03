@@ -72,7 +72,28 @@ class SeizureLog(Base, DiaryLogMixin):
     seizure_type_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("seizure_types.id"), nullable=False
     )
+    #: Измеренная длительность. Только измеренная.
+    #:
+    #: Интервальный ответ («от 10 до 30 минут») сюда НЕ пересчитывается — ни
+    #: нижней границей, ни серединой. Иначе догадка со слов становится
+    #: неотличимой от засечённого секундомером, а по этому числу врач судит о
+    #: течении болезни: 600 секунд из «10 минут и больше» и 600 секунд с
+    #: секундомера — разные по достоверности данные (ADR-0020).
     duration_sec: Mapped[int | None] = mapped_column(Integer)
+    #: Интервал длительности со слов — вариант шкалы `seizure_duration`
+    #: справочника анкеты (`intake_options`).
+    #:
+    #: Тот же справочник, что у анкеты регистрации, а не свой: семья отвечает на
+    #: один и тот же вопрос в кабинете и в боте, и две шкалы про одно и то же
+    #: означали бы, что ряды за разные месяцы нельзя сравнить между собой
+    #: (вопрос 23 медицинской команде).
+    duration_option_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("intake_options.id", ondelete="RESTRICT"),
+        # Индекс на внешний ключ — общий инвариант схемы (раздел 4 ТЗ): без него
+        # проверка RESTRICT при правке справочника читает дневник целиком.
+        index=True,
+    )
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     description: Mapped[str | None]
     triggers: Mapped[str | None]

@@ -20,6 +20,7 @@ from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import (
+    IntakeOption,
     KetoneLog,
     MealLog,
     Medication,
@@ -30,7 +31,7 @@ from ..models import (
     SideEffectLog,
     WeightLog,
 )
-from ..models.enums import DiarySource
+from ..models.enums import DiarySource, IntakeScale
 
 DiaryLog = SeizureLog | KetoneLog | WeightLog | MedicationLog | MealLog | SideEffectLog
 
@@ -127,6 +128,26 @@ async def seizure_type_exists(session: AsyncSession, seizure_type_id: uuid.UUID)
     """Справочник `seizure_types` общий, к пациенту не привязан (раздел 4.2 ТЗ)."""
 
     found = await session.scalar(select(SeizureType.id).where(SeizureType.id == seizure_type_id))
+    return found is not None
+
+
+async def duration_option_is_usable(session: AsyncSession, option_id: uuid.UUID) -> bool:
+    """Вариант длительности пригоден: он из шкалы `seizure_duration` и не выведен.
+
+    Проверяется именно шкала, а не просто существование строки: `intake_options`
+    — один справочник на все пять шкал анкеты, и без этой проверки в
+    длительность приступа записалось бы «6 и более препаратов». Выведенный из
+    употребления вариант тоже не принимается: он остаётся ради старых записей,
+    а не ради новых.
+    """
+
+    found = await session.scalar(
+        select(IntakeOption.id).where(
+            IntakeOption.id == option_id,
+            IntakeOption.scale == IntakeScale.SEIZURE_DURATION,
+            IntakeOption.retired.is_(False),
+        )
+    )
     return found is not None
 
 

@@ -51,6 +51,10 @@ class FakeApi:
     #: Схема терапии для сценария «Лекарства».
     medications: list[dict[str, Any]] = field(default_factory=list)
     medications_error: Exception | None = None
+    #: Справочники для сценария «Приступ».
+    seizure_type_items: list[dict[str, Any]] = field(default_factory=list)
+    duration_items: list[dict[str, Any]] = field(default_factory=list)
+    dictionary_error: Exception | None = None
     #: Ответ `POST /ai/parse` для сценария «Еда словами».
     parsed: dict[str, Any] | None = None
     parse_error: Exception | None = None
@@ -109,6 +113,16 @@ class FakeApi:
         if self.medications_error is not None:
             raise self.medications_error
         return self.medications
+
+    async def seizure_types(self, *, link_id: uuid.UUID, secret: str) -> list[dict[str, Any]]:
+        if self.dictionary_error is not None:
+            raise self.dictionary_error
+        return self.seizure_type_items
+
+    async def duration_options(self, *, link_id: uuid.UUID, secret: str) -> list[dict[str, Any]]:
+        if self.dictionary_error is not None:
+            raise self.dictionary_error
+        return self.duration_items
 
     async def parse_text(
         self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, text: str

@@ -26,14 +26,12 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
     сообщения: меню не пришло бы вовсе. Пока адреса нет, кнопки просто нет —
     так же, как её не было до появления Mini App.
 
-    Кнопки «Приступ» здесь нет по той же причине: сценарий ждёт ответа
-    медицинской команды о шкале длительности (вопрос 23 в
-    `docs/medical/OPEN_QUESTIONS.md`), а кнопка, которая приводит к «я вас не
-    понял», хуже отсутствующей — тем более на самом важном событии. Нажатие
-    старой кнопки, оставшейся у семьи на экране, разбирает `scenarios.py`.
+    «Приступ» стоит первым и отдельной строкой: это самое важное событие
+    дневника, и искать его среди четырёх кнопок родителю не приходится.
     """
 
     keyboard = [
+        [KeyboardButton(text=texts.BTN_SEIZURE)],
         [KeyboardButton(text=texts.BTN_KETONES), KeyboardButton(text=texts.BTN_WEIGHT)],
         [KeyboardButton(text=texts.BTN_MEAL), KeyboardButton(text=texts.BTN_MEDICATION)],
         [KeyboardButton(text=texts.BTN_WELLBEING)],
@@ -126,6 +124,47 @@ def confirm() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=texts.BTN_CONFIRM, callback_data=CONFIRM_DATA)],
             _cancel_row(),
         ]
+    )
+
+
+SEIZURE_TYPE_PREFIX = "stype:"
+SEIZURE_DURATION_PREFIX = "sdur:"
+#: «Ввести точно» — требование ТЗ 7.3: у кого секундомер был, тот вводит число.
+SEIZURE_EXACT_DATA = "sdur-exact"
+
+
+def seizure_types(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Кнопка на каждый тип приступа из справочника.
+
+    Список приходит с сервера и здесь не дополняется: типы приступов ведёт
+    медицинская команда, и «прочее», добавленное ботом, оказалось бы значением,
+    которого нет ни в кабинете, ни в отчёте.
+    """
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=title, callback_data=f"{SEIZURE_TYPE_PREFIX}{item_id}")]
+            for item_id, title in items
+        ]
+        + [_cancel_row()]
+    )
+
+
+def seizure_durations(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Шкала длительности из справочника плюс «Ввести точно».
+
+    По кнопке на вариант, а не свободный ввод: родитель отвечает сразу после
+    приступа, и «сколько это было в секундах» — вопрос, на который у него чаще
+    всего нет ответа. Кто засекал — вводит число.
+    """
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=title, callback_data=f"{SEIZURE_DURATION_PREFIX}{item_id}")]
+            for item_id, title in items
+        ]
+        + [[InlineKeyboardButton(text=texts.BTN_SEIZURE_EXACT, callback_data=SEIZURE_EXACT_DATA)]]
+        + [_cancel_row()]
     )
 
 
