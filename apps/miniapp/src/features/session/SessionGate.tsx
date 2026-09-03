@@ -3,6 +3,7 @@ import { type ReactNode, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { onSessionExpired } from "../../lib/api";
+import { launchDiagnosis } from "../../lib/telegram";
 import type { Session } from "./useSession";
 import { useOpenSession } from "./useSession";
 
@@ -50,10 +51,33 @@ export function SessionGate({
     }
 
     if (open.error === "outside_telegram") {
+      // Две причины выглядят снаружи одинаково, а лечатся по-разному: страницу
+      // открыли ссылкой (Telegram есть, подписи нет) или не загрузился скрипт
+      // Telegram (нет и объекта). Поэтому под текстом стоит строка проверки —
+      // без неё разбор превращается в переписку вслепую.
+      const facts = launchDiagnosis();
+      const yes = t("session.outside.yes");
+      const no = t("session.outside.no");
+
       return (
         <EmptyState
           title={t("session.outside.title")}
-          description={t("session.outside.description")}
+          description={
+            <span className="flex flex-col gap-field">
+              <span>{t("session.outside.description")}</span>
+              <span>
+                {facts.telegram
+                  ? t("session.outside.byLink")
+                  : t("session.outside.noScript")}
+              </span>
+              <span className="text-xs">
+                {t("session.outside.diagnosis", {
+                  telegram: facts.telegram ? yes : no,
+                  launchParams: facts.launchParams ? yes : no,
+                })}
+              </span>
+            </span>
+          }
         />
       );
     }
