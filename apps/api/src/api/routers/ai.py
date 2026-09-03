@@ -87,6 +87,13 @@ async def parse_text(
 ) -> ParseResponse:
     await assert_patient_access(session, user, payload.patient_id)
 
+    # Соединение с БД возвращается в пул ДО ожидания разбора. Дальше база не
+    # нужна, а ждём мы до 15 секунд: с открытой сессией пятнадцать
+    # одновременных разборов заняли бы весь пул (5 + 10 overflow), и вставал бы
+    # не разбор, а весь API — вход, дневники, приём у врача. Сессия закрыта, но
+    # зависимость закроет её ещё раз при выходе; повторный close безопасен.
+    await session.close()
+
     try:
         answer = await queue_service.run(
             "parse_free_text",

@@ -206,9 +206,50 @@ restrict,command="/srv/ketocare-deploy.sh" ssh-ed25519 …
 `BOT_TOKEN`, `BOT_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`,
 при появлении — `ANTHROPIC_API_KEY`, `SENTRY_DSN`.
 Переменные (там же, вкладка Variables): `WEB_ORIGIN`, `MINIAPP_ORIGIN`,
-`TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
+`MINIAPP_URL`, `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
 `PUBLIC_CONTACT_EMAIL`, `PUBLIC_TELEGRAM_URL`, `LANDING_INDEXABLE`, `TZ`,
 `SENTRY_ENVIRONMENT` (по умолчанию `production`).
+
+**`MINIAPP_URL` в этом списке когда-то не было — и кнопки «Приложение» в боте
+не было тоже.** Разбираться пришлось от симптома: приложение собирается каждым
+выкатом, лежит в `/var/www/ketocare-miniapp`, а кнопки нет — потому что бот
+показывает её только при непустом `MINIAPP_URL`, а переменная, которой нет в
+документации, не появляется сама. Выкат теперь говорит об этом вслух, а сам
+адрес принимается и из Secrets: место ему в Variables (он публичный), но
+положить его к `BOT_TOKEN` — естественная ошибка с несоразмерной расплатой.
+
+**Порядок включения Mini App важен, и он такой:**
+
+1. DNS: `A tma.<домен>` на адрес сервера. Без записи certbot не выпустит
+   сертификат — проверка идёт по домену.
+2. Каталог приложения и сайт nginx — **двумя действиями, а не одним**:
+
+   ```
+   sudo mkdir -p /var/www/ketocare-miniapp
+   sudo cp /srv/ketocare/infra/nginx/ketocare-miniapp.conf /etc/nginx/sites-available/
+   sudo ln -sf /etc/nginx/sites-available/ketocare-miniapp.conf /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+   Симлинк без `cp` даёт битую ссылку, и nginx перестаёт проходить проверку
+   целиком: `open() "/etc/nginx/sites-enabled/ketocare-miniapp.conf" failed
+   (2: No such file or directory)`. Работающий nginx при этом продолжает
+   отдавать старую конфигурацию — но следующий `reload` и certbot с плагином
+   nginx откажут оба, и выглядит это как поломка сертификата, а не ссылки.
+   Лечится тем же `cp`: битая ссылка сама станет рабочей.
+3. Сертификат — **расширением действующего**, а не новым:
+   `sudo certbot --nginx --expand -d <домен> -d app.<домен> -d tma.<домен>`.
+   Без `--expand` появится второй линидж, и обновляться они будут вразнобой.
+   Признак, что шага не сделали: `curl https://tma.<домен>` отвечает 200, но
+   `curl` без `-k` падает, а в сертификате `CN=<домен>` без `tma` в SAN.
+4. Только теперь — переменные `MINIAPP_ORIGIN` и `MINIAPP_URL`, обе равны
+   `https://tma.<домен>`, и выкат.
+
+Порядок не формальность: `MINIAPP_URL`, заданный раньше сертификата, даёт
+кнопку, которая открывает пустоту, — Telegram не пустит семью на host с
+сертификатом от чужого имени. А `MINIAPP_ORIGIN`, оставшийся равным адресу
+кабинета, отклонит запросы приложения по CORS — приложение откроется и не
+покажет ничего.
 
 **`POSTGRES_PASSWORD` не ротируется перезаписью секрета.** Postgres применяет
 эту переменную только при инициализации пустого тома. После первого деплоя новый

@@ -43,6 +43,12 @@ MAX_PRODUCTS = 40
 #: Слова короче трёх букв не ищутся: «на», «и», «в» дают весь справочник.
 MIN_WORD = 3
 
+#: Сколько продуктов берётся под одно слово, даже когда слов много.
+#:
+#: Ниже этого отбор перестаёт работать: у «масла» в справочнике десяток
+#: разновидностей, и одна строка на слово почти наверняка окажется не той.
+MIN_PER_WORD = 5
+
 _WORD = re.compile(rf"[^\W\d_]{{{MIN_WORD},}}", re.UNICODE)
 
 
@@ -114,9 +120,21 @@ async def collect_products(session: AsyncSession, *, text: str) -> list[ProductO
     начнёт «помогать» и подберёт граммовку под кетосоотношение.
     """
 
+    words = list(dict.fromkeys(_WORD.findall(text.lower())))
+    if not words:
+        return []
+
+    # Бюджет делится между словами, а не отдаётся первому.
+    #
+    # Иначе «масло и яйцо» уходило бы в модель сорока сортами масла: поиск по
+    # первому слову выбирал лимит целиком, и яйца в списке не оказывалось
+    # вовсе — а значит, модель не смогла бы его сопоставить и отправила бы в
+    # `unmatched` продукт, который в справочнике есть.
+    per_word = max(MIN_PER_WORD, MAX_PRODUCTS // len(words))
+
     found: dict[str, str] = {}
-    for word in dict.fromkeys(_WORD.findall(text.lower())):
-        products, _ = await products_repo.search(session, q=word, limit=MAX_PRODUCTS)
+    for word in words:
+        products, _ = await products_repo.search(session, q=word, limit=per_word)
         for product in products:
             found.setdefault(str(product.id), product.name_ru)
             if len(found) >= MAX_PRODUCTS:

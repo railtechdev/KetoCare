@@ -89,6 +89,25 @@ if [ "${1:-}" != "--api-only" ]; then
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/miniapp run build
     if [ -d "$MINIAPP_ROOT" ]; then
         rsync -a --delete apps/miniapp/dist/ "$MINIAPP_ROOT"/
+        # Приложение на диске есть, а адреса нет — значит, семья до него не
+        # доберётся: кнопку «Приложение» бот показывает только при непустом
+        # MINIAPP_URL. Молчать об этом нельзя: выкат при этом успешен, и со
+        # стороны выглядит, будто всё сделано.
+        case "${MINIAPP_URL:-}" in
+            https://*)
+                # Адрес задан — значит, кнопка у семьи появится. Проверяем, что
+                # она ведёт на живое место: DNS, включённый сайт nginx и
+                # сертификат делаются руками (docs/DEPLOY.md), и любой
+                # пропущенный шаг виден только отсюда. Не ошибка выката —
+                # предупреждение: код выложен правильно.
+                if ! curl -fsS --max-time 10 -o /dev/null "$MINIAPP_URL"; then
+                    echo "MINIAPP_URL='$MINIAPP_URL' не отвечает: кнопка в боте будет вести в пустоту."
+                    echo "Проверьте DNS, сайт nginx и сертификат: docs/DEPLOY.md, «nginx и TLS»."
+                fi
+                ;;
+            "") echo "MINIAPP_URL пуст — Mini App выложен, но кнопки в боте не будет." ;;
+            *) echo "MINIAPP_URL='$MINIAPP_URL' не https — Telegram такую кнопку не примет." ;;
+        esac
     else
         echo "Нет $MINIAPP_ROOT — Mini App собран, но не выложен."
         echo "Создайте каталог и заведите домен: docs/DEPLOY.md, «nginx и TLS»."

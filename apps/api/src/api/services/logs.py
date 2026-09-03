@@ -9,12 +9,11 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.models import MealLog
+from core.models import AiJob, MealLog
 from core.models.enums import AiJobKind, AiJobStatus, DiarySource
 from core.repositories import ai_jobs as ai_jobs_repo
 from core.repositories import diary as diary_repo
@@ -79,14 +78,26 @@ async def create_log[M: DiaryLog, R: BaseModel](
     author: CurrentUser,
 ) -> R:
     fields = payload.model_dump(exclude={"occurred_at"})
+    # По умолчанию — канал, из которого пришла запись; подтверждённый разбор
+    # ниже подменяет его на `ai_parsed`.
+    source = channel_source(author)
+    job = None
     if isinstance(payload, MealLogCreate):
         _check_meal_content(payload.menu_item_id, payload.free_text)
         # Подтверждение разбора: структура берётся из журнала, а не из тела.
         fields.pop("ai_job_id", None)
         if payload.ai_job_id is not None:
-            fields["parsed"] = await _parsed_of_job(
+            job = await _job_for_confirmation(
                 session, ai_job_id=payload.ai_job_id, patient_id=patient_id, author=author
             )
+            fields["parsed"] = (job.output or {})["parsed"]
+            # Происхождение — `ai_parsed`, а не канал, из которого пришли
+            # (раздел 5.4 ТЗ). Разница клиническая: «55 г» из разбора — оценка
+            # модели по фразе «одно яйцо», а такие же 55 г, набранные руками, —
+            # взвешенная порция. В карточке дневника у `ai_parsed` своя пометка
+            # «Распознано ИИ» (`DiaryEntryCard`), и без этой строки она не
+            # появлялась бы никогда: врач не отличил бы оценку от измерения.
+            source = DiarySource.AI_PARSED
     await _check_references(session, patient_id=patient_id, fields=fields)
 
     log = await diary_repo.create(
@@ -94,10 +105,16 @@ async def create_log[M: DiaryLog, R: BaseModel](
         model,
         patient_id=patient_id,
         occurred_at=payload.occurred_at,
-        source=channel_source(author),
+        source=source,
         created_by=author.id,
         fields=fields,
     )
+
+    if job is not None:
+        # Отметка ставится после создания записи, в той же транзакции: разбор
+        # подтверждён и израсходован.
+        await ai_jobs_repo.mark_confirmed(session, job=job, log_id=log.id)
+
     return read.model_validate(log)
 
 
@@ -151,24 +168,27 @@ async def _owned_log[M: DiaryLog](
     return log
 
 
-async def _parsed_of_job(
+async def _job_for_confirmation(
     session: AsyncSession,
     *,
     ai_job_id: uuid.UUID,
     patient_id: uuid.UUID,
     author: CurrentUser,
-) -> dict[str, Any]:
+) -> AiJob:
     """Разбор из журнала — с проверками, без которых он не разбор, а чужие данные.
 
-    Четыре условия, и каждое закрывает свой способ подсунуть в дневник то, чего
-    не было: задача существует; её заказывал ЭТОТ человек; она про ЭТОГО
-    ребёнка; она действительно разбор еды и он удался. Сообщение на все случаи
-    одно — по разнице ответов иначе устанавливалось бы, что чужая задача
-    существует.
+    Пять условий, и каждое закрывает свой способ подсунуть в дневник то, чего не
+    было: задача существует; её заказывал ЭТОТ человек; она про ЭТОГО ребёнка;
+    она действительно разбор еды и он удался; и она ещё не израсходована.
+
+    Последнее — про двойное нажатие и повтор запроса: разбор описывает один
+    приём пищи, и второй раз он подтверждаться не должен, иначе в дне ребёнка
+    появятся жиры, которых он не ел. Сообщение на все случаи одно: по разнице
+    ответов иначе устанавливалось бы, что чужая задача существует.
     """
 
     job = await ai_jobs_repo.get(session, ai_job_id)
-    parsed = (job.output or {}).get("parsed") if job is not None else None
+    output = (job.output or {}) if job is not None else {}
 
     if (
         job is None
@@ -176,11 +196,12 @@ async def _parsed_of_job(
         or job.patient_id != patient_id
         or job.kind != AiJobKind.PARSE_MEAL
         or job.status != AiJobStatus.DONE
-        or not isinstance(parsed, dict)
+        or not isinstance(output.get("parsed"), dict)
+        or output.get("confirmed_log_id") is not None
     ):
         raise ApiError(ErrorCode.NOT_FOUND, "Разбор не найден. Повторите разбор текста.")
 
-    return parsed
+    return job
 
 
 def _check_meal_content(menu_item_id: uuid.UUID | None, free_text: str | None) -> None:

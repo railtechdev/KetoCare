@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.services import queue as queue_service
 from core.models import AiJob, MealLog
-from core.models.enums import AiJobKind, AiJobStatus, UserRole
+from core.models.enums import AiJobKind, AiJobStatus, DiarySource, UserRole
 from core.repositories import patients as patients_repo
 
 pytestmark = pytest.mark.asyncio
@@ -314,3 +314,123 @@ class TestConfirmation:
 
         assert response.status_code == 201
         assert response.json()["parsed"] is None
+
+
+class TestFindingsFromReview:
+    """Дефекты, найденные состязательным ревью после первой реализации.
+
+    Каждый из них проходил все прежние тесты: они проверяли путь, а не его
+    границы.
+    """
+
+    async def test_confirmed_parse_is_marked_as_ai_not_as_the_channel(
+        self, client, session, make_user, make_patient, auth_headers
+    ) -> None:
+        """Раздел 5.4 ТЗ: source=ai_parsed. Разница клиническая — «55 г» из
+        разбора это оценка модели по фразе «одно яйцо», а те же 55 г, набранные
+        руками, — взвешенная порция. В карточке дневника у ai_parsed своя
+        пометка «Распознано ИИ», и без этого она не появлялась бы никогда."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        job = await _job(session, requested_by=parent.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/meals",
+            json={
+                "occurred_at": "2026-09-02T09:00:00Z",
+                "free_text": "30 г масла",
+                "ai_job_id": str(job.id),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 201
+        log = (await session.scalars(select(MealLog))).one()
+        assert log.source == DiarySource.AI_PARSED
+
+    async def test_manual_meal_keeps_the_channel_source(
+        self, client, session, make_user, make_patient, auth_headers
+    ) -> None:
+        """Обратная сторона: запись руками не должна выдавать себя за разбор."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        await client.post(
+            f"/api/v1/patients/{patient.id}/logs/meals",
+            json={"occurred_at": "2026-09-02T09:00:00Z", "free_text": "омлет"},
+            headers=auth_headers(parent),
+        )
+
+        log = (await session.scalars(select(MealLog))).one()
+        assert log.source == DiarySource.WEB
+
+    async def test_one_parse_confirms_once(
+        self, client, session, make_user, make_patient, auth_headers
+    ) -> None:
+        """Разбор описывает ОДИН приём пищи. Повтор запроса с тем же job_id
+        (двойное нажатие, ретрай сети) добавлял бы в день ребёнка жиры, которых
+        он не ел."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        job = await _job(session, requested_by=parent.id, patient_id=patient.id)
+        body = {
+            "occurred_at": "2026-09-02T09:00:00Z",
+            "free_text": "30 г масла",
+            "ai_job_id": str(job.id),
+        }
+
+        first = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/meals", json=body, headers=auth_headers(parent)
+        )
+        second = await client.post(
+            f"/api/v1/patients/{patient.id}/logs/meals", json=body, headers=auth_headers(parent)
+        )
+
+        assert first.status_code == 201
+        assert second.status_code == 404
+        assert len(list(await session.scalars(select(MealLog)))) == 1
+
+    async def test_bot_token_may_call_parse(self) -> None:
+        """Белый список маршрутов бота закрыт: чего в нём нет — то запрещено.
+        Без этой строки сценарий «Еда → словами» получал бы 403 в бою, а тесты
+        бота этого не видели: у них поддельный клиент API."""
+
+        from api.deps.bot import BOT_ALLOWED_ROUTES
+
+        assert ("POST", "/ai/parse") in BOT_ALLOWED_ROUTES
+
+    async def test_parse_does_not_hold_the_database_while_waiting(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ) -> None:
+        """Ждём разбор до 15 секунд. С открытой сессией пятнадцать
+        одновременных разборов заняли бы весь пул соединений — и вставал бы не
+        разбор, а весь API, включая вход и приём у врача."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        # Проверяется порядок, а не состояние: соединение обязано вернуться в
+        # пул ДО ожидания. Состояние сессии в тесте обманчиво — она привязана к
+        # соединению внешней транзакции и после close выглядит живой.
+        order: list[str] = []
+        original_close = session.close
+
+        async def close_spy() -> None:
+            order.append("close")
+            await original_close()
+
+        monkeypatch.setattr(session, "close", close_spy)
+
+        async def run(task: str, *args, timeout_s: float):
+            order.append("wait")
+            return {"status": "ok", "ai_job_id": str(uuid.uuid4()), "result": PARSED}
+
+        monkeypatch.setattr(queue_service, "run", run)
+
+        response = await client.post(
+            "/api/v1/ai/parse",
+            json={"patient_id": str(patient.id), "text": "30 г масла"},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200
+        assert order[:2] == ["close", "wait"]

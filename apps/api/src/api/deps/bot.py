@@ -53,6 +53,11 @@ BOT_ALLOWED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         # Сценарий «Еда → из меню на сегодня»: показать позиции и отметить съеденное.
         ("GET", "/patients/{patient_id}/menus"),
         ("POST", "/patients/{patient_id}/menus/items/{item_id}/eaten"),
+        # Сценарий «Еда → свободный текст» (раздел 10.3 ТЗ): разбор фразы.
+        # Ручка ничего не сохраняет и данных пациента не отдаёт — она их
+        # принимает; запись появляется отдельным `POST .../logs/meals`, который
+        # уже в списке.
+        ("POST", "/ai/parse"),
         # Справочники для кнопок FSM. Клинических данных в них нет.
         ("GET", "/dictionaries/seizure-types"),
         ("GET", "/dictionaries/ketone-methods"),

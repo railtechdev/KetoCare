@@ -26,6 +26,14 @@ import httpx
 # секунду до истечения, доезжал бы до API уже с просроченным токеном.
 _EXPIRY_MARGIN = timedelta(seconds=30)
 
+#: Ожидание разбора свободного текста — дольше общего таймаута клиента.
+#:
+#: Ручка `POST /ai/parse` ждёт ответ модели синхронно до 15 секунд (раздел 10.1
+#: ТЗ), а общий таймаут бота — 10. С ним бот обрывал бы связь ровно тогда, когда
+#: ответ уже в пути, и родитель не увидел бы ничего: `httpx.ReadTimeout` — не
+#: `BotApiError`, обработчик до своего сообщения об отказе не дошёл бы.
+PARSE_TIMEOUT_S = 16.0
+
 
 class BotApiError(Exception):
     """Сбой вызова API. `code` — код из раздела 5.1 ТЗ, если API его прислал."""
@@ -201,6 +209,12 @@ class BotApi:
             "/api/v1/ai/parse",
             headers={"Authorization": f"Bearer {token}"},
             json={"patient_id": str(patient_id), "text": text},
+            # Своё ожидание, дольше общего: ручка ждёт разбор синхронно до 15
+            # секунд (раздел 10.1 ТЗ), а клиент бота настроен на 10. С общим
+            # таймаутом бот обрывал бы связь раньше ответа — и родитель не
+            # увидел бы ни разбора, ни отказа: `httpx.ReadTimeout` — не
+            # `BotApiError`, и обработчик до своего сообщения не дошёл бы.
+            wait_s=PARSE_TIMEOUT_S,
         )
 
     async def mark_eaten(
@@ -229,8 +243,18 @@ class BotApi:
         *,
         headers: dict[str, str],
         json: dict[str, Any] | None = None,
+        wait_s: float | None = None,
     ) -> dict[str, Any]:
-        response = await self._client.request(method, path, headers=headers, json=json)
+        # Имя не `timeout`: это не ожидание корутины, а параметр httpx для
+        # одного запроса. `USE_CLIENT_DEFAULT` — сам httpx: он отличает
+        # «таймаут не задан» от «таймаут снят», и None означал бы второе.
+        response = await self._client.request(
+            method,
+            path,
+            headers=headers,
+            json=json,
+            timeout=httpx.USE_CLIENT_DEFAULT if wait_s is None else wait_s,
+        )
         if response.is_success:
             body: dict[str, Any] = response.json()
             return body
