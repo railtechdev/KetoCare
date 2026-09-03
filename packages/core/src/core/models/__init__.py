@@ -44,6 +44,7 @@ from .diary import (
     WeightLog,
 )
 from .files import Attachment
+from .knowledge import KbChunk
 from .marketing import Lead
 
 __all__ = [
@@ -93,5 +94,6 @@ __all__ = [
     "ReportJob",
     "AuditLog",
     # marketing
+    "KbChunk",
     "Lead",
 ]
