@@ -92,6 +92,37 @@ function fromSdk(): string | undefined {
   }
 }
 
+export interface LaunchDiagnosis {
+  /** Есть ли `window.Telegram.WebApp` — то есть загрузился ли скрипт Telegram. */
+  telegram: boolean;
+  /** Отдал ли клиент строку запуска: она приходит либо в объекте, либо в адресе. */
+  launchParams: boolean;
+}
+
+/**
+ * Почему приложение решило, что открыто не из Telegram.
+ *
+ * Показывается человеку одной строкой на экране отказа. Причин ровно две, и
+ * лечатся они по-разному: нет объекта Telegram — не загрузился скрипт (сеть,
+ * блокировка, старый клиент); объект есть, а параметров нет — страницу открыли
+ * ссылкой, а не кнопкой «Приложение», и Telegram подпись не выдал.
+ *
+ * Без этой строки разбор превращается в переписку вслепую: снаружи оба случая
+ * выглядят одинаково — «откройте кнопкой в чате».
+ */
+export function launchDiagnosis(): LaunchDiagnosis {
+  const address =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.hash} ${window.location.search}`;
+
+  return {
+    telegram: webApp() !== null,
+    launchParams:
+      address.includes("tgWebApp") || (webApp()?.initData ?? "").length > 0,
+  };
+}
+
 function firstNonEmpty(...values: (string | undefined)[]): string | null {
   for (const value of values) {
     if (value !== undefined && value.length > 0) return value;

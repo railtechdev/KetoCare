@@ -10,7 +10,15 @@ import { SessionGate } from "./SessionGate";
 const launchData = vi.hoisted(() => vi.fn<() => string | null>());
 const post = vi.hoisted(() => vi.fn());
 
-vi.mock("../../lib/telegram", () => ({ launchData, webApp: () => null }));
+const diagnosis = vi.hoisted(() =>
+  vi.fn(() => ({ telegram: false, launchParams: false })),
+);
+
+vi.mock("../../lib/telegram", () => ({
+  launchData,
+  webApp: () => null,
+  launchDiagnosis: diagnosis,
+}));
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
   return { ...actual, api: { POST: post } };
@@ -76,6 +84,28 @@ describe("вход в Mini App", () => {
       await screen.findByText(/открывается из Telegram/),
     ).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("называет причину: скрипт Telegram не загрузился", async () => {
+    // Две причины выглядят одинаково, а лечатся по-разному. Без этой строки
+    // разбор превращается в переписку вслепую — так и вышло на живом стенде.
+    launchData.mockReturnValue(null);
+    diagnosis.mockReturnValue({ telegram: false, launchParams: false });
+
+    renderGate();
+
+    expect(await screen.findByText(/загрузить Telegram/)).toBeInTheDocument();
+    expect(screen.getByText(/Telegram — нет/)).toBeInTheDocument();
+  });
+
+  it("называет причину: страницу открыли ссылкой, а не кнопкой", async () => {
+    launchData.mockReturnValue(null);
+    diagnosis.mockReturnValue({ telegram: true, launchParams: false });
+
+    renderGate();
+
+    expect(await screen.findByText(/открыли ссылкой/)).toBeInTheDocument();
+    expect(screen.getByText(/Telegram — есть/)).toBeInTheDocument();
   });
 
   it("прочий отказ даёт повтор, а не тупик", async () => {
