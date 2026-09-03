@@ -360,12 +360,20 @@ class TestRulesAreIntact:
             "закоммиченная миграция": (
                 "packages/core/migrations/versions/89d9663051ae_initial_schema.py"
             ),
+            "клинические статьи помощника": ("docs/knowledge-base/clinical/ketones-target.md"),
         }
         for what, path in must_block.items():
             assert check_file(path) == BLOCK, f"защита снята: {what} ({path})"
 
     def test_documented_exceptions_still_pass(self) -> None:
-        for path in ("docs/medical/OPEN_QUESTIONS.md", ".env.example"):
+        for path in (
+            "docs/medical/OPEN_QUESTIONS.md",
+            ".env.example",
+            # Статьи про кнопки пишет агент: за них отвечает продукт, а не
+            # медицинская команда. Защищена только клиническая половина базы.
+            "docs/knowledge-base/product/how-to-record-ketones.md",
+            "docs/knowledge-base/README.md",
+        ):
             assert check_file(path) == ALLOW, f"исключение перестало работать: {path}"
 
 
@@ -473,9 +481,7 @@ class TestHeredocBodyIsData:
     def test_data_in_body_allowed(self, command: str) -> None:
         assert check_command(command) == ALLOW, f"тело heredoc принято за команды: {command}"
 
-    def test_commit_message_mentioning_a_protected_path_allowed(
-        self, repo_on_main: Path
-    ) -> None:
+    def test_commit_message_mentioning_a_protected_path_allowed(self, repo_on_main: Path) -> None:
         """Текст сообщения коммита — данные: в нём встречаются и пути, и команды.
 
         Проверяется в СВОЁМ репозитории на своей ветке. В настоящем проекте

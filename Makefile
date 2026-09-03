@@ -257,6 +257,14 @@ openapi: ## Выгрузить openapi.json и перегенерировать 
 		echo "node_modules нет — пропущена генерация клиента (запустите pnpm install)"; \
 	fi
 
+.PHONY: kb-index
+kb-index: ## Пересобрать индекс базы знаний помощника из docs/knowledge-base
+	uv run python -m core.tools.index_knowledge_base
+
+.PHONY: kb-check
+kb-check: ## Проверить статьи базы знаний, не трогая БД
+	uv run python -m core.tools.index_knowledge_base --check
+
 .PHONY: e2e
 e2e: ## Playwright-тесты (требует make dev)
 	@echo "E2E появляются на этапе 5 ТЗ (раздел 15, п.22)"; exit 1
