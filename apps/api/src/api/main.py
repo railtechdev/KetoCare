@@ -13,6 +13,7 @@ from .ratelimit import register_rate_limiting
 from .routers import (
     admin,
     ai,
+    ai_conversations,
     attachments,
     auth,
     calc,
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     v1 = APIRouter(prefix=API_PREFIX)
     v1.include_router(auth.router)
     v1.include_router(ai.router)
+    v1.include_router(ai_conversations.router)
     v1.include_router(patients.router)
     v1.include_router(attachments.router)
     v1.include_router(prescriptions.router)

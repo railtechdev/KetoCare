@@ -175,3 +175,83 @@ def _without_citations(text: str) -> str:
 #: Классы постфильтра, при которых ответ заменяется шаблоном врача. Внутренняя
 #: ошибка фильтра сюда тоже входит: непроверенный ответ семья не увидит.
 BLOCKING_KINDS = frozenset(Kind)
+
+
+async def assistant_reply(
+    ctx: dict[str, object],
+    conversation_id: str,
+    requested_by: str,
+    patient_id: str,
+    question: str,
+    reply_seq: int,
+) -> dict[str, object]:
+    """Задача ARQ: дописать ответ помощника в переписку (раздел 10.1 ТЗ).
+
+    Асинхронно, в отличие от разбора еды: ответ помощника идёт секунды, а ручка
+    столько не ждёт — nginx перед API рвёт соединение на шестидесятой, и ответ,
+    за который уже заплачено, терялся бы на границе прокси. Поэтому ручка
+    кладёт в переписку пустое сообщение-ожидание, а эта задача заменяет его
+    ответом; экран дочитывает переписку.
+
+    Отказы тоже становятся сообщением: молчащее «ожидание» навсегда — худший из
+    возможных ответов, потому что человек не знает, ждать ему или нет.
+    """
+
+    from core.db import get_sessionmaker
+    from core.repositories import ai_conversations as conversations_repo
+    from core.schemas.ai_conversations import new_message
+
+    from .client import build_ai_client
+
+    sessionmaker = get_sessionmaker()
+
+    text = DOCTOR_TEMPLATE
+    sources: list[str] = []
+    blocked = True
+    job_id = None
+    status = "done"
+
+    try:
+        async with sessionmaker() as session:
+            result = await answer(
+                build_ai_client(),
+                session,
+                requested_by=uuid.UUID(requested_by),
+                patient_id=uuid.UUID(patient_id),
+                question=question,
+            )
+        text = result.text
+        sources = list(result.sources)
+        blocked = result.blocked
+        job_id = result.ai_job_id
+    except AiLimitExceeded as error:
+        text = str(error)
+    except AiError:
+        text = (
+            "Помощник сейчас недоступен. Попробуйте позже — остальные разделы работают как обычно."
+        )
+        status = "failed"
+
+    async with sessionmaker() as session:
+        conversation = await conversations_repo.get_for_update(session, uuid.UUID(conversation_id))
+        if conversation is None:
+            # Разговор мог исчезнуть вместе с пациентом (`erase_patient`):
+            # дописывать некуда, и это не ошибка.
+            return {"status": "gone"}
+
+        await conversations_repo.replace_message(
+            session,
+            conversation=conversation,
+            message=new_message(
+                seq=reply_seq,
+                role="assistant",
+                text=text,
+                status=status,  # type: ignore[arg-type]
+                blocked=blocked,
+                sources=sources,
+                ai_job_id=job_id,
+            ),
+        )
+        await session.commit()
+
+    return {"status": status, "blocked": blocked}

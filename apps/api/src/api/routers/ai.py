@@ -20,9 +20,14 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.models.enums import AiConversationChannel, UserRole
+from core.repositories import ai_conversations as conversations_repo
+from core.schemas.ai_conversations import new_message
+
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AI_RATE_LIMIT, limiter
+from ..schemas_ai import AssistantAccepted, AssistantAsk
 from ..services import queue as queue_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -127,6 +132,86 @@ def _response(answer: Any) -> ParseResponse:
 
     result = answer.get("result") or {}
     return ParseResponse(ai_job_id=uuid.UUID(str(answer["ai_job_id"])), **result)
+
+
+@router.post(
+    "/assistant/messages",
+    response_model=AssistantAccepted,
+    status_code=202,
+    summary="Спросить помощника",
+)
+@limiter.limit(AI_RATE_LIMIT)
+async def ask_assistant(
+    request: Request,
+    payload: AssistantAsk,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> AssistantAccepted:
+    """Принять вопрос и поставить ответ в очередь (раздел 10.4 ТЗ).
+
+    202, а не синхронный ответ, как у разбора еды: помощник отвечает секундами,
+    а nginx перед API рвёт соединение на шестидесятой — ответ, за который уже
+    заплачено, терялся бы на границе прокси. Поэтому в переписку сразу кладётся
+    пустое сообщение-ожидание, воркер заменяет его ответом, а экран дочитывает
+    переписку (ADR-0022).
+
+    Спрашивает только семья: врач читает переписку, но не ведёт её от имени
+    родителя — иначе в карте появились бы вопросы, которых семья не задавала.
+    """
+
+    await assert_patient_access(session, user, payload.patient_id)
+
+    if user.role != UserRole.PARENT:
+        raise ApiError(ErrorCode.FORBIDDEN, "Помощник отвечает семье, а не специалисту.")
+
+    channel = (
+        AiConversationChannel.MINIAPP if user.channel == "miniapp" else AiConversationChannel.WEB
+    )
+
+    if payload.conversation_id is None:
+        conversation = await conversations_repo.create(
+            session, user_id=user.id, patient_id=payload.patient_id, channel=channel
+        )
+    else:
+        existing = await conversations_repo.get_for_update(session, payload.conversation_id)
+        # Одно сообщение на три случая — нет, чужой ребёнок, чужой автор: по
+        # разнице ответов иначе устанавливается, что разговор существует.
+        if (
+            existing is None
+            or existing.patient_id != payload.patient_id
+            or existing.user_id != user.id
+        ):
+            raise ApiError(ErrorCode.NOT_FOUND, "Разговор не найден.")
+        conversation = existing
+
+    question_seq = conversations_repo.next_seq(conversation)
+    reply_seq = question_seq + 1
+    await conversations_repo.append(
+        session,
+        conversation=conversation,
+        messages=[
+            new_message(seq=question_seq, role="user", text=payload.text),
+            # Пустое «ожидание» появляется сразу: экран рисует на этом месте
+            # «помощник думает», а не пустоту, из которой непонятно, ушёл ли
+            # вопрос вообще.
+            new_message(seq=reply_seq, role="assistant", status="pending"),
+        ],
+    )
+    conversation_id = conversation.id
+    await session.commit()
+
+    await queue_service.enqueue(
+        "assistant_reply",
+        str(conversation_id),
+        str(user.id),
+        str(payload.patient_id),
+        payload.text,
+        reply_seq,
+    )
+
+    return AssistantAccepted(
+        conversation_id=conversation_id, question_seq=question_seq, reply_seq=reply_seq
+    )
 
 
 def _unavailable(message: str) -> ApiError:
