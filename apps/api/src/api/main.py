@@ -31,6 +31,7 @@ from .routers import (
     recipes,
     reports,
     staff,
+    summaries,
     telegram,
 )
 
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     v1.include_router(recipes.router)
     v1.include_router(reports.router)
     v1.include_router(reports.jobs_router)
+    v1.include_router(summaries.router)
     v1.include_router(clinical.router)
     v1.include_router(intake.router)
     v1.include_router(dictionaries.router)

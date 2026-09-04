@@ -15,8 +15,18 @@ import { buttonVariants } from "./ui/button";
 import { cn } from "../lib/cn";
 
 export interface ConfirmDialogProps {
-  /** Кнопка, открывающая диалог */
-  trigger: ReactNode;
+  /**
+   * Кнопка, открывающая диалог. Не нужна в управляемом режиме: там диалог
+   * открывает не нажатие, а отправка формы.
+   */
+  trigger?: ReactNode;
+  /**
+   * Управляемый режим. Нужен там, где подтверждение вызывает не кнопка, а
+   * submit формы: собственного триггера у такой формы нет, а подтверждать
+   * необратимое действие двумя разными диалогами нельзя.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   /** Называет объект: «Удалить запись за 27.08?», а не «Вы уверены?» */
   title: string;
   description?: ReactNode;
@@ -40,6 +50,8 @@ export interface ConfirmDialogProps {
  */
 export function ConfirmDialog({
   trigger,
+  open,
+  onOpenChange,
   title,
   description,
   confirmLabel,
@@ -48,8 +60,8 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

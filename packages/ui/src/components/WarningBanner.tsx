@@ -5,6 +5,12 @@ import { cn } from "../lib/cn";
 export type WarningLevel = "info" | "warning" | "danger";
 
 export interface WarningBannerProps {
+  /**
+   * Идентификатор баннера. Нужен, когда предупреждение относится к конкретному
+   * содержимому и связывается с ним через `aria-describedby`: пометка
+   * «черновик ИИ» обязана читаться вместе с текстом, а не отдельно от него.
+   */
+  id?: string;
   level?: WarningLevel;
   title?: string;
   children: ReactNode;
@@ -33,6 +39,7 @@ const BORDER_BY_LEVEL: Record<WarningLevel, string> = {
 
 /** Баннер предупреждения (раздел 8.3 ТЗ: выход за допуски в меню). */
 export function WarningBanner({
+  id,
   level = "warning",
   title,
   children,
@@ -40,6 +47,7 @@ export function WarningBanner({
 }: WarningBannerProps) {
   return (
     <div
+      id={id}
       className={cn(
         "rounded-xl border-l-4 bg-card px-4 py-3 text-foreground shadow-kc-sm",
         BORDER_BY_LEVEL[level],

@@ -14,13 +14,17 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import (
     DoctorSummary,
     KetoneLog,
+    MealLog,
+    Medication,
+    MedicationLog,
     Menu,
     MenuItem,
     SeizureLog,
@@ -199,15 +203,151 @@ async def list_approved_summaries(
     в схеме ответа его легко было бы забыть.
     """
 
-    return list(
-        await session.scalars(
-            select(DoctorSummary)
-            .where(
-                DoctorSummary.patient_id == patient_id,
-                DoctorSummary.approved_md.is_not(None),
-                DoctorSummary.period_end >= period_from,
-                DoctorSummary.period_start <= period_to,
-            )
-            .order_by(DoctorSummary.period_start)
+    rows = await session.scalars(
+        select(DoctorSummary)
+        .where(
+            DoctorSummary.patient_id == patient_id,
+            DoctorSummary.approved_md.is_not(None),
+            DoctorSummary.period_end >= period_from,
+            DoctorSummary.period_start <= period_to,
         )
+        # За один период сводку можно утвердить дважды — черновик собирается
+        # заново, если первый не понравился. В отчёт идёт последняя: два разных
+        # описания одних данных врач читает как противоречие, а понять, какое
+        # действующее, по документу нельзя. Удалять прежнюю нечем и незачем
+        # (правило 4), поэтому выбор делается здесь.
+        .order_by(DoctorSummary.period_start, DoctorSummary.approved_at)
     )
+
+    latest: dict[tuple[date, date], DoctorSummary] = {}
+    for row in rows:
+        latest[(row.period_start, row.period_end)] = row
+    return [latest[key] for key in sorted(latest)]
+
+
+@dataclass(frozen=True, slots=True)
+class MedicationAdherenceRow:
+    """Отметки о приёме одного препарата за период.
+
+    Только измеримое: сколько отметок и сколько из них «не принято». Доли
+    «пропущено из положенных» здесь нет и быть не может — `medications.frequency`
+    свободная строка, из которой число приёмов в сутки не выводится (вопрос 37
+    в docs/medical/OPEN_QUESTIONS.md).
+    """
+
+    medication_id: uuid.UUID
+    drug_name: str
+    dose: str
+    entries: int
+    taken: int
+
+
+async def medication_adherence(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    period_from: datetime,
+    period_to: datetime,
+) -> list[MedicationAdherenceRow]:
+    """Отметки о приёме препаратов, сгруппированные по препарату."""
+
+    stmt = (
+        select(
+            Medication.id,
+            Medication.drug_name,
+            Medication.dose,
+            func.count(MedicationLog.id),
+            func.count(MedicationLog.id).filter(MedicationLog.taken.is_(True)),
+        )
+        .join(MedicationLog, MedicationLog.medication_id == Medication.id)
+        .where(
+            MedicationLog.patient_id == patient_id,
+            MedicationLog.deleted_at.is_(None),
+            MedicationLog.occurred_at >= period_from,
+            MedicationLog.occurred_at <= period_to,
+        )
+        .group_by(Medication.id, Medication.drug_name, Medication.dose)
+        .order_by(Medication.drug_name)
+    )
+    return [
+        MedicationAdherenceRow(
+            medication_id=row[0], drug_name=row[1], dose=row[2], entries=row[3], taken=row[4]
+        )
+        for row in await session.execute(stmt)
+    ]
+
+
+#: Дневниковые таблицы, запись в любую из которых считается «семья вела дневник
+#: в этот день». Меню сюда не входит: его составляет специалист или родитель
+#: заранее, и наличие плана ничего не говорит о том, вели ли записи.
+_DIARY_TABLES = (SeizureLog, KetoneLog, WeightLog, MedicationLog, MealLog, SideEffectLog)
+
+
+async def days_with_entries(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    period_from: datetime,
+    period_to: datetime,
+) -> list[date]:
+    """Даты, в которые есть хоть одна дневниковая запись, по возрастанию.
+
+    Раздел 10.5 ТЗ просит «% дней с записями», и это не `days_planned` из
+    `menu_adherence`: там считаются дни с составленным МЕНЮ. День с планом и без
+    единой отметки — ровно тот случай, о котором сводка должна сказать.
+    """
+
+    days: set[date] = set()
+    for model in _DIARY_TABLES:
+        rows = await session.scalars(
+            select(func.date(model.occurred_at))
+            .where(
+                model.patient_id == patient_id,
+                model.deleted_at.is_(None),
+                model.occurred_at >= period_from,
+                model.occurred_at <= period_to,
+            )
+            .distinct()
+        )
+        days.update(rows)
+    return sorted(days)
+
+
+@dataclass(frozen=True, slots=True)
+class MenuDayRow:
+    """Итоги спланированного дня — то, что уже посчитано ядром при сохранении меню."""
+
+    date: date
+    totals: dict[str, Any]
+    engine_version: str | None
+
+
+async def list_menu_days(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    period_from: date,
+    period_to: date,
+) -> list[MenuDayRow]:
+    """Дни с посчитанными итогами меню за период.
+
+    Итоги берутся сохранёнными, а не пересчитываются: день считался тем ядром,
+    что было на момент сохранения, и `engine_version` идёт вместе с числами.
+    """
+
+    rows = await session.execute(
+        select(Menu.date, Menu.totals, Menu.engine_version)
+        .where(
+            Menu.patient_id == patient_id,
+            Menu.deleted_at.is_(None),
+            Menu.totals.is_not(None),
+            Menu.date >= period_from,
+            Menu.date <= period_to,
+        )
+        .order_by(Menu.date)
+    )
+    return [
+        MenuDayRow(date=row[0], totals=row[1], engine_version=row[2])
+        for row in rows
+        if row[1] is not None
+    ]

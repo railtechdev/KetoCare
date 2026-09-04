@@ -79,6 +79,7 @@ async def get_report(
         period_from=period_from,
         period_to=period_to,
         generated_at=datetime.now(UTC),
+        with_summaries=_is_specialist(user.role),
     )
 
     if report_format == "json":
@@ -138,6 +139,7 @@ async def request_pdf_report(
         period_from=period_from,
         period_to=period_to,
         generated_at=datetime.now(UTC),
+        with_summaries=_is_specialist(user.role),
     )
 
     job = await jobs_repo.create(
@@ -159,6 +161,16 @@ async def request_pdf_report(
     # иначе отчёт на экране и отчёт в PDF однажды разойдутся (ADR-0008).
     await queue_service.enqueue("render_report", str(job.id), report.model_dump(mode="json"))
     return ReportJobRead.model_validate(job)
+
+
+def _is_specialist(role: UserRole) -> bool:
+    """Кому в отчёт кладутся врачебные сводки.
+
+    Диетолог ведёт того же ребёнка и читает те же данные; родитель — нет:
+    сводка написана специалисту и для специалиста (раздел 10.5 ТЗ).
+    """
+
+    return role in (UserRole.DOCTOR, UserRole.DIETITIAN)
 
 
 def _check_period(period_from: date, period_to: date) -> None:

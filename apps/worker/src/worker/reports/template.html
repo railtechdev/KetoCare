@@ -12,6 +12,7 @@
       h2 { font-size: 12pt; margin: 6mm 0 2mm; }
       p { margin: 0 0 1mm; }
       .muted { color: #555; }
+      .pre-line { white-space: pre-line; }
       table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
       th, td { border-bottom: 0.3pt solid #bbb; padding: 1.4mm 1mm; text-align: left; }
       th { font-weight: 600; }
@@ -162,7 +163,12 @@
         <h2>Сводки врача</h2>
         {% for item in summaries %}
           <p class="muted">{{ item.period_start }} — {{ item.period_end }}</p>
-          <p>{{ item.approved_md }}</p>
+          <!-- pre-line, а не <p>: сводка — шесть разделов с заголовками, и без
+               сохранения переносов они схлопывались в сплошной абзац. Markdown
+               здесь намеренно не разбирается: преобразователь с `|safe` отдал бы
+               weasyprint произвольную разметку из правленого человеком текста, а
+               weasyprint ходит за внешними ресурсами. -->
+          <p class="pre-line">{{ item.approved_md }}</p>
         {% endfor %}
       </section>
     {% endif %}
