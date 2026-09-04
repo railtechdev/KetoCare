@@ -216,3 +216,27 @@ class TestFreeText:
 
     def test_none_stays_none(self) -> None:
         assert scrub_free_text(None) is None
+
+
+class TestStringValuesInPayload:
+    """Строки внутри нагрузки — тоже текст человека."""
+
+    def test_contacts_inside_a_value_are_masked(self) -> None:
+        """Ключ разрешён, содержимое — нет.
+
+        Название препарата и доза нужны модели, поэтому запретить эти ключи
+        нельзя. Но пишет их человек, и контакт в поле уехал бы и в промпт, и в
+        `ai_jobs.input`: `FORBIDDEN_KEYS` — список имён, а не содержимого.
+        """
+
+        cleaned = pseudonymize(
+            {"medications": [{"drug_name": "Депакин, вопросы на doc@clinic.uz", "dose": "300 мг"}]}
+        )
+
+        assert "doc@clinic.uz" not in str(cleaned)
+        assert cleaned["medications"][0]["dose"] == "300 мг"
+
+    def test_the_medication_name_itself_survives(self) -> None:
+        cleaned = pseudonymize({"medications": [{"drug_name": "Депакин хроно", "dose": "300 мг"}]})
+
+        assert cleaned["medications"][0]["drug_name"] == "Депакин хроно"

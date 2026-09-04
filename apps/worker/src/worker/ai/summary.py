@@ -140,6 +140,14 @@ async def doctor_summary(
             f"Попробуйте позже. ({type(error).__name__})",
         )
         return {"status": "failed"}
+    except Exception as error:  # noqa: BLE001 — любой сбой обязан стать состоянием
+        # Незамеченное исключение здесь стоит дороже, чем выглядит: ARQ повторит
+        # задачу несколько раз, каждый повтор — новый платный вызов модели по
+        # кварталу дневника, а исчерпав попытки, оставит строку в `running`.
+        # Тогда `find_pending` будет вечно возвращать её, кнопка на экране
+        # останется выключенной, и сводку за этот период не заказать уже никогда.
+        await _fail(sessionmaker, identifier, f"Внутренняя ошибка сборки: {error}")
+        return {"status": "failed"}
 
     async with sessionmaker() as session:
         saved = await summaries_repo.attach_draft(

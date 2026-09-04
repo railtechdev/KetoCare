@@ -138,8 +138,24 @@ def _walk_dates(node: Any, found: set[tuple[int, int]]) -> None:
 
 
 def check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
-    """Числа сводки, которых в переданных рядах нет."""
+    """Числа сводки, которых в переданных рядах нет.
 
+    Не бросает исключений. Черновик к этому моменту уже оплачен, и падение на
+    нём стоило бы дорого дважды: текст потерян, а строка осталась бы в
+    `running` — повторный заказ за тот же период возвращал бы её же, и сводку за
+    этот период нельзя было бы собрать никогда. Сбой самой проверки становится
+    находкой, как и в `core.textguard`.
+    """
+
+    try:
+        return _check(text, payload)
+    except Exception as error:  # noqa: BLE001 — сломанная проверка не роняет черновик
+        return [
+            Ungrounded(value=0.0, fragment=f"проверка чисел не выполнена: {error}"),
+        ]
+
+
+def _check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
     allowed = collect_numbers(payload)
     dates = _dates_of(payload)
     period = payload.get("period") or {}
@@ -153,10 +169,11 @@ def check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
         rest = sentence
         for match in _DATE.finditer(sentence):
             day, month = int(match.group(1)), int(match.group(2))
-            literal = float(
-                match.group(0).replace(",", ".").rsplit(".", 1)[0] + "." + match.group(2)
-            )
-            known_date = (day, month) in dates or _date_in_period(day, month, within_period)
+            year = int(match.group(3)) if match.group(3) else None
+            # Число собирается из групп, а не склейкой строки: «14.08.2026»
+            # давало «14.08.08» и падение с ValueError.
+            literal = float(f"{day}.{month:02d}")
+            known_date = (day, month) in dates or _date_in_period(day, month, year, within_period)
             # Форма ДД.ММ и десятичное «14.02» неразличимы. Сомнение решается в
             # пользу текста: находка ставится, только если литерал не проходит
             # ни как дата периода, ни как обоснованное число.
@@ -199,21 +216,27 @@ def _period_days(period: dict[str, Any]) -> tuple[date, date] | None:
         return None
 
 
-def _date_in_period(day: int, month: int, period: tuple[date, date] | None) -> bool:
-    """Дата без года — внутри периода, если она попадает в него хоть одним годом.
+def _date_in_period(
+    day: int, month: int, year: int | None, period: tuple[date, date] | None
+) -> bool:
+    """Дата внутри периода.
 
-    Сводка пишет даты как ДД.ММ (так требует промпт), а период может пересекать
-    новый год; перебрать два года дешевле, чем угадывать.
+    Год модель обычно не пишет — промпт требует ДД.ММ, — и тогда он подбирается:
+    период может пересекать новый год, и перебрать два года дешевле, чем
+    угадывать. Написанный год проверяется как есть, поэтому «14.08.2025» в
+    периоде за август 2026 становится находкой.
     """
 
     if period is None:
         return False
     start, end = period
-    for year in {start.year, end.year}:
+    years = {year} if year is not None else {start.year, end.year}
+    for candidate in years:
+        full = candidate + 2000 if candidate < 100 else candidate
         try:
-            candidate = date(year, month, day)
+            when = date(full, month, day)
         except ValueError:
             continue
-        if start <= candidate <= end:
+        if start <= when <= end:
             return True
     return False

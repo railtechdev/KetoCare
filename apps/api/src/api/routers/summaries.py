@@ -27,7 +27,7 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from core import textguard
@@ -39,6 +39,7 @@ from core.repositories import patients as patients_repo
 
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
+from ..ratelimit import AI_RATE_LIMIT, limiter
 from ..services import queue as queue_service
 from ..services import summaries as summaries_service
 
@@ -151,7 +152,9 @@ async def list_summaries(
 
 
 @router.post("", response_model=SummaryRead, status_code=202, summary="Заказать черновик сводки")
+@limiter.limit(AI_RATE_LIMIT)
 async def request_summary(
+    request: Request,
     patient_id: Annotated[uuid.UUID, Path()],
     session: SessionDep,
     user: PatientAccessDep,
@@ -163,6 +166,9 @@ async def request_summary(
     Идемпотентно, пока задача не завершилась: двойное нажатие или перезагрузка
     страницы — это два обращения к smart-модели по кварталу дневника, оплаченных
     из общего дневного бюджета; исчерпав его, замолчал бы и помощник семей.
+
+    Идемпотентность закрывает повтор того же периода, но не перебор соседних —
+    поэтому здесь же стоит ограничитель частоты, общий с остальными ИИ-ручками.
     """
 
     _require_doctor(user)
@@ -199,9 +205,22 @@ async def request_summary(
 
     # Ряды уезжают в задачу готовыми: воркер не собирает их заново, иначе сводка
     # опишет одни числа, а отчёт покажет другие (ADR-0008, ADR-0023).
-    await queue_service.enqueue(
-        "doctor_summary", str(summary.id), str(user.id), str(patient.id), payload
-    )
+    try:
+        await queue_service.enqueue(
+            "doctor_summary", str(summary.id), str(user.id), str(patient.id), payload
+        )
+    except Exception:  # noqa: BLE001 — недоступная очередь не оставляет строку в «готовится»
+        # Строка уже записана: без этой ветки недоступный Redis оставил бы её в
+        # `queued` навсегда. `find_pending` возвращал бы её при каждом следующем
+        # заказе, экран показывал бы «черновик готовится», и период оказался бы
+        # заперт — задачи-то нет и не будет.
+        await summaries_repo.mark_failed(
+            session, summary.id, error="Очередь недоступна — задача не поставлена."
+        )
+        await session.commit()
+        raise ApiError(
+            ErrorCode.INTERNAL, "Не удалось поставить задачу. Попробуйте ещё раз."
+        ) from None
     return _read(summary)
 
 

@@ -97,6 +97,22 @@ class TestUngrounded:
         found = check("Кетоны держались около 2.6 ммоль/л, максимум 3.9.", empty)
         assert [item.value for item in found] == [2.6, 3.9]
 
+    def test_a_full_date_does_not_break_the_check(self) -> None:
+        """Дата с годом разбирается, а не роняет проверку.
+
+        Промпт просит ДД.ММ, но это просьба к модели, а не гарантия. Первая
+        версия собирала число склейкой строки и на «14.08.2026» падала с
+        ValueError — а падение здесь стоило бы оплаченного черновика и заперло
+        бы период: строка осталась бы в `running`, и повторный заказ возвращал
+        бы её же.
+        """
+
+        assert check("Приступ 14.08.2026 записан отдельно.", PAYLOAD) == []
+
+    def test_a_full_date_outside_the_period_is_found(self) -> None:
+        found = check("Приступ 14.08.2025 записан отдельно.", PAYLOAD)
+        assert [item.value for item in found] == [14.08]
+
     def test_a_date_outside_the_period_is_found(self) -> None:
         found = check("Приступ 14.09 записан отдельно.", PAYLOAD)
         assert found and found[0].fragment.startswith("приступ")

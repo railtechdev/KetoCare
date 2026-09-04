@@ -180,6 +180,18 @@ class TestRequest:
 
         assert response.status_code == 403
 
+    async def test_admin_has_no_access(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Админ к клиническим данным не ходит (раздел 5.1 ТЗ)."""
+
+        admin = await make_user(UserRole.ADMIN)
+        patient = await make_patient()
+
+        response = await client.post(_url(patient.id), headers=auth_headers(admin))
+
+        assert response.status_code == 403
+
     async def test_another_doctors_patient_is_closed(
         self, client, session, make_user, make_patient, auth_headers
     ):
@@ -329,6 +341,24 @@ class TestApprove:
         assert entry is not None
         assert "приступ" not in str(entry.after).lower()
 
+    async def test_a_summary_of_another_patient_is_not_found(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Свой `patient_id` в пути не открывает чужую сводку."""
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        other = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=other.id)
+        summary = await _with_draft(session, other, doctor)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/summaries/{summary.id}/approve",
+            json={"approved_md": DRAFT},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 404
+
     async def test_parent_may_not_approve(
         self, client, session, make_user, make_patient, auth_headers
     ):
@@ -381,6 +411,30 @@ class TestInTheReport:
         )
 
         assert [item["approved_md"] for item in response.json()["summaries"]] == [DRAFT]
+
+    async def test_a_ready_pdf_is_not_downloadable_by_another_user(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        """Содержимое PDF зависит от роли заказчика, поэтому файл — заказчику.
+
+        Врачебная сборка несёт сводки; родитель, узнавший идентификатор задачи,
+        получил бы её целиком, хотя своя сборка ему их не покажет.
+        """
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        parent = await make_user(UserRole.PARENT)
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+
+        created = await client.post(
+            f"/api/v1/patients/{patient.id}/report/pdf"
+            f"?from={PERIOD_FROM.isoformat()}&to={PERIOD_TO.isoformat()}",
+            headers=auth_headers(doctor),
+        )
+        job_id = created.json()["id"]
+
+        response = await client.get(f"/api/v1/reports/jobs/{job_id}", headers=auth_headers(parent))
+
+        assert response.status_code == 403
 
     async def test_the_family_report_carries_no_summaries(
         self, client, session, make_user, make_patient, auth_headers

@@ -263,6 +263,9 @@ async def medication_adherence(
         .where(
             MedicationLog.patient_id == patient_id,
             MedicationLog.deleted_at.is_(None),
+            # Отменённый препарат не пересказывается: он снят с назначения, и
+            # его отметки — не то, о чём сводка должна говорить врачу.
+            Medication.deleted_at.is_(None),
             MedicationLog.occurred_at >= period_from,
             MedicationLog.occurred_at <= period_to,
         )
@@ -300,7 +303,12 @@ async def days_with_entries(
     days: set[date] = set()
     for model in _DIARY_TABLES:
         rows = await session.scalars(
-            select(func.date(model.occurred_at))
+            # Сутки считаются в UTC явно. Голый `date(occurred_at)` над
+            # timestamptz режет по зоне сессии БД, а остальные ряды сводки
+            # получают дату питоновским `.date()` — то есть в UTC. Разойдясь,
+            # эти два способа дали бы «дней с записями» и «приступов по дням»,
+            # посчитанные по разным суткам, в одном документе.
+            select(func.date(func.timezone("UTC", model.occurred_at)))
             .where(
                 model.patient_id == patient_id,
                 model.deleted_at.is_(None),

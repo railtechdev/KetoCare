@@ -195,6 +195,38 @@ class TestTask:
         assert saved.status is AiJobStatus.FAILED
         assert saved.error
 
+    async def test_an_unexpected_error_also_becomes_a_visible_state(
+        self,
+        sessionmaker: async_sessionmaker,
+        user_id: uuid.UUID,
+        patient_id: uuid.UUID,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Не только `AiError`: любой сбой обязан закрыть строку.
+
+        Незамеченное исключение здесь ARQ повторил бы несколько раз — каждый
+        повтор новый платный вызов модели, — а исчерпав попытки, оставил бы
+        строку в `running`. `find_pending` возвращал бы её вечно, и сводку за
+        этот период нельзя было бы заказать уже никогда.
+        """
+
+        summary_id = await _order(sessionmaker, user_id, patient_id)
+
+        async def boom(*_: object, **__: object) -> None:
+            raise ValueError("что-то посчиталось не так")
+
+        monkeypatch.setattr("worker.ai.summary.summarize", boom)
+        monkeypatch.setattr("worker.ai.client.build_ai_client", lambda: None)
+        monkeypatch.setattr("core.db.get_sessionmaker", lambda: sessionmaker)
+
+        result = await doctor_summary({}, str(summary_id), str(user_id), str(patient_id), PAYLOAD)
+
+        assert result["status"] == "failed"
+        async with sessionmaker() as session:
+            saved = await summaries_repo.get(session, summary_id)
+        assert saved is not None
+        assert saved.status is AiJobStatus.FAILED
+
 
 async def _order(
     sessionmaker: async_sessionmaker, user_id: uuid.UUID, patient_id: uuid.UUID

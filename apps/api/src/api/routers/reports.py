@@ -234,6 +234,11 @@ async def _job_with_access(
 
     Именно тем же кодом, а не тем же репозиторием: копия проверки повторяла
     только вторую её ступень и пропускала сверку `patient_scope`.
+
+    Доступа к ребёнку при этом мало: содержимое файла зависит от того, кто его
+    заказал — врачебные сводки попадают в PDF только специалисту. Файл отдаётся
+    заказчику, иначе родитель, узнавший идентификатор задачи, получил бы
+    врачебную сборку целиком.
     """
 
     job = await jobs_repo.get(session, job_id)
@@ -241,6 +246,8 @@ async def _job_with_access(
         raise ApiError(ErrorCode.NOT_FOUND, "Задача отчёта не найдена.")
 
     await assert_patient_access(session, user, job.patient_id)
+    if job.requested_by != user.id:
+        raise ApiError(ErrorCode.FORBIDDEN, "Отчёт заказан другим пользователем.")
     return job
 
 
