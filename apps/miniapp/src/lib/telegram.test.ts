@@ -15,6 +15,7 @@ const retrieve = vi.hoisted(() => vi.fn());
 vi.mock("@telegram-apps/sdk-react", () => ({ retrieveRawInitData: retrieve }));
 
 afterEach(() => {
+  window.location.hash = "";
   retrieve.mockReset();
   delete (window as { Telegram?: unknown }).Telegram;
 });
@@ -28,7 +29,27 @@ function telegramWith(initData: string) {
   (window as { Telegram?: unknown }).Telegram = { WebApp: { initData } };
 }
 
+function withAddress(hash: string) {
+  window.location.hash = hash;
+}
+
 describe("строка запуска", () => {
+  it("берётся из адреса, даже когда SDK молчит", async () => {
+    // Замер на живом стенде: клиент передал параметры в хеше, а
+    // `retrieveRawInitData` строки не отдал — ни исключением, ни значением.
+    retrieve.mockReturnValue("");
+    withAddress("#tgWebAppData=query_id%3Dfrom-hash&tgWebAppVersion=7.0");
+
+    expect(await launchData()).toBe("query_id=from-hash");
+  });
+
+  it("адрес важнее прочих источников: подпись там свежая", async () => {
+    retrieve.mockReturnValue("query_id=from-sdk");
+    withAddress("#tgWebAppData=query_id%3Dfrom-hash");
+
+    expect(await launchData()).toBe("query_id=from-hash");
+  });
+
   it("берётся у SDK, когда он её нашёл", async () => {
     retrieve.mockReturnValue("query_id=from-sdk");
 

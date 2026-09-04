@@ -66,14 +66,19 @@ export function SessionGate({
             <span className="flex flex-col gap-field">
               <span>{t("session.outside.description")}</span>
               <span>
-                {facts.telegram
-                  ? t("session.outside.byLink")
-                  : t("session.outside.noScript")}
+                {!facts.telegram
+                  ? t("session.outside.noScript")
+                  : facts.launchParams
+                    ? // Клиент открыл приложение как Mini App, но подписи среди
+                      // параметров нет: обменивать на сессию нечего.
+                      t("session.outside.noSignature")
+                    : t("session.outside.byLink")}
               </span>
               <span className="text-xs">
                 {t("session.outside.diagnosis", {
                   telegram: facts.telegram ? yes : no,
                   launchParams: facts.launchParams ? yes : no,
+                  keys: facts.keys || no,
                 })}
               </span>
             </span>
