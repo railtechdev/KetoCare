@@ -5,6 +5,7 @@
 
 from . import (
     access,
+    ai_conversations,
     ai_jobs,
     attachments,
     audit,
@@ -32,6 +33,7 @@ from . import (
 
 __all__ = [
     "access",
+    "ai_conversations",
     "ai_jobs",
     "attachments",
     "audit",

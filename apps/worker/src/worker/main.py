@@ -19,6 +19,7 @@ from arq.connections import RedisSettings
 from core.config import Settings
 from core.observability import init_sentry
 
+from .ai.assistant import assistant_reply
 from .ai.parse import parse_free_text
 from .maintenance import close_stuck_ai_jobs, purge_files
 from .reminders.notify import notify_family
@@ -34,7 +35,7 @@ init_sentry("worker")
 
 
 class WorkerSettingsARQ:
-    functions: list[Any] = [render_report, notify_family, parse_free_text]
+    functions: list[Any] = [render_report, notify_family, parse_free_text, assistant_reply]
     # Уборка файлов — ночью и раз в сутки: работа дисковая, торопиться некуда,
     # а днём том занят выдачей отчётов и вложений.
     cron_jobs: list[Any] = [
