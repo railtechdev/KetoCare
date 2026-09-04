@@ -206,9 +206,19 @@ restrict,command="/srv/ketocare-deploy.sh" ssh-ed25519 …
 `BOT_TOKEN`, `BOT_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`,
 при появлении — `ANTHROPIC_API_KEY`, `SENTRY_DSN`.
 Переменные (там же, вкладка Variables): `WEB_ORIGIN`, `MINIAPP_ORIGIN`,
-`MINIAPP_URL`, `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
+`MINIAPP_URL`, `AI_MODEL_FAST`, `AI_MODEL_SMART`, `AI_DAILY_BUDGET_USD`,
+`AI_USER_DAILY_LIMIT`, `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
 `PUBLIC_CONTACT_EMAIL`, `PUBLIC_TELEGRAM_URL`, `LANDING_INDEXABLE`, `TZ`,
 `SENTRY_ENVIRONMENT` (по умолчанию `production`).
+
+**`AI_MODEL_FAST` и `AI_MODEL_SMART` — тот же случай, и он повторился.** Ключ
+`ANTHROPIC_API_KEY` в выкате был, а имён моделей не было ни в списке, ни в самом
+`deploy.yml`: ИИ-функции на стенде молча отвечали «недоступно», хотя ключ на
+месте. Код намеренно не подставляет модель по умолчанию — это был бы хардкод
+модели (правило 6). Значения: `claude-haiku-4-5` для разбора еды,
+`claude-opus-5` для помощника и сводок; обе обязаны быть в прайс-листе
+`worker/ai/pricing.py`, иначе клиент откажется работать, чтобы не выключить
+дневной бюджет.
 
 **`MINIAPP_URL` в этом списке когда-то не было — и кнопки «Приложение» в боте
 не было тоже.** Разбираться пришлось от симптома: приложение собирается каждым

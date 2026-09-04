@@ -108,6 +108,18 @@ jobs:
           BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Имена моделей (раздел 10.2 ТЗ). Не секреты — но принимаются и из
+          # Secrets: адрес Mini App уже наступил на эти грабли, а расплата
+          # несоразмерная — выкат успешен, ИИ-функции молча отвечают
+          # «недоступно». Пустое значение — тоже ответ: код отказывается
+          # подставлять модель по умолчанию, потому что это был бы хардкод
+          # модели (правило 6 CLAUDE.md).
+          AI_MODEL_FAST: ${{ vars.AI_MODEL_FAST || secrets.AI_MODEL_FAST }}
+          AI_MODEL_SMART: ${{ vars.AI_MODEL_SMART || secrets.AI_MODEL_SMART }}
+          # Предохранители расхода. Умолчания заданы в `core.config`, поэтому
+          # пустое значение здесь не ломает ничего — оно означает «как в коде».
+          AI_DAILY_BUDGET_USD: ${{ vars.AI_DAILY_BUDGET_USD }}
+          AI_USER_DAILY_LIMIT: ${{ vars.AI_USER_DAILY_LIMIT }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           # Имя окружения в Sentry: без него боевые ошибки лежали бы вперемешку
           # с ошибками с машины разработчика. Не секрет — переменная репозитория.
@@ -162,6 +174,8 @@ jobs:
           NAMES = [
               "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
               "BOT_USERNAME", "ANTHROPIC_API_KEY",
+              "AI_MODEL_FAST", "AI_MODEL_SMART",
+              "AI_DAILY_BUDGET_USD", "AI_USER_DAILY_LIMIT",
               "SENTRY_DSN", "SENTRY_ENVIRONMENT",
               "ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME",
               "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN", "MINIAPP_URL",
