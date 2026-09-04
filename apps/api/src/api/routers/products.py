@@ -20,6 +20,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
 from core.models import Product, ProductCategory
@@ -48,6 +49,7 @@ from ..schemas import (
     ProductRevisionRead,
     ProductUpdate,
 )
+from ..services import product_checks
 from ..services.product_import import ValidRow, parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -279,6 +281,80 @@ async def _category_name_is_free(
             "регистром или пробелами.",
             details={"category_id": str(existing.id)},
         )
+
+
+class ProductAnomalyRead(BaseModel):
+    """Находка по одному продукту.
+
+    Класс и числа — кодами: русский текст живёт в словарях фронтенда
+    (правило 8 CLAUDE.md), а не собирается здесь.
+    """
+
+    kind: str
+    values: dict[str, float]
+    field: str
+
+
+class ProductWithAnomalies(BaseModel):
+    product_id: uuid.UUID
+    name_ru: str
+    is_active: bool
+    anomalies: list[ProductAnomalyRead]
+
+
+# Объявлен ДО `/{product_id}`: маршруты разбираются в порядке объявления, и
+# перенос этого блока ниже превратил бы «anomalies» в идентификатор продукта.
+@router.get(
+    "/anomalies",
+    response_model=Page[ProductWithAnomalies],
+    summary="Продукты с подозрительными значениями",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def list_anomalies(
+    session: SessionDep,
+    _: CurrentUserDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Page[ProductWithAnomalies]:
+    """Проверка базы на аномалии (раздел 10.1 ТЗ, задача `content_draft`).
+
+    Считается арифметикой, а не моделью: обе проверки, которые называет ТЗ, —
+    счёт, а счёт, отданный модели, становится непроверяемым (ADR-0024). Границы
+    те же, что у импорта, — один модуль на оба места.
+
+    База просматривается целиком, пагинация применяется к находкам: «аномалий
+    нет» должно означать «нет в базе», а не «нет на этой странице».
+    """
+
+    rows = await products_repo.list_values(session)
+    found = [
+        ProductWithAnomalies(
+            product_id=row.id,
+            name_ru=row.name_ru,
+            is_active=row.is_active,
+            anomalies=[
+                ProductAnomalyRead(kind=item.kind.value, values=item.values, field=item.field)
+                for item in anomalies
+            ],
+        )
+        for row, anomalies in (
+            (
+                row,
+                product_checks.check(
+                    product_checks.Values(
+                        kcal=row.kcal_100g,
+                        fat=row.fat_100g,
+                        protein=row.protein_100g,
+                        carbs=row.carbs_100g,
+                        fiber=row.fiber_100g,
+                    )
+                ),
+            )
+            for row in rows
+        )
+        if anomalies
+    ]
+    return Page(items=found[offset : offset + limit], total=len(found))
 
 
 @router.get("/{product_id}", response_model=ProductRead, summary="Карточка продукта")

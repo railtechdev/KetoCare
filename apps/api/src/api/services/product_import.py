@@ -28,12 +28,14 @@ REQUIRED_COLUMNS = (
 
 OPTIONAL_COLUMNS = ("name_uz", "name_en")
 
-# Физиологичные границы значений на 100 г — отсекают явные ошибки ввода
+# Физиологичные границы значений на 100 г — отсекают явные ошибки ввода.
+# Публичные: тем же границам подчиняется проверка уже загруженной базы
+# (`product_checks`), и две копии однажды разошлись бы.
 # (перепутанные колонки, значения в кДж вместо ккал). 100 г макронутриентов на
 # 100 г продукта — верхняя граница по определению; предел калорийности опирается
 # на проверку аномалий из раздела 10.1 ТЗ.
-_MACRO_MAX = 100.0
-_KCAL_MAX = 1000.0
+MACRO_MAX = 100.0
+KCAL_MAX = 1000.0
 
 
 @dataclass(slots=True)
@@ -189,11 +191,11 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
         parsed[column] = value
 
     for column, limit in (
-        ("kcal_100g", _KCAL_MAX),
-        ("fat_100g", _MACRO_MAX),
-        ("protein_100g", _MACRO_MAX),
-        ("carbs_100g", _MACRO_MAX),
-        ("fiber_100g", _MACRO_MAX),
+        ("kcal_100g", KCAL_MAX),
+        ("fat_100g", MACRO_MAX),
+        ("protein_100g", MACRO_MAX),
+        ("carbs_100g", MACRO_MAX),
+        ("fiber_100g", MACRO_MAX),
     ):
         raw_value = (row.get(column) or "").strip().replace(",", ".")
         try:
@@ -225,7 +227,7 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
     macros = [parsed.get(c) for c in ("fat_100g", "protein_100g", "carbs_100g")]
     if all(isinstance(m, float) for m in macros):
         macro_sum = sum(macros)  # type: ignore[arg-type]
-        if macro_sum > _MACRO_MAX:
+        if macro_sum > MACRO_MAX:
             errors.append(
                 RowError(
                     line_no,

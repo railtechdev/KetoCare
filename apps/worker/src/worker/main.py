@@ -2,8 +2,8 @@
 
 Задачи раздела 10.1 ТЗ подключаются по мере готовности этапов: сейчас здесь
 `render_report` (раздел 15 п. 14), уборка файлов, напоминания, `parse_free_text`
-(п. 19 этапа 4), `assistant_reply` (п. 20) и `doctor_summary` (п. 21).
-Осталась `content_draft` — черновики карточек рецептов для администратора.
+(п. 19 этапа 4), `assistant_reply`, `doctor_summary` и `content_draft` (п. 21) —
+то есть все задачи раздела 10.1.
 
 Адрес Redis берётся из `core.config.Settings` — того же места, откуда его берёт
 API. Своя `BaseSettings` у воркера читала только переменные процесса и не видела
@@ -20,6 +20,7 @@ from core.config import Settings
 from core.observability import init_sentry
 
 from .ai.assistant import assistant_reply
+from .ai.content import content_draft
 from .ai.parse import parse_free_text
 from .ai.summary import doctor_summary
 from .maintenance import close_stuck_ai_jobs, purge_files
@@ -42,6 +43,7 @@ class WorkerSettingsARQ:
         parse_free_text,
         assistant_reply,
         doctor_summary,
+        content_draft,
     ]
     # Уборка файлов — ночью и раз в сутки: работа дисковая, торопиться некуда,
     # а днём том занят выдачей отчётов и вложений.
