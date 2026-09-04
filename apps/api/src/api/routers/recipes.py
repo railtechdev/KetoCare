@@ -9,25 +9,29 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Path, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from core.models import Recipe
 from core.models.enums import AttachmentOwnerKind, RecipeCategory, RecipeStatus, UserRole
 from core.repositories import attachments as attachments_repo
 from core.repositories import audit as audit_repo
+from core.repositories import products as products_repo
 from core.repositories import recipes as recipes_repo
 
 from ..client_address import client_address
 from ..deps.auth import CurrentUser, CurrentUserDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
-from ..schemas import Page
+from ..ratelimit import IMPORT_RATE_LIMIT, limiter
+from ..schemas import ImportRowError, Page
 from ..schemas_recipes import RecipeRead, RecipeWrite
 from ..services import attachments as files_service
+from ..services import recipe_import, uploads
 from ..services import recipes as recipes_service
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
@@ -453,3 +457,162 @@ async def delete_recipe(
         before=before.model_dump(mode="json"),
     )
     return Response(status_code=204)
+
+
+class RecipeImportRow(BaseModel):
+    """Рецепт, который импорт заведёт. Показывается в превью до записи."""
+
+    line: int
+    title: str
+    category: RecipeCategory
+    servings: int
+    ingredients: int
+    kcal: float | None = None
+    ratio: float | None = None
+
+
+class RecipeImportReport(BaseModel):
+    total_rows: int
+    imported: int
+    recipes: list[RecipeImportRow] = []
+    errors: list[ImportRowError] = []
+    dry_run: bool
+
+
+@router.post(
+    "/import",
+    response_model=RecipeImportReport,
+    summary="Импорт рецептов из CSV (с превью)",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+@limiter.limit(IMPORT_RATE_LIMIT)
+async def import_recipes(
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+    file: Annotated[UploadFile, File()],
+    dry_run: bool = True,
+) -> RecipeImportReport:
+    """Завести сборник рецептов разом (раздел 15 п. 24 ТЗ).
+
+    Формат — строка на ингредиент, описание и шаблон в `docs/import/README.md`.
+    Продукты сопоставляются по названию: файл готовит человек по своей таблице, а
+    идентификаторов нашей базы он не знает.
+
+    **Существующие рецепты не трогаются.** У продуктов обновляющий импорт есть —
+    там приходит новая версия справочника состава, и обновить 400 позиций руками
+    нельзя. Рецепт же правит человек: у него есть фото, статус публикации и
+    правки диетолога, и перезапись файлом стёрла бы их молча. Совпадение по
+    названию — ошибка строки, а не повод обновить.
+
+    Рецепты заводятся черновиками: публикация — отдельное решение (раздел 5.3).
+    """
+
+    content = await uploads.read_within_limit(file)
+    report = recipe_import.parse_csv(content)
+    errors = [
+        ImportRowError(line=e.line, column=e.column, message=e.message) for e in report.errors
+    ]
+
+    # Продукты и существующие названия — двумя запросами на весь файл, а не по
+    # запросу на строку: в сборнике сотни строк состава.
+    names = [item.product_name for recipe in report.recipes for item in recipe.ingredients]
+    products = await products_repo.get_by_names(session, names=names)
+    taken = await recipes_repo.titles_taken(
+        session, titles=[recipe.title for recipe in report.recipes]
+    )
+
+    ready: list[tuple[Any, list[tuple[uuid.UUID, float]]]] = []
+    for recipe in report.recipes:
+        if recipe.title.casefold().strip() in taken:
+            errors.append(
+                ImportRowError(
+                    line=recipe.line,
+                    column="title",
+                    message=(
+                        f"Рецепт «{recipe.title}» уже есть — строка пропущена. "
+                        "Импорт не переписывает существующие рецепты: у них бывают "
+                        "фото, статус публикации и правки диетолога."
+                    ),
+                )
+            )
+            continue
+
+        composition: list[tuple[uuid.UUID, float]] = []
+        unknown = False
+        for item in recipe.ingredients:
+            product = products.get(item.product_name.casefold().strip())
+            if product is None:
+                errors.append(
+                    ImportRowError(
+                        line=item.line,
+                        column="product_name",
+                        message=f"Продукта «{item.product_name}» нет в справочнике.",
+                    )
+                )
+                unknown = True
+                continue
+            composition.append((product.id, item.grams))
+        if not unknown:
+            ready.append((recipe, composition))
+
+    preview: list[RecipeImportRow] = []
+    for recipe, composition in ready:
+        computed, _ = await recipes_service.compute(session, composition=composition)
+        preview.append(
+            RecipeImportRow(
+                line=recipe.line,
+                title=recipe.title,
+                category=recipe.category,
+                servings=recipe.servings,
+                ingredients=len(composition),
+                kcal=computed.get("kcal"),
+                ratio=computed.get("ratio"),
+            )
+        )
+
+    if dry_run or errors:
+        # Файл с ошибками не импортируется частично: сборник рецептов, заведённый
+        # наполовину, разбирать дороже, чем завести заново.
+        return RecipeImportReport(
+            total_rows=report.total_rows,
+            imported=len(preview) if dry_run and not errors else 0,
+            recipes=preview,
+            errors=errors,
+            dry_run=dry_run,
+        )
+
+    for recipe, composition in ready:
+        computed, engine_version = await recipes_service.compute(session, composition=composition)
+        created = await recipes_repo.create(
+            session,
+            title=recipe.title,
+            category=recipe.category,
+            photo_path=None,
+            yield_g=recipe.yield_g,
+            servings=recipe.servings,
+            instructions=recipe.instructions,
+            author_id=user.id,
+            ingredients=composition,
+            computed=computed,
+            engine_version=engine_version,
+        )
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="import",
+            entity="recipes",
+            entity_id=created.id,
+            before=None,
+            after={"title": created.title, "line": recipe.line},
+            ip=client_address(request),
+        )
+
+    await session.commit()
+    return RecipeImportReport(
+        total_rows=report.total_rows,
+        imported=len(ready),
+        recipes=preview,
+        errors=errors,
+        dry_run=False,
+    )
