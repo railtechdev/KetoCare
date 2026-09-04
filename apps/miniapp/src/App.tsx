@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  Bot,
   Calculator,
   ChartLine,
   House,
@@ -9,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TabBar, type TabBarItem } from "./components/TabBar";
+import { AssistantScreen } from "./features/assistant/AssistantScreen";
 import { CalculatorScreen } from "./features/calculator/CalculatorScreen";
 import { ChartsScreen } from "./features/charts/ChartsScreen";
 import { RecipesScreen } from "./features/recipes/RecipesScreen";
@@ -19,7 +21,8 @@ import type { Session } from "./features/session/useSession";
 import { webApp } from "./lib/telegram";
 import { applyTelegramTheme, watchTelegramTheme } from "./lib/theme";
 
-type TabId = "home" | "menu" | "calculator" | "recipes" | "charts";
+type TabId =
+  "home" | "menu" | "calculator" | "recipes" | "charts" | "assistant";
 
 /**
  * Mini App: кабинет родителя внутри Telegram (раздел 9 ТЗ).
@@ -57,6 +60,9 @@ function Screens({ session }: { session: Session }) {
     { id: "calculator", label: t("tabs.calculator"), icon: Calculator },
     { id: "recipes", label: t("tabs.recipes"), icon: BookOpen },
     { id: "charts", label: t("tabs.charts"), icon: ChartLine },
+    // Шестая и последняя: больше в нижнюю полосу не помещается — на 360 px
+    // это по 60 px на вкладку, и подпись перестаёт читаться.
+    { id: "assistant", label: t("tabs.assistant"), icon: Bot },
   ];
 
   return (
@@ -67,6 +73,7 @@ function Screens({ session }: { session: Session }) {
         {tab === "calculator" && <CalculatorScreen session={session} />}
         {tab === "recipes" && <RecipesScreen />}
         {tab === "charts" && <ChartsScreen session={session} />}
+        {tab === "assistant" && <AssistantScreen session={session} />}
       </div>
       <TabBar items={tabs} active={tab} onSelect={setTab} />
     </>
