@@ -385,10 +385,7 @@ class TestWiring:
         (вопрос 23 закрыт шкалой анкеты, ADR-0020) в меню есть все.
         """
 
-        with_app = BotSettings(
-            bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
-        )
-        labels = {button.text for row in keyboards.main_menu(with_app).keyboard for button in row}
+        labels = {button.text for row in keyboards.main_menu(SETTINGS).keyboard for button in row}
         assert labels == {
             texts.BTN_SEIZURE,
             texts.BTN_KETONES,
@@ -396,39 +393,79 @@ class TestWiring:
             texts.BTN_MEAL,
             texts.BTN_MEDICATION,
             texts.BTN_WELLBEING,
-            texts.BTN_APP,
         }
 
-    def test_app_button_opens_the_mini_app(self):
-        """Кнопка обязана нести адрес: без `web_app` она просто текст, и
-        Telegram ничего не откроет."""
 
-        settings = BotSettings(
+class TestMiniAppEntry:
+    """Mini App открывается кнопкой МЕНЮ, а не кнопкой клавиатуры.
+
+    Документация Telegram: «initData … empty if the Mini App was launched from
+    a keyboard button». Приложение, открытое из клавиатуры, подписи не получает
+    вовсе и войти не может — проверено на живом стенде: клиент передавал
+    `tgWebAppVersion`, `tgWebAppPlatform`, `tgWebAppThemeParams` и ни одного
+    `tgWebAppData`.
+    """
+
+    def test_keyboard_has_no_app_button_even_when_deployed(self):
+        with_app = BotSettings(
             bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
         )
-        buttons = [b for row in keyboards.main_menu(settings).keyboard for b in row]
-        app_button = next(b for b in buttons if b.text == texts.BTN_APP)
 
-        assert app_button.web_app is not None
-        assert app_button.web_app.url == "https://tma.example.uz"
+        labels = {b.text for row in keyboards.main_menu(with_app).keyboard for b in row}
 
-    def test_app_button_is_absent_until_the_mini_app_is_deployed(self):
-        """Кнопка, которая никуда не ведёт, хуже отсутствующей.
+        assert all("риложение" not in label for label in labels)
 
-        Хуже буквально: Telegram отвергает `web_app` с пустым или http-адресом,
-        и тогда не приходит ВСЁ сообщение — то есть меню исчезает целиком.
-        """
+    @pytest.mark.asyncio
+    async def test_menu_button_carries_the_address(self):
+        from aiogram.types import MenuButtonWebApp
 
-        labels = {b.text for row in keyboards.main_menu(SETTINGS).keyboard for b in row}
-        assert texts.BTN_APP not in labels
+        from bot.main import setup_bot_profile
 
-    def test_http_address_is_not_offered_to_telegram(self):
-        # Telegram принимает в `web_app` только https.
-        insecure = BotSettings(
-            bot_token="t", bot_api_token="s", miniapp_url="http://tma.example.uz"
+        with_app = BotSettings(
+            bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
         )
-        labels = {b.text for row in keyboards.main_menu(insecure).keyboard for b in row}
-        assert texts.BTN_APP not in labels
+        seen: dict[str, object] = {}
+
+        class FakeBot:
+            async def set_my_commands(self, *_: object, **__: object) -> None: ...
+
+            async def set_my_description(self, *_: object, **__: object) -> None: ...
+
+            async def set_my_short_description(self, *_: object, **__: object) -> None: ...
+
+            async def set_chat_menu_button(self, *, menu_button: object) -> None:
+                seen["button"] = menu_button
+
+        await setup_bot_profile(FakeBot(), with_app)  # type: ignore[arg-type]
+
+        button = seen["button"]
+        assert isinstance(button, MenuButtonWebApp)
+        assert button.web_app.url == "https://tma.example.uz"
+
+    @pytest.mark.asyncio
+    async def test_menu_button_is_reset_without_an_address(self):
+        """Кнопка меню, ведущая в никуда, хуже отсутствующей: она занимает
+        единственное видное место рядом с полем ввода."""
+
+        from aiogram.types import MenuButtonDefault
+
+        from bot.main import setup_bot_profile
+
+        seen: dict[str, object] = {}
+
+        class FakeBot:
+            async def set_my_commands(self, *_: object, **__: object) -> None: ...
+
+            async def set_my_description(self, *_: object, **__: object) -> None: ...
+
+            async def set_my_short_description(self, *_: object, **__: object) -> None: ...
+
+            async def set_chat_menu_button(self, *, menu_button: object) -> None:
+                seen["button"] = menu_button
+
+        await setup_bot_profile(FakeBot(), SETTINGS)  # type: ignore[arg-type]
+
+        assert isinstance(seen["button"], MenuButtonDefault)
 
 
 class TestEventTimeStep:
@@ -829,8 +866,11 @@ class TestBotProfile:
             async def set_my_short_description(self, *, short_description):
                 self.short_description = short_description
 
+            async def set_chat_menu_button(self, *, menu_button):
+                self.menu_button = menu_button
+
         bot = FakeBot()
-        await bot_main.setup_bot_profile(bot)
+        await bot_main.setup_bot_profile(bot, SETTINGS)
 
         assert {c.command for c in bot.commands} == {"start", "help"}
         assert all(c.description for c in bot.commands)
@@ -847,7 +887,7 @@ class TestBotProfile:
             async def set_my_commands(self, commands):
                 raise RuntimeError("telegram is down")
 
-        await bot_main.setup_bot_profile(BrokenBot())
+        await bot_main.setup_bot_profile(BrokenBot(), SETTINGS)
 
 
 class TestCancelOnOldMessage:

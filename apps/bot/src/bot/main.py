@@ -16,7 +16,13 @@ import httpx
 import structlog
 from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.types import BotCommand, TelegramObject
+from aiogram.types import (
+    BotCommand,
+    MenuButtonDefault,
+    MenuButtonWebApp,
+    TelegramObject,
+    WebAppInfo,
+)
 from redis.asyncio import Redis
 
 from . import texts
@@ -79,7 +85,7 @@ BOT_COMMANDS = [
 ]
 
 
-async def setup_bot_profile(bot: Bot) -> None:
+async def setup_bot_profile(bot: Bot, settings: BotSettings) -> None:
     """Команды и описания бота — то, что родитель видит до первого сообщения.
 
     Экран «Что умеет этот бот?» до /start и строка в списке чатов были пустыми.
@@ -92,8 +98,40 @@ async def setup_bot_profile(bot: Bot) -> None:
         await bot.set_my_commands(BOT_COMMANDS)
         await bot.set_my_description(description=texts.BOT_DESCRIPTION)
         await bot.set_my_short_description(short_description=texts.BOT_SHORT_DESCRIPTION)
+        await _setup_menu_button(bot, settings)
     except Exception as exc:  # noqa: BLE001 — косметика не должна ронять запуск
         logger.warning("bot_profile_setup_failed", reason=str(exc))
+
+
+async def _setup_menu_button(bot: Bot, settings: BotSettings) -> None:
+    """Mini App открывается КНОПКОЙ МЕНЮ, а не кнопкой клавиатуры.
+
+    Разница не косметическая, она решающая. Документация Telegram:
+    «initData … empty if the Mini App was launched from a keyboard button» —
+    приложение, запущенное из обычной клавиатуры, подписи не получает вовсе,
+    такие кнопки рассчитаны на `sendData()`. Проверено на живом стенде: клиент
+    передавал `tgWebAppVersion`, `tgWebAppPlatform`, `tgWebAppThemeParams` — и
+    ни одного `tgWebAppData`, поэтому вход был невозможен в принципе.
+
+    Кнопка меню работает «exactly the same way as when using inline buttons»,
+    то есть с полной подписью, и стоит постоянно слева от поля ввода — искать
+    её не нужно.
+
+    Пустой или не-https адрес возвращает кнопку по умолчанию: кнопка меню,
+    ведущая в никуда, хуже отсутствующей — она занимает единственное видное
+    место рядом с полем ввода.
+    """
+
+    if not settings.has_miniapp:
+        await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
+        return
+
+    await bot.set_chat_menu_button(
+        menu_button=MenuButtonWebApp(
+            text=texts.BTN_APP_MENU,
+            web_app=WebAppInfo(url=settings.miniapp_url.strip()),
+        )
+    )
 
 
 async def main() -> None:
@@ -115,7 +153,7 @@ async def main() -> None:
     )
 
     try:
-        await setup_bot_profile(bot)
+        await setup_bot_profile(bot, settings)
         await dp.start_polling(bot)
     finally:
         await http.aclose()
