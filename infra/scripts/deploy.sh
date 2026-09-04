@@ -128,5 +128,39 @@ if [ "${1:-}" != "--api-only" ]; then
     rsync -a --delete packages/landing/dist/ "$LANDING_ROOT"/
 fi
 
+check_headers() {
+    # Заголовки безопасности (раздел 11 ТЗ) проверяются после каждого выката, а
+    # не предполагаются. Причина конкретная: `add_header` в nginx наследуется с
+    # уровня `server` только туда, где нет ни одной своей директивы
+    # `add_header`. Политика, написанная один раз наверху, молча не доходит до
+    # `location` с `Cache-Control` — ровно так защита от вставки в рамку не
+    # попадала на index.html Mini App, выглядя при этом настроенной.
+    #
+    # Не ошибка выката: код выложен правильно, а конфигурация nginx ставится
+    # руками (docs/DEPLOY.md). Но молчать об этом нельзя.
+    url="$1"
+    shift
+    headers=$(curl -fsSI --max-time 10 "$url" 2>/dev/null) || {
+        echo "Заголовки $url проверить не удалось — сайт не ответил."
+        return
+    }
+    for expected in "$@"; do
+        if ! printf '%s' "$headers" | grep -qi "$expected"; then
+            echo "У $url нет заголовка «$expected» — см. docs/DEPLOY.md, «nginx и TLS»."
+        fi
+    done
+}
+
+if [ -n "${WEB_ORIGIN:-}" ]; then
+    check_headers "$WEB_ORIGIN/" "x-frame-options" "content-security-policy" "strict-transport-security"
+fi
+case "${MINIAPP_URL:-}" in
+    https://*)
+        # У Mini App своя политика: рамка разрешена клиентам Telegram, и
+        # X-Frame-Options здесь быть НЕ должно — он умеет только DENY.
+        check_headers "$MINIAPP_URL" "content-security-policy"
+        ;;
+esac
+
 $COMPOSE ps
 echo "Деплой завершён: $(git rev-parse --short HEAD)"

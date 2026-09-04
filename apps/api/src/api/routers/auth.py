@@ -21,7 +21,7 @@ from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
-from ..cookies import set_auth_cookies
+from ..cookies import clear_auth_cookies, set_auth_cookies
 from ..deps.auth import (
     CurrentUserDep,
     PasswordResetUserDep,
@@ -310,8 +310,7 @@ async def telegram_init(
 
 @router.post("/logout", status_code=204, summary="Выход")
 async def logout(response: Response) -> None:
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+    clear_auth_cookies(response)
 
 
 @router.post("/totp/setup", response_model=TotpSetupResponse, summary="Начать настройку 2FA")
