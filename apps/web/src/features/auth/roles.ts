@@ -24,8 +24,10 @@ export function isRole(value: unknown): value is Role {
 export const SIDEBAR_HIDDEN_SECTIONS: readonly string[] = ["profile"];
 
 export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
-  // «Ассистент» появится вместе со своей работой (этап 4). Пункт меню, за
-  // которым ничего нет, хуже его отсутствия — правило П3 канона.
+  // «Помощник» появился вместе со своей работой (п. 20 этапа 4): он отвечает по
+  // материалам приложения, а на вопросы о ребёнке — шаблоном со ссылкой на
+  // врача. Пункт меню, за которым ничего нет, хуже его отсутствия (П3), и до
+  // работающего экрана этого пункта здесь не было.
   parent: [
     "home",
     "menu",
@@ -33,6 +35,7 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
     "calculator",
     "recipes",
     "products",
+    "assistant",
     "reports",
     "child",
     "profile",

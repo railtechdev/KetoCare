@@ -19,6 +19,7 @@ import {
 import type { ReactElement } from "react";
 
 import { AdminPage } from "../features/admin/AdminPage";
+import { AssistantPage } from "../features/assistant/AssistantPage";
 import type { Role } from "../features/auth/roles";
 import { CalculatorPage } from "../features/calculator/CalculatorPage";
 import { DiaryPage } from "../features/diary/DiaryPage";
@@ -47,6 +48,14 @@ import { ChildPage } from "../features/child/ChildPage";
 export type SectionScreen = (role: Role | undefined) => ReactElement;
 
 export const SECTION_SCREENS: Record<string, SectionScreen> = {
+  // Помощник — только у семьи и только с выбранным ребёнком: обращение обязано
+  // идти с `patient_id`, иначе переписку не удалит `erase_patient` (ADR-0019),
+  // а врач не увидит переписку своего пациента.
+  assistant: () => (
+    <PatientGate
+      render={(patientId) => <AssistantPage patientId={patientId} />}
+    />
+  ),
   // Главная у семьи и у специалиста отвечает на разные вопросы: родителю —
   // «что сейчас», врачу — «кем заняться» (`docs/DESIGN_PROPOSAL.md`). Экран
   // выбирается по роли, как у `products`; право читать проверяет сервер.

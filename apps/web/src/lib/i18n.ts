@@ -2,6 +2,7 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
 import adminRu from "../locales/ru/admin.json";
+import assistantRu from "../locales/ru/assistant.json";
 import authRu from "../locales/ru/auth.json";
 import calculatorRu from "../locales/ru/calculator.json";
 import commonRu from "../locales/ru/common.json";
@@ -31,6 +32,7 @@ export const resources = {
   ru: {
     common: commonRu,
     admin: adminRu,
+    assistant: assistantRu,
     auth: authRu,
     calculator: calculatorRu,
     diary: diaryRu,
