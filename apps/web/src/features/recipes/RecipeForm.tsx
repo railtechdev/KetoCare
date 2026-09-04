@@ -1,8 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, EmptyState, FormFooter, Input } from "@ketocare/ui";
-import { CookingPot, X } from "lucide-react";
+import { Button, EmptyState, FormFooter, Input, toast } from "@ketocare/ui";
+import { CookingPot, Sparkles, X } from "lucide-react";
 import { useId } from "react";
-import { useFieldArray, useForm, type DefaultValues } from "react-hook-form";
+import {
+  useFieldArray,
+  useForm,
+  useWatch,
+  type DefaultValues,
+} from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
@@ -11,6 +16,7 @@ import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { ProductPicker } from "../calculator/ProductPicker";
 import { recipeFormSchema, type RecipeFormValues } from "./schemas";
+import { useRecipeDraftMutation, type DraftCheck } from "./useRecipeDraft";
 import { RECIPE_CATEGORIES } from "./types";
 
 interface Props {
@@ -46,6 +52,7 @@ export function RecipeForm({
     control,
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<RecipeFormValues>({
     resolver: zodResolver(recipeFormSchema),
@@ -53,6 +60,40 @@ export function RecipeForm({
   });
 
   const ingredients = useFieldArray({ control, name: "ingredients" });
+
+  // Черновик собирается по тому, что уже введено в форме: состав закрыт, и
+  // модель получает готовый список, а не подбирает его сама.
+  const draft = useRecipeDraftMutation();
+  const watched = useWatch({ control });
+  const draftReady =
+    (watched.title ?? "").trim().length > 1 &&
+    (watched.ingredients ?? []).length > 0;
+
+  function requestDraft() {
+    draft.mutate(
+      {
+        title: (watched.title ?? "").trim(),
+        category: watched.category ?? "breakfast",
+        servings:
+          watched.servings && watched.servings > 0 ? watched.servings : 1,
+        ingredients: (watched.ingredients ?? []).map((item) => ({
+          product_id: item?.productId ?? "",
+          grams: item?.grams ?? 0,
+        })),
+      },
+      {
+        onSuccess: (result) => {
+          // Текст кладётся в поле, а не показывается отдельно: редактор правит
+          // его там же, где сохраняет, и черновик не остаётся вторым текстом,
+          // о котором легко забыть.
+          setValue("instructions", result.instructions, { shouldDirty: true });
+          toast.success(t("form.draft.done"));
+        },
+        onError: (error) =>
+          toast.error(errorMessageOf(error) ?? t("common:errors.unexpected")),
+      },
+    );
+  }
 
   const categoryId = `${ids}-category`;
   const instructionsId = `${ids}-instructions`;
@@ -262,6 +303,30 @@ export function RecipeForm({
             error={errors.instructions && t("form.errors.instructions")}
             {...register("instructions")}
           />
+
+          <div className="mt-field flex flex-col items-start gap-field">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch"
+              disabled={!draftReady || draft.isPending}
+              aria-busy={draft.isPending || undefined}
+              onClick={requestDraft}
+            >
+              <Sparkles aria-hidden="true" />
+              {draft.isPending
+                ? t("form.draft.pending")
+                : t("form.draft.action")}
+            </Button>
+            <p className="m-0 text-sm text-muted-foreground">
+              {draftReady
+                ? t("form.draft.hint")
+                : t("form.draft.needComposition")}
+            </p>
+            {draft.data && draft.data.checks.length > 0 && (
+              <DraftChecks checks={draft.data.checks} />
+            )}
+          </div>
         </fieldset>
 
         {error !== null && error !== undefined && (
@@ -281,5 +346,39 @@ export function RecipeForm({
         />
       </form>
     </PageLayout>
+  );
+}
+
+/**
+ * Что нашёл постфильтр в черновике.
+ *
+ * Показывается рядом с текстом, а не вместо него: текст уже в поле, и редактор
+ * решает сам. Класс приходит с сервера кодом — формулировка живёт в словаре
+ * (правило 8 CLAUDE.md).
+ */
+function DraftChecks({ checks }: { checks: DraftCheck[] }) {
+  const { t } = useTranslation("recipes");
+
+  return (
+    <div className="flex flex-col gap-field">
+      <p className="m-0 text-sm font-medium">{t("form.draft.checks")}</p>
+      <ul className="m-0 flex list-none flex-col gap-field p-0">
+        {checks.map((check, index) => (
+          <li key={`${check.kind}-${index}`} className="text-sm">
+            <span className={check.hard ? "text-destructive" : "text-warning"}>
+              {t(`form.draft.kind.${check.kind}`, {
+                defaultValue: t("form.draft.kind.other"),
+              })}
+            </span>
+            {check.fragment && (
+              <span className="text-muted-foreground">
+                {" "}
+                — «{check.fragment}»
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

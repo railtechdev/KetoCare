@@ -91,16 +91,20 @@ class Finding:
         }
 
 
-def check(text: str) -> list[Finding]:
-    """Найти в сводке всё, чему в ней быть не положено.
+def check(text: str, *, require_sections: bool = True) -> list[Finding]:
+    """Найти в тексте всё, чему в нём быть не положено.
 
-    Пустой список — сводка прошла. Ошибка внутри фильтра возвращает находку
+    Пустой список — текст прошёл. Ошибка внутри фильтра возвращает находку
     класса `internal`: непроверенный текст утвердить нельзя (fail-closed), но и
-    выбрасывать его не за что — врач увидит и текст, и причину.
+    выбрасывать его не за что — человек увидит и текст, и причину.
+
+    `require_sections` — только для сводки: шесть разделов требует раздел 10.5
+    ТЗ, а у карточки рецепта своя форма. Правила предложений при этом общие:
+    обещание лечебного действия одинаково недопустимо и там, и там.
     """
 
     try:
-        return _check(text)
+        return _check(text, require_sections=require_sections)
     except Exception as error:  # noqa: BLE001 — фильтр падает в сторону запрета
         return [Finding(Kind.INTERNAL, "fail-closed", "", str(error)[:200])]
 
@@ -109,10 +113,10 @@ def has_hard(findings: list[Finding]) -> bool:
     return any(finding.hard for finding in findings)
 
 
-def _check(text: str) -> list[Finding]:
+def _check(text: str, *, require_sections: bool) -> list[Finding]:
     findings: list[Finding] = []
 
-    missing = _missing_sections(text)
+    missing = _missing_sections(text) if require_sections else set()
     if missing:
         findings.append(Finding(Kind.STRUCTURE, "missing_sections", "", ", ".join(sorted(missing))))
 

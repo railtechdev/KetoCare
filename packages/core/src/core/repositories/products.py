@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -346,3 +347,55 @@ async def get_by_ids(
 
     rows = await session.scalars(select(Product).where(Product.id.in_(list(product_ids))))
     return {product.id: product for product in rows}
+
+
+@dataclass(frozen=True, slots=True)
+class ProductValues:
+    """Значения продукта на 100 г — то, по чему считается проверка аномалий."""
+
+    id: uuid.UUID
+    name_ru: str
+    is_active: bool
+    kcal_100g: float
+    fat_100g: float
+    protein_100g: float
+    carbs_100g: float
+    fiber_100g: float
+
+
+async def list_values(session: AsyncSession) -> list[ProductValues]:
+    """Значения всех продуктов базы — для проверки на аномалии (раздел 10.1 ТЗ).
+
+    Без пагинации: проверка смотрит базу целиком, иначе «аномалий нет» означало
+    бы «нет на этой странице». Полей ровно пять, и даже на десятке тысяч строк
+    это несколько сотен килобайт.
+
+    Отключённые продукты входят: их не предлагают в меню, но они остаются в
+    сохранённых блюдах, и ошибка в значениях продолжает считаться.
+    """
+
+    rows = await session.execute(
+        select(
+            Product.id,
+            Product.name_ru,
+            Product.is_active,
+            Product.kcal_100g,
+            Product.fat_100g,
+            Product.protein_100g,
+            Product.carbs_100g,
+            Product.fiber_100g,
+        ).order_by(Product.name_ru)
+    )
+    return [
+        ProductValues(
+            id=row[0],
+            name_ru=row[1],
+            is_active=row[2],
+            kcal_100g=float(row[3]),
+            fat_100g=float(row[4]),
+            protein_100g=float(row[5]),
+            carbs_100g=float(row[6]),
+            fiber_100g=float(row[7]),
+        )
+        for row in rows
+    ]

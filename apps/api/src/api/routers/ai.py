@@ -17,14 +17,15 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.models.enums import AiConversationChannel, UserRole
+from core.models.enums import AiConversationChannel, RecipeCategory, UserRole
 from core.repositories import ai_conversations as conversations_repo
+from core.repositories import products as products_repo
 from core.schemas.ai_conversations import new_message
 
-from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access
+from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AI_RATE_LIMIT, limiter
 from ..schemas_ai import AssistantAccepted, AssistantAsk
@@ -34,6 +35,11 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 #: Сколько ждём разбор. Раздел 10.1 ТЗ: ручка ждёт синхронно, таймаут 15 с.
 PARSE_TIMEOUT_S = 15.0
+
+#: Сколько ждём черновик рецепта. Дольше разбора: там одна фраза, здесь восемь
+#: шагов у smart-модели. Меньше шестидесяти — на шестидесятой nginx рвёт
+#: соединение, и оплаченный ответ терялся бы на границе прокси.
+RECIPE_DRAFT_TIMEOUT_S = 45.0
 
 
 class ParseRequest(BaseModel):
@@ -211,6 +217,122 @@ async def ask_assistant(
 
     return AssistantAccepted(
         conversation_id=conversation_id, question_seq=question_seq, reply_seq=reply_seq
+    )
+
+
+class DraftIngredient(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: uuid.UUID
+    grams: Annotated[float, Field(gt=0, le=10_000)]
+
+
+class RecipeDraftRequest(BaseModel):
+    """Готовый состав блюда. Модель его не подбирает и не меняет."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Annotated[str, Field(min_length=2, max_length=255)]
+    category: RecipeCategory
+    servings: Annotated[int, Field(ge=1, le=50)]
+    ingredients: Annotated[list[DraftIngredient], Field(min_length=1, max_length=30)]
+
+
+class DraftCheck(BaseModel):
+    kind: str
+    rule: str
+    fragment: str
+    matched: str
+    hard: bool
+
+
+class RecipeDraftResponse(BaseModel):
+    """Черновик способа приготовления. Ничего не сохранено.
+
+    Карточку сохраняет человек обычной формой рецепта — правило 6 CLAUDE.md
+    здесь выполняется самой формой работы, отдельного подтверждения не нужно.
+    """
+
+    instructions: str
+    checks: list[DraftCheck] = []
+    ai_job_id: uuid.UUID | None = None
+
+
+@router.post(
+    "/recipe-draft",
+    response_model=RecipeDraftResponse,
+    summary="Черновик способа приготовления",
+    dependencies=[Depends(require_roles(UserRole.ADMIN, UserRole.DIETITIAN))],
+)
+@limiter.limit(AI_RATE_LIMIT)
+async def draft_recipe(
+    request: Request,
+    payload: RecipeDraftRequest,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> RecipeDraftResponse:
+    """Способ приготовления по готовому составу (раздел 10.1 ТЗ, `content_draft`).
+
+    Синхронно, как разбор еды: диетолог стоит у формы рецепта и ждёт ответа
+    сейчас. Ничего не сохраняется — текст возвращается на экран, там его правят
+    и сохраняют обычной формой.
+
+    Названия продуктов подставляет сервер по идентификаторам: модель получает
+    список, который ей нельзя менять, а неизвестный идентификатор — ошибка
+    запроса, а не повод придумать продукт.
+    """
+
+    ingredients: list[dict[str, Any]] = []
+    for item in payload.ingredients:
+        product = await products_repo.get(session, item.product_id)
+        if product is None:
+            raise ApiError(
+                ErrorCode.VALIDATION_ERROR,
+                "В составе есть продукт, которого нет в справочнике.",
+                details={"product_id": str(item.product_id)},
+            )
+        ingredients.append({"name_ru": product.name_ru, "grams": item.grams})
+
+    prompt_payload = {
+        "title": payload.title,
+        "category": payload.category.value,
+        "servings": payload.servings,
+        "ingredients": ingredients,
+    }
+
+    # Соединение с БД возвращается в пул до ожидания: дальше база не нужна, а
+    # ждём мы почти минуту — та же причина, что у разбора еды.
+    await session.close()
+
+    try:
+        answer = await queue_service.run(
+            "content_draft", str(user.id), prompt_payload, timeout_s=RECIPE_DRAFT_TIMEOUT_S
+        )
+    except queue_service.TaskTimeout as error:
+        raise _unavailable(
+            "Черновик не успел собраться. Попробуйте ещё раз или напишите шаги сами."
+        ) from error
+    except queue_service.TaskLost as error:
+        raise _unavailable("Черновик сейчас недоступен. Попробуйте позже.") from error
+
+    return _draft_response(answer)
+
+
+def _draft_response(answer: Any) -> RecipeDraftResponse:
+    if not isinstance(answer, dict):
+        raise _unavailable("Черновик вернулся в неожиданном виде.")
+
+    status = answer.get("status")
+    if status == "limited":
+        raise ApiError(ErrorCode.RATE_LIMITED, str(answer.get("message") or "Лимит исчерпан."))
+    if status != "ok":
+        raise _unavailable(str(answer.get("message") or "Черновик сейчас недоступен."))
+
+    job_id = answer.get("ai_job_id")
+    return RecipeDraftResponse(
+        instructions=str(answer.get("instructions") or ""),
+        checks=[DraftCheck.model_validate(item) for item in answer.get("checks") or []],
+        ai_job_id=uuid.UUID(str(job_id)) if job_id else None,
     )
 
 

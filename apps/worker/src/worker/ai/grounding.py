@@ -49,6 +49,14 @@ MAX_FINDINGS = 12
 #: Числовой литерал: целое или десятичное, с запятой или точкой.
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 
+#: Единицы массы и объёма. Нужны, когда проверяются не все числа подряд, а
+#: только величины состава: в способе приготовления «готовьте 4 минуты при 180
+#: градусах» — это то, ради чего его и пишут, а «45 г масла» вместо переданных
+#: 30 г — другое блюдо.
+MASS_UNITS: tuple[str, ...] = ("г", "гр", "грамм", "граммов", "грамма", "кг", "мл", "л")
+
+_MASS_AFTER = re.compile(r"\s*(?:" + "|".join(MASS_UNITS) + r")\b")
+
 #: Дата — ровно две цифры на каждую часть: промпт требует формата ДД.ММ, а
 #: `2.6` в сводке это кетоны, а не второе июня. Одноцифренная форма стоила бы
 #: находки на каждом десятичном значении: первый же прогон пометил «1.9» как
@@ -137,8 +145,13 @@ def _walk_dates(node: Any, found: set[tuple[int, int]]) -> None:
             _walk_dates(value, found)
 
 
-def check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
-    """Числа сводки, которых в переданных рядах нет.
+def check(text: str, payload: dict[str, Any], *, only_masses: bool = False) -> list[Ungrounded]:
+    """Числа текста, которых в переданной нагрузке нет.
+
+    `only_masses` — проверять лишь величины с единицей массы или объёма. Так
+    смотрят карточку рецепта: состав закрыт, и граммовка не из списка ломает
+    расчёт блюда, а время и температуру модель как раз и придумывает — это её
+    работа. У сводки проверяются все числа: там придумывать нечего.
 
     Не бросает исключений. Черновик к этому моменту уже оплачен, и падение на
     нём стоило бы дорого дважды: текст потерян, а строка осталась бы в
@@ -148,14 +161,14 @@ def check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
     """
 
     try:
-        return _check(text, payload)
+        return _check(text, payload, only_masses=only_masses)
     except Exception as error:  # noqa: BLE001 — сломанная проверка не роняет черновик
         return [
             Ungrounded(value=0.0, fragment=f"проверка чисел не выполнена: {error}"),
         ]
 
 
-def _check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
+def _check(text: str, payload: dict[str, Any], *, only_masses: bool = False) -> list[Ungrounded]:
     allowed = collect_numbers(payload)
     dates = _dates_of(payload)
     period = payload.get("period") or {}
@@ -167,7 +180,7 @@ def _check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
 
     for sentence in sentences(text):
         rest = sentence
-        for match in _DATE.finditer(sentence):
+        for match in () if only_masses else _DATE.finditer(sentence):
             day, month = int(match.group(1)), int(match.group(2))
             year = int(match.group(3)) if match.group(3) else None
             # Число собирается из групп, а не склейкой строки: «14.08.2026»
@@ -181,8 +194,10 @@ def _check(text: str, payload: dict[str, Any]) -> list[Ungrounded]:
                 findings.append(Ungrounded(value=literal, fragment=sentence))
             rest = rest.replace(match.group(0), " ")
 
-        for raw in _NUMBER.findall(rest):
-            value = float(raw.replace(",", "."))
+        for match in _NUMBER.finditer(rest):
+            if only_masses and not _MASS_AFTER.match(rest, match.end()):
+                continue
+            value = float(match.group(0).replace(",", "."))
             if value in seen:
                 continue
             if _grounded(value, allowed, days):

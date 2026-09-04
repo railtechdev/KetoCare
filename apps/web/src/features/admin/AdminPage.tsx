@@ -4,6 +4,7 @@ import { PageLayout } from "../../components/PageLayout";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { LeadsPanel } from "./LeadsPanel";
+import { ProductAnomaliesPanel } from "./ProductAnomaliesPanel";
 import { ProductsPanel } from "./ProductsPanel";
 import { ProductCategoriesPanel } from "../products/ProductCategoriesPanel";
 import { UsersPanel } from "./UsersPanel";
@@ -52,6 +53,12 @@ export function AdminPage({ section }: { section?: string }) {
                 только в существующую категорию, а до этого её нельзя было ни
                 завести, ни переименовать, ни свести с одноимённой. */}
             <ProductCategoriesPanel />
+
+            {/* Проверка базы на аномалии (раздел 10.1 ТЗ). Внизу раздела, а не
+                вверху: это ревизия того, что уже загружено, а не ежедневная
+                работа — иначе она оттесняла бы поиск продукта, ради которого
+                сюда и заходят. */}
+            <ProductAnomaliesPanel />
           </>
         )}
         {current === "dictionaries" && <DictionariesPanel chrome="screen" />}
