@@ -34,6 +34,8 @@ class Anomaly(StrEnum):
     ALL_ZERO = "all_zero"
 
 
+# TODO(med): подтвердить у медицинской команды — порог расхождения объявленной
+# и расчётной калорийности продукта (вопрос 43 в docs/medical/OPEN_QUESTIONS.md).
 #: Насколько объявленная калорийность может расходиться с расчётной.
 #:
 #: Расхождение неизбежно и у безупречных таблиц: производитель округляет,
@@ -52,11 +54,19 @@ KCAL_MISMATCH_MIN = 25.0
 
 @dataclass(frozen=True, slots=True)
 class ProductAnomaly:
-    """Одна находка по одному продукту."""
+    """Одна находка по одному продукту.
+
+    Наружу идут класс и числа, а не готовая фраза: текст живёт в словарях
+    фронтенда (правило 8 CLAUDE.md), и формулировку можно согласовать, не трогая
+    бэкенд. Собранное здесь русское предложение обошло бы i18n стороной.
+    """
 
     kind: Anomaly
-    #: Что именно не сходится — числами, чтобы администратор проверил сам.
-    detail: str
+    #: Числа, по которым администратор проверит сам. Ключи — имена подстановок в
+    #: словаре.
+    values: dict[str, float]
+    #: Какое поле не в порядке (для `macro_range`) — кодом, не подписью.
+    field: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,39 +97,34 @@ def check(values: Values) -> list[ProductAnomaly]:
 
     macro_sum = values.fat + values.protein + values.carbs
     if macro_sum > MACRO_MAX:
-        found.append(
-            ProductAnomaly(
-                Anomaly.MACRO_SUM,
-                f"жиры, белки и углеводы дают {macro_sum:g} г на 100 г продукта",
-            )
-        )
+        found.append(ProductAnomaly(Anomaly.MACRO_SUM, {"sum": round(macro_sum, 2)}))
 
-    for name, value in (
-        ("жиры", values.fat),
-        ("белки", values.protein),
-        ("углеводы", values.carbs),
-        ("клетчатка", values.fiber),
+    for field, value in (
+        ("fat", values.fat),
+        ("protein", values.protein),
+        ("carbs", values.carbs),
+        ("fiber", values.fiber),
     ):
         if value > MACRO_MAX:
             found.append(
-                ProductAnomaly(Anomaly.MACRO_RANGE, f"{name}: {value:g} г на 100 г продукта")
+                ProductAnomaly(Anomaly.MACRO_RANGE, {"value": round(value, 2)}, field=field)
             )
 
     if values.kcal > KCAL_MAX:
-        found.append(ProductAnomaly(Anomaly.KCAL_RANGE, f"{values.kcal:g} ккал на 100 г"))
+        found.append(ProductAnomaly(Anomaly.KCAL_RANGE, {"kcal": round(values.kcal, 2)}))
 
     if macro_sum == 0 and values.kcal > 0:
         # Калории без единого макронутриента: либо колонки пусты, либо продукт
         # завели «чтобы был». В меню он даст калории из ниоткуда.
-        found.append(
-            ProductAnomaly(Anomaly.ALL_ZERO, f"{values.kcal:g} ккал при нулевых макронутриентах")
-        )
+        found.append(ProductAnomaly(Anomaly.ALL_ZERO, {"kcal": round(values.kcal, 2)}))
     elif _kcal_mismatch(values):
-        expected = expected_kcal(values)
         found.append(
             ProductAnomaly(
                 Anomaly.KCAL_MISMATCH,
-                f"заявлено {values.kcal:g} ккал, по макронутриентам выходит {expected:.0f}",
+                {
+                    "declared": round(values.kcal, 2),
+                    "expected": round(expected_kcal(values)),
+                },
             )
         )
 

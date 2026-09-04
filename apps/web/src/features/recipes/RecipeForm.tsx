@@ -65,9 +65,15 @@ export function RecipeForm({
   // модель получает готовый список, а не подбирает его сама.
   const draft = useRecipeDraftMutation();
   const watched = useWatch({ control });
+  // Готов не «есть строки состава», а «в каждой строке выбран продукт»:
+  // пустая строка уехала бы на сервер с пустым идентификатором и вернулась
+  // ошибкой вместо подсказки.
   const draftReady =
     (watched.title ?? "").trim().length > 1 &&
-    (watched.ingredients ?? []).length > 0;
+    (watched.ingredients ?? []).length > 0 &&
+    (watched.ingredients ?? []).every(
+      (item) => (item?.productId ?? "") !== "" && (item?.grams ?? 0) > 0,
+    );
 
   function requestDraft() {
     draft.mutate(
@@ -83,6 +89,15 @@ export function RecipeForm({
       },
       {
         onSuccess: (result) => {
+          if (result.checks.some((check) => check.hard)) {
+            // Жёсткая находка — обещание лечебного действия, бытовая мера
+            // вместо граммов, упоминание лекарства. Такой текст не
+            // подставляется сам: поле сохраняется соседней кнопкой, и
+            // подставленное молча слишком легко сохранить не читая. Вставить
+            // его всё равно можно — отдельным осознанным нажатием.
+            toast.warning(t("form.draft.blocked"));
+            return;
+          }
           // Текст кладётся в поле, а не показывается отдельно: редактор правит
           // его там же, где сохраняет, и черновик не остаётся вторым текстом,
           // о котором легко забыть.
@@ -324,7 +339,24 @@ export function RecipeForm({
                 : t("form.draft.needComposition")}
             </p>
             {draft.data && draft.data.checks.length > 0 && (
-              <DraftChecks checks={draft.data.checks} />
+              <>
+                <DraftChecks checks={draft.data.checks} />
+                {draft.data.checks.some((check) => check.hard) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-touch"
+                    onClick={() => {
+                      setValue("instructions", draft.data!.instructions, {
+                        shouldDirty: true,
+                      });
+                      toast.success(t("form.draft.done"));
+                    }}
+                  >
+                    {t("form.draft.insertAnyway")}
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </fieldset>

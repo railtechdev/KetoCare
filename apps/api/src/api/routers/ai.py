@@ -282,9 +282,15 @@ async def draft_recipe(
     запроса, а не повод придумать продукт.
     """
 
+    # Одним запросом, а не по продукту в цикле: состав бывает из тридцати
+    # позиций, и тридцать обращений к базе ради названий — это тридцать
+    # обращений.
+    products = await products_repo.get_by_ids(
+        session, product_ids=[item.product_id for item in payload.ingredients]
+    )
     ingredients: list[dict[str, Any]] = []
     for item in payload.ingredients:
-        product = await products_repo.get(session, item.product_id)
+        product = products.get(item.product_id)
         if product is None:
             raise ApiError(
                 ErrorCode.VALIDATION_ERROR,

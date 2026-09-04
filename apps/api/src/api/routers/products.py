@@ -284,10 +284,15 @@ async def _category_name_is_free(
 
 
 class ProductAnomalyRead(BaseModel):
-    """Находка по одному продукту. Класс — кодом: текст живёт в словарях фронта."""
+    """Находка по одному продукту.
+
+    Класс и числа — кодами: русский текст живёт в словарях фронтенда
+    (правило 8 CLAUDE.md), а не собирается здесь.
+    """
 
     kind: str
-    detail: str
+    values: dict[str, float]
+    field: str
 
 
 class ProductWithAnomalies(BaseModel):
@@ -297,6 +302,8 @@ class ProductWithAnomalies(BaseModel):
     anomalies: list[ProductAnomalyRead]
 
 
+# Объявлен ДО `/{product_id}`: маршруты разбираются в порядке объявления, и
+# перенос этого блока ниже превратил бы «anomalies» в идентификатор продукта.
 @router.get(
     "/anomalies",
     response_model=Page[ProductWithAnomalies],
@@ -326,7 +333,8 @@ async def list_anomalies(
             name_ru=row.name_ru,
             is_active=row.is_active,
             anomalies=[
-                ProductAnomalyRead(kind=item.kind.value, detail=item.detail) for item in anomalies
+                ProductAnomalyRead(kind=item.kind.value, values=item.values, field=item.field)
+                for item in anomalies
             ],
         )
         for row, anomalies in (

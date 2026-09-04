@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from core.textguard import sentences
+from core.textguard import normalize, sentences
 
 #: Допуск сравнения. Модель округляет по-своему: 87.3 % может стать «87 %», а
 #: 2.4 ммоль/л — «2,4». Различие в сотых — форматирование, а не выдумка.
@@ -57,6 +57,26 @@ MASS_UNITS: tuple[str, ...] = ("г", "гр", "грамм", "граммов", "г
 
 _MASS_AFTER = re.compile(r"\s*(?:" + "|".join(MASS_UNITS) + r")\b")
 
+#: Бытовые меры. В составе их не бывает по построению — там граммы, — поэтому
+#: любая такая мера в тексте это придуманная величина, и число рядом с ней
+#: сверять не с чем. Опаснее прямой ошибки в граммах: «две столовые ложки»
+#: читаются как нормальный кулинарный текст, и редактор их не заметит.
+HOUSEHOLD_MEASURES: tuple[str, ...] = (
+    "ст. л",
+    "ст.л",
+    "столов",
+    "ч. л",
+    "ч.л",
+    "чайн",
+    "стакан",
+    "щепот",
+    "по вкусу",
+    "горсть",
+    "капл",
+)
+
+_HOUSEHOLD = re.compile(r"(?:" + "|".join(m.replace(".", r"\.") for m in HOUSEHOLD_MEASURES) + r")")
+
 #: Дата — ровно две цифры на каждую часть: промпт требует формата ДД.ММ, а
 #: `2.6` в сводке это кетоны, а не второе июня. Одноцифренная форма стоила бы
 #: находки на каждом десятичном значении: первый же прогон пометил «1.9» как
@@ -68,29 +88,34 @@ _DATE = re.compile(r"\b(\d{2})[.](\d{2})(?:[.](\d{2,4}))?\b")
 
 @dataclass(frozen=True, slots=True)
 class Ungrounded:
-    """Число из сводки, которого нет в переданных рядах."""
+    """Величина из текста, которой нет в переданной нагрузке."""
 
     value: float
     fragment: str
+    #: Бытовая мера, если сработало правило про них. Числа у такой находки нет —
+    #: «щепотка» это не величина, в том и дело.
+    measure: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return {"value": self.value, "fragment": self.fragment}
+        return {"value": self.value, "fragment": self.fragment, "measure": self.measure}
 
 
-def collect_numbers(payload: Any) -> set[float]:
+def collect_numbers(payload: Any, *, from_strings: bool = True) -> set[float]:
     """Все числа нагрузки, на любой глубине.
 
-    Строки не разбираются: `dose = "300 мг"` — это подпись, а не величина, и
-    число из неё сводка вправе повторить. Поэтому числа из строк добавляются
-    тоже, но отдельным правилом — см. `_from_text`.
+    `from_strings` — брать ли числа из строковых значений. Сводке они нужны:
+    доза `"300 мг"` — подпись препарата, и повторить её сводка вправе. Карточке
+    рецепта — нет, и это не мелочь: названия продуктов почти всегда с
+    процентом, и «масло сливочное 82%» разрешало бы «возьмите 82 г масла» при
+    любых переданных граммовках.
     """
 
     found: set[float] = set()
-    _walk(payload, found)
+    _walk(payload, found, from_strings=from_strings)
     return found
 
 
-def _walk(node: Any, found: set[float]) -> None:
+def _walk(node: Any, found: set[float], *, from_strings: bool) -> None:
     if isinstance(node, bool):
         return
     if isinstance(node, int | float):
@@ -100,15 +125,16 @@ def _walk(node: Any, found: set[float]) -> None:
         found.add(abs(float(node)))
         return
     if isinstance(node, str):
-        found.update(_from_text(node))
+        if from_strings:
+            found.update(_from_text(node))
         return
     if isinstance(node, dict):
         for value in node.values():
-            _walk(value, found)
+            _walk(value, found, from_strings=from_strings)
         return
     if isinstance(node, list | tuple):
         for value in node:
-            _walk(value, found)
+            _walk(value, found, from_strings=from_strings)
 
 
 def _from_text(text: str) -> set[float]:
@@ -169,7 +195,7 @@ def check(text: str, payload: dict[str, Any], *, only_masses: bool = False) -> l
 
 
 def _check(text: str, payload: dict[str, Any], *, only_masses: bool = False) -> list[Ungrounded]:
-    allowed = collect_numbers(payload)
+    allowed = collect_numbers(payload, from_strings=not only_masses)
     dates = _dates_of(payload)
     period = payload.get("period") or {}
     days = int(period.get("days") or 0)
@@ -178,8 +204,17 @@ def _check(text: str, payload: dict[str, Any], *, only_masses: bool = False) -> 
     findings: list[Ungrounded] = []
     seen: set[float] = set()
 
+    if only_masses:
+        # По целому тексту, а не по предложениям: разбиение на предложения режет
+        # «2 ст. л.» по точке, и мера, ради которой правило написано, до него не
+        # доезжает.
+        whole = normalize(text)
+        for measure in dict.fromkeys(match.group(0) for match in _HOUSEHOLD.finditer(whole)):
+            findings.append(Ungrounded(value=0.0, fragment=measure, measure=measure))
+
     for sentence in sentences(text):
         rest = sentence
+
         for match in () if only_masses else _DATE.finditer(sentence):
             day, month = int(match.group(1)), int(match.group(2))
             year = int(match.group(3)) if match.group(3) else None

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from core.models.enums import AiJobKind
+from core.textguard import find_any, normalize
 from core.textguard import summary_guard as sguard
 
 from . import grounding
@@ -35,6 +36,22 @@ MAX_TOKENS = 900
 
 #: Сколько ждём. Ручка синхронная: администратор стоит у формы рецепта.
 TIMEOUT_S = 40.0
+
+#: Лекарственные формы. В карточке блюда им места нет вовсе, и это единственное
+#: правило, которого нет у сводки: там «таблетка» может оказаться пересказом
+#: отметки о приёме, а здесь — только указанием, что положить в еду.
+#:
+#: Единиц дозы (мг, мкг) в списке нет намеренно: правило помощника, отвергающее
+#: любое «число + единица», для рецепта непригодно — миллилитры в нём законны.
+MEDICATION_FORMS: tuple[str, ...] = (
+    "таблетк",
+    "капсул",
+    "ампул",
+    "инъекц",
+    "суспензи",
+    "сироп",
+    "порошок для приема",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,16 +88,33 @@ async def draft_recipe(
     )
 
     checks = [finding.as_dict() for finding in sguard.check(reply.text, require_sections=False)]
-    checks += [
-        {
-            "kind": "ungrounded_number",
-            "rule": "not_in_payload",
-            "fragment": item.fragment,
-            "matched": _format(item.value),
-            "hard": False,
-        }
-        for item in grounding.check(reply.text, payload, only_masses=True)
-    ]
+
+    medication = find_any(normalize(reply.text), MEDICATION_FORMS)
+    if medication is not None:
+        checks.append(
+            {
+                "kind": "medication",
+                "rule": "medication_form",
+                "fragment": "",
+                "matched": medication,
+                "hard": True,
+            }
+        )
+
+    for item in grounding.check(reply.text, payload, only_masses=True):
+        household = bool(item.measure)
+        checks.append(
+            {
+                "kind": "household_measure" if household else "ungrounded_number",
+                "rule": "household" if household else "not_in_payload",
+                "fragment": item.fragment,
+                "matched": item.measure if household else _format(item.value),
+                # Бытовая мера — жёсткая находка: в составе её нет по построению,
+                # значит величина придумана, а «две столовые ложки» читаются как
+                # обычный кулинарный текст и проходят мимо глаза.
+                "hard": household,
+            }
+        )
     return Draft(instructions=reply.text.strip(), checks=checks, ai_job_id=reply.job_id)
 
 

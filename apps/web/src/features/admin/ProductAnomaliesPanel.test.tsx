@@ -58,7 +58,8 @@ describe("проверка базы продуктов", () => {
             anomalies: [
               {
                 kind: "kcal_mismatch",
-                detail: "заявлено 3000 ккал, по макронутриентам выходит 748",
+                values: { declared: 3000, expected: 748 },
+                field: "",
               },
             ],
           },
@@ -88,7 +89,7 @@ describe("проверка базы продуктов", () => {
             product_id: "22222222-2222-4222-8222-222222222222",
             name_ru: "Странный продукт",
             is_active: true,
-            anomalies: [{ kind: "something_new", detail: "что-то не так" }],
+            anomalies: [{ kind: "something_new", values: {}, field: "" }],
           },
         ],
         total: 1,

@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from core.models.enums import AiJobKind
+from core.repositories import ai_jobs as jobs_repo
 from worker.ai.content import content_draft, draft_recipe
 
 from .test_ai_client import (
@@ -114,16 +116,76 @@ class TestDraft:
 
         assert draft.checks == []
 
-    async def test_the_call_has_no_patient(
+    async def test_a_number_from_a_product_name_does_not_ground_a_gram_amount(
         self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
     ) -> None:
-        """Рецепт лежит в общей библиотеке и не про конкретного ребёнка."""
+        """82 из «Масло сливочное 82%» не разрешает «82 г масла».
+
+        Названия в этой предметной области почти всегда с процентом, и общий
+        сбор чисел по всей нагрузке делал бы обоснованной любую граммовку,
+        совпавшую с процентом жирности.
+        """
+
+        text = "1. Возьмите 82 г масла и растопите."
+
+        draft = await draft_recipe(
+            client_for(sessionmaker, says(text)), requested_by=user_id, payload=PAYLOAD
+        )
+
+        assert [check["matched"] for check in draft.checks] == ["82"]
+
+    async def test_a_household_measure_is_a_hard_finding(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """«Две столовые ложки» — придуманная величина, которую легко не заметить.
+
+        В составе бытовых мер нет по построению: там граммы. Читается такая
+        строка как обычный кулинарный текст, поэтому находка жёсткая.
+        """
+
+        text = "1. Добавьте 2 ст. л. масла и посолите по вкусу."
+
+        draft = await draft_recipe(
+            client_for(sessionmaker, says(text)), requested_by=user_id, payload=PAYLOAD
+        )
+
+        kinds = {check["kind"] for check in draft.checks}
+        assert kinds == {"household_measure"}
+        assert all(check["hard"] for check in draft.checks)
+
+    async def test_a_medication_form_is_a_hard_finding(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """В карточке блюда лекарственным формам места нет вовсе."""
+
+        text = "1. Растолките таблетку и добавьте в смесь."
+
+        draft = await draft_recipe(
+            client_for(sessionmaker, says(text)), requested_by=user_id, payload=PAYLOAD
+        )
+
+        assert "medication" in {check["kind"] for check in draft.checks}
+
+    async def test_the_job_row_has_no_patient(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """Рецепт лежит в общей библиотеке и не про конкретного ребёнка.
+
+        Проверяется строка журнала, а не факт вызова: проставленный однажды
+        `patient_id` связал бы общий рецепт с ребёнком, и ни один тест этого бы
+        не заметил.
+        """
 
         draft = await draft_recipe(
             client_for(sessionmaker, says(STEPS)), requested_by=user_id, payload=PAYLOAD
         )
 
         assert draft.ai_job_id is not None
+        async with sessionmaker() as session:
+            job = await jobs_repo.get(session, draft.ai_job_id)
+        assert job is not None
+        assert job.patient_id is None
+        assert job.kind is AiJobKind.CONTENT_DRAFT
 
 
 class TestTask:

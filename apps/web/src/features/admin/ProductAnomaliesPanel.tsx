@@ -1,12 +1,30 @@
 import { AsyncSection, EmptyState, Section, Skeleton } from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../../lib/api";
 import { SectionLink } from "../../components/SectionLink";
 
 type Anomalies = components["schemas"]["ProductWithAnomalies"];
+type Anomaly = components["schemas"]["ProductAnomalyRead"];
+
+/**
+ * Пояснение к находке: класс и числа приходят с сервера, фраза собирается из
+ * словаря (правило 8 CLAUDE.md).
+ */
+function detailOf(t: TFunction<"admin">, item: Anomaly): string {
+  return t(`products.anomalies.detail.${item.kind}`, {
+    ...item.values,
+    field: item.field
+      ? t(`products.anomalies.field.${item.field}`, {
+          defaultValue: item.field,
+        })
+      : "",
+    defaultValue: "",
+  });
+}
 
 const PAGE_SIZE = 50;
 
@@ -75,13 +93,23 @@ export function ProductAnomaliesPanel() {
           <ul className="m-0 flex list-none flex-col gap-block p-0">
             {rows.map((row) => (
               <li key={row.product_id} className="flex flex-col gap-field">
-                <SectionLink
-                  section="products"
-                  item={row.product_id}
-                  className="font-medium"
-                >
-                  {row.name_ru}
-                </SectionLink>
+                <p className="m-0 flex flex-wrap items-baseline gap-field">
+                  <SectionLink
+                    section="products"
+                    item={row.product_id}
+                    className="font-medium"
+                  >
+                    {row.name_ru}
+                  </SectionLink>
+                  {/* Выведенные позиции проверяются тоже: в меню их не
+                      предлагают, но в сохранённых блюдах они остаются. Без
+                      пометки администратор не отличит их в списке. */}
+                  {!row.is_active && (
+                    <span className="text-sm text-muted-foreground">
+                      {t("products.anomalies.inactive")}
+                    </span>
+                  )}
+                </p>
                 <ul className="m-0 flex list-none flex-col gap-1 p-0">
                   {row.anomalies.map((item, index) => (
                     <li
@@ -94,7 +122,9 @@ export function ProductAnomaliesPanel() {
                         })}
                       </span>
                       {" — "}
-                      {item.detail}
+                      {/* Фраза собирается здесь из чисел: сервер отдаёт класс и
+                          значения, а текст живёт в словаре (правило 8). */}
+                      {detailOf(t, item)}
                     </li>
                   ))}
                 </ul>
