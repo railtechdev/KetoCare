@@ -13,6 +13,12 @@ export type {
   WarningLevel,
 } from "./components/WarningBanner";
 
+export { ChatMessage } from "./components/ChatMessage";
+export type { ChatMessageProps } from "./components/ChatMessage";
+
+export { ChatComposer } from "./components/ChatComposer";
+export type { ChatComposerProps } from "./components/ChatComposer";
+
 export { DiaryEntryCard } from "./components/DiaryEntryCard";
 export type { DiaryEntryCardProps } from "./components/DiaryEntryCard";
 
