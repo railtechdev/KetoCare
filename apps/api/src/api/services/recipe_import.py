@@ -35,7 +35,11 @@ import io
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+
 from core.models.enums import RecipeCategory
+
+from ..schemas_recipes import MAX_INGREDIENTS, RecipeIngredientIn, RecipeWrite
 
 REQUIRED_COLUMNS = (
     "title",
@@ -47,15 +51,24 @@ REQUIRED_COLUMNS = (
     "grams",
 )
 
-#: Верхняя граница массы одного ингредиента, г. Та же, что у ручного ввода
-#: рецепта (`RecipeIngredientIn`): пять килограммов одного продукта в блюде для
-#: ребёнка — это ошибка ввода, а не рецепт.
-GRAMS_MAX = 5000.0
 
-#: Потолок выхода блюда, г. Двадцать килограммов — это уже не порция.
-YIELD_MAX = 20_000.0
+# Границы берутся у ручного ввода, а не переписываются: второй вход в те же
+# таблицы обязан иметь те же пределы. Собственные копии уже однажды разошлись —
+# в первой версии этого модуля выход блюда ограничивался двадцатью килограммами
+# против ста у формы, а порций было пятьдесят против ста.
+def _bound(model: type[BaseModel], field: str, name: str) -> float:
+    for meta in model.model_fields[field].metadata:
+        value = getattr(meta, name, None)
+        if value is not None:
+            return float(value)
+    raise AssertionError(f"У поля {field} нет ограничения {name}")
 
-MAX_SERVINGS = 50
+
+GRAMS_MAX = _bound(RecipeIngredientIn, "grams", "le")
+YIELD_MAX = _bound(RecipeWrite, "yield_g", "le")
+MAX_SERVINGS = int(_bound(RecipeWrite, "servings", "le"))
+TITLE_MAX = int(_bound(RecipeWrite, "title", "max_length"))
+INSTRUCTIONS_MAX = int(_bound(RecipeWrite, "instructions", "max_length"))
 
 
 @dataclass(slots=True)
@@ -118,6 +131,9 @@ def parse_csv(content: bytes) -> ImportReport:
         return report
 
     by_title: dict[str, ParsedRecipe] = {}
+    # Рецепт, к которому относятся строки состава сейчас. `None` значит, что
+    # относить их не к чему: шапки ещё не было или она не разобралась.
+    current: ParsedRecipe | None = None
 
     for offset, row in enumerate(reader, start=2):
         report.total_rows += 1
@@ -126,9 +142,10 @@ def parse_csv(content: bytes) -> ImportReport:
         known = by_title.get(_key(title)) if title else None
 
         if not title:
-            # Пустой заголовок — продолжение предыдущего рецепта. Если предыдущего
-            # нет, значит файл начинается с состава без шапки.
-            current = report.recipes[-1] if report.recipes else None
+            # Пустой заголовок — продолжение ТЕКУЩЕГО рецепта, а не последнего
+            # разобравшегося. Разница видна там, где шапка не прошла: строки
+            # состава прилипали бы к предыдущему, корректному рецепту, и превью
+            # показывало бы чужие граммы с посчитанными по ним ккал.
             if current is None:
                 report.errors.append(
                     RowError(offset, "title", "Строка состава раньше первого рецепта.")
@@ -150,6 +167,9 @@ def parse_csv(content: bytes) -> ImportReport:
             if recipe is not None:
                 by_title[_key(title)] = recipe
                 report.recipes.append(recipe)
+            # Шапка не разобралась — состав этого рецепта никуда не приписывается.
+            # Иначе он прилип бы к предыдущему, корректному, и в превью показались
+            # бы чужие граммы с посчитанными по ним ккал и соотношением.
             current = recipe
 
         ingredient, errors = _ingredient(row, offset)
@@ -158,6 +178,16 @@ def parse_csv(content: bytes) -> ImportReport:
             current.ingredients.append(ingredient)
 
     for recipe in report.recipes:
+        if len(recipe.ingredients) > MAX_INGREDIENTS:
+            # Тот же предел, что у формы: без него импорт заводил бы состав,
+            # который через кабинет ввести нельзя.
+            report.errors.append(
+                RowError(
+                    recipe.line,
+                    None,
+                    f"У рецепта «{recipe.title}» больше {MAX_INGREDIENTS} продуктов.",
+                )
+            )
         if not recipe.ingredients:
             report.errors.append(
                 RowError(recipe.line, None, f"У рецепта «{recipe.title}» нет ни одного продукта.")
@@ -183,15 +213,25 @@ def _header_empty(row: dict[str, Any]) -> bool:
     return all(not (row.get(column) or "").strip() for column in _HEADER_COLUMNS)
 
 
-def _key(name: str) -> str:
-    """Ключ сопоставления: регистр и пробелы по краям не различаются.
+def match_key(name: str) -> str:
+    """Ключ сопоставления: регистр и пробелы не различаются.
 
-    То же правило, каким уникальность имени обеспечена в БД
-    (`lower(btrim(name_ru))`), — иначе файл с «Масло Сливочное» прошёл бы импорт
-    и завёл бы второй продукт, неотличимый на экране от первого.
+    Ровно то же правило, каким уникальность имени обеспечена в БД:
+    `lower(btrim(name_ru))`. Внутренние пробелы НЕ схлопываются намеренно —
+    индекс их тоже не схлопывает, и разбор, находящий «Масло⎵⎵сливочное» там,
+    где запрос его не найдёт, дал бы «продукта нет в справочнике» на позиции,
+    которую сам же признал совпавшей.
+
+    Публичная: этим же ключом ручка ищет продукты и занятые названия. Два разных
+    правила нормализации на одном пути означали бы, что файл разбирается по
+    одному, а сопоставляется по другому.
     """
 
-    return " ".join(name.strip().lower().split())
+    return name.strip().casefold()
+
+
+def _key(name: str) -> str:
+    return match_key(name)
 
 
 def _header(
@@ -211,9 +251,21 @@ def _header(
 
     yield_g = _number(row, "yield_g", line, errors, maximum=YIELD_MAX)
     servings = _number(row, "servings", line, errors, maximum=MAX_SERVINGS)
+    if len(title) > TITLE_MAX:
+        # Иначе строка проходит превью чисто, а на записи роняет вставку: в
+        # таблице `title` — varchar(255), и СУБД ответит пятисоткой вместо
+        # понятной ошибки строки.
+        errors.append(RowError(line, "title", f"Название длиннее {TITLE_MAX} знаков."))
+
     instructions = (row.get("instructions") or "").strip()
     if not instructions:
         errors.append(RowError(line, "instructions", "Способ приготовления не заполнен."))
+    elif len(instructions) > INSTRUCTIONS_MAX:
+        errors.append(
+            RowError(
+                line, "instructions", f"Способ приготовления длиннее {INSTRUCTIONS_MAX} знаков."
+            )
+        )
 
     if errors:
         return None, errors

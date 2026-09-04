@@ -62,10 +62,31 @@ PRODUCTS = [
 ]
 
 
+#: Признаки боевой базы: сид заводит врача с известным паролем и сброшенным
+#: вторым фактором, а сквозной тест пишет назначение — отменить его нельзя,
+#: `prescriptions` append-only. Ошибиться адресом здесь стоит дороже, чем
+#: перестраховаться.
+_PRODUCTION_HINTS = ("railtech", "prod", "ketocare.uz")
+
+
+def _refuse_production(database_url: str) -> None:
+    lowered = database_url.lower()
+    hit = next((hint for hint in _PRODUCTION_HINTS if hint in lowered), None)
+    if hit is None:
+        return
+    raise SystemExit(
+        f"Адрес базы похож на боевой (в строке подключения есть «{hit}»).\n"
+        "Сид прогонов заводит учётную запись врача с известным паролем и сбрасывает\n"
+        "второй фактор, а сквозной тест пишет назначение. Укажите локальную базу."
+    )
+
+
 async def main() -> int:
     from api.security import hash_password
 
-    engine = create_async_engine(get_settings().database_url)
+    database_url = get_settings().database_url
+    _refuse_production(database_url)
+    engine = create_async_engine(database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
 
     async with maker() as session:

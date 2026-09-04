@@ -37,14 +37,27 @@ REPO=/srv/ketocare
 DEST=/srv/backups
 KEEP_DAYS=30
 STAMP=$(date +%F)
-AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
-REMOTE="${BACKUP_REMOTE:-}"
-ALLOW_PLAINTEXT="${BACKUP_ALLOW_PLAINTEXT:-}"
 COMPOSE="docker compose --env-file $REPO/.env -f $REPO/infra/docker-compose.prod.yml"
 
 umask 077
 mkdir -p "$DEST"
 cd "$REPO"
+
+# Настройки читаются из того же файла, куда их кладёт администратор по
+# docs/DEPLOY.md. Из cron скрипт запускается голой строкой, без окружения:
+# читать переменные только из него значило бы дать администратору инструкцию,
+# выполнение которой ничего не меняет, — и получать отказ каждую ночь в лог,
+# который никто не читает. Тот же приём, что в deploy.sh.
+if [ -f "$REPO/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$REPO/.env"
+    set +a
+fi
+
+AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
+REMOTE="${BACKUP_REMOTE:-}"
+ALLOW_PLAINTEXT="${BACKUP_ALLOW_PLAINTEXT:-}"
 
 fail() {
     echo "[$(date '+%F %T')] БЭКАП НЕ СДЕЛАН: $1" >&2
@@ -65,7 +78,14 @@ fi
 # копия не переживает прогон — иначе смысла в шифровании нет.
 encrypt() {
     [ -n "$AGE_RECIPIENT" ] || return 0
-    age -r "$AGE_RECIPIENT" -o "$1.age" "$1" || fail "не удалось зашифровать $1"
+    if ! age -r "$AGE_RECIPIENT" -o "$1.age" "$1"; then
+        # Открытая копия не переживает прогон даже при отказе шифрования. Иначе
+        # первое же падение `age` — кончилось место, битый ключ — оставляло бы
+        # незашифрованный дамп клинической базы лежать тридцать дней до
+        # retention, ровно там, откуда его и убирали.
+        rm -f "$1" "$1.age"
+        fail "не удалось зашифровать $1 (открытая копия удалена)"
+    fi
     rm -f "$1"
 }
 
@@ -110,7 +130,12 @@ done
 # До уборки: если увезти не удалось, пусть на диске останется всё, что есть.
 if [ -n "$REMOTE" ]; then
     command -v rclone >/dev/null 2>&1 || fail "BACKUP_REMOTE задан, а rclone не установлен"
-    rclone copy "$DEST" "$REMOTE" --include "*-$STAMP.*" --no-traverse \
+    # Шаблоны начинаются с имени, а не со звёздочки: `*-$STAMP.*` подхватил бы и
+    # `.postgres-$STAMP.dump.part` — недописанный файл прерванного прогона.
+    rclone copy "$DEST" "$REMOTE" --no-traverse \
+        --include "postgres-$STAMP.*" \
+        --include "attachments-$STAMP.*" \
+        --include "erased-$STAMP.*" \
         || fail "не удалось увезти копию в $REMOTE"
     echo "  увезено в $REMOTE"
 fi

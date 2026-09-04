@@ -101,6 +101,55 @@ class TestParsing:
         columns = {error.column for error in report.errors}
         assert {"category", "yield_g", "servings", "instructions", "grams"} <= columns
 
+    def test_a_too_long_title_is_a_row_error(self):
+        """Иначе строка проходит превью чисто и роняет вставку пятисоткой:
+        в таблице `title` — varchar(255)."""
+
+        long_title = "О" * 300
+        report = parse_csv(_csv(f'{long_title},breakfast,120,1,"1. Шаг.",Масло,30'))
+
+        assert not report.ok
+        assert any(error.column == "title" for error in report.errors)
+
+    def test_limits_are_the_same_as_in_the_form(self):
+        """Второй вход в те же таблицы обязан иметь те же пределы.
+
+        Проверяется не значение, а совпадение: собственные копии в первой версии
+        этого модуля уже разошлись с формой — выход блюда ограничивался двадцатью
+        килограммами против ста, порций было пятьдесят против ста.
+        """
+
+        from api.schemas_recipes import RecipeIngredientIn, RecipeWrite
+        from api.services import recipe_import
+
+        def bound(model, field, name):
+            return next(
+                getattr(meta, name)
+                for meta in model.model_fields[field].metadata
+                if getattr(meta, name, None) is not None
+            )
+
+        assert bound(RecipeWrite, "yield_g", "le") == recipe_import.YIELD_MAX
+        assert bound(RecipeWrite, "servings", "le") == recipe_import.MAX_SERVINGS
+        assert bound(RecipeWrite, "title", "max_length") == recipe_import.TITLE_MAX
+        assert bound(RecipeIngredientIn, "grams", "le") == recipe_import.GRAMS_MAX
+
+    def test_a_broken_header_does_not_attach_rows_to_the_previous_recipe(self):
+        """Иначе в превью появятся чужие граммы с посчитанными по ним ккал."""
+
+        report = parse_csv(
+            _csv(
+                'Первый,breakfast,120,1,"1. Шаг.",Масло,30',
+                "Второй,,,,,Яйцо,55",
+                ",,,,,Сливки,20",
+            )
+        )
+
+        # «Второй» с пустой шапкой — это продолжение по правилу, но такого
+        # рецепта ещё нет: строка становится ошибкой, а не составом «Первого».
+        assert len(report.recipes) == 1
+        assert [item.product_name for item in report.recipes[0].ingredients] == ["Масло"]
+
     def test_a_duplicated_product_in_one_recipe_is_an_error(self):
         """Иначе один продукт сложился бы дважды, и расчёт разошёлся бы с составом."""
 
@@ -231,6 +280,63 @@ class TestEndpoint:
         body = response.json()
         assert body["imported"] == 0
         assert any("уже есть" in error["message"] for error in body["errors"])
+
+    async def test_import_is_written_to_the_audit_log(
+        self, client, session, make_user, auth_headers
+    ):
+        """Правка справочника рецептов — из списка раздела 4.2 (правило 7)."""
+
+        from sqlalchemy import select
+
+        from core.models import AuditLog
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        await _product(session, "Масло для аудита")
+
+        await client.post(
+            "/api/v1/recipes/import?dry_run=false",
+            files={
+                "file": (
+                    "recipes.csv",
+                    _csv('Рецепт для аудита,breakfast,120,1,"1. Шаг.",Масло для аудита,30'),
+                    "text/csv",
+                )
+            },
+            headers=auth_headers(dietitian),
+        )
+
+        entry = await session.scalar(
+            select(AuditLog).where(AuditLog.entity == "recipes", AuditLog.action == "import")
+        )
+        assert entry is not None
+        assert entry.user_id == dietitian.id
+
+    async def test_an_inactive_product_is_not_taken_into_a_new_recipe(
+        self, client, session, make_user, auth_headers
+    ):
+        """Позицию вывели из справочника осознанно — новый рецепт на ней
+        означал бы, что решение отменили молча."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        product = await _product(session, "Масло выведенное")
+        product.is_active = False
+        await session.flush()
+
+        response = await client.post(
+            "/api/v1/recipes/import",
+            files={
+                "file": (
+                    "recipes.csv",
+                    _csv('Омлет,breakfast,120,1,"1. Шаг.",Масло выведенное,30'),
+                    "text/csv",
+                )
+            },
+            headers=auth_headers(dietitian),
+        )
+
+        body = response.json()
+        assert body["imported"] == 0
+        assert any("выведен из справочника" in error["message"] for error in body["errors"])
 
     async def test_parent_may_not_import(self, client, session, make_user, auth_headers):
         parent = await make_user(UserRole.PARENT)

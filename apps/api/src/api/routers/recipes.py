@@ -524,7 +524,7 @@ async def import_recipes(
 
     ready: list[tuple[Any, list[tuple[uuid.UUID, float]]]] = []
     for recipe in report.recipes:
-        if recipe.title.casefold().strip() in taken:
+        if recipe_import.match_key(recipe.title) in taken:
             errors.append(
                 ImportRowError(
                     line=recipe.line,
@@ -541,7 +541,7 @@ async def import_recipes(
         composition: list[tuple[uuid.UUID, float]] = []
         unknown = False
         for item in recipe.ingredients:
-            product = products.get(item.product_name.casefold().strip())
+            product = products.get(recipe_import.match_key(item.product_name))
             if product is None:
                 errors.append(
                     ImportRowError(
@@ -552,13 +552,31 @@ async def import_recipes(
                 )
                 unknown = True
                 continue
+            if not product.is_active:
+                # Выведенную позицию в новый рецепт брать нельзя: её вывели из
+                # справочника осознанно, и новый рецепт на ней означает, что
+                # решение отменили молча.
+                errors.append(
+                    ImportRowError(
+                        line=item.line,
+                        column="product_name",
+                        message=f"Продукт «{product.name_ru}» выведен из справочника.",
+                    )
+                )
+                unknown = True
+                continue
             composition.append((product.id, item.grams))
         if not unknown:
             ready.append((recipe, composition))
 
+    # Состав считается по разу на рецепт, а не дважды: результат превью тот же,
+    # что уйдёт в запись. На сборнике в двести рецептов вторая волна расчётов —
+    # это лишние двести обращений к справочнику.
+    counted: list[tuple[Any, list[tuple[uuid.UUID, float]], dict[str, Any], str]] = []
     preview: list[RecipeImportRow] = []
     for recipe, composition in ready:
-        computed, _ = await recipes_service.compute(session, composition=composition)
+        computed, engine_version = await recipes_service.compute(session, composition=composition)
+        counted.append((recipe, composition, computed, engine_version))
         preview.append(
             RecipeImportRow(
                 line=recipe.line,
@@ -582,8 +600,7 @@ async def import_recipes(
             dry_run=dry_run,
         )
 
-    for recipe, composition in ready:
-        computed, engine_version = await recipes_service.compute(session, composition=composition)
+    for recipe, composition, computed, engine_version in counted:
         created = await recipes_repo.create(
             session,
             title=recipe.title,

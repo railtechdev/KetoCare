@@ -262,7 +262,13 @@ async def titles_taken(session: AsyncSession, *, titles: list[str]) -> set[str]:
         return set()
 
     folded = {title.casefold().strip() for title in titles}
+    # Фильтр в SQL, а не чтение всей таблицы в память: сборник рецептов клиники
+    # это тысячи строк, и импорт вытягивал бы их целиком ради проверки двухсот
+    # названий. Нормализация та же, что в приложении.
+    #
     # Мягкого удаления у рецептов нет (раздел 4.2): убирают их сменой статуса,
-    # а название остаётся занятым — уникальность в базе от статуса не зависит.
-    rows = await session.scalars(select(Recipe.title))
-    return {title.casefold().strip() for title in rows if title.casefold().strip() in folded}
+    # а название остаётся занятым.
+    rows = await session.scalars(
+        select(Recipe.title).where(func.lower(func.btrim(Recipe.title)).in_(folded))
+    )
+    return {title.casefold().strip() for title in rows}

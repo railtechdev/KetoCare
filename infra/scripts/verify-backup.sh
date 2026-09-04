@@ -39,10 +39,11 @@ if [ "${DUMP%.age}" != "$DUMP" ]; then
     command -v age >/dev/null 2>&1 || fail "дамп зашифрован, а age не установлен"
     [ -n "${BACKUP_AGE_IDENTITY:-}" ] || fail "укажите BACKUP_AGE_IDENTITY — путь к приватному ключу age"
     PLAIN=$(mktemp)
-    # umask на случай, если временный каталог общий: расшифрованная копия живёт
-    # секунды, но эти секунды она содержит всё.
+    # Права сразу: расшифрованная копия живёт секунды, но эти секунды она
+    # содержит всё. Снимается она в общем обработчике выхода ниже — отдельный
+    # `trap` здесь молча заменялся бы следующим (в bash обработчик EXIT один), и
+    # полный дамп клинической базы оставался бы в /tmp после каждой проверки.
     chmod 600 "$PLAIN"
-    trap 'rm -f "$PLAIN"' EXIT
     age -d -i "$BACKUP_AGE_IDENTITY" -o "$PLAIN" "$DUMP" || fail "не удалось расшифровать $DUMP"
     DUMP="$PLAIN"
 fi
@@ -69,6 +70,10 @@ psql_check() {
 cleanup() {
     docker exec "$CONTAINER" psql -U ketocare -d postgres \
         -c "DROP DATABASE IF EXISTS $CHECK_DB WITH (FORCE)" >/dev/null 2>&1 || true
+    # Всё временное — здесь, одним обработчиком. Второй `trap ... EXIT` не
+    # добавляется к первому, а заменяет его, и расшифрованный дамп переживал бы
+    # выход скрипта.
+    rm -f "${PLAIN:-}" "${RESTORE_LOG:-}"
 }
 trap cleanup EXIT
 
