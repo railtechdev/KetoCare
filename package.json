@@ -20,5 +20,10 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8"
   },
-  "type": "module"
+  "type": "module",
+  "pnpm": {
+    "overrides": {
+      "valibot": ">=1.4.2"
+    }
+  }
 }

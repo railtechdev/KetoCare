@@ -1,0 +1,42 @@
+name: Аудит зависимостей
+
+# Раз в неделю и по кнопке (раздел 15 п. 23 ТЗ). Не на каждый PR: уязвимость
+# публикуется независимо от наших правок, и красный CI на чужой находке
+# останавливал бы работу, ничего не ускоряя. Раз в неделю — темп, в котором её
+# и так разбирают.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  python:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Список зависимостей
+        # `--no-emit-project`: наши собственные пакеты на PyPI не публикуются,
+        # и pip-audit на них спотыкается («not found on PyPI»).
+        run: uv export --no-hashes --no-emit-project --format requirements-txt --all-packages -o requirements.txt
+      - name: pip-audit
+        run: uvx pip-audit -r requirements.txt --progress-spinner off
+
+  javascript:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm audit
+        # Порог — moderate: low-находки в дереве сборки шумят и разбираются
+        # вместе с обновлением зависимостей, а не по звонку.
+        run: pnpm audit --audit-level moderate
