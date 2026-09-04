@@ -7,7 +7,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    WebAppInfo,
 )
 
 from . import texts
@@ -28,6 +27,14 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
 
     «Приступ» стоит первым и отдельной строкой: это самое важное событие
     дневника, и искать его среди четырёх кнопок родителю не приходится.
+
+    Кнопки «Приложение» здесь НЕТ, и это не упущение. Документация Telegram:
+    «initData … empty if the Mini App was launched from a keyboard button» —
+    приложение, открытое из обычной клавиатуры, подписи не получает вовсе и
+    войти не может. Проверено на живом стенде: клиент передавал
+    `tgWebAppVersion`, `tgWebAppPlatform`, `tgWebAppThemeParams` и ни одного
+    `tgWebAppData`. Mini App живёт в кнопке меню рядом с полем ввода
+    (`main._setup_menu_button`) — там подпись выдаётся.
     """
 
     keyboard = [
@@ -36,15 +43,6 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
         [KeyboardButton(text=texts.BTN_MEAL), KeyboardButton(text=texts.BTN_MEDICATION)],
         [KeyboardButton(text=texts.BTN_WELLBEING)],
     ]
-
-    if settings.has_miniapp:
-        keyboard.append(
-            [
-                KeyboardButton(
-                    text=texts.BTN_APP, web_app=WebAppInfo(url=settings.miniapp_url.strip())
-                )
-            ]
-        )
 
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
