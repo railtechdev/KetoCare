@@ -72,15 +72,37 @@ export function webApp(): TelegramWebApp | null {
  * нельзя, и отличать её от отсутствия нечем.
  */
 export function launchData(): string | null {
-  // Два источника, и берётся первый непустой.
+  // Три источника, и берётся первый непустой.
   //
-  // Раньше к `window.Telegram.WebApp` обращались только в `catch`, то есть
-  // когда SDK БРОСИЛ исключение. Но он умеет и не бросать: вернуть пустую
-  // строку или `undefined`, если строки запуска нет там, где он её ищет
-  // (адрес, хеш, хранилище клиента). В этом случае запасной источник не
-  // опрашивался вовсе, и приложение, открытое кнопкой в чате, объявляло себя
-  // открытым вне Telegram — тупик, из которого семье не выйти.
-  return firstNonEmpty(fromSdk(), webApp()?.initData);
+  // Первым — свой разбор адреса, а не SDK. Причина не в недоверии, а в замере
+  // на живом стенде: клиент Telegram передал параметры запуска в адресе
+  // (`tgWebApp…` в хеше), а `retrieveRawInitData` строки не отдал — ни
+  // исключением, ни значением. Приложение при этом объявляло себя открытым вне
+  // Telegram, стоя ровно там, куда его привела кнопка «Приложение».
+  //
+  // Разбор адреса — три строки и никаких предположений о поведении библиотеки:
+  // `tgWebAppData` в хеше и есть та самая подпись, которую проверяет сервер.
+  return firstNonEmpty(fromAddress(), fromSdk(), webApp()?.initData);
+}
+
+/**
+ * `tgWebAppData` из адреса страницы.
+ *
+ * Telegram кладёт параметры запуска в хеш (`#tgWebAppData=…&tgWebAppVersion=…`),
+ * а в некоторых клиентах — в строку запроса. Смотрим оба места: пропустить
+ * подпись там, где она есть, дороже лишней проверки.
+ */
+function fromAddress(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+
+  for (const source of [
+    window.location.hash.slice(1),
+    window.location.search.slice(1),
+  ]) {
+    const value = new URLSearchParams(source).get("tgWebAppData");
+    if (value !== null && value.length > 0) return value;
+  }
+  return undefined;
 }
 
 function fromSdk(): string | undefined {
@@ -97,6 +119,8 @@ export interface LaunchDiagnosis {
   telegram: boolean;
   /** Отдал ли клиент строку запуска: она приходит либо в объекте, либо в адресе. */
   launchParams: boolean;
+  /** Какие именно параметры запуска пришли — только имена, без значений. */
+  keys: string;
 }
 
 /**
@@ -120,6 +144,12 @@ export function launchDiagnosis(): LaunchDiagnosis {
     telegram: webApp() !== null,
     launchParams:
       address.includes("tgWebApp") || (webApp()?.initData ?? "").length > 0,
+    // Имена параметров, и только имена: в значениях лежат подпись и данные
+    // пользователя, а эта строка показывается на экране.
+    keys: [...address.matchAll(/tgWebApp[A-Za-z]*/g)]
+      .map((match) => match[0])
+      .filter((name, index, all) => all.indexOf(name) === index)
+      .join(", "),
   };
 }
 
