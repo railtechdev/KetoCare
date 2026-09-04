@@ -1,0 +1,92 @@
+name: E2E
+
+# Ночью и по кнопке, а не на каждый PR (раздел 13 ТЗ). Сквозной прогон поднимает
+# базу, API и дев-сервер кабинета и ходит по экранам браузером: это минуты, и
+# держать их в обязательном CI значило бы платить ими за каждую правку текста.
+# Ночной прогон ловит то же самое, только на сутки позже — а сутки здесь дешевле,
+# чем очередь на merge.
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+env:
+  DATABASE_URL: postgresql+asyncpg://ketocare:ketocare@localhost:5432/ketocare
+  REDIS_URL: redis://localhost:6379/0
+  SECRET_KEY: ci-secret-key-not-used-outside-ci-000000000000
+  BOT_API_TOKEN: ci-bot-service-token-not-used-outside-ci
+  TZ: Asia/Tashkent
+  # Порты, которые ждут `apps/e2e/src/env.ts` и vite: в CI корневого `.env` нет,
+  # и без них конфигурация взяла бы значения по умолчанию, а vite — свои.
+  API_PROXY_TARGET: http://127.0.0.1:8001
+  WEB_PORT: "5173"
+
+jobs:
+  e2e:
+    name: Сквозной сценарий (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ketocare
+          POSTGRES_PASSWORD: ketocare
+          POSTGRES_DB: ketocare
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ketocare"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: uv sync --all-packages
+      - run: pnpm install --frozen-lockfile
+
+      - name: Сгенерировать api-client
+        # `packages/api-client/src/generated/` в .gitignore: на чистом checkout
+        # его нет, и кабинет не соберётся.
+        run: |
+          uv run python apps/api/scripts/export_openapi.py apps/api/openapi.json
+          pnpm --filter @ketocare/api-client run generate
+
+      - name: Миграции и данные прогона
+        run: |
+          cd packages/core && uv run --project ../.. alembic upgrade head && cd ../..
+          uv run python infra/scripts/seed_e2e.py
+
+      - name: Браузер Playwright
+        run: pnpm --filter @ketocare/e2e exec playwright install --with-deps chromium
+
+      - name: Прогон
+        # API и дев-сервер кабинета поднимает сама конфигурация Playwright
+        # (`webServer`): так же, как локально, — чтобы прогон в CI и на машине
+        # разработчика запускался одинаково и расходился реже.
+        run: pnpm --filter @ketocare/e2e exec playwright test
+
+      - name: Отчёт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
