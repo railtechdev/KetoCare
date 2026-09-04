@@ -239,6 +239,10 @@ worker: ## Запустить ARQ-воркер (PDF-отчёты)
 seed-demo: ## Наполнить локальную БД демо-данными (учётки, продукты, две недели дневника)
 	uv run python infra/scripts/seed_demo.py
 
+.PHONY: seed-e2e
+seed-e2e: ## Данные для сквозного прогона Playwright (учётки, ребёнок, продукты)
+	uv run python infra/scripts/seed_e2e.py
+
 .PHONY: migrate
 migrate: ## Применить миграции (alembic upgrade head)
 	cd packages/core && uv run --project ../.. alembic upgrade head
@@ -266,8 +270,22 @@ kb-check: ## Проверить статьи базы знаний, не тро�
 	uv run python -m core.tools.index_knowledge_base --check
 
 .PHONY: e2e
-e2e: ## Playwright-тесты (требует make dev)
-	@echo "E2E появляются на этапе 5 ТЗ (раздел 15, п.22)"; exit 1
+e2e: check-env ## Сквозные тесты Playwright (требует make dev)
+	@# Сид запускает сама конфигурация Playwright (globalSetup): так он
+	@# отработает и при прямом вызове `playwright test`, а забытый сид виден
+	@# как «Неверный код подтверждения» — сообщение, по которому причину не найти.
+	pnpm --filter @ketocare/e2e run e2e
+
+.PHONY: e2e-install
+e2e-install: ## Поставить браузер для Playwright (нужно один раз)
+	pnpm --filter @ketocare/e2e exec playwright install --with-deps chromium
+
+.PHONY: load
+load: check-env ## Нагрузочный прогон (locust, 100 одновременных) — требует поднятый API
+	@# Раздел 15 п. 22 ТЗ. Профиль и пороги — в infra/load/README.md.
+	uv run --with locust locust -f infra/load/locustfile.py \
+		--headless --users 100 --spawn-rate 10 --run-time 2m \
+		--host $${LOAD_HOST:-http://127.0.0.1:$(API_PORT)}
 
 .PHONY: coverage-engine
 coverage-engine: ## Покрытие keto_engine (по ТЗ требуется 100%)

@@ -40,7 +40,13 @@ async def send_message(client: httpx.AsyncClient, *, token: str, chat_id: int, t
         return
 
     body = _describe(response)
-    logger.warning("telegram_send_failed", chat_id=chat_id, status=response.status_code)
+    # `chat_id` в лог не пишется: раздел 10.2 ТЗ называет его идентификатором,
+    # который не должен покидать систему, а json-file логи лежат на диске VPS
+    # открытым текстом — это прямая связь строки лога с конкретной семьёй.
+    # Для разбора достаточно кода ответа и хвоста идентификатора.
+    logger.warning(
+        "telegram_send_failed", chat=f"…{str(chat_id)[-4:]}", status=response.status_code
+    )
     raise TelegramSendError(body)
 
 

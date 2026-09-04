@@ -20,6 +20,11 @@ x-app-env: &app-env
   REPORTS_DIR: /data/reports
   ATTACHMENTS_DIR: /data/attachments
   ERASED_DIR: /data/erased
+  # Интерактивная документация выключена: перечень маршрутов, схемы тел и коды
+  # ошибок, открытые кому угодно, — бесплатная карта целей. Спецификацию для
+  # генерации клиента снимает `scripts/export_openapi.py`, а не работающий
+  # сервер, поэтому сборке это ничего не ломает.
+  API_DOCS: "false"
 
 # 40 ГБ диска: без ограничения json-file логи uvicorn/бота съедают его молча.
 x-logging: &logging

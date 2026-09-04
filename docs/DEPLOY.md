@@ -111,6 +111,13 @@ cp .env.example .env   # и заполнить, см. ниже
 ```bash
 sudo cp infra/nginx/ketocare-landing.conf infra/nginx/ketocare-app.conf \
         infra/nginx/ketocare-miniapp.conf /etc/nginx/sites-available/
+# Заголовки безопасности лежат отдельными файлами и подключаются `include` из
+# каждого location. Без этого шага nginx не поднимется вовсе — «open() ...
+# snippets/ketocare-security-headers.conf failed».
+sudo mkdir -p /etc/nginx/snippets
+sudo cp infra/nginx/security-headers.conf /etc/nginx/snippets/ketocare-security-headers.conf
+sudo cp infra/nginx/csp-app.conf /etc/nginx/snippets/ketocare-csp-app.conf
+sudo cp infra/nginx/csp-miniapp.conf /etc/nginx/snippets/ketocare-csp-miniapp.conf
 sudo ln -s /etc/nginx/sites-available/ketocare-{landing,app,miniapp}.conf /etc/nginx/sites-enabled/
 sudo cp infra/nginx/server-names-hash.conf /etc/nginx/conf.d/
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -118,6 +125,23 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d ketocare.railtech.uz -d app.ketocare.railtech.uz \
         -d tma.ketocare.railtech.uz --redirect
 ```
+
+**Заголовки проверяются, а не предполагаются.** `add_header` в nginx наследуется
+с уровня `server` только туда, где нет ни одной своей директивы `add_header`, —
+и политика, написанная один раз наверху, молча не доходит до `location` с
+`Cache-Control`. Ровно это и было у Mini App: защита от вставки в рамку не
+попадала на `index.html`, то есть на единственный ответ, ради которого писалась.
+После выката:
+
+```bash
+curl -sI https://app.ketocare.railtech.uz/ | grep -iE 'frame-options|content-security|strict-transport'
+curl -sI https://tma.ketocare.railtech.uz/ | grep -i content-security
+```
+
+У кабинета должны быть `X-Frame-Options: DENY` и `frame-ancestors 'none'`, у
+Mini App — `frame-ancestors https://web.telegram.org …` и НИ ОДНОГО
+`X-Frame-Options` (он умеет только `DENY`/`SAMEORIGIN` и закрыл бы приложение
+целиком).
 
 **Mini App — отдельный host (`tma.`), а не путь внутри кабинета.** Так требует
 раздел 13 ТЗ, и причина в заголовках: кабинет запрещает вставку в рамку, а Mini
@@ -447,9 +471,31 @@ docker compose --env-file .env -f infra/docker-compose.prod.yml \
 диске, который и отказывает. Том `reports` не копируется: PDF пересобирается
 из базы.
 
-Плюс копия за пределы VPS (rclone/scp — куда угодно, но не на этот же диск):
-дамп, архив вложений и архивы удалений. Этого скрипт не делает — настраивается
-отдельно, и он об этом честно пишет в конце каждого прогона.
+**Копия шифруется, иначе не делается вовсе.** Раздел 11 ТЗ требует age, и скрипт
+без ключа отказывается работать: предупреждение в конце прогона, которое стояло
+здесь раньше, честно называло проблему и ничего не меняло — открытые копии всей
+клинической базы продолжали копиться рядом с продом.
+
+Ключ создаётся **не на сервере**: приватная половина там не нужна и её там быть
+не должно — иначе шифрование защищает ровно ни от чего.
+
+```bash
+# на своей машине
+age-keygen -o ketocare-backup.key      # приватный ключ храните вне сервера
+grep 'public key' ketocare-backup.key  # age1…
+```
+
+Публичный ключ кладётся на сервер в переменную `BACKUP_AGE_RECIPIENT`, туда же —
+`BACKUP_REMOTE` с целью `rclone copy` (например `s3:ketocare-backups`). Нужны
+пакеты `age` и `rclone` (`apt-get install -y age rclone`) и однократный
+`rclone config`. Осознанный отказ от шифрования возможен —
+`BACKUP_ALLOW_PLAINTEXT=1`, — но написать его придётся руками, и он останется в
+crontab на виду.
+
+**Копия за пределы этого диска.** Отказ диска уничтожает и прод, и все тридцать
+копий разом: ни retention, ни проверка восстановления в этом сценарии не
+помогают ничем. Если `BACKUP_REMOTE` пуст, скрипт скажет об этом в конце
+прогона.
 
 **Восстановление проверяется скриптом, а не обещанием.**
 `infra/scripts/verify-backup.sh` разворачивает дамп в отдельную временную базу и
@@ -460,6 +506,11 @@ docker compose --env-file .env -f infra/docker-compose.prod.yml \
 ```bash
 # на сервере
 /srv/ketocare/infra/scripts/verify-backup.sh /srv/backups/postgres-$(date +%F).dump
+
+# зашифрованную копию проверяют там, где есть приватный ключ, — обычно на своей
+# машине. Проверка заодно подтверждает, что ключ цел и подходит.
+BACKUP_AGE_IDENTITY=~/ketocare-backup.key \
+  infra/scripts/verify-backup.sh ./postgres-2026-09-04.dump.age ketocare-dev-postgres-1
 
 # или не копируя скрипт на сервер
 ssh ketocare@… 'bash -s -- /srv/backups/postgres-2026-08-31.dump' < infra/scripts/verify-backup.sh
@@ -499,6 +550,13 @@ ssh ketocare@… 'bash -s -- /srv/backups/postgres-2026-08-31.dump' < infra/scri
   этим стоит отсрочка `ATTACHMENT_PURGE_DAYS` — 30 дней, чтобы случайно
   удалённую выписку можно было вернуть. Проверить, что задача идёт:
   `docker compose ... logs worker | grep purge_files`.
+
+## Руководство администратора клиники
+
+Этот документ — про сервер. То, что делает администратор клиники в самом
+кабинете (учётные записи, второй фактор, справочники, заявки, журнал аудита),
+описано отдельно: [`ADMIN.md`](ADMIN.md). Его же стоит отдать клиенту вместе с
+доступами.
 
 ## Передача клиенту
 

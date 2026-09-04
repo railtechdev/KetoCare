@@ -49,7 +49,7 @@ from ..schemas import (
     ProductRevisionRead,
     ProductUpdate,
 )
-from ..services import product_checks
+from ..services import product_checks, uploads
 from ..services.product_import import ValidRow, parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -522,33 +522,8 @@ async def list_product_revisions(
 
 
 # 5 МБ: база продуктов — тысячи строк, а не десятки тысяч; ограничение защищает
-# воркер от разбора произвольно большого файла в памяти.
-MAX_IMPORT_BYTES = 5 * 1024 * 1024
-
-#: Размер куска при чтении загруженного файла.
-_IMPORT_CHUNK = 64 * 1024
-
-
-async def _read_within_limit(file: UploadFile) -> bytes:
-    """Читает файл, останавливаясь на превышении предела.
-
-    Предел проверялся ПОСЛЕ `await file.read()`, то есть после того, как весь
-    файл оказывался в памяти процесса. Ограничение, которое срабатывает уже
-    после того, как ущерб нанесён, защищает только от аккуратных: гигабайтный
-    файл сначала прочитывался целиком и лишь затем отвергался.
-    """
-
-    chunks: list[bytes] = []
-    size = 0
-    while chunk := await file.read(_IMPORT_CHUNK):
-        size += len(chunk)
-        if size > MAX_IMPORT_BYTES:
-            raise ApiError(
-                ErrorCode.VALIDATION_ERROR,
-                f"Файл больше {MAX_IMPORT_BYTES // (1024 * 1024)} МБ.",
-            )
-        chunks.append(chunk)
-    return b"".join(chunks)
+# воркер от разбора произвольно большого файла в памяти. Само чтение — в
+# `services.uploads`: тот же предел нужен импорту рецептов.
 
 
 @router.post(
@@ -577,7 +552,7 @@ async def import_products(
     частично.
     """
 
-    content = await _read_within_limit(file)
+    content = await uploads.read_within_limit(file)
 
     report = parse_csv(content)
     errors = [

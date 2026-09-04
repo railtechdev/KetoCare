@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, time
@@ -224,7 +225,7 @@ class AiClient:
                 timeout=timeout_s,
             )
         except Exception as error:  # noqa: BLE001 — наружу идёт один понятный тип
-            await self._finish_failed(job_id, error=str(error))
+            await self._finish_failed(job_id, error=_describe_failure(error))
             raise AiUnavailable("Модель не ответила.") from error
 
         tokens_in, tokens_out = _usage_of(response)
@@ -394,3 +395,26 @@ def build_anthropic(settings: Settings) -> AnthropicLike:
             timeout=DEFAULT_TIMEOUT_S,
         ),
     )
+
+
+#: Сколько текста исключения сохранять в журнал.
+_ERROR_CHARS = 300
+
+
+def _describe_failure(error: BaseException) -> str:
+    """Причина неудачи для `ai_jobs.error` — без содержимого запроса.
+
+    `str(error)` у транспортных исключений иногда разворачивает объект запроса
+    вместе с заголовками, а среди них `x-api-key`. Журнал вызовов читают люди, и
+    ключ, однажды попавший в строку таблицы, оттуда уже не вынуть: он поедет в
+    бэкап, в выгрузку, в разбор инцидента.
+    """
+
+    text = f"{type(error).__name__}: {error}"[:_ERROR_CHARS]
+    return _SECRETS.sub("[скрыто]", text)
+
+
+#: Что вырезается: значения заголовков с ключами и любые строки вида `sk-...`.
+_SECRETS = re.compile(
+    r"(?i)(x-api-key|authorization|api[_-]?key)\s*[:=]\s*\S+|sk-[A-Za-z0-9_\-]{8,}"
+)

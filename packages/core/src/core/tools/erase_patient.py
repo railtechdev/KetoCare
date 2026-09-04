@@ -180,7 +180,7 @@ def _remove_files(stored_names: list[str]) -> int:
     return removed
 
 
-async def erase(patient_id: uuid.UUID, *, archive_dir: Path) -> Path:
+async def erase(patient_id: uuid.UUID, *, archive_dir: Path, requested_by: str = "") -> Path:
     """Стирает данные пациента. Возвращает путь к архиву."""
 
     sessionmaker = get_sessionmaker()
@@ -251,6 +251,12 @@ async def erase(patient_id: uuid.UUID, *, archive_dir: Path) -> Path:
                     "archive": path.name,
                     "rows": removed_rows,
                     "files": removed_files,
+                    # Кто распорядился. Запись без этого фиксировала факт
+                    # стирания, но не основание: через полгода на вопрос «по
+                    # чьему запросу» ответа не было бы, а операция необратима.
+                    # `user_id` остаётся пустым намеренно — команду запускают из
+                    # консоли сервера, а не из-под учётной записи.
+                    "requested_by": requested_by or "не указан",
                 },
             )
         )
@@ -278,6 +284,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Куда положить архив перед удалением (по умолчанию ERASED_DIR)",
     )
+    parser.add_argument(
+        "--requested-by",
+        default="",
+        help="Кто распорядился стиранием: имя или почта. Уходит в audit_log",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -302,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
     # Умолчание — из настроек, а не строкой здесь: на сервере это том, и
     # каталог внутри контейнера потерял бы архив при первом деплое.
     archive_dir = Path(args.archive_dir or get_settings().erased_dir)
-    asyncio.run(erase(patient_id, archive_dir=archive_dir))
+    asyncio.run(erase(patient_id, archive_dir=archive_dir, requested_by=args.requested_by))
     return 0
 
 

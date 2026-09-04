@@ -247,3 +247,28 @@ async def delete(session: AsyncSession, *, recipe: Recipe) -> None:
     )
     await session.delete(recipe)
     await session.flush()
+
+
+async def titles_taken(session: AsyncSession, *, titles: list[str]) -> set[str]:
+    """Названия из списка, которые уже заняты, — в нормализованном виде.
+
+    Нужно импорту: он не переписывает существующие рецепты, и совпадение по
+    названию должно стать ошибкой строки, а не молчаливой перезаписью. Сравнение
+    по свёрнутому регистру, как и у продуктов: «Омлет» и «омлет» — одно и то же
+    блюдо в глазах человека, который готовит по списку.
+    """
+
+    if not titles:
+        return set()
+
+    folded = {title.casefold().strip() for title in titles}
+    # Фильтр в SQL, а не чтение всей таблицы в память: сборник рецептов клиники
+    # это тысячи строк, и импорт вытягивал бы их целиком ради проверки двухсот
+    # названий. Нормализация та же, что в приложении.
+    #
+    # Мягкого удаления у рецептов нет (раздел 4.2): убирают их сменой статуса,
+    # а название остаётся занятым.
+    rows = await session.scalars(
+        select(Recipe.title).where(func.lower(func.btrim(Recipe.title)).in_(folded))
+    )
+    return {title.casefold().strip() for title in rows}

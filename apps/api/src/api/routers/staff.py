@@ -22,7 +22,7 @@ from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, limiter
 from ..schemas import ColleagueRead, MeUpdate, PasswordChange, TokenPair, UserRead
-from ..security import create_token, hash_password_async, verify_password
+from ..security import create_token, hash_password_async, verify_password_async
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -89,7 +89,7 @@ async def change_password(
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
 
-    if not verify_password(me.password_hash, payload.current_password):
+    if not await verify_password_async(me.password_hash, payload.current_password):
         await audit_repo.write_audit_log_independent(
             user_id=me.id,
             action="password_change_failed",

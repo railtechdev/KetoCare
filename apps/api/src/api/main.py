@@ -49,8 +49,14 @@ def create_app() -> FastAPI:
         title="KetoCare API",
         version="0.1.0",
         description="API платформы сопровождения кетогенной диетотерапии.",
-        openapi_url=f"{API_PREFIX}/openapi.json",
-        docs_url=f"{API_PREFIX}/docs",
+        # На стенде документация выключается (`API_DOCS=false`): перечень
+        # маршрутов, схемы тел и коды ошибок, открытые кому угодно, — бесплатная
+        # карта целей. В разработке она нужна, поэтому умолчание обратное.
+        # Спецификацию для генерации клиента снимает `scripts/export_openapi.py`,
+        # а не работающий сервер, — выключение ничего не ломает.
+        openapi_url=f"{API_PREFIX}/openapi.json" if settings.api_docs else None,
+        docs_url=f"{API_PREFIX}/docs" if settings.api_docs else None,
+        redoc_url=None,
     )
 
     # Порядок важен: add_middleware добавляет слой снаружи предыдущих, поэтому
