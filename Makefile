@@ -274,7 +274,7 @@ e2e: check-env ## Сквозные тесты Playwright (требует make de
 	@# Сид запускает сама конфигурация Playwright (globalSetup): так он
 	@# отработает и при прямом вызове `playwright test`, а забытый сид виден
 	@# как «Неверный код подтверждения» — сообщение, по которому причину не найти.
-	pnpm --filter @ketocare/e2e exec playwright test
+	pnpm --filter @ketocare/e2e run e2e
 
 .PHONY: e2e-install
 e2e-install: ## Поставить браузер для Playwright (нужно один раз)
