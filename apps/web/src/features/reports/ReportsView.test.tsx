@@ -30,6 +30,7 @@ const REPORT = {
   ketones: { points: [], min: null, max: null, mean: null },
   weight: { points: [], min: null, max: null, mean: null },
   menu: { days: 0, items: 0, eaten: 0 },
+  summaries: [],
 };
 
 let jobStatus = "queued";

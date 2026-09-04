@@ -1,9 +1,9 @@
 """ARQ-воркер KetoCare.
 
 Задачи раздела 10.1 ТЗ подключаются по мере готовности этапов: сейчас здесь
-`render_report` (раздел 15 п. 14), уборка файлов, напоминания и `parse_free_text`
-(п. 19 этапа 4). Остальные ИИ-задачи — `assistant_reply` (п. 20),
-`doctor_summary` и `content_draft` (п. 21) — впереди.
+`render_report` (раздел 15 п. 14), уборка файлов, напоминания, `parse_free_text`
+(п. 19 этапа 4), `assistant_reply` (п. 20) и `doctor_summary` (п. 21).
+Осталась `content_draft` — черновики карточек рецептов для администратора.
 
 Адрес Redis берётся из `core.config.Settings` — того же места, откуда его берёт
 API. Своя `BaseSettings` у воркера читала только переменные процесса и не видела
@@ -21,6 +21,7 @@ from core.observability import init_sentry
 
 from .ai.assistant import assistant_reply
 from .ai.parse import parse_free_text
+from .ai.summary import doctor_summary
 from .maintenance import close_stuck_ai_jobs, purge_files
 from .reminders.notify import notify_family
 from .reminders.task import reminders_cron
@@ -35,7 +36,13 @@ init_sentry("worker")
 
 
 class WorkerSettingsARQ:
-    functions: list[Any] = [render_report, notify_family, parse_free_text, assistant_reply]
+    functions: list[Any] = [
+        render_report,
+        notify_family,
+        parse_free_text,
+        assistant_reply,
+        doctor_summary,
+    ]
     # Уборка файлов — ночью и раз в сутки: работа дисковая, торопиться некуда,
     # а днём том занят выдачей отчётов и вложений.
     cron_jobs: list[Any] = [

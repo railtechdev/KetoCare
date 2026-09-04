@@ -22,6 +22,9 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
+from core.textguard import find_any as _any
+from core.textguard import normalize as _normalize
+
 from .lexicons import (
     ABOUT_THE_CHILD,
     CHANGE_VERBS,
@@ -149,22 +152,3 @@ def _symptom_reading(text: str) -> Verdict:
     if reading is None:
         return PASSED
     return Verdict(True, Kind.SYMPTOM_READING, "симптом + толкование", f"{symptom} + {reading}")
-
-
-def _normalize(text: str) -> str:
-    """Нижний регистр, «ё» как «е», разметка снята.
-
-    Без этого `**300 мг**` и «Мг» проходили бы мимо: модель форматирует ответ, а
-    фильтр смотрит на буквы.
-    """
-
-    lowered = text.lower().replace("ё", "е")
-    without_markup = re.sub(r"[*_`#>]+", " ", lowered)
-    return re.sub(r"\s+", " ", without_markup)
-
-
-def _any(text: str, needles: tuple[str, ...]) -> str | None:
-    for needle in needles:
-        if needle in text:
-            return needle
-    return None

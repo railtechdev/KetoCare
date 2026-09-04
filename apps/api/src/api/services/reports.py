@@ -72,7 +72,16 @@ async def build_report(
     period_from: date,
     period_to: date,
     generated_at: datetime,
+    with_summaries: bool = False,
 ) -> PatientReport:
+    """Отчёт за период.
+
+    `with_summaries` — врачебные сводки. По умолчанию их нет: сводка написана
+    для специалиста, а тот же отчёт видит семья, и раздел о ребёнке, написанный
+    не для родителя, не должен появляться у него молча (вопрос 42 медкоманде).
+    Ограничение стоит на сборке, а не на экране: экран — это UX, не доступ.
+    """
+
     start, end = period_bounds(period_from, period_to)
 
     seizures = await reports_repo.list_seizures(
@@ -90,8 +99,12 @@ async def build_report(
     adherence = await reports_repo.menu_adherence(
         session, patient_id=patient.id, period_from=period_from, period_to=period_to
     )
-    summaries = await reports_repo.list_approved_summaries(
-        session, patient_id=patient.id, period_from=period_from, period_to=period_to
+    summaries = (
+        await reports_repo.list_approved_summaries(
+            session, patient_id=patient.id, period_from=period_from, period_to=period_to
+        )
+        if with_summaries
+        else []
     )
 
     history, _ = await prescriptions_repo.list_history(

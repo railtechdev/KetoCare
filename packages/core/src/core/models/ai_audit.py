@@ -60,6 +60,19 @@ class AiConversation(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
 
 
 class DoctorSummary(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
+    """Сводка за период: черновик модели и подтверждённый врачом текст (раздел 10.5 ТЗ).
+
+    Строка заводится в момент заказа, до обращения к модели, и потому знает своё
+    состояние (`status`). Раздел 4.2 ТЗ такого поля не предусматривает, но без
+    него врачу нечего опрашивать: сборка идёт секунды, а «черновика ещё нет» и
+    «черновик не получился» — разные вещи, и вторая обязана быть видимой.
+    Причина та же, по которой заведена `report_jobs` (ADR-0008), а решение
+    записано в ADR-0023.
+
+    Отсюда же необязательность `draft_md` и `ai_job_id`: на момент заказа текста
+    нет, а вызова модели ещё не было.
+    """
+
     __tablename__ = "doctor_summaries"
 
     patient_id: Mapped[uuid.UUID] = mapped_column(
@@ -67,13 +80,25 @@ class DoctorSummary(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     )
     period_start: Mapped[date] = mapped_column(nullable=False)
     period_end: Mapped[date] = mapped_column(nullable=False)
-    draft_md: Mapped[str] = mapped_column(nullable=False)
+    status: Mapped[AiJobStatus] = mapped_column(
+        pg_enum(AiJobStatus, "ai_job_status"), nullable=False, default=AiJobStatus.QUEUED
+    )
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    draft_md: Mapped[str | None]
+    #: Находки постфильтра по черновику: список `{kind, fragment, detail}`.
+    #: Хранятся, а не пересчитываются при чтении: правила со временем меняются,
+    #: а разбирать через полгода придётся именно то, что видел врач.
+    checks: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    error: Mapped[str | None]
     approved_md: Mapped[str | None]
     approved_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id")
     )
-    ai_job_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("ai_jobs.id"), nullable=False
+    approved_at: Mapped[datetime | None]
+    ai_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("ai_jobs.id")
     )
 
 

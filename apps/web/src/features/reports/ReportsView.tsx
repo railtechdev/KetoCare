@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { DoctorSummaryPanel } from "./DoctorSummaryPanel";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { toDateInput } from "../diary/time";
@@ -267,9 +268,45 @@ export function ReportsView({ patientId }: { patientId: string }) {
                 })}
               </p>
             </Section>
+
+            {/* Утверждённые сводки: до этого блока они были в PDF и в выгрузке,
+                но не на экране — ADR-0008 обещает обратное, а расхождение
+                экрана и печати в клиническом документе и есть тот риск, ради
+                которого обещание давалось. Сервер отдаёт этот раздел только
+                специалисту. */}
+            {report.data.summaries.length > 0 && (
+              <Section title={t("summary.approvedTitle")}>
+                {report.data.summaries.map((item) => (
+                  <div
+                    key={`${item.period_start}-${item.period_end}`}
+                    className="flex flex-col gap-field"
+                  >
+                    <p className="m-0 text-sm text-muted-foreground">
+                      {t("summary.periodLine", {
+                        from: item.period_start,
+                        to: item.period_end,
+                      })}
+                    </p>
+                    <p className="m-0 whitespace-pre-line text-sm">
+                      {item.approved_md}
+                    </p>
+                  </div>
+                ))}
+              </Section>
+            )}
           </>
         )}
       </AsyncSection>
+
+      {/* Черновик сводки — только врачу. Это UX: право проверяет сервер,
+          ручки сводки закрыты ролью и `require_patient_access`. */}
+      {isDoctor && (
+        <DoctorSummaryPanel
+          patientId={patientId}
+          range={range}
+          disabled={invalidRange}
+        />
+      )}
     </>
   );
 }

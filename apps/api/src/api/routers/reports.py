@@ -79,6 +79,7 @@ async def get_report(
         period_from=period_from,
         period_to=period_to,
         generated_at=datetime.now(UTC),
+        with_summaries=_is_specialist(user.role),
     )
 
     if report_format == "json":
@@ -138,6 +139,7 @@ async def request_pdf_report(
         period_from=period_from,
         period_to=period_to,
         generated_at=datetime.now(UTC),
+        with_summaries=_is_specialist(user.role),
     )
 
     job = await jobs_repo.create(
@@ -159,6 +161,16 @@ async def request_pdf_report(
     # иначе отчёт на экране и отчёт в PDF однажды разойдутся (ADR-0008).
     await queue_service.enqueue("render_report", str(job.id), report.model_dump(mode="json"))
     return ReportJobRead.model_validate(job)
+
+
+def _is_specialist(role: UserRole) -> bool:
+    """Кому в отчёт кладутся врачебные сводки.
+
+    Диетолог ведёт того же ребёнка и читает те же данные; родитель — нет:
+    сводка написана специалисту и для специалиста (раздел 10.5 ТЗ).
+    """
+
+    return role in (UserRole.DOCTOR, UserRole.DIETITIAN)
 
 
 def _check_period(period_from: date, period_to: date) -> None:
@@ -222,6 +234,11 @@ async def _job_with_access(
 
     Именно тем же кодом, а не тем же репозиторием: копия проверки повторяла
     только вторую её ступень и пропускала сверку `patient_scope`.
+
+    Доступа к ребёнку при этом мало: содержимое файла зависит от того, кто его
+    заказал — врачебные сводки попадают в PDF только специалисту. Файл отдаётся
+    заказчику, иначе родитель, узнавший идентификатор задачи, получил бы
+    врачебную сборку целиком.
     """
 
     job = await jobs_repo.get(session, job_id)
@@ -229,6 +246,8 @@ async def _job_with_access(
         raise ApiError(ErrorCode.NOT_FOUND, "Задача отчёта не найдена.")
 
     await assert_patient_access(session, user, job.patient_id)
+    if job.requested_by != user.id:
+        raise ApiError(ErrorCode.FORBIDDEN, "Отчёт заказан другим пользователем.")
     return job
 
 
