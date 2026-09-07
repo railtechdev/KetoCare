@@ -5,3 +5,11 @@ packages:
   - "packages/landing"
   - "packages/ui"
   - "packages/api-client"
+
+# Переопределения версий (`pnpm.overrides`) лежат в `package.json`: их читает
+# pnpm 9, который закреплён в `packageManager`. В pnpm 10 это поле переехало
+# сюда, и при обновлении менеджера его нужно перенести — иначе override
+# перестанет применяться МОЛЧА, без ошибки, и вернётся уязвимость, ради которой
+# он заведён (сейчас это `valibot >=1.4.2`, ReDoS в регулярке эмодзи,
+# docs/SECURITY_REVIEW.md). Признак, что пора переносить: предупреждение
+# «The "pnpm" field in package.json is no longer read by pnpm».

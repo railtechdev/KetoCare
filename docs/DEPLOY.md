@@ -118,6 +118,7 @@ sudo mkdir -p /etc/nginx/snippets
 sudo cp infra/nginx/security-headers.conf /etc/nginx/snippets/ketocare-security-headers.conf
 sudo cp infra/nginx/csp-app.conf /etc/nginx/snippets/ketocare-csp-app.conf
 sudo cp infra/nginx/csp-miniapp.conf /etc/nginx/snippets/ketocare-csp-miniapp.conf
+sudo cp infra/nginx/csp-landing.conf /etc/nginx/snippets/ketocare-csp-landing.conf
 sudo ln -s /etc/nginx/sites-available/ketocare-{landing,app,miniapp}.conf /etc/nginx/sites-enabled/
 sudo cp infra/nginx/server-names-hash.conf /etc/nginx/conf.d/
 sudo rm -f /etc/nginx/sites-enabled/default
