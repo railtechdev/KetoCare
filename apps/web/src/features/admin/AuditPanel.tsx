@@ -3,6 +3,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  FilterBar,
   formatOccurredAt,
   Section,
 } from "@ketocare/ui";
@@ -188,80 +189,77 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
           `fieldset` остаётся там, где обязателен семантически — у группы
           радиокнопок или флажков с общей подписью. Здесь же это поля разных
           типов, и `Section` с `titleHidden` описан ровно для этого случая. */}
-      <Section
-        title={t("audit.filters.legend")}
-        titleHidden
-        density="compact"
-        contentClassName="grid gap-block sm:grid-cols-2 lg:grid-cols-3"
-      >
-        <Field
-          id="audit-user"
-          label={t("audit.filters.user")}
-          placeholder={t("audit.filters.userPlaceholder")}
-          value={filters.userId}
-          onChange={(event) => patchFilters({ userId: event.target.value })}
-          error={userIdInvalid && t("audit.filters.userInvalid")}
-        />
+      <Section title={t("audit.filters.legend")} titleHidden>
+        <FilterBar label={t("audit.filters.legend")}>
+          <Field
+            id="audit-user"
+            label={t("audit.filters.user")}
+            placeholder={t("audit.filters.userPlaceholder")}
+            value={filters.userId}
+            onChange={(event) => patchFilters({ userId: event.target.value })}
+            error={userIdInvalid && t("audit.filters.userInvalid")}
+          />
 
-        <SelectField
-          id="audit-entity"
-          width="medium"
-          label={t("audit.filters.entity")}
-          value={filters.entity}
-          onChange={(event) => patchFilters({ entity: event.target.value })}
-        >
-          <option value="">{t("audit.filters.anyEntity")}</option>
-          {AUDIT_ENTITIES.map((entity) => (
-            <option key={entity} value={entity}>
-              {t(`audit.entities.${entity}`)}
-            </option>
-          ))}
-        </SelectField>
-
-        <SelectField
-          id="audit-action"
-          width="medium"
-          label={t("audit.filters.action")}
-          value={filters.action}
-          onChange={(event) => patchFilters({ action: event.target.value })}
-        >
-          <option value="">{t("audit.filters.anyAction")}</option>
-          {AUDIT_ACTIONS.map((action) => (
-            <option key={action} value={action}>
-              {t(`audit.actions.${action}`)}
-            </option>
-          ))}
-        </SelectField>
-
-        <Field
-          id="audit-from"
-          width="date"
-          type="date"
-          label={t("audit.filters.from")}
-          value={filters.from}
-          onChange={(event) => patchFilters({ from: event.target.value })}
-        />
-
-        <Field
-          id="audit-to"
-          width="date"
-          type="date"
-          label={t("audit.filters.to")}
-          value={filters.to}
-          onChange={(event) => patchFilters({ to: event.target.value })}
-          error={rangeInvalid && t("audit.filters.rangeInvalid")}
-        />
-
-        <div className="flex items-end">
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-touch w-full"
-            onClick={resetFilters}
+          <SelectField
+            id="audit-entity"
+            width="medium"
+            label={t("audit.filters.entity")}
+            value={filters.entity}
+            onChange={(event) => patchFilters({ entity: event.target.value })}
           >
-            {t("audit.filters.reset")}
-          </Button>
-        </div>
+            <option value="">{t("audit.filters.anyEntity")}</option>
+            {AUDIT_ENTITIES.map((entity) => (
+              <option key={entity} value={entity}>
+                {t(`audit.entities.${entity}`)}
+              </option>
+            ))}
+          </SelectField>
+
+          <SelectField
+            id="audit-action"
+            width="medium"
+            label={t("audit.filters.action")}
+            value={filters.action}
+            onChange={(event) => patchFilters({ action: event.target.value })}
+          >
+            <option value="">{t("audit.filters.anyAction")}</option>
+            {AUDIT_ACTIONS.map((action) => (
+              <option key={action} value={action}>
+                {t(`audit.actions.${action}`)}
+              </option>
+            ))}
+          </SelectField>
+
+          <Field
+            id="audit-from"
+            width="date"
+            type="date"
+            label={t("audit.filters.from")}
+            value={filters.from}
+            onChange={(event) => patchFilters({ from: event.target.value })}
+          />
+
+          <Field
+            id="audit-to"
+            width="date"
+            type="date"
+            label={t("audit.filters.to")}
+            value={filters.to}
+            onChange={(event) => patchFilters({ to: event.target.value })}
+            error={rangeInvalid && t("audit.filters.rangeInvalid")}
+          />
+
+          <div className="flex items-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch w-full"
+              onClick={resetFilters}
+            >
+              {t("audit.filters.reset")}
+            </Button>
+          </div>
+        </FilterBar>
       </Section>
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}

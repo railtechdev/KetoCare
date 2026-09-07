@@ -22,6 +22,34 @@ export type { ChatComposerProps } from "./components/ChatComposer";
 export { DiaryEntryCard } from "./components/DiaryEntryCard";
 export type { DiaryEntryCardProps } from "./components/DiaryEntryCard";
 
+export { Columns } from "./components/layout/Columns";
+export type { ColumnsProps } from "./components/layout/Columns";
+
+export { MetricRow, Metric } from "./components/layout/MetricRow";
+export type {
+  MetricRowProps,
+  MetricProps,
+} from "./components/layout/MetricRow";
+
+export { FactList, Fact } from "./components/layout/FactList";
+export type { FactListProps, FactProps } from "./components/layout/FactList";
+
+export { FilterBar } from "./components/layout/FilterBar";
+export type { FilterBarProps } from "./components/layout/FilterBar";
+
+export { Tiles } from "./components/layout/Tiles";
+export type { TilesProps } from "./components/layout/Tiles";
+
+export { SplitView } from "./components/layout/SplitView";
+export type { SplitViewProps } from "./components/layout/SplitView";
+
+export { DensityProvider } from "./components/layout/density";
+export { useDensity } from "./lib/density";
+export type { Density } from "./lib/density";
+
+export { useBreakpoint, BREAKPOINTS } from "./lib/useBreakpoint";
+export type { Breakpoint } from "./lib/useBreakpoint";
+
 export { Section } from "./components/Section";
 export type { SectionProps } from "./components/Section";
 

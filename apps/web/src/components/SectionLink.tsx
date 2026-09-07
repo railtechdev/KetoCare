@@ -24,6 +24,18 @@ interface Props {
    * нечего, нужно задать.
    */
   patient?: string;
+  /**
+   * Всплывающая подсказка. Нужна там, где видимая подпись скрыта: боковая
+   * панель между 768 и 1024 px показывает одни значки, и мыши имя раздела
+   * сообщает только она (скринридеру его сообщает `sr-only`-подпись).
+   */
+  title?: string;
+  /**
+   * Текущий предмет в перечне. Ставится явно, а не выводится из адреса:
+   * «активной» роутер считает ссылку по совпадению пути, а перечень пациентов
+   * весь ведёт на один и тот же путь и различается только параметром.
+   */
+  current?: boolean;
   onClick?: () => void;
 }
 
@@ -48,6 +60,8 @@ export function SectionLink({
   item,
   query,
   patient,
+  title,
+  current,
   onClick,
 }: Props) {
   return (
@@ -73,6 +87,8 @@ export function SectionLink({
         patient: patient ?? previous.patient,
       })}
       className={className}
+      title={title}
+      aria-current={current ? "true" : undefined}
       activeProps={activeProps}
       onClick={onClick}
     >

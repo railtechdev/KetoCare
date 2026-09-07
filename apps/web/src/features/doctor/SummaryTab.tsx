@@ -2,6 +2,7 @@ import {
   AsyncSection,
   Button,
   EmptyState,
+  FactList,
   formatOccurredAt,
   MacroBar,
   RatioBadge,
@@ -137,7 +138,7 @@ function OverviewPanels({
             }
           />
         ) : (
-          <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+          <FactList>
             <dt className="text-muted-foreground">{t("fields.ratio")}</dt>
             <dd className="m-0">
               {/* Вердикт о допуске здесь не показывается: это сама цель
@@ -178,7 +179,7 @@ function OverviewPanels({
                 <dd className="m-0">{prescription.restrictions}</dd>
               </>
             )}
-          </dl>
+          </FactList>
         )}
       </Section>
 
@@ -242,7 +243,7 @@ function OverviewPanels({
       </Section>
 
       <Section title={t("summary.readings.title")}>
-        <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+        <FactList>
           <dt className="text-muted-foreground">
             {t("summary.readings.ketone")}
           </dt>
@@ -279,7 +280,7 @@ function OverviewPanels({
               entries: data.seizures_today.entries,
             })}
           </dd>
-        </dl>
+        </FactList>
       </Section>
     </>
   );
@@ -381,7 +382,7 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
       ?.name_ru ?? null;
 
   return (
-    <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+    <FactList>
       <dt className="text-muted-foreground">{t("profile.fields.diagnosis")}</dt>
       <dd className="m-0">{profile.diagnosis ?? "—"}</dd>
 
@@ -423,6 +424,6 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
       <dd className="m-0 tabular-nums">
         {formatTimestamp(profile.updated_at) ?? "—"}
       </dd>
-    </dl>
+    </FactList>
   );
 }

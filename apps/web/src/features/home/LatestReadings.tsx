@@ -1,4 +1,4 @@
-import { Button, DiaryEntryCard, EmptyState } from "@ketocare/ui";
+import { Button, DiaryEntryCard, EmptyState, Tiles } from "@ketocare/ui";
 import { Droplets, Scale } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -32,7 +32,10 @@ export function LatestReadings({ ketone, weight }: Props) {
         {t("readings.title")}
       </h2>
 
-      <div className="grid gap-block sm:grid-cols-2">
+      {/* Плитками по ширине блока, а не окна: замеры стоят и в основной
+          колонке главной, и (в скелетоне) в приставной — `sm:` отвечал бы на
+          вопрос о ширине окна в обоих местах одинаково. */}
+      <Tiles min="sm">
         {ketone === null ? (
           <NoReading
             icon={Droplets}
@@ -73,7 +76,7 @@ export function LatestReadings({ ketone, weight }: Props) {
             </p>
           </DiaryEntryCard>
         )}
-      </div>
+      </Tiles>
     </section>
   );
 }

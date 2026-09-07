@@ -5,6 +5,7 @@ import {
   EmptyState,
   RatioBadge,
   Skeleton,
+  Tiles,
 } from "@ketocare/ui";
 import { CookingPot, Plus, SearchX } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -39,10 +40,7 @@ export function RecipeListSkeleton() {
         {t("list.loading")}
       </p>
 
-      <ul
-        aria-hidden="true"
-        className="m-0 grid list-none gap-block p-0 sm:grid-cols-2 lg:grid-cols-3"
-      >
+      <Tiles as="ul" min="sm" columns="fill" aria-hidden="true">
         {Array.from({ length: 6 }, (_, index) => (
           <li key={index}>
             <Card className="h-full gap-0 overflow-hidden py-0">
@@ -55,7 +53,7 @@ export function RecipeListSkeleton() {
             </Card>
           </li>
         ))}
-      </ul>
+      </Tiles>
     </div>
   );
 }
@@ -124,7 +122,7 @@ export function RecipeList({
 
   return (
     <div className="flex flex-col gap-block">
-      <ul className="m-0 grid list-none gap-block p-0 sm:grid-cols-2 lg:grid-cols-3">
+      <Tiles as="ul" min="sm" columns="fill">
         {recipes.map((recipe) => (
           <li key={recipe.id}>
             {/* Кликабельна вся карточка, но нажимается настоящая кнопка с
@@ -180,7 +178,7 @@ export function RecipeList({
             </Card>
           </li>
         ))}
-      </ul>
+      </Tiles>
 
       <p
         role="status"

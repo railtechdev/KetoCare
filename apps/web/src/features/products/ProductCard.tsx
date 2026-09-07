@@ -2,6 +2,7 @@ import {
   AsyncSection,
   Badge,
   Button,
+  FactList,
   MacroBar,
   Section,
   Skeleton,
@@ -126,7 +127,7 @@ export function ProductCard({
                 форме правки — при том что именно они отвечают на вопрос «можно
                 ли доверять этим числам». */}
             <Section title={t("card.passport")} density="compact">
-              <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+              <FactList>
                 <dt className="text-muted-foreground">
                   {t("card.fields.source")}
                 </dt>
@@ -152,7 +153,7 @@ export function ProductCard({
                       : t("revisions.withdrawn")}
                   </Badge>
                 </dd>
-              </dl>
+              </FactList>
             </Section>
 
             {/* Кто и что менял — только специалистам: имена сотрудников рядом с

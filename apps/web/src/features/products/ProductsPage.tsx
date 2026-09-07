@@ -3,6 +3,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  FilterBar,
   RatioBadge,
   Skeleton,
 } from "@ketocare/ui";
@@ -203,42 +204,50 @@ export function ProductsPage() {
   }
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")}>
-      <Field
-        id="product-search"
-        type="search"
-        label={t("search.label")}
-        width="wide"
-        value={query}
-        placeholder={t("search.placeholder")}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setUrlQuery(event.target.value);
-          // Новый отбор — снова с первой страницы: иначе выдача из двух строк
-          // открывалась бы на седьмой странице, то есть пустой.
-          setPage(0);
-        }}
-      />
+    // Справочник — таблица из девяти столбцов: страница, на которой работают.
+    // В колонке 72rem «Соотношение» и «Источник» жались, а справа на мониторе
+    // 1920 оставалось 488 px пустоты (правило П34 канона).
+    <PageLayout title={t("title")} intro={t("intro")} width="wide">
+      {/* Отбор — одной строкой с переносом, а не двумя полями формы. Поиск и
+          категория занимали две строки по 86 px и отодвигали таблицу на 172 px
+          вниз, при том что справа от них было свободно около 900 px. */}
+      <FilterBar label={t("filters.label")}>
+        <Field
+          id="product-search"
+          type="search"
+          label={t("search.label")}
+          width="wide"
+          value={query}
+          placeholder={t("search.placeholder")}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setUrlQuery(event.target.value);
+            // Новый отбор — снова с первой страницы: иначе выдача из двух строк
+            // открывалась бы на седьмой странице, то есть пустой.
+            setPage(0);
+          }}
+        />
 
-      {/* Фильтра по категории у семьи не было вовсе: найти «все жиры» можно
-          было только перебором названий. */}
-      <SelectField
-        id="product-category"
-        width="wide"
-        label={t("filters.category")}
-        value={categoryId}
-        onChange={(event) => {
-          setCategoryId(event.target.value);
-          setPage(0);
-        }}
-      >
-        <option value="">{t("filters.allCategories")}</option>
-        {(categories.data ?? []).map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name_ru}
-          </option>
-        ))}
-      </SelectField>
+        {/* Фильтра по категории у семьи не было вовсе: найти «все жиры» можно
+            было только перебором названий. */}
+        <SelectField
+          id="product-category"
+          width="medium"
+          label={t("filters.category")}
+          value={categoryId}
+          onChange={(event) => {
+            setCategoryId(event.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="">{t("filters.allCategories")}</option>
+          {(categories.data ?? []).map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name_ru}
+            </option>
+          ))}
+        </SelectField>
+      </FilterBar>
 
       {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
           обновление не должно прятать уже показанную выдачу (П15 канона).

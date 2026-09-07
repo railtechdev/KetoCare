@@ -4,6 +4,7 @@ import {
   DiaryEntryCard,
   EmptyState,
   Skeleton,
+  Tiles,
 } from "@ketocare/ui";
 import { NotebookPen } from "lucide-react";
 import type { TFunction } from "i18next";
@@ -51,7 +52,12 @@ export function DiaryList({
   }
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-block p-0">
+    // Столько столбцов, сколько влезает. Записи дневника — независимые
+    // карточки в одну-две строки текста: столбцом на мониторе 1920 каждая
+    // растягивалась во всю ширину экрана, и «Кетоны 2.4 ммоль/л» занимало
+    // строку в полтора метра. Порядок при этом остаётся хронологическим —
+    // слева направо, потом вниз, как в любой сетке.
+    <Tiles as="ul" columns="fill">
       {logs.map((log) => (
         <li key={log.id}>
           <DiaryEntry
@@ -66,7 +72,7 @@ export function DiaryList({
           />
         </li>
       ))}
-    </ul>
+    </Tiles>
   );
 }
 
@@ -78,10 +84,13 @@ export function DiaryList({
  */
 export function DiaryListSkeleton({ label }: { label: string }) {
   return (
-    <div
+    // Скелетон повторяет раскладку списка тем же примитивом, а не своими
+    // классами: пока классы были свои, они однажды разошлись бы, и экран
+    // прыгал бы ровно в тот момент, ради которого скелетон и существует.
+    <Tiles
+      columns="fill"
       role="status"
       aria-label={label}
-      className="flex flex-col gap-block"
       data-testid="diary-list-skeleton"
     >
       {[0, 1, 2].map((row) => (
@@ -94,7 +103,7 @@ export function DiaryListSkeleton({ label }: { label: string }) {
           <Skeleton className="mt-2 h-4 w-1/2" />
         </div>
       ))}
-    </div>
+    </Tiles>
   );
 }
 

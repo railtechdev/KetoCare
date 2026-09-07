@@ -1,4 +1,4 @@
-import { AsyncSection, EmptyState, Section } from "@ketocare/ui";
+import { AsyncSection, EmptyState, FactList, Section } from "@ketocare/ui";
 import { ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -137,7 +137,7 @@ function Answers({
       {groups.map((group) => (
         <div key={group.title}>
           <h4 className="m-0 mb-field text-sm font-semibold">{group.title}</h4>
-          <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+          <FactList>
             {group.rows.map(([label, value]) => (
               <div key={label} className="contents">
                 <dt className="text-muted-foreground">{label}</dt>
@@ -147,7 +147,7 @@ function Answers({
                 <dd className="m-0">{value ?? t("notAnswered")}</dd>
               </div>
             ))}
-          </dl>
+          </FactList>
         </div>
       ))}
     </div>

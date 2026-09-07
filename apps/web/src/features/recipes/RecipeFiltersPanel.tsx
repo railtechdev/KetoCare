@@ -1,4 +1,4 @@
-import { Button, Section } from "@ketocare/ui";
+import { Button, FilterBar, Section } from "@ketocare/ui";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -43,8 +43,26 @@ export function RecipeFiltersPanel({
       density="compact"
       contentClassName="gap-field"
     >
-      <div className="grid gap-block sm:grid-cols-2 lg:grid-cols-4">
-        <div className="sm:col-span-2">
+      {/* Строка с переносом вместо `sm:grid-cols-2 lg:grid-cols-4`: сетка
+          спрашивала о ширине ОКНА, а панель стоит и на своём экране, и во
+          вкладке — и в четыре столбца поля отбора расходились по краям с
+          пустотой между ними. */}
+      <FilterBar
+        label={t("filters.legend")}
+        // Сброс — в слот действия панели, а не строкой под ней: в колонке блока
+        // кнопка растягивалась во всю ширину — «Сбросить фильтры» на 1030 px.
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch"
+            onClick={onReset}
+          >
+            {t("filters.reset")}
+          </Button>
+        }
+      >
+        <div>
           <Field
             id={searchId}
             width="wide"
@@ -107,7 +125,7 @@ export function RecipeFiltersPanel({
             className="tabular-nums"
           />
         </div>
-      </div>
+      </FilterBar>
 
       <p id={hintId} className="mt-field mb-0 text-sm text-muted-foreground">
         {t("filters.ratioHint")}
@@ -122,15 +140,6 @@ export function RecipeFiltersPanel({
           {t("filters.rangeInvalid")}
         </p>
       )}
-
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-block min-h-touch"
-        onClick={onReset}
-      >
-        {t("filters.reset")}
-      </Button>
     </Section>
   );
 }

@@ -1,4 +1,4 @@
-import { AsyncSection } from "@ketocare/ui";
+import { AsyncSection, Columns } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
@@ -34,8 +34,13 @@ export function HomePage({ patientId }: { patientId: string }) {
   const prescription = data?.prescription ?? null;
 
   return (
+    // Ширина — `wide`, но плотность остаётся родительской: правило П26 канона
+    // про количество дел на экране, а не про ширину. Дел на главной столько же,
+    // просто «что делать сегодня» и «с чем это сверять» стоят рядом, а не одно
+    // под другим.
     <PageLayout
       title={t("title")}
+      width="wide"
       // Дата известна только вместе со сводкой: до ответа подпись пустая,
       // а не подставленная клиентом — сутки считает сервер по своей зоне.
       intro={
@@ -80,24 +85,38 @@ export function HomePage({ patientId }: { patientId: string }) {
 
             <QuickActions />
 
-            <div className="grid gap-block lg:grid-cols-3">
-              <div className="flex flex-col gap-block lg:col-span-2">
-                <NextMealCard patientId={patientId} />
-                <DayTotalsCard
-                  day={data.day ?? null}
-                  targetKcal={data.prescription?.kcal_per_day ?? null}
-                />
-                <LatestReadings
-                  ketone={data.last_ketone ?? null}
-                  weight={data.last_weight ?? null}
-                />
-              </div>
+            {/* Слева то, что делают сегодня, справа — то, с чем это сверяют.
+                Приставная колонка не уезжает при прокрутке: назначение — это
+                справка, к которой обращаются, глядя на итоги дня, и уводить её
+                вверх значило бы заставлять прокручивать туда-обратно.
 
-              <div className="flex flex-col gap-block">
-                <PrescriptionCard prescription={data.prescription ?? null} />
-                <SeizuresCard seizures={data.seizures_today} />
-              </div>
-            </div>
+                Раскладка та же, что была вручную (`lg:grid-cols-3` +
+                `lg:col-span-2`), но теперь её задаёт общий примитив: колонки
+                разошлись в шести экранах из тридцати, и каждый решал ширину
+                приставной колонки заново. */}
+            <Columns
+              asideLabel={t("aside.label")}
+              asideSticky
+              main={
+                <>
+                  <NextMealCard patientId={patientId} />
+                  <DayTotalsCard
+                    day={data.day ?? null}
+                    targetKcal={data.prescription?.kcal_per_day ?? null}
+                  />
+                  <LatestReadings
+                    ketone={data.last_ketone ?? null}
+                    weight={data.last_weight ?? null}
+                  />
+                </>
+              }
+              aside={
+                <>
+                  <PrescriptionCard prescription={data.prescription ?? null} />
+                  <SeizuresCard seizures={data.seizures_today} />
+                </>
+              }
+            />
           </>
         )}
       </AsyncSection>

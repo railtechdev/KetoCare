@@ -6,12 +6,19 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Columns,
   ConfirmDialog,
+  DensityProvider,
   DiaryEntryCard,
   EmptyState,
   ErrorState,
+  Fact,
+  FactList,
+  FilterBar,
   FormFooter,
   MacroBar,
+  Metric,
+  MetricRow,
   RatioBadge,
   Section,
   Skeleton,
@@ -19,6 +26,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Tiles,
   toast,
   WarningBanner,
 } from "@ketocare/ui";
@@ -128,7 +136,7 @@ export function UiShowcase() {
       </Section>
 
       <Section title="Состояния">
-        <div className="grid gap-block lg:grid-cols-2">
+        <Tiles>
           <EmptyState
             icon={Inbox}
             title="Записей пока нет"
@@ -153,7 +161,95 @@ export function UiShowcase() {
             cancelLabel="Отмена"
             onConfirm={() => toast.success("Удалено")}
           />
-        </div>
+        </Tiles>
+      </Section>
+
+      {/* Примитивы раскладки — рядом, потому что выбор между ними неочевиден
+          и различается только на глаз: `MetricRow` отвечает «сколько»,
+          `FactList` — «какой», `columns="fit"` растягивает плитки, `"fill"`
+          держит их ширину. Ширину блока здесь стоит менять окном браузера:
+          все четыре реагируют на ширину САМОГО блока, а не окна. */}
+      <Section title="Раскладка: «сколько» и «какой»">
+        <Columns
+          asideLabel="Пример приставной колонки"
+          main={
+            <>
+              <MetricRow label="MetricRow — «сколько»">
+                <Metric label="Кетосоотношение" value="3.5 : 1" />
+                <Metric label="Калорийность" value="1200" unit="ккал" />
+                <Metric label="Белок" value="25" unit="г" />
+                <Metric label="Рост" value={null} />
+              </MetricRow>
+
+              <FactList label="FactList — «какой»">
+                <Fact label="Дата рождения" value="12.04.2019 (7 лет)" />
+                <Fact label="Пол" value="девочка" />
+                <Fact label="Аллергии" value={null} />
+                <Fact
+                  label="Заметки семьи"
+                  value={"Две строки текста,\nвторая строка."}
+                  multiline
+                />
+              </FactList>
+            </>
+          }
+          aside={
+            <MetricRow label="Тот же ряд в колонке 20rem">
+              <Metric label="Кетосоотношение" value="3.5 : 1" />
+              <Metric label="Калорийность" value="1200" unit="ккал" />
+            </MetricRow>
+          }
+        />
+      </Section>
+
+      <Section title="Раскладка: плитки и отбор">
+        <FilterBar
+          label="Пример панели отбора"
+          action={<Button variant="outline">Сбросить</Button>}
+        >
+          <Field id="showcase-filter-q" label="Поиск" width="wide" />
+          <SelectField id="showcase-filter-kind" label="Вид" width="medium">
+            <option>Любой</option>
+          </SelectField>
+        </FilterBar>
+
+        <p className="m-0 text-sm text-muted-foreground">
+          columns=&quot;fit&quot; — плитки растягиваются и заполняют строку:
+        </p>
+        <Tiles min="sm" columns="fit">
+          <Card>
+            <CardContent>Одна</CardContent>
+          </Card>
+        </Tiles>
+
+        <p className="m-0 text-sm text-muted-foreground">
+          columns=&quot;fill&quot; — плитка держит ширину, лишние столбцы
+          пустые:
+        </p>
+        <Tiles min="sm" columns="fill">
+          <Card>
+            <CardContent>Одна</CardContent>
+          </Card>
+        </Tiles>
+      </Section>
+
+      <Section title="Плотность экрана">
+        <p className="m-0 text-sm text-muted-foreground">
+          Задаётся один раз на экране (`PageLayout density`) и наследуется
+          блоками. Слева — семья, справа — специалист.
+        </p>
+        <Tiles min="sm">
+          <DensityProvider density="comfortable">
+            <Section title="comfortable" level={3}>
+              Экран семьи: одно дело на страницу.
+            </Section>
+          </DensityProvider>
+          <DensityProvider density="compact">
+            <Section title="compact" level={3}>
+              Экран специалиста: повторяющиеся операции.
+            </Section>
+          </DensityProvider>
+        </Tiles>
       </Section>
 
       <Section title="Карточки и вкладки">

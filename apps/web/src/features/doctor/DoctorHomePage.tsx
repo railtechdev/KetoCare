@@ -1,4 +1,12 @@
-import { AsyncSection, Button, EmptyState, Section } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  Columns,
+  EmptyState,
+  Metric,
+  MetricRow,
+  Section,
+} from "@ketocare/ui";
 import { CircleCheck, Users } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -114,126 +122,144 @@ export function DoctorHomePage() {
     }, [items, overviews.byPatientId]);
 
   return (
-    <PageLayout title={t("home.title")} intro={t("home.intro")}>
-      <Section
-        title={t("home.queue.title")}
-        description={t("home.queue.intro")}
-        action={
-          <Button asChild variant="outline">
-            <SectionLink section="patients">
-              {t("home.queue.toList")}
-            </SectionLink>
-          </Button>
-        }
-      >
-        <AsyncSection
-          loading={patients.isPending || !settled}
-          skeleton={<LinesSkeleton label={t("home.queue.loading")} lines={4} />}
-          error={
-            patients.isError
-              ? {
-                  title: t("home.queue.loadError"),
-                  description:
-                    errorMessageOf(patients.error) ??
-                    t("common:errors.unexpected"),
-                }
-              : null
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void patients.refetch()}
-          isEmpty={queue.length === 0}
-          empty={
-            <EmptyState
-              icon={items.length === 0 ? Users : CircleCheck}
-              title={
-                items.length === 0
-                  ? t("home.queue.noPatients")
-                  : t("home.queue.allCalm")
-              }
-              description={
-                items.length === 0
-                  ? t("home.queue.noPatientsHint")
-                  : t("home.queue.allCalmHint")
-              }
-            />
-          }
-        >
-          <ul className="m-0 flex list-none flex-col gap-field p-0">
-            {queue.map((row) => (
-              <li
-                key={row.patient.id}
-                className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
-              >
-                {/* Имя — ссылка на карту: врач открывает её в новой вкладке и
-                    пересылает коллеге (правило П1 канона). */}
-                <SectionLink
-                  section="patients"
-                  patient={row.patient.id}
-                  tab={tabForFlags(row.flags)}
-                  className="min-w-0 flex-1 font-medium break-words underline-offset-2 hover:underline"
-                >
-                  {row.patient.full_name}
+    // Главная врача — рабочая страница: очередь внимания и цифры по когорте
+    // стояли друг под другом в колонке 1152 px, при том что справа было пусто.
+    <PageLayout
+      title={t("home.title")}
+      intro={t("home.intro")}
+      width="wide"
+      density="compact"
+    >
+      <Columns
+        asideLabel={t("home.cohort.title")}
+        asideSticky
+        main={
+          <Section
+            title={t("home.queue.title")}
+            description={t("home.queue.intro")}
+            action={
+              <Button asChild variant="outline">
+                <SectionLink section="patients">
+                  {t("home.queue.toList")}
                 </SectionLink>
-                <PatientFlagsView flags={row.flags} />
-              </li>
-            ))}
-          </ul>
+              </Button>
+            }
+          >
+            <AsyncSection
+              loading={patients.isPending || !settled}
+              skeleton={
+                <LinesSkeleton label={t("home.queue.loading")} lines={4} />
+              }
+              error={
+                patients.isError
+                  ? {
+                      title: t("home.queue.loadError"),
+                      description:
+                        errorMessageOf(patients.error) ??
+                        t("common:errors.unexpected"),
+                    }
+                  : null
+              }
+              retryLabel={t("common:actions.retry")}
+              onRetry={() => void patients.refetch()}
+              isEmpty={queue.length === 0}
+              empty={
+                <EmptyState
+                  icon={items.length === 0 ? Users : CircleCheck}
+                  title={
+                    items.length === 0
+                      ? t("home.queue.noPatients")
+                      : t("home.queue.allCalm")
+                  }
+                  description={
+                    items.length === 0
+                      ? t("home.queue.noPatientsHint")
+                      : t("home.queue.allCalmHint")
+                  }
+                />
+              }
+            >
+              <ul className="m-0 flex list-none flex-col gap-field p-0">
+                {queue.map((row) => (
+                  <li
+                    key={row.patient.id}
+                    className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
+                  >
+                    {/* Имя — ссылка на карту: врач открывает её в новой вкладке и
+                    пересылает коллеге (правило П1 канона). */}
+                    <SectionLink
+                      section="patients"
+                      patient={row.patient.id}
+                      tab={tabForFlags(row.flags)}
+                      className="min-w-0 flex-1 font-medium break-words underline-offset-2 hover:underline"
+                    >
+                      {row.patient.full_name}
+                    </SectionLink>
+                    <PatientFlagsView flags={row.flags} />
+                  </li>
+                ))}
+              </ul>
 
-          {flagged > queue.length && (
-            <p className="m-0 text-sm text-muted-foreground">
-              {t("home.queue.more", { count: flagged - queue.length })}
-            </p>
-          )}
+              {flagged > queue.length && (
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t("home.queue.more", { count: flagged - queue.length })}
+                </p>
+              )}
 
-          <PatientFlagsLegend />
-        </AsyncSection>
-      </Section>
+              <PatientFlagsLegend />
+            </AsyncSection>
+          </Section>
+        }
+        aside={
+          <Section
+            title={t("home.cohort.title")}
+            description={t("home.cohort.intro")}
+          >
+            {/* Ряд показателей, а не список пар: в приставной колонке он встанет
+                в один-два столбца, а во всю ширину — в четыре. Сколько именно,
+                решает ширина САМОГО ряда, поэтому блок верен и здесь, и если
+                однажды переедет на всю ширину экрана. */}
+            <MetricRow label={t("home.cohort.title")}>
+              <Metric label={t("home.cohort.total")} value={items.length} />
 
-      <Section
-        title={t("home.cohort.title")}
-        description={t("home.cohort.intro")}
-        density="compact"
-      >
-        <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
-          <dt className="text-muted-foreground">{t("home.cohort.total")}</dt>
-          <dd className="m-0 tabular-nums">{items.length}</dd>
+              {/* Первым: пациент без назначения ждёт не наблюдения, а решения
+                  врача. */}
+              <Metric
+                label={t("home.cohort.waiting")}
+                value={settled ? waiting : "…"}
+              />
+              <Metric
+                label={t("home.cohort.silent")}
+                value={settled ? silent : "…"}
+              />
+              <Metric
+                label={t("home.cohort.offTolerance")}
+                value={settled ? offTolerance : "…"}
+              />
 
-          {/* Первой строкой: пациент без назначения ждёт не наблюдения, а
-              решения врача. */}
-          <dt className="text-muted-foreground">{t("home.cohort.waiting")}</dt>
-          <dd className="m-0 tabular-nums">{settled ? waiting : "…"}</dd>
-
-          <dt className="text-muted-foreground">{t("home.cohort.silent")}</dt>
-          <dd className="m-0 tabular-nums">{settled ? silent : "…"}</dd>
-
-          <dt className="text-muted-foreground">
-            {t("home.cohort.offTolerance")}
-          </dt>
-          <dd className="m-0 tabular-nums">{settled ? offTolerance : "…"}</dd>
-
-          {/* Строка появляется, только когда есть о чём молчать: ноль
-              непрочитанных сводок — не показатель, а шум. */}
-          {settled && unknown > 0 && (
-            <>
-              <dt className="text-muted-foreground">
-                {t("home.cohort.unknown")}
-              </dt>
-              <dd className="m-0 flex flex-wrap items-center gap-field">
-                <span className="tabular-nums">{unknown}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-h-touch"
-                  onClick={() => overviews.refetch()}
-                >
-                  {t("common:actions.retry")}
-                </Button>
-              </dd>
-            </>
-          )}
-        </dl>
-      </Section>
+              {/* Показатель появляется, только когда есть о чём молчать: ноль
+                  непрочитанных сводок — не показатель, а шум. */}
+              {settled && unknown > 0 && (
+                <Metric
+                  label={t("home.cohort.unknown")}
+                  value={unknown}
+                  hint={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="-ml-3 min-h-touch"
+                      onClick={() => overviews.refetch()}
+                    >
+                      {t("common:actions.retry")}
+                    </Button>
+                  }
+                />
+              )}
+            </MetricRow>
+          </Section>
+        }
+      />
     </PageLayout>
   );
 }

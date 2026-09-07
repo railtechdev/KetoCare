@@ -1,6 +1,10 @@
 import {
   Button,
+  Fact,
+  FactList,
   FormSheet,
+  Metric,
+  MetricRow,
   Section,
   Tabs,
   TabsBar,
@@ -92,6 +96,12 @@ export function PatientCard({
       title={patient.full_name}
       onBack={onBack}
       backLabel={t("card.back")}
+      // Карта — рабочая страница: под ней шесть вкладок с таблицами и графиками,
+      // и предел 72rem оставлял на мониторе 1920 четверть окна пустой.
+      width="wide"
+      // Плотность объявляется один раз на экран и наследуется блоками вкладок,
+      // а не проставляется в каждом (правило П26 канона).
+      density="compact"
     >
       {/* Блок выделяется `Section`, а не `Card`: `Card` — карточка элемента
           списка, а это блок экрана (правило П23 канона). Заголовок скрыт —
@@ -100,7 +110,6 @@ export function PatientCard({
       <Section
         title={t("card.passportTitle")}
         titleHidden
-        density="compact"
         /* Рост и аллергии правит и специалист, а не только семья: ребёнка
            взвешивают на приёме, а непереносимость всплывает в разговоре с
            врачом. Сервер это давно разрешает ведущему специалисту
@@ -118,52 +127,72 @@ export function PatientCard({
           </Button>
         }
       >
-        <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
-          <dt className="text-muted-foreground">{t("card.birthDate")}</dt>
-          <dd className="m-0 tabular-nums">
-            {birthDate === null
-              ? "—"
-              : months === null
-                ? birthDate
-                : t("card.birthDateWithAge", {
-                    date: birthDate,
-                    age:
-                      months < 24
-                        ? t("age.months", { count: months })
-                        : t("age.years", { count: Math.floor(months / 12) }),
-                  })}
-          </dd>
+        {/* Паспорт — рядом, а не столбиком. Пары «подпись — значение» шли
+            двумя столбцами на всю ширину карты: четыре коротких факта занимали
+            четыре строки и отодвигали вкладки вниз, а справа оставалось пусто.
+            `MetricRow` кладёт столько столбцов, сколько влезает в САМ блок, —
+            и потому одинаково верен и в карте, и в узкой колонке. */}
+        <MetricRow min="wide" label={t("card.passportTitle")}>
+          <Metric
+            label={t("card.birthDate")}
+            value={
+              birthDate === null
+                ? null
+                : months === null
+                  ? birthDate
+                  : t("card.birthDateWithAge", {
+                      date: birthDate,
+                      age:
+                        months < 24
+                          ? t("age.months", { count: months })
+                          : t("age.years", { count: Math.floor(months / 12) }),
+                    })
+            }
+          />
+          <Metric
+            label={t("card.sex")}
+            value={t(`card.sexValue.${patient.sex}`)}
+          />
+          <Metric
+            label={t("card.height")}
+            value={
+              patient.height_cm === null
+                ? null
+                : t("card.heightValue", { value: patient.height_cm })
+            }
+          />
+          {/* Названия, а не идентификаторы: поле хранит ссылки на продукты
+              вперемешку со свободными метками, и «dcf7df2c-349b…» в карте —
+              это мусор в клинически значимой строке. */}
+          <Metric
+            label={t("card.allergies")}
+            value={
+              allergies.length === 0
+                ? t("card.noAllergies")
+                : allergies.join(", ")
+            }
+          />
+        </MetricRow>
 
-          <dt className="text-muted-foreground">{t("card.sex")}</dt>
-          <dd className="m-0">{t(`card.sexValue.${patient.sex}`)}</dd>
+        {/* Заметки семьи. Родитель пишет их в разделе «Ребёнок» — про уход,
+            непереносимости сверх списка аллергий, поведение. Читателя у поля
+            не было ни одного: семья писала в пустоту.
 
-          <dt className="text-muted-foreground">{t("card.height")}</dt>
-          <dd className="m-0 tabular-nums">
-            {patient.height_cm === null
-              ? "—"
-              : t("card.heightValue", { value: patient.height_cm })}
-          </dd>
-
-          <dt className="text-muted-foreground">{t("card.allergies")}</dt>
-          <dd className="m-0">
-            {/* Названия, а не идентификаторы: поле хранит ссылки на продукты
-                вперемешку со свободными метками, и «dcf7df2c-349b…» в карте —
-                это мусор в клинически значимой строке. */}
-            {allergies.length === 0
-              ? t("card.noAllergies")
-              : allergies.join(", ")}
-          </dd>
-
-          {/* Заметки семьи. Родитель пишет их в разделе «Ребёнок» — про уход,
-              непереносимости сверх списка аллергий, поведение. Читателя у поля
-              не было ни одного: семья писала в пустоту. */}
-          {patient.notes !== null && patient.notes.trim() !== "" && (
-            <>
-              <dt className="text-muted-foreground">{t("card.familyNotes")}</dt>
-              <dd className="m-0 whitespace-pre-line">{patient.notes}</dd>
-            </>
-          )}
-        </dl>
+            Отдельной строкой под рядом, а не столбцом в нём: это свободный
+            текст в несколько строк, и в ряду коротких фактов он растянул бы
+            все столбцы по своей высоте. */}
+        {patient.notes !== null && patient.notes.trim() !== "" && (
+          // Пара, а не два абзаца: подпись со значением связаны разметкой, и
+          // скринридер читает их вместе. `multiline` сохраняет переносы —
+          // семья пишет сюда несколько строк про уход.
+          <FactList>
+            <Fact
+              label={t("card.familyNotes")}
+              value={patient.notes}
+              multiline
+            />
+          </FactList>
+        )}
       </Section>
 
       <FormSheet

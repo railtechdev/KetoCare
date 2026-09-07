@@ -1,4 +1,4 @@
-import { Skeleton } from "@ketocare/ui";
+import { FactList, Skeleton } from "@ketocare/ui";
 import {
   CircleAlert,
   CircleCheck,
@@ -142,7 +142,7 @@ export function PatientFlagsLegend() {
   const { t } = useTranslation("doctor");
 
   return (
-    <dl className="m-0 grid gap-1 text-sm text-muted-foreground sm:grid-cols-[auto_1fr] sm:gap-x-3">
+    <FactList className="text-muted-foreground">
       <dt className="flex items-center gap-1.5 font-semibold">
         <ClipboardList aria-hidden="true" className="size-4 text-destructive" />
         {t("flags.legend.noPrescriptionTerm")}
@@ -165,6 +165,6 @@ export function PatientFlagsLegend() {
         {t("flags.legend.unknownTerm")}
       </dt>
       <dd className="m-0">{t("flags.legend.unknown")}</dd>
-    </dl>
+    </FactList>
   );
 }

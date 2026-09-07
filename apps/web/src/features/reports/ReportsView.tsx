@@ -1,4 +1,14 @@
-import { AsyncSection, Button, Section, Skeleton, toast } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  FilterBar,
+  Metric,
+  MetricRow,
+  Section,
+  Skeleton,
+  Tiles,
+  toast,
+} from "@ketocare/ui";
 import { Download, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -106,7 +116,7 @@ export function ReportsView({ patientId }: { patientId: string }) {
           </Button>
         }
       >
-        <div className="flex flex-wrap items-end gap-block">
+        <FilterBar label={t("period.legend")}>
           <Field
             id="report-from"
             type="date"
@@ -124,7 +134,7 @@ export function ReportsView({ patientId }: { patientId: string }) {
             value={to}
             onChange={(event) => setTo(event.target.value)}
           />
-        </div>
+        </FilterBar>
 
         {/* Выгрузка — только врачу (раздел 8.3 ТЗ): файл уезжает из продукта, и
             дальше его судьбу никто не контролирует. Это UX, право проверяет
@@ -217,57 +227,65 @@ export function ReportsView({ patientId }: { patientId: string }) {
       >
         {report.data !== undefined && (
           <>
-            <Section title={t("seizures.title")}>
-              <p className="m-0">
-                {t("seizures.total", {
-                  count: report.data.seizures.count,
-                  entries: report.data.seizures.entries,
-                })}
-              </p>
-              {report.data.seizures.by_type.length > 0 && (
-                <ul className="m-0 flex list-none flex-col gap-field p-0">
-                  {report.data.seizures.by_type.map((item: SeizureByType) => (
-                    <li
-                      key={item.seizure_type_id}
-                      className="flex flex-wrap items-baseline gap-field"
-                    >
-                      <span className="font-medium">{item.name_ru}</span>
-                      {item.code !== null && (
-                        <span className="text-sm text-muted-foreground">
-                          {item.code}
-                        </span>
-                      )}
-                      <span className="tabular-nums">{item.count}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
+            {/* Три коротких блока — рядом. Столбиком они занимали три экрана
+                прокрутки при том, что в каждом одна-две строки, а справа было
+                пусто. Сколько столбцов — решает ширина, а не брейкпоинт. */}
+            <Tiles min="sm">
+              <Section title={t("seizures.title")}>
+                <p className="m-0">
+                  {t("seizures.total", {
+                    count: report.data.seizures.count,
+                    entries: report.data.seizures.entries,
+                  })}
+                </p>
+                {report.data.seizures.by_type.length > 0 && (
+                  <ul className="m-0 flex list-none flex-col gap-field p-0">
+                    {report.data.seizures.by_type.map((item: SeizureByType) => (
+                      <li
+                        key={item.seizure_type_id}
+                        className="flex flex-wrap items-baseline gap-field"
+                      >
+                        <span className="font-medium">{item.name_ru}</span>
+                        {item.code !== null && (
+                          <span className="text-sm text-muted-foreground">
+                            {item.code}
+                          </span>
+                        )}
+                        <span className="tabular-nums">{item.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
 
-            <Section title={t("measurements.title")}>
-              <dl className="m-0 grid gap-block sm:grid-cols-2">
-                <Measurement
-                  label={t("measurements.ketones")}
-                  series={report.data.ketones}
-                  unit={t("measurements.unitKetones")}
-                />
-                <Measurement
-                  label={t("measurements.weight")}
-                  series={report.data.weight}
-                  unit={t("measurements.unitWeight")}
-                />
-              </dl>
-            </Section>
+              <Section title={t("measurements.title")}>
+                {/* Ряд показателей вместо `sm:grid-cols-2`: тот же блок стоит и
+                  во всю ширину экрана отчёта, и во вкладке карты пациента, и
+                  вопрос о ширине ОКНА в обоих местах отвечал неверно. */}
+                <MetricRow min="wide" label={t("measurements.title")}>
+                  <Measurement
+                    label={t("measurements.ketones")}
+                    series={report.data.ketones}
+                    unit={t("measurements.unitKetones")}
+                  />
+                  <Measurement
+                    label={t("measurements.weight")}
+                    series={report.data.weight}
+                    unit={t("measurements.unitWeight")}
+                  />
+                </MetricRow>
+              </Section>
 
-            <Section title={t("menu.title")}>
-              <p className="m-0">
-                {t("menu.summary", {
-                  days: report.data.menu.days_planned,
-                  planned: report.data.menu.items_planned,
-                  eaten: report.data.menu.items_eaten,
-                })}
-              </p>
-            </Section>
+              <Section title={t("menu.title")}>
+                <p className="m-0">
+                  {t("menu.summary", {
+                    days: report.data.menu.days_planned,
+                    planned: report.data.menu.items_planned,
+                    eaten: report.data.menu.items_eaten,
+                  })}
+                </p>
+              </Section>
+            </Tiles>
 
             {/* Утверждённые сводки: до этого блока они были в PDF и в выгрузке,
                 но не на экране — ADR-0008 обещает обратное, а расхождение
@@ -327,11 +345,14 @@ function Measurement({
 }) {
   const { t } = useTranslation("reports");
 
+  // Своя разметка пары «подпись — значение» здесь была ровно такой же, как в
+  // ките: одна и та же пара писалась в семи местах семью способами, и
+  // моноширинные цифры стояли в пяти из них.
   return (
-    <div className="min-w-0">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="m-0 tabular-nums">
-        {series.mean === null
+    <Metric
+      label={label}
+      value={
+        series.mean === null
           ? t("measurements.empty")
           : t("measurements.value", {
               mean: AMOUNT.format(series.mean),
@@ -339,9 +360,9 @@ function Measurement({
               max: AMOUNT.format(series.max ?? 0),
               count: series.points.length,
               unit,
-            })}
-      </dd>
-    </div>
+            })
+      }
+    />
   );
 }
 

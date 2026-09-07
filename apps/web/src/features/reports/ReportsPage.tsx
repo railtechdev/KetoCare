@@ -14,7 +14,8 @@ export function ReportsPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("reports");
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")}>
+    // Отчёт — числа и таблицы, страница для работы (правило П34 канона).
+    <PageLayout title={t("title")} intro={t("intro")} width="wide">
       <ReportsView patientId={patientId} />
     </PageLayout>
   );

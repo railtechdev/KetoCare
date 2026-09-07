@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@ui/lib/cn";
+import { useDensity, type Density } from "@ui/lib/density";
 import {
   Card,
   CardAction,
@@ -25,8 +26,11 @@ export interface SectionProps {
   /**
    * `compact` — служебные экраны (врач, администратор) и плотные списки.
    * Родительские экраны идут с обычной плотностью (правило П26 канона).
+   *
+   * Не задано — плотность берётся у экрана (`PageLayout density`). Явное
+   * значение сильнее: у отдельного блока бывает своя причина.
    */
-  density?: "comfortable" | "compact";
+  density?: Density;
   /**
    * Заголовок только для скринридера. Для блоков, которые узнаются по
    * содержимому и подпись над которыми была бы шумом (панель фильтров).
@@ -55,18 +59,25 @@ export function Section({
   level = 2,
   description,
   action,
-  density = "comfortable",
+  density,
   titleHidden = false,
   className,
   contentClassName,
   children,
 }: SectionProps) {
-  const compact = density === "compact";
+  const compact = useDensity(density) === "compact";
   const Heading = level === 2 ? "h2" : "h3";
 
   return (
     <Card
+      // `@container` — чтобы содержимое блока подстраивалось под ширину САМОГО
+      // блока, а не окна. Один и тот же блок стоит и во всю колонку, и в
+      // приставной колонке 20rem: `sm:grid-cols-2` внутри него спрашивает о
+      // ширине окна и в узкой колонке на широком мониторе оставался
+      // двухстолбцовым — подписи ломались, числа налезали друг на друга.
+      // Внутри блоков вместо `sm:` пишется `@sm:` (правило П33 канона).
       className={cn(
+        "@container",
         compact && "gap-block rounded-lg py-block",
         !compact && "gap-block",
         className,

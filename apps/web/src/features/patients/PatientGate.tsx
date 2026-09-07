@@ -36,7 +36,11 @@ export function PatientGate({
 
   if (isPending) {
     return (
-      <div className="flex flex-col gap-block" role="status" aria-busy="true">
+      <div
+        className="flex max-w-form flex-col gap-block"
+        role="status"
+        aria-busy="true"
+      >
         <Skeleton className="h-7 w-40" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -46,6 +50,7 @@ export function PatientGate({
   if (patients.error !== null) {
     return (
       <ErrorState
+        className="max-w-form"
         title={t("patientGate.errorTitle")}
         description={
           errorMessageOf(patients.error) ?? t("errors.unexpected") ?? undefined
@@ -63,6 +68,11 @@ export function PatientGate({
     // и это тот же тупик, который экран должен закрывать (правило П15).
     return (
       <EmptyState
+        // Ширина ограничена: экраны этого гейта рисуются вне `PageLayout`, и
+        // без предела пунктирная рамка с двумя кнопками растягивалась во всю
+        // рабочую область — 1616 x 290 px на мониторе 1920 под фразу в одну
+        // строку.
+        className="max-w-form"
         icon={Users}
         title={t("patientGate.chooseTitle")}
         description={t("patientGate.chooseBody")}
@@ -89,6 +99,7 @@ export function PatientGate({
   if (patientId === null) {
     return (
       <EmptyState
+        className="max-w-form"
         icon={Baby}
         title={t("patientGate.noneTitle")}
         description={t("patientGate.noneBody")}

@@ -1,4 +1,12 @@
-import { MacroBar, RatioBadge, Section, WarningBanner } from "@ketocare/ui";
+import {
+  EmptyState,
+  MacroBar,
+  Metric,
+  MetricRow,
+  RatioBadge,
+  Section,
+  WarningBanner,
+} from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { dayVerdict, type DayTolerance } from "../patients/dayVerdict";
@@ -31,7 +39,7 @@ export function DayTotalsPanel({
   if (totals === null) {
     return (
       <Section title={t("totals.title")}>
-        <p className="m-0 text-sm text-muted-foreground">{t("totals.none")}</p>
+        <EmptyState size="inline" title={t("totals.none")} />
       </Section>
     );
   }
@@ -73,37 +81,28 @@ export function DayTotalsPanel({
       />
 
       {targets !== null && left !== null && (
-        <dl className="m-0 grid gap-block sm:grid-cols-2">
-          <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">
-              {t("totals.kcalLabel")}
-            </dt>
-            <dd className="m-0 tabular-nums">
-              {left.kcal >= 0
+        <MetricRow label={t("totals.title")}>
+          <Metric
+            label={t("totals.kcalLabel")}
+            value={
+              left.kcal >= 0
                 ? t("totals.kcalLeft", { value: AMOUNT.format(left.kcal) })
-                : t("totals.kcalOver", { value: AMOUNT.format(-left.kcal) })}
-            </dd>
-          </div>
-
-          <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">
-              {t("totals.carbsLabel")}
-            </dt>
-            <dd className="m-0 tabular-nums">
-              {t("totals.carbsOfLimit", {
-                value: AMOUNT.format(totals.carbs),
-                limit: AMOUNT.format(targets.carbsLimitG),
-              })}
-            </dd>
-            <dd className="m-0 text-sm text-muted-foreground tabular-nums">
-              {left.carbs >= 0
+                : t("totals.kcalOver", { value: AMOUNT.format(-left.kcal) })
+            }
+          />
+          <Metric
+            label={t("totals.carbsLabel")}
+            value={t("totals.carbsOfLimit", {
+              value: AMOUNT.format(totals.carbs),
+              limit: AMOUNT.format(targets.carbsLimitG),
+            })}
+            hint={
+              left.carbs >= 0
                 ? t("totals.carbsLeft", { value: AMOUNT.format(left.carbs) })
-                : t("totals.carbsOver", {
-                    value: AMOUNT.format(-left.carbs),
-                  })}
-            </dd>
-          </div>
-        </dl>
+                : t("totals.carbsOver", { value: AMOUNT.format(-left.carbs) })
+            }
+          />
+        </MetricRow>
       )}
 
       {verdict.ratioOffTolerance && (
