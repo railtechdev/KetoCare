@@ -1,5 +1,5 @@
 import { AsyncSection, Button, Tabs, TabsBar, TabsContent } from "@ketocare/ui";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -13,6 +13,7 @@ import { useSelectedPatient } from "../patients/useSelectedPatient";
 import { RecipeDetail } from "./RecipeDetail";
 import { RecipeFiltersPanel } from "./RecipeFiltersPanel";
 import { RecipeFormPanel } from "./RecipeFormPanel";
+import { RecipeImportPanel } from "./RecipeImportPanel";
 import { RecipeList, RecipeListEmpty, RecipeListSkeleton } from "./RecipeList";
 import {
   canEditRecipes,
@@ -46,6 +47,11 @@ type FormView = { recipeId: string | null };
 const TABS = ["recipes", "dishes"] as const;
 
 type Tab = (typeof TABS)[number];
+
+//: Псевдо-идентификатор открытого экрана импорта. Тот же приём, что у
+//: справочника продуктов: `/app/$section` не знает о вложенных путях, но что
+//: именно открыто, живёт в адресе (`?item=`), а не в состоянии экрана.
+const IMPORT_ITEM = "import";
 
 export function RecipesPage() {
   const { t } = useTranslation("recipes");
@@ -99,6 +105,10 @@ export function RecipesPage() {
     );
   }
 
+  if (openId === IMPORT_ITEM && canEdit) {
+    return <RecipeImportPanel onDone={() => setOpenId(undefined)} />;
+  }
+
   if (openId !== undefined) {
     return (
       <RecipeDetail
@@ -118,14 +128,29 @@ export function RecipesPage() {
       intro={t("intro")}
       actions={
         canEdit && (
-          <Button
-            type="button"
-            className="min-h-touch"
-            onClick={() => setForm({ recipeId: null })}
-          >
-            <Plus aria-hidden="true" />
-            {t("actions.create")}
-          </Button>
+          <>
+            <Button
+              type="button"
+              className="min-h-touch"
+              onClick={() => setForm({ recipeId: null })}
+            >
+              <Plus aria-hidden="true" />
+              {t("actions.create")}
+            </Button>
+            {/* Вторичное действие рядом с первичным — как у справочника
+                продуктов. Импорт заводит сборник разом, при заведении клиники;
+                создание рецепта — ежедневная работа, и первичное действие
+                остаётся за ней (правило П14 канона). */}
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch"
+              onClick={() => setOpenId(IMPORT_ITEM)}
+            >
+              <Upload aria-hidden="true" />
+              {t("actions.import")}
+            </Button>
+          </>
         )
       }
     >
