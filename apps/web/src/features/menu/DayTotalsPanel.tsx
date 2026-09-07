@@ -1,10 +1,9 @@
 import {
   EmptyState,
   MacroBar,
-  Metric,
-  MetricRow,
   RatioBadge,
   Section,
+  TargetBar,
   WarningBanner,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
@@ -80,19 +79,33 @@ export function DayTotalsPanel({
         carbsG={totals.carbs}
       />
 
+      {/* Цели — полосой, а не только числом. «Осталось 910,5 ккал» родитель
+          читал и складывал в уме; полоса отвечает на «сколько дня осталось»
+          сразу. Калорийность — цель, которую НАБИРАЮТ, углеводы — предел,
+          который нельзя превышать: у них разный смысл заполнения. */}
       {targets !== null && left !== null && (
-        <MetricRow label={t("totals.title")}>
-          <Metric
+        <div className="flex flex-col gap-block">
+          <TargetBar
+            kind="goal"
             label={t("totals.kcalLabel")}
-            value={
+            value={totals.kcal}
+            target={targets.kcalPerDay}
+            valueText={t("totals.kcalOfTarget", {
+              value: AMOUNT.format(totals.kcal),
+              target: AMOUNT.format(targets.kcalPerDay),
+            })}
+            hint={
               left.kcal >= 0
                 ? t("totals.kcalLeft", { value: AMOUNT.format(left.kcal) })
                 : t("totals.kcalOver", { value: AMOUNT.format(-left.kcal) })
             }
           />
-          <Metric
+          <TargetBar
+            kind="limit"
             label={t("totals.carbsLabel")}
-            value={t("totals.carbsOfLimit", {
+            value={totals.carbs}
+            target={targets.carbsLimitG}
+            valueText={t("totals.carbsOfLimit", {
               value: AMOUNT.format(totals.carbs),
               limit: AMOUNT.format(targets.carbsLimitG),
             })}
@@ -102,7 +115,7 @@ export function DayTotalsPanel({
                 : t("totals.carbsOver", { value: AMOUNT.format(-left.carbs) })
             }
           />
-        </MetricRow>
+        </div>
       )}
 
       {verdict.ratioOffTolerance && (

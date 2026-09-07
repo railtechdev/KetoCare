@@ -17,7 +17,14 @@ export function DayNavigator({ date, onChange }: Props) {
   const inputId = useId();
 
   return (
-    <div className="flex flex-wrap items-end gap-field">
+    // Ряд управления, а не форма: нижний отступ поля здесь снимается, иначе
+    // стрелки и «Сегодня» равняются на край отступа и стоят на 16 px ниже
+    // самого поля. Замерено на 500 px: поле `top=254`, кнопки `top=270`.
+    <div
+      role="group"
+      aria-label={t("day.label")}
+      className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0"
+    >
       <Button
         type="button"
         variant="outline"
