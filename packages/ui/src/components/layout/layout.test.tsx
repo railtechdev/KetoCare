@@ -39,6 +39,22 @@ describe("Columns", () => {
     expect(container.textContent).toBe("главноесбоку");
   });
 
+  it("asideFirst ставит приставное раньше основного и в разметке тоже", () => {
+    // Порядок чтения обязан совпадать на обеих ширинах: перестановка задаётся
+    // размещением в сетке, а не `order`, иначе клавиатура и скринридер пошли бы
+    // не в том порядке, что глаз.
+    const { container } = render(
+      <Columns
+        asideFirst
+        asideLabel="Итоги"
+        main={<p>главное</p>}
+        aside={<p>итог</p>}
+      />,
+    );
+
+    expect(container.textContent).toBe("итогглавное");
+  });
+
   it("без приставного содержимого не резервирует под него места", () => {
     // Иначе рядом с содержимым остаётся пустой столбец в 20rem: в меню пустого
     // дня итогов ещё нет, и справа от плана висела пустота шириной с сам план.
@@ -130,6 +146,7 @@ describe("SplitView", () => {
 
     render(
       <SplitView
+        railLabel="Пациенты"
         list={<p>полный список</p>}
         rail={<p>перечень</p>}
         detail={<p>карта</p>}
@@ -146,6 +163,7 @@ describe("SplitView", () => {
 
     render(
       <SplitView
+        railLabel="Пациенты"
         list={<p>полный список</p>}
         rail={<p>перечень</p>}
         detail={<p>карта</p>}
@@ -154,6 +172,11 @@ describe("SplitView", () => {
 
     expect(screen.getByText("перечень")).toBeInTheDocument();
     expect(screen.getByText("карта")).toBeInTheDocument();
+    // Перечень — ориентир страницы и назван: без подписи два `nav` на экране
+    // различались бы только порядком.
+    expect(
+      screen.getByRole("navigation", { name: "Пациенты" }),
+    ).toBeInTheDocument();
   });
 
   it("без выбранного предмета показывает полный список на любой ширине", () => {
@@ -163,6 +186,7 @@ describe("SplitView", () => {
 
     render(
       <SplitView
+        railLabel="Пациенты"
         list={<p>полный список</p>}
         rail={<p>перечень</p>}
         detail={null}

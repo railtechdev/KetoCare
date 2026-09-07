@@ -84,7 +84,17 @@ export function PatientRail({ selectedId }: { selectedId: string }) {
                 <span className="min-w-0 flex-1 break-words">
                   {row.patient.full_name}
                 </span>
-                {row.flags !== null && <PatientFlagsView flags={row.flags} />}
+                {/* Без условия на `flags !== null`: `null` — это «сводка не
+                    пришла», а не «замечаний нет», и `PatientFlagsView` умеет
+                    показать оба состояния сам. Условие стирало третье
+                    состояние: пациент без ответа сервера выглядел спокойным и
+                    уезжал вниз списка вместе со спокойными. Триаж, выдающий
+                    «всё хорошо» там, где ничего не известно, — худшая из его
+                    ошибок (правило П19 канона). */}
+                <PatientFlagsView
+                  flags={row.flags}
+                  pending={overviews.pending}
+                />
               </SectionLink>
             </li>
           );

@@ -15,6 +15,30 @@ const SPLIT_AT = {
   xl: "xl:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
 } as const;
 
+/**
+ * Приставная колонка стоит в разметке первой, а визуально всё равно справа.
+ *
+ * Нужно там, где приставное содержимое — итог, к которому идёт основное: на
+ * телефоне колонки складываются в одну, и итоги дня уезжали под шесть приёмов
+ * пищи, хотя до этого стояли над ними. Телефон у семьи — основной сценарий, и
+ * разворот приоритета на нём дороже, чем выигрыш на широком экране.
+ *
+ * Порядок чтения при этом остаётся честным: он одинаков на обеих ширинах —
+ * сначала итог, потом состав. Перестановка задаётся размещением в сетке, а не
+ * `order`, поэтому и клавиатура, и скринридер идут в том же порядке, что глаз.
+ */
+const ASIDE_FIRST_AT = {
+  md: "md:col-start-2 md:row-start-1",
+  lg: "lg:col-start-2 lg:row-start-1",
+  xl: "xl:col-start-2 xl:row-start-1",
+} as const;
+
+const MAIN_SECOND_AT = {
+  md: "md:col-start-1 md:row-start-1",
+  lg: "lg:col-start-1 lg:row-start-1",
+  xl: "xl:col-start-1 xl:row-start-1",
+} as const;
+
 const STICKY_AT = {
   md: "md:sticky md:top-20 md:self-start",
   lg: "lg:sticky lg:top-20 lg:self-start",
@@ -38,6 +62,12 @@ export interface ColumnsProps {
   asideSticky?: boolean;
   /** Подпись приставной колонки для скринридера */
   asideLabel: string;
+  /**
+   * Приставная колонка идёт в разметке первой — и потому первой читается,
+   * когда колонки складываются в одну. Для приставного содержимого, которое
+   * подводит итог основному: итоги дня над составом меню.
+   */
+  asideFirst?: boolean;
   className?: string;
 }
 
@@ -55,6 +85,9 @@ export interface ColumnsProps {
  * одну (телефон), пользователь получает главное первым. Поэтому приставная
  * колонка не годится для того, без чего экран не работает.
  *
+ * Исключение — `asideFirst`: приставное содержимое, подводящее итог основному
+ * (итоги дня над составом меню), обязано читаться раньше и на телефоне тоже.
+ *
  * Ниже точки расхождения это обычный столбец блоков — те же `gap-block`, что и
  * у `PageLayout`, так что вложение не меняет вертикальный ритм.
  */
@@ -63,6 +96,7 @@ export function Columns({
   aside,
   from = "lg",
   asideSticky = false,
+  asideFirst = false,
   asideLabel,
   className,
 }: ColumnsProps) {
@@ -75,20 +109,37 @@ export function Columns({
     );
   }
 
+  const mainColumn = (
+    <div
+      key="main"
+      className={cn(
+        "flex min-w-0 flex-col gap-block",
+        asideFirst && MAIN_SECOND_AT[from],
+      )}
+    >
+      {main}
+    </div>
+  );
+
+  const asideColumn = (
+    <aside
+      key="aside"
+      aria-label={asideLabel}
+      className={cn(
+        "flex min-w-0 flex-col gap-block",
+        asideFirst && ASIDE_FIRST_AT[from],
+        asideSticky && STICKY_AT[from],
+      )}
+    >
+      {aside}
+    </aside>
+  );
+
   return (
     <div
       className={cn("grid items-start gap-block", SPLIT_AT[from], className)}
     >
-      <div className="flex min-w-0 flex-col gap-block">{main}</div>
-      <aside
-        aria-label={asideLabel}
-        className={cn(
-          "flex min-w-0 flex-col gap-block",
-          asideSticky && STICKY_AT[from],
-        )}
-      >
-        {aside}
-      </aside>
+      {asideFirst ? [asideColumn, mainColumn] : [mainColumn, asideColumn]}
     </div>
   );
 }

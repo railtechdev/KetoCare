@@ -1,6 +1,7 @@
 import { SplitView } from "@ketocare/ui";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 
 import { usePatients } from "../patients/usePatients";
 import { PatientCard } from "./PatientCard";
@@ -25,6 +26,7 @@ import { PatientsListView } from "./PatientsListView";
  * подменять его флагом значило бы вписать в общий хук две разные роли.
  */
 export function DoctorPatientsPage() {
+  const { t } = useTranslation("doctor");
   const search = useSearch({ from: "/app/$section" });
   const navigate = useNavigate({ from: "/app/$section" });
   const patients = usePatients();
@@ -53,6 +55,7 @@ export function DoctorPatientsPage() {
   // телефоне лишней половины не существует, а не прячется классом.
   return (
     <SplitView
+      railLabel={t("rail.title")}
       list={<PatientsListView />}
       rail={selected === null ? null : <PatientRail selectedId={selected.id} />}
       detail={

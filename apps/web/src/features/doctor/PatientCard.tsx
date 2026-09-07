@@ -1,5 +1,7 @@
 import {
   Button,
+  Fact,
+  FactList,
   FormSheet,
   Metric,
   MetricRow,
@@ -180,10 +182,16 @@ export function PatientCard({
             текст в несколько строк, и в ряду коротких фактов он растянул бы
             все столбцы по своей высоте. */}
         {patient.notes !== null && patient.notes.trim() !== "" && (
-          <div className="text-sm">
-            <p className="m-0 text-muted-foreground">{t("card.familyNotes")}</p>
-            <p className="m-0 whitespace-pre-line">{patient.notes}</p>
-          </div>
+          // Пара, а не два абзаца: подпись со значением связаны разметкой, и
+          // скринридер читает их вместе. `multiline` сохраняет переносы —
+          // семья пишет сюда несколько строк про уход.
+          <FactList>
+            <Fact
+              label={t("card.familyNotes")}
+              value={patient.notes}
+              multiline
+            />
+          </FactList>
         )}
       </Section>
 

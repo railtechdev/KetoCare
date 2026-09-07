@@ -75,6 +75,11 @@ export function Tiles({
 
   return (
     <Tag
+      // `role="list"` при `list-style: none` — не избыточность: Safari с
+      // VoiceOver снимают роль списка с такого `ul`, и перечень перестаёт
+      // объявляться («список из шести») ровно там, где он нужнее всего.
+      // jsdom этого не моделирует, поэтому тестом не ловится.
+      role={as === "ul" ? "list" : undefined}
       className={cn(
         "grid gap-block",
         MIN_WIDTH[columns][min],

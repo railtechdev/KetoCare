@@ -22,6 +22,12 @@ export interface SplitViewProps {
   rail: ReactNode;
   /** Открытый предмет; `null` — не выбран ничего */
   detail: ReactNode | null;
+  /**
+   * Подпись перечня для скринридера: он остаётся ориентиром страницы
+   * (`nav`), а не безымянным столбцом. Без подписи два ориентира на экране
+   * различаются только порядком.
+   */
+  railLabel: string;
   /** С какой ширины окна перечень и предмет стоят рядом */
   from?: Extract<Breakpoint, "xl" | "2xl">;
   className?: string;
@@ -50,6 +56,7 @@ export function SplitView({
   list,
   rail,
   detail,
+  railLabel,
   from = "xl",
   className,
 }: SplitViewProps) {
@@ -65,9 +72,15 @@ export function SplitView({
     <div
       className={cn("grid items-start gap-screen", RAIL_AT[from], className)}
     >
-      <div className="sticky top-20 flex min-w-0 flex-col gap-block">
+      {/* Перечень идёт раньше предмета и в разметке — как в почтовых
+          клиентах: он навигация, и обходить его до содержимого естественно.
+          Ориентир назван, иначе на экране оказывается два безымянных `nav`. */}
+      <nav
+        aria-label={railLabel}
+        className="sticky top-20 flex min-w-0 flex-col gap-block"
+      >
         {rail}
-      </div>
+      </nav>
       <div className="flex min-w-0 flex-col gap-screen">{detail}</div>
     </div>
   );

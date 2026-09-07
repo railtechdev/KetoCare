@@ -42,6 +42,10 @@ export function useBreakpoint(breakpoint: Breakpoint): boolean {
         return () => undefined;
       }
       const list = window.matchMedia(query);
+      // До Safari 14 у `MediaQueryList` нет `addEventListener`. Подписки не
+      // будет — раскладка не переставится при повороте экрана, — но исключение
+      // внутри `subscribe` уронило бы весь рендер.
+      if (typeof list.addEventListener !== "function") return () => undefined;
       list.addEventListener("change", onChange);
       return () => list.removeEventListener("change", onChange);
     },
