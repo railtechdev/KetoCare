@@ -37,7 +37,13 @@ export function FilterBar({
     <div
       role="group"
       aria-label={label}
-      className={cn("flex flex-wrap items-end gap-block", className)}
+      // `[&_[data-slot=field]]:mb-0` снимает у полей нижний отступ формы: в
+      // строке он превращается в разъезд по вертикали, потому что выравнивание
+      // идёт по низу, и соседи равняются на край отступа, а не поля.
+      className={cn(
+        "flex flex-wrap items-end gap-block [&_[data-slot=field]]:mb-0",
+        className,
+      )}
     >
       {children}
       {action && <div className="ms-auto flex items-end">{action}</div>}
