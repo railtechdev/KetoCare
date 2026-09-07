@@ -1,4 +1,11 @@
-import { AsyncSection, Button, formatOccurredAt, Section } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  formatOccurredAt,
+  Metric,
+  MetricRow,
+  Section,
+} from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -75,11 +82,15 @@ export function AdminHomePage() {
   const recentRows = (recent.data?.items ?? []).slice(0, RECENT_LIMIT);
 
   return (
-    <PageLayout title={t("home.title")} intro={t("home.intro")}>
+    <PageLayout
+      title={t("home.title")}
+      intro={t("home.intro")}
+      width="wide"
+      density="compact"
+    >
       <Section
         title={t("home.accounts.title")}
         description={t("home.accounts.intro")}
-        density="compact"
         action={
           <Button asChild variant="outline">
             <SectionLink section="users">
@@ -108,36 +119,34 @@ export function AdminHomePage() {
           isEmpty={false}
           empty={null}
         >
-          <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr] sm:justify-start">
+          <MetricRow label={t("home.accounts.title")}>
             {ROLES.map((role) => {
               const bucket = byRole.get(role);
               return (
-                <div key={role} className="contents">
-                  <dt className="text-muted-foreground">
-                    {t(`common:roles.${role}`)}
-                  </dt>
-                  <dd className="m-0 tabular-nums">
-                    {/* Отключённые названы отдельно, а не спрятаны в общем
-                        числе: «шесть врачей», из которых двое без доступа, —
-                        это не шесть врачей. */}
-                    {bucket?.inactive
+                <Metric
+                  key={role}
+                  label={t(`common:roles.${role}`)}
+                  // Отключённые названы отдельно, а не спрятаны в общем числе:
+                  // «шесть врачей», из которых двое без доступа, — это не шесть
+                  // врачей.
+                  value={
+                    bucket?.inactive
                       ? t("home.accounts.withInactive", {
                           active: bucket.active,
                           inactive: bucket.inactive,
                         })
-                      : (bucket?.active ?? 0)}
-                  </dd>
-                </div>
+                      : (bucket?.active ?? 0)
+                  }
+                />
               );
             })}
-          </dl>
+          </MetricRow>
         </AsyncSection>
       </Section>
 
       <Section
         title={t("home.products.title")}
         description={t("home.products.intro")}
-        density="compact"
         action={
           <Button asChild variant="outline">
             <SectionLink section="products">
@@ -202,7 +211,6 @@ export function AdminHomePage() {
       <Section
         title={t("home.invitations.title")}
         description={t("home.invitations.intro")}
-        density="compact"
         action={
           <Button asChild variant="outline">
             <SectionLink section="users">
@@ -252,7 +260,6 @@ export function AdminHomePage() {
       <Section
         title={t("home.audit.title")}
         description={t("home.audit.intro")}
-        density="compact"
         action={
           <Button asChild variant="outline">
             <SectionLink section="audit">{t("home.audit.toList")}</SectionLink>

@@ -38,9 +38,14 @@ export function AdminPage({ section }: { section?: string }) {
   const current = sectionFromRoute(section);
 
   return (
+    // Разделы админки — таблицы: учётки, продукты, справочники, журнал. Это
+    // страницы, на которых работают, а не читают (правило П34 канона), и
+    // плотность у них объявляется один раз на экран, а не в каждом блоке.
     <PageLayout
       title={t(`${current}.title`)}
       intro={t(`${current}.intro`, { defaultValue: "" }) || undefined}
+      width="wide"
+      density="compact"
     >
       <div className="flex flex-col gap-block">
         {current === "users" && <UsersPanel chrome="screen" />}

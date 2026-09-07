@@ -1,4 +1,10 @@
-import { MacroBar, RatioBadge, Section, WarningBanner } from "@ketocare/ui";
+import {
+  EmptyState,
+  MacroBar,
+  RatioBadge,
+  Section,
+  WarningBanner,
+} from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { dayVerdict, type DayTolerance } from "../patients/dayVerdict";
@@ -31,7 +37,7 @@ export function DayTotalsPanel({
   if (totals === null) {
     return (
       <Section title={t("totals.title")}>
-        <p className="m-0 text-sm text-muted-foreground">{t("totals.none")}</p>
+        <EmptyState size="inline" title={t("totals.none")} />
       </Section>
     );
   }

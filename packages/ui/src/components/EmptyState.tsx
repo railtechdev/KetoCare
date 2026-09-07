@@ -10,6 +10,18 @@ export interface EmptyStateProps {
   description?: ReactNode;
   /** Кнопка действия: пустое состояние без выхода — тупик */
   action?: ReactNode;
+  /**
+   * `block` — единственное пустое состояние экрана: рамка, значок, объяснение.
+   * `inline` — строка: блок, которому нечего показать, когда о пустоте экрана
+   * уже сказано в другом месте (правило П27 канона).
+   *
+   * Размер существует потому, что правило П27 («пустому блоку не нужна
+   * высота») было записано, но обеспечить его было нечем: у пустого состояния
+   * форма была одна. Пустой день в меню рисовал четыре рамки «Блюд пока нет»,
+   * дневник — два пустых состояния подряд, а выбор ребёнка — пунктирный
+   * прямоугольник 1616 x 290 px.
+   */
+  size?: "block" | "inline";
   className?: string;
 }
 
@@ -25,8 +37,26 @@ export function EmptyState({
   title,
   description,
   action,
+  size = "block",
   className,
 }: EmptyStateProps) {
+  if (size === "inline") {
+    // Значка нет намеренно: значок нужен, чтобы объяснить пустой экран, а здесь
+    // объяснять нечего — строка стоит внутри блока, который сам себя называет.
+    return (
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-field text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        <span>{title}</span>
+        {description && <span>{description}</span>}
+        {action}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(

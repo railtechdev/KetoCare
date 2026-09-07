@@ -1,8 +1,10 @@
+import { SplitView } from "@ketocare/ui";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 import { usePatients } from "../patients/usePatients";
 import { PatientCard } from "./PatientCard";
+import { PatientRail } from "./PatientRail";
 import { PatientsListView } from "./PatientsListView";
 
 /**
@@ -45,9 +47,19 @@ export function DoctorPatientsPage() {
     (patients.data?.items ?? []).find((item) => item.id === search.patient) ??
     null;
 
-  if (selected !== null) {
-    return <PatientCard patient={selected} onBack={() => select(undefined)} />;
-  }
-
-  return <PatientsListView />;
+  // Ничего не выбрано — реестр во всю ширину. Выбран пациент: на узком экране
+  // только его карта (ровно как было), с 1280 px — карта и перечень «кто
+  // следующий» рядом. Разветвление делает `SplitView`, и делает его в JS: на
+  // телефоне лишней половины не существует, а не прячется классом.
+  return (
+    <SplitView
+      list={<PatientsListView />}
+      rail={selected === null ? null : <PatientRail selectedId={selected.id} />}
+      detail={
+        selected === null ? null : (
+          <PatientCard patient={selected} onBack={() => select(undefined)} />
+        )
+      }
+    />
+  );
 }

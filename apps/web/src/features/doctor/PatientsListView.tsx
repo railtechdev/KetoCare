@@ -4,6 +4,7 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  FilterBar,
   FormSheet,
   RatioBadge,
 } from "@ketocare/ui";
@@ -159,9 +160,14 @@ export function PatientsListView() {
   );
 
   return (
+    // Реестр — страница, на которой работают: восемь столбцов в колонке 1152 px
+    // жались, оставляя на мониторе 1920 четверть окна пустой. Плотность —
+    // `compact` на весь экран: правило П26 канона, блоки её наследуют.
     <PageLayout
       title={t("list.title")}
       intro={t("list.intro")}
+      width="wide"
+      density="compact"
       actions={
         <Button type="button" onClick={() => setInviteOpen(true)}>
           <UserPlus aria-hidden="true" />
@@ -169,7 +175,7 @@ export function PatientsListView() {
         </Button>
       }
     >
-      <div className="max-w-md">
+      <FilterBar label={t("list.filtersLabel")}>
         <Field
           id="patient-search"
           width="wide"
@@ -179,7 +185,7 @@ export function PatientsListView() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-      </div>
+      </FilterBar>
 
       {/* Ошибка обновления списка не прячет уже показанных пациентов: врач,
           у которого строки исчезли за красным блоком, решает, что потерял

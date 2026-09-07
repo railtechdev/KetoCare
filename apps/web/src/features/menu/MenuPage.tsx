@@ -1,6 +1,7 @@
 import {
   AsyncSection,
   Button,
+  Columns,
   ConfirmDialog,
   FormSheet,
   Section,
@@ -102,9 +103,11 @@ export function MenuPage({ patientId }: { patientId: string }) {
   }
 
   return (
+    // План дня и итоги стоят рядом — это просит ширины (правило П34 канона).
     <PageLayout
       title={t("title")}
       intro={t("intro")}
+      width="wide"
       actions={
         <>
           <Button
@@ -178,18 +181,6 @@ export function MenuPage({ patientId }: { patientId: string }) {
 
         <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
 
-        {/* Итогов у пустого дня нет, и говорить об этом отдельным блоком не
-            нужно: о пустом дне говорит подпись блока приёмов пищи. Раньше два
-            блока подряд сообщали одно и то же на 332 px (правило П27). */}
-        {items.length > 0 && (
-          <DayTotalsPanel
-            totals={menu.data?.totals ?? null}
-            engineVersion={menu.data?.engine_version ?? null}
-            tolerance={tolerance}
-            targets={targets}
-          />
-        )}
-
         {/* Ошибка отправки, а не загрузки: повторять нечего, состав дня
             остался прежним (правило П16 канона). */}
         {upsert.isError && (
@@ -208,37 +199,62 @@ export function MenuPage({ patientId }: { patientId: string }) {
             Поле `meals_per_day` заполняется с первого назначения и до сих пор
             не доходило ни до одного экрана семьи: она планировала день, не
             зная, о скольких приёмах договорились. */}
-        <Section
-          title={t("meals.title")}
-          description={
-            items.length === 0
-              ? t("day.empty")
-              : targets === null
-                ? undefined
-                : t("meals.planned", {
-                    prescribed: targets.mealsPerDay,
-                    planned: plannedSlots,
-                  })
+        {/* Итоги дня — рядом с составом, а не над ним. Семья добавляет блюдо и
+            смотрит, что стало с соотношением: пока итоги стояли отдельным
+            блоком сверху, каждое добавление требовало прокрутки вверх и обратно.
+            Приставная колонка закреплена — итоги остаются на виду, пока идёт
+            работа с приёмами пищи.
+
+            Итогов у пустого дня нет, и говорить об этом отдельным блоком не
+            нужно: о пустом дне говорит подпись блока приёмов пищи. Раньше два
+            блока подряд сообщали одно и то же на 332 px (правило П27). */}
+        <Columns
+          asideLabel={t("totals.title")}
+          asideSticky
+          aside={
+            items.length > 0 ? (
+              <DayTotalsPanel
+                totals={menu.data?.totals ?? null}
+                engineVersion={menu.data?.engine_version ?? null}
+                tolerance={tolerance}
+                targets={targets}
+              />
+            ) : null
           }
-          contentClassName="gap-0 divide-y divide-border"
-        >
-          {MEAL_SLOTS.map((slot) => (
-            <MealSlotGroup
-              key={slot}
-              slot={slot}
-              items={items.filter((item) => item.meal_slot === slot)}
-              titles={titles}
-              withdrawnByItem={withdrawn}
-              canRemove={items.length > 1}
-              pending={upsert.isPending}
-              onAdd={() => setAddingSlot(slot)}
-              onRemove={removeItem}
-              onToggleEaten={(itemId, value) =>
-                eaten.mutate({ itemId, eaten: value })
+          main={
+            <Section
+              title={t("meals.title")}
+              description={
+                items.length === 0
+                  ? t("day.empty")
+                  : targets === null
+                    ? undefined
+                    : t("meals.planned", {
+                        prescribed: targets.mealsPerDay,
+                        planned: plannedSlots,
+                      })
               }
-            />
-          ))}
-        </Section>
+              contentClassName="gap-0 divide-y divide-border"
+            >
+              {MEAL_SLOTS.map((slot) => (
+                <MealSlotGroup
+                  key={slot}
+                  slot={slot}
+                  items={items.filter((item) => item.meal_slot === slot)}
+                  titles={titles}
+                  withdrawnByItem={withdrawn}
+                  canRemove={items.length > 1}
+                  pending={upsert.isPending}
+                  onAdd={() => setAddingSlot(slot)}
+                  onRemove={removeItem}
+                  onToggleEaten={(itemId, value) =>
+                    eaten.mutate({ itemId, eaten: value })
+                  }
+                />
+              ))}
+            </Section>
+          }
+        />
 
         {upsert.isPending && (
           <p role="status" className="m-0 text-sm text-muted-foreground">

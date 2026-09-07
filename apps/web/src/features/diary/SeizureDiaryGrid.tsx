@@ -1,4 +1,4 @@
-import { Section } from "@ketocare/ui";
+import { EmptyState, Section } from "@ketocare/ui";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -47,7 +47,7 @@ export function SeizureDiaryGrid({
       description={grid.rows.length === 0 ? undefined : t("grid.hint")}
     >
       {grid.rows.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">{t("grid.empty")}</p>
+        <EmptyState size="inline" title={t("grid.empty")} />
       ) : (
         <>
           {/* Широкая таблица прокручивается внутри своего блока, а не тянет

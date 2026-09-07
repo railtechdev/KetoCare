@@ -1,4 +1,4 @@
-import { EmptyState, RatioBadge } from "@ketocare/ui";
+import { EmptyState, Metric, MetricRow, RatioBadge } from "@ketocare/ui";
 import { ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -29,60 +29,43 @@ export function PrescriptionCard({
 
   return (
     <Panel title={t("prescription.title")}>
-      <dl className="m-0 grid gap-block sm:grid-cols-2">
-        <div>
-          <dt className="text-sm text-muted-foreground">
-            {t("prescription.ratio")}
-          </dt>
-          <dd className="m-0 mt-1">
-            {/* Без вердикта о допуске: это назначенная цель, а не измеренный
-                результат, сравнивать её не с чем. */}
-            <RatioBadge ratio={prescription.ratio} />
-          </dd>
-        </div>
-
-        <div>
-          <dt className="text-sm text-muted-foreground">
-            {t("prescription.kcal")}
-          </dt>
-          <dd className="m-0 mt-1 tabular-nums">
-            {t("prescription.kcalValue", {
-              value: prescription.kcal_per_day.toFixed(0),
-            })}
-          </dd>
-        </div>
-
-        <div>
-          <dt className="text-sm text-muted-foreground">
-            {t("prescription.protein")}
-          </dt>
-          <dd className="m-0 mt-1 tabular-nums">
-            {t("prescription.gramsValue", { value: prescription.protein_g })}
-          </dd>
-        </div>
-
-        <div>
-          <dt className="text-sm text-muted-foreground">
-            {t("prescription.carbsLimit")}
-          </dt>
-          <dd className="m-0 mt-1 tabular-nums">
-            {t("prescription.gramsValue", {
-              value: prescription.carbs_limit_g,
-            })}
-          </dd>
-        </div>
-
+      {/* Показатели рядом, сколько влезет. Раньше здесь было
+          `sm:grid-cols-2` — вопрос о ширине ОКНА: в приставной колонке 20rem на
+          мониторе 1920 блок оставался двухстолбцовым, и «Кетосоотношение» с
+          «Калорийностью» жались в 130 px каждый. `MetricRow` спрашивает о
+          ширине самого блока. */}
+      <MetricRow label={t("prescription.title")}>
+        {/* Без вердикта о допуске: это назначенная цель, а не измеренный
+            результат, сравнивать её не с чем. */}
+        <Metric
+          label={t("prescription.ratio")}
+          value={<RatioBadge ratio={prescription.ratio} />}
+        />
+        <Metric
+          label={t("prescription.kcal")}
+          value={t("prescription.kcalValue", {
+            value: prescription.kcal_per_day.toFixed(0),
+          })}
+        />
+        <Metric
+          label={t("prescription.protein")}
+          value={t("prescription.gramsValue", {
+            value: prescription.protein_g,
+          })}
+        />
+        <Metric
+          label={t("prescription.carbsLimit")}
+          value={t("prescription.gramsValue", {
+            value: prescription.carbs_limit_g,
+          })}
+        />
         {/* Число приёмов врач задаёт с первого назначения, а семье его до сих
             пор не показывали нигде — при том что план дня составляет она. */}
-        <div>
-          <dt className="text-sm text-muted-foreground">
-            {t("prescription.meals")}
-          </dt>
-          <dd className="m-0 mt-1 tabular-nums">
-            {prescription.meals_per_day}
-          </dd>
-        </div>
-      </dl>
+        <Metric
+          label={t("prescription.meals")}
+          value={prescription.meals_per_day}
+        />
+      </MetricRow>
     </Panel>
   );
 }

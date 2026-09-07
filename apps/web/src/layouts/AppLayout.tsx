@@ -25,6 +25,12 @@ import { UserMenu } from "./UserMenu";
  *
  * На узком экране навигация уезжает в шторку: родитель заполняет дневник с
  * телефона, и это основной сценарий, а не запасной.
+ *
+ * Три ширины, а не две. Раньше их было две — «телефон» и «1024 и шире», — и
+ * между ними лежал провал: на 1000 px (ноутбук в окне, планшет альбомом)
+ * приложение показывало телефонную раскладку с гамбургером, отдавая всю ширину
+ * одной колонке. Теперь с 768 px боковая панель возвращается полосой значков, а
+ * подписи к ним появляются с 1024 px, когда для них есть место.
  */
 export function AppLayout() {
   const { t } = useTranslation();
@@ -38,19 +44,22 @@ export function AppLayout() {
   return (
     <TooltipProvider>
       <div className="min-h-dvh bg-background">
-        <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-screen border-r border-sidebar-border bg-sidebar p-4 lg:flex">
+        {/* Полоса значков с 768 px, подписи — с 1024 px. Ширина панели и отступ
+            содержимого обязаны совпадать: панель `fixed`, и расхождение между
+            ними тут же уводит содержимое под неё. */}
+        <aside className="fixed inset-y-0 left-0 hidden w-16 flex-col gap-screen border-r border-sidebar-border bg-sidebar p-2 md:flex lg:w-64 lg:p-4">
           <Brand />
           <SidebarNav sections={sections} />
         </aside>
 
-        <div className="lg:pl-64">
+        <div className="md:pl-16 lg:pl-64">
           <header className="sticky top-0 z-20 flex h-16 items-center gap-block border-b border-border bg-card px-4 sm:px-6">
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="lg:hidden"
+                  className="md:hidden"
                   aria-label={t("nav.openMenu")}
                 >
                   <Menu aria-hidden="true" />
@@ -62,6 +71,7 @@ export function AppLayout() {
                 <Separator className="my-4" />
                 <SidebarNav
                   sections={sections}
+                  labels="always"
                   onNavigate={() => setNavOpen(false)}
                 />
               </SheetContent>
@@ -74,7 +84,7 @@ export function AppLayout() {
             <UserMenu session={session} />
           </header>
 
-          <main className="p-4 sm:p-6">
+          <main className="p-4 sm:p-6 xl:px-8">
             <Outlet />
           </main>
         </div>
@@ -85,15 +95,22 @@ export function AppLayout() {
   );
 }
 
+/**
+ * Знак и название. На полосе значков название скрыто визуально, но остаётся
+ * скринридеру: полоса — это та же навигация, и она обязана называть, куда
+ * пользователь попал.
+ */
 function Brand() {
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center gap-field">
-      <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+    <div className="flex items-center justify-center gap-field lg:justify-start">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
         <Activity aria-hidden="true" className="size-5" />
       </span>
-      <span className="text-lg font-bold text-foreground">{t("app.name")}</span>
+      <span className="sr-only text-lg font-bold text-foreground lg:not-sr-only">
+        {t("app.name")}
+      </span>
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Tiles,
   toast,
   WarningBanner,
 } from "@ketocare/ui";
@@ -128,7 +129,7 @@ export function UiShowcase() {
       </Section>
 
       <Section title="Состояния">
-        <div className="grid gap-block lg:grid-cols-2">
+        <Tiles>
           <EmptyState
             icon={Inbox}
             title="Записей пока нет"
@@ -153,7 +154,7 @@ export function UiShowcase() {
             cancelLabel="Отмена"
             onConfirm={() => toast.success("Удалено")}
           />
-        </div>
+        </Tiles>
       </Section>
 
       <Section title="Карточки и вкладки">

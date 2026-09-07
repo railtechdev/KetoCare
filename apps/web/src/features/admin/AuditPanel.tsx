@@ -191,8 +191,7 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
       <Section
         title={t("audit.filters.legend")}
         titleHidden
-        density="compact"
-        contentClassName="grid gap-block sm:grid-cols-2 lg:grid-cols-3"
+        contentClassName="flex-row flex-wrap items-end"
       >
         <Field
           id="audit-user"
