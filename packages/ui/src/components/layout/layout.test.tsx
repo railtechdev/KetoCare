@@ -6,6 +6,7 @@ import { Fact, FactList } from "./FactList";
 import { Metric, MetricRow } from "./MetricRow";
 import { SplitView } from "./SplitView";
 import { Tiles } from "./Tiles";
+import { Workspace, WorkspaceNav } from "./Workspace";
 import { DensityProvider } from "./density";
 import { Section } from "../Section";
 
@@ -222,5 +223,66 @@ describe("плотность", () => {
     );
 
     expect(container.firstElementChild?.className).not.toContain("py-block");
+  });
+});
+
+describe("Workspace", () => {
+  it("называет навигацию предмета: на экране она не одна", () => {
+    // Навигация приложения на экране уже есть. Два безымянных ориентира
+    // различались бы только порядком, и скринридер не мог бы сказать, в какой
+    // из них он попал.
+    render(
+      <Workspace navLabel="Разделы карты" nav={<span>меню</span>}>
+        содержимое
+      </Workspace>,
+    );
+
+    expect(
+      screen.getByRole("navigation", { name: "Разделы карты" }),
+    ).toBeInTheDocument();
+  });
+
+  it("не убирает навигацию на узком экране", () => {
+    // Здесь колонка — единственный способ перейти из одного раздела предмета в
+    // другой, в отличие от перечня в `SplitView`. Убрав её на телефоне, экран
+    // остался бы без навигации вовсе, поэтому раскладку решает сетка, а не
+    // ветвление в JS: обе части в разметке есть всегда.
+    stubMatchMedia(false);
+
+    render(
+      <Workspace navLabel="Разделы карты" nav={<span>меню</span>}>
+        содержимое
+      </Workspace>,
+    );
+
+    expect(screen.getByText("меню")).toBeInTheDocument();
+    expect(screen.getByText("содержимое")).toBeInTheDocument();
+  });
+
+  it("навигация идёт в разметке раньше содержимого", () => {
+    // На узком экране она встаёт НАД содержимым, и порядок чтения обязан
+    // совпадать с порядком обхода клавиатурой.
+    const { container } = render(
+      <Workspace navLabel="Разделы карты" nav={<span>меню</span>}>
+        содержимое
+      </Workspace>,
+    );
+
+    expect(container.querySelector("div")?.firstElementChild?.tagName).toBe(
+      "NAV",
+    );
+  });
+
+  it("перечисляет пункты списком", () => {
+    // Скринридер обязан назвать, сколько разделов и какой по счёту открыт;
+    // набор ссылок подряд этого не даёт.
+    render(
+      <WorkspaceNav>
+        <li>Сводка</li>
+        <li>Назначение</li>
+      </WorkspaceNav>,
+    );
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 });

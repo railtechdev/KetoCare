@@ -7,17 +7,31 @@ import {
   SheetTrigger,
   Toaster,
   TooltipProvider,
+  cn,
 } from "@ketocare/ui";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useMatchRoute } from "@tanstack/react-router";
 import { Activity, Menu } from "lucide-react";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SECTIONS_BY_ROLE } from "../features/auth/roles";
+import { NAV } from "./navWidth";
 import { useSession } from "../features/auth/useSession";
+import { isPatientView } from "../features/doctor/patientViews";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
 import { SidebarNav } from "./SidebarNav";
 import { UserMenu } from "./UserMenu";
+
+/**
+ * Переключатель пациента едет отдельным куском: он нужен только внутри карты,
+ * а каркас грузится всем — родителю на телефоне вместе с ним приезжал бы поиск
+ * по когорте, которого у него нет и быть не может.
+ */
+const DoctorPatientSwitcher = lazy(() =>
+  import("../features/doctor/DoctorPatientSwitcher").then((m) => ({
+    default: m.DoctorPatientSwitcher,
+  })),
+);
 
 /**
  * Каркас кабинета. Один билд на три роли (раздел 8.1 ТЗ): недоступные разделы
@@ -36,23 +50,39 @@ export function AppLayout() {
   const { t } = useTranslation();
   const { session } = useSession();
   const [navOpen, setNavOpen] = useState(false);
+  const matchRoute = useMatchRoute();
+
+  // Карта пациента — уровень глубже разделов, и каркас об этом знает: он
+  // сжимает своё меню и подставляет в шапку переключатель пациента. Спросить
+  // об этом роутер честнее, чем передавать признак через контекст: адрес и есть
+  // источник правды о том, где пользователь находится.
+  const inPatient =
+    matchRoute({ to: "/app/patients/$patientId", fuzzy: true }) !== false;
+  const openView = matchRoute({ to: "/app/patients/$patientId/$view" });
 
   if (session === null) return null;
 
   const sections = SECTIONS_BY_ROLE[session.role];
+  const nav = inPatient ? NAV.patient : NAV.sections;
 
   return (
     <TooltipProvider>
       <div className="min-h-dvh bg-background">
-        {/* Полоса значков с 768 px, подписи — с 1024 px. Ширина панели и отступ
-            содержимого обязаны совпадать: панель `fixed`, и расхождение между
-            ними тут же уводит содержимое под неё. */}
-        <aside className="fixed inset-y-0 left-0 hidden w-16 flex-col gap-screen border-r border-sidebar-border bg-sidebar p-2 md:flex lg:w-64 lg:p-4">
-          <Brand />
-          <SidebarNav sections={sections} />
+        <aside
+          className={cn(
+            "fixed inset-y-0 left-0 hidden flex-col gap-screen border-r border-sidebar-border bg-sidebar p-2 md:flex",
+            !inPatient && "lg:p-4",
+            nav.aside,
+          )}
+        >
+          <Brand labels={inPatient ? "never" : "responsive"} />
+          <SidebarNav
+            sections={sections}
+            labels={inPatient ? "never" : "responsive"}
+          />
         </aside>
 
-        <div className="md:pl-16 lg:pl-64">
+        <div className={nav.content}>
           <header className="sticky top-0 z-20 flex h-16 items-center gap-block border-b border-border bg-card px-4 sm:px-6">
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger asChild>
@@ -67,7 +97,7 @@ export function AppLayout() {
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-4">
                 <SheetTitle className="sr-only">{t("app.name")}</SheetTitle>
-                <Brand />
+                <Brand labels="always" />
                 <Separator className="my-4" />
                 <SidebarNav
                   sections={sections}
@@ -77,8 +107,22 @@ export function AppLayout() {
               </SheetContent>
             </Sheet>
 
-            <div className="mr-auto">
+            <div className="mr-auto min-w-0">
               {session.role === "parent" && <PatientSwitcher />}
+              {/* Чья карта открыта — видно в любом разделе и на любой ширине, в
+                  том числе на телефоне, где навигация карты уезжает под
+                  содержимое. Он же — переход к следующему пациенту. */}
+              {openView !== false && isPatientView(openView.view) && (
+                // Пока чанк едет, в шапке пусто, а не заглушка: имя пациента
+                // всё это время видно в навигации карты, и мигающий скелетон на
+                // его месте сообщал бы о загрузке того, что уже показано.
+                <Suspense fallback={null}>
+                  <DoctorPatientSwitcher
+                    patientId={openView.patientId}
+                    view={openView.view}
+                  />
+                </Suspense>
+              )}
             </div>
 
             <UserMenu session={session} />
@@ -96,19 +140,31 @@ export function AppLayout() {
 }
 
 /**
- * Знак и название. На полосе значков название скрыто визуально, но остаётся
- * скринридеру: полоса — это та же навигация, и она обязана называть, куда
+ * Знак и название. Там, где подпись скрыта визуально, она остаётся
+ * скринридеру: полоса значков — та же навигация, и она обязана называть, куда
  * пользователь попал.
  */
-function Brand() {
+function Brand({ labels }: { labels: "responsive" | "always" | "never" }) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center justify-center gap-field lg:justify-start">
+    <div
+      className={cn(
+        "flex items-center justify-center gap-field",
+        labels === "responsive" && "lg:justify-start",
+        labels === "always" && "justify-start",
+      )}
+    >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
         <Activity aria-hidden="true" className="size-5" />
       </span>
-      <span className="sr-only text-lg font-bold text-foreground lg:not-sr-only">
+      <span
+        className={cn(
+          "text-lg font-bold text-foreground",
+          labels === "responsive" && "sr-only lg:not-sr-only",
+          labels === "never" && "sr-only",
+        )}
+      >
         {t("app.name")}
       </span>
     </div>

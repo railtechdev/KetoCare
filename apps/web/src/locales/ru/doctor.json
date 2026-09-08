@@ -67,7 +67,6 @@
     "years_other": "{{count}} года"
   },
   "card": {
-    "back": "К списку пациентов",
     "birthDate": "Дата рождения",
     "birthDateWithAge": "{{date}} ({{age}})",
     "sex": "Пол",
@@ -79,15 +78,6 @@
     "heightValue": "{{value}} см",
     "allergies": "Аллергии",
     "noAllergies": "Не указаны",
-    "tabsLabel": "Разделы карты пациента",
-    "tabs": {
-      "summary": "Сводка",
-      "prescription": "Назначения",
-      "menu": "Питание",
-      "diary": "Дневники",
-      "reports": "Отчёт",
-      "notes": "Заметки"
-    },
     "passportTitle": "Данные пациента",
     "unknownProduct": "продукт удалён из справочника",
     "familyNotes": "Заметки семьи",
@@ -380,7 +370,24 @@
     "empty": "Семья ещё не заведена",
     "emptyDescription": "Кабинет родителя создаётся приглашением — оно отправляется из списка пациентов."
   },
-  "rail": {
-    "title": "Пациенты"
+  "workspace": {
+    "toList": "Все пациенты",
+    "navLabel": "Разделы карты пациента: {{name}}",
+    "loadError": "Карту пациента загрузить не удалось",
+    "views": {
+      "summary": "Сводка",
+      "prescription": "Назначение",
+      "menu": "Питание",
+      "diary": "Дневники",
+      "reports": "Отчёт",
+      "notes": "Заметки",
+      "profile": "Профиль"
+    },
+    "switcher": {
+      "label": "Выбрать другого пациента",
+      "loading": "Загружаем…",
+      "placeholder": "Поиск по имени",
+      "empty": "Пациенты не найдены"
+    }
   }
 }

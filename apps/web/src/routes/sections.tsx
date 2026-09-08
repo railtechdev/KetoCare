@@ -62,9 +62,9 @@ const DoctorHomePage = lazy(() =>
     default: m.DoctorHomePage,
   })),
 );
-const DoctorPatientsPage = lazy(() =>
-  import("../features/doctor/DoctorPatientsPage").then((m) => ({
-    default: m.DoctorPatientsPage,
+const PatientsListView = lazy(() =>
+  import("../features/doctor/PatientsListView").then((m) => ({
+    default: m.PatientsListView,
   })),
 );
 const HomePage = lazy(() =>
@@ -149,7 +149,11 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
       render={(patientId) => <ReportsPage patientId={patientId} />}
     />
   ),
-  patients: () => <DoctorPatientsPage />,
+  // Реестр пациентов. Карта пациента живёт не здесь, а своим уровнем адреса
+  // (`/app/patients/<id>/<раздел>`, см. `routes/PatientRoute.tsx`): раздел
+  // отвечает на вопрос «кто у меня есть», а карта — «что с этим ребёнком», и
+  // держать их на одном адресе значило открывать карту параметром списка.
+  patients: () => <PatientsListView />,
   // Справочник продуктов: семье и врачу на чтение, диетологу — с правкой,
   // администратору — с правкой, импортом и историей. Право проверяет сервер
   // (`_EDITOR_ROLES` в routers/products.py); здесь только UX.

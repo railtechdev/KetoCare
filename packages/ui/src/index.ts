@@ -43,6 +43,9 @@ export type { TilesProps } from "./components/layout/Tiles";
 export { SplitView } from "./components/layout/SplitView";
 export type { SplitViewProps } from "./components/layout/SplitView";
 
+export { Workspace, WorkspaceNav } from "./components/layout/Workspace";
+export type { WorkspaceProps } from "./components/layout/Workspace";
+
 export { DensityProvider } from "./components/layout/density";
 export { useDensity } from "./lib/density";
 export type { Density } from "./lib/density";

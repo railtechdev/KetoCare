@@ -57,13 +57,21 @@ export function ReportsView({ patientId }: { patientId: string }) {
   // страницы и при уходе в другой раздел. Готовый файл после этого достать было
   // нечем — у API нет ручки «мои задачи», только выдача по идентификатору, — и
   // человек заказывал сборку заново, второй раз занимая воркер.
-  const search = useSearch({ from: "/app/$section" });
-  const navigate = useNavigate({ from: "/app/$section" });
+  //
+  // Маршрут не назван намеренно (`strict: false`): экран живёт под двумя
+  // адресами — `/app/reports` у семьи и `/app/patients/<id>/reports` у врача, —
+  // и привязка к одному из них роняла бы его на другом. Параметр при этом
+  // объявлен обоими маршрутами: не объявленный в `validateSearch` теряется
+  // молча.
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
   const jobId = search.job ?? null;
 
   const setJobId = useCallback(
     (next: string | null) => {
       void navigate({
+        // «Здесь же»: маршрут не назван, потому что экран стоит под двумя.
+        to: ".",
         search: (previous) => ({ ...previous, job: next ?? undefined }),
         replace: true,
       });

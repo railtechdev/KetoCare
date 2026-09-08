@@ -18,14 +18,21 @@ import { useCallback } from "react";
  * Переход — `replace`: вкладка не создаёт запись в истории, иначе «Назад»
  * после осмотра пяти вкладок пришлось бы нажимать пять раз, чтобы уйти с
  * экрана. Ссылка и F5 при этом работают.
+ *
+ * Маршрут не назван (`strict: false`), и это не послабление типизации, а суть
+ * хука: он про «состояние живёт в адресе», а не про конкретный адрес. Экраны,
+ * которые им пользуются, стоят под двумя маршрутами — разделом кабинета и
+ * картой пациента, — и дневник врача падал бы на любом из них, будь хук привязан
+ * к другому. Имена параметров при этом обязан объявить `validateSearch` того
+ * маршрута, под которым экран стоит: необъявленный параметр теряется молча.
  */
 export function useSectionTab<T extends string>(
   key: "tab" | "kind",
   values: readonly T[],
   fallback: T,
 ): [T, (value: T) => void] {
-  const search = useSearch({ from: "/app/$section" });
-  const navigate = useNavigate({ from: "/app/$section" });
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
 
   const raw = search[key];
   const value = values.find((candidate) => candidate === raw) ?? fallback;
@@ -33,6 +40,7 @@ export function useSectionTab<T extends string>(
   const set = useCallback(
     (next: T) => {
       void navigate({
+        to: ".",
         search: (previous) => ({
           ...previous,
           [key]: next,
@@ -63,12 +71,13 @@ export function useSectionItem(): [
   string | undefined,
   (value?: string) => void,
 ] {
-  const search = useSearch({ from: "/app/$section" });
-  const navigate = useNavigate({ from: "/app/$section" });
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
 
   const set = useCallback(
     (next?: string) => {
       void navigate({
+        to: ".",
         search: (previous) => ({ ...previous, item: next }),
       });
     },
@@ -89,12 +98,13 @@ export function useSectionItem(): [
  * пришлось бы нажимать по разу на каждую букву.
  */
 export function useSectionQuery(): [string, (value: string) => void] {
-  const search = useSearch({ from: "/app/$section" });
-  const navigate = useNavigate({ from: "/app/$section" });
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
 
   const set = useCallback(
     (next: string) => {
       void navigate({
+        to: ".",
         replace: true,
         search: (previous) => ({
           ...previous,
