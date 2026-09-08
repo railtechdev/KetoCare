@@ -15,19 +15,31 @@ import { DEFAULT_PATIENT_VIEW, type PatientView } from "./patientViews";
  * принадлежит покинутому разделу и на другом означал бы уже не то, а сборка
  * отчёта живёт на сервере — уйти из отчёта в дневники и вернуться, потеряв
  * готовый файл, значит заказать его второй раз (ради этого `?job=` и заведён).
+ *
+ * `item` и `tab` задаются явно там, где переход ведёт к конкретному предмету:
+ * блюдо пациента открывается в калькуляторе ЕГО карты — только там у расчёта
+ * есть кетосоотношение из назначения и список исключённых продуктов.
  */
 export function PatientViewLink({
   patientId,
   view = DEFAULT_PATIENT_VIEW,
+  item,
+  tab,
   children,
   className,
   current,
   onClick,
+  "aria-label": ariaLabel,
 }: {
   patientId: string;
   view?: PatientView;
+  /** Предмет, который нужно открыть в разделе: блюдо в калькуляторе карты */
+  item?: string;
+  /** Вкладка внутри раздела: режим калькулятора */
+  tab?: string;
   children: ReactNode;
   className?: string;
+  "aria-label"?: string;
   /**
    * Открытый раздел. Ставится явно, а не берётся у роутера: «активной» он
    * считает ссылку по совпадению адреса ВМЕСТЕ с параметрами поиска
@@ -43,8 +55,9 @@ export function PatientViewLink({
     <Link
       to="/app/patients/$patientId/$view"
       params={{ patientId, view }}
-      search={(previous) => ({ job: previous.job })}
+      search={(previous) => ({ job: previous.job, item, tab })}
       className={className}
+      aria-label={ariaLabel}
       aria-current={current ? "page" : undefined}
       onClick={onClick}
     >

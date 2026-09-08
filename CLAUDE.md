@@ -30,7 +30,7 @@ KetoCare — платформа сопровождения кетогенной 
 - Экраны раздела 8.3: калькулятор, продукты, главная родителя, меню, дневники (6 видов), рецепты, кабинет врача, админка. Плюс сверх ТЗ: свой профиль, настройки с профилями детей, приглашения, витрина `/dev/ui`.
 - `apps/api` — `/logs`, `/menus`, `/overview`, `/recipes`, `/custom-dishes`, `/clinical`, `/admin`, `/dictionaries`, `/users` (свой профиль, смена пароля, справочник персонала), ведение пациента специалистом.
 
-Тестов: 1307 pytest (`apps/api` 779, `apps/worker` 160, `.claude/hooks` 113, `apps/bot` 100, `packages/core` 88, `packages/keto_engine` 67) и 572 vitest (`apps/web` 410, `packages/ui` 96, `apps/miniapp` 61, `packages/api-client` 5). Единственный пропуск — рендер PDF без системных pango и cairo.
+Тестов: 1307 pytest (`apps/api` 779, `apps/worker` 160, `.claude/hooks` 113, `apps/bot` 100, `packages/core` 88, `packages/keto_engine` 67) и 576 vitest (`apps/web` 414, `packages/ui` 96, `apps/miniapp` 61, `packages/api-client` 5). Единственный пропуск — рендер PDF без системных pango и cairo.
 `make seed-demo` наполняет локальную БД демо-данными (три роли, продукты, две недели дневника).
 
 Сверх ТЗ, по материалам заказчика от 29.08.2026 ([ADR-0007](docs/adr/0007-patient-intake-and-seizure-diary.md)):

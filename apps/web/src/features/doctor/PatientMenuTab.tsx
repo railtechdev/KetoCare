@@ -19,6 +19,7 @@ import {
   useDayTolerance,
   useMenuQuery,
 } from "../menu/useMenu";
+import { MyDishesPanel } from "../dishes/MyDishesPanel";
 import { LinesSkeleton } from "./skeletons";
 
 /**
@@ -32,6 +33,12 @@ import { LinesSkeleton } from "./skeletons";
  * Сервер правку специалисту не запрещает, но менять план семьи за её спиной —
  * не работа врача; расхождение между тем, что семья видит на кухне, и тем, что
  * кто-то поправил из кабинета, — клинический риск.
+ *
+ * Под планом — блюда ребёнка. Специалист передаёт ему раскладку из калькулятора
+ * («Передать пациенту»), и до этого списка увидеть переданное в карте было
+ * негде: блюдо сохранялось, семья находила его при сборке меню, а тот, кто его
+ * передал, — нет. Обещание «блюдо появится у ребёнка» обязано иметь место, где
+ * его видно.
  */
 export function PatientMenuTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
@@ -136,6 +143,11 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
           targets={targets}
         />
       </AsyncSection>
+
+      {/* Вне `AsyncSection` дня: блюда ребёнка не зависят от того, составлен ли
+          план на выбранную дату, и прятать их за загрузкой меню значило бы
+          терять их в самый частый момент — когда плана ещё нет. */}
+      <MyDishesPanel patientId={patientId} openIn="card" />
     </div>
   );
 }
