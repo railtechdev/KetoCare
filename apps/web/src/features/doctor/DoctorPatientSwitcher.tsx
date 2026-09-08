@@ -89,10 +89,33 @@ export function DoctorPatientSwitcher({
             placeholder={t("workspace.switcher.placeholder")}
           />
           <CommandList>
-            {/* Пока идёт запрос, «не найдено» не показывается: это утверждение
-                о когорте, а не о состоянии загрузки (правило П15 канона). */}
-            {!patients.isPending && (
-              <CommandEmpty>{t("workspace.switcher.empty")}</CommandEmpty>
+            {/* «Не найдено» — утверждение о когорте, и говорить его можно
+                только тогда, когда сервер ответил пустым списком (правило П15).
+                Ни загрузка, ни отказ сети таким ответом не являются: врач,
+                читающий «Пациенты не найдены» вместо сообщения о сбое, решает,
+                что пациента нет, — и ответ этот выглядит достоверным. Тот же
+                довод, по которому поиск ушёл на сервер. */}
+            {patients.isError ? (
+              <div
+                role="status"
+                className="flex flex-col items-start gap-field p-4 text-sm"
+              >
+                <span className="text-foreground">
+                  {t("workspace.switcher.loadError")}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void patients.refetch()}
+                >
+                  {t("common:actions.retry")}
+                </Button>
+              </div>
+            ) : (
+              !patients.isPending && (
+                <CommandEmpty>{t("workspace.switcher.empty")}</CommandEmpty>
+              )
             )}
             <CommandGroup>
               {items.map((patient) => (

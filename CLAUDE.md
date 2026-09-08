@@ -30,7 +30,7 @@ KetoCare — платформа сопровождения кетогенной 
 - Экраны раздела 8.3: калькулятор, продукты, главная родителя, меню, дневники (6 видов), рецепты, кабинет врача, админка. Плюс сверх ТЗ: свой профиль, настройки с профилями детей, приглашения, витрина `/dev/ui`.
 - `apps/api` — `/logs`, `/menus`, `/overview`, `/recipes`, `/custom-dishes`, `/clinical`, `/admin`, `/dictionaries`, `/users` (свой профиль, смена пароля, справочник персонала), ведение пациента специалистом.
 
-Тестов: 1307 pytest (`apps/api` 779, `apps/worker` 160, `.claude/hooks` 113, `apps/bot` 100, `packages/core` 88, `packages/keto_engine` 67) и 550 vitest (`apps/web` 388, `packages/ui` 96, `apps/miniapp` 61, `packages/api-client` 5). Единственный пропуск — рендер PDF без системных pango и cairo.
+Тестов: 1307 pytest (`apps/api` 779, `apps/worker` 160, `.claude/hooks` 113, `apps/bot` 100, `packages/core` 88, `packages/keto_engine` 67) и 566 vitest (`apps/web` 404, `packages/ui` 96, `apps/miniapp` 61, `packages/api-client` 5). Единственный пропуск — рендер PDF без системных pango и cairo.
 `make seed-demo` наполняет локальную БД демо-данными (три роли, продукты, две недели дневника).
 
 Сверх ТЗ, по материалам заказчика от 29.08.2026 ([ADR-0007](docs/adr/0007-patient-intake-and-seizure-diary.md)):
@@ -640,7 +640,8 @@ directory`. Защита при этом выглядит настроенной
   `features/doctor/PatientViewLink.tsx`.
 - `features/patients/usePatient.ts` — один пациент по идентификатору из адреса. Поиск в списке
   `usePatients` для этого не годится: список отдаёт первые 200 строк.
-- `test/SectionRouter.tsx` — роутер для тестов экранов с адресуемой вкладкой.
+- `test/SectionRouter.tsx` — роутер для тестов экранов с адресуемой вкладкой;
+  `test/PatientRouter.tsx` — то же для разделов карты пациента (`/app/patients/<id>/<раздел>`).
 - `components/Field.tsx` — `Field` / `SelectField` / `TextAreaField` и `FIELD_CONTROL`.
   Важна не разметка (она у кита), а связь подписи, пояснения и ошибки.
 - `components/SectionLink.tsx` — ссылка на раздел; переносит выбранного ребёнка в адресе.
