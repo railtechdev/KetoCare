@@ -10,7 +10,8 @@ import {
   toast,
 } from "@ketocare/ui";
 import { Download, FileText } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
@@ -51,7 +52,24 @@ export function ReportsView({ patientId }: { patientId: string }) {
 
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(() => toDateInput(new Date()));
-  const [jobId, setJobId] = useState<string | null>(null);
+  // Задача сборки живёт в адресе, а не в состоянии экрана: PDF собирается
+  // воркером секундами, и до этого идентификатор терялся при обновлении
+  // страницы и при уходе в другой раздел. Готовый файл после этого достать было
+  // нечем — у API нет ручки «мои задачи», только выдача по идентификатору, — и
+  // человек заказывал сборку заново, второй раз занимая воркер.
+  const search = useSearch({ from: "/app/$section" });
+  const navigate = useNavigate({ from: "/app/$section" });
+  const jobId = search.job ?? null;
+
+  const setJobId = useCallback(
+    (next: string | null) => {
+      void navigate({
+        search: (previous) => ({ ...previous, job: next ?? undefined }),
+        replace: true,
+      });
+    },
+    [navigate],
+  );
   // Момент постановки задачи: по нему видно, что сборка затянулась. Воркер
   // может быть не поднят вовсе (PDF требует системных pango и cairo), и тогда
   // экран бесконечно показывал «Готовим файл», пока открыта вкладка.

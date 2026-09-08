@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import reportsRu from "../../locales/ru/reports.json";
+import { SectionRouter } from "../../test/SectionRouter";
 import { ReportsView } from "./ReportsView";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -39,9 +40,13 @@ function renderView() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  // Роутер обязателен: задача сборки PDF живёт в адресе (`?job=`), а не в
+  // состоянии экрана — иначе готовый файл теряется при обновлении страницы.
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <SectionRouter section="reports">{children}</SectionRouter>
+      </QueryClientProvider>
     );
   }
   return render(<ReportsView patientId={PATIENT_ID} />, { wrapper: Wrapper });
@@ -68,7 +73,9 @@ describe("сборка PDF-отчёта", () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(screen.getByRole("button", { name: /Собрать PDF/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Собрать PDF/ }),
+    );
 
     const retry = await screen.findByRole("button", { name: "Собрать заново" });
     await user.click(retry);
@@ -83,7 +90,9 @@ describe("сборка PDF-отчёта", () => {
     const user = userEvent.setup();
     renderView();
 
-    await user.click(screen.getByRole("button", { name: /Собрать PDF/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Собрать PDF/ }),
+    );
 
     expect(await screen.findByText(reportsRu.pdf.building)).toBeInTheDocument();
   });
