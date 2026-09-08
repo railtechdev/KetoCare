@@ -390,8 +390,13 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           </div>
 
           {/* Ограничения касаются только подбора: проверке они ничего не
-              меняют. Поэтому стоят при кнопке, а не в цели. */}
-          <div className="grid gap-field sm:grid-cols-2">
+              меняют. Поэтому стоят при кнопке, а не в цели.
+
+              Тем же рядом, что и цель: две колонки разносили «Белок не менее» и
+              «Углеводы не более» на 555 px друг от друга. Экранный `sm:` здесь
+              к тому же спрашивал ширину окна, а не блока (правило П33), — в
+              карте пациента этот же блок стоит в колонке уже вдвое. */}
+          <div className="flex flex-wrap items-start gap-block">
             <Field
               id="protein-min"
               width="narrow"
@@ -492,55 +497,69 @@ function GoalFields({
 
   return (
     <div className="flex flex-col gap-field">
-      {/* Две колонки и на телефоне: поля короткие (числовые, ширина из шкалы),
-          а сложенные в столбик они отодвигали показатели блюда почти на сотню
-          пикселей вниз — а они обязаны читаться рядом с целью. */}
-      <div className="grid grid-cols-2 gap-block">
-        <Field
-          id="ratio"
-          width="narrow"
-          label={t("targets.ratio")}
-          hint={
-            suggested !== null && ratio === suggested.ratio
-              ? t("goal.ratioFromPrescription")
-              : undefined
-          }
-          type="number"
-          inputMode="decimal"
-          min={1}
-          max={5}
-          step={0.5}
-          value={ratio ?? ""}
-          onChange={(e) =>
-            onChange({
-              ratio: e.target.value === "" ? null : +e.target.value,
-              kcal,
-            })
-          }
-          className="tabular-nums"
-        />
-        <Field
-          id="kcal"
-          width="narrow"
-          label={t("targets.kcal")}
-          hint={
-            suggested !== null && kcal === suggested.kcal
-              ? (fromPrescription ?? undefined)
-              : t("goal.kcalHint")
-          }
-          type="number"
-          inputMode="decimal"
-          min={1}
-          step={10}
-          value={kcal ?? ""}
-          onChange={(e) =>
-            onChange({
-              ratio,
-              kcal: e.target.value === "" ? null : +e.target.value,
-            })
-          }
-          className="tabular-nums"
-        />
+      {/* Рядом и на телефоне: поля короткие (числовые, ширина из шкалы), а
+          сложенные в столбик они отодвигали показатели блюда почти на сотню
+          пикселей вниз — а они обязаны читаться рядом с целью.
+
+          Ряд, а не две колонки блока: колонки делят ШИРИНУ БЛОКА пополам, и в
+          блоке 1102 px поле «Кетосоотношение» (123 px по шкале) стояло в 559 px
+          от поля «Калорийность» — пара читалась как два несвязанных поля, а
+          пояснение к правому уезжало к краю экрана. Ширину пары теперь задают
+          сами поля. */}
+      <div className="flex items-start gap-block">
+        {/* Каждое поле — своя доля строки на телефоне и своя ширина на
+            десктопе: числовое поле занимает строку целиком до `sm`, и в
+            свободном ряду пара распадалась на две строки — а показатели
+            блюда обязаны читаться рядом с целью. */}
+        <div className="min-w-0 flex-1 sm:flex-none">
+          <Field
+            id="ratio"
+            width="narrow"
+            label={t("targets.ratio")}
+            hint={
+              suggested !== null && ratio === suggested.ratio
+                ? t("goal.ratioFromPrescription")
+                : undefined
+            }
+            type="number"
+            inputMode="decimal"
+            min={1}
+            max={5}
+            step={0.5}
+            value={ratio ?? ""}
+            onChange={(e) =>
+              onChange({
+                ratio: e.target.value === "" ? null : +e.target.value,
+                kcal,
+              })
+            }
+            className="tabular-nums"
+          />
+        </div>
+        <div className="min-w-0 flex-1 sm:flex-none">
+          <Field
+            id="kcal"
+            width="narrow"
+            label={t("targets.kcal")}
+            hint={
+              suggested !== null && kcal === suggested.kcal
+                ? (fromPrescription ?? undefined)
+                : t("goal.kcalHint")
+            }
+            type="number"
+            inputMode="decimal"
+            min={1}
+            step={10}
+            value={kcal ?? ""}
+            onChange={(e) =>
+              onChange({
+                ratio,
+                kcal: e.target.value === "" ? null : +e.target.value,
+              })
+            }
+            className="tabular-nums"
+          />
+        </div>
       </div>
 
       {/* Цели нет — и сравнивать не с чем. Сказать это прямо честнее, чем

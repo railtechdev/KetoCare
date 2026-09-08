@@ -33,7 +33,12 @@ export function DishRows({
   }
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-field p-0">
+    /* Ширина списка ограничена: масса прижата к правому краю строки, и в блоке
+       во всю ширину экрана (1102 px в кабинете врача) поле граммовки уезжало от
+       названия продукта на 780 px — глазу не связать «Масло сливочное» с его
+       «50 г», а на строку ниже связывалось уже с чужим числом. Предел тот же,
+       что у формы: состав и есть ввод. */
+    <ul className="m-0 flex max-w-form list-none flex-col gap-field p-0">
       {rows.map((row) => (
         <li
           key={row.product.id}
