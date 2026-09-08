@@ -73,6 +73,9 @@ export function PatientGate({
         // рабочую область — 1616 x 290 px на мониторе 1920 под фразу в одну
         // строку.
         className="max-w-form"
+        // Это и есть экран: заголовка на странице больше нет ни одного, а
+        // родитель попадает сюда первым делом после входа.
+        headingLevel={1}
         icon={Users}
         title={t("patientGate.chooseTitle")}
         description={t("patientGate.chooseBody")}
@@ -100,6 +103,7 @@ export function PatientGate({
     return (
       <EmptyState
         className="max-w-form"
+        headingLevel={1}
         icon={Baby}
         title={t("patientGate.noneTitle")}
         description={t("patientGate.noneBody")}
