@@ -239,6 +239,12 @@ worker: ## Запустить ARQ-воркер (PDF-отчёты)
 seed-demo: ## Наполнить локальную БД демо-данными (учётки, продукты, две недели дневника)
 	uv run python infra/scripts/seed_demo.py
 
+.PHONY: miniapp-link
+miniapp-link: check-env ## Ссылка для локального запуска Mini App (привязка чата + подпись)
+	@# Токен бота берётся из корневого .env: подпись считается тем же ключом и
+	@# тем же алгоритмом, что и у Telegram, — но только на своей базе.
+	set -a && . ./$(ENV_FILE) && set +a && uv run python infra/scripts/miniapp_dev_link.py $(ARGS)
+
 .PHONY: seed-e2e
 seed-e2e: ## Данные для сквозного прогона Playwright (учётки, ребёнок, продукты)
 	uv run python infra/scripts/seed_e2e.py
