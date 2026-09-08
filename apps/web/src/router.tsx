@@ -117,6 +117,19 @@ export interface SectionSearch {
    */
   item?: string;
   /**
+   * Задача сборки PDF-отчёта.
+   *
+   * В адресе, а не в состоянии экрана: сборка идёт в воркере секундами, и до
+   * этого параметра её идентификатор терялся при обновлении страницы, переходе
+   * в другой раздел и возврате. Готовый файл после этого достать было нечем —
+   * ручки «мои задачи» у API нет, только выдача по идентификатору, — и человек
+   * заказывал сборку заново, второй раз занимая воркер.
+   *
+   * Тот же класс, что потерянная переписка помощника: то, что живёт на
+   * сервере, не должно существовать только в памяти вкладки.
+   */
+  job?: string;
+  /**
    * Строка поиска раздела.
    *
    * В адресе, потому что поиск — это ссылка: калькулятор, не нашедший продукт,
@@ -146,11 +159,13 @@ const sectionRoute = createRoute({
     const kind = text(search.kind);
     const item = text(search.item);
     const q = text(search.q);
+    const job = text(search.job);
     if (patient !== undefined) result.patient = patient;
     if (tab !== undefined) result.tab = tab;
     if (kind !== undefined) result.kind = kind;
     if (item !== undefined) result.item = item;
     if (q !== undefined) result.q = q;
+    if (job !== undefined) result.job = job;
     return result;
   },
   beforeLoad: ({ context, params }) => {
