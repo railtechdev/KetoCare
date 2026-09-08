@@ -166,11 +166,18 @@ class TestAdminPasswordReset:
         temporary = await _reset(client, admin, doctor, auth_headers)
 
         # Сброс пароля сокращает путь до смены, но не отменяет второго фактора.
+        # Отсутствие кода — это шаг входа, а не ошибка: сервер просит код
+        # состоянием, а не отказом (правило П38 канона). Проверяется здесь
+        # именно то, ради чего тест написан: временный пароль НЕ открывает
+        # сессию сам по себе.
         without_code = await client.post(
             "/api/v1/auth/login",
             json={"email": doctor.email, "password": temporary},
         )
-        assert without_code.status_code == 401
+        assert without_code.status_code == 200, without_code.text
+        assert without_code.json()["status"] == "totp_required"
+        assert without_code.json()["tokens"] is None
+        assert without_code.json()["password_reset_token"] is None
 
         with_code = await client.post(
             "/api/v1/auth/login",

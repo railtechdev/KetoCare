@@ -61,10 +61,17 @@ class TestLogin:
         secret = pyotp.random_base32()
         doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
 
+        # Кода ещё не спрашивали — это шаг входа, а не ошибка. Проверка была
+        # обратной (`401`), и клиент на этом строился: он узнавал о втором
+        # факторе, ЛОВЯ ошибку. Врач видел «Неверный код подтверждения.» на
+        # первом же экране, журнал аудита получал `login_failed_totp` на каждый
+        # нормальный вход, а лимит входа тратил две попытки из пяти.
         without = await client.post(
             "/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD}
         )
-        assert without.status_code == 401
+        assert without.status_code == 200, without.text
+        assert without.json()["status"] == "totp_required"
+        assert without.json()["tokens"] is None
 
         wrong_code = await client.post(
             "/api/v1/auth/login",
@@ -83,6 +90,69 @@ class TestLogin:
         assert with_code.status_code == 200
         assert with_code.json()["status"] == "ok"
 
+    async def test_step_of_login_is_not_written_to_audit_as_failure(
+        self, client, make_user, monkeypatch
+    ):
+        """Журнал аудита ведётся ради перебора кодов — и должен его показывать.
+
+        Пока «кода ещё не спрашивали» было ошибкой, `login_failed_totp`
+        появлялся на КАЖДЫЙ вход врача. Администратор, открывший журнал, видел
+        столько же фальшивых провалов, сколько было нормальных входов, и
+        настоящий перебор в этом шуме не отличался ничем.
+
+        Проверяется вызов, а не строка в таблице: неудачный вход пишется
+        `write_audit_log_independent` — в собственной транзакции, которая в
+        тестах не видит ещё не закоммиченного пользователя и молча падает на
+        внешнем ключе (ошибка аудита не должна превращать 401 в 500). То есть
+        строку здесь не увидеть в принципе, а вызов — увидеть можно.
+        """
+        from api.routers import auth as auth_router
+
+        calls: list[str] = []
+        original = auth_router.audit_repo.write_audit_log_independent
+
+        async def spy(**kwargs: object) -> None:
+            calls.append(str(kwargs.get("action")))
+            await original(**kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(auth_router.audit_repo, "write_audit_log_independent", spy)
+
+        secret = pyotp.random_base32()
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
+
+        await client.post("/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD})
+        assert calls == [], "шаг входа — не провал второго фактора"
+
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": doctor.email, "password": PASSWORD, "totp_code": "000000"},
+        )
+        assert calls == ["login_failed_totp"], "а вот неверный код — провал"
+
+    async def test_login_response_shape_for_web_cabinet(self, client, session, make_user):
+        """Потребитель — `apps/web` (`LoginPage`): по `status` он решает, какой
+        шаг показать, и своих догадок о втором факторе не делает.
+
+        Тест здесь, а не только во фронтенде, по правилу «стык проверяется на
+        стороне поставщика»: подделка в тестах кабинета повторяет представления
+        автора о контракте, а не сам контракт.
+        """
+        secret = pyotp.random_base32()
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
+
+        step = await client.post(
+            "/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD}
+        )
+        body = step.json()
+
+        assert step.status_code == 200
+        assert set(body) >= {"status", "tokens"}
+        assert body["status"] == "totp_required"
+        # Ни токенов, ни токена настройки: это ещё не вход и не первичная
+        # настройка — только запрос кода.
+        assert body["tokens"] is None
+        assert body["totp_setup_token"] is None
+
     async def test_parent_who_enabled_totp_must_supply_code(self, client, session, make_user):
         """Для родителя 2FA опциональна, но если включена — обязательна при входе."""
         secret = pyotp.random_base32()
@@ -91,7 +161,9 @@ class TestLogin:
         without = await client.post(
             "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
         )
-        assert without.status_code == 401
+        assert without.status_code == 200, without.text
+        assert without.json()["status"] == "totp_required"
+        assert without.json()["tokens"] is None
 
 
 class TestTotpChange:

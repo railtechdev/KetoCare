@@ -1,4 +1,12 @@
-import { FactList, Skeleton } from "@ketocare/ui";
+import {
+  Button,
+  FactList,
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+  Skeleton,
+} from "@ketocare/ui";
 import {
   CircleAlert,
   CircleCheck,
@@ -133,38 +141,65 @@ function recencyLabel(
 }
 
 /**
- * Расшифровка флагов под таблицей.
+ * Расшифровка флагов — по требованию, а не постоянным блоком.
  *
  * Порог вынесен в `NO_DATA_FLAG_DAYS` и подставляется сюда: врач должен видеть,
  * по какому именно порогу помечена строка, а не догадываться о нём.
+ *
+ * Почему в поповере. Раскрытой легенда стояла вплотную под списком, в том же
+ * блоке: строка пациента — 42 px, легенда под ней — 192 px, зазор 16 px. Врач,
+ * читая сверху вниз, видел имя пациента и под ним четыре строки с пометками,
+ * которые выглядели как пометки ЭТОГО пациента — при том что у него одна.
+ * Справка, которую читают один раз, занимала вчетверо больше места, чем то,
+ * что она объясняет, и вводила в заблуждение каждый день.
+ *
+ * `Popover` берётся у кита: он стоял установленным и не использовался ни разу,
+ * пока раскрывающиеся блоки писались вручную.
  */
 export function PatientFlagsLegend() {
   const { t } = useTranslation("doctor");
 
   return (
-    <FactList className="text-muted-foreground">
-      <dt className="flex items-center gap-1.5 font-semibold">
-        <ClipboardList aria-hidden="true" className="size-4 text-destructive" />
-        {t("flags.legend.noPrescriptionTerm")}
-      </dt>
-      <dd className="m-0">{t("flags.legend.noPrescription")}</dd>
-      <dt className="flex items-center gap-1.5 font-semibold">
-        <CircleAlert aria-hidden="true" className="size-4 text-destructive" />
-        {t("flags.legend.noReadingsTerm")}
-      </dt>
-      <dd className="m-0">
-        {t("flags.legend.noReadings", { days: NO_DATA_FLAG_DAYS })}
-      </dd>
-      <dt className="flex items-center gap-1.5 font-semibold">
-        <TriangleAlert aria-hidden="true" className="size-4 text-warning" />
-        {t("flags.legend.nutritionOffTerm")}
-      </dt>
-      <dd className="m-0">{t("flags.legend.nutritionOff")}</dd>
-      <dt className="flex items-center gap-1.5 font-semibold">
-        <CircleHelp aria-hidden="true" className="size-4" />
-        {t("flags.legend.unknownTerm")}
-      </dt>
-      <dd className="m-0">{t("flags.legend.unknown")}</dd>
-    </FactList>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="self-start">
+          <CircleHelp aria-hidden="true" />
+          {t("flags.legend.open")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-96 max-w-[90vw]">
+        <PopoverTitle>{t("flags.legend.title")}</PopoverTitle>
+        <FactList className="mt-field text-muted-foreground">
+          <dt className="flex items-center gap-1.5 font-semibold">
+            <ClipboardList
+              aria-hidden="true"
+              className="size-4 text-destructive"
+            />
+            {t("flags.legend.noPrescriptionTerm")}
+          </dt>
+          <dd className="m-0">{t("flags.legend.noPrescription")}</dd>
+          <dt className="flex items-center gap-1.5 font-semibold">
+            <CircleAlert
+              aria-hidden="true"
+              className="size-4 text-destructive"
+            />
+            {t("flags.legend.noReadingsTerm")}
+          </dt>
+          <dd className="m-0">
+            {t("flags.legend.noReadings", { days: NO_DATA_FLAG_DAYS })}
+          </dd>
+          <dt className="flex items-center gap-1.5 font-semibold">
+            <TriangleAlert aria-hidden="true" className="size-4 text-warning" />
+            {t("flags.legend.nutritionOffTerm")}
+          </dt>
+          <dd className="m-0">{t("flags.legend.nutritionOff")}</dd>
+          <dt className="flex items-center gap-1.5 font-semibold">
+            <CircleHelp aria-hidden="true" className="size-4" />
+            {t("flags.legend.unknownTerm")}
+          </dt>
+          <dd className="m-0">{t("flags.legend.unknown")}</dd>
+        </FactList>
+      </PopoverContent>
+    </Popover>
   );
 }
