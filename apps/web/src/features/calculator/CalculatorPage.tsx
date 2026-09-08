@@ -64,7 +64,7 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
   const { t } = useTranslation("calculator");
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")}>
+    <PageLayout title={t("title")} intro={t("intro")} width="form">
       <CalculatorView patientId={patientId} />
     </PageLayout>
   );
@@ -251,7 +251,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   }
 
   return (
-    <>
+    /* Ширину калькулятор несёт с собой, а не берёт у экрана: в разделе кабинета
+       оболочка уже ограничена ролью «форма», а в карте пациента она шире —
+       и те же блоки растягивались там на 1102 px под поля в 123 px. Одна
+       колонка на все размещения — одна правая линия у поиска, состава, полосы
+       макронутриентов и кнопок. */
+    <div className="flex max-w-form flex-col gap-screen">
       <Section
         title={t("composition.title")}
         description={t("composition.description")}
@@ -342,68 +347,20 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
 
         <Separator />
 
+        {/* Два действия, и у каждого свой ввод прямо над ним.
+
+            Раньше ряд начинался кнопкой «Подобрать граммовку», за ней шло чужое
+            поле «Коэффициент порции» с кнопкой пересчёта, а ограничения подбора
+            стояли ПОД всем этим — то есть поля действия читались после самого
+            действия, а два разных действия делили одну строку. Порядок «поля →
+            кнопка» — правило П9 канона, и он же отвечает на вопрос «что эта
+            кнопка возьмёт в расчёт».
+
+            Подбор остаётся первым и крупным (ADR-0028): это главное, чего нет у
+            KDC, где граммовку доводят стрелками вручную. */}
         <div className="flex flex-col gap-block">
-          {/* Подбор — главное, что умеет калькулятор и чего нет у KDC: там
-              граммовку доводят стрелками вручную. Кнопка стоит первой и
-              называет результат, а не механизм.
-
-              `[&_[data-slot=field]]:mb-0` снимает у поля нижний отступ формы:
-              ряд равняется по низу, и без этого кнопки равнялись на нижний край
-              ОТСТУПА поля «Коэффициент порции», а не самого поля — поле
-              оказывалось на 16 px выше обеих кнопок. Тем же приёмом живут
-              `FilterBar` кита и навигатор дня. */}
-          <div className="flex flex-wrap items-end gap-block [&_[data-slot=field]]:mb-0">
-            <Button
-              type="button"
-              size="lg"
-              className="min-h-touch"
-              disabled={rows.length === 0 || targets === null || busy}
-              aria-busy={solve.isPending}
-              onClick={() => {
-                if (targets === null) return;
-                scale.reset();
-                solve.mutate({ rows, targets, patientId });
-              }}
-            >
-              {solve.isPending ? t("actions.solving") : t("actions.solve")}
-            </Button>
-
-            <div className="flex flex-wrap items-end gap-field">
-              <Field
-                id="factor"
-                width="tiny"
-                label={t("factor")}
-                type="number"
-                inputMode="decimal"
-                min={0.1}
-                step={0.1}
-                value={factor}
-                onChange={(event) => setFactor(Number(event.target.value))}
-                className="tabular-nums"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-touch"
-                disabled={rows.length === 0 || busy}
-                aria-busy={scale.isPending}
-                onClick={() => {
-                  solve.reset();
-                  scale.mutate({ rows, factor });
-                }}
-              >
-                {scale.isPending ? t("actions.scaling") : t("actions.scale")}
-              </Button>
-            </div>
-          </div>
-
           {/* Ограничения касаются только подбора: проверке они ничего не
-              меняют. Поэтому стоят при кнопке, а не в цели.
-
-              Тем же рядом, что и цель: две колонки разносили «Белок не менее» и
-              «Углеводы не более» на 555 px друг от друга. Экранный `sm:` здесь
-              к тому же спрашивал ширину окна, а не блока (правило П33), — в
-              карте пациента этот же блок стоит в колонке уже вдвое. */}
+              меняют. Поэтому стоят при его кнопке, а не в цели. */}
           <div className="flex flex-wrap items-start gap-block">
             <Field
               id="protein-min"
@@ -435,6 +392,56 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               }
               className="tabular-nums"
             />
+          </div>
+
+          <div>
+            <Button
+              type="button"
+              size="lg"
+              className="min-h-touch"
+              disabled={rows.length === 0 || targets === null || busy}
+              aria-busy={solve.isPending}
+              onClick={() => {
+                if (targets === null) return;
+                scale.reset();
+                solve.mutate({ rows, targets, patientId });
+              }}
+            >
+              {solve.isPending ? t("actions.solving") : t("actions.solve")}
+            </Button>
+          </div>
+
+          {/* Пересчёт порций — второе действие, со своим числом.
+
+              `[&_[data-slot=field]]:mb-0` снимает у поля нижний отступ формы:
+              ряд равняется по низу, и без этого кнопка равнялась на нижний край
+              ОТСТУПА поля, а не самого поля — поле оказывалось на 16 px выше. */}
+          <div className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0">
+            <Field
+              id="factor"
+              width="tiny"
+              label={t("factor")}
+              type="number"
+              inputMode="decimal"
+              min={0.1}
+              step={0.1}
+              value={factor}
+              onChange={(event) => setFactor(Number(event.target.value))}
+              className="tabular-nums"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch"
+              disabled={rows.length === 0 || busy}
+              aria-busy={scale.isPending}
+              onClick={() => {
+                solve.reset();
+                scale.mutate({ rows, factor });
+              }}
+            >
+              {scale.isPending ? t("actions.scaling") : t("actions.scale")}
+            </Button>
           </div>
         </div>
       </Section>
@@ -468,7 +475,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
 
