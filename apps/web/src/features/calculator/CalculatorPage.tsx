@@ -317,9 +317,11 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           }}
         />
 
-        {dish === null ? (
-          <p className="m-0 text-sm text-muted-foreground">{t("calc.empty")}</p>
-        ) : (
+        {/* Пустой расчёт молчит: о том, что состав не набран, уже сказано в
+            блоке состава — строкой над этим. Своя фраза здесь была вторым
+            сообщением об одном и том же (правило П27 канона), и вместе с
+            рамкой пустого состава они отодвигали цель на 200 px вниз. */}
+        {dish === null ? null : (
           <div
             aria-busy={stale}
             className={stale ? "opacity-60 transition-opacity" : undefined}

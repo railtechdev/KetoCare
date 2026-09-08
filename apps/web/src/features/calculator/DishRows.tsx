@@ -1,5 +1,5 @@
 import { Button, EmptyState, Input, cn } from "@ketocare/ui";
-import { Utensils, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { DishRow } from "./types";
@@ -23,9 +23,13 @@ export function DishRows({
   const { t } = useTranslation("calculator");
 
   if (rows.length === 0) {
+    // Строкой, а не рамкой: пустой состав — это половина экрана, о которой
+    // ниже говорил ещё и блок расчёта («показатели появятся здесь»). Два
+    // сообщения об одном и том же занимали 200 px и отодвигали цель вниз;
+    // правило П27 канона требует одного (`size="inline"`).
     return (
       <EmptyState
-        icon={Utensils}
+        size="inline"
         title={t("empty.title")}
         description={t("empty.description")}
       />
