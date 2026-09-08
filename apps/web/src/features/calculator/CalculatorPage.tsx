@@ -345,8 +345,14 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         <div className="flex flex-col gap-block">
           {/* Подбор — главное, что умеет калькулятор и чего нет у KDC: там
               граммовку доводят стрелками вручную. Кнопка стоит первой и
-              называет результат, а не механизм. */}
-          <div className="flex flex-wrap items-end gap-block">
+              называет результат, а не механизм.
+
+              `[&_[data-slot=field]]:mb-0` снимает у поля нижний отступ формы:
+              ряд равняется по низу, и без этого кнопки равнялись на нижний край
+              ОТСТУПА поля «Коэффициент порции», а не самого поля — поле
+              оказывалось на 16 px выше обеих кнопок. Тем же приёмом живут
+              `FilterBar` кита и навигатор дня. */}
+          <div className="flex flex-wrap items-end gap-block [&_[data-slot=field]]:mb-0">
             <Button
               type="button"
               size="lg"
