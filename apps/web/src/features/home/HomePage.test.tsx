@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import homeRu from "../../locales/ru/home.json";
+import { primaryActions } from "../../test/primaryActions";
 import { SectionRouter } from "../../test/SectionRouter";
 import { HomePage } from "./HomePage";
 
@@ -143,6 +144,22 @@ describe("главная родителя", () => {
       "href",
       expect.stringContaining("kind=seizures"),
     );
+  });
+
+  it("предлагает одно первичное действие, а не пять", async () => {
+    // Замер до правки на 500 px: пять кнопок с акцентным фоном — «Записать
+    // приступ», «Записать кетоны», «Записать вес», «Меню на день» и «Составить
+    // меню». Три из пяти вели в одно и то же место, и ни одна не была главной.
+    // Родитель без опыта работы с интерфейсами получал пять равных начал
+    // вместо одного (правило П31 канона).
+    (api.GET as Mock).mockResolvedValue({ data: overview(PRESCRIPTION) });
+
+    const { container } = renderHome();
+    // Ждём кнопку, а не заголовок блока: заголовок рисуется сразу, содержимое —
+    // после ответа, и на скелетоне кнопок нет вовсе.
+    await screen.findByRole("link", { name: /Составить меню/ });
+
+    expect(primaryActions(container)).toEqual(["Составить меню"]);
   });
 
   it("с назначением подсказки нет — она была бы шумом", async () => {
