@@ -91,6 +91,34 @@ export async function clearMenu(
   await request.delete(`/api/v1/patients/${patientId}/menus?date=${date}`);
 }
 
+/**
+ * Замер кетонов за сегодня — чтобы на экране дневника ПОЯВИЛСЯ график.
+ *
+ * Нужен проверке ширины: без записей график не рисуется вовсе, и проверка
+ * проходит на экране, где проверять нечего. Такой тест не может упасть — а тест,
+ * который не может упасть, хуже отсутствующего.
+ */
+export async function ensureKetoneReading(
+  request: APIRequestContext,
+  patientId: string,
+): Promise<void> {
+  const response = await request.post(
+    `/api/v1/patients/${patientId}/logs/ketones`,
+    {
+      data: {
+        occurred_at: new Date().toISOString(),
+        value: 2.4,
+        method: "blood",
+      },
+    },
+  );
+  if (!response.ok()) {
+    throw new Error(
+      `Замер не записан: ${response.status()} ${await response.text()}`,
+    );
+  }
+}
+
 export interface Report {
   ketones: { points: unknown[] };
   weight: { points: unknown[] };

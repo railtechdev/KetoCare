@@ -50,6 +50,9 @@ export type { Density } from "./lib/density";
 export { useBreakpoint, BREAKPOINTS } from "./lib/useBreakpoint";
 export type { Breakpoint } from "./lib/useBreakpoint";
 
+export { TargetBar } from "./components/TargetBar";
+export type { TargetBarProps } from "./components/TargetBar";
+
 export { Section } from "./components/Section";
 export type { SectionProps } from "./components/Section";
 

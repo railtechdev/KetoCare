@@ -7,8 +7,15 @@ import { useSelectedPatient } from "./useSelectedPatient";
 /**
  * Выбор ребёнка в шапке кабинета.
  *
- * Не рендерится, когда ребёнок один: выбирать не из чего, а лишний элемент в
- * шапке отвлекает от того, ради чего экран открыт.
+ * Не рендерится в двух случаях:
+ *
+ * - ребёнок один — выбирать не из чего, а лишний элемент в шапке отвлекает от
+ *   того, ради чего экран открыт;
+ * - ребёнок ещё не выбран — тогда выбор предлагает сам экран (`PatientGate`),
+ *   и он объясняет, зачем это нужно. Два разных элемента управления с одним и
+ *   тем же смыслом на одном экране — первое, что видел родитель после входа, и
+ *   выбирать между ними ему было не из чего: они делают одно и то же.
+ *   Переключатель — для смены выбора, а сменить пока нечего.
  */
 export function PatientSwitcher() {
   const { t } = useTranslation();
@@ -16,6 +23,7 @@ export function PatientSwitcher() {
   const id = useId();
 
   if (patients.length <= 1) return null;
+  if (patientId === null) return null;
 
   return (
     <div className="flex items-center gap-field">
@@ -28,9 +36,6 @@ export function PatientSwitcher() {
         onChange={(event) => select(event.target.value)}
         className={`${FIELD_CONTROL} w-auto`}
       >
-        {patientId === null && (
-          <option value="">{t("nav.patientPlaceholder")}</option>
-        )}
         {patients.map((patient) => (
           <option key={patient.id} value={patient.id}>
             {patient.full_name}

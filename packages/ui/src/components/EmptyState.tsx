@@ -22,6 +22,16 @@ export interface EmptyStateProps {
    * прямоугольник 1616 x 290 px.
    */
   size?: "block" | "inline";
+  /**
+   * Уровень заголовка. По умолчанию заголовка нет вовсе — это абзац внутри
+   * блока, у которого заголовок свой.
+   *
+   * `1` ставится там, где пустое состояние **и есть экран**: выбор ребёнка
+   * после входа рисуется до `PageLayout`, и заголовка на странице не было ни
+   * одного — человек не понимал, куда попал (правило П24 канона: `h1` на
+   * экране обязателен).
+   */
+  headingLevel?: 1 | 2 | 3;
   className?: string;
 }
 
@@ -38,6 +48,7 @@ export function EmptyState({
   description,
   action,
   size = "block",
+  headingLevel,
   className,
 }: EmptyStateProps) {
   if (size === "inline") {
@@ -69,7 +80,21 @@ export function EmptyState({
           <Icon aria-hidden="true" className="size-6" />
         </span>
       )}
-      <p className="m-0 font-semibold text-foreground">{title}</p>
+      {headingLevel === undefined ? (
+        <p className="m-0 font-semibold text-foreground">{title}</p>
+      ) : headingLevel === 1 ? (
+        <h1 className="m-0 text-page-title font-semibold text-foreground">
+          {title}
+        </h1>
+      ) : headingLevel === 2 ? (
+        <h2 className="m-0 text-section-title font-semibold text-foreground">
+          {title}
+        </h2>
+      ) : (
+        <h3 className="m-0 text-card-title font-semibold text-foreground">
+          {title}
+        </h3>
+      )}
       {description && (
         <p className="m-0 max-w-prose text-sm text-muted-foreground">
           {description}

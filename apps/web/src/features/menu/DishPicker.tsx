@@ -1,4 +1,12 @@
-import { Input, Label, cn, formatRatio } from "@ketocare/ui";
+import {
+  cn,
+  formatRatio,
+  Input,
+  Label,
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -63,119 +71,135 @@ export function DishPicker({
   }
 
   return (
-    <div className="relative flex flex-col gap-field">
-      <Label htmlFor={inputId}>{t("picker.label")}</Label>
-      <Input
-        id={inputId}
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={isOpen ? `${listId}-${activeIndex}` : undefined}
-        aria-invalid={invalid ? true : undefined}
-        aria-describedby={errorId}
-        className="min-h-touch"
-        placeholder={t("picker.placeholder")}
-        value={query}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setActiveIndex(0);
-          setOpen(true);
-          // Правка текста отменяет выбор: иначе в меню ушло бы блюдо, которого
-          // в поле уже не видно.
-          if (value !== null) onSelect(null);
-        }}
-        onKeyDown={(event) => {
-          if (!isOpen) return;
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setActiveIndex((index) => (index + 1) % options.length);
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActiveIndex(
-              (index) => (index - 1 + options.length) % options.length,
-            );
-          } else if (event.key === "Enter") {
-            event.preventDefault();
-            pick(options[activeIndex]);
-          } else if (event.key === "Escape") {
-            setOpen(false);
-          }
-        }}
-      />
-
-      {/* Состояние поиска объявляется отдельно: скринридер иначе не узнает,
-          что список обновился. */}
-      <span className="sr-only" role="status">
-        {isFetching
-          ? t("picker.searching")
-          : isOpen
-            ? t("picker.optionsFound", { count: options.length })
-            : ""}
-      </span>
-
-      {isOpen && (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-10 mt-1 max-h-72 w-full list-none overflow-auto rounded-lg border border-border bg-popover p-0 text-popover-foreground shadow-kc"
-        >
-          {options.map((option, index) => (
-            <li
-              key={option.key}
-              id={`${listId}-${index}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              className={cn(
-                "flex min-h-touch cursor-pointer flex-wrap items-center gap-field px-3 py-2",
-                index === activeIndex && "bg-accent text-accent-foreground",
-              )}
-              onMouseDown={(event) => {
-                // mouseDown, а не click: click срабатывает после blur поля,
-                // и список успевает закрыться раньше выбора.
-                event.preventDefault();
-                pick(option);
+    // Список — в китовом `Popover`, а не своим `absolute` внутри `relative`:
+    // рукописное позиционирование не умеет ни упираться в край экрана, ни
+    // выходить за пределы прокручиваемого родителя. Форма добавления блюда
+    // открывается панелью (`FormSheet`) — там список обрезался её краем.
+    <Popover open={isOpen} onOpenChange={(next) => setOpen(next)}>
+      <div className="flex flex-col gap-field">
+        <PopoverAnchor asChild>
+          <div className="flex flex-col gap-field">
+            <Label htmlFor={inputId}>{t("picker.label")}</Label>
+            <Input
+              id={inputId}
+              role="combobox"
+              aria-expanded={isOpen}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={
+                isOpen ? `${listId}-${activeIndex}` : undefined
+              }
+              aria-invalid={invalid ? true : undefined}
+              aria-describedby={errorId}
+              className="min-h-touch"
+              placeholder={t("picker.placeholder")}
+              value={query}
+              onFocus={() => setOpen(true)}
+              onBlur={() => setOpen(false)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActiveIndex(0);
+                setOpen(true);
+                // Правка текста отменяет выбор: иначе в меню ушло бы блюдо, которого
+                // в поле уже не видно.
+                if (value !== null) onSelect(null);
               }}
-              onMouseEnter={() => setActiveIndex(index)}
-            >
-              <span className="min-w-0 break-words">{option.title}</span>
-              <span className="text-sm text-muted-foreground">
-                {t(`item.${option.kind}`)}
-              </span>
-              <span className="text-sm text-muted-foreground tabular-nums">
-                {option.kcal === null
-                  ? t("picker.noTotals")
-                  : t("picker.totals", {
-                      kcal: option.kcal.toFixed(0),
-                      ratio:
-                        option.ratio === null ? "—" : formatRatio(option.ratio),
-                    })}
-              </span>
-              {option.servings !== null && (
-                <span className="text-sm text-muted-foreground tabular-nums">
-                  {t("picker.servings", { count: option.servings })}
+              onKeyDown={(event) => {
+                if (!isOpen) return;
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveIndex((index) => (index + 1) % options.length);
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveIndex(
+                    (index) => (index - 1 + options.length) % options.length,
+                  );
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  pick(options[activeIndex]);
+                } else if (event.key === "Escape") {
+                  setOpen(false);
+                }
+              }}
+            />
+          </div>
+        </PopoverAnchor>
+
+        {/* Состояние поиска объявляется отдельно: скринридер иначе не узнает,
+          что список обновился. */}
+        <span className="sr-only" role="status">
+          {isFetching
+            ? t("picker.searching")
+            : isOpen
+              ? t("picker.optionsFound", { count: options.length })
+              : ""}
+        </span>
+
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="max-h-72 w-[var(--radix-popover-trigger-width)] overflow-auto p-0"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <ul id={listId} role="listbox" className="m-0 list-none p-0">
+            {options.map((option, index) => (
+              <li
+                key={option.key}
+                id={`${listId}-${index}`}
+                role="option"
+                aria-selected={index === activeIndex}
+                className={cn(
+                  "flex min-h-touch cursor-pointer flex-wrap items-center gap-field px-3 py-2",
+                  index === activeIndex && "bg-accent text-accent-foreground",
+                )}
+                onMouseDown={(event) => {
+                  // mouseDown, а не click: click срабатывает после blur поля,
+                  // и список успевает закрыться раньше выбора.
+                  event.preventDefault();
+                  pick(option);
+                }}
+                onMouseEnter={() => setActiveIndex(index)}
+              >
+                <span className="min-w-0 break-words">{option.title}</span>
+                <span className="text-sm text-muted-foreground">
+                  {t(`item.${option.kind}`)}
                 </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {option.kcal === null
+                    ? t("picker.noTotals")
+                    : t("picker.totals", {
+                        kcal: option.kcal.toFixed(0),
+                        ratio:
+                          option.ratio === null
+                            ? "—"
+                            : formatRatio(option.ratio),
+                      })}
+                </span>
+                {option.servings !== null && (
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {t("picker.servings", { count: option.servings })}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
 
-      {isError && (
-        <p className="m-0 text-sm text-destructive" role="alert">
-          {errorMessageOf(error) ?? t("picker.failed")}
+        {isError && (
+          <p className="m-0 text-sm text-destructive" role="alert">
+            {errorMessageOf(error) ?? t("picker.failed")}
+          </p>
+        )}
+
+        <p className="m-0 text-sm text-muted-foreground">
+          {value !== null
+            ? t(`item.${value.kind}`)
+            : query.trim().length >= 2 && !isFetching && !isOpen
+              ? t("picker.nothingFound")
+              : t("picker.hint")}
         </p>
-      )}
-
-      <p className="m-0 text-sm text-muted-foreground">
-        {value !== null
-          ? t(`item.${value.kind}`)
-          : query.trim().length >= 2 && !isFetching && !isOpen
-            ? t("picker.nothingFound")
-            : t("picker.hint")}
-      </p>
-    </div>
+      </div>
+    </Popover>
   );
 }

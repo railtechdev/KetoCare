@@ -1,4 +1,10 @@
-import { Button, ErrorState } from "@ketocare/ui";
+import {
+  Button,
+  ErrorState,
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@ketocare/ui";
 import { PackageSearch } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,11 +39,26 @@ interface Props {
  * Разметка combobox по WAI-ARIA: поле связано со списком через aria-controls,
  * активный вариант — через aria-activedescendant. Без этого пользователь
  * скринридера не узнает ни о появлении подсказок, ни о выбранном варианте.
+ *
+ * Список показывается в китовом `Popover`, а не своим `absolute` внутри
+ * `relative`. Разница не в оформлении: рукописное позиционирование не умеет ни
+ * упираться в край экрана, ни выходить за пределы прокручиваемого родителя.
+ * Родитель добавляет блюдо в панели (`FormSheet`) с телефона — там поле часто
+ * оказывается в нижней половине, и список обрезался краем окна. `Popover`
+ * переносит содержимое в портал и сам переворачивает его вверх, когда снизу
+ * места нет.
+ *
+ * Разметку и клавиатуру combobox оставляем свою: `cmdk` фильтрует список сам, а
+ * здесь поиск серверный — и «недавние» намеренно стоят строкой кнопок ПОД
+ * полем, а не в выпадающем списке (иначе они перекрывали бы форму).
  */
 export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
   const { t } = useTranslation("calculator");
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  // Список закрыли щелчком мимо или Escape. Само по себе `isOpen` производное
+  // и закрыться не может: пока в поле те же две буквы, условие снова истинно.
+  const [dismissed, setDismissed] = useState(false);
 
   const listId = useId();
   const inputId = useId();
@@ -52,7 +73,7 @@ export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
     query.trim() === ""
       ? (recent.data ?? []).filter((p) => !excludeIds.includes(p.id))
       : [];
-  const isOpen = query.trim().length >= 2 && options.length > 0;
+  const isOpen = !dismissed && query.trim().length >= 2 && options.length > 0;
   // Упавший поиск без сообщения неотличим от «ничего не нашлось»: подсказок
   // нет в обоих случаях. Показываем ошибку с повтором (П15 канона).
   const searchFailed = isError && query.trim().length >= 2;
@@ -73,41 +94,99 @@ export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
   }
 
   return (
-    <div className="relative">
-      <Field
-        id={inputId}
-        label={t("addProduct")}
-        width="wide"
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={isOpen ? `${listId}-${activeIndex}` : undefined}
-        placeholder={t("searchPlaceholder")}
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setActiveIndex(0);
-        }}
-        onKeyDown={(event) => {
-          if (!isOpen) return;
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setActiveIndex((i) => (i + 1) % options.length);
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActiveIndex((i) => (i - 1 + options.length) % options.length);
-          } else if (event.key === "Enter") {
-            event.preventDefault();
-            pick(options[activeIndex]);
-          } else if (event.key === "Escape") {
-            setQuery("");
-          }
-        }}
-      />
+    <div>
+      <Popover open={isOpen} onOpenChange={(open) => setDismissed(!open)}>
+        <PopoverAnchor asChild>
+          <div>
+            <Field
+              id={inputId}
+              label={t("addProduct")}
+              width="wide"
+              role="combobox"
+              aria-expanded={isOpen}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={
+                isOpen ? `${listId}-${activeIndex}` : undefined
+              }
+              placeholder={t("searchPlaceholder")}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActiveIndex(0);
+                setDismissed(false);
+              }}
+              onKeyDown={(event) => {
+                if (!isOpen) return;
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveIndex((i) => (i + 1) % options.length);
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveIndex(
+                    (i) => (i - 1 + options.length) % options.length,
+                  );
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  pick(options[activeIndex]);
+                } else if (event.key === "Escape") {
+                  setQuery("");
+                }
+              }}
+            />
+          </div>
+        </PopoverAnchor>
+
+        {/* Ширину берём у поля (`--radix-popover-trigger-width` Radix
+            выставляет по якорю), фокус оставляем в поле: combobox тем и
+            отличается от меню, что человек продолжает печатать. */}
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          // Ширина повторяет поле, а не задаётся заново: на телефоне — во всю
+          // ширину якоря (Radix отдаёт её в `--radix-popover-trigger-width`), с
+          // `sm` — тот же предел `field-wide`, что у самого поля.
+          className="max-h-72 w-[var(--radix-popover-trigger-width)] overflow-auto p-0 sm:max-w-field-wide"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <ul id={listId} role="listbox" className="m-0 list-none p-0">
+            {options.map((product, index) => (
+              <li
+                key={product.id}
+                id={`${listId}-${index}`}
+                role="option"
+                aria-selected={index === activeIndex}
+                className={`flex min-h-touch cursor-pointer flex-wrap items-center gap-x-field px-3 py-2 ${
+                  index === activeIndex
+                    ? "bg-accent text-accent-foreground"
+                    : ""
+                }`}
+                onMouseDown={(event) => {
+                  // mouseDown, а не click: click срабатывает после blur поля,
+                  // и список успевает закрыться раньше выбора.
+                  event.preventDefault();
+                  pick(product);
+                }}
+                onMouseEnter={() => setActiveIndex(index)}
+              >
+                <span className="min-w-0 break-words">{product.name}</span>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {t("per100g", {
+                    kcal: product.kcal.toFixed(0),
+                    fat: product.fat.toFixed(1),
+                    protein: product.protein.toFixed(1),
+                    carbs: product.carbs.toFixed(1),
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
 
       {/* Состояние поиска объявляется отдельно: скринридер иначе не узнает,
-          что список обновился. */}
+        что список обновился. */}
       <span className="sr-only" role="status">
         {isFetching
           ? t("searching")
@@ -132,8 +211,8 @@ export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
       )}
 
       {/* Недавние — не выпадающий список, а строка кнопок под полем: список
-          перекрывал бы форму, а нажать на подсказку человек хочет сразу, не
-          вызывая её раскрытием. */}
+        перекрывал бы форму, а нажать на подсказку человек хочет сразу, не
+        вызывая её раскрытием. */}
       {recentOptions.length > 0 && (
         <div className="mt-field flex flex-col gap-field">
           <span className="text-sm text-muted-foreground">{t("recent")}</span>
@@ -163,43 +242,6 @@ export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
           retryLabel={t("common:actions.retry")}
           onRetry={() => void refetch()}
         />
-      )}
-
-      {isOpen && (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-border bg-card shadow-kc"
-        >
-          {options.map((product, index) => (
-            <li
-              key={product.id}
-              id={`${listId}-${index}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              className={`flex min-h-touch cursor-pointer flex-wrap items-center gap-x-field px-3 py-2 ${
-                index === activeIndex ? "bg-accent text-accent-foreground" : ""
-              }`}
-              onMouseDown={(event) => {
-                // mouseDown, а не click: click срабатывает после blur поля,
-                // и список успевает закрыться раньше выбора.
-                event.preventDefault();
-                pick(product);
-              }}
-              onMouseEnter={() => setActiveIndex(index)}
-            >
-              <span className="min-w-0 break-words">{product.name}</span>
-              <span className="text-sm text-muted-foreground tabular-nums">
-                {t("per100g", {
-                  kcal: product.kcal.toFixed(0),
-                  fat: product.fat.toFixed(1),
-                  protein: product.protein.toFixed(1),
-                  carbs: product.carbs.toFixed(1),
-                })}
-              </span>
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   );
