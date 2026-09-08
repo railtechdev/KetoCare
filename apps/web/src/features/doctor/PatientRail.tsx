@@ -1,9 +1,13 @@
-import { Section } from "@ketocare/ui";
-import { useMemo } from "react";
+import { Button, FormSheet, Section } from "@ketocare/ui";
+import { UserPlus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SectionLink } from "../../components/SectionLink";
 import { cn } from "@ketocare/ui";
+import { InvitationsList } from "../invitations/InvitationsList";
+import { InviteForm } from "../invitations/InvitePanel";
+import type { Role } from "../invitations/useInvitations";
 import { usePatients } from "../patients/usePatients";
 import { PatientFlagsView } from "./PatientFlagsView";
 import { usePatientOverviews } from "./doctorQueries";
@@ -26,9 +30,17 @@ import { attentionRank, computePatientFlags } from "./flags";
  * пациента (правило П24 канона). Данные берутся из общего кэша — те же запросы,
  * что у реестра и у главной, поэтому перечень не стоит ни одного лишнего
  * обращения к серверу.
+ *
+ * Приглашение семьи — здесь же. Оно живёт в шапке реестра, а реестр рядом с
+ * открытой картой не рисуется: до перечня это читалось как «другой экран», а с
+ * ним — как «список на месте, а кнопка пропала». Действие то же самое и та же
+ * панель: второго способа приглашать не заводим.
  */
+const FAMILY_ROLES: readonly Role[] = ["parent"];
+
 export function PatientRail({ selectedId }: { selectedId: string }) {
   const { t } = useTranslation("doctor");
+  const [inviteOpen, setInviteOpen] = useState(false);
   const patients = usePatients();
   const items = useMemo(() => patients.data?.items ?? [], [patients.data]);
   const overviews = usePatientOverviews(
@@ -59,6 +71,17 @@ export function PatientRail({ selectedId }: { selectedId: string }) {
       title={t("rail.title")}
       density="compact"
       contentClassName="gap-field"
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setInviteOpen(true)}
+        >
+          <UserPlus aria-hidden="true" />
+          {t("list.inviteAction")}
+        </Button>
+      }
     >
       <ul className="m-0 flex max-h-[60dvh] list-none flex-col gap-1 overflow-y-auto p-0">
         {rows.map((row) => {
@@ -100,6 +123,16 @@ export function PatientRail({ selectedId }: { selectedId: string }) {
           );
         })}
       </ul>
+
+      <FormSheet
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        title={t("invitations:title")}
+        description={t("invitations:intro")}
+      >
+        <InviteForm roles={FAMILY_ROLES} />
+        <InvitationsList />
+      </FormSheet>
     </Section>
   );
 }
