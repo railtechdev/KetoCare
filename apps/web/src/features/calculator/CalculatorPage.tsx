@@ -1,12 +1,5 @@
-import {
-  Button,
-  Section,
-  Tabs,
-  TabsBar,
-  TabsContent,
-  WarningBanner,
-} from "@ketocare/ui";
-import { useEffect, useRef, useState } from "react";
+import { Button, Section, Separator, WarningBanner } from "@ketocare/ui";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useTranslation } from "react-i18next";
@@ -15,12 +8,13 @@ import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
-import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
+import { useSectionItem } from "../../routes/useSectionTab";
 import { parseIncoming, useIncomingComposition } from "./incomingDish";
 import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
 import { DishRows } from "./DishRows";
+import { mealTargetsFrom } from "./mealTargets";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
 import type { DishRow } from "./types";
@@ -32,10 +26,6 @@ import {
   type TargetsInput,
 } from "./useCalcMutations";
 
-type Mode = "verify" | "solve" | "scale";
-
-const MODES = ["verify", "solve", "scale"] as const;
-
 /**
  * Задержка автоматического пересчёта.
  *
@@ -45,79 +35,114 @@ const MODES = ["verify", "solve", "scale"] as const;
 const AUTO_CALC_DELAY_MS = 400;
 
 /**
- * Цели по умолчанию, пока назначение не загрузилось.
+ * Калькулятор: один экран, три функции раздела 9 ТЗ.
  *
- * Кетосоотношение подставляется из активного назначения ребёнка, как только оно
- * придёт: до этого калькулятор сравнивал блюдо с четвёркой, зашитой в экране, и
- * объявлял «выходит за допуски назначения» — вердикт относительно чужой цели.
+ * **Вкладок больше нет, и это главное изменение.** Проверка, подбор и пересчёт
+ * были тремя режимами — тремя РАЗНЫМИ экранами с разным поведением, — и
+ * последовательность работы об это ломалась. Экран открывался на «Проверить»,
+ * при том что главный вопрос и врача («выполнимо ли соотношение на этих
+ * продуктах»), и родителя («сколько положить, чтобы вышло») — это подбор, а он
+ * лежал за второй вкладкой. Наше единственное преимущество перед кабинетом, к
+ * которому привыкла клиника (`docs/AUDIT_KDC.md`, там граммовку доводят
+ * стрелками вручную), было спрятано.
  *
- * Калорийность приёма остаётся за пользователем. Разделить суточную норму на
- * число приёмов — медицинское допущение о равномерном распределении, а его
- * принимает не фронтенд (правило 1 CLAUDE.md).
- * TODO(med): вопрос 24 в `docs/medical/OPEN_QUESTIONS.md`.
- */
-const DEFAULT_TARGETS: TargetsInput = { ratio: 4, kcal: 400 };
-
-/**
- * Калькулятор: три режима из раздела 8.3 ТЗ.
+ * Теперь проверка — не режим, а постоянное состояние экрана: числа
+ * пересчитываются по мере правки. Подбор и пересчёт — действия над составом:
+ * они его ПЕРЕЗАПИСЫВАЮТ, поэтому остаются кнопками, а не считаются по ходу
+ * набора. Разбор — ADR-0028.
  *
- * Ребёнок необязателен, и это не послабление, а разделение двух разных
- * вопросов. «Выйдет ли 4:1 на этих продуктах» — вопрос о продуктах: на него
- * отвечают до того, как выбрали, кому это готовить, и сервер это давно
- * позволяет (`patient_id` у `/calc/*` необязателен). «Годится ли это блюдо
- * ЭТОМУ ребёнку» — вопрос о ребёнке, и на него отвечает калькулятор в его
- * карте: там есть кетосоотношение из назначения и его исключённые продукты.
+ * **Цель стоит над фактом, и она не выдумывается.** Раньше вердикт «блюдо не
+ * сходится с целью» стоял на 318 px ВЫШЕ самой цели, а калорийность приёма была
+ * зашитой в экране четырёхсоткой, подписанной как «задаётся вами». Теперь цель
+ * приходит из назначения ребёнка вместе с арифметикой, по которой посчитана, а
+ * без назначения её просто нет — и сравнивать тогда не с чем.
  *
- * Пока эти два вопроса были одним экраном, специалист с когортой в полсотни
- * получал вместо калькулятора пятьдесят кнопок «выберите ребёнка».
+ * Ребёнок необязателен: «выйдет ли 4:1 на этих продуктах» — вопрос о продуктах
+ * (ADR-0027).
  */
 export function CalculatorPage({ patientId }: { patientId?: string }) {
   const { t } = useTranslation("calculator");
 
-  // Режим — в адресе (правило П30): ссылку на «подобрать раскладку» можно
-  // переслать, а F5 не возвращает в «проверить».
-  const [mode, setMode] = useSectionTab<Mode>("tab", MODES, "verify");
+  return (
+    <PageLayout title={t("title")} intro={t("intro")}>
+      <CalculatorView patientId={patientId} />
+    </PageLayout>
+  );
+}
+
+/**
+ * Тело калькулятора без оболочки экрана.
+ *
+ * Оболочку ставит вызывающий: у раздела кабинета это `CalculatorPage` выше, у
+ * карты пациента — её собственный `PageLayout` с названием раздела. Вложить
+ * `PageLayout` сюда нельзя: в карте заголовок уже есть, и второй дал бы `h1`
+ * внутри `h1` — ровно так «Калькулятор» и напечатался в карте дважды. Тем же
+ * устроен отчёт (`ReportsView`).
+ */
+export function CalculatorView({ patientId }: { patientId?: string }) {
+  const { t } = useTranslation("calculator");
+
   const [rows, setRows] = useState<DishRow[]>([]);
 
   // Продукт, пришедший из справочника (`?item=<id>`). Справочник знает только
-  // идентификатор, состав на 100 г нужно дочитать. До этого справочник и
-  // калькулятор не знали друг о друге: найденный продукт приходилось искать
-  // здесь заново по памяти.
+  // идентификатор, состав на 100 г нужно дочитать.
   const [incomingId, setIncomingId] = useSectionItem();
   const incoming = parseIncoming(incomingId);
   const incomingProduct = useProduct(
     incoming?.kind === "product" ? incoming.id : undefined,
   );
-  // Готовое блюдо: рецепт или своя раскладка. Приходит из карточки рецепта и из
-  // списка своих блюд — до этого у вкладки «Пересчитать» источника не было
-  // вовсе, и она не давала ничего сверх «Проверить».
+  // Готовое блюдо: рецепт или своя раскладка — приходит из карточки рецепта и
+  // из списка блюд ребёнка.
   const incomingDish = useIncomingComposition(incoming, patientId);
-  const [targets, setTargets] = useState<TargetsInput>(DEFAULT_TARGETS);
+
+  /**
+   * Цель расчёта. `null` в каждой половине — «не задано».
+   *
+   * Двумя числами, а не одним объектом с умолчаниями: цель существует, только
+   * когда названы обе половины. Объект с подставленными значениями невозможно
+   * отличить от заполненного человеком — именно так и появилась четырёхсотка,
+   * которую никто не вводил, но против которой выносился вердикт.
+   */
+  const [ratio, setRatio] = useState<number | null>(null);
+  const [kcal, setKcal] = useState<number | null>(null);
+  const [proteinMin, setProteinMin] = useState<number | null>(null);
+  const [carbsMax, setCarbsMax] = useState<number | null>(null);
   const [factor, setFactor] = useState(2);
 
-  // Назначение — тем же запросом, что у главной и меню: свой запрос делил бы
-  // с ними ключ, но расходился бы в обработке.
   const overview = usePatientOverview(patientId ?? null);
-  const prescribedRatio = overview.data?.prescription?.ratio ?? null;
+  const prescription = overview.data?.prescription ?? null;
+  const suggested = useMemo(
+    () => mealTargetsFrom(prescription),
+    [prescription],
+  );
 
-  // Правка пользователя важнее назначения: он мог считать блюдо под другую
-  // цель осознанно, и подставлять назначение поверх введённого значит терять
-  // его ввод.
-  const [ratioTouched, setRatioTouched] = useState(false);
+  // Правка человека важнее назначения: он мог считать блюдо под другую цель
+  // осознанно, и подставлять назначение поверх введённого — терять его ввод.
+  const touched = useRef(false);
 
   useEffect(() => {
-    if (prescribedRatio === null || ratioTouched) return;
-    setTargets((current) =>
-      current.ratio === prescribedRatio
-        ? current
-        : { ...current, ratio: prescribedRatio },
-    );
-  }, [prescribedRatio, ratioTouched]);
+    if (suggested === null || touched.current) return;
+    setRatio((current) => (current === null ? suggested.ratio : current));
+    setKcal((current) => (current === null ? suggested.kcal : current));
+  }, [suggested]);
 
-  // Какое блюдо уже разложено на экране. Ссылка из адреса НЕ снимается — в
-  // отличие от прихода одного продукта: она описывает, что открыто, и после F5
-  // состав должен вернуться. А вот применять её повторно нельзя: правки
-  // граммовки затирались бы исходным составом при каждой перерисовке.
+  /**
+   * Собранная цель. `useMemo` здесь не оптимизация, а условие правильности:
+   * задержка сравнивает значения по ссылке, и цель, пересобранная на каждом
+   * рендере, делала расчёт вечно «устаревшим» — вердикт не показывался никогда,
+   * а проверка уходила на сервер по кругу.
+   */
+  const targets: TargetsInput | null = useMemo(
+    () =>
+      ratio !== null && kcal !== null
+        ? { ratio, kcal, proteinMin, carbsMax }
+        : null,
+    [ratio, kcal, proteinMin, carbsMax],
+  );
+
+  // Какое блюдо уже разложено на экране. Ссылка из адреса НЕ снимается: она
+  // описывает, что открыто, и после F5 состав должен вернуться. А вот применять
+  // её повторно нельзя — правки граммовки затирались бы исходным составом.
   const appliedDish = useRef<string | null>(null);
 
   useEffect(() => {
@@ -150,127 +175,42 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
   const solve = useSolveMutation();
   const scale = useScaleMutation();
 
-  const active = mode === "verify" ? verify : mode === "solve" ? solve : scale;
-
   /**
-   * Массы, которые вернул сервер.
+   * Проверка идёт сама по мере правки состава и цели.
    *
-   * В режиме «подобрать» их задаёт решатель, в режиме «пересчитать» —
-   * множитель порции. И там и там на экране обязаны стоять новые граммовки:
-   * родитель по этому экрану взвешивает продукты.
-   *
-   * До этого пересчёт показывал итоги новой порции, а состав оставался от
-   * старой — и в сохранение уходил тоже старый. Родитель, сохранивший
-   * «двойную порцию», получал блюдо с одинарной раскладкой и расхождение
-   * замечал, только сложив макросы вручную.
-   */
-  // Только «пересчитать»: подобранные массы теперь уезжают прямо в состав
-  // (см. ниже), и второй их список был бы копией того, что уже в полях.
-  const serverItems = mode === "scale" ? scale.data?.dish.items : undefined;
-
-  const serverRows: DishRow[] = (serverItems ?? []).flatMap((item) => {
-    const row = rows.find((r) => r.product.id === item.product_id);
-    return row ? [{ ...row, grams: item.grams }] : [];
-  });
-
-  // Исключения приходят от сервера: сопоставить состав с тем, что ребёнку
-  // нельзя, может только он — в браузере нет ни аллергий, ни каталога.
-  const excluded =
-    (
-      active.data as {
-        excluded?: { product_id: string; name_ru: string | null }[];
-      }
-    )?.excluded ?? [];
-
-  const dish: DishView | null = active.data
-    ? ((active.data as { dish: DishView }).dish ?? null)
-    : null;
-
-  const ratioWithin =
-    mode === "solve"
-      ? solve.data?.ratio_within_tolerance
-      : mode === "verify"
-        ? (verify.data?.ratio_within_tolerance ?? undefined)
-        : undefined;
-  const kcalWithin =
-    mode === "solve"
-      ? solve.data?.kcal_within_tolerance
-      : mode === "verify"
-        ? (verify.data?.kcal_within_tolerance ?? undefined)
-        : undefined;
-
-  /**
-   * «Проверить» считает сам, по мере правки.
-   *
-   * Раньше расчёт запускала только кнопка, и она стояла в СЛЕДУЮЩЕМ блоке, а
-   * результат — в третьем. Замер на живом экране: на ноутбуке 1280×800 итог
-   * оказывался ниже сгиба, на телефоне 390×844 — ниже сгиба сама кнопка.
-   * Человек добавлял продукт, смотрел на экран и не видел ничего: изменение
-   * происходило за его границей. Отсюда «добавляю продукты — ничего не
-   * происходит».
-   *
-   * Задержка в 400 мс — чтобы правка граммовки не отправляла запрос на каждое
-   * нажатие; тот же приём, что у поисковых полей.
-   *
-   * «Подобрать» и «Пересчитать» так делать нельзя: они ПЕРЕЗАПИСЫВАЮТ состав,
-   * и запуск по ходу набора вырывал бы поля из-под рук. Там кнопка остаётся.
+   * Она ничего не перезаписывает, поэтому кнопки у неё нет: кнопка обещала бы
+   * действие, которое уже произошло (правило П3 канона).
    */
   const debouncedRows = useDebouncedValue(rows, AUTO_CALC_DELAY_MS);
   const debouncedTargets = useDebouncedValue(targets, AUTO_CALC_DELAY_MS);
   const verifyMutate = verify.mutate;
 
   useEffect(() => {
-    if (mode !== "verify" || debouncedRows.length === 0) return;
+    if (debouncedRows.length === 0) return;
     verifyMutate({
       rows: debouncedRows,
-      targets: debouncedTargets,
+      targets: debouncedTargets ?? undefined,
       patientId,
     });
-  }, [mode, debouncedRows, debouncedTargets, patientId, verifyMutate]);
+  }, [debouncedRows, debouncedTargets, patientId, verifyMutate]);
 
   /**
-   * Показанный результат посчитан не по тому, что сейчас в полях.
+   * Массы, посчитанные сервером, уезжают прямо в состав.
    *
-   * Число на экране остаётся: гасить его на каждое нажатие — значит очищать
-   * тот самый экран, по которому человек сверяется. А вот вердикт снимается.
-   * Зелёный значок «в допуске», посчитанный при прежней цели, рядом с новым
-   * числом в поле — не устаревшая выдача, а неверное утверждение: по нему
-   * готовят еду ребёнку.
+   * И подбор, и пересчёт порций перезаписывают граммовку — состав остаётся
+   * единственным, что на экране считается вводом. Пока пересчёт показывал
+   * новые массы отдельным списком, а старые оставлял в полях, в сохранение
+   * уходили старые: родитель, сохранивший «двойную порцию», получал блюдо с
+   * одинарной раскладкой.
    */
-  const stale =
-    mode === "verify" &&
-    (rows !== debouncedRows ||
-      targets !== debouncedTargets ||
-      verify.isPending);
-
-  function resetResults() {
-    // В «Проверить» прошлый результат НЕ гасится: пересчёт придёт через
-    // доли секунды и заменит его. Гасить — значит на каждое нажатие в поле
-    // граммов очищать экран, по которому человек как раз и сверяется.
-    if (mode !== "verify") verify.reset();
-    solve.reset();
-    scale.reset();
-  }
-
-  function run() {
-    if (mode === "verify") verify.mutate({ rows, targets, patientId });
-    else if (mode === "solve") solve.mutate({ rows, targets, patientId });
-    else scale.mutate({ rows, factor });
-  }
-
-  // Подобранная раскладка переносится в состав.
-  //
-  // До этого массы решателя жили только внутри ответа мутации: поля были
-  // заблокированы, а переход на другую вкладку сбрасывал результат и возвращал
-  // исходные 50 г. Цепочка «подобрал → округлил под кухонные весы → проверил →
-  // пересчитал на две порции» была разорвана: из режима «подобрать» вёл один
-  // выход — сохранить как есть, иначе результат исчезал.
   const solvedItems = solve.data?.dish.items;
+  const scaledItems = scale.data?.dish.items;
+
   useEffect(() => {
-    if (solvedItems === undefined) return;
-    const grams = new Map(
-      solvedItems.map((item) => [item.product_id, item.grams]),
-    );
+    const items = solvedItems ?? scaledItems;
+    if (items === undefined) return;
+
+    const grams = new Map(items.map((item) => [item.product_id, item.grams]));
     setRows((current) =>
       current.map((row) => {
         const next = grams.get(row.product.id);
@@ -279,35 +219,39 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
           : { ...row, grams: next };
       }),
     );
-  }, [solvedItems]);
+  }, [solvedItems, scaledItems]);
+
+  // Исключения приходят от сервера: сопоставить состав с тем, что ребёнку
+  // нельзя, может только он — в браузере нет ни аллергий, ни каталога.
+  const excluded = verify.data?.excluded ?? [];
+  const dish: DishView | null = verify.data?.dish ?? null;
+
+  /**
+   * Показанный результат посчитан не по тому, что сейчас в полях.
+   *
+   * Число на экране остаётся: гасить его на каждое нажатие — значит очищать тот
+   * самый экран, по которому человек сверяется. А вот вердикт снимается.
+   * Зелёный значок «в допуске», посчитанный при прежней цели, рядом с новым
+   * числом — не устаревшая выдача, а неверное утверждение: по нему готовят еду
+   * ребёнку.
+   */
+  const stale =
+    rows !== debouncedRows || targets !== debouncedTargets || verify.isPending;
+
+  const ratioWithin = stale ? undefined : verify.data?.ratio_within_tolerance;
+  const kcalWithin = stale ? undefined : verify.data?.kcal_within_tolerance;
 
   const infeasible = errorCodeOf(solve.error) === "infeasible_calculation";
-  // Сохраняется то, что показано: расчётные массы, если сервер их вернул.
-  const rowsForSave = serverRows.length > 0 ? serverRows : rows;
+  const actionError = solve.isError || scale.isError;
+  const busy = solve.isPending || scale.isPending;
+
+  function resetActions() {
+    solve.reset();
+    scale.reset();
+  }
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")}>
-      <Tabs
-        value={mode}
-        onValueChange={(value) => {
-          setMode(value as Mode);
-          resetResults();
-        }}
-      >
-        <TabsBar
-          label={t("tabsLabel")}
-          items={MODES.map((value) => ({ value, label: t(`tabs.${value}`) }))}
-        />
-
-        {MODES.map((value) => (
-          <TabsContent key={value} value={value}>
-            <p className="m-0 text-sm text-muted-foreground">
-              {t(`tabHint.${value}`)}
-            </p>
-          </TabsContent>
-        ))}
-      </Tabs>
-
+    <>
       <Section
         title={t("composition.title")}
         description={t("composition.description")}
@@ -317,7 +261,7 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
           excludeIds={rows.map((r) => r.product.id)}
           onPick={(product) => {
             setRows((current) => [...current, { product, grams: 50 }]);
-            resetResults();
+            resetActions();
           }}
         />
 
@@ -329,24 +273,23 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
                 row.product.id === productId ? { ...row, grams } : row,
               ),
             );
-            resetResults();
+            resetActions();
           }}
           onRemove={(productId) => {
             setRows((current) =>
               current.filter((row) => row.product.id !== productId),
             );
-            resetResults();
+            resetActions();
           }}
         />
       </Section>
 
-      {/* Что ребёнку нельзя — над результатом, а не под ним: в «подобрать»
-          продукт со входа снят, и по числам этого не видно; в «проверить»
-          состав остался как есть, и решать человеку.
+      {/* Что ребёнку нельзя — над расчётом, а не под ним: подбор снимает такие
+          продукты со входа, и по числам этого не видно.
           Запрещать или предупреждать — вопрос 29 медицинской команде. */}
       {excluded.length > 0 && (
         <WarningBanner level="danger" title={t("excluded.title")}>
-          {t(mode === "solve" ? "excluded.solve" : "excluded.verify", {
+          {t("excluded.verify", {
             list: excluded
               .map((entry) => entry.name_ru ?? entry.product_id)
               .join(", "),
@@ -354,249 +297,257 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
         </WarningBanner>
       )}
 
-      {/* Результат стоит РЯДОМ с составом, а не в конце страницы.
-          Замер на живом экране: при прежнем порядке (состав → параметры →
-          результат) итог оказывался ниже сгиба на ноутбуке 1280×800, а на
-          телефоне ниже сгиба была и кнопка. Человек правил граммовку и не
-          видел, что от этого меняется. */}
-      {dish && (
-        <div
-          aria-busy={stale}
-          className={stale ? "opacity-60 transition-opacity" : undefined}
-        >
-          <DishResultView
-            dish={dish}
-            // Цель либо из назначения ребёнка, либо введена руками — и вердикт
-            // обязан называть ту, с которой на самом деле сравнивал.
-            target={prescribedRatio === null ? "manual" : "prescription"}
-            ratioWithinTolerance={
-              stale ? undefined : (ratioWithin ?? undefined)
-            }
-            kcalWithinTolerance={stale ? undefined : (kcalWithin ?? undefined)}
-          />
-          {stale && (
-            <p role="status" className="m-0 text-sm text-muted-foreground">
-              {t("recalculating")}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Цель, факт и действия — одним блоком, в этом порядке. Цель обязана
+          стоять выше вердикта о ней; факт обязан стоять рядом с составом, иначе
+          правка граммовки уводит итог ниже сгиба (замер на 1280×800). Оба
+          требования выполняются, только если цель и факт лежат в одном блоке —
+          так же устроен и кабинет, к которому привыкла клиника: строка «Goal»
+          прямо над строкой «Actual». */}
+      <Section title={t("calc.title")}>
+        <GoalFields
+          ratio={ratio}
+          kcal={kcal}
+          suggested={suggested}
+          prescription={prescription}
+          onChange={(next) => {
+            touched.current = true;
+            setRatio(next.ratio);
+            setKcal(next.kcal);
+            resetActions();
+          }}
+        />
 
-      <Section title={t("params.title")}>
-        {mode === "scale" ? (
-          <ScaleFields
-            factor={factor}
-            onChange={(next) => {
-              setFactor(next);
-              resetResults();
-            }}
-          />
+        {dish === null ? (
+          <p className="m-0 text-sm text-muted-foreground">{t("calc.empty")}</p>
         ) : (
-          <TargetsFields
-            targets={targets}
-            prescribedRatio={prescribedRatio}
-            onChange={(next) => {
-              if (next.ratio !== targets.ratio) setRatioTouched(true);
-              setTargets(next);
-              resetResults();
-            }}
-            showLimits={mode === "solve"}
-          />
+          <div
+            aria-busy={stale}
+            className={stale ? "opacity-60 transition-opacity" : undefined}
+          >
+            <DishResultView
+              dish={dish}
+              goal={targets}
+              ratioWithinTolerance={ratioWithin ?? undefined}
+              kcalWithinTolerance={kcalWithin ?? undefined}
+            />
+            {stale && (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                {t("recalculating")}
+              </p>
+            )}
+          </div>
         )}
 
-        {/* Кнопка только там, где расчёт НЕ идёт сам: «Подобрать» и
-            «Пересчитать» перезаписывают состав, и запускать их по ходу набора
-            нельзя. В «Проверить» кнопки нет — она обещала бы действие, которое
-            уже произошло (правило П3 канона). */}
-        {mode !== "verify" && (
-          <Button
-            type="button"
-            size="lg"
-            onClick={run}
-            disabled={rows.length === 0 || active.isPending}
-            aria-busy={active.isPending}
-            className="min-h-touch w-full sm:w-auto sm:self-start"
-          >
-            {active.isPending ? t("calculating") : t("calculate")}
-          </Button>
-        )}
+        <Separator />
+
+        <div className="flex flex-col gap-block">
+          {/* Подбор — главное, что умеет калькулятор и чего нет у KDC: там
+              граммовку доводят стрелками вручную. Кнопка стоит первой и
+              называет результат, а не механизм. */}
+          <div className="flex flex-wrap items-end gap-block">
+            <Button
+              type="button"
+              size="lg"
+              className="min-h-touch"
+              disabled={rows.length === 0 || targets === null || busy}
+              aria-busy={solve.isPending}
+              onClick={() => {
+                if (targets === null) return;
+                scale.reset();
+                solve.mutate({ rows, targets, patientId });
+              }}
+            >
+              {solve.isPending ? t("actions.solving") : t("actions.solve")}
+            </Button>
+
+            <div className="flex flex-wrap items-end gap-field">
+              <Field
+                id="factor"
+                width="tiny"
+                label={t("factor")}
+                type="number"
+                inputMode="decimal"
+                min={0.1}
+                step={0.1}
+                value={factor}
+                onChange={(event) => setFactor(Number(event.target.value))}
+                className="tabular-nums"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                disabled={rows.length === 0 || busy}
+                aria-busy={scale.isPending}
+                onClick={() => {
+                  solve.reset();
+                  scale.mutate({ rows, factor });
+                }}
+              >
+                {scale.isPending ? t("actions.scaling") : t("actions.scale")}
+              </Button>
+            </div>
+          </div>
+
+          {/* Ограничения касаются только подбора: проверке они ничего не
+              меняют. Поэтому стоят при кнопке, а не в цели. */}
+          <div className="grid gap-field sm:grid-cols-2">
+            <Field
+              id="protein-min"
+              width="narrow"
+              label={t("targets.proteinMin")}
+              optional
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={1}
+              value={proteinMin ?? ""}
+              onChange={(e) =>
+                setProteinMin(e.target.value === "" ? null : +e.target.value)
+              }
+              className="tabular-nums"
+            />
+            <Field
+              id="carbs-max"
+              width="narrow"
+              label={t("targets.carbsMax")}
+              optional
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={1}
+              value={carbsMax ?? ""}
+              onChange={(e) =>
+                setCarbsMax(e.target.value === "" ? null : +e.target.value)
+              }
+              className="tabular-nums"
+            />
+          </div>
+        </div>
       </Section>
 
       {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3 ТЗ):
-          сервер возвращает человекочитаемую причину, её и показываем. */}
+          сервер возвращает человекочитаемую причину, её и показываем. Для врача
+          это и есть ответ на его вопрос: назначение на этих продуктах не
+          собирается. */}
       {infeasible && (
         <WarningBanner level="danger" title={t("infeasible.title")}>
           {errorMessageOf(solve.error)}
         </WarningBanner>
       )}
 
-      {/* Расчёт запускает пользователь — это отправка, а не загрузка экрана,
-          поэтому ошибка показывается как ошибка действия (П16 канона). */}
-      {active.isError && !infeasible && (
+      {actionError && !infeasible && (
         <FormError>
-          {errorMessageOf(active.error) ?? t("common:errors.unexpected")}
+          {errorMessageOf(solve.error ?? scale.error) ??
+            t("common:errors.unexpected")}
         </FormError>
       )}
 
       {dish && (
         <>
-          {/* Пересчитанные граммовки — отдельным блоком, а не подменой ввода:
-              исходные массы остаются доступными для правки, потому что они и
-              есть ввод этого режима. В «подобрать» иначе — там массы задаёт
-              решатель, и править их бессмысленно. */}
-          {mode === "scale" && serverRows.length > 0 && (
-            <Section
-              title={t("scaled.title")}
-              description={t("scaled.description", { factor })}
-              level={2}
-            >
-              <DishRows rows={serverRows} readOnlyGrams />
-            </Section>
-          )}
-
           {/* Куда уходит собранный состав, зависит от того, чей это экран:
               в карте ребёнка — сразу в его блюда, в общем калькуляторе —
-              вместе с выбором ребёнка. Второй формы сохранения здесь нет:
-              это одна и та же работа с разным числом известных на входе. */}
+              вместе с выбором ребёнка. */}
           {patientId === undefined ? (
-            <HandOffToPatient rows={rowsForSave} />
+            <HandOffToPatient rows={rows} />
           ) : (
-            <SaveDishForm patientId={patientId} rows={rowsForSave} />
+            <SaveDishForm patientId={patientId} rows={rows} />
           )}
         </>
       )}
-    </PageLayout>
+    </>
   );
 }
 
-function TargetsFields({
-  targets,
-  prescribedRatio,
+/**
+ * Цель расчёта: соотношение и калорийность приёма.
+ *
+ * Значения из назначения подставляются вместе с арифметикой, по которой
+ * посчитаны, — «1200 ккал ÷ 4 приёма». Молча подставленное число неотличимо от
+ * введённого человеком, а деление суточной нормы на приёмы — медицинское
+ * допущение, и человек должен видеть, что оно принято (`mealTargets.ts`).
+ */
+function GoalFields({
+  ratio,
+  kcal,
+  suggested,
+  prescription,
   onChange,
-  showLimits,
 }: {
-  targets: TargetsInput;
-  /** Соотношение из активного назначения; null — назначения нет или не пришло */
-  prescribedRatio: number | null;
-  onChange: (next: TargetsInput) => void;
-  showLimits: boolean;
+  ratio: number | null;
+  kcal: number | null;
+  suggested: TargetsInput | null;
+  prescription: { kcal_per_day: number; meals_per_day: number } | null;
+  onChange: (next: { ratio: number | null; kcal: number | null }) => void;
 }) {
   const { t } = useTranslation("calculator");
 
-  // tabular-nums: цифры в полях цели не должны прыгать при вводе.
-  // inputMode="decimal": на телефоне открывается цифровая клавиатура (П13).
-  return (
-    <div className="grid gap-block sm:grid-cols-2">
-      <Field
-        id="ratio"
-        width="narrow"
-        label={t("targets.ratio")}
-        // Откуда взялось значение — видно прямо у поля: молча подставленное
-        // назначение неотличимо от значения, введённого в прошлый раз.
-        hint={
-          prescribedRatio === null
-            ? t("targets.ratioNoPrescription")
-            : targets.ratio === prescribedRatio
-              ? t("targets.ratioFromPrescription", { value: prescribedRatio })
-              : t("targets.ratioOverridden", { value: prescribedRatio })
-        }
-        type="number"
-        inputMode="decimal"
-        min={1}
-        max={5}
-        step={0.5}
-        value={targets.ratio}
-        onChange={(e) =>
-          onChange({ ...targets, ratio: Number(e.target.value) })
-        }
-        className="tabular-nums"
-      />
-      <Field
-        id="kcal"
-        width="narrow"
-        label={t("targets.kcal")}
-        // Из назначения не подставляется: суточная норма делится на приёмы
-        // только при допущении о равномерном распределении, а это решение
-        // медицинской команды (вопрос 24 в OPEN_QUESTIONS).
-        hint={t("targets.kcalHint")}
-        type="number"
-        inputMode="decimal"
-        min={1}
-        step={10}
-        value={targets.kcal}
-        onChange={(e) => onChange({ ...targets, kcal: Number(e.target.value) })}
-        className="tabular-nums"
-      />
+  const fromPrescription =
+    prescription === null
+      ? null
+      : t("goal.fromPrescription", {
+          kcal: prescription.kcal_per_day,
+          meals: prescription.meals_per_day,
+        });
 
-      {showLimits && (
-        <>
-          <Field
-            id="protein-min"
-            width="narrow"
-            label={t("targets.proteinMin")}
-            optional
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step={1}
-            value={targets.proteinMin ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...targets,
-                proteinMin:
-                  e.target.value === "" ? null : Number(e.target.value),
-              })
-            }
-            className="tabular-nums"
-          />
-          <Field
-            id="carbs-max"
-            width="narrow"
-            label={t("targets.carbsMax")}
-            optional
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step={1}
-            value={targets.carbsMax ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...targets,
-                carbsMax: e.target.value === "" ? null : Number(e.target.value),
-              })
-            }
-            className="tabular-nums"
-          />
-        </>
+  return (
+    <div className="flex flex-col gap-field">
+      {/* Две колонки и на телефоне: поля короткие (числовые, ширина из шкалы),
+          а сложенные в столбик они отодвигали показатели блюда почти на сотню
+          пикселей вниз — а они обязаны читаться рядом с целью. */}
+      <div className="grid grid-cols-2 gap-block">
+        <Field
+          id="ratio"
+          width="narrow"
+          label={t("targets.ratio")}
+          hint={
+            suggested !== null && ratio === suggested.ratio
+              ? t("goal.ratioFromPrescription")
+              : undefined
+          }
+          type="number"
+          inputMode="decimal"
+          min={1}
+          max={5}
+          step={0.5}
+          value={ratio ?? ""}
+          onChange={(e) =>
+            onChange({
+              ratio: e.target.value === "" ? null : +e.target.value,
+              kcal,
+            })
+          }
+          className="tabular-nums"
+        />
+        <Field
+          id="kcal"
+          width="narrow"
+          label={t("targets.kcal")}
+          hint={
+            suggested !== null && kcal === suggested.kcal
+              ? (fromPrescription ?? undefined)
+              : t("goal.kcalHint")
+          }
+          type="number"
+          inputMode="decimal"
+          min={1}
+          step={10}
+          value={kcal ?? ""}
+          onChange={(e) =>
+            onChange({
+              ratio,
+              kcal: e.target.value === "" ? null : +e.target.value,
+            })
+          }
+          className="tabular-nums"
+        />
+      </div>
+
+      {/* Цели нет — и сравнивать не с чем. Сказать это прямо честнее, чем
+          подставить своё число и объявить блюдо не попавшим в него. */}
+      {(ratio === null || kcal === null) && (
+        <p className="m-0 text-sm text-muted-foreground">{t("goal.none")}</p>
       )}
-    </div>
-  );
-}
-
-function ScaleFields({
-  factor,
-  onChange,
-}: {
-  factor: number;
-  onChange: (next: number) => void;
-}) {
-  const { t } = useTranslation("calculator");
-
-  return (
-    <div className="grid gap-block sm:grid-cols-2">
-      <Field
-        id="factor"
-        width="narrow"
-        label={t("factor")}
-        hint={t("factorHint")}
-        type="number"
-        inputMode="decimal"
-        min={0.1}
-        step={0.1}
-        value={factor}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="tabular-nums"
-      />
     </div>
   );
 }

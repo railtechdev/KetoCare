@@ -8,7 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import calculatorRu from "../../locales/ru/calculator.json";
 import { SectionRouter } from "../../test/SectionRouter";
-import { CalculatorPage } from "./CalculatorPage";
+import { CalculatorPage, CalculatorView } from "./CalculatorPage";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -175,8 +175,10 @@ describe("калькулятор", () => {
     renderCalculator(PATIENT_ID);
     await addButter(user);
 
+    // Состояние сказано словом рядом с числами, а не плашкой-тревогой: пока
+    // блюдо собирают, оно почти всегда мимо цели.
     expect(
-      await screen.findByText(/выходит за допуски/, undefined, {
+      await screen.findByText("Цель не достигнута", undefined, {
         timeout: AUTO_CALC_TIMEOUT_MS,
       }),
     ).toBeInTheDocument();
@@ -188,26 +190,57 @@ describe("калькулятор", () => {
     await user.clear(ratio);
 
     await waitFor(() =>
-      expect(screen.queryByText(/выходит за допуски/)).not.toBeInTheDocument(),
+      expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument(),
     );
     expect(screen.getByText(/374 ккал/)).toBeInTheDocument();
   });
 
-  it("переносит подобранные массы в состав, оставляя их редактируемыми", async () => {
+  it("подбирает граммовку кнопкой и переносит массы в состав", async () => {
+    // Подбор — действие над составом, а не отдельный режим: он перезаписывает
+    // граммовку, поэтому остаётся кнопкой, но живёт на том же экране.
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);
     await addButter(user);
 
-    await user.click(screen.getByRole("tab", { name: /Подобрать/ }));
-    await user.click(screen.getByRole("button", { name: /^Рассчитать/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Подобрать граммовку/ }),
+    );
 
-    // Иначе из режима «подобрать» вёл один выход — сохранить как есть:
-    // округлить под кухонные весы, проверить или пересчитать было нельзя.
     const grams = await screen.findByLabelText(
       /Масса продукта «Масло сливочное»/,
     );
     await waitFor(() => expect(grams).toHaveValue(29));
     expect(grams).not.toHaveAttribute("readonly");
+  });
+
+  it("подбор недоступен, пока не задана цель", async () => {
+    // Подбирать граммовку не подо что: цель — вход этого действия.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    const kcal = await screen.findByLabelText(/Калорийность/);
+    await user.clear(kcal);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      ).toBeDisabled(),
+    );
+  });
+
+  it("подставляет цель приёма из назначения вместе с арифметикой", async () => {
+    // 1200 ккал на 3 приёма — это 400, посчитанное из назначения, а не
+    // константа, зашитая в экран и подписанная «задаётся вами». Совпадение
+    // чисел здесь случайно: важно, что показана арифметика (ADR-0028,
+    // вопрос 24 медкоманде).
+    renderCalculator(PATIENT_ID);
+
+    const kcal = await screen.findByLabelText(/Калорийность/);
+    await waitFor(() => expect(kcal).toHaveValue(400));
+    expect(
+      screen.getByText("Из назначения: 1200 ккал ÷ 3 приёма"),
+    ).toBeInTheDocument();
   });
 });
 
@@ -226,20 +259,27 @@ describe("калькулятор без выбранного ребёнка", ()
     expect(screen.queryByText("Выберите ребёнка")).not.toBeInTheDocument();
   });
 
-  it("не ссылается на назначение, которого нет", async () => {
-    // Вердикт «выходит за допуски НАЗНАЧЕНИЯ» без назначения называет то, чего
-    // нет: цель здесь задал человек, и сравнивали именно с ней.
+  it("не выдумывает цель и не судит по ней", async () => {
+    // Раньше экран подставлял 4:1 и 400 ккал, подписывал их как «задаётся
+    // вами» и объявлял первый же добавленный продукт не попавшим в цель,
+    // которую сам и придумал.
     const user = userEvent.setup();
     renderCalculator();
 
     await addButter(user);
 
+    expect(await screen.findByLabelText(/Калорийность/)).toHaveValue(null);
     expect(
-      await screen.findByText("Блюдо не сходится с заданной целью"),
+      screen.getByText(/Цель не задана: показатели считаются/),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Блюдо выходит за допуски назначения"),
-    ).not.toBeInTheDocument();
+    // Ни «достигнута», ни «не достигнута»: сравнивать не с чем, и молчание
+    // здесь честнее догадки.
+    await waitFor(
+      () => expect(screen.getByText(/374 ккал/)).toBeInTheDocument(),
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+    expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument();
   });
 
   it("предлагает передать состав пациенту вместо «сохранить себе»", async () => {
@@ -267,5 +307,26 @@ describe("калькулятор без выбранного ребёнка", ()
     expect(
       screen.queryByRole("heading", { name: "Передать пациенту" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("оболочка экрана", () => {
+  it("в карте пациента не рисует второго заголовка", () => {
+    // Заголовок там уже есть — название раздела карты. Свой `PageLayout`
+    // внутри чужого дал бы `h1` внутри `h1`, и «Калькулятор» печатался бы
+    // дважды подряд.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <SectionRouter section="calculator">
+          <CalculatorView patientId={PATIENT_ID} />
+        </SectionRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(container.querySelectorAll("h1")).toHaveLength(0);
   });
 });

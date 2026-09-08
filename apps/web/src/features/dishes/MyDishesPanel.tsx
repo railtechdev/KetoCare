@@ -117,7 +117,6 @@ export function MyDishesPanel({
                   <PatientViewLink
                     patientId={patientId}
                     view="calculator"
-                    tab="scale"
                     item={incomingDish(dish.id)}
                     aria-label={t("myDishes.toCalculator", {
                       title: dish.title,
@@ -128,7 +127,6 @@ export function MyDishesPanel({
                 ) : (
                   <SectionLink
                     section="calculator"
-                    tab="scale"
                     item={incomingDish(dish.id)}
                     aria-label={t("myDishes.toCalculator", {
                       title: dish.title,

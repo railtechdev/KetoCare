@@ -53,7 +53,7 @@ const NotesView = lazy(() =>
 );
 const CalculatorView = lazy(() =>
   import("../calculator/CalculatorPage").then((m) => ({
-    default: m.CalculatorPage,
+    default: m.CalculatorView,
   })),
 );
 const ProfileView = lazy(() =>
