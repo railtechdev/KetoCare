@@ -143,7 +143,37 @@ class Doctor(HttpUser):
         self.client.headers["Authorization"] = f"Bearer {_SESSION['token']}"
         self.patient_id = _SESSION["patient_id"]
 
-    @task
+    @task(3)
+    def triage(self) -> None:
+        """Первый экран врача: список пациентов и сводка по каждому.
+
+        Кабинет запрашивает сводку **отдельным запросом на каждого пациента**
+        (`usePatientOverviews`), поэтому один заход на главную стоит `1 + N`
+        обращений, где N — число прикреплённых пациентов. Каждое из них —
+        агрегат по дневникам и меню с проверкой доступа.
+
+        Профиль до этой задачи мерил только отчёт, то есть самый дорогой запрос
+        врача, но не самый частый: отчёт берут раз в приём, а на главную заходят
+        каждый раз, когда открывают кабинет.
+
+        **Что эта задача НЕ доказывает.** На прогонном сиде у учётной записи
+        один пациент, то есть N = 1, и веер не воспроизводится. Задача повторяет
+        ФОРМУ обращения; величину надо мерить на стенде с настоящим числом
+        пациентов у врача — см. README, «Веер сводок».
+        """
+        listing = self.client.get(
+            "/api/v1/patients?limit=50&offset=0", name="/patients"
+        )
+        if listing.status_code != 200:
+            return
+
+        for patient in (listing.json().get("items") or [])[:50]:
+            self.client.get(
+                f"/api/v1/patients/{patient['id']}/overview",
+                name="/overview (веер триажа)",
+            )
+
+    @task(1)
     def report(self) -> None:
         self.client.get(
             f"/api/v1/patients/{self.patient_id}/report?from=2026-08-01&to=2026-08-31",
