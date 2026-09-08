@@ -16,26 +16,91 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactElement } from "react";
+import { lazy, type ReactElement } from "react";
 
-import { AdminPage } from "../features/admin/AdminPage";
-import { AssistantPage } from "../features/assistant/AssistantPage";
 import type { Role } from "../features/auth/roles";
-import { CalculatorPage } from "../features/calculator/CalculatorPage";
-import { DiaryPage } from "../features/diary/DiaryPage";
-import { AdminHomePage } from "../features/admin/AdminHomePage";
-import { DoctorHomePage } from "../features/doctor/DoctorHomePage";
-import { DoctorPatientsPage } from "../features/doctor/DoctorPatientsPage";
-import { HomePage } from "../features/home/HomePage";
 import { PatientGate } from "../features/patients/PatientGate";
-import { MenuPage } from "../features/menu/MenuPage";
-import { CatalogPage } from "../features/products/CatalogPage";
-import { ProductsPage } from "../features/products/ProductsPage";
 import { canEditCatalog } from "../features/products/types";
-import { RecipesPage } from "../features/recipes/RecipesPage";
-import { ReportsPage } from "../features/reports/ReportsPage";
-import { ProfilePage } from "../features/profile/ProfilePage";
-import { ChildPage } from "../features/child/ChildPage";
+
+/**
+ * Экраны загружаются по требованию, а не все сразу.
+ *
+ * Замер до разделения: `apps/web` собирался в ОДИН файл 1 612 кБ (451 кБ
+ * gzip), и родитель на телефоне скачивал его целиком, прежде чем увидеть хоть
+ * что-нибудь: вместе со своей главной — админку, карту пациента врача,
+ * справочники, журнал аудита. Внутри: recharts с lodash — 705 кБ (нужны только
+ * дневнику и отчёту), таблица TanStack — 136 кБ, генератор QR-кода — 71 кБ
+ * (нужен один раз в жизни, при настройке второго фактора специалиста).
+ *
+ * Разделение по разделам, а не по ролям: раздел — это то, что человек
+ * открывает, и граница загрузки должна совпадать с границей перехода.
+ * Пока чанк едет, `SectionRoute` показывает скелетон — экран не мигает пустотой.
+ */
+const AdminPage = lazy(() =>
+  import("../features/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
+);
+const AssistantPage = lazy(() =>
+  import("../features/assistant/AssistantPage").then((m) => ({
+    default: m.AssistantPage,
+  })),
+);
+const CalculatorPage = lazy(() =>
+  import("../features/calculator/CalculatorPage").then((m) => ({
+    default: m.CalculatorPage,
+  })),
+);
+const DiaryPage = lazy(() =>
+  import("../features/diary/DiaryPage").then((m) => ({ default: m.DiaryPage })),
+);
+const AdminHomePage = lazy(() =>
+  import("../features/admin/AdminHomePage").then((m) => ({
+    default: m.AdminHomePage,
+  })),
+);
+const DoctorHomePage = lazy(() =>
+  import("../features/doctor/DoctorHomePage").then((m) => ({
+    default: m.DoctorHomePage,
+  })),
+);
+const DoctorPatientsPage = lazy(() =>
+  import("../features/doctor/DoctorPatientsPage").then((m) => ({
+    default: m.DoctorPatientsPage,
+  })),
+);
+const HomePage = lazy(() =>
+  import("../features/home/HomePage").then((m) => ({ default: m.HomePage })),
+);
+const MenuPage = lazy(() =>
+  import("../features/menu/MenuPage").then((m) => ({ default: m.MenuPage })),
+);
+const CatalogPage = lazy(() =>
+  import("../features/products/CatalogPage").then((m) => ({
+    default: m.CatalogPage,
+  })),
+);
+const ProductsPage = lazy(() =>
+  import("../features/products/ProductsPage").then((m) => ({
+    default: m.ProductsPage,
+  })),
+);
+const RecipesPage = lazy(() =>
+  import("../features/recipes/RecipesPage").then((m) => ({
+    default: m.RecipesPage,
+  })),
+);
+const ReportsPage = lazy(() =>
+  import("../features/reports/ReportsPage").then((m) => ({
+    default: m.ReportsPage,
+  })),
+);
+const ProfilePage = lazy(() =>
+  import("../features/profile/ProfilePage").then((m) => ({
+    default: m.ProfilePage,
+  })),
+);
+const ChildPage = lazy(() =>
+  import("../features/child/ChildPage").then((m) => ({ default: m.ChildPage })),
+);
 
 /**
  * Экран раздела. Роль — аргумент, потому что один и тот же ключ раздела
