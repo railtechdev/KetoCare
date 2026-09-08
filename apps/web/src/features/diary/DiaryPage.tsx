@@ -312,7 +312,12 @@ function DiaryTab({
         invalid={preset === "custom" && range === null}
       />
 
-      {withChart && (
+      {/* Пустого графика не бывает: когда записей нет, о пустоте говорит одно
+          пустое состояние ниже. До этого экран сообщал её дважды — строкой «За
+          выбранный период измерений нет» над рамкой «Записей за этот период
+          нет» (правило П27). Тот же дефект был у сетки приступов и у дневника
+          в карте пациента: экранов три, а правило было одно. */}
+      {withChart && items.length > 0 && (
         <TrendChart
           points={points}
           markers={markers}
@@ -398,8 +403,12 @@ function DiaryTab({
               icon={NotebookPen}
               title={t("list.emptyTitle")}
               description={t("list.emptyBody")}
+              // Вторичная: то же действие уже стоит первичным в шапке экрана,
+              // и два одинаково громких «Добавить запись» на одном экране
+              // делают их одинаково незаметными (правило П31 — одно первичное).
+              // Выход из пустого состояния при этом остаётся (П15).
               action={
-                <Button type="button" onClick={onAdd}>
+                <Button type="button" variant="outline" onClick={onAdd}>
                   {t("list.emptyAction")}
                 </Button>
               }
