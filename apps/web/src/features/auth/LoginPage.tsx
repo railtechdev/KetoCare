@@ -9,15 +9,23 @@ import {
   FormFooter,
 } from "@ketocare/ui";
 import { Activity } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { Field } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
+/**
+ * Первичная настройка второго фактора грузится по требованию: внутри неё
+ * генератор QR-кода — 71 кБ, которые до этого скачивал КАЖДЫЙ, кто открывал
+ * страницу входа. Нужны они один раз в жизни и только специалисту, которого
+ * пригласили в клинику; семья не видит этот экран никогда.
+ */
+const TotpSetupPanel = lazy(() =>
+  import("./TotpSetupPanel").then((m) => ({ default: m.TotpSetupPanel })),
+);
 import { SetPasswordPanel } from "./SetPasswordPanel";
-import { TotpSetupPanel } from "./TotpSetupPanel";
 import { loginSchema, type LoginValues } from "./schemas";
 import { useSession } from "./useSession";
 import { useLoginMutation } from "./useAuthMutations";
@@ -55,7 +63,11 @@ export function LoginPage() {
   } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
 
   if (setupToken !== null) {
-    return <TotpSetupPanel setupToken={setupToken} />;
+    return (
+      <Suspense fallback={null}>
+        <TotpSetupPanel setupToken={setupToken} />
+      </Suspense>
+    );
   }
 
   if (resetToken !== null) {
