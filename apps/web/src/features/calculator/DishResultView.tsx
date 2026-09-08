@@ -16,12 +16,23 @@ interface Props {
   /** Вердикты приходят от сервера; допуск — медицинская константа ядра */
   ratioWithinTolerance?: boolean;
   kcalWithinTolerance?: boolean;
+  /**
+   * Откуда взялась цель, с которой сравнивают.
+   *
+   * `prescription` — из активного назначения ребёнка; `manual` — её задал
+   * человек в полях расчёта. Разница не косметическая: без назначения вердикт
+   * «выходит за допуски НАЗНАЧЕНИЯ» называет то, чего нет. Так и было видно на
+   * экране, где назначения ещё не завели, — и стало видно всем специалистам,
+   * когда калькулятор научился работать без выбранного ребёнка.
+   */
+  target?: "prescription" | "manual";
 }
 
 export function DishResultView({
   dish,
   ratioWithinTolerance,
   kcalWithinTolerance,
+  target = "prescription",
 }: Props) {
   const { t } = useTranslation("calculator");
   const offTolerance =
@@ -43,8 +54,11 @@ export function DishResultView({
       />
 
       {offTolerance && (
-        <WarningBanner level="warning" title={t("offTolerance.title")}>
-          {t("offTolerance.body")}
+        <WarningBanner
+          level="warning"
+          title={t(`offTolerance.${target}.title`)}
+        >
+          {t(`offTolerance.${target}.body`)}
         </WarningBanner>
       )}
       {/* Версия движка показывается рядом с результатом: расчёт, сделанный разными

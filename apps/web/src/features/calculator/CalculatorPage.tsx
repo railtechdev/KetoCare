@@ -19,6 +19,7 @@ import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
 import { parseIncoming, useIncomingComposition } from "./incomingDish";
 import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
+import { HandOffToPatient } from "./HandOffToPatient";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
@@ -57,8 +58,20 @@ const AUTO_CALC_DELAY_MS = 400;
  */
 const DEFAULT_TARGETS: TargetsInput = { ratio: 4, kcal: 400 };
 
-/** Калькулятор: три режима из раздела 8.3 ТЗ. */
-export function CalculatorPage({ patientId }: { patientId: string }) {
+/**
+ * Калькулятор: три режима из раздела 8.3 ТЗ.
+ *
+ * Ребёнок необязателен, и это не послабление, а разделение двух разных
+ * вопросов. «Выйдет ли 4:1 на этих продуктах» — вопрос о продуктах: на него
+ * отвечают до того, как выбрали, кому это готовить, и сервер это давно
+ * позволяет (`patient_id` у `/calc/*` необязателен). «Годится ли это блюдо
+ * ЭТОМУ ребёнку» — вопрос о ребёнке, и на него отвечает калькулятор в его
+ * карте: там есть кетосоотношение из назначения и его исключённые продукты.
+ *
+ * Пока эти два вопроса были одним экраном, специалист с когортой в полсотни
+ * получал вместо калькулятора пятьдесят кнопок «выберите ребёнка».
+ */
+export function CalculatorPage({ patientId }: { patientId?: string }) {
   const { t } = useTranslation("calculator");
 
   // Режим — в адресе (правило П30): ссылку на «подобрать раскладку» можно
@@ -84,7 +97,7 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
 
   // Назначение — тем же запросом, что у главной и меню: свой запрос делил бы
   // с ними ключ, но расходился бы в обработке.
-  const overview = usePatientOverview(patientId);
+  const overview = usePatientOverview(patientId ?? null);
   const prescribedRatio = overview.data?.prescription?.ratio ?? null;
 
   // Правка пользователя важнее назначения: он мог считать блюдо под другую
@@ -353,6 +366,9 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
         >
           <DishResultView
             dish={dish}
+            // Цель либо из назначения ребёнка, либо введена руками — и вердикт
+            // обязан называть ту, с которой на самом деле сравнивал.
+            target={prescribedRatio === null ? "manual" : "prescription"}
             ratioWithinTolerance={
               stale ? undefined : (ratioWithin ?? undefined)
             }
@@ -438,7 +454,15 @@ export function CalculatorPage({ patientId }: { patientId: string }) {
             </Section>
           )}
 
-          <SaveDishForm patientId={patientId} rows={rowsForSave} />
+          {/* Куда уходит собранный состав, зависит от того, чей это экран:
+              в карте ребёнка — сразу в его блюда, в общем калькуляторе —
+              вместе с выбором ребёнка. Второй формы сохранения здесь нет:
+              это одна и та же работа с разным числом известных на входе. */}
+          {patientId === undefined ? (
+            <HandOffToPatient rows={rowsForSave} />
+          ) : (
+            <SaveDishForm patientId={patientId} rows={rowsForSave} />
+          )}
         </>
       )}
     </PageLayout>

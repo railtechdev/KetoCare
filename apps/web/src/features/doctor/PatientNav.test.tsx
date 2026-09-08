@@ -5,6 +5,7 @@ import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
 import { PatientNav } from "./PatientNav";
+import { patientViewsFor } from "./patientViews";
 import type { Patient } from "./types";
 
 i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
@@ -87,9 +88,14 @@ describe("навигация карты пациента", () => {
   });
 
   it("показывает врачу все разделы карты", async () => {
+    // Число берётся из реестра, а не записано здесь: иначе новый раздел
+    // добавляли бы, правя тест, — то есть проверка перестала бы что-либо
+    // проверять.
     renderNav();
 
     const nav = await screen.findByRole("list");
-    expect(within(nav).getAllByRole("listitem")).toHaveLength(7);
+    expect(within(nav).getAllByRole("listitem")).toHaveLength(
+      patientViewsFor("doctor").length,
+    );
   });
 });

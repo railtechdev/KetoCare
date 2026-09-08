@@ -20,6 +20,7 @@ import { lazy, type ReactElement } from "react";
 
 import type { Role } from "../features/auth/roles";
 import { PatientGate } from "../features/patients/PatientGate";
+import { isCareRole } from "../features/doctor/types";
 import { canEditCatalog } from "../features/products/types";
 
 /**
@@ -132,11 +133,21 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
     ) : (
       <PatientGate render={(patientId) => <HomePage patientId={patientId} />} />
     ),
-  calculator: () => (
-    <PatientGate
-      render={(patientId) => <CalculatorPage patientId={patientId} />}
-    />
-  ),
+  // Калькулятор отвечает на два разных вопроса, и роль решает, на какой.
+  // Семье он считает блюдо ЕЁ ребёнку — ребёнок один или двое, и `PatientGate`
+  // выбирает его сам. Специалисту он отвечает «выйдет ли соотношение на этих
+  // продуктах» — вопрос о продуктах, а не о ребёнке; требовать выбрать пациента
+  // до расчёта значило показывать когорту вместо калькулятора, и на пятидесяти
+  // пациентах экран так и начинался — пятьюдесятью кнопками. Проверка блюда
+  // против цели конкретного ребёнка живёт разделом его карты (ADR-0026).
+  calculator: (role) =>
+    isCareRole(role) ? (
+      <CalculatorPage />
+    ) : (
+      <PatientGate
+        render={(patientId) => <CalculatorPage patientId={patientId} />}
+      />
+    ),
   menu: () => (
     <PatientGate render={(patientId) => <MenuPage patientId={patientId} />} />
   ),

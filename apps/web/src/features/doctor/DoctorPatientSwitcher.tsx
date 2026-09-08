@@ -1,23 +1,8 @@
-import {
-  Button,
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@ketocare/ui";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { PatientPicker } from "../patients/PatientPicker";
 import { usePatient } from "../patients/usePatient";
-import { usePatients } from "../patients/usePatients";
 import type { PatientView } from "./patientViews";
 
 /**
@@ -25,14 +10,13 @@ import type { PatientView } from "./patientViews";
  *
  * Это и есть ответ на вопрос «а если пациентов пятьдесят». Приём идёт пациент
  * за пациентом, и путь «назад в реестр → найти строку → открыть карту → снова
- * открыть тот же раздел» повторяется весь день. Здесь он занимает одно
- * нажатие и три буквы, а открытый раздел сохраняется: врач, сверяющий дневники
- * по когорте, остаётся в дневниках.
+ * открыть тот же раздел» повторяется весь день. Здесь он занимает одно нажатие
+ * и три буквы, а открытый раздел сохраняется: врач, сверяющий дневники по
+ * когорте, остаётся в дневниках.
  *
- * Отбор идёт на сервере (`usePatients(query)`), поэтому собственный фильтр
- * `cmdk` выключен: он отбирал бы уже отобранное и отвечал бы «не найдено» о
- * пациенте, который на сервере есть, но не попал в первые двести строк, — самый
- * вредный из возможных ответов, потому что выглядит достоверным.
+ * Сам поиск — в `PatientPicker`: тот же элемент управления передаёт пациенту
+ * состав из общего калькулятора, и двух поисков по одной когорте здесь быть не
+ * должно.
  */
 export function DoctorPatientSwitcher({
   patientId,
@@ -43,108 +27,26 @@ export function DoctorPatientSwitcher({
 }) {
   const { t } = useTranslation("doctor");
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-
-  const debouncedQuery = useDebouncedValue(query, 300);
-  const patients = usePatients(debouncedQuery);
   const current = usePatient(patientId);
 
-  const items = patients.data?.items ?? [];
-
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        // Запрос сбрасывается при закрытии: открытый в следующий раз список
-        // обязан показывать когорту, а не остаток прошлого поиска.
-        if (!next) setQuery("");
+    <PatientPicker
+      selectedId={patientId}
+      label={t("workspace.switcher.label")}
+      // Кнопка в шапке — не поле формы: рамка вокруг имени пациента читалась бы
+      // как ввод. Имя здесь — то, где ты находишься.
+      className="border-transparent shadow-none"
+      trigger={
+        <span className="font-medium">
+          {current.data?.full_name ?? t("workspace.switcher.loading")}
+        </span>
+      }
+      onSelect={(patient) => {
+        void navigate({
+          to: "/app/patients/$patientId/$view",
+          params: { patientId: patient.id, view },
+        });
       }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          // Ширина — из той же шкалы, что у полей выбора (`--container-field-medium`):
-          // имя пациента бывает длинным, а шапка кабинета не резиновая.
-          className="min-h-touch max-w-field-medium justify-start gap-field"
-        >
-          <span className="truncate font-medium">
-            {current.data?.full_name ?? t("workspace.switcher.loading")}
-          </span>
-          <ChevronsUpDown
-            aria-hidden="true"
-            className="size-4 shrink-0 text-muted-foreground"
-          />
-          <span className="sr-only">{t("workspace.switcher.label")}</span>
-        </Button>
-      </PopoverTrigger>
-
-      <PopoverContent align="start" className="w-72 p-0">
-        <Command shouldFilter={false}>
-          <CommandInput
-            value={query}
-            onValueChange={setQuery}
-            placeholder={t("workspace.switcher.placeholder")}
-          />
-          <CommandList>
-            {/* «Не найдено» — утверждение о когорте, и говорить его можно
-                только тогда, когда сервер ответил пустым списком (правило П15).
-                Ни загрузка, ни отказ сети таким ответом не являются: врач,
-                читающий «Пациенты не найдены» вместо сообщения о сбое, решает,
-                что пациента нет, — и ответ этот выглядит достоверным. Тот же
-                довод, по которому поиск ушёл на сервер. */}
-            {patients.isError ? (
-              <div
-                role="status"
-                className="flex flex-col items-start gap-field p-4 text-sm"
-              >
-                <span className="text-foreground">
-                  {t("workspace.switcher.loadError")}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void patients.refetch()}
-                >
-                  {t("common:actions.retry")}
-                </Button>
-              </div>
-            ) : (
-              !patients.isPending && (
-                <CommandEmpty>{t("workspace.switcher.empty")}</CommandEmpty>
-              )
-            )}
-            <CommandGroup>
-              {items.map((patient) => (
-                <CommandItem
-                  key={patient.id}
-                  value={patient.id}
-                  onSelect={() => {
-                    setOpen(false);
-                    void navigate({
-                      to: "/app/patients/$patientId/$view",
-                      params: { patientId: patient.id, view },
-                    });
-                  }}
-                >
-                  <Check
-                    aria-hidden="true"
-                    className={
-                      patient.id === patientId
-                        ? "size-4 shrink-0"
-                        : "size-4 shrink-0 opacity-0"
-                    }
-                  />
-                  <span className="truncate">{patient.full_name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    />
   );
 }

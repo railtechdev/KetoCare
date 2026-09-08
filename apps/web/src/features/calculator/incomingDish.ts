@@ -56,7 +56,12 @@ export function incomingDish(dishId: string): string {
  */
 export function useIncomingComposition(
   incoming: Incoming | null,
-  patientId: string,
+  /**
+   * Ребёнок, чьи блюда доступны. `undefined` — калькулятор открыт вне карты
+   * пациента: рецепт оттуда открывается так же, а своего блюда там нет, потому
+   * что «своё» бывает только чьё-то.
+   */
+  patientId: string | undefined,
 ): {
   rows: DishRow[] | null;
   isPending: boolean;
@@ -78,7 +83,9 @@ export function useIncomingComposition(
   // Своё блюдо читается списком, а не по одному: ручки чтения одной раскладки
   // в API нет (раздел 5.3 ТЗ описывает список и правку), а список у экрана
   // «Мои блюда» уже в кеше под тем же ключом.
-  const dishes = useCustomDishes(incoming?.kind === "dish" ? patientId : null);
+  const dishes = useCustomDishes(
+    incoming?.kind === "dish" ? (patientId ?? null) : null,
+  );
   const dish = {
     data: (dishes.data ?? []).find(
       (item: CustomDish) => item.id === incoming?.id,

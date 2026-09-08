@@ -92,7 +92,12 @@ const SOLVED = {
   engine_version: "1.0.0",
 };
 
-function renderCalculator() {
+/**
+ * Значение по умолчанию здесь не годится: оно подставляется и на явный
+ * `undefined`, то есть «калькулятор без ребёнка» молча превращался бы в
+ * калькулятор с ребёнком, а тест — в проверку того же, что и соседний.
+ */
+function renderCalculator(patientId?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -105,7 +110,7 @@ function renderCalculator() {
     );
   }
 
-  return render(<CalculatorPage patientId={PATIENT_ID} />, {
+  return render(<CalculatorPage patientId={patientId} />, {
     wrapper: Wrapper,
   });
 }
@@ -130,7 +135,7 @@ describe("калькулятор", () => {
   });
 
   it("берёт кетосоотношение из активного назначения, а не из кода экрана", async () => {
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
 
     // До этого в поле стояла четвёрка, зашитая во фронтенде, и вердикт
     // «выходит за допуски назначения» выносился относительно чужой цели.
@@ -143,7 +148,7 @@ describe("калькулятор", () => {
 
   it("считает сам, без нажатия кнопки", async () => {
     const user = userEvent.setup();
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
     await addButter(user);
 
     // «Добавляю продукты — ничего не происходит»: расчёт запускала кнопка,
@@ -167,7 +172,7 @@ describe("калькулятор", () => {
 
   it("снимает вердикт, пока пересчёт не догнал новую цель", async () => {
     const user = userEvent.setup();
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
     await addButter(user);
 
     expect(
@@ -190,7 +195,7 @@ describe("калькулятор", () => {
 
   it("переносит подобранные массы в состав, оставляя их редактируемыми", async () => {
     const user = userEvent.setup();
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
     await addButter(user);
 
     await user.click(screen.getByRole("tab", { name: /Подобрать/ }));
@@ -203,5 +208,64 @@ describe("калькулятор", () => {
     );
     await waitFor(() => expect(grams).toHaveValue(29));
     expect(grams).not.toHaveAttribute("readonly");
+  });
+});
+
+describe("калькулятор без выбранного ребёнка", () => {
+  it("считает и не требует выбирать пациента", async () => {
+    // «Выйдет ли 4:1 на этих продуктах» — вопрос о продуктах. Пока он был
+    // общим с вопросом «годится ли это ЭТОМУ ребёнку», специалист с когортой в
+    // полсотни получал вместо калькулятора пятьдесят кнопок «выберите
+    // ребёнка». Сервер расчёт без пациента разрешал всегда.
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await addButter(user);
+
+    expect(await screen.findByText(/Кетосоотношение/)).toBeInTheDocument();
+    expect(screen.queryByText("Выберите ребёнка")).not.toBeInTheDocument();
+  });
+
+  it("не ссылается на назначение, которого нет", async () => {
+    // Вердикт «выходит за допуски НАЗНАЧЕНИЯ» без назначения называет то, чего
+    // нет: цель здесь задал человек, и сравнивали именно с ней.
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await addButter(user);
+
+    expect(
+      await screen.findByText("Блюдо не сходится с заданной целью"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Блюдо выходит за допуски назначения"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("предлагает передать состав пациенту вместо «сохранить себе»", async () => {
+    // Своё блюдо бывает только чьё-то: сохранять раскладку некуда, пока не
+    // сказано, кому она нужна.
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await addButter(user);
+
+    expect(
+      await screen.findByRole("heading", { name: "Передать пациенту" }),
+    ).toBeInTheDocument();
+  });
+
+  it("в карте ребёнка сохраняет сразу ему, ничего не спрашивая", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+
+    await addButter(user);
+
+    expect(
+      await screen.findByRole("heading", { name: /Сохранить/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Передать пациенту" }),
+    ).not.toBeInTheDocument();
   });
 });

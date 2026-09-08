@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Calculator,
   ClipboardList,
   FileText,
   Gauge,
@@ -50,6 +51,11 @@ const ReportsView = lazy(() =>
 const NotesView = lazy(() =>
   import("./NotesTab").then((m) => ({ default: m.NotesTab })),
 );
+const CalculatorView = lazy(() =>
+  import("../calculator/CalculatorPage").then((m) => ({
+    default: m.CalculatorPage,
+  })),
+);
 const ProfileView = lazy(() =>
   import("./PatientProfileView").then((m) => ({
     default: m.PatientProfileView,
@@ -59,13 +65,18 @@ const ProfileView = lazy(() =>
 /**
  * Порядок — это порядок работы врача, а не алфавит: сводка отвечает «что
  * сейчас», назначение — единственное, что врач здесь МЕНЯЕТ, дальше идёт то,
- * чем он проверяет назначение (питание, дневники, отчёт), и последним —
- * паспорт с анамнезом, за которым приходят реже всего.
+ * чем он проверяет назначение (питание, калькулятор, дневники, отчёт), и
+ * последним — паспорт с анамнезом, за которым приходят реже всего.
+ *
+ * Калькулятор стоит сразу за питанием, потому что отвечает на его вопрос:
+ * «выполнимо ли назначение из того, что ребёнку можно». В общем меню он тоже
+ * есть, но там у него нет ни кетосоотношения ребёнка, ни его исключений.
  */
 export const PATIENT_VIEWS = [
   "summary",
   "prescription",
   "menu",
+  "calculator",
   "diary",
   "reports",
   "notes",
@@ -108,6 +119,7 @@ export const PATIENT_VIEW_SCREENS: Record<PatientView, PatientViewScreen> = {
   summary: (patient) => <SummaryView patient={patient} />,
   prescription: (patient) => <PrescriptionView patientId={patient.id} />,
   menu: (patient) => <MenuView patientId={patient.id} />,
+  calculator: (patient) => <CalculatorView patientId={patient.id} />,
   diary: (patient) => <DiaryView patientId={patient.id} />,
   reports: (patient) => <ReportsView patientId={patient.id} />,
   notes: (patient) => <NotesView patientId={patient.id} />,
@@ -132,6 +144,9 @@ export const PATIENT_VIEW_WIDTH: Record<
   summary: "content",
   prescription: "wide",
   menu: "wide",
+  // Калькулятор — одна колонка состава и результата под ней: считают по нему
+  // построчно, а не сравнивают ряды.
+  calculator: "content",
   diary: "wide",
   reports: "wide",
   notes: "content",
@@ -147,6 +162,7 @@ export const PATIENT_VIEW_ICONS: Record<PatientView, LucideIcon> = {
   summary: Gauge,
   prescription: ClipboardList,
   menu: CalendarDays,
+  calculator: Calculator,
   diary: NotebookPen,
   reports: FileText,
   notes: StickyNote,

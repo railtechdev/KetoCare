@@ -81,9 +81,18 @@ export function useScaleMutation() {
   });
 }
 
-export function useSaveDishMutation(patientId: string) {
+/**
+ * Сохранение состава в блюда ребёнка.
+ *
+ * `null` — ребёнок ещё не выбран: так бывает в общем калькуляторе, где состав
+ * набирают до того, как решают, кому его передать. Хук объявляется всё равно —
+ * условных хуков не бывает, — а запрос без ребёнка не уходит.
+ */
+export function useSaveDishMutation(patientId: string | null) {
   return useMutation({
     mutationFn: async (input: { title: string; rows: DishRow[] }) => {
+      if (patientId === null) throw new Error("patientId is required to save");
+
       const { data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/custom-dishes",
         {

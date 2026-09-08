@@ -200,7 +200,7 @@ const sectionRoute = createRoute({
           patientId: search.patient,
           view: patientViewFromTab(search.tab),
         },
-        search: { kind: search.kind, job: search.job },
+        search: { kind: search.kind, item: search.item, job: search.job },
       });
     }
   },
@@ -215,8 +215,20 @@ const sectionRoute = createRoute({
  * незачем: пациент и есть путь.
  */
 export interface PatientSearch {
+  /**
+   * Вкладка внутри раздела: режим калькулятора (проверить / подобрать /
+   * пересчитать). Разделы заменили вкладки КАРТЫ, но не вкладки внутри
+   * раздела — правило П29 разрешает их как параллельные виды одного предмета.
+   */
+  tab?: string;
   /** Вид дневника внутри раздела «Дневники» */
   kind?: string;
+  /**
+   * Предмет, открытый внутри раздела: продукт или готовое блюдо, пришедшее в
+   * калькулятор (`item=dish:<id>`). Тем же параметром состав, собранный в общем
+   * калькуляторе, попадает в карту пациента.
+   */
+  item?: string;
   /**
    * Задача сборки PDF-отчёта. В адресе по той же причине, что и в разделах:
    * сборка идёт в воркере секундами, а ручки «мои задачи» у API нет — потеряв
@@ -237,9 +249,13 @@ const patientRoute = createRoute({
   path: "patients/$patientId",
   validateSearch: (search: Record<string, unknown>): PatientSearch => {
     const result: PatientSearch = {};
+    const tab = text(search.tab);
     const kind = text(search.kind);
+    const item = text(search.item);
     const job = text(search.job);
+    if (tab !== undefined) result.tab = tab;
     if (kind !== undefined) result.kind = kind;
+    if (item !== undefined) result.item = item;
     if (job !== undefined) result.job = job;
     return result;
   },
