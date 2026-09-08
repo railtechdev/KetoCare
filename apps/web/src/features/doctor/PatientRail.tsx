@@ -92,8 +92,12 @@ export function PatientRail({ selectedId }: { selectedId: string }) {
               <SectionLink
                 section="patients"
                 patient={row.patient.id}
+                // Имя и пометки — в столбик, а не в строку. В колонке 320 px
+                // пометка «Без замечаний · данные сегодня» не переносится
+                // (`whitespace-nowrap`) и съедала всю ширину: имя оставалось с
+                // двадцатью пикселями и рассыпалось по букве в строку.
                 className={cn(
-                  "flex min-h-touch flex-wrap items-center gap-field rounded-lg px-3 py-2 text-sm",
+                  "flex min-h-touch flex-col items-start gap-1 rounded-lg px-3 py-2 text-sm",
                   "no-underline transition-colors hover:bg-accent",
                   current
                     ? "bg-accent font-semibold text-accent-foreground"
@@ -104,7 +108,7 @@ export function PatientRail({ selectedId }: { selectedId: string }) {
                 // подсветка строки читается хуже, чем сказанное вслух.
                 current={current}
               >
-                <span className="min-w-0 flex-1 break-words">
+                <span className="min-w-0 break-words">
                   {row.patient.full_name}
                 </span>
                 {/* Без условия на `flags !== null`: `null` — это «сводка не

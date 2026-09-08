@@ -120,12 +120,50 @@ describe("помощник в Mini App", () => {
     });
   });
 
-  it("до первого вопроса за перепиской не ходит", async () => {
+  it("до первого вопроса за телом переписки не ходит", async () => {
+    // Переписок у семьи нет вовсе.
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+
     renderScreen();
 
     expect(
       await screen.findByText(/как работает приложение/i),
     ).toBeInTheDocument();
-    expect(api.GET).not.toHaveBeenCalled();
+
+    // Один запрос — за СПИСКОМ: без него приложение не знает, был ли разговор.
+    expect(api.GET).toHaveBeenCalledTimes(1);
+    expect((api.GET as Mock).mock.calls[0]?.[0]).toBe(
+      "/api/v1/patients/{patient_id}/ai-conversations",
+    );
+  });
+
+  it("открывается на последней переписке после перезапуска из чата", async () => {
+    // Каждый запуск Mini App — новая загрузка страницы. Пока идентификатор жил
+    // в состоянии экрана, переписка терялась ВСЕГДА: родитель спрашивал,
+    // закрывал приложение и при следующем открытии видел пустой чат.
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.endsWith("/ai-conversations")
+        ? Promise.resolve({
+            data: { items: [{ id: CONVERSATION_ID }], total: 1 },
+          })
+        : Promise.resolve({
+            data: {
+              id: CONVERSATION_ID,
+              messages: [
+                message({
+                  seq: 0,
+                  role: "user",
+                  text: "куда записать кетоны",
+                  sources: [],
+                }),
+                message({ seq: 1 }),
+              ],
+            },
+          }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText("куда записать кетоны")).toBeInTheDocument();
   });
 });

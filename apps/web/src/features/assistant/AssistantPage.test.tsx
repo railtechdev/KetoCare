@@ -145,12 +145,51 @@ describe("помощник в кабинете", () => {
   });
 
   it("до первого вопроса объясняет, о чём спрашивать", async () => {
+    // Переписок у семьи нет вовсе.
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+
     renderPage();
 
     expect(
       await screen.findByText(/как работает приложение/i),
     ).toBeInTheDocument();
-    // Переписки ещё нет — за ней не ходим.
-    expect(api.GET).not.toHaveBeenCalled();
+
+    // Один запрос — за СПИСКОМ переписок: без него экран не знает, был ли
+    // разговор раньше. За телом переписки не ходим: её идентификатора нет.
+    expect(api.GET).toHaveBeenCalledTimes(1);
+    expect((api.GET as Mock).mock.calls[0]?.[0]).toBe(
+      "/api/v1/patients/{patient_id}/ai-conversations",
+    );
+  });
+
+  it("открывается на последней переписке, а не с чистого листа", async () => {
+    // Раньше идентификатор жил только в состоянии экрана: родитель спрашивал,
+    // получал ответ, уходил в другой раздел — и, вернувшись, видел пустой чат.
+    // Разговор при этом лежал на сервере и был доступен лечащему врачу
+    // (ADR-0022), то есть семья единственная не могла его перечитать.
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.endsWith("/ai-conversations")
+        ? Promise.resolve({
+            data: { items: [{ id: CONVERSATION_ID }], total: 1 },
+          })
+        : Promise.resolve({
+            data: {
+              id: CONVERSATION_ID,
+              messages: [
+                message({
+                  seq: 0,
+                  role: "user",
+                  text: "куда записать кетоны",
+                  sources: [],
+                }),
+                message({ seq: 1 }),
+              ],
+            },
+          }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("куда записать кетоны")).toBeInTheDocument();
   });
 });

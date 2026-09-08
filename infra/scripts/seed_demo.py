@@ -72,6 +72,16 @@ async def main() -> int:
             session, UserRole.PARENT, "Мария Родитель", "parent@example.com", hash_password
         )
 
+        # Второй фактор демо-учёток сбрасывается при КАЖДОМ прогоне, как это уже
+        # делает сид прогонов (`seed_e2e`). Иначе демо-стенд одноразовый: врач и
+        # администратор настраивают 2FA на чей-то телефон при первом входе, и
+        # любой следующий человек — или та же машина через месяц — упирается в
+        # запрос кода, которого никто не знает. Учётки демонстрационные, база
+        # локальная; в бою этот скрипт не запускается.
+        for staff in (admin, doctor):
+            staff.totp_secret = None
+            staff.totp_pending_secret = None
+
         category = await _category(session)
         added = await _products(session, category_id=category.id, changed_by=admin.id)
 
@@ -87,8 +97,8 @@ async def main() -> int:
     print(f"Записей дневника добавлено: {entries}")
     print()
     print("Учётные записи (пароль у всех одинаковый):")
-    print("  admin@example.com   — администратор")
-    print("  doctor@example.com  — врач (при первом входе настроит 2FA)")
+    print("  admin@example.com   — администратор (второй фактор сброшен)")
+    print("  doctor@example.com  — врач (второй фактор сброшен)")
     print("  parent@example.com  — родитель")
     print(f"  пароль: {DEMO_PASSWORD}")
     return 0

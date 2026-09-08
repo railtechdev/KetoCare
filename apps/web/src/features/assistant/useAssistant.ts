@@ -22,6 +22,42 @@ export interface AssistantMessage {
  */
 const POLL_MS = 2500;
 
+/**
+ * Последняя переписка семьи с помощником.
+ *
+ * Нужна, чтобы экран открывался НА НЕЙ, а не с чистого листа. До этого
+ * идентификатор переписки жил только в состоянии экрана: родитель задавал
+ * вопрос, получал ответ, уходил в другой раздел — и, вернувшись, видел пустой
+ * чат. Переписка при этом никуда не девалась: она лежит на сервере, и её
+ * читает лечащий врач (ADR-0022). То есть семья единственная не могла
+ * перечитать собственный разговор.
+ *
+ * Берём одну, самую свежую: сервер отдаёт список от новых к старым, а
+ * переписка у семьи по смыслу одна — продолжающийся разговор, а не переписка с
+ * разными собеседниками.
+ */
+export function useLatestConversationId(patientId: string) {
+  return useQuery({
+    queryKey: ["assistant", patientId, "latest"],
+    // Список нужен один раз при открытии экрана: дальше идентификатор известен,
+    // и перечитывать перечень на каждом фокусе окна незачем.
+    staleTime: Infinity,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/ai-conversations",
+        {
+          params: {
+            path: { patient_id: patientId },
+            query: { limit: 1, offset: 0 },
+          },
+        },
+      );
+      if (error) throw error;
+      return data?.items?.[0]?.id ?? null;
+    },
+  });
+}
+
 export function useConversation(
   patientId: string,
   conversationId: string | null,

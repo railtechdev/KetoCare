@@ -4,7 +4,11 @@ import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
-import { useAskAssistant, useConversation } from "./useAssistant";
+import {
+  useAskAssistant,
+  useConversation,
+  useLatestConversationId,
+} from "./useAssistant";
 
 /**
  * Помощник семьи (раздел 10.4 ТЗ, п. 20 этапа 4).
@@ -17,11 +21,23 @@ import { useAskAssistant, useConversation } from "./useAssistant";
  * Ответ приходит не сразу: ручка принимает вопрос и кладёт в переписку
  * «ожидание», а воркер заменяет его ответом (ADR-0022). Поэтому экран
  * дочитывает переписку, а не ждёт ответа запросом.
+ *
+ * Экран открывается на последней переписке семьи. До этого идентификатор жил
+ * только в состоянии компонента: родитель спрашивал, получал ответ, уходил в
+ * другой раздел — и, вернувшись, видел пустой чат. Разговор при этом лежал на
+ * сервере и был доступен лечащему врачу, то есть семья единственная не могла
+ * перечитать собственную переписку.
  */
 export function AssistantPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("assistant");
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  // `null` — «ещё не знаем»: до ответа сервера о последней переписке экран не
+  // должен решать, что её нет. Отсюда же и `undefined` у выбранной вручную:
+  // выбор человека сильнее подставленного умолчания.
+  const [chosenId, setChosenId] = useState<string | undefined>(undefined);
   const [question, setQuestion] = useState("");
+
+  const latest = useLatestConversationId(patientId);
+  const conversationId = chosenId ?? latest.data ?? null;
 
   const conversation = useConversation(patientId, conversationId);
   const ask = useAskAssistant(patientId);
@@ -36,7 +52,7 @@ export function AssistantPage({ patientId }: { patientId: string }) {
       { text, conversationId },
       {
         onSuccess: (accepted) => {
-          setConversationId(accepted.conversation_id);
+          setChosenId(accepted.conversation_id);
           setQuestion("");
         },
       },
@@ -47,7 +63,13 @@ export function AssistantPage({ patientId }: { patientId: string }) {
     <PageLayout title={t("title")} intro={t("intro")} width="form">
       <Section title={t("conversation")} density="compact">
         <AsyncSection
-          loading={conversation.isPending && conversationId !== null}
+          // Пока идёт запрос о последней переписке, экран тоже занят: иначе
+          // между ответами мелькает «переписки пока нет» — и родитель успевает
+          // прочесть, что его разговора не существует.
+          loading={
+            latest.isPending ||
+            (conversation.isPending && conversationId !== null)
+          }
           skeleton={<ChatMessage role="assistant" pending />}
           error={
             conversation.isError
