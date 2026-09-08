@@ -4,7 +4,11 @@ import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import type { Session } from "../session/useSession";
-import { useAskAssistant, useConversation } from "./useAssistant";
+import {
+  useAskAssistant,
+  useConversation,
+  useLatestConversationId,
+} from "./useAssistant";
 
 /**
  * Помощник семьи в Mini App (раздел 10.4 ТЗ, п. 20 этапа 4).
@@ -19,7 +23,10 @@ import { useAskAssistant, useConversation } from "./useAssistant";
  */
 export function AssistantScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  // Выбор человека сильнее подставленного умолчания; `null` — «ещё не знаем».
+  const [chosenId, setChosenId] = useState<string | undefined>(undefined);
+  const latest = useLatestConversationId(session.patientId);
+  const conversationId = chosenId ?? latest.data ?? null;
   const [question, setQuestion] = useState("");
 
   const conversation = useConversation(session.patientId, conversationId);
@@ -35,7 +42,7 @@ export function AssistantScreen({ session }: { session: Session }) {
       { text, conversationId },
       {
         onSuccess: (accepted) => {
-          setConversationId(accepted.conversation_id);
+          setChosenId(accepted.conversation_id);
           setQuestion("");
         },
       },
@@ -48,7 +55,10 @@ export function AssistantScreen({ session }: { session: Session }) {
 
       <Section title={t("assistant.conversation")} density="compact">
         <AsyncSection
-          loading={conversation.isPending && conversationId !== null}
+          loading={
+            latest.isPending ||
+            (conversation.isPending && conversationId !== null)
+          }
           skeleton={<ChatMessage role="assistant" pending />}
           error={
             conversation.isError

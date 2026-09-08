@@ -21,6 +21,35 @@ export interface AssistantMessage {
  */
 const POLL_MS = 2500;
 
+/**
+ * Последняя переписка семьи с помощником.
+ *
+ * В Mini App это не удобство, а необходимость: каждый запуск из чата — новая
+ * загрузка страницы, и идентификатор переписки, живущий в состоянии экрана,
+ * теряется ВСЕГДА. Родитель спрашивал, получал ответ, закрывал приложение — и
+ * при следующем открытии видел пустой чат, хотя разговор лежал на сервере и был
+ * доступен лечащему врачу (ADR-0022).
+ */
+export function useLatestConversationId(patientId: string) {
+  return useQuery({
+    queryKey: ["assistant", patientId, "latest"],
+    staleTime: Infinity,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/ai-conversations",
+        {
+          params: {
+            path: { patient_id: patientId },
+            query: { limit: 1, offset: 0 },
+          },
+        },
+      );
+      if (error) throw error;
+      return data?.items?.[0]?.id ?? null;
+    },
+  });
+}
+
 export function useConversation(
   patientId: string,
   conversationId: string | null,
