@@ -71,6 +71,9 @@ export function SaveDishForm({ patientId, rows }: Props) {
           pendingLabel={t("save.saving")}
           pending={save.isPending}
           disabled={title.trim() === "" || rows.length === 0}
+          reason={
+            rows.length === 0 ? t("blocked.noRows") : t("save.blocked.noTitle")
+          }
         />
       </form>
     </Section>

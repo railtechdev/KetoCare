@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
+import { ActionReason } from "./ActionReason";
 import { Button } from "./ui/button";
 import { cn } from "../lib/cn";
 
@@ -9,6 +10,14 @@ export interface FormFooterProps {
   pendingLabel: string;
   pending?: boolean;
   disabled?: boolean;
+  /**
+   * Чего не хватает, чтобы отправить форму, — когда `disabled` стоит не из-за
+   * отправки, а из-за незаполненного (правило П44 канона).
+   *
+   * Живёт здесь, а не на экране, ровно потому, что иначе о нём забывают: у
+   * подвала уже есть `disabled`, и причина обязана идти с ним рядом.
+   */
+  reason?: ReactNode;
   cancelLabel?: string;
   onCancel?: () => void;
   className?: string;
@@ -31,36 +40,49 @@ export function FormFooter({
   pendingLabel,
   pending = false,
   disabled = false,
+  reason,
   cancelLabel,
   onCancel,
   className,
   extra,
 }: FormFooterProps) {
+  const reasonId = useId();
+  // Причина показывается, только когда она и есть препятствие: во время
+  // отправки кнопка тоже выключена, но объяснять там нечего.
+  const blocked = disabled && !pending && reason !== undefined;
+
   return (
-    <div className={cn("flex flex-wrap items-center gap-3", className)}>
-      {/* min-h-touch явно: кнопка подтверждения формы — то, во что целятся
+    <div className={cn("flex flex-col gap-field", className)}>
+      <div className="flex flex-wrap items-center gap-3">
+        {/* min-h-touch явно: кнопка подтверждения формы — то, во что целятся
           чаще всего, и 36 px кита здесь мало даже на мыши (раздел 8.2 ТЗ). */}
-      <Button
-        type="submit"
-        className="min-h-touch"
-        disabled={pending || disabled}
-        aria-busy={pending}
-      >
-        {pending ? pendingLabel : submitLabel}
-      </Button>
-
-      {cancelLabel && onCancel && (
         <Button
-          type="button"
-          variant="outline"
+          type="submit"
           className="min-h-touch"
-          onClick={onCancel}
+          disabled={pending || disabled}
+          aria-busy={pending}
+          aria-describedby={blocked ? reasonId : undefined}
         >
-          {cancelLabel}
+          {pending ? pendingLabel : submitLabel}
         </Button>
-      )}
 
-      {extra && <span className="ml-auto">{extra}</span>}
+        {cancelLabel && onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch"
+            onClick={onCancel}
+          >
+            {cancelLabel}
+          </Button>
+        )}
+
+        {extra && <span className="ml-auto">{extra}</span>}
+      </div>
+
+      {/* Область постоянна: живая область, добавленная вместе с текстом,
+          озвучивается не всеми программами чтения с экрана. */}
+      <ActionReason id={reasonId}>{blocked ? reason : null}</ActionReason>
     </div>
   );
 }

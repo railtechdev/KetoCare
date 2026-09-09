@@ -10,6 +10,8 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { SECTIONS_BY_ROLE } from "../auth/roles";
+import { useOptionalSession } from "../auth/sessionContext";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import {
@@ -31,6 +33,15 @@ interface Props {
    * рецепт вообще.
    */
   patientId?: string;
+  /**
+   * Предлагать ли искать в рецептах, когда продукта не нашлось.
+   *
+   * Только там, где человек собирает БЛЮДО и мог набрать его название целиком:
+   * так и вышло у заказчицы — «суп из говядины» в поиске продуктов. В форме
+   * рецепта и в списке исключённых ребёнку продуктов совет искать в рецептах
+   * бессмыслен, а уход по ссылке ещё и потерял бы незаписанное.
+   */
+  suggestRecipes?: boolean;
 }
 
 /**
@@ -52,8 +63,20 @@ interface Props {
  * здесь поиск серверный — и «недавние» намеренно стоят строкой кнопок ПОД
  * полем, а не в выпадающем списке (иначе они перекрывали бы форму).
  */
-export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
+export function ProductPicker({
+  onPick,
+  excludeIds,
+  patientId,
+  suggestRecipes = false,
+}: Props) {
   const { t } = useTranslation("calculator");
+  // Раздела «Рецепты» нет у врача (`SECTIONS_BY_ROLE`), и ссылка туда увела бы
+  // его на главную: тупик того же рода, который здесь и закрывается (П3).
+  const role = useOptionalSession()?.session?.role;
+  const canOpenRecipes =
+    suggestRecipes &&
+    role !== undefined &&
+    SECTIONS_BY_ROLE[role].includes("recipes");
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   // Список закрыли щелчком мимо или Escape. Само по себе `isOpen` производное
@@ -202,18 +225,43 @@ export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
             : ""}
       </span>
 
+      {/* Два выхода, а не один. Заказчица набрала здесь «суп из говядины» —
+          название БЛЮДА в поиске ПРОДУКТОВ, — получила «ничего не нашлось» и
+          дальше не пошла: состав остался пустым, кнопка подбора серой.
+          Угадывать за человека, блюдо он ищет или продукт, нельзя и не нужно —
+          достаточно назвать оба места и увести туда с тем же словом. */}
       {nothingFound && (
         <div
           role="status"
-          className="mt-field flex flex-wrap items-center gap-field text-sm text-muted-foreground"
+          className="mt-field flex flex-col gap-field text-sm text-muted-foreground"
         >
-          <PackageSearch aria-hidden="true" className="size-4 shrink-0" />
-          <span>{t("noMatches", { query: query.trim() })}</span>
-          <Button asChild variant="outline" size="sm" className="min-h-touch">
-            <SectionLink section="products" query={query.trim()}>
-              {t("openCatalog")}
-            </SectionLink>
-          </Button>
+          <span className="flex items-center gap-field">
+            <PackageSearch aria-hidden="true" className="size-4 shrink-0" />
+            <span>
+              {canOpenRecipes
+                ? t("noMatchesDish", { query: query.trim() })
+                : t("noMatches", { query: query.trim() })}
+            </span>
+          </span>
+          <span className="flex flex-wrap items-center gap-field">
+            <Button asChild variant="outline" size="sm" className="min-h-touch">
+              <SectionLink section="products" query={query.trim()}>
+                {t("openCatalog")}
+              </SectionLink>
+            </Button>
+            {canOpenRecipes && (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="min-h-touch"
+              >
+                <SectionLink section="recipes" query={query.trim()}>
+                  {t("openRecipes")}
+                </SectionLink>
+              </Button>
+            )}
+          </span>
         </div>
       )}
 
