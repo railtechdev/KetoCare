@@ -1,4 +1,5 @@
 import {
+  ActionReason,
   Button,
   EmptyState,
   Input,
@@ -12,7 +13,14 @@ import {
   mealTargetsFrom,
 } from "@ketocare/ui";
 import { Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
@@ -199,8 +207,33 @@ export function CalculatorScreen({ session }: { session: Session }) {
           carbs_max_g: parseAmount(carbsMax) > 0 ? parseAmount(carbsMax) : null,
         };
   const busy = solve.isPending || scale.isPending;
-  const canSolve = rows.length > 0 && solveTargets !== null && !busy;
-  const canScale = filled && parseAmount(factor) > 0 && !busy;
+
+  /**
+   * Чего не хватает, чтобы нажать (правило П44 канона).
+   *
+   * Серая кнопка без объяснения — тупик: в кабинете на этом застряла
+   * заказчица и не дошла до подбора граммовки. Причина по одной за раз, в том
+   * порядке, в каком их устраняют.
+   */
+  const solveBlockedBy =
+    rows.length === 0
+      ? t("calculator.blocked.noRows")
+      : solveTargets === null
+        ? t("calculator.blocked.noTargets")
+        : null;
+  const scaleBlockedBy =
+    rows.length === 0
+      ? t("calculator.blocked.noRows")
+      : !filled
+        ? t("calculator.blocked.noGrams")
+        : parseAmount(factor) > 0
+          ? null
+          : t("calculator.blocked.noFactor");
+  // Одна строка на блок действий, а не по одной на кнопку: при пустом составе
+  // причины совпадают, и два одинаковых абзаца — второе сообщение об одном и
+  // том же (правило П27), озвученное дважды.
+  const actionsBlockedBy = solveBlockedBy ?? scaleBlockedBy;
+  const reasonId = useId();
 
   const actionError = solve.error ?? scale.error;
   const infeasible = errorCodeOf(actionError) === "infeasible_calculation";
@@ -430,8 +463,9 @@ export function CalculatorScreen({ session }: { session: Session }) {
         <Button
           type="button"
           className="min-h-(--spacing-touch) w-full"
-          disabled={!canSolve}
+          disabled={solveBlockedBy !== null || busy}
           aria-busy={solve.isPending}
+          aria-describedby={solveBlockedBy === null ? undefined : reasonId}
           onClick={() => {
             if (solveTargets === null) return;
             scale.reset();
@@ -457,8 +491,9 @@ export function CalculatorScreen({ session }: { session: Session }) {
             type="button"
             variant="outline"
             className="min-h-(--spacing-touch) flex-1"
-            disabled={!canScale}
+            disabled={scaleBlockedBy !== null || busy}
             aria-busy={scale.isPending}
+            aria-describedby={scaleBlockedBy === null ? undefined : reasonId}
             onClick={() => {
               solve.reset();
               scale.mutate({ rows, factor: parseAmount(factor) });
@@ -469,6 +504,9 @@ export function CalculatorScreen({ session }: { session: Session }) {
               : t("calculator.doScale")}
           </Button>
         </div>
+        {/* Область постоянна: живая область, появившаяся вместе с текстом,
+            озвучивается не всеми программами чтения с экрана. */}
+        <ActionReason id={reasonId}>{actionsBlockedBy}</ActionReason>
         <p className="m-0 text-sm text-muted-foreground">
           {t("calculator.factorHint")}
         </p>

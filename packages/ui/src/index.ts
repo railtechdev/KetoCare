@@ -82,6 +82,9 @@ export type { ErrorStateProps } from "./components/ErrorState";
 export { ConfirmDialog } from "./components/ConfirmDialog";
 export type { ConfirmDialogProps } from "./components/ConfirmDialog";
 
+export { ActionReason } from "./components/ActionReason";
+export type { ActionReasonProps } from "./components/ActionReason";
+
 export { FormFooter } from "./components/FormFooter";
 export type { FormFooterProps } from "./components/FormFooter";
 

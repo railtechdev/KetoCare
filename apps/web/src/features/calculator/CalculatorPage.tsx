@@ -1,11 +1,12 @@
 import {
+  ActionReason,
   Button,
   Section,
   Separator,
   WarningBanner,
   mealTargetsFrom,
 } from "@ketocare/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useTranslation } from "react-i18next";
@@ -268,6 +269,40 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const ratioWithin = stale ? undefined : verify.data?.ratio_within_tolerance;
   const kcalWithin = stale ? undefined : verify.data?.kcal_within_tolerance;
 
+  /**
+   * Чего не хватает, чтобы нажать (правило П44 канона).
+   *
+   * Заказчица не дошла до подбора граммовки — единственного, чего нет у
+   * программы, к которой она привыкла, — потому что кнопка была серой и не
+   * сказала ни слова. Причина по одной за раз, в том порядке, в каком их
+   * устраняют: сначала состав, потом цель.
+   *
+   * Строка на блок действий одна, а не по одной на кнопку: при пустом составе
+   * обе причины совпадают, и два одинаковых абзаца подряд — это второе
+   * сообщение об одном и том же (правило П27), да ещё и озвученное дважды.
+   *
+   * Про назначение здесь не говорится: этим занимается строка под целью и
+   * подписи полей. Экран специалиста работает и вовсе без ребёнка (ADR-0027),
+   * и утверждение «у ребёнка нет назначения» было бы там о ком-то, кого он не
+   * выбирал.
+   */
+  const noRows = rows.length === 0;
+  const solveBlockedBy = noRows
+    ? t("blocked.noRows")
+    : targets === null
+      ? t("blocked.noTargets")
+      : null;
+  // Пересчёт цели не требует: множитель применяется к тому, что уже набрано.
+  const scaleBlockedBy = noRows
+    ? t("blocked.noRows")
+    : factor > 0
+      ? null
+      : t("blocked.noFactor");
+  // Показывается причина того действия, ради которого экран открывают: подбор
+  // первый и главный. Если он доступен, а пересчёт нет — говорит пересчёт.
+  const actionsBlockedBy = solveBlockedBy ?? scaleBlockedBy;
+  const reasonId = useId();
+
   const infeasible = errorCodeOf(solve.error) === "infeasible_calculation";
   const actionError = solve.isError || scale.isError;
   const busy = solve.isPending || scale.isPending;
@@ -290,6 +325,11 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       >
         <ProductPicker
           patientId={patientId}
+          // Здесь собирают блюдо, и сюда набирают его название целиком:
+          // «суп из говядины» в поиске продуктов — то, на чём застряла
+          // заказчица. В форме рецепта и в исключённых продуктах такого
+          // предложения быть не должно.
+          suggestRecipes
           excludeIds={rows.map((r) => r.product.id)}
           onPick={(product) => {
             setRows((current) => [...current, { product, grams: 50 }]);
@@ -432,21 +472,26 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
             />
           </div>
 
-          <div>
-            <Button
-              type="button"
-              size="lg"
-              className="min-h-touch"
-              disabled={rows.length === 0 || targets === null || busy}
-              aria-busy={solve.isPending}
-              onClick={() => {
-                if (targets === null) return;
-                scale.reset();
-                solve.mutate({ rows, targets, patientId });
-              }}
-            >
-              {solve.isPending ? t("actions.solving") : t("actions.solve")}
-            </Button>
+          <div className="flex flex-col gap-field">
+            <div>
+              <Button
+                type="button"
+                size="lg"
+                className="min-h-touch"
+                disabled={solveBlockedBy !== null || busy}
+                aria-busy={solve.isPending}
+                aria-describedby={
+                  solveBlockedBy === null ? undefined : reasonId
+                }
+                onClick={() => {
+                  if (targets === null) return;
+                  scale.reset();
+                  solve.mutate({ rows, targets, patientId });
+                }}
+              >
+                {solve.isPending ? t("actions.solving") : t("actions.solve")}
+              </Button>
+            </div>
           </div>
 
           {/* Пересчёт порций — второе действие, со своим числом.
@@ -454,37 +499,47 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               `[&_[data-slot=field]]:mb-0` снимает у поля нижний отступ формы:
               ряд равняется по низу, и без этого кнопка равнялась на нижний край
               ОТСТУПА поля, а не самого поля — поле оказывалось на 16 px выше. */}
-          <div className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0">
-            <Field
-              id="factor"
-              width="tiny"
-              label={t("factor")}
-              // Пересчёт ПЕРЕПИСЫВАЕТ граммовку в составе, и сказать об этом
-              // обязан тот, кто предлагает нажать: в Mini App подпись была, в
-              // кабинете — нет.
-              hint={t("factorHint")}
-              type="number"
-              inputMode="decimal"
-              min={0.1}
-              step={0.1}
-              value={factor}
-              onChange={(event) => setFactor(Number(event.target.value))}
-              className="tabular-nums"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-touch"
-              disabled={rows.length === 0 || busy}
-              aria-busy={scale.isPending}
-              onClick={() => {
-                solve.reset();
-                scale.mutate({ rows, factor });
-              }}
-            >
-              {scale.isPending ? t("actions.scaling") : t("actions.scale")}
-            </Button>
+          <div className="flex flex-col gap-field">
+            <div className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0">
+              <Field
+                id="factor"
+                width="tiny"
+                label={t("factor")}
+                // Пересчёт ПЕРЕПИСЫВАЕТ граммовку в составе, и сказать об
+                // этом обязан тот, кто предлагает нажать: в Mini App подпись
+                // была, в кабинете — нет.
+                hint={t("factorHint")}
+                type="number"
+                inputMode="decimal"
+                min={0.1}
+                step={0.1}
+                value={factor}
+                onChange={(event) => setFactor(Number(event.target.value))}
+                className="tabular-nums"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                disabled={scaleBlockedBy !== null || busy}
+                aria-busy={scale.isPending}
+                aria-describedby={
+                  scaleBlockedBy === null ? undefined : reasonId
+                }
+                onClick={() => {
+                  solve.reset();
+                  scale.mutate({ rows, factor });
+                }}
+              >
+                {scale.isPending ? t("actions.scaling") : t("actions.scale")}
+              </Button>
+            </div>
           </div>
+
+          {/* Одна область на блок действий, и она постоянна: живая область,
+              появившаяся вместе с текстом, озвучивается не всеми программами
+              чтения с экрана. */}
+          <ActionReason id={reasonId}>{actionsBlockedBy}</ActionReason>
         </div>
       </Section>
 

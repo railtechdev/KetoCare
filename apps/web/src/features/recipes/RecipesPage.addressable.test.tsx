@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -78,5 +78,27 @@ describe("карточка рецепта в адресе", () => {
 
     expect(await screen.findByText("Омлет на сливках")).toBeInTheDocument();
     expect(screen.queryByText("Взбить и пожарить.")).not.toBeInTheDocument();
+  });
+});
+
+describe("строка поиска в адресе", () => {
+  it("приходит из калькулятора и попадает в поле", async () => {
+    // Калькулятор, не нашедший продукт, уводит сюда с тем же словом: «суп из
+    // говядины» — это блюдо. Раньше поиск жил только в памяти вкладки, и слово
+    // приходилось набирать заново.
+    renderPage({ q: "омлет" });
+
+    const field = await screen.findByLabelText(/Поиск|Название/i);
+    expect(field).toHaveValue("омлет");
+    await waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/recipes",
+        expect.objectContaining({
+          params: expect.objectContaining({
+            query: expect.objectContaining({ q: "омлет" }),
+          }),
+        }),
+      ),
+    );
   });
 });

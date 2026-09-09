@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
-import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
+import {
+  useSectionItem,
+  useSectionQuery,
+  useSectionTab,
+} from "../../routes/useSectionTab";
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useSession } from "../auth/useSession";
@@ -67,7 +71,15 @@ export function RecipesPage() {
   // сами ручки закрыты ролевой проверкой на сервере.
   const canEdit = canEditRecipes(session?.role);
 
-  const [filters, setFilters] = useState<RecipeFilters>(EMPTY_RECIPE_FILTERS);
+  // Запрос — в адресе, как в справочнике продуктов: калькулятор, не нашедший
+  // продукт, ведёт сюда с уже введённым словом («суп из говядины» — это блюдо,
+  // и искать его надо здесь). Заодно поиск переживает F5 и пересылается
+  // ссылкой: до этого он жил только в памяти вкладки.
+  const [urlQuery, setUrlQuery] = useSectionQuery();
+  const [filters, setFilters] = useState<RecipeFilters>({
+    ...EMPTY_RECIPE_FILTERS,
+    q: urlQuery,
+  });
   const [openId, setOpenId] = useSectionItem();
   const [form, setForm] = useState<FormView | null>(null);
 
@@ -87,6 +99,20 @@ export function RecipesPage() {
       ...patch,
       limit: RECIPES_PAGE_SIZE,
     }));
+    // В адрес уходит только строка поиска: остальные фильтры принадлежат
+    // экрану, а по слову сюда приходят извне.
+    if (patch.q !== undefined) setUrlQuery(patch.q);
+  }
+
+  /**
+   * Сброс фильтров чистит и адрес.
+   *
+   * Иначе в поле пусто, а в адресе остаётся `?q=`, и F5 возвращает то, что
+   * человек только что убрал: экран и адрес расходятся молча.
+   */
+  function resetFilters() {
+    setFilters(EMPTY_RECIPE_FILTERS);
+    setUrlQuery("");
   }
 
   if (form !== null) {
@@ -172,7 +198,7 @@ export function RecipesPage() {
                 filters={filters}
                 rangeInvalid={rangeInvalid}
                 onChange={patchFilters}
-                onReset={() => setFilters(EMPTY_RECIPE_FILTERS)}
+                onReset={resetFilters}
               />
 
               {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
@@ -196,7 +222,7 @@ export function RecipesPage() {
                 empty={
                   <RecipeListEmpty
                     filtersActive={hasActiveFilters(filters)}
-                    onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
+                    onResetFilters={resetFilters}
                     onCreate={
                       canEdit ? () => setForm({ recipeId: null }) : undefined
                     }
@@ -229,7 +255,7 @@ export function RecipesPage() {
             filters={filters}
             rangeInvalid={rangeInvalid}
             onChange={patchFilters}
-            onReset={() => setFilters(EMPTY_RECIPE_FILTERS)}
+            onReset={resetFilters}
           />
 
           {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
@@ -253,7 +279,7 @@ export function RecipesPage() {
             empty={
               <RecipeListEmpty
                 filtersActive={hasActiveFilters(filters)}
-                onResetFilters={() => setFilters(EMPTY_RECIPE_FILTERS)}
+                onResetFilters={resetFilters}
                 onCreate={
                   canEdit ? () => setForm({ recipeId: null }) : undefined
                 }
