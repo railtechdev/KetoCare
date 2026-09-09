@@ -241,6 +241,74 @@ describe("калькулятор", () => {
     expect(screen.getByText(/374 ккал/)).toBeInTheDocument();
   });
 
+  it("убранный из состава продукт не оставляет своих чисел на экране", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(/374 ккал/, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Убрать продукт/ }));
+
+    // Показатели пустого состава — утверждение о блюде, которого на экране уже
+    // нет. Пустой расчёт молчит: о пустоте сказано в блоке состава.
+    await waitFor(() =>
+      expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText("Сохранить как моё блюдо"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("исключённый продукт без имени назван словами, а не идентификатором", async () => {
+    // Mini App говорит здесь словами с самого начала; кабинет печатал 36
+    // знаков UUID — одна семья, один продукт, два разных ответа.
+    (api.POST as Mock).mockImplementation(async () => ({
+      data: {
+        ...VERIFIED,
+        excluded: [{ product_id: "0f9b7c33-1111-4111-8111-222222222222" }],
+      },
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    expect(
+      await screen.findByText(/продукт удалён из справочника/, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/0f9b7c33/)).not.toBeInTheDocument();
+  });
+
+  it("называет продукты, снятые со входа подбора", async () => {
+    // Подбор не предупреждает об исключённом, а вычёркивает его. Пока режимы
+    // были вкладками, об этом говорил результат подбора; на одном экране
+    // своего блока у результата нет — массы уезжают прямо в состав, и сказать
+    // об этом больше негде. Строка в словаре осталась без места и молчала.
+    (api.POST as Mock).mockImplementation(async (path: string) => ({
+      data: path.includes("solve")
+        ? { ...SOLVED, excluded: [{ product_id: "x", name_ru: "Арахис" }] }
+        : VERIFIED,
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Подобрать граммовку" }),
+    );
+
+    expect(
+      await screen.findByText(/Не участвовало в подборе: Арахис/),
+    ).toBeInTheDocument();
+  });
+
   it("подбирает граммовку кнопкой и переносит массы в состав", async () => {
     // Подбор — действие над составом, а не отдельный режим: он перезаписывает
     // граммовку, поэтому остаётся кнопкой, но живёт на том же экране.

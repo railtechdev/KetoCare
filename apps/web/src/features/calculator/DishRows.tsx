@@ -1,4 +1,4 @@
-import { Button, EmptyState, Input, cn } from "@ketocare/ui";
+import { Button, EmptyState, Input, MacroFacts, cn } from "@ketocare/ui";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -126,80 +126,24 @@ export function DishRows({
               </div>
             </div>
 
-            {/* Вклад позиции. Пока пересчёт не догнал правку, числа гаснут
-                вместе с итогом блюда — но остаются: гасить их совсем значит
-                очищать строку, по которой человек и правит граммовку. */}
+            {/* Вклад позиции — компонентом кита: те же числа и то же
+                округление стоят в Mini App, а две копии однажды разошлись бы.
+                Пока пересчёт не догнал правку, числа тускнеют вместе с итогом
+                блюда, но остаются: гасить их совсем значит очищать строку, по
+                которой человек и правит граммовку. */}
             {contribution !== undefined && (
-              <div
-                role="group"
-                aria-label={t("contribution.label", { name: row.product.name })}
-                aria-busy={stale}
-                className={cn(
-                  "grid grid-cols-4 gap-x-3 text-sm tabular-nums text-muted-foreground",
-                  stale && "opacity-60 transition-opacity",
-                )}
-              >
-                <ContributionCell
-                  short={t("contribution.kcal")}
-                  full={t("contribution.kcalFull")}
-                  value={contribution.kcal.toFixed(0)}
-                  unitAfter
-                />
-                <ContributionCell
-                  short={t("contribution.fat")}
-                  full={t("contribution.fatFull")}
-                  value={contribution.fat_g.toFixed(1)}
-                />
-                <ContributionCell
-                  short={t("contribution.protein")}
-                  full={t("contribution.proteinFull")}
-                  value={contribution.protein_g.toFixed(1)}
-                />
-                <ContributionCell
-                  short={t("contribution.carbs")}
-                  full={t("contribution.carbsFull")}
-                  value={contribution.carbs_g.toFixed(1)}
-                />
-              </div>
+              <MacroFacts
+                label={t("contribution.label", { name: row.product.name })}
+                kcal={contribution.kcal}
+                fatG={contribution.fat_g}
+                proteinG={contribution.protein_g}
+                carbsG={contribution.carbs_g}
+                stale={stale}
+              />
             )}
           </li>
         );
       })}
     </ul>
-  );
-}
-
-/**
- * Одна ячейка вклада: подпись и число в одной строке.
- *
- * Глазу — сокращение из подсказки поиска («Ж», «Б», «У»): на 360 px четыре
- * полных слова в строку не встают. Единица калорий стоит ПОСЛЕ числа
- * («367 ккал»), как в подсказке и в итоге блюда, — а не перед ним, как буква
- * макронутриента. Вспомогательной технологии — полное название, иначе строка
- * читается как набор букв.
- */
-function ContributionCell({
-  short,
-  full,
-  value,
-  unitAfter = false,
-}: {
-  short: string;
-  full: string;
-  value: string;
-  unitAfter?: boolean;
-}) {
-  const label = (
-    <span aria-hidden="true" className="shrink-0">
-      {short}
-    </span>
-  );
-  return (
-    <span className="flex min-w-0 items-baseline gap-1">
-      <span className="sr-only">{full}</span>
-      {!unitAfter && label}
-      <span className="text-foreground">{value}</span>
-      {unitAfter && label}
-    </span>
   );
 }

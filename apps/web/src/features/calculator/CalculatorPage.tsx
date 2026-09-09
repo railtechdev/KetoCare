@@ -1,4 +1,10 @@
-import { Button, Section, Separator, WarningBanner } from "@ketocare/ui";
+import {
+  Button,
+  Section,
+  Separator,
+  WarningBanner,
+  mealTargetsFrom,
+} from "@ketocare/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
@@ -14,7 +20,6 @@ import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
 import { DishRows } from "./DishRows";
-import { mealTargetsFrom } from "./mealTargets";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
 import type { DishRow } from "./types";
@@ -184,15 +189,23 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const debouncedRows = useDebouncedValue(rows, AUTO_CALC_DELAY_MS);
   const debouncedTargets = useDebouncedValue(targets, AUTO_CALC_DELAY_MS);
   const verifyMutate = verify.mutate;
+  const verifyReset = verify.reset;
 
   useEffect(() => {
-    if (debouncedRows.length === 0) return;
+    if (debouncedRows.length === 0) {
+      // Пустой состав не считают — но и числа прежнего блюда на экране не
+      // оставляют: убрав последний продукт, человек видел его калорийность,
+      // соотношение и предложение сохранить блюдо, которого больше нет.
+      // Результат мутации сам не пропадает: он живёт, пока его не сбросят.
+      verifyReset();
+      return;
+    }
     verifyMutate({
       rows: debouncedRows,
       targets: debouncedTargets ?? undefined,
       patientId,
     });
-  }, [debouncedRows, debouncedTargets, patientId, verifyMutate]);
+  }, [debouncedRows, debouncedTargets, patientId, verifyMutate, verifyReset]);
 
   /**
    * Массы, посчитанные сервером, уезжают прямо в состав.
@@ -224,6 +237,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   // Исключения приходят от сервера: сопоставить состав с тем, что ребёнку
   // нельзя, может только он — в браузере нет ни аллергий, ни каталога.
   const excluded = verify.data?.excluded ?? [];
+  // Подбор не предупреждает об исключённом, а вычёркивает его со входа, и
+  // сказать об этом больше негде: своего блока у результата подбора нет —
+  // массы уезжают прямо в состав.
+  const solveExcluded = solve.data?.excluded ?? [];
   const dish: DishView | null = verify.data?.dish ?? null;
 
   // Вклад каждой позиции — из того же ответа, что и итог блюда: сумма
@@ -304,13 +321,22 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       {/* Что ребёнку нельзя — над расчётом, а не под ним: подбор снимает такие
           продукты со входа, и по числам этого не видно.
           Запрещать или предупреждать — вопрос 29 медицинской команде. */}
-      {excluded.length > 0 && (
+      {(excluded.length > 0 || solveExcluded.length > 0) && (
         <WarningBanner level="danger" title={t("excluded.title")}>
-          {t("excluded.verify", {
-            list: excluded
-              .map((entry) => entry.name_ru ?? entry.product_id)
-              .join(", "),
-          })}
+          {excluded.length > 0 && (
+            <p className="m-0">
+              {t("excluded.verify", {
+                list: namesOf(excluded, t("excluded.unknownProduct")),
+              })}
+            </p>
+          )}
+          {solveExcluded.length > 0 && (
+            <p className="m-0">
+              {t("excluded.solve", {
+                list: namesOf(solveExcluded, t("excluded.unknownProduct")),
+              })}
+            </p>
+          )}
         </WarningBanner>
       )}
 
@@ -433,6 +459,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               id="factor"
               width="tiny"
               label={t("factor")}
+              // Пересчёт ПЕРЕПИСЫВАЕТ граммовку в составе, и сказать об этом
+              // обязан тот, кто предлагает нажать: в Mini App подпись была, в
+              // кабинете — нет.
+              hint={t("factorHint")}
               type="number"
               inputMode="decimal"
               min={0.1}
@@ -492,12 +522,28 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
 }
 
 /**
+ * Названия исключённых продуктов, а не их идентификаторы: продукт могли убрать
+ * из справочника, и 36 знаков UUID человеку не говорят ничего.
+ *
+ * Mini App говорит здесь словами с самого начала (находка М6 его аудита), а
+ * кабинет печатал UUID — то самое расхождение каналов, ради которого экраны и
+ * сводились.
+ */
+function namesOf(
+  entries: { product_id: string; name_ru?: string | null }[],
+  unknown: string,
+) {
+  return entries.map((entry) => entry.name_ru ?? unknown).join(", ");
+}
+
+/**
  * Цель расчёта: соотношение и калорийность приёма.
  *
  * Значения из назначения подставляются вместе с арифметикой, по которой
  * посчитаны, — «1200 ккал ÷ 4 приёма». Молча подставленное число неотличимо от
  * введённого человеком, а деление суточной нормы на приёмы — медицинское
- * допущение, и человек должен видеть, что оно принято (`mealTargets.ts`).
+ * допущение, и человек должен видеть, что оно принято. Само допущение живёт в
+ * ките (`mealTargetsFrom`): та же цель показывается той же семье в Mini App.
  */
 function GoalFields({
   ratio,
