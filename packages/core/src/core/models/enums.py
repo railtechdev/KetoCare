@@ -130,6 +130,12 @@ class AttachmentDocKind(enum.StrEnum):
 
     DISCHARGE = "discharge"
     EEG = "eeg"
+    #: Снимки: МРТ и КТ одним видом.
+    #:
+    #: Просила заказчица («МРТ добавить» на снимке формы). Вместе с КТ, а не
+    #: отдельно: их кладут в один ряд и смотрят вместе, а заводить второе
+    #: значение позже — вторая миграция ради одного слова.
+    IMAGING = "imaging"
     LAB = "lab"
     PRESCRIPTION = "prescription"
     OTHER = "other"

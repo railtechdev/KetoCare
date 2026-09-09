@@ -3,9 +3,9 @@ import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
-import { FormFooter } from "@ketocare/ui";
+import { FormFooter, formatRatio } from "@ketocare/ui";
 
-import { Field, TextAreaField } from "../../components/Field";
+import { Field, SelectField, TextAreaField } from "../../components/Field";
 import {
   FormErrorSummary,
   type FormErrorSummaryItem,
@@ -16,9 +16,7 @@ import {
   KCAL_MAX,
   KCAL_MIN,
   prescriptionFormSchema,
-  RATIO_MAX,
-  RATIO_MIN,
-  RATIO_STEP,
+  RATIO_CHOICES,
   type PrescriptionFormValues,
 } from "./prescriptionSchema";
 
@@ -109,18 +107,23 @@ export function PrescriptionForm({
           врач сверяет их между собой на одном экране. На узком экране колонка
           одна (правило П6 канона). */}
       <div className="grid gap-block sm:grid-cols-2">
-        <Field
+        {/* Список, а не свободное число: врач мыслит «4 : 1», а поле
+            показывало «4». Значения те же, что уже разрешены схемой (шаг 0,5
+            от 1 до 5), новых состояний не появляется — меняется только способ
+            ввода и класс ошибок вместе с ним. */}
+        <SelectField
           id={`${ids}-ratio`}
           width="narrow"
-          type="number"
-          inputMode="decimal"
-          min={RATIO_MIN}
-          max={RATIO_MAX}
-          step={RATIO_STEP}
           label={t("fields.ratio")}
           error={errors.ratio && t("prescription.errors.ratio")}
           {...register("ratio", { valueAsNumber: true })}
-        />
+        >
+          {RATIO_CHOICES.map((value) => (
+            <option key={value} value={value}>
+              {formatRatio(value)}
+            </option>
+          ))}
+        </SelectField>
 
         <Field
           id={`${ids}-kcal`}
