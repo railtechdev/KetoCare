@@ -20,7 +20,14 @@ import { LinesSkeleton } from "../doctor/skeletons";
 import type { Attachment } from "../doctor/types";
 
 /** Виды документов — как в справочнике сервера (`AttachmentDocKind`). */
-const DOC_KINDS = ["discharge", "eeg", "lab", "prescription", "other"] as const;
+const DOC_KINDS = [
+  "discharge",
+  "eeg",
+  "imaging",
+  "lab",
+  "prescription",
+  "other",
+] as const;
 
 function attachmentsKey(patientId: string) {
   return ["patient", patientId, "attachments"] as const;

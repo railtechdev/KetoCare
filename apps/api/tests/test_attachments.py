@@ -68,6 +68,27 @@ class TestUpload:
         listed = await client.get(url(patient.id), headers=auth_headers(doctor))
         assert [item["id"] for item in listed.json()] == [body["id"]]
 
+    async def test_imaging_is_an_accepted_doc_kind(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Снимки — вид документа, а не «иное» (просьба заказчицы «МРТ добавить»).
+
+        МРТ и КТ одним значением: их кладут в один ряд и смотрят вместе.
+        Справочник закрытый, поэтому значение живёт в схеме БД — новый вид
+        нельзя добавить строкой в словарь интерфейса.
+        """
+        doctor, patient = await _linked_doctor(session, make_user, make_patient)
+
+        created = await client.post(
+            url(patient.id),
+            files=upload(PDF, "mri.pdf", "application/pdf"),
+            data={"doc_kind": "imaging"},
+            headers=auth_headers(doctor),
+        )
+
+        assert created.status_code == 201, created.text
+        assert created.json()["doc_kind"] == "imaging"
+
     async def test_description_is_optional(
         self, client, session, make_user, make_patient, auth_headers
     ):

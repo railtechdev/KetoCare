@@ -16,6 +16,7 @@
   "kinds": {
     "discharge": "Выписка",
     "eeg": "ЭЭГ",
+    "imaging": "МРТ или КТ",
     "lab": "Анализ",
     "prescription": "Назначение",
     "other": "Иное"
