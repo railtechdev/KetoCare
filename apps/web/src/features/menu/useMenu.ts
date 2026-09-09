@@ -32,6 +32,17 @@ export const DEFAULT_MEAL_COUNT = 4;
  * назначение могли поменять после того, как день собрали, и спрятанное блюдо
  * пропало бы из плана молча, оставшись в итогах дня.
  */
+/**
+ * Номера приёмов, в которых что-то стоит, в порядке дня.
+ *
+ * Для экранов на чтение: там пустой приём показывать незачем, и число
+ * назначенных приёмов спрашивать не у кого. Позиции приходят с сервера уже
+ * отсортированными, `Set` сохраняет этот порядок.
+ */
+export function plannedMealIndexes(items: readonly MenuItemRead[]): number[] {
+  return [...new Set(items.map((item) => item.meal_index))];
+}
+
 export function mealIndexes(
   mealsPerDay: number | null | undefined,
   items: readonly MenuItemRead[] = [],

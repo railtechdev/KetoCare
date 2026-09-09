@@ -14,10 +14,9 @@ import {
 } from "../menu/WithdrawnProductsNotice";
 import { withdrawnByItem } from "../menu/withdrawn";
 import {
-  mealIndexes,
+  plannedMealIndexes,
   useDayTargets,
   useDayTolerance,
-  useMealsPerDay,
   useMenuQuery,
 } from "../menu/useMenu";
 import { MyDishesPanel } from "../dishes/MyDishesPanel";
@@ -44,8 +43,6 @@ import { LinesSkeleton } from "./skeletons";
 export function PatientMenuTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
   const [date, setDate] = useState(todayIso);
-
-  const mealsPerDay = useMealsPerDay(patientId);
 
   const menu = useMenuQuery(patientId, date);
   const tolerance = useDayTolerance(patientId, date);
@@ -92,11 +89,15 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
 
         <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
 
-        {mealIndexes(mealsPerDay, items).map((mealIndex) => {
+        {/* Только занятые приёмы: экран на чтение, добавлять сюда нечего, и
+            пустая строка «Блюд пока нет» врачу ничего не сообщает. Поэтому
+            число назначенных приёмов здесь и не спрашивается — в отличие от
+            экрана семьи, где приём надо показать, чтобы в него можно было
+            положить блюдо (ADR-0029). */}
+        {plannedMealIndexes(items).map((mealIndex) => {
           const mealItems = items.filter(
             (item) => item.meal_index === mealIndex,
           );
-          if (mealItems.length === 0) return null;
 
           return (
             <Section
