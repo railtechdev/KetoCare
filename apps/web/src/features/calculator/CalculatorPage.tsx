@@ -226,6 +226,16 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const excluded = verify.data?.excluded ?? [];
   const dish: DishView | null = verify.data?.dish ?? null;
 
+  // Вклад каждой позиции — из того же ответа, что и итог блюда: сумма
+  // вкладов и есть итог, ядро считает их одной арифметикой.
+  const contributions = useMemo(
+    () =>
+      new Map(
+        (verify.data?.dish.items ?? []).map((item) => [item.product_id, item]),
+      ),
+    [verify.data],
+  );
+
   /**
    * Показанный результат посчитан не по тому, что сейчас в полях.
    *
@@ -272,6 +282,8 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
 
         <DishRows
           rows={rows}
+          contributions={contributions}
+          stale={stale}
           onChangeGrams={(productId, grams) => {
             setRows((current) =>
               current.map((row) =>

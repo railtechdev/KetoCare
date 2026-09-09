@@ -42,13 +42,33 @@ def _dish_kcal(fat_g: float, protein_g: float, carbs_g: float) -> float:
 def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
     """Считает итоговые показатели блюда по заданным продуктам и массам (г)."""
 
+    # Вклад каждой позиции считается здесь же, а итоги — как сумма вкладов:
+    # так строка состава и итог блюда не могут разойтись, потому что их даёт
+    # одна арифметика. Второй расчёт вклада (в API или в браузере) был бы
+    # вторым источником клинических чисел.
+    positions: list[ItemAmount] = []
     fat_g = protein_g = carbs_g = fiber_g = 0.0
     for ingredient, grams in items:
         factor = grams / 100.0
-        fat_g += ingredient.fat * factor
-        protein_g += ingredient.protein * factor
-        carbs_g += ingredient.carbs * factor
-        fiber_g += ingredient.fiber * factor
+        item_fat = ingredient.fat * factor
+        item_protein = ingredient.protein * factor
+        item_carbs = ingredient.carbs * factor
+        item_fiber = ingredient.fiber * factor
+        positions.append(
+            ItemAmount(
+                ingredient=ingredient,
+                grams=grams,
+                kcal=_dish_kcal(item_fat, item_protein, item_carbs),
+                fat_g=item_fat,
+                protein_g=item_protein,
+                carbs_g=item_carbs,
+                fiber_g=item_fiber,
+            )
+        )
+        fat_g += item_fat
+        protein_g += item_protein
+        carbs_g += item_carbs
+        fiber_g += item_fiber
 
     kcal = _dish_kcal(fat_g, protein_g, carbs_g)
 
@@ -60,7 +80,7 @@ def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
     ratio = fat_g / denom if denom > 0 else None
 
     return DishResult(
-        items=tuple(ItemAmount(ingredient=ing, grams=g) for ing, g in items),
+        items=tuple(positions),
         kcal=kcal,
         fat_g=fat_g,
         protein_g=protein_g,

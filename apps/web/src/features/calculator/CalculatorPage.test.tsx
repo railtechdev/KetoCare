@@ -69,7 +69,17 @@ const VERIFIED = {
     fiber_g: 0,
     ratio: 63.5,
     engine_version: "1.0.0",
-    items: [{ product_id: BUTTER, grams: 50 }],
+    items: [
+      {
+        product_id: BUTTER,
+        grams: 50,
+        kcal: 374,
+        fat_g: 41.25,
+        protein_g: 0.25,
+        carbs_g: 0.4,
+        fiber_g: 0,
+      },
+    ],
   },
   ratio_within_tolerance: false,
   kcal_within_tolerance: false,
@@ -85,7 +95,17 @@ const SOLVED = {
     fiber_g: 0,
     ratio: PRESCRIBED_RATIO,
     engine_version: "1.0.0",
-    items: [{ product_id: BUTTER, grams: 29 }],
+    items: [
+      {
+        product_id: BUTTER,
+        grams: 29,
+        kcal: 400,
+        fat_g: 44,
+        protein_g: 0.3,
+        carbs_g: 0.4,
+        fiber_g: 0,
+      },
+    ],
   },
   ratio_within_tolerance: true,
   kcal_within_tolerance: true,
@@ -168,6 +188,32 @@ describe("калькулятор", () => {
     expect(
       screen.queryByRole("button", { name: /^Рассчитать/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("показывает вклад каждой позиции числами сервера", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    // По итогу блюда видно только, что оно мимо цели; что именно менять —
+    // видно по вкладу строки. Числа приходят с сервера: умножать состав на
+    // граммы в браузере — второй источник клинических чисел.
+    const contribution = await screen.findByRole(
+      "group",
+      { name: /Вклад продукта «Масло сливочное»/ },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    expect(contribution).toHaveTextContent("374");
+    expect(contribution).toHaveTextContent("41.3");
+    expect(contribution).toHaveTextContent("Жиры, г");
+    expect(contribution).not.toHaveAttribute("aria-busy", "true");
+
+    // Правка граммовки не гасит числа строки, а помечает их устаревшими —
+    // так же, как итог блюда.
+    await user.type(screen.getByLabelText(/Масса продукта/), "0");
+    expect(
+      screen.getByRole("group", { name: /Вклад продукта/ }),
+    ).toHaveAttribute("aria-busy", "true");
   });
 
   it("снимает вердикт, пока пересчёт не догнал новую цель", async () => {

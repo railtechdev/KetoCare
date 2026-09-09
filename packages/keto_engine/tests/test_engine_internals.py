@@ -218,3 +218,63 @@ class TestRepairInternals:
         targets = Targets(ratio=4.0, kcal=200.0)
         result = _repair_rounding([22.0, 2.0], [pure_fat, self.LEAN], targets)
         assert isinstance(result, list)
+
+
+class TestItemContributions:
+    """Вклад каждой позиции в показатели блюда (ENGINE_VERSION 0.4.0).
+
+    Строка состава в калькуляторе показывает, что именно даёт каждый продукт;
+    считать это в браузере нельзя (второй источник клинических чисел), поэтому
+    вклад отдаёт ядро — и обязан сходиться с итогом блюда.
+    """
+
+    def test_contribution_is_mass_share_of_per_100g(self) -> None:
+        butter = Ingredient(product_id="butter", kcal=717, fat=81.0, protein=0.5, carbs=1.0)
+        egg = Ingredient(product_id="egg", kcal=155, fat=11.0, protein=13.0, carbs=1.0, fiber=0.0)
+
+        dish = verify([(butter, 50.0), (egg, 100.0)])
+
+        first, second = dish.items
+        assert first.ingredient is butter
+        assert first.grams == 50.0
+        assert first.fat_g == pytest.approx(40.5)
+        assert first.protein_g == pytest.approx(0.25)
+        assert first.carbs_g == pytest.approx(0.5)
+        assert first.fiber_g == 0.0
+        # 40.5 × 9 + 0.25 × 4 + 0.5 × 4
+        assert first.kcal == pytest.approx(367.5)
+
+        assert second.ingredient is egg
+        assert second.fat_g == pytest.approx(11.0)
+        assert second.protein_g == pytest.approx(13.0)
+        assert second.carbs_g == pytest.approx(1.0)
+        assert second.kcal == pytest.approx(155.0)
+
+    def test_contributions_sum_to_dish_totals(self) -> None:
+        cream = Ingredient(
+            product_id="cream", kcal=340, fat=35.0, protein=2.5, carbs=3.0, fiber=0.0
+        )
+        avocado = Ingredient(
+            product_id="avocado", kcal=160, fat=15.0, protein=2.0, carbs=9.0, fiber=7.0
+        )
+
+        dish = verify([(cream, 80.0), (avocado, 60.0)])
+
+        assert sum(item.fat_g for item in dish.items) == pytest.approx(dish.fat_g)
+        assert sum(item.protein_g for item in dish.items) == pytest.approx(dish.protein_g)
+        assert sum(item.carbs_g for item in dish.items) == pytest.approx(dish.carbs_g)
+        assert sum(item.fiber_g for item in dish.items) == pytest.approx(dish.fiber_g)
+        assert sum(item.kcal for item in dish.items) == pytest.approx(dish.kcal)
+
+    def test_zero_mass_contributes_nothing(self) -> None:
+        oil = Ingredient(product_id="oil", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        dish = verify([(oil, 0.0)])
+        (item,) = dish.items
+        assert (item.kcal, item.fat_g, item.protein_g, item.carbs_g, item.fiber_g) == (
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+        assert dish.ratio is None

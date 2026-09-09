@@ -85,5 +85,16 @@
     "solving": "Подбираем…",
     "scale": "Пересчитать порции",
     "scaling": "Пересчитываем…"
+  },
+  "contribution": {
+    "label": "Вклад продукта «{{name}}» в блюдо",
+    "kcal": "ккал",
+    "kcalFull": "Калорийность, ккал",
+    "fat": "Ж",
+    "fatFull": "Жиры, г",
+    "protein": "Б",
+    "proteinFull": "Белки, г",
+    "carbs": "У",
+    "carbsFull": "Углеводы, г"
   }
 }
