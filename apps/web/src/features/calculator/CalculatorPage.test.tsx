@@ -8,7 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import calculatorRu from "../../locales/ru/calculator.json";
 import { SectionRouter } from "../../test/SectionRouter";
-import { CalculatorPage } from "./CalculatorPage";
+import { CalculatorPage, CalculatorView } from "./CalculatorPage";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -69,7 +69,17 @@ const VERIFIED = {
     fiber_g: 0,
     ratio: 63.5,
     engine_version: "1.0.0",
-    items: [{ product_id: BUTTER, grams: 50 }],
+    items: [
+      {
+        product_id: BUTTER,
+        grams: 50,
+        kcal: 374,
+        fat_g: 41.25,
+        protein_g: 0.25,
+        carbs_g: 0.4,
+        fiber_g: 0,
+      },
+    ],
   },
   ratio_within_tolerance: false,
   kcal_within_tolerance: false,
@@ -85,14 +95,29 @@ const SOLVED = {
     fiber_g: 0,
     ratio: PRESCRIBED_RATIO,
     engine_version: "1.0.0",
-    items: [{ product_id: BUTTER, grams: 29 }],
+    items: [
+      {
+        product_id: BUTTER,
+        grams: 29,
+        kcal: 400,
+        fat_g: 44,
+        protein_g: 0.3,
+        carbs_g: 0.4,
+        fiber_g: 0,
+      },
+    ],
   },
   ratio_within_tolerance: true,
   kcal_within_tolerance: true,
   engine_version: "1.0.0",
 };
 
-function renderCalculator() {
+/**
+ * Значение по умолчанию здесь не годится: оно подставляется и на явный
+ * `undefined`, то есть «калькулятор без ребёнка» молча превращался бы в
+ * калькулятор с ребёнком, а тест — в проверку того же, что и соседний.
+ */
+function renderCalculator(patientId?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -105,7 +130,7 @@ function renderCalculator() {
     );
   }
 
-  return render(<CalculatorPage patientId={PATIENT_ID} />, {
+  return render(<CalculatorPage patientId={patientId} />, {
     wrapper: Wrapper,
   });
 }
@@ -130,7 +155,7 @@ describe("калькулятор", () => {
   });
 
   it("берёт кетосоотношение из активного назначения, а не из кода экрана", async () => {
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
 
     // До этого в поле стояла четвёрка, зашитая во фронтенде, и вердикт
     // «выходит за допуски назначения» выносился относительно чужой цели.
@@ -143,7 +168,7 @@ describe("калькулятор", () => {
 
   it("считает сам, без нажатия кнопки", async () => {
     const user = userEvent.setup();
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
     await addButter(user);
 
     // «Добавляю продукты — ничего не происходит»: расчёт запускала кнопка,
@@ -165,13 +190,41 @@ describe("калькулятор", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("снимает вердикт, пока пересчёт не догнал новую цель", async () => {
+  it("показывает вклад каждой позиции числами сервера", async () => {
     const user = userEvent.setup();
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
     await addButter(user);
 
+    // По итогу блюда видно только, что оно мимо цели; что именно менять —
+    // видно по вкладу строки. Числа приходят с сервера: умножать состав на
+    // граммы в браузере — второй источник клинических чисел.
+    const contribution = await screen.findByRole(
+      "group",
+      { name: /Вклад продукта «Масло сливочное»/ },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    expect(contribution).toHaveTextContent("374");
+    expect(contribution).toHaveTextContent("41.3");
+    expect(contribution).toHaveTextContent("Жиры, г");
+    expect(contribution).not.toHaveAttribute("aria-busy", "true");
+
+    // Правка граммовки не гасит числа строки, а помечает их устаревшими —
+    // так же, как итог блюда.
+    await user.type(screen.getByLabelText(/Масса продукта/), "0");
     expect(
-      await screen.findByText(/выходит за допуски/, undefined, {
+      screen.getByRole("group", { name: /Вклад продукта/ }),
+    ).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("снимает вердикт, пока пересчёт не догнал новую цель", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    // Состояние сказано словом рядом с числами, а не плашкой-тревогой: пока
+    // блюдо собирают, оно почти всегда мимо цели.
+    expect(
+      await screen.findByText("Цель не достигнута", undefined, {
         timeout: AUTO_CALC_TIMEOUT_MS,
       }),
     ).toBeInTheDocument();
@@ -183,25 +236,211 @@ describe("калькулятор", () => {
     await user.clear(ratio);
 
     await waitFor(() =>
-      expect(screen.queryByText(/выходит за допуски/)).not.toBeInTheDocument(),
+      expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument(),
     );
     expect(screen.getByText(/374 ккал/)).toBeInTheDocument();
   });
 
-  it("переносит подобранные массы в состав, оставляя их редактируемыми", async () => {
+  it("убранный из состава продукт не оставляет своих чисел на экране", async () => {
     const user = userEvent.setup();
-    renderCalculator();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(/374 ккал/, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Убрать продукт/ }));
+
+    // Показатели пустого состава — утверждение о блюде, которого на экране уже
+    // нет. Пустой расчёт молчит: о пустоте сказано в блоке состава.
+    await waitFor(() =>
+      expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText("Сохранить как моё блюдо"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("исключённый продукт без имени назван словами, а не идентификатором", async () => {
+    // Mini App говорит здесь словами с самого начала; кабинет печатал 36
+    // знаков UUID — одна семья, один продукт, два разных ответа.
+    (api.POST as Mock).mockImplementation(async () => ({
+      data: {
+        ...VERIFIED,
+        excluded: [{ product_id: "0f9b7c33-1111-4111-8111-222222222222" }],
+      },
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
     await addButter(user);
 
-    await user.click(screen.getByRole("tab", { name: /Подобрать/ }));
-    await user.click(screen.getByRole("button", { name: /^Рассчитать/ }));
+    expect(
+      await screen.findByText(/продукт удалён из справочника/, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/0f9b7c33/)).not.toBeInTheDocument();
+  });
 
-    // Иначе из режима «подобрать» вёл один выход — сохранить как есть:
-    // округлить под кухонные весы, проверить или пересчитать было нельзя.
+  it("называет продукты, снятые со входа подбора", async () => {
+    // Подбор не предупреждает об исключённом, а вычёркивает его. Пока режимы
+    // были вкладками, об этом говорил результат подбора; на одном экране
+    // своего блока у результата нет — массы уезжают прямо в состав, и сказать
+    // об этом больше негде. Строка в словаре осталась без места и молчала.
+    (api.POST as Mock).mockImplementation(async (path: string) => ({
+      data: path.includes("solve")
+        ? { ...SOLVED, excluded: [{ product_id: "x", name_ru: "Арахис" }] }
+        : VERIFIED,
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Подобрать граммовку" }),
+    );
+
+    expect(
+      await screen.findByText(/Не участвовало в подборе: Арахис/),
+    ).toBeInTheDocument();
+  });
+
+  it("подбирает граммовку кнопкой и переносит массы в состав", async () => {
+    // Подбор — действие над составом, а не отдельный режим: он перезаписывает
+    // граммовку, поэтому остаётся кнопкой, но живёт на том же экране.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole("button", { name: /Подобрать граммовку/ }),
+    );
+
     const grams = await screen.findByLabelText(
       /Масса продукта «Масло сливочное»/,
     );
     await waitFor(() => expect(grams).toHaveValue(29));
     expect(grams).not.toHaveAttribute("readonly");
+  });
+
+  it("подбор недоступен, пока не задана цель", async () => {
+    // Подбирать граммовку не подо что: цель — вход этого действия.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    const kcal = await screen.findByLabelText(/Калорийность/);
+    await user.clear(kcal);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      ).toBeDisabled(),
+    );
+  });
+
+  it("подставляет цель приёма из назначения вместе с арифметикой", async () => {
+    // 1200 ккал на 3 приёма — это 400, посчитанное из назначения, а не
+    // константа, зашитая в экран и подписанная «задаётся вами». Совпадение
+    // чисел здесь случайно: важно, что показана арифметика (ADR-0028,
+    // вопрос 24 медкоманде).
+    renderCalculator(PATIENT_ID);
+
+    const kcal = await screen.findByLabelText(/Калорийность/);
+    await waitFor(() => expect(kcal).toHaveValue(400));
+    expect(
+      screen.getByText("Из назначения: 1200 ккал ÷ 3 приёма"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("калькулятор без выбранного ребёнка", () => {
+  it("считает и не требует выбирать пациента", async () => {
+    // «Выйдет ли 4:1 на этих продуктах» — вопрос о продуктах. Пока он был
+    // общим с вопросом «годится ли это ЭТОМУ ребёнку», специалист с когортой в
+    // полсотни получал вместо калькулятора пятьдесят кнопок «выберите
+    // ребёнка». Сервер расчёт без пациента разрешал всегда.
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await addButter(user);
+
+    expect(await screen.findByText(/Кетосоотношение/)).toBeInTheDocument();
+    expect(screen.queryByText("Выберите ребёнка")).not.toBeInTheDocument();
+  });
+
+  it("не выдумывает цель и не судит по ней", async () => {
+    // Раньше экран подставлял 4:1 и 400 ккал, подписывал их как «задаётся
+    // вами» и объявлял первый же добавленный продукт не попавшим в цель,
+    // которую сам и придумал.
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await addButter(user);
+
+    expect(await screen.findByLabelText(/Калорийность/)).toHaveValue(null);
+    expect(
+      screen.getByText(/Цель не задана: показатели считаются/),
+    ).toBeInTheDocument();
+    // Ни «достигнута», ни «не достигнута»: сравнивать не с чем, и молчание
+    // здесь честнее догадки.
+    await waitFor(
+      () => expect(screen.getByText(/374 ккал/)).toBeInTheDocument(),
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+    expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument();
+  });
+
+  it("предлагает передать состав пациенту вместо «сохранить себе»", async () => {
+    // Своё блюдо бывает только чьё-то: сохранять раскладку некуда, пока не
+    // сказано, кому она нужна.
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await addButter(user);
+
+    expect(
+      await screen.findByRole("heading", { name: "Передать пациенту" }),
+    ).toBeInTheDocument();
+  });
+
+  it("в карте ребёнка сохраняет сразу ему, ничего не спрашивая", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+
+    await addButter(user);
+
+    expect(
+      await screen.findByRole("heading", { name: /Сохранить/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Передать пациенту" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("оболочка экрана", () => {
+  it("в карте пациента не рисует второго заголовка", () => {
+    // Заголовок там уже есть — название раздела карты. Свой `PageLayout`
+    // внутри чужого дал бы `h1` внутри `h1`, и «Калькулятор» печатался бы
+    // дважды подряд.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <SectionRouter section="calculator">
+          <CalculatorView patientId={PATIENT_ID} />
+        </SectionRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(container.querySelectorAll("h1")).toHaveLength(0);
   });
 });

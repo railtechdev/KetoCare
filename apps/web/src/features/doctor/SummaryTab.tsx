@@ -9,42 +9,30 @@ import {
   Section,
   WarningBanner,
 } from "@ketocare/ui";
-import { CalendarOff, ClipboardList, FileText, Lock } from "lucide-react";
-import { useState } from "react";
+import { CalendarOff, ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { errorCodeOf, errorMessageOf } from "../../lib/api";
-import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
-import { CareTeamPanel } from "./CareTeamPanel";
-import { FamilyPanel } from "./FamilyPanel";
-import { MedicalProfileForm } from "./MedicalProfileForm";
-import { formatIsoDate, formatTimestamp } from "./dates";
-import { IntakeView } from "../intake/IntakeView";
-import { useIntakeOptions } from "../intake/useIntake";
+import { errorMessageOf } from "../../lib/api";
+import { formatIsoDate } from "./dates";
 import { dayVerdict } from "../patients/dayVerdict";
 import { usePatientOverview } from "../patients/overview";
-import { useMedicalProfile } from "./doctorQueries";
+import { PatientViewLink } from "./PatientViewLink";
 import { LinesSkeleton } from "./skeletons";
-import type { MedicalProfile, Patient, PatientOverview } from "./types";
+import type { Patient, PatientOverview } from "./types";
 
 /**
- * Сводка карты пациента.
+ * Раздел «Сводка»: что с ребёнком сейчас.
  *
- * Клиническая часть экрана приходит одним запросом `/patients/{id}/overview`:
+ * Клиническая часть приходит одним запросом `/patients/{id}/overview`:
  * назначение, итоги дня против него, последние замеры и приступы за сегодня
- * собраны сервером на один момент времени. Медицинский профиль — отдельная
- * ручка, доступная только врачу.
+ * собраны сервером на один момент времени.
+ *
+ * Анамнеза здесь больше нет. Анкета, медицинский профиль, документы, семья и
+ * ведущие специалисты уехали в раздел «Профиль»: сводку открывают, чтобы
+ * увидеть состояние на сегодня, и шесть блоков анамнеза под ней превращали
+ * ответ на этот вопрос в пролистывание.
  */
-export function SummaryTab({
-  patient,
-  clinicalAllowed,
-  onOpenPrescriptions,
-}: {
-  patient: Patient;
-  clinicalAllowed: boolean;
-  /** Переключить карту на вкладку назначений: путь к первому действию врача. */
-  onOpenPrescriptions?: () => void;
-}) {
+export function SummaryTab({ patient }: { patient: Patient }) {
   const { t } = useTranslation("doctor");
   const overview = usePatientOverview(patient.id);
 
@@ -73,40 +61,19 @@ export function SummaryTab({
         empty={null}
       >
         {overview.data !== undefined && (
-          <OverviewPanels
-            data={overview.data}
-            onOpenPrescriptions={onOpenPrescriptions}
-          />
+          <OverviewPanels data={overview.data} patientId={patient.id} />
         )}
       </AsyncSection>
-
-      {/* Анкета — рядом с медицинским профилем: врачебная часть анамнеза и
-          часть, заполненная семьёй, читаются вместе. Доступ к ней даёт сам
-          доступ к пациенту, поэтому диетолог её тоже видит. */}
-      <IntakeView patientId={patient.id} />
-
-      {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
-
-      {/* Документы — сразу после анкеты и профиля: анамнез и то, чем он
-          подтверждён, читаются вместе. */}
-      <AttachmentsPanel patientId={patient.id} />
-
-      {/* Два ответа на один вопрос «с кем говорить»: кто ведёт ребёнка дома
-          и кто ведёт его в клинике. Семья первой — к ней обращаются, когда
-          дневники пусты, а это самый частый повод. */}
-      <FamilyPanel patientId={patient.id} />
-
-      <CareTeamPanel patientId={patient.id} />
     </div>
   );
 }
 
 function OverviewPanels({
   data,
-  onOpenPrescriptions,
+  patientId,
 }: {
   data: PatientOverview;
-  onOpenPrescriptions?: () => void;
+  patientId: string;
 }) {
   const { t } = useTranslation("doctor");
 
@@ -127,14 +94,16 @@ function OverviewPanels({
             title={t("summary.prescription.empty")}
             description={t("summary.prescription.emptyDescription")}
             action={
-              // Текст звал на соседнюю вкладку, а перейти на неё нажатием было
-              // нельзя. Назначение — первое, что от врача требуется у нового
+              // Ссылкой, а не кнопкой: раздел живёт по адресу, и переход к
+              // назначению открывается в новой вкладке и пересылается коллеге
+              // (правило П1 канона). Кнопка со сменой вкладки ничего этого не
+              // умела. Назначение — первое, что от врача требуется у нового
               // пациента, и путь к нему не должен быть длиннее одного клика.
-              onOpenPrescriptions === undefined ? undefined : (
-                <Button type="button" onClick={onOpenPrescriptions}>
+              <Button asChild>
+                <PatientViewLink patientId={patientId} view="prescription">
                   {t("summary.prescription.toTab")}
-                </Button>
-              )
+                </PatientViewLink>
+              </Button>
             }
           />
         ) : (
@@ -283,147 +252,5 @@ function OverviewPanels({
         </FactList>
       </Section>
     </>
-  );
-}
-
-function MedicalProfilePanel({ patientId }: { patientId: string }) {
-  const { t } = useTranslation("doctor");
-  const [editing, setEditing] = useState(false);
-
-  const profile = useMedicalProfile(patientId, true);
-
-  // Незаполненный профиль сервер отдаёт как 404 — это не сбой, а состояние
-  // «ещё не заполнен», и показывать его как ошибку нельзя.
-  const notFilled = errorCodeOf(profile.error) === "not_found";
-  const forbidden = errorCodeOf(profile.error) === "forbidden";
-
-  if (editing) {
-    return (
-      <MedicalProfileForm
-        patientId={patientId}
-        profile={profile.data ?? null}
-        onDone={() => setEditing(false)}
-        onCancel={() => setEditing(false)}
-      />
-    );
-  }
-
-  return (
-    <Section title={t("profile.title")}>
-      {/* Правило четырёх состояний — общим компонентом (П15). 403 и
-          «ещё не заполнен» — не сбои, а пустые состояния: предлагать врачу
-          «Повторить» там, где повторять нечего, значит звать его в тупик. */}
-      <AsyncSection
-        loading={profile.isPending}
-        skeleton={<LinesSkeleton label={t("profile.loading")} lines={4} />}
-        error={
-          profile.isError && !notFilled && !forbidden
-            ? {
-                title: t("profile.loadError"),
-                description:
-                  errorMessageOf(profile.error) ??
-                  t("common:errors.unexpected"),
-              }
-            : null
-        }
-        retryLabel={t("common:actions.retry")}
-        onRetry={() => void profile.refetch()}
-        isEmpty={forbidden}
-        empty={
-          <EmptyState
-            icon={Lock}
-            title={t("profile.forbidden")}
-            description={t("profile.forbiddenDescription")}
-          />
-        }
-      >
-        {notFilled && (
-          <EmptyState
-            icon={FileText}
-            title={t("profile.empty")}
-            description={t("profile.emptyDescription")}
-            action={
-              <Button type="button" onClick={() => setEditing(true)}>
-                {t("profile.fill")}
-              </Button>
-            }
-          />
-        )}
-
-        {profile.data !== undefined && (
-          <>
-            <ProfileValues profile={profile.data} />
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start"
-              onClick={() => setEditing(true)}
-            >
-              {t("profile.edit")}
-            </Button>
-          </>
-        )}
-      </AsyncSection>
-    </Section>
-  );
-}
-
-function ProfileValues({ profile }: { profile: MedicalProfile }) {
-  const { t } = useTranslation("doctor");
-  const genetics = profile.genetics ?? null;
-
-  // Число сменённых ПЭП хранится ссылкой на справочник, а не числом: шкала
-  // задана медицинской командой («1-2», «3 и более»), и подписи берутся оттуда.
-  // Выведенные из употребления варианты запрашиваются вместе с действующими —
-  // иначе прежний ответ показался бы прочерком.
-  const options = useIntakeOptions();
-  const aedSwitchCount =
-    options.data?.find((option) => option.id === profile.aed_switch_count_id)
-      ?.name_ru ?? null;
-
-  return (
-    <FactList>
-      <dt className="text-muted-foreground">{t("profile.fields.diagnosis")}</dt>
-      <dd className="m-0">{profile.diagnosis ?? "—"}</dd>
-
-      <dt className="text-muted-foreground">
-        {t("profile.fields.epilepsyType")}
-      </dt>
-      <dd className="m-0">{profile.epilepsy_type ?? "—"}</dd>
-
-      <dt className="text-muted-foreground">{t("profile.fields.onset")}</dt>
-      <dd className="m-0 tabular-nums">
-        {profile.onset_age_months === null
-          ? "—"
-          : t("age.months", { count: profile.onset_age_months })}
-      </dd>
-
-      <dt className="text-muted-foreground">{t("profile.fields.genetics")}</dt>
-      <dd className="m-0">
-        {genetics === null ||
-        (genetics.gene == null &&
-          genetics.variant == null &&
-          genetics.interpretation == null)
-          ? "—"
-          : [genetics.gene, genetics.variant, genetics.interpretation]
-              .filter((part): part is string => part != null && part !== "")
-              .join(" · ")}
-      </dd>
-
-      <dt className="text-muted-foreground">
-        {t("profile.fields.comorbidities")}
-      </dt>
-      <dd className="m-0">{profile.comorbidities ?? "—"}</dd>
-
-      <dt className="text-muted-foreground">
-        {t("profile.fields.aedSwitchCount")}
-      </dt>
-      <dd className="m-0">{aedSwitchCount ?? "—"}</dd>
-
-      <dt className="text-muted-foreground">{t("profile.fields.updatedAt")}</dt>
-      <dd className="m-0 tabular-nums">
-        {formatTimestamp(profile.updated_at) ?? "—"}
-      </dd>
-    </FactList>
   );
 }

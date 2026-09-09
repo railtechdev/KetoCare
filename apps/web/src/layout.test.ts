@@ -2,6 +2,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { NAV } from "./layouts/navWidth";
+
 /**
  * Раскладка держится тестами, а не обещаниями.
  *
@@ -95,13 +97,30 @@ describe("раскладка экранов", () => {
   it("боковая панель и отступ содержимого объявлены одной ширины", () => {
     // Панель `fixed`, и содержимое отодвигается от неё отдельным классом.
     // Разойдись эти два числа — содержимое уедет под панель, и заметить это
-    // можно только глазами на широком экране.
-    const shell = readFileSync(join(SRC, "layouts", "AppLayout.tsx"), "utf8");
-    const aside = shell.match(/aside className="([^"]*)"/)?.[1] ?? "";
-    const content = shell.match(/<div className="(md:pl-[^"]*)"/)?.[1] ?? "";
+    // можно только глазами на широком экране. Ширин теперь две: обычная и
+    // сжатая до значков внутри карты пациента, — то есть и разойтись они могут
+    // в двух местах.
+    const widths = (text: string, prefix: string) =>
+      [...text.matchAll(new RegExp(`\\b${prefix}-(\\d+)\\b`, "g"))].map(
+        (match) => Number(match[1]),
+      );
 
-    expect(aside).toContain("w-16");
-    expect(aside).toContain("lg:w-64");
-    expect(content).toBe("md:pl-16 lg:pl-64");
+    for (const [mode, pair] of Object.entries(NAV)) {
+      expect(
+        { mode, widths: widths(pair.aside, "w") },
+        `ширина панели и отступ содержимого разошлись: ${mode}`,
+      ).toEqual({ mode, widths: widths(pair.content, "pl") });
+    }
+  });
+
+  it("панель внутри карты пациента уже, чем панель разделов", () => {
+    // Смысл сжатия: место отдаётся навигации самого пациента. Панель,
+    // оставшаяся широкой, забирала бы 30rem под два меню разом.
+    const inPatient = Number(/w-(\d+)/.exec(NAV.patient.aside)?.[1]);
+    const inSections = Math.max(
+      ...[...NAV.sections.aside.matchAll(/w-(\d+)/g)].map((m) => Number(m[1])),
+    );
+
+    expect(inPatient).toBeLessThan(inSections);
   });
 });

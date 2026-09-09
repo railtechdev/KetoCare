@@ -16,6 +16,8 @@ import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { usePatients } from "../patients/usePatients";
 import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
+import { PatientViewLink } from "./PatientViewLink";
+import type { PatientView } from "./patientViews";
 import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import { LinesSkeleton } from "./skeletons";
@@ -37,14 +39,14 @@ interface QueueRow {
 }
 
 /**
- * Вкладка карты, на которую ведёт строка очереди.
+ * Раздел карты, на который ведёт строка очереди.
  *
  * Флаг существует, чтобы вызвать действие, и действие у каждого своё: молчание
  * семьи проверяют в дневниках, отклонение соотношения — в плане питания за
  * день. Открывать карту на сводке значило бы требовать ещё один клик там, где
  * известно, куда именно идти.
  */
-function tabForFlags(flags: PatientFlags): string {
+function viewForFlags(flags: PatientFlags): PatientView {
   if (flags.noPrescription) return "prescription";
   return flags.staleData ? "diary" : "menu";
 }
@@ -187,14 +189,13 @@ export function DoctorHomePage() {
                   >
                     {/* Имя — ссылка на карту: врач открывает её в новой вкладке и
                     пересылает коллеге (правило П1 канона). */}
-                    <SectionLink
-                      section="patients"
-                      patient={row.patient.id}
-                      tab={tabForFlags(row.flags)}
+                    <PatientViewLink
+                      patientId={row.patient.id}
+                      view={viewForFlags(row.flags)}
                       className="min-w-0 flex-1 font-medium break-words underline-offset-2 hover:underline"
                     >
                       {row.patient.full_name}
-                    </SectionLink>
+                    </PatientViewLink>
                     <PatientFlagsView flags={row.flags} />
                   </li>
                 ))}

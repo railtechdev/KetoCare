@@ -84,6 +84,22 @@ def test_kcal_monotonic_in_mass(ings: list[Ingredient], grams: list[float]) -> N
     assert bumped.kcal >= base.kcal - 1e-9
 
 
+@given(ings=ingredients(min_size=1, max_size=5), grams=st.lists(_grams, min_size=5, max_size=5))
+@settings(max_examples=100)
+def test_item_contributions_sum_to_totals(ings: list[Ingredient], grams: list[float]) -> None:
+    """Сумма вкладов позиций равна итогам блюда — итоги и есть эта сумма."""
+    items = list(zip(ings, grams[: len(ings)], strict=True))
+    dish = verify(items)
+
+    assert len(dish.items) == len(items)
+    for item, (ing, g) in zip(dish.items, items, strict=True):
+        assert item.ingredient is ing
+        assert item.grams == g
+    for field in ("kcal", "fat_g", "protein_g", "carbs_g", "fiber_g"):
+        total = sum(getattr(item, field) for item in dish.items)
+        assert total == pytest.approx(getattr(dish, field), rel=1e-9, abs=1e-9)
+
+
 @given(ings=ingredients(min_size=1, max_size=4))
 @settings(max_examples=50)
 def test_scale_identity(ings: list[Ingredient]) -> None:

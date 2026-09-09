@@ -6,6 +6,20 @@ export interface DishRow {
   grams: number;
 }
 
+/**
+ * Вклад позиции в показатели блюда — то, что даёт её масса.
+ *
+ * Приходит от сервера (`/calc/verify`, позиция `dish.items`), и только
+ * оттуда: умножить состав на 100 г в браузере просто, но это был бы второй
+ * источник клинических чисел рядом с ядром, и однажды они разошлись бы.
+ */
+export interface ItemContribution {
+  kcal: number;
+  fat_g: number;
+  protein_g: number;
+  carbs_g: number;
+}
+
 /** Продукты в формате, который ожидает `/calc/*`: значения на 100 г. */
 export function toCalcIngredients(rows: DishRow[]) {
   return rows.map((row) => ({

@@ -64,8 +64,21 @@ class ExcludedProductOut(BaseModel):
 
 
 class ItemOut(BaseModel):
+    """Позиция состава и её вклад в показатели блюда.
+
+    Вклад считает ядро (`keto_engine.verify`), и сумма по позициям равна итогам
+    `DishOut`. Читает его строка состава в калькуляторе кабинета: по нему видно,
+    что менять, когда блюдо мимо цели. Считать вклад на клиенте нельзя — это
+    был бы второй источник клинических чисел.
+    """
+
     product_id: str
     grams: float
+    kcal: float
+    fat_g: float
+    protein_g: float
+    carbs_g: float
+    fiber_g: float
 
 
 class DishOut(BaseModel):

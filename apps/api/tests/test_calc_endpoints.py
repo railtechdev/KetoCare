@@ -69,6 +69,45 @@ class TestVerify:
         assert dish["protein_g"] == pytest.approx(12.85, abs=0.01)
         assert dish["engine_version"] == ENGINE_VERSION
 
+    async def test_items_carry_per_position_contribution(
+        self, client, session, make_user, auth_headers
+    ):
+        """Форму позиции читает строка состава калькулятора кабинета
+        (`apps/web` → `features/calculator/DishRows.tsx`) — по вкладу продукта
+        видно, что менять, когда блюдо мимо цели. Считать вклад в браузере
+        нельзя, поэтому поля обязаны приходить с сервера и сходиться с итогом.
+        """
+        user = await make_user(UserRole.PARENT)
+        response = await client.post(
+            "/api/v1/calc/verify",
+            json={
+                "ingredients": [BUTTER, CHICKEN],
+                "items": [
+                    {"product_id": "butter", "grams": 50},
+                    {"product_id": "chicken", "grams": 40},
+                ],
+            },
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 200, response.text
+        dish = response.json()["dish"]
+        butter, chicken = dish["items"]
+        assert set(butter) == {
+            "product_id",
+            "grams",
+            "kcal",
+            "fat_g",
+            "protein_g",
+            "carbs_g",
+            "fiber_g",
+        }
+        assert butter["product_id"] == "butter"
+        assert butter["grams"] == 50
+        assert butter["fat_g"] == pytest.approx(40.55, abs=0.01)
+        assert chicken["protein_g"] == pytest.approx(12.4, abs=0.01)
+        for field in ("kcal", "fat_g", "protein_g", "carbs_g", "fiber_g"):
+            assert butter[field] + chicken[field] == pytest.approx(dish[field], abs=1e-6)
+
     async def test_tolerance_reported_when_targets_given(
         self, client, session, make_user, auth_headers
     ):

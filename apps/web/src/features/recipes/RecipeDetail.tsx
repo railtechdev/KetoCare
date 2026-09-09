@@ -109,11 +109,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
               ничего. Отсюда рецепт уходит в калькулятор с уже заполненным
               составом, и вкладка «Пересчитать» наконец получает источник. */}
           <Button asChild variant="outline" className="min-h-touch">
-            <SectionLink
-              section="calculator"
-              tab="scale"
-              item={incomingRecipe(data.id)}
-            >
+            <SectionLink section="calculator" item={incomingRecipe(data.id)}>
               <Calculator aria-hidden="true" />
               {t("actions.toCalculator")}
             </SectionLink>

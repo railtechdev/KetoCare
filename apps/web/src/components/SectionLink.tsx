@@ -32,10 +32,20 @@ interface Props {
   title?: string;
   /**
    * Текущий предмет в перечне. Ставится явно, а не выводится из адреса:
-   * «активной» роутер считает ссылку по совпадению пути, а перечень пациентов
+   * «активной» роутер считает ссылку по совпадению пути, а перечень предметов
    * весь ведёт на один и тот же путь и различается только параметром.
    */
   current?: boolean;
+  /**
+   * Считать ссылку открытой только при точном совпадении адреса.
+   *
+   * По умолчанию роутер считает открытой и ссылку на начало пути: из карты
+   * пациента (`/app/patients/<id>/<раздел>`) ссылка на реестр `/app/patients`
+   * получала `aria-current="page"` — то есть возврат наверх представлялся
+   * скринридеру текущей страницей. Для бокового меню это поведение верное
+   * (раздел действительно открыт), для ссылки «наверх» — нет.
+   */
+  exact?: boolean;
   onClick?: () => void;
 }
 
@@ -62,6 +72,7 @@ export function SectionLink({
   patient,
   title,
   current,
+  exact,
   onClick,
 }: Props) {
   return (
@@ -89,6 +100,7 @@ export function SectionLink({
       className={className}
       title={title}
       aria-current={current ? "true" : undefined}
+      activeOptions={exact ? { exact: true } : undefined}
       activeProps={activeProps}
       onClick={onClick}
     >

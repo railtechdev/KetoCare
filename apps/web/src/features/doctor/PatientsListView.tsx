@@ -9,12 +9,12 @@ import {
   RatioBadge,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Link } from "@tanstack/react-router";
 import { SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { PatientViewLink } from "./PatientViewLink";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
@@ -101,17 +101,12 @@ export function PatientsListView() {
         // Освободившийся столбец возвращает таблице ширину, которую П19 просит
         // держать узкой.
         cell: ({ row }) => (
-          <Link
-            from="/app/$section"
-            to="."
-            search={(previous) => ({
-              ...previous,
-              patient: row.original.patient.id,
-            })}
+          <PatientViewLink
+            patientId={row.original.patient.id}
             className="font-medium underline-offset-2 hover:underline"
           >
             {row.original.name}
-          </Link>
+          </PatientViewLink>
         ),
       },
       {

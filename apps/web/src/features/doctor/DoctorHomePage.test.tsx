@@ -153,8 +153,7 @@ describe("главная врача", () => {
     );
 
     const href = decodeURIComponent(link.getAttribute("href") ?? "");
-    expect(href).toContain(`patient=${WAITING}`);
-    expect(href).toContain("tab=prescription");
+    expect(href).toBe(`/app/patients/${WAITING}/prescription`);
   });
 
   it("пациента без сводки не выдаёт за спокойного, а считает отдельно", async () => {
@@ -169,7 +168,7 @@ describe("главная врача", () => {
     expect(screen.queryByText("Неизвестный Пациент")).not.toBeInTheDocument();
   });
 
-  it("имя в очереди ведёт в карту сразу на нужную вкладку", async () => {
+  it("имя в очереди ведёт в карту сразу на нужный раздел", async () => {
     renderHome();
 
     // Флаг существует, чтобы вызвать действие. Молчание семьи проверяют в
@@ -177,7 +176,6 @@ describe("главная врача", () => {
     // где известно, куда идти.
     const link = await screen.findByRole("link", { name: "Молчащий Пациент" });
     const href = decodeURIComponent(link.getAttribute("href") ?? "");
-    expect(href).toContain(`patient=${SILENT}`);
-    expect(href).toContain("tab=diary");
+    expect(href).toBe(`/app/patients/${SILENT}/diary`);
   });
 });

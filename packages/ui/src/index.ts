@@ -1,4 +1,6 @@
 export { cn } from "./lib/cn";
+export { mealTargetsFrom } from "./lib/mealTargets";
+export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
 export { formatRatio, formatOccurredAt } from "./lib/format";
 
 export { RatioBadge } from "./components/RatioBadge";
@@ -6,6 +8,9 @@ export type { RatioBadgeProps } from "./components/RatioBadge";
 
 export { MacroBar } from "./components/MacroBar";
 export type { MacroBarProps } from "./components/MacroBar";
+
+export { MacroFacts } from "./components/MacroFacts";
+export type { MacroFactsProps } from "./components/MacroFacts";
 
 export { WarningBanner } from "./components/WarningBanner";
 export type {
@@ -42,6 +47,9 @@ export type { TilesProps } from "./components/layout/Tiles";
 
 export { SplitView } from "./components/layout/SplitView";
 export type { SplitViewProps } from "./components/layout/SplitView";
+
+export { Workspace, WorkspaceNav } from "./components/layout/Workspace";
+export type { WorkspaceProps } from "./components/layout/Workspace";
 
 export { DensityProvider } from "./components/layout/density";
 export { useDensity } from "./lib/density";

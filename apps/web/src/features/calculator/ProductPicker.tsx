@@ -157,7 +157,14 @@ export function ProductPicker({ onPick, excludeIds, patientId }: Props) {
                 id={`${listId}-${index}`}
                 role="option"
                 aria-selected={index === activeIndex}
-                className={`flex min-h-touch cursor-pointer flex-wrap items-center gap-x-field px-3 py-2 ${
+                /* Название строкой, состав — строкой под ним, всегда. Раньше
+                   строка была свободной (`flex-wrap`), и раскладка зависела от
+                   длины названия: «Кокосовое масло» умещалось с числами в одну
+                   строку, «Масло оливковое» переносило их на вторую. Соседние
+                   подсказки получались разной высоты, а числа — без общей
+                   левой линии, то есть несравнимыми: именно их человек и
+                   сравнивает, выбирая продукт. */
+                className={`flex min-h-touch cursor-pointer flex-col gap-field px-3 py-2 ${
                   index === activeIndex
                     ? "bg-accent text-accent-foreground"
                     : ""

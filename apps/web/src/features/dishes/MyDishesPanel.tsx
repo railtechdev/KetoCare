@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { SectionLink } from "../../components/SectionLink";
+import { PatientViewLink } from "../doctor/PatientViewLink";
 import { incomingDish } from "../calculator/incomingDish";
 import { errorMessageOf } from "../../lib/api";
 import {
@@ -25,7 +26,7 @@ import {
 } from "./useCustomDishes";
 
 /**
- * «Мои блюда» — раскладки, сохранённые семьёй из калькулятора.
+ * Блюда ребёнка — раскладки, сохранённые из калькулятора.
  *
  * Форма сохранения обещала список — списка не существовало нигде. Блюдо с
  * ошибкой в названии или составе оставалось в подсказках меню навсегда, и
@@ -34,9 +35,22 @@ import {
  * Состав здесь только показывается. Править его — работа калькулятора: он
  * считает по ядру и умеет подбирать массы, а форма списка считала бы сама, то
  * есть завела бы второй источник клинических чисел.
+ *
+ * Список один на два места, и `openIn` говорит, КУДА он ведёт. У семьи
+ * калькулятор — раздел кабинета; в карте пациента он раздел карты, и только
+ * там у расчёта есть кетосоотношение из назначения и исключённые продукты.
+ * Ссылка на общий калькулятор из карты вела бы в экран, который про этого
+ * ребёнка ничего не знает и его блюда открыть не может.
  */
-export function MyDishesPanel({ patientId }: { patientId: string | null }) {
+export function MyDishesPanel({
+  patientId,
+  openIn = "section",
+}: {
+  patientId: string | null;
+  openIn?: "section" | "card";
+}) {
   const { t } = useTranslation("recipes");
+  const inCard = openIn === "card";
   const dishes = useCustomDishes(patientId);
   const [renaming, setRenaming] = useState<CustomDish | null>(null);
 
@@ -44,7 +58,12 @@ export function MyDishesPanel({ patientId }: { patientId: string | null }) {
   const remove = useDeleteCustomDish(patientId ?? "");
 
   return (
-    <Section title={t("myDishes.title")} description={t("myDishes.intro")}>
+    // «Мои блюда» — надпись от первого лица, и в чужой карте она называет не
+    // того: блюда здесь принадлежат ребёнку, а читает их специалист.
+    <Section
+      title={t(inCard ? "myDishes.patientTitle" : "myDishes.title")}
+      description={t(inCard ? "myDishes.patientIntro" : "myDishes.intro")}
+    >
       <AsyncSection
         loading={dishes.isPending && patientId !== null}
         skeleton={null}
@@ -94,14 +113,28 @@ export function MyDishesPanel({ patientId }: { patientId: string | null }) {
               {/* Своё блюдо тоже уходит в калькулятор: править состав здесь
                   нечем и не нужно — считает ядро, а не форма списка. */}
               <Button asChild variant="ghost" size="icon">
-                <SectionLink
-                  section="calculator"
-                  tab="scale"
-                  item={incomingDish(dish.id)}
-                  aria-label={t("myDishes.toCalculator", { title: dish.title })}
-                >
-                  <Calculator aria-hidden="true" className="size-4" />
-                </SectionLink>
+                {openIn === "card" && patientId !== null ? (
+                  <PatientViewLink
+                    patientId={patientId}
+                    view="calculator"
+                    item={incomingDish(dish.id)}
+                    aria-label={t("myDishes.toCalculator", {
+                      title: dish.title,
+                    })}
+                  >
+                    <Calculator aria-hidden="true" className="size-4" />
+                  </PatientViewLink>
+                ) : (
+                  <SectionLink
+                    section="calculator"
+                    item={incomingDish(dish.id)}
+                    aria-label={t("myDishes.toCalculator", {
+                      title: dish.title,
+                    })}
+                  >
+                    <Calculator aria-hidden="true" className="size-4" />
+                  </SectionLink>
+                )}
               </Button>
 
               <Button

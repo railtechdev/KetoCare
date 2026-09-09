@@ -17,6 +17,7 @@ import {
   FilterBar,
   FormFooter,
   MacroBar,
+  MacroFacts,
   Metric,
   MetricRow,
   RatioBadge,
@@ -107,6 +108,17 @@ export function UiShowcase() {
           fatG={80}
           proteinG={20}
           carbsG={8}
+        />
+        {/* Рядом с полосой намеренно: те же числа в двух формах. Полоса
+            отвечает «каково соотношение», числа — «что даёт этот продукт», и
+            расхождение их размеров видно только здесь. */}
+        <MacroFacts
+          className="mt-4 max-w-md"
+          label="Вклад продукта «Масло сливочное» в блюдо"
+          kcal={367}
+          fatG={40.5}
+          proteinG={0.5}
+          carbsG={0.1}
         />
         <DiaryEntryCard
           className="mt-4 max-w-md"

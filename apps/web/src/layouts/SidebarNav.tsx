@@ -26,13 +26,21 @@ export function SidebarNav({
   sections: readonly string[];
   onNavigate?: () => void;
   /**
-   * `responsive` — подписи появляются с 1024 px (боковая панель).
-   * `always` — подписи видны всегда (мобильная шторка).
+   * `responsive` — подписи появляются с 1024 px (боковая панель);
+   * `always` — подписи видны всегда (мобильная шторка);
+   * `never` — только значки на любой ширине (панель внутри карты пациента:
+   * место отдано навигации самого пациента).
    */
-  labels?: "responsive" | "always";
+  labels?: "responsive" | "always" | "never";
 }) {
   const { t } = useTranslation();
-  const collapsible = labels === "responsive";
+  const iconsOnly = labels !== "always";
+  const hideLabel =
+    labels === "never"
+      ? "sr-only"
+      : labels === "responsive"
+        ? "sr-only lg:not-sr-only"
+        : "";
 
   return (
     <nav aria-label={t("app.name")} className="flex-1">
@@ -48,14 +56,20 @@ export function SidebarNav({
               <li key={section}>
                 <SectionLink
                   section={section}
-                  title={collapsible ? label : undefined}
+                  title={iconsOnly ? label : undefined}
                   className={cn(
                     "flex min-h-touch items-center gap-block rounded-lg px-3 text-sm font-medium",
                     "text-sidebar-foreground/80 no-underline transition-colors",
                     "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    collapsible &&
+                    labels === "never" && "justify-center px-0",
+                    labels === "responsive" &&
                       "justify-center px-0 lg:justify-start lg:px-3",
                   )}
+                  // Карта пациента лежит внутри своего раздела
+                  // (`/app/patients/<id>/…`), и роутер считает пункт «Пациенты»
+                  // открытым по началу пути. Это верно: врач, работающий в
+                  // карте, находится именно в этом разделе — и видит по меню,
+                  // где он.
                   activeProps={{
                     className:
                       "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
@@ -69,9 +83,7 @@ export function SidebarNav({
                   {Icon && (
                     <Icon aria-hidden="true" className="size-5 shrink-0" />
                   )}
-                  <span className={cn(collapsible && "sr-only lg:not-sr-only")}>
-                    {label}
-                  </span>
+                  <span className={hideLabel}>{label}</span>
                 </SectionLink>
               </li>
             );

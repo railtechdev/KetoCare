@@ -1,53 +1,36 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi, type Mock } from "vitest";
 
 import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import childRu from "../../locales/ru/child.json";
 import doctorRu from "../../locales/ru/doctor.json";
-import { SectionRouter } from "../../test/SectionRouter";
-import { PatientCard } from "./PatientCard";
+import { PatientRouter } from "../../test/PatientRouter";
+import { PatientProfileView } from "./PatientProfileView";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
   return {
     ...actual,
     api: {
-      // Экран тянет и списки (`{items}`), и справочники (массив): ответ
+      // Раздел тянет и списки (`{items}`), и справочники (массив): ответ
       // выбирается по адресу, иначе один из них падает на разборе.
-      GET: vi.fn().mockImplementation((path: string) => {
-        if (path.includes("overview")) {
-          // Сводка — отдельная форма ответа: без неё вкладка «Сводка» падает
-          // на разборе, и до формы правки тест не доходит.
-          return Promise.resolve({
-            data: {
-              patient_id: PATIENT.id,
-              date: "2026-09-01",
-              prescription: null,
-              day: null,
-              last_ketone: null,
-              last_weight: null,
-              seizures_today: { entries: 0, count: 0 },
-            },
-          });
-        }
-        return Promise.resolve({
-          // Справочники и списки отдают `{items}`, а справочник персонала и
-          // «недавние продукты» — массив: ответ выбирается по адресу, иначе
-          // один из разборов падает.
+      GET: vi.fn().mockImplementation((path: string) =>
+        Promise.resolve({
           data:
             path.includes("colleagues") ||
-            path.includes("recent-products") ||
             path.includes("attachments") ||
             path.includes("parents") ||
-            path.includes("doctors")
+            path.includes("doctors") ||
+            path.includes("intake-options") ||
+            path.includes("aed-drugs")
               ? []
               : { items: [], total: 0 },
-        });
-      }),
+        }),
+      ),
       PATCH: vi.fn(),
     },
   };
@@ -81,31 +64,35 @@ const PATIENT = {
   created_at: "2026-08-01T10:00:00Z",
 };
 
-function renderCard(patient: Record<string, unknown> = {}) {
+function renderProfile(patient: Record<string, unknown> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <SectionRouter>{children}</SectionRouter>
+        <PatientRouter patientId={PATIENT.id} view="profile">
+          {children}
+        </PatientRouter>
       </QueryClientProvider>
     );
   }
+
   return render(
-    <PatientCard
+    <PatientProfileView
       patient={{ ...PATIENT, ...patient } as never}
-      onBack={() => undefined}
+      clinicalAllowed
     />,
     { wrapper: Wrapper },
   );
 }
 
-describe("паспорт пациента в карте врача", () => {
+describe("паспорт пациента", () => {
   it("называет аллергии словами, а не идентификаторами продуктов", async () => {
     // Врач читал «dcf7df2c-349b-42f8-bfb4-886ebc6ea111, цитрусовые» ровно в том
     // поле, по которому решает, что ребёнку можно.
-    renderCard();
+    renderProfile();
 
     expect(
       await screen.findByText(/Кокосовое масло, цитрусовые/),
@@ -115,13 +102,13 @@ describe("паспорт пациента в карте врача", () => {
 
   it("показывает заметки семьи", async () => {
     // Родитель пишет их в разделе «Ребёнок»; читателя у поля не было ни одного.
-    renderCard();
+    renderProfile();
 
     expect(await screen.findByText(/Плохо переносит жару/)).toBeInTheDocument();
   });
 
   it("не показывает пустую строку заметок", async () => {
-    renderCard({ notes: "   " });
+    renderProfile({ notes: "   " });
 
     await screen.findByText(/Кокосовое масло/);
     expect(screen.queryByText("Заметки семьи")).not.toBeInTheDocument();
@@ -137,7 +124,7 @@ describe("правка профиля ребёнка специалистом", 
       data: { ...PATIENT, height_cm: 106 },
     });
     const user = userEvent.setup();
-    renderCard();
+    renderProfile();
 
     await user.click(await screen.findByRole("button", { name: "Изменить" }));
 
@@ -157,19 +144,21 @@ describe("правка профиля ребёнка специалистом", 
   });
 });
 
-describe("выход из пустых состояний карты", () => {
-  it("«назначения нет» ведёт на вкладку назначений одним нажатием", async () => {
-    // Текст звал на соседнюю вкладку, а перейти на неё нажатием было нельзя:
-    // назначение — первое, что от врача требуется у нового пациента.
-    const user = userEvent.setup();
-    renderCard();
+describe("состав раздела", () => {
+  it("собирает анамнез в одном месте, а не размазывает по сводке", async () => {
+    // Анкета, документы, семья и ведущие специалисты жили внутри «Сводки», и
+    // ответ на вопрос «что с ребёнком сейчас» приходилось пролистывать.
+    renderProfile();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Задать назначение" }),
-    );
-
-    expect(
-      await screen.findByRole("heading", { name: /Новая версия назначения/ }),
-    ).toBeInTheDocument();
+    for (const title of [
+      "Данные пациента",
+      "Анкета",
+      "Медицинский профиль",
+      "Кто ведёт ребёнка дома",
+    ]) {
+      expect(
+        await screen.findByRole("heading", { name: new RegExp(title) }),
+      ).toBeInTheDocument();
+    }
   });
 });

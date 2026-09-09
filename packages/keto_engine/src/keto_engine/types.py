@@ -31,10 +31,20 @@ class Targets:
 
 @dataclass(frozen=True, slots=True)
 class ItemAmount:
-    """Ингредиент и его масса (г) в составе блюда."""
+    """Ингредиент, его масса (г) и вклад этой массы в показатели блюда.
+
+    Вклад считает только `verify()`: у полей нет умолчаний намеренно, чтобы
+    собранная руками позиция с нулями не сошла за посчитанную. Сумма вкладов
+    по позициям равна итогам `DishResult` — итоги и считаются как эта сумма.
+    """
 
     ingredient: Ingredient
     grams: float
+    kcal: float
+    fat_g: float
+    protein_g: float
+    carbs_g: float
+    fiber_g: float
 
 
 @dataclass(frozen=True, slots=True)

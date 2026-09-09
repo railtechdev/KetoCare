@@ -1,16 +1,15 @@
-import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
+import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { SessionProvider } from "../auth/session";
-import { DoctorPatientsPage } from "./DoctorPatientsPage";
+import { PatientsListView } from "./PatientsListView";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -30,29 +29,26 @@ const ACCESS_TOKEN = `header.${btoa(
   JSON.stringify({ sub: DOCTOR_ID, role: "doctor" }),
 )}.signature`;
 
-const PATIENTS = {
-  items: [
-    {
-      id: SILENT_ID,
-      full_name: "Иван Петров",
-      birth_date: "2020-05-14",
-      sex: "m",
-      height_cm: 108,
-      allergies: [],
-      notes: null,
-    },
-    {
-      id: FRESH_ID,
-      full_name: "Анна Сидорова",
-      birth_date: "2018-02-03",
-      sex: "f",
-      height_cm: 124,
-      allergies: ["орехи"],
-      notes: null,
-    },
-  ],
-  total: 2,
-};
+const PATIENTS = [
+  {
+    id: SILENT_ID,
+    full_name: "Иван Петров",
+    birth_date: "2020-05-14",
+    sex: "m",
+    height_cm: 108,
+    allergies: [],
+    notes: null,
+  },
+  {
+    id: FRESH_ID,
+    full_name: "Анна Сидорова",
+    birth_date: "2018-02-03",
+    sex: "f",
+    height_cm: 124,
+    allergies: ["орехи"],
+    notes: null,
+  },
+];
 
 const TOTALS = {
   kcal: 1180,
@@ -63,7 +59,7 @@ const TOTALS = {
   ratio: 3.2,
 };
 
-const ACTIVE_PRESCRIPTION = {
+const PRESCRIPTION = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   patient_id: SILENT_ID,
   ratio: 4,
@@ -77,27 +73,11 @@ const ACTIVE_PRESCRIPTION = {
   created_at: "2026-08-01T09:00:00Z",
 };
 
-const OLD_PRESCRIPTION = {
-  ...ACTIVE_PRESCRIPTION,
-  id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-  ratio: 3,
-  effective_from: "2026-06-01",
-  created_at: "2026-06-01T09:00:00Z",
-};
-
-const CREATED_PRESCRIPTION = {
-  ...ACTIVE_PRESCRIPTION,
-  id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-  ratio: 3.5,
-  effective_from: "2026-08-28",
-  created_at: "2026-08-28T10:00:00Z",
-};
-
-/** Молчащий пациент: последний замер за неделю до даты сводки. */
+/** Молчащий пациент: последний замер за десять суток до даты сводки. */
 const SILENT_OVERVIEW = {
   patient_id: SILENT_ID,
   date: "2026-08-28",
-  prescription: ACTIVE_PRESCRIPTION,
+  prescription: PRESCRIPTION,
   day: {
     totals: TOTALS,
     // Вердикт о допусках даёт сервер — экран его только показывает.
@@ -116,7 +96,7 @@ const SILENT_OVERVIEW = {
 const FRESH_OVERVIEW = {
   patient_id: FRESH_ID,
   date: "2026-08-28",
-  prescription: { ...ACTIVE_PRESCRIPTION, patient_id: FRESH_ID, ratio: 3 },
+  prescription: { ...PRESCRIPTION, patient_id: FRESH_ID, ratio: 3 },
   day: {
     totals: TOTALS,
     tolerance: { ratio_within_tolerance: true, kcal_within_tolerance: true },
@@ -131,34 +111,28 @@ const FRESH_OVERVIEW = {
   seizures_today: { entries: 0, count: 0 },
 };
 
-let history: { items: (typeof ACTIVE_PRESCRIPTION)[] };
-
-function renderPage() {
+function renderList() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
 
-  // Toaster монтируется в `AppLayout`, а тест рендерит экран отдельно: без него
-  // сообщение об успехе некуда показать (правило П16 канона — успех тостом).
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
-          {/* Карта пациента держит вкладку в адресе (правило П30), поэтому
-              экрану нужен роутер — как и в работающем приложении. */}
+          {/* Строка поиска живёт в состоянии экрана, но ссылки на карту —
+              адресные, и без роутера они бы не собрались. */}
           <SectionRouter section="patients">{children}</SectionRouter>
-          <Toaster />
         </SessionProvider>
       </QueryClientProvider>
     );
   }
 
-  return render(<DoctorPatientsPage />, { wrapper: Wrapper });
+  return render(<PatientsListView />, { wrapper: Wrapper });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  history = { items: [ACTIVE_PRESCRIPTION, OLD_PRESCRIPTION] };
 
   (api.GET as Mock).mockImplementation(
     (
@@ -171,8 +145,8 @@ beforeEach(() => {
           ?.query?.q;
         const items =
           q === undefined
-            ? PATIENTS.items
-            : PATIENTS.items.filter((patient) =>
+            ? PATIENTS
+            : PATIENTS.filter((patient) =>
                 patient.full_name.toLowerCase().includes(q.toLowerCase()),
               );
         return Promise.resolve({ data: { items, total: items.length } });
@@ -185,12 +159,7 @@ beforeEach(() => {
               : FRESH_OVERVIEW,
         });
       }
-      if (path === "/api/v1/patients/{patient_id}/prescriptions") {
-        return Promise.resolve({
-          data: { items: history.items, total: history.items.length },
-        });
-      }
-      throw new Error(`Unexpected GET ${path}`);
+      return Promise.resolve({ data: { items: [], total: 0 } });
     },
   );
 
@@ -198,17 +167,13 @@ beforeEach(() => {
     if (path === "/api/v1/auth/refresh") {
       return Promise.resolve({ data: { access_token: ACCESS_TOKEN } });
     }
-    if (path === "/api/v1/patients/{patient_id}/prescriptions") {
-      history = { items: [CREATED_PRESCRIPTION, ...history.items] };
-      return Promise.resolve({ data: CREATED_PRESCRIPTION });
-    }
     throw new Error(`Unexpected POST ${path}`);
   });
 });
 
-describe("Список пациентов", () => {
+describe("реестр пациентов", () => {
   it("помечает молчание и выход соотношения за допуск, поднимая такие строки наверх", async () => {
-    renderPage();
+    renderList();
 
     // Сначала дожидаемся сводок: до них строки стоят в алфавитном порядке и
     // после их прихода перестраиваются, поэтому узел, взятый раньше, к моменту
@@ -216,12 +181,6 @@ describe("Список пациентов", () => {
     //
     // Последний замер 18 августа, дата сводки — 28-е: десять суток молчания.
     expect(await screen.findByText("Нет замеров: 10 дн.")).toBeInTheDocument();
-
-    // Имя пациента — ссылка на его карту: карта живёт по адресу (правило П1),
-    // и ссылку врач открывает в новой вкладке, копирует и пересылает.
-    expect(
-      screen.getByRole("link", { name: "Иван Петров" }),
-    ).toBeInTheDocument();
 
     // Именно в таблице: тот же текст есть в расшифровке флагов под ней.
     const table = within(screen.getByRole("table"));
@@ -241,81 +200,24 @@ describe("Список пациентов", () => {
       .map((row) => row.querySelector("td")?.textContent);
     expect(names).toEqual(["Иван Петров", "Анна Сидорова"]);
   });
-});
 
-describe("Форма назначения", () => {
-  it("не отправляет кетосоотношение вне шага 0,5 и показывает версию после сохранения", async () => {
-    const user = userEvent.setup();
-    renderPage();
+  it("имя ведёт в карту пациента по её собственному адресу", async () => {
+    // Карта живёт своим уровнем пути (правило П41), и ссылку врач открывает в
+    // новой вкладке, копирует и пересылает коллеге. Пока карта была параметром
+    // списка, ссылка вела на список.
+    renderList();
 
-    // Сначала дожидаемся флагов: до этого строки стоят в алфавитном порядке и
-    // после загрузки сводок перестраиваются.
-    await screen.findByText("Нет замеров: 10 дн.");
-
-    // Карта открывается ссылкой на имени, а не кнопкой в отдельном столбце.
-    await user.click(screen.getByRole("link", { name: "Иван Петров" }));
-    await user.click(screen.getByRole("tab", { name: "Назначения" }));
-
-    const ratio = await screen.findByLabelText("Кетосоотношение");
-    await user.clear(ratio);
-    await user.type(ratio, "3.7");
-    await user.click(
-      screen.getByRole("button", { name: "Сохранить назначение" }),
+    const link = await screen.findByRole("link", { name: "Иван Петров" });
+    expect(link.getAttribute("href")).toBe(
+      `/app/patients/${SILENT_ID}/summary`,
     );
-
-    // Текст обязан стоять в двух местах сразу: под полем и строкой сводки над
-    // формой (правило П8 канона — сводка повторяет формулировку поля, иначе
-    // читается как вторая, несуществующая ошибка).
-    const ratioErrors = await screen.findAllByText(
-      "Кетосоотношение — от 1,0 до 5,0 с шагом 0,5.",
-    );
-    expect(ratioErrors).toHaveLength(2);
-
-    // Строка сводки ведёт в поле: без якоря она сообщает об ошибке, но не
-    // помогает её исправить.
-    const summaryLink = ratioErrors.find(
-      (node) => node.tagName === "A",
-    ) as HTMLAnchorElement;
-    expect(summaryLink).toBeDefined();
-    expect(summaryLink.getAttribute("href")).toBe(`#${ratio.id}`);
-    expect(api.POST).not.toHaveBeenCalledWith(
-      "/api/v1/patients/{patient_id}/prescriptions",
-      expect.anything(),
-    );
-
-    await user.clear(ratio);
-    await user.type(ratio, "3.5");
-    await user.click(
-      screen.getByRole("button", { name: "Сохранить назначение" }),
-    );
-
-    expect(api.POST).toHaveBeenCalledWith(
-      "/api/v1/patients/{patient_id}/prescriptions",
-      expect.objectContaining({
-        params: { path: { patient_id: SILENT_ID } },
-        body: expect.objectContaining({
-          ratio: 3.5,
-          kcal_per_day: 1200,
-          protein_g: 26,
-          carbs_limit_g: 10,
-          meals_per_day: 4,
-          restrictions: null,
-        }),
-      }),
-    );
-
-    // Номер версии берётся из обновлённой истории, а не из «было плюс один»,
-    // и сообщается тостом, а не зелёной строкой в потоке страницы.
-    expect(await screen.findByText("Создана версия 3")).toBeInTheDocument();
   });
-});
 
-describe("поиск пациентов", () => {
-  it("спрашивает сервер, а не отбирает загруженную страницу", async () => {
+  it("поиск спрашивает сервер, а не отбирает загруженную страницу", async () => {
     // Список приходит первыми двумя сотнями строк. Поиск по ним отвечал «не
     // найдено» о пациенте, который есть, — и выглядел этот ответ достоверным.
     const user = userEvent.setup();
-    renderPage();
+    renderList();
 
     await screen.findByText("Иван Петров");
     await user.type(screen.getByLabelText(/Поиск по имени/), "петров");

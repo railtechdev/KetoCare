@@ -52,7 +52,16 @@ def to_targets(raw: TargetsIn) -> Targets:
 def to_dish_out(dish: DishResult) -> DishOut:
     return DishOut(
         items=[
-            ItemOut(product_id=item.ingredient.product_id, grams=item.grams) for item in dish.items
+            ItemOut(
+                product_id=item.ingredient.product_id,
+                grams=item.grams,
+                kcal=item.kcal,
+                fat_g=item.fat_g,
+                protein_g=item.protein_g,
+                carbs_g=item.carbs_g,
+                fiber_g=item.fiber_g,
+            )
+            for item in dish.items
         ],
         kcal=dish.kcal,
         fat_g=dish.fat_g,

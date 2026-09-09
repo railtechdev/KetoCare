@@ -10,9 +10,17 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { AcceptInvitePage } from "./features/invitations/AcceptInvitePage";
 import { SECTIONS_BY_ROLE, type Role } from "./features/auth/roles";
 import type { Session } from "./features/auth/claims";
+import {
+  DEFAULT_PATIENT_VIEW,
+  isPatientView,
+  patientViewFromTab,
+  patientViewsFor,
+} from "./features/doctor/patientViews";
 import { AppLayout } from "./layouts/AppLayout";
 import { UiShowcase } from "./routes/UiShowcase";
 import { NotFoundPage } from "./routes/NotFoundPage";
+import { PatientRoute } from "./routes/PatientRoute";
+import { PatientViewRoute } from "./routes/PatientViewRoute";
 import { SectionRoute } from "./routes/SectionRoute";
 
 export interface RouterContext {
@@ -168,7 +176,7 @@ const sectionRoute = createRoute({
     if (job !== undefined) result.job = job;
     return result;
   },
-  beforeLoad: ({ context, params }) => {
+  beforeLoad: ({ context, params, search }) => {
     const role = context.session?.role;
     if (!role) return;
 
@@ -180,8 +188,120 @@ const sectionRoute = createRoute({
         params: { section: firstSectionFor(role) },
       });
     }
+
+    // Прежний адрес карты пациента — `/app/patients?patient=<id>&tab=<вкладка>`.
+    // Такие ссылки лежат в закладках и в переписке врачей, и оборвать их
+    // значило бы обменять работающие ссылки на новую раскладку. Перевод — один
+    // на все: и на очередь главной, и на письмо коллеге годовой давности.
+    if (params.section === "patients" && search.patient !== undefined) {
+      throw redirect({
+        to: "/app/patients/$patientId/$view",
+        params: {
+          patientId: search.patient,
+          view: patientViewFromTab(search.tab),
+        },
+        search: { kind: search.kind, item: search.item, job: search.job },
+      });
+    }
   },
   component: SectionRoute,
+});
+
+/**
+ * Параметры адреса внутри карты пациента.
+ *
+ * Их два, и оба уже были у раздела: вид дневника и задача сборки отчёта.
+ * Вкладки (`?tab=`) здесь нет — её место занял уровень пути, а `?patient=`
+ * незачем: пациент и есть путь.
+ */
+export interface PatientSearch {
+  /** Вид дневника внутри раздела «Дневники» */
+  kind?: string;
+  /**
+   * Предмет, открытый внутри раздела: продукт или готовое блюдо, пришедшее в
+   * калькулятор (`item=dish:<id>`). Тем же параметром состав, собранный в общем
+   * калькуляторе, попадает в карту пациента.
+   */
+  item?: string;
+  /**
+   * Задача сборки PDF-отчёта. В адресе по той же причине, что и в разделах:
+   * сборка идёт в воркере секундами, а ручки «мои задачи» у API нет — потеряв
+   * идентификатор, готовый файл достать нечем.
+   */
+  job?: string;
+}
+
+/**
+ * Карта пациента — уровень пути, а не параметр списка.
+ *
+ * Разбор, из которого это выросло, — в `routes/PatientRoute.tsx`. Здесь важно
+ * одно: `patients/$patientId` длиннее одного сегмента, поэтому со статическим
+ * разделом `/app/patients` он не спорит — реестр остаётся на своём адресе.
+ */
+const patientRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "patients/$patientId",
+  validateSearch: (search: Record<string, unknown>): PatientSearch => {
+    const result: PatientSearch = {};
+    const kind = text(search.kind);
+    const item = text(search.item);
+    const job = text(search.job);
+    if (kind !== undefined) result.kind = kind;
+    if (item !== undefined) result.item = item;
+    if (job !== undefined) result.job = job;
+    return result;
+  },
+  beforeLoad: ({ context }) => {
+    const role = context.session?.role;
+    if (!role) return;
+
+    // Карта пациента — рабочее место специалиста. Семья ходит своими разделами,
+    // и попавший сюда родитель получает свой кабинет, а не 404: доступ к данным
+    // всё равно проверяет сервер (правило 5 CLAUDE.md), здесь только UX.
+    if (!SECTIONS_BY_ROLE[role].includes("patients")) {
+      throw redirect({
+        to: "/app/$section",
+        params: { section: firstSectionFor(role) },
+      });
+    }
+  },
+  component: PatientRoute,
+});
+
+const patientIndexRoute = createRoute({
+  getParentRoute: () => patientRoute,
+  path: "/",
+  beforeLoad: ({ params }) => {
+    // Адрес без раздела — это «открой пациента»: ссылка, набранная руками, и
+    // ссылка из письма без хвоста обязаны открывать карту, а не пустоту.
+    throw redirect({
+      to: "/app/patients/$patientId/$view",
+      params: { patientId: params.patientId, view: DEFAULT_PATIENT_VIEW },
+    });
+  },
+  component: () => null,
+});
+
+const patientViewRoute = createRoute({
+  getParentRoute: () => patientRoute,
+  path: "$view",
+  beforeLoad: ({ context, params }) => {
+    const role = context.session?.role;
+    if (!role) return;
+
+    // Раздел, которого нет или который роли не положен (заметки диетологу), —
+    // это устаревшая ссылка, а не ошибка: уводим на сводку.
+    if (
+      !isPatientView(params.view) ||
+      !patientViewsFor(role).includes(params.view)
+    ) {
+      throw redirect({
+        to: "/app/patients/$patientId/$view",
+        params: { patientId: params.patientId, view: DEFAULT_PATIENT_VIEW },
+      });
+    }
+  },
+  component: PatientViewRoute,
 });
 
 /**
@@ -205,7 +325,11 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   inviteRoute,
   ...devRoutes,
-  appRoute.addChildren([appIndexRoute, sectionRoute]),
+  appRoute.addChildren([
+    appIndexRoute,
+    sectionRoute,
+    patientRoute.addChildren([patientIndexRoute, patientViewRoute]),
+  ]),
 ]);
 
 export const router = createRouter({
