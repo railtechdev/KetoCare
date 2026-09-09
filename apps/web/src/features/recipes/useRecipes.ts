@@ -1,6 +1,7 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
+import type { ProductDetail } from "../products/useProductDetail";
 import { toRecipeSearchQuery, type RecipeFilters } from "./types";
 
 /**
@@ -68,13 +69,44 @@ export interface ProductNames {
  * кеша, а не из сети.
  */
 export function useProductNames(productIds: string[]): ProductNames {
-  const unique = Array.from(new Set(productIds));
+  const details = useProductDetails(productIds);
+
+  const byId: Record<string, string> = {};
+  const withdrawn: Record<string, string> = {};
+  for (const product of Object.values(details.byId)) {
+    byId[product.id] = product.name_ru;
+    if (!product.is_active) withdrawn[product.id] = product.name_ru;
+  }
+
+  return { byId, withdrawn, isLoading: details.isLoading };
+}
+
+export interface ProductDetails {
+  byId: Record<string, ProductDetail>;
+  isLoading: boolean;
+  /** Хотя бы одну карточку получить не удалось */
+  isError: boolean;
+}
+
+/**
+ * Карточки продуктов состава целиком.
+ *
+ * Рецепт приходит с составом из `product_id` и граммов: ни названий, ни
+ * значений на 100 г в нём нет. Названия нужны, чтобы показать состав, значения
+ * — чтобы посчитать показатели блюда по мере правки: `/calc/verify` ждёт
+ * продукты вместе с их составом на 100 г, и взять их больше неоткуда.
+ *
+ * Ключ `['products','detail',id]` общий для всех экранов, так что повторно
+ * открытый рецепт берёт карточки из кеша, а не из сети.
+ */
+export function useProductDetails(productIds: string[]): ProductDetails {
+  const unique = Array.from(new Set(productIds)).filter((id) => id !== "");
 
   const results = useQueries({
     queries: unique.map((id) => ({
       queryKey: ["products", "detail", id],
-      // Справочник продуктов меняется редко: перезапрашивать название при
-      // каждом открытии карточки незачем.
+      // Справочник продуктов меняется редко: перезапрашивать карточку при
+      // каждом открытии рецепта незачем.
       staleTime: 5 * 60 * 1000,
       queryFn: async () => {
         const { data, error } = await api.GET("/api/v1/products/{product_id}", {
@@ -86,17 +118,14 @@ export function useProductNames(productIds: string[]): ProductNames {
     })),
   });
 
-  const byId: Record<string, string> = {};
-  const withdrawn: Record<string, string> = {};
+  const byId: Record<string, ProductDetail> = {};
   for (const result of results) {
-    if (!result.data) continue;
-    byId[result.data.id] = result.data.name_ru;
-    if (!result.data.is_active) withdrawn[result.data.id] = result.data.name_ru;
+    if (result.data) byId[result.data.id] = result.data;
   }
 
   return {
     byId,
-    withdrawn,
     isLoading: results.some((result) => result.isLoading),
+    isError: results.some((result) => result.isError),
   };
 }

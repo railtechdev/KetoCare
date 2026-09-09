@@ -1,5 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, EmptyState, FormFooter, Input, toast } from "@ketocare/ui";
+import {
+  Button,
+  EmptyState,
+  FormFooter,
+  Input,
+  MacroBar,
+  MacroFacts,
+  RatioBadge,
+  cn,
+  toast,
+} from "@ketocare/ui";
 import { CookingPot, Sparkles, X } from "lucide-react";
 import { useId } from "react";
 import {
@@ -15,6 +25,7 @@ import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { ProductPicker } from "../calculator/ProductPicker";
+import { useRecipeComputed } from "./useRecipeComputed";
 import { recipeFormSchema, type RecipeFormValues } from "./schemas";
 import { useRecipeDraftMutation, type DraftCheck } from "./useRecipeDraft";
 import { RECIPE_CATEGORIES } from "./types";
@@ -109,6 +120,20 @@ export function RecipeForm({
       },
     );
   }
+
+  /**
+   * Показатели блюда по мере правки состава.
+   *
+   * Считает сервер (`/calc/verify`): своя арифметика в браузере — второй
+   * источник клинических чисел рядом с ядром, и она разошлась бы с тем, что
+   * сохранится. Разбор — в `useRecipeComputed`.
+   */
+  const computed = useRecipeComputed(
+    (watched.ingredients ?? []).map((item) => ({
+      productId: item?.productId ?? "",
+      grams: item?.grams ?? 0,
+    })),
+  );
 
   const categoryId = `${ids}-category`;
   const instructionsId = `${ids}-instructions`;
@@ -231,6 +256,9 @@ export function RecipeForm({
               {ingredients.fields.map((field, index) => {
                 const gramsId = `${ids}-grams-${field.id}`;
                 const gramsError = errors.ingredients?.[index]?.grams;
+                const contribution = computed.contributions.get(
+                  field.productId,
+                );
 
                 return (
                   <li
@@ -284,6 +312,23 @@ export function RecipeForm({
                         {t("form.errors.grams")}
                       </p>
                     )}
+
+                    {/* Что даёт этот продукт. По итогу блюда видно только, что
+                        оно мимо цели; что менять — видно по строке. Числа с
+                        сервера, тем же компонентом кита, что в калькуляторе и
+                        в Mini App: своё округление здесь означало бы, что одно
+                        и то же блюдо выглядит по-разному. */}
+                    {contribution && (
+                      <MacroFacts
+                        className="w-full"
+                        label={t("form.contribution", { name: field.name })}
+                        kcal={contribution.kcal}
+                        fatG={contribution.fat_g}
+                        proteinG={contribution.protein_g}
+                        carbsG={contribution.carbs_g}
+                        stale={computed.stale}
+                      />
+                    )}
                   </li>
                 );
               })}
@@ -300,9 +345,56 @@ export function RecipeForm({
             </p>
           )}
 
-          <p className="mt-field mb-0 text-sm text-muted-foreground">
-            {t("form.computedHint")}
-          </p>
+          {/* Показатели блюда — здесь же, а не после сохранения.
+              До этого форма не показывала ни одного числа, и подобрать
+              граммовку в ней было нельзя: сохранить, посмотреть, вернуться,
+              поправить. Целевых чисел рядом нет и быть не может — рецепт
+              общий, он не привязан к ребёнку, и цель есть только там, где есть
+              назначение (калькулятор, план дня). */}
+          {computed.dish !== null && !compositionEmpty && (
+            <div
+              // «Занято» — только пока идёт расчёт. Незаполненная строка держит
+              // его сколь угодно долго, и бесконечное «занято» для читающего с
+              // экрана было бы неправдой; приглушение при этом остаётся: числа
+              // относятся к прежнему составу.
+              aria-busy={computed.pending}
+              className={cn(
+                "mt-block flex flex-col gap-field",
+                computed.stale && "opacity-60 transition-opacity",
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-block">
+                <RatioBadge ratio={computed.dish.ratio} />
+                <span className="tabular-nums">
+                  {t("form.computedKcal", {
+                    value: computed.dish.kcal.toFixed(0),
+                  })}
+                </span>
+              </div>
+              <MacroBar
+                fatG={computed.dish.fat_g}
+                proteinG={computed.dish.protein_g}
+                carbsG={computed.dish.carbs_g}
+              />
+              <p className="m-0 text-sm text-muted-foreground">
+                {t("form.computedHint")}
+              </p>
+              {/* Версия ядра — рядом с любыми его числами, как в калькуляторе,
+                  карточке рецепта и итогах дня: расчёт разных версий может
+                  отличаться, и это должно быть видно. */}
+              <p className="m-0 text-xs text-muted-foreground">
+                {t("form.engineVersion", {
+                  version: computed.dish.engine_version,
+                })}
+              </p>
+            </div>
+          )}
+
+          {computed.isError && (
+            <p role="status" className="mt-field mb-0 text-sm text-warning">
+              {t("form.computedFailed")}
+            </p>
+          )}
         </fieldset>
 
         <fieldset className="m-0 border-0 p-0">
