@@ -29,7 +29,7 @@ from core.models import (
     SeizureLog,
     SeizureType,
 )
-from core.models.enums import IntakeScale, MealSlot, UserRole
+from core.models.enums import IntakeScale, UserRole
 from core.repositories import patients as patients_repo
 
 pytestmark = pytest.mark.asyncio
@@ -90,7 +90,7 @@ async def _menu_item(session, *, patient) -> MenuItem:
     menu = Menu(patient_id=patient.id, date=date(2026, 8, 1))
     session.add(menu)
     await session.flush()
-    item = MenuItem(menu_id=menu.id, patient_id=patient.id, meal_slot=MealSlot.BREAKFAST)
+    item = MenuItem(menu_id=menu.id, patient_id=patient.id, meal_index=1)
     session.add(item)
     await session.flush()
     return item

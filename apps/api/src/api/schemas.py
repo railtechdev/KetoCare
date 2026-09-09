@@ -243,6 +243,14 @@ class PatientRead(BaseModel):
 
 # --- prescriptions --------------------------------------------------------
 
+#: Сколько приёмов пищи в день можно назначить.
+#:
+#: Отсюда же берётся потолок номера приёма в плане дня
+#: (`schemas_menus.MenuItemWrite.meal_index`): план не может содержать приём,
+#: которого нельзя назначить. Второе объявление этой границы однажды разошлось
+#: бы с первым (ADR-0029).
+MAX_MEALS_PER_DAY = 10
+
 
 class PrescriptionCreate(BaseModel):
     """Валидация из раздела 8.3 ТЗ: ratio 1.0-5.0, kcal 500-3000."""
@@ -251,7 +259,7 @@ class PrescriptionCreate(BaseModel):
     kcal_per_day: Annotated[int, Field(ge=500, le=3000)]
     protein_g: Annotated[float, Field(gt=0, le=300)]
     carbs_limit_g: Annotated[float, Field(ge=0, le=300)]
-    meals_per_day: Annotated[int, Field(ge=1, le=10)]
+    meals_per_day: Annotated[int, Field(ge=1, le=MAX_MEALS_PER_DAY)]
     effective_from: date
     restrictions: str | None = None
 

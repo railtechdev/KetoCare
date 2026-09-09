@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
-import { MEAL_SLOTS, useMenuQuery } from "../menu/useMenu";
+import { useMenuQuery } from "../menu/useMenu";
 import { itemDishKey, useMenuItemTitles } from "../menu/useDishCatalog";
 import { todayIso } from "../menu/dates";
 import { Panel } from "./Panel";
@@ -37,9 +37,9 @@ export function NextMealCard({ patientId }: { patientId: string }) {
   const items = menu.data?.items ?? [];
   const titles = useMenuItemTitles(patientId, items);
 
-  const next = MEAL_SLOTS.flatMap((slot) =>
-    items.filter((item) => item.meal_slot === slot),
-  ).find((item) => !item.eaten);
+  // Позиции приходят с сервера уже в порядке дня (по номеру приёма, затем по
+  // времени добавления), поэтому «следующий» — просто первый неотмеченный.
+  const next = items.find((item) => !item.eaten);
 
   // Название берётся тем же ключом, что и в меню: словарь заполнен по
   // `recipe:<id>` / `custom:<id>`, а не по идентификатору позиции.
@@ -105,7 +105,7 @@ export function NextMealCard({ patientId }: { patientId: string }) {
         ) : (
           <div className="flex flex-wrap items-center gap-block">
             <Badge variant="secondary">
-              {t(`nextMeal.slots.${next.meal_slot}`)}
+              {t("nextMeal.meal", { index: next.meal_index })}
             </Badge>
             <span className="min-w-0 text-card-title font-semibold break-words">
               {/* Ключ словаря — `recipe:<id>` / `custom:<id>`, а не идентификатор

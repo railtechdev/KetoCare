@@ -43,7 +43,7 @@ type Composition = list[tuple[uuid.UUID, float]]
 
 def to_spec(item: MenuItemWrite, snapshot: dict[str, Any] | None = None) -> MenuItemSpec:
     return MenuItemSpec(
-        meal_slot=item.meal_slot,
+        meal_index=item.meal_index,
         recipe_id=item.recipe_id,
         custom_dish_id=item.custom_dish_id,
         portion_factor=item.portion_factor,

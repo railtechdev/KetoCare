@@ -45,13 +45,6 @@ class RecipeStatus(enum.StrEnum):
     PUBLISHED = "published"
 
 
-class MealSlot(enum.StrEnum):
-    BREAKFAST = "breakfast"
-    LUNCH = "lunch"
-    DINNER = "dinner"
-    SNACK = "snack"
-
-
 class KetoneMethod(enum.StrEnum):
     BLOOD = "blood"
     URINE = "urine"

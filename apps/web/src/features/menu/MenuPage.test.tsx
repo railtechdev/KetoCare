@@ -42,7 +42,7 @@ const MENU = {
       id: "item-1",
       menu_id: "menu-1",
       patient_id: "p1",
-      meal_slot: "breakfast",
+      meal_index: 1,
       recipe_id: "r1",
       custom_dish_id: null,
       portion_factor: 1,
@@ -57,7 +57,7 @@ const MENU = {
       id: "item-2",
       menu_id: "menu-1",
       patient_id: "p1",
-      meal_slot: "dinner",
+      meal_index: 3,
       recipe_id: null,
       custom_dish_id: "d1",
       portion_factor: 0.5,
@@ -70,6 +70,19 @@ const MENU = {
     },
   ],
 };
+
+/** Сводка пациента с другим числом назначенных приёмов пищи. */
+function withMealsPerDay(meals: number) {
+  const answer = respond("/api/v1/patients/{patient_id}/overview") as {
+    data: { prescription: Record<string, unknown> };
+  };
+  return {
+    data: {
+      ...answer.data,
+      prescription: { ...answer.data.prescription, meals_per_day: meals },
+    },
+  };
+}
 
 function respond(path: string) {
   if (path === "/api/v1/patients") {
@@ -226,7 +239,7 @@ describe("MenuPage", () => {
       await screen.findByRole("heading", { level: 2, name: "Приёмы пищи" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 3, name: "Завтрак" }),
+      screen.getByRole("heading", { level: 3, name: "Приём 1" }),
     ).toBeInTheDocument();
   });
 
@@ -238,12 +251,12 @@ describe("MenuPage", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Добавить блюдо в приём «Обед»",
+        name: "Добавить блюдо в приём: Приём 2",
       }),
     );
 
     expect(
-      await screen.findByRole("dialog", { name: /Обед/ }),
+      await screen.findByRole("dialog", { name: /Приём 2/ }),
     ).toBeInTheDocument();
   });
 
@@ -265,9 +278,56 @@ describe("MenuPage", () => {
     expect(screen.queryByText(menuRu.totals.none as string)).toBeNull();
   });
 
+  it("показывает столько приёмов, сколько назначено, а не четыре", async () => {
+    // Назначение допускает до десяти приёмов, и клиника назначает шесть
+    // (`docs/AUDIT_KDC.md`). День из четырёх слотов такое назначение не
+    // раскладывал вовсе: экран писал «назначено 6, в плане 4», и достичь
+    // шести было нельзя (ADR-0029).
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/overview"
+          ? withMealsPerDay(6)
+          : respond(path),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "Приём 6" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 3, name: "Приём 7" }),
+    ).toBeNull();
+  });
+
+  it("не прячет позицию, стоящую дальше назначенного числа приёмов", async () => {
+    // Назначение могли поменять после того, как день собрали. Спрятанное
+    // блюдо пропало бы из плана молча, оставшись в итогах дня.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/overview"
+          ? withMealsPerDay(2)
+          : path === "/api/v1/patients/{patient_id}/menus"
+            ? {
+                data: {
+                  ...MENU,
+                  items: [{ ...MENU.items[0], id: "item-9", meal_index: 5 }],
+                },
+              }
+            : respond(path),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "Приём 5" }),
+    ).toBeInTheDocument();
+  });
+
   it("называет назначенное число приёмов и сколько их в плане", async () => {
     // Семья планировала день по четырём слотам, не зная, что назначено пять
-    // приёмов: `meals_per_day` не доходил ни до одного её экрана.
+    // приёмов: `meals_per_day` не доходил ни до одного её экрана. Теперь он
+    // задаёт и само число приёмов на экране (ADR-0029).
     //
     // В дне три блюда, но приёма два: второе блюдо стоит в том же завтраке.
     // Врач назначает именно приёмы, поэтому считаются они, а не позиции.
@@ -282,7 +342,7 @@ describe("MenuPage", () => {
                   {
                     ...MENU.items[1],
                     id: "item-3",
-                    meal_slot: "breakfast",
+                    meal_index: 1,
                   },
                 ],
               },

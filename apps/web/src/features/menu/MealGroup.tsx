@@ -8,10 +8,11 @@ import { formatPortionFactor } from "./dates";
 // число обязано выглядеть одинаково.
 import { formatGrams } from "../recipes/format";
 import { itemDishKey } from "./useDishCatalog";
-import type { MealSlot, MenuItemRead } from "./useMenu";
+import type { MenuItemRead } from "./useMenu";
 
 interface Props {
-  slot: MealSlot;
+  /** Номер приёма в дне, с единицы (ADR-0029) */
+  mealIndex: number;
   items: readonly MenuItemRead[];
   /** Названия блюд по ключу источника: позиция меню несёт только ссылку */
   titles: Record<string, string>;
@@ -28,14 +29,18 @@ interface Props {
 /**
  * Приём пищи внутри дня: позиции плана, отметки «съедено», кнопка добавления.
  *
+ * Приём назван номером, а не «завтраком»: сколько их в дне, задаёт назначение
+ * врача (до десяти), и четыре имени описывали только четырёхразовый день
+ * (ADR-0029).
+ *
  * Своей рамки у приёма нет намеренно. Раньше каждый был отдельной карточкой, и
  * пустой день занимал 808 px на четыре строки «Блюд пока нет» — две трети окна
  * до того, как в меню появилось хоть что-то (`docs/AUDIT_UI_LAYOUT.md`).
  * Приёмы — части одного дня, а не четыре независимых блока, поэтому они лежат
  * в одном блоке «Приёмы пищи» заголовками третьего уровня (правило П24).
  */
-export function MealSlotGroup({
-  slot,
+export function MealGroup({
+  mealIndex,
   items,
   titles,
   withdrawnByItem,
@@ -48,7 +53,7 @@ export function MealSlotGroup({
   const { t } = useTranslation("menu");
   const headingId = useId();
 
-  const slotName = t(`slots.${slot}`);
+  const mealName = t("meal.name", { index: mealIndex });
 
   return (
     <section
@@ -57,7 +62,7 @@ export function MealSlotGroup({
     >
       <div className="flex flex-wrap items-center justify-between gap-field">
         <h3 id={headingId} className="m-0 text-card-title font-semibold">
-          {slotName}
+          {mealName}
         </h3>
 
         <Button
@@ -67,15 +72,15 @@ export function MealSlotGroup({
           className="min-h-touch"
           onClick={onAdd}
           disabled={pending}
-          aria-label={t("slot.addTo", { slot: slotName })}
+          aria-label={t("meal.addTo", { meal: mealName })}
         >
           <Plus aria-hidden="true" />
-          {t("slot.add")}
+          {t("meal.add")}
         </Button>
       </div>
 
       {items.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">{t("slot.empty")}</p>
+        <p className="m-0 text-sm text-muted-foreground">{t("meal.empty")}</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-field p-0">
           {items.map((item) => {
@@ -134,7 +139,7 @@ export function MealSlotGroup({
                     </Button>
                   }
                   title={t("item.removeTitle", { name: title })}
-                  description={t("item.removeDescription", { slot: slotName })}
+                  description={t("item.removeDescription", { meal: mealName })}
                   confirmLabel={t("item.removeConfirm")}
                   cancelLabel={t("common:actions.cancel")}
                   onConfirm={() => onRemove(item.id)}

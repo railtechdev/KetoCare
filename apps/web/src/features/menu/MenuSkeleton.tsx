@@ -1,7 +1,7 @@
 import { Skeleton } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { MEAL_SLOTS } from "./useMenu";
+import { DEFAULT_MEAL_COUNT } from "./useMenu";
 
 /**
  * Заглушка загрузки меню в форме будущего содержимого (правило П15 канона).
@@ -25,7 +25,7 @@ export function MenuSkeleton() {
           реальную раскладку, иначе экран прыгает после загрузки (правило П15). */}
       <Skeleton
         className="w-full rounded-xl"
-        style={{ height: `${MEAL_SLOTS.length * 72 + 56}px` }}
+        style={{ height: `${DEFAULT_MEAL_COUNT * 72 + 56}px` }}
       />
     </div>
   );

@@ -758,7 +758,6 @@ class TestDeleteRecipe:
         from datetime import date as date_type
 
         from core.models import Menu, MenuItem
-        from core.models.enums import MealSlot
 
         admin = await make_user(UserRole.ADMIN)
         patient = await make_patient()
@@ -772,7 +771,7 @@ class TestDeleteRecipe:
             MenuItem(
                 menu_id=menu.id,
                 patient_id=patient.id,
-                meal_slot=MealSlot.BREAKFAST,
+                meal_index=1,
                 recipe_id=recipe_id,
                 portion_factor=1,
             )

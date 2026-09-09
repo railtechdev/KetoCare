@@ -37,7 +37,7 @@ function menu(overrides: Record<string, unknown> = {}) {
         id: "item-1",
         menu_id: "menu-1",
         patient_id: SESSION.patientId,
-        meal_slot: "breakfast",
+        meal_index: 1,
         recipe_id: null,
         custom_dish_id: null,
         portion_factor: 1,

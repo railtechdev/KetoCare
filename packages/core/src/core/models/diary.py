@@ -15,13 +15,23 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from .base import Base, CreatedAtMixin, SoftDeleteMixin, UpdatedAtMixin, UUIDPkMixin
-from .enums import DiarySource, KetoneMethod, MealSlot, pg_enum
+from .enums import DiarySource, KetoneMethod, pg_enum
 
 
 class SeizureType(Base, UUIDPkMixin):
@@ -158,6 +168,11 @@ class Menu(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
 
 class MenuItem(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
     __tablename__ = "menu_items"
+    # Нулевого приёма не бывает: нумерация с единицы, как её читает человек.
+    # Верхней границы у столбца нет намеренно — её задаёт назначение
+    # (`meals_per_day`), и дублировать её здесь значило бы завести второе место,
+    # где эта граница живёт.
+    __table_args__ = (CheckConstraint("meal_index >= 1", name="ck_menu_items_meal_index_positive"),)
 
     menu_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("menus.id"), nullable=False
@@ -165,7 +180,15 @@ class MenuItem(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixi
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
     )
-    meal_slot: Mapped[MealSlot] = mapped_column(pg_enum(MealSlot, "meal_slot"), nullable=False)
+    #: Порядковый номер приёма пищи в дне, с единицы (ADR-0029).
+    #:
+    #: Не имя («завтрак») и не enum: число приёмов задаёт назначение
+    #: (`prescriptions.meals_per_day`, 1-10), а клиника считает приёмы, а не
+    #: называет их — так спрашивает её собственная анкета регистрации
+    #: («3 приёма пищи / 5 приёмов пищи / более 5»). Четыре именованных слота
+    #: были у́же предметной области: шестиприёмное назначение в них не
+    #: раскладывалось вовсе.
+    meal_index: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     recipe_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("recipes.id")
     )

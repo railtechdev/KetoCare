@@ -20,7 +20,7 @@ describe("ключ блюда в меню", () => {
     return {
       id: ITEM,
       menu_id: "m1",
-      meal_slot: "breakfast",
+      meal_index: 1,
       recipe_id: null,
       custom_dish_id: null,
       portion_factor: 1,

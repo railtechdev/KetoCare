@@ -14,9 +14,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-from core.models.enums import MealSlot
-
-from .schemas import DishComputed
+from .schemas import MAX_MEALS_PER_DAY, DishComputed
 
 # Технические, а не медицинские границы. Сколько блюд бывает в дне и насколько
 # крупной бывает порция, ТЗ не задаёт (правило 1 CLAUDE.md), поэтому здесь только
@@ -45,7 +43,12 @@ def _quantize_portion_factor(value: float) -> float:
 class MenuItemWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    meal_slot: MealSlot
+    #: Номер приёма пищи в дне, с единицы (ADR-0029).
+    #:
+    #: Верхняя граница — из назначения: приёмов столько, сколько назначил врач
+    #: (`meals_per_day`, до 10). Здесь стоит тот же потолок, а не свой: второе
+    #: место, где живёт эта граница, однажды разошлось бы с первым.
+    meal_index: Annotated[int, Field(ge=1, le=MAX_MEALS_PER_DAY)]
     recipe_id: uuid.UUID | None = None
     custom_dish_id: uuid.UUID | None = None
     portion_factor: Annotated[
@@ -105,7 +108,7 @@ class MenuItemRead(BaseModel):
     id: uuid.UUID
     menu_id: uuid.UUID
     patient_id: uuid.UUID
-    meal_slot: MealSlot
+    meal_index: int
     recipe_id: uuid.UUID | None
     custom_dish_id: uuid.UUID | None
     portion_factor: float

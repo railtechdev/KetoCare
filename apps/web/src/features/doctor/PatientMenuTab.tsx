@@ -14,7 +14,7 @@ import {
 } from "../menu/WithdrawnProductsNotice";
 import { withdrawnByItem } from "../menu/withdrawn";
 import {
-  MEAL_SLOTS,
+  plannedMealIndexes,
   useDayTargets,
   useDayTolerance,
   useMenuQuery,
@@ -89,19 +89,25 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
 
         <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
 
-        {MEAL_SLOTS.map((slot) => {
-          const slotItems = items.filter((item) => item.meal_slot === slot);
-          if (slotItems.length === 0) return null;
+        {/* Только занятые приёмы: экран на чтение, добавлять сюда нечего, и
+            пустая строка «Блюд пока нет» врачу ничего не сообщает. Поэтому
+            число назначенных приёмов здесь и не спрашивается — в отличие от
+            экрана семьи, где приём надо показать, чтобы в него можно было
+            положить блюдо (ADR-0029). */}
+        {plannedMealIndexes(items).map((mealIndex) => {
+          const mealItems = items.filter(
+            (item) => item.meal_index === mealIndex,
+          );
 
           return (
             <Section
-              key={slot}
-              title={t(`menu.slots.${slot}`)}
+              key={mealIndex}
+              title={t("menu.meal", { index: mealIndex })}
               level={3}
               density="compact"
             >
               <ul className="m-0 flex list-none flex-col gap-field p-0">
-                {slotItems.map((item) => {
+                {mealItems.map((item) => {
                   const key = itemDishKey(item);
                   return (
                     <li
