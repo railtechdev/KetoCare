@@ -558,19 +558,19 @@ class TestMeal:
             "items": [
                 {
                     "id": "item-1",
-                    "meal_slot": "breakfast",
+                    "meal_index": 1,
                     "title": "Омлет с маслом",
                     "eaten": False,
                 },
                 {
                     "id": "item-3",
-                    "meal_slot": "lunch",
+                    "meal_index": 2,
                     "title": "Суп со сливками",
                     "eaten": False,
                 },
                 {
                     "id": "item-2",
-                    "meal_slot": "dinner",
+                    "meal_index": 3,
                     "title": "Курица с брокколи",
                     "eaten": True,
                 },
@@ -586,7 +586,7 @@ class TestMeal:
 
         assert message.last == texts.MEAL_ASK
         buttons = [button.text for row in message.answers[-1][1].inline_keyboard for button in row]
-        assert "Завтрак: Омлет с маслом" in buttons
+        assert "Приём 1: Омлет с маслом" in buttons
         assert all("Курица" not in text for text in buttons), "съеденное не предлагается"
 
     @pytest.mark.asyncio
@@ -604,7 +604,7 @@ class TestMeal:
         # Эхо называет отмеченное блюдо, ниже — остаток плана.
         assert "Омлет с маслом" in message.last
         buttons = [b.text for row in message.answers[-1][1].inline_keyboard for b in row]
-        assert "Обед: Суп со сливками" in buttons
+        assert "Приём 2: Суп со сливками" in buttons
         # Выход из серии — «Готово», не «Отмена»: отметки уже сохранены.
         assert texts.BTN_DONE in buttons
         assert texts.BTN_CANCEL not in buttons
@@ -621,7 +621,7 @@ class TestMeal:
             await scenarios.meal_mark(callback, state, api, linked_store, SETTINGS)
 
         assert api.eaten == ["item-1", "item-3"]
-        assert message.last == texts.MEAL_MARKED_LAST.format(title="Обед: Суп со сливками")
+        assert message.last == texts.MEAL_MARKED_LAST.format(title="Приём 2: Суп со сливками")
         assert await state.get_state() is None
 
     @pytest.mark.asyncio

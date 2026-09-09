@@ -710,7 +710,7 @@ def _meal_buttons(items: list[dict[str, Any]]) -> list[tuple[str, str]]:
     return [
         (
             str(item["id"]),
-            f"{texts.MEAL_SLOTS.get(item['meal_slot'], item['meal_slot'])}: "
+            f"{texts.meal_name(item['meal_index'])}: "
             f"{item.get('title') or texts.MEAL_UNKNOWN_DISH}",
         )
         for item in items

@@ -12,7 +12,7 @@ const item = (over: Partial<MenuItemRead>): MenuItemRead => ({
   id: "item-1",
   menu_id: "menu-1",
   patient_id: "patient-1",
-  meal_slot: "breakfast",
+  meal_index: 1,
   recipe_id: null,
   custom_dish_id: null,
   portion_factor: 1,
@@ -27,13 +27,13 @@ describe("toWriteItem", () => {
   it("рецепт заполняет только recipe_id", () => {
     expect(
       toWriteItem({
-        slot: "lunch",
+        mealIndex: 2,
         kind: "recipe",
         id: "recipe-1",
         portionFactor: 1.5,
       }),
     ).toEqual({
-      meal_slot: "lunch",
+      meal_index: 2,
       recipe_id: "recipe-1",
       custom_dish_id: null,
       portion_factor: 1.5,
@@ -43,13 +43,13 @@ describe("toWriteItem", () => {
   it("своё блюдо заполняет только custom_dish_id", () => {
     expect(
       toWriteItem({
-        slot: "snack",
+        mealIndex: 4,
         kind: "custom",
         id: "dish-1",
         portionFactor: 0.5,
       }),
     ).toEqual({
-      meal_slot: "snack",
+      meal_index: 4,
       recipe_id: null,
       custom_dish_id: "dish-1",
       portion_factor: 0.5,
@@ -64,17 +64,17 @@ describe("toWriteItems", () => {
     expect(
       toWriteItems([
         item({ id: "a", recipe_id: "recipe-1", eaten: true }),
-        item({ id: "b", meal_slot: "dinner", custom_dish_id: "dish-1" }),
+        item({ id: "b", meal_index: 3, custom_dish_id: "dish-1" }),
       ]),
     ).toEqual([
       {
-        meal_slot: "breakfast",
+        meal_index: 1,
         recipe_id: "recipe-1",
         custom_dish_id: null,
         portion_factor: 1,
       },
       {
-        meal_slot: "dinner",
+        meal_index: 3,
         recipe_id: null,
         custom_dish_id: "dish-1",
         portion_factor: 1,

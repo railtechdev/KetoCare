@@ -5,7 +5,6 @@ import { api, errorCodeOf } from "../../lib/api";
 import type { DayTolerance } from "../patients/dayVerdict";
 import { patientOverviewKey, patientOverviewQuery } from "../patients/overview";
 
-export type MealSlot = components["schemas"]["MealSlot"];
 export type MenuRead = components["schemas"]["MenuRead"];
 export type MenuItemRead = components["schemas"]["MenuItemRead"];
 export type MenuItemWrite = components["schemas"]["MenuItemWrite"];
@@ -14,13 +13,33 @@ export type DayTotals = components["schemas"]["DishComputed"];
 /** Источник позиции меню: рецепт из общей базы или своё блюдо пациента. */
 export type DishKind = "recipe" | "custom";
 
-/** Приёмы пищи в порядке дня (раздел 4.2 ТЗ, `menu_items.meal_slot`). */
-export const MEAL_SLOTS: readonly MealSlot[] = [
-  "breakfast",
-  "lunch",
-  "dinner",
-  "snack",
-];
+/**
+ * Сколько приёмов пищи показывать в дне, когда назначения нет.
+ *
+ * Ровно столько, сколько их было до перехода на позиции (ADR-0029): семья без
+ * назначения видит тот же день, что и раньше, а не пустой экран.
+ */
+export const DEFAULT_MEAL_COUNT = 4;
+
+/**
+ * Номера приёмов пищи в порядке дня.
+ *
+ * Их столько, сколько назначил врач (`meals_per_day`), и это главное: при шести
+ * приёмах день из четырёх слотов не собирался вовсе, а экран честно писал
+ * «назначено 6, в плане 4» — и достичь шести было нельзя (ADR-0029).
+ *
+ * Уже сохранённые позиции не прячутся, даже если их номер больше назначенного:
+ * назначение могли поменять после того, как день собрали, и спрятанное блюдо
+ * пропало бы из плана молча, оставшись в итогах дня.
+ */
+export function mealIndexes(
+  mealsPerDay: number | null | undefined,
+  items: readonly MenuItemRead[] = [],
+): number[] {
+  const planned = Math.max(...items.map((item) => item.meal_index), 0);
+  const count = Math.max(mealsPerDay ?? DEFAULT_MEAL_COUNT, planned, 1);
+  return Array.from({ length: count }, (_, i) => i + 1);
+}
 
 /** Ключи запросов иерархией (раздел 8.4 ТЗ): день лежит под пациентом. */
 export function menuKey(patientId: string | null, date: string) {
@@ -270,6 +289,19 @@ export interface DayTargets {
 }
 
 /**
+ * Сколько приёмов пищи назначено ребёнку сейчас.
+ *
+ * Без даты, в отличие от `useDayTargets`: норма дня относится к конкретному
+ * дню, а число приёмов — это форма плана, и она нужна на любой дате. Иначе
+ * вчерашний день пришлось бы рисовать четырьмя приёмами, а сегодняшний —
+ * шестью, при одном и том же назначении.
+ */
+export function useMealsPerDay(patientId: string | null): number | null {
+  const overview = useQuery(patientOverviewQuery(patientId));
+  return overview.data?.prescription?.meals_per_day ?? null;
+}
+
+/**
  * Нормы дня для показа остатка «осталось до цели» (правило П18 UI-канона).
  *
  * Источник тот же, что у вердикта, — сводка пациента, и ограничение то же:
@@ -303,13 +335,13 @@ export function useDayTargets(
  * состояние «выбраны оба» на экране невозможно в принципе.
  */
 export function toWriteItem(input: {
-  slot: MealSlot;
+  mealIndex: number;
   kind: DishKind;
   id: string;
   portionFactor: number;
 }): MenuItemWrite {
   return {
-    meal_slot: input.slot,
+    meal_index: input.mealIndex,
     recipe_id: input.kind === "recipe" ? input.id : null,
     custom_dish_id: input.kind === "custom" ? input.id : null,
     portion_factor: input.portionFactor,
@@ -321,7 +353,7 @@ export function toWriteItems(
   items: readonly MenuItemRead[] | undefined,
 ): MenuItemWrite[] {
   return (items ?? []).map((item) => ({
-    meal_slot: item.meal_slot,
+    meal_index: item.meal_index,
     recipe_id: item.recipe_id,
     custom_dish_id: item.custom_dish_id,
     portion_factor: item.portion_factor,

@@ -7,7 +7,17 @@ import type { Session } from "../session/useSession";
 import type { Menu, MenuItem } from "./useMenu";
 import { today, useMarkEaten, useMenu } from "./useMenu";
 
-const SLOTS = ["breakfast", "lunch", "dinner", "snack"] as const;
+/**
+ * Приёмы, которые есть в плане, в порядке дня.
+ *
+ * Экран показывает только занятые приёмы — он на чтение, добавлять сюда
+ * нечего. Номер приёма приходит с сервера (ADR-0029), и перечислять их
+ * заранее списком из четырёх имён больше нельзя: врач назначает до десяти.
+ * Позиции уже отсортированы сервером, `Set` сохраняет этот порядок.
+ */
+function plannedMeals(items: readonly { meal_index: number }[]): number[] {
+  return [...new Set(items.map((item) => item.meal_index))];
+}
 /** Целые граммы — целыми: «50 г», а не «50.0 г». Дробные — с одним знаком. */
 function formatGrams(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -90,12 +100,17 @@ function DayPlan({
         </WarningBanner>
       )}
 
-      {SLOTS.map((slot) => {
-        const items = menu.items.filter((item) => item.meal_slot === slot);
-        if (items.length === 0) return null;
+      {plannedMeals(menu.items).map((mealIndex) => {
+        const items = menu.items.filter(
+          (item) => item.meal_index === mealIndex,
+        );
 
         return (
-          <Section key={slot} title={t(`menu.slots.${slot}`)} density="compact">
+          <Section
+            key={mealIndex}
+            title={t("menu.meal", { index: mealIndex })}
+            density="compact"
+          >
             <ul className="flex flex-col gap-field">
               {items.map((item) => (
                 <li key={item.id}>

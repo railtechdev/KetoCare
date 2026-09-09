@@ -146,8 +146,8 @@ class TestUpsert:
             json={
                 "date": MENU_DATE,
                 "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id)},
-                    {"meal_slot": "lunch", "custom_dish_id": str(dish.id)},
+                    {"meal_index": 1, "recipe_id": str(recipe.id)},
+                    {"meal_index": 2, "custom_dish_id": str(dish.id)},
                 ],
             },
             headers=auth_headers(parent),
@@ -162,7 +162,7 @@ class TestUpsert:
         assert body["engine_version"] == ENGINE_VERSION, (
             "сохранённые итоги обязаны нести версию движка (раздел 4.1 ТЗ)"
         )
-        assert [item["meal_slot"] for item in body["items"]] == ["breakfast", "lunch"]
+        assert [item["meal_index"] for item in body["items"]] == [1, 2]
         assert all(item["eaten"] is False for item in body["items"])
 
     async def test_portion_factor_scales_totals(
@@ -177,9 +177,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id), "portion_factor": 0.5}
-                ],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id), "portion_factor": 0.5}],
             },
             headers=auth_headers(parent),
         )
@@ -208,7 +206,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -239,8 +237,8 @@ class TestUpsert:
             json={
                 "date": MENU_DATE,
                 "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id)},
-                    {"meal_slot": "dinner", "recipe_id": str(recipe.id), "portion_factor": 2},
+                    {"meal_index": 1, "recipe_id": str(recipe.id)},
+                    {"meal_index": 3, "recipe_id": str(recipe.id), "portion_factor": 2},
                 ],
             },
             headers=auth_headers(parent),
@@ -266,9 +264,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id), "portion_factor": 2}
-                ],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id), "portion_factor": 2}],
             },
             headers=auth_headers(parent),
         )
@@ -294,7 +290,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "lunch", "custom_dish_id": str(dish.id)}],
+                "items": [{"meal_index": 2, "custom_dish_id": str(dish.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -318,9 +314,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id), "portion_factor": 0.125}
-                ],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id), "portion_factor": 0.125}],
             },
             headers=auth_headers(parent),
         )
@@ -342,9 +336,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id), "portion_factor": 0.004}
-                ],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id), "portion_factor": 0.004}],
             },
             headers=auth_headers(parent),
         )
@@ -364,7 +356,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(first.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(first.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -374,7 +366,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(second.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(second.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -411,7 +403,7 @@ class TestUpsert:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(breakfast.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -429,26 +421,28 @@ class TestUpsert:
             json={
                 "date": MENU_DATE,
                 "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(breakfast.id)},
-                    {"meal_slot": "dinner", "recipe_id": str(dinner.id)},
+                    {"meal_index": 1, "recipe_id": str(breakfast.id)},
+                    {"meal_index": 3, "recipe_id": str(dinner.id)},
                 ],
             },
             headers=auth_headers(parent),
         )
-        items = {item["meal_slot"]: item for item in updated.json()["items"]}
-        assert items["breakfast"]["id"] == breakfast_id
-        assert items["breakfast"]["eaten"] is True
-        assert items["dinner"]["eaten"] is False
+        items = {item["meal_index"]: item for item in updated.json()["items"]}
+        assert items[1]["id"] == breakfast_id
+        assert items[1]["eaten"] is True
+        assert items[3]["eaten"] is False
 
 
 class TestValidation:
     @pytest.mark.parametrize(
         "item",
         [
-            {"meal_slot": "breakfast"},  # ни рецепта, ни своего блюда
-            {"meal_slot": "breakfast", "portion_factor": 0},
-            {"meal_slot": "breakfast", "portion_factor": -1},
-            {"meal_slot": "second_dinner"},  # нет такого приёма пищи
+            {"meal_index": 1},  # ни рецепта, ни своего блюда
+            {"meal_index": 1, "portion_factor": 0},
+            {"meal_index": 1, "portion_factor": -1},
+            {"meal_index": 0},  # нулевого приёма не бывает: счёт с единицы
+            {"meal_index": 11},  # больше, чем можно назначить (MAX_MEALS_PER_DAY)
+            {"meal_index": "breakfast"},  # приём — номер, а не имя (ADR-0029)
         ],
     )
     async def test_invalid_item_rejected(
@@ -479,7 +473,7 @@ class TestValidation:
                 "date": MENU_DATE,
                 "items": [
                     {
-                        "meal_slot": "breakfast",
+                        "meal_index": 1,
                         "recipe_id": str(recipe.id),
                         "custom_dish_id": str(dish.id),
                     }
@@ -514,7 +508,7 @@ class TestValidation:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(draft.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(draft.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -529,7 +523,7 @@ class TestValidation:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(uuid.uuid4())}],
+                "items": [{"meal_index": 1, "recipe_id": str(uuid.uuid4())}],
             },
             headers=auth_headers(parent),
         )
@@ -549,7 +543,7 @@ class TestValidation:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "custom_dish_id": str(foreign_dish.id)}],
+                "items": [{"meal_index": 1, "custom_dish_id": str(foreign_dish.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -558,6 +552,48 @@ class TestValidation:
 
 
 class TestGet:
+    async def test_item_names_the_meal_by_number(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Форму позиции читают три приложения, и все три называют приём номером.
+
+        Потребители: кабинет (`apps/web`, `features/menu/MealGroup.tsx`), Mini App
+        (`features/menu/MenuScreen.tsx`) и бот (кнопки «отметить съеденным»,
+        `bot/texts.meal_name`). Имени приёма в ответе нет и не будет: сколько их
+        в дне, задаёт назначение, а как они называются — открытый вопрос 28
+        (ADR-0029).
+
+        Отдельно проверяется, что приём с номером больше четырёх сохраняется и
+        возвращается: ровно этого не мог прежний план из четырёх слотов, и ради
+        этого всё и делалось.
+        """
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_index": 6, "recipe_id": str(recipe.id)},
+                    {"meal_index": 1, "recipe_id": str(recipe.id)},
+                ],
+            },
+            headers=auth_headers(parent),
+        )
+
+        response = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert response.status_code == 200, response.text
+        items = response.json()["items"]
+
+        # Порядок дня — по номеру приёма, а не по порядку записи.
+        assert [item["meal_index"] for item in items] == [1, 6]
+        assert all("meal_slot" not in item for item in items)
+
     async def test_returns_menu_of_requested_date(
         self, client, session, make_user, make_patient, auth_headers
     ):
@@ -570,7 +606,7 @@ class TestGet:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -611,8 +647,8 @@ class TestGet:
             json={
                 "date": MENU_DATE,
                 "items": [
-                    {"meal_slot": "breakfast", "recipe_id": str(recipe.id)},
-                    {"meal_slot": "lunch", "custom_dish_id": str(dish.id)},
+                    {"meal_index": 1, "recipe_id": str(recipe.id)},
+                    {"meal_index": 2, "custom_dish_id": str(dish.id)},
                 ],
             },
             headers=auth_headers(parent),
@@ -640,8 +676,8 @@ class TestGet:
         assert [entry["name_ru"] for entry in withdrawn] == [butter.name_ru]
 
         # Названы и позиции: в дне их несколько, и семья должна знать, какая.
-        breakfast = next(i for i in body["items"] if i["meal_slot"] == "breakfast")
-        lunch = next(i for i in body["items"] if i["meal_slot"] == "lunch")
+        breakfast = next(i for i in body["items"] if i["meal_index"] == 1)
+        lunch = next(i for i in body["items"] if i["meal_index"] == 2)
         assert withdrawn[0]["item_ids"] == [breakfast["id"]]
         assert lunch["id"] not in withdrawn[0]["item_ids"]
 
@@ -674,7 +710,7 @@ class TestSnapshotFreezesTheDay:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -698,7 +734,7 @@ class TestSnapshotFreezesTheDay:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -728,7 +764,7 @@ class TestSnapshotFreezesTheDay:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -759,7 +795,7 @@ class TestSnapshotFreezesTheDay:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -773,7 +809,7 @@ class TestSnapshotFreezesTheDay:
             _url(patient),
             json={
                 "date": "2026-03-09",
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -793,7 +829,7 @@ class TestSnapshotFreezesTheDay:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -821,7 +857,7 @@ class TestSnapshotFreezesTheDay:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -853,7 +889,7 @@ class TestExcludedProductsAreNamed:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -887,7 +923,7 @@ class TestExcludedProductsAreNamed:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -921,7 +957,7 @@ class TestRecentProducts:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -963,7 +999,7 @@ class TestRecentProducts:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -1004,7 +1040,7 @@ class TestAccessControl:
             _url(other_child),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(uuid.uuid4())}],
+                "items": [{"meal_index": 1, "recipe_id": str(uuid.uuid4())}],
             },
             headers=auth_headers(parent),
         )
@@ -1025,7 +1061,7 @@ class TestAccessControl:
             _url(other_patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(other_parent),
         )
@@ -1052,7 +1088,7 @@ class TestEaten:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -1102,7 +1138,7 @@ async def _save_day(client, auth_headers, parent, patient, session, day):
         _url(patient),
         json={
             "date": day.isoformat(),
-            "items": [{"meal_slot": "breakfast", "custom_dish_id": str(dish.id)}],
+            "items": [{"meal_index": 1, "custom_dish_id": str(dish.id)}],
         },
         headers=auth_headers(parent),
     )
@@ -1128,7 +1164,7 @@ class TestItemComposition:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )
@@ -1157,7 +1193,7 @@ class TestItemComposition:
             _url(patient),
             json={
                 "date": MENU_DATE,
-                "items": [{"meal_slot": "breakfast", "recipe_id": str(recipe.id)}],
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
             },
             headers=auth_headers(parent),
         )

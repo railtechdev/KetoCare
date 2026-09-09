@@ -22,17 +22,16 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import CustomDish, Menu, MenuItem, Recipe, RecipeIngredient
-from ..models.enums import MealSlot
 
 # Ключ, по которому позиция плана считается «той же самой» при пересохранении дня.
-type _ItemKey = tuple[MealSlot, uuid.UUID | None, uuid.UUID | None]
+type _ItemKey = tuple[int, uuid.UUID | None, uuid.UUID | None]
 
 
 @dataclass(frozen=True, slots=True)
 class MenuItemSpec:
-    """Позиция плана дня: приём пищи, блюдо и множитель порции (раздел 4.2 ТЗ)."""
+    """Позиция плана дня: номер приёма, блюдо и множитель порции (ADR-0029)."""
 
-    meal_slot: MealSlot
+    meal_index: int
     recipe_id: uuid.UUID | None
     custom_dish_id: uuid.UUID | None
     portion_factor: float
@@ -58,15 +57,16 @@ async def get_by_date(
 async def list_items(session: AsyncSession, *, menu_id: uuid.UUID) -> list[MenuItem]:
     """Позиции меню в порядке приёмов пищи.
 
-    Сортировка по `meal_slot` — это порядок значений в enum-типе (`breakfast`,
-    `lunch`, `dinner`, `snack`), то есть порядок дня. Внутри приёма — по времени
-    добавления: колонки `position` раздел 4.2 у `menu_items` не предусматривает.
+    Сортировка по `meal_index` — это и есть порядок дня: номер приёма. Прежде
+    сортировали по enum-типу `meal_slot`, и работало это лишь потому, что
+    значения в типе были перечислены в нужном порядке (ADR-0029). Внутри приёма
+    — по времени добавления: колонки `position` у `menu_items` нет.
     """
 
     stmt = (
         select(MenuItem)
         .where(MenuItem.menu_id == menu_id, MenuItem.deleted_at.is_(None))
-        .order_by(MenuItem.meal_slot, MenuItem.created_at, MenuItem.id)
+        .order_by(MenuItem.meal_index, MenuItem.created_at, MenuItem.id)
     )
     return list(await session.scalars(stmt))
 
@@ -227,12 +227,12 @@ async def replace_items(
 
     reusable: dict[_ItemKey, deque[MenuItem]] = defaultdict(deque)
     for stored in await list_items(session, menu_id=menu.id):
-        reusable[_item_key(stored.meal_slot, stored.recipe_id, stored.custom_dish_id)].append(
+        reusable[_item_key(stored.meal_index, stored.recipe_id, stored.custom_dish_id)].append(
             stored
         )
 
     for spec in items:
-        bucket = reusable.get(_item_key(spec.meal_slot, spec.recipe_id, spec.custom_dish_id))
+        bucket = reusable.get(_item_key(spec.meal_index, spec.recipe_id, spec.custom_dish_id))
         if bucket:
             kept = bucket.popleft()
             kept.portion_factor = spec.portion_factor
@@ -244,7 +244,7 @@ async def replace_items(
             MenuItem(
                 menu_id=menu.id,
                 patient_id=patient_id,
-                meal_slot=spec.meal_slot,
+                meal_index=spec.meal_index,
                 recipe_id=spec.recipe_id,
                 custom_dish_id=spec.custom_dish_id,
                 portion_factor=spec.portion_factor,
@@ -322,6 +322,6 @@ async def get_custom_dishes_by_ids(
 
 
 def _item_key(
-    meal_slot: MealSlot, recipe_id: uuid.UUID | None, custom_dish_id: uuid.UUID | None
+    meal_index: int, recipe_id: uuid.UUID | None, custom_dish_id: uuid.UUID | None
 ) -> _ItemKey:
-    return (meal_slot, recipe_id, custom_dish_id)
+    return (meal_index, recipe_id, custom_dish_id)

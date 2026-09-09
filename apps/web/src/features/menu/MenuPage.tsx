@@ -18,7 +18,7 @@ import { AddMenuItemForm } from "./AddMenuItemForm";
 import { CopyDayForm } from "./CopyDayForm";
 import { DayNavigator } from "./DayNavigator";
 import { DayTotalsPanel } from "./DayTotalsPanel";
-import { MealSlotGroup } from "./MealSlotGroup";
+import { MealGroup } from "./MealGroup";
 import {
   ExcludedProductsNotice,
   WithdrawnProductsNotice,
@@ -28,17 +28,17 @@ import { MenuSkeleton } from "./MenuSkeleton";
 import { formatDayLabel, todayIso } from "./dates";
 import { useMenuItemTitles } from "./useDishCatalog";
 import {
-  MEAL_SLOTS,
+  mealIndexes,
   toWriteItem,
   toWriteItems,
   useDayTargets,
+  useMealsPerDay,
   useDayTolerance,
   useDeleteMenuMutation,
   useEatenMutation,
   useMenuQuery,
   useUpsertMenuMutation,
   type DishKind,
-  type MealSlot,
 } from "./useMenu";
 
 /**
@@ -56,8 +56,8 @@ import {
 export function MenuPage({ patientId }: { patientId: string }) {
   const { t } = useTranslation("menu");
   const [date, setDate] = useState(todayIso);
-  /** Приём пищи, в который добавляют блюдо; `null` — панель закрыта */
-  const [addingSlot, setAddingSlot] = useState<MealSlot | null>(null);
+  /** Номер приёма, в который добавляют блюдо; `null` — панель закрыта */
+  const [addingMeal, setAddingMeal] = useState<number | null>(null);
   const [copying, setCopying] = useState(false);
 
   const menu = useMenuQuery(patientId, date);
@@ -74,10 +74,14 @@ export function MenuPage({ patientId }: { patientId: string }) {
   const titles = useMenuItemTitles(patientId, items);
   // Приёмы, а не блюда: в один приём их может быть несколько, а врач назначает
   // именно число приёмов.
-  const plannedSlots = new Set(items.map((item) => item.meal_slot)).size;
+  const plannedMeals = new Set(items.map((item) => item.meal_index)).size;
+  // Сколько приёмов показывать. До ADR-0029 их было ровно четыре, и назначение
+  // на шесть приёмов в дне не раскладывалось вовсе.
+  const mealsPerDay = useMealsPerDay(patientId);
+  const meals = mealIndexes(mealsPerDay, items);
 
   function addItem(input: {
-    slot: MealSlot;
+    mealIndex: number;
     kind: DishKind;
     id: string;
     portionFactor: number;
@@ -233,25 +237,25 @@ export function MenuPage({ patientId }: { patientId: string }) {
               description={
                 items.length === 0
                   ? t("day.empty")
-                  : targets === null
+                  : mealsPerDay === null
                     ? undefined
                     : t("meals.planned", {
-                        prescribed: targets.mealsPerDay,
-                        planned: plannedSlots,
+                        prescribed: mealsPerDay,
+                        planned: plannedMeals,
                       })
               }
               contentClassName="gap-0 divide-y divide-border"
             >
-              {MEAL_SLOTS.map((slot) => (
-                <MealSlotGroup
-                  key={slot}
-                  slot={slot}
-                  items={items.filter((item) => item.meal_slot === slot)}
+              {meals.map((mealIndex) => (
+                <MealGroup
+                  key={mealIndex}
+                  mealIndex={mealIndex}
+                  items={items.filter((item) => item.meal_index === mealIndex)}
                   titles={titles}
                   withdrawnByItem={withdrawn}
                   canRemove={items.length > 1}
                   pending={upsert.isPending}
-                  onAdd={() => setAddingSlot(slot)}
+                  onAdd={() => setAddingMeal(mealIndex)}
                   onRemove={removeItem}
                   onToggleEaten={(itemId, value) =>
                     eaten.mutate({ itemId, eaten: value })
@@ -276,26 +280,26 @@ export function MenuPage({ patientId }: { patientId: string }) {
       </AsyncSection>
 
       <FormSheet
-        open={addingSlot !== null}
+        open={addingMeal !== null}
         onOpenChange={(open) => {
-          if (!open) setAddingSlot(null);
+          if (!open) setAddingMeal(null);
         }}
         title={
-          addingSlot === null
-            ? t("slot.add")
-            : t("slot.addTo", { slot: t(`slots.${addingSlot}`) })
+          addingMeal === null
+            ? t("meal.add")
+            : t("meal.addTo", { meal: t("meal.name", { index: addingMeal }) })
         }
       >
-        {addingSlot !== null && (
+        {addingMeal !== null && (
           <AddMenuItemForm
             patientId={patientId}
-            slot={addingSlot}
+            mealIndex={addingMeal}
             pending={upsert.isPending}
             onAdd={(input) => {
-              addItem({ slot: addingSlot, ...input });
-              setAddingSlot(null);
+              addItem({ mealIndex: addingMeal, ...input });
+              setAddingMeal(null);
             }}
-            onCancel={() => setAddingSlot(null)}
+            onCancel={() => setAddingMeal(null)}
           />
         )}
       </FormSheet>

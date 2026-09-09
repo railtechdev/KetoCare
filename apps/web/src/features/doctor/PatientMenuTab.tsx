@@ -14,9 +14,10 @@ import {
 } from "../menu/WithdrawnProductsNotice";
 import { withdrawnByItem } from "../menu/withdrawn";
 import {
-  MEAL_SLOTS,
+  mealIndexes,
   useDayTargets,
   useDayTolerance,
+  useMealsPerDay,
   useMenuQuery,
 } from "../menu/useMenu";
 import { MyDishesPanel } from "../dishes/MyDishesPanel";
@@ -43,6 +44,8 @@ import { LinesSkeleton } from "./skeletons";
 export function PatientMenuTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
   const [date, setDate] = useState(todayIso);
+
+  const mealsPerDay = useMealsPerDay(patientId);
 
   const menu = useMenuQuery(patientId, date);
   const tolerance = useDayTolerance(patientId, date);
@@ -89,19 +92,21 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
 
         <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
 
-        {MEAL_SLOTS.map((slot) => {
-          const slotItems = items.filter((item) => item.meal_slot === slot);
-          if (slotItems.length === 0) return null;
+        {mealIndexes(mealsPerDay, items).map((mealIndex) => {
+          const mealItems = items.filter(
+            (item) => item.meal_index === mealIndex,
+          );
+          if (mealItems.length === 0) return null;
 
           return (
             <Section
-              key={slot}
-              title={t(`menu.slots.${slot}`)}
+              key={mealIndex}
+              title={t("menu.meal", { index: mealIndex })}
               level={3}
               density="compact"
             >
               <ul className="m-0 flex list-none flex-col gap-field p-0">
-                {slotItems.map((item) => {
+                {mealItems.map((item) => {
                   const key = itemDishKey(item);
                   return (
                     <li

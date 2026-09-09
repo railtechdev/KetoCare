@@ -355,12 +355,7 @@
     "portion": "порция × {{value}}",
     "eaten": "Съедено",
     "notEaten": "Не отмечено",
-    "slots": {
-      "breakfast": "Завтрак",
-      "lunch": "Обед",
-      "dinner": "Ужин",
-      "snack": "Перекус"
-    }
+    "meal": "Приём {{index}}"
   },
   "family": {
     "title": "Кто ведёт ребёнка дома",

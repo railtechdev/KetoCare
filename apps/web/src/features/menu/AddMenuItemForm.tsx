@@ -8,7 +8,7 @@ import { z } from "zod";
 import { Field } from "../../components/Field";
 import { DishPicker } from "./DishPicker";
 import type { DishOption } from "./useDishCatalog";
-import type { DishKind, MealSlot } from "./useMenu";
+import type { DishKind } from "./useMenu";
 
 /**
  * Границы множителя порции — технические, а не медицинские: колонка
@@ -24,7 +24,8 @@ type AddItemValues = z.infer<typeof addItemSchema>;
 
 interface Props {
   patientId: string | null;
-  slot: MealSlot;
+  /** Номер приёма, в который добавляют блюдо (ADR-0029) */
+  mealIndex: number;
   pending: boolean;
   onAdd: (input: { kind: DishKind; id: string; portionFactor: number }) => void;
   onCancel: () => void;
@@ -33,15 +34,15 @@ interface Props {
 /**
  * Добавление позиции в приём пищи: блюдо и множитель порции.
  *
- * Приём пищи не спрашивается: форма открывается кнопкой внутри своего слота, и
+ * Приём пищи не спрашивается: форма открывается кнопкой внутри своего приёма, и
  * на экране остаётся два поля вместо трёх (раздел 8.3 ТЗ: не больше трёх полей
  * в форме родительского интерфейса). Название приёма пищи остаётся у формы
- * подписью: подписи кнопок подвала одинаковы во всех слотах, и без неё
+ * подписью: подписи кнопок подвала одинаковы во всех приёмах, и без неё
  * пользователь скринридера не понял бы, в какой приём он добавляет блюдо.
  */
 export function AddMenuItemForm({
   patientId,
-  slot,
+  mealIndex,
   pending,
   onAdd,
   onCancel,
@@ -78,7 +79,9 @@ export function AddMenuItemForm({
     <form
       onSubmit={(event) => void onSubmit(event)}
       noValidate
-      aria-label={t("slot.addTo", { slot: t(`slots.${slot}`) })}
+      aria-label={t("meal.addTo", {
+        meal: t("meal.name", { index: mealIndex }),
+      })}
       className="flex flex-col gap-block rounded-lg border border-border p-4"
     >
       <DishPicker
@@ -114,7 +117,7 @@ export function AddMenuItemForm({
         submitLabel={t("add.submit")}
         pendingLabel={t("add.submitting")}
         pending={pending}
-        cancelLabel={t("slot.cancel")}
+        cancelLabel={t("meal.cancel")}
         onCancel={onCancel}
       />
     </form>
