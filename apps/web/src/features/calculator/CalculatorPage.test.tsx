@@ -327,8 +327,10 @@ describe("калькулятор", () => {
     expect(grams).not.toHaveAttribute("readonly");
   });
 
-  it("подбор недоступен, пока не задана цель", async () => {
-    // Подбирать граммовку не подо что: цель — вход этого действия.
+  it("подбор недоступен, пока не задана цель, и говорит об этом", async () => {
+    // Подбирать граммовку не подо что: цель — вход этого действия. Но серая
+    // кнопка без объяснения — это тупик: заказчица так и не дошла до подбора,
+    // единственного, чего нет у программы, к которой она привыкла.
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);
     await addButter(user);
@@ -336,11 +338,49 @@ describe("калькулятор", () => {
     const kcal = await screen.findByLabelText(/Калорийность/);
     await user.clear(kcal);
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /Подобрать граммовку/ }),
-      ).toBeDisabled(),
+    const solve = screen.getByRole("button", { name: /Подобрать граммовку/ });
+    await waitFor(() => expect(solve).toBeDisabled());
+
+    const reason = await screen.findByText(/Для подбора нужна цель/);
+    expect(solve).toHaveAttribute("aria-describedby", reason.id);
+  });
+
+  it("пустой состав назван один раз на обе кнопки", async () => {
+    // Строка на блок действий одна: при пустом составе причина у обеих кнопок
+    // одна и та же, и два одинаковых абзаца подряд — второе сообщение об одном
+    // и том же (правило П27), да ещё и озвученное дважды.
+    renderCalculator(PATIENT_ID);
+
+    const solve = await screen.findByRole("button", {
+      name: /Подобрать граммовку/,
+    });
+    const scale = screen.getByRole("button", { name: /Пересчитать порции/ });
+    expect(solve).toBeDisabled();
+    expect(scale).toBeDisabled();
+
+    const reason = screen.getByText("В составе нет продуктов.");
+    expect(solve).toHaveAttribute("aria-describedby", reason.id);
+    expect(scale).toHaveAttribute("aria-describedby", reason.id);
+    expect(screen.queryByText(/Для подбора нужна цель/)).toBeNull();
+  });
+
+  it("причина не говорит о назначении: экран работает и без ребёнка", async () => {
+    // Калькулятор специалиста открывается без выбранного пациента (ADR-0027),
+    // и «у ребёнка нет назначения» было бы там утверждением о ком-то, кого он
+    // не выбирал. О назначении говорят подпись поля и строка под целью.
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path.includes("overview")
+        ? { data: { ...OVERVIEW, prescription: null }, error: undefined }
+        : { data: PRODUCTS, error: undefined },
     );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    expect(
+      await screen.findByText(/Для подбора нужна цель/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Назначения у ребёнка нет/)).toBeNull();
   });
 
   it("подставляет цель приёма из назначения вместе с арифметикой", async () => {

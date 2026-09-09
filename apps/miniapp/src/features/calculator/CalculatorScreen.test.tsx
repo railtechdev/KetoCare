@@ -473,6 +473,23 @@ describe("калькулятор в Mini App", () => {
     expect((api.POST as Mock).mock.calls.length).toBe(before);
   });
 
+  it("отключённая кнопка называет причину", async () => {
+    // Серая кнопка без объяснения — тупик: в кабинете на этом застряла
+    // заказчица. Строка одна на блок действий: при пустом составе причина у
+    // обеих кнопок одна и та же.
+    renderScreen();
+
+    const solve = await screen.findByRole("button", {
+      name: "Подобрать граммовку",
+    });
+    const scale = screen.getByRole("button", { name: "Пересчитать порции" });
+    const reason = screen.getByText("В составе нет продуктов.");
+
+    expect(solve).toBeDisabled();
+    expect(solve).toHaveAttribute("aria-describedby", reason.id);
+    expect(scale).toHaveAttribute("aria-describedby", reason.id);
+  });
+
   it("без цели подбор не запускается", async () => {
     // Подбирать не из чего: цель — это то, подо что решатель считает.
     const user = userEvent.setup();
@@ -484,7 +501,9 @@ describe("калькулятор в Mini App", () => {
     expect(
       screen.getByRole("button", { name: "Подобрать граммовку" }),
     ).toBeDisabled();
-    expect(await screen.findByText(/Цель не задана/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Для подбора нужна цель/),
+    ).toBeInTheDocument();
   });
 
   it("пересчёт порций тоже переписывает состав, запятую понимает", async () => {

@@ -102,12 +102,19 @@ export function HandOffToPatient({ rows }: { rows: DishRow[] }) {
 
         {/* Подвал формы — общий: подтверждение первым, подпись меняется на
             время отправки. Кнопка выключена, пока не названы блюдо и ребёнок:
-            отправлять нечего, и отказ после нажатия был бы лишним шагом. */}
+            отправлять нечего, и отказ после нажатия был бы лишним шагом. И
+            выключена не молча — подвал называет, чего не хватает (правило
+            П44 канона). */}
         <FormFooter
           submitLabel={t("handoff.submit")}
           pendingLabel={t("handoff.pending")}
           pending={save.isPending}
           disabled={!ready}
+          reason={
+            title.trim() === ""
+              ? t("handoff.blocked.noTitle")
+              : t("handoff.blocked.noPatient")
+          }
         />
       </form>
     </Section>

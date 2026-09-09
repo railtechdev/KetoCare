@@ -8,6 +8,8 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import calculatorRu from "../../locales/ru/calculator.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import type { Role } from "../auth/roles";
+import { SessionContext } from "../auth/sessionContext";
 import { ProductPicker } from "./ProductPicker";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -28,6 +30,24 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
+/** Роль решает, предлагать ли рецепты: у врача такого раздела нет. */
+function withRole(role: Role) {
+  return function RoleWrapper({ children }: { children: ReactNode }) {
+    return (
+      <SessionContext.Provider
+        value={{
+          session: { userId: "u1", role, patientScope: null },
+          restoring: false,
+          signIn: () => {},
+          signOut: async () => {},
+        }}
+      >
+        {wrapper({ children })}
+      </SessionContext.Provider>
+    );
+  };
+}
+
 /**
  * Регрессия: поиск, ничего не нашедший, молчал.
  *
@@ -43,28 +63,88 @@ describe("поиск продукта в калькуляторе", () => {
     vi.clearAllMocks();
   });
 
-  it("говорит, что ничего не нашлось, и ведёт в справочник с тем же запросом", async () => {
+  it("говорит, что ничего не нашлось, и даёт два выхода с тем же запросом", async () => {
     const user = userEvent.setup();
     (api.GET as Mock).mockResolvedValue({
       data: { items: [], total: 0 },
       error: undefined,
     });
 
-    render(<ProductPicker onPick={() => {}} excludeIds={[]} />, { wrapper });
+    render(<ProductPicker onPick={() => {}} excludeIds={[]} suggestRecipes />, {
+      wrapper: withRole("parent"),
+    });
 
     // Роутер памяти монтируется асинхронно — поле появляется не сразу.
     await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
 
     expect(
-      await screen.findByText(/По запросу «фуагра» ничего не нашлось/),
+      await screen.findByText(/По запросу «фуагра» продуктов не нашлось/),
     ).toBeInTheDocument();
 
-    const link = screen.getByRole("link", { name: /Искать в справочнике/ });
-    // Запрос уезжает в адрес справочника: набирать слово второй раз, стоя у
+    // Запрос уезжает в адрес обоих разделов: набирать слово второй раз, стоя у
     // плиты, — это и есть тупик, который здесь закрывается.
-    expect(decodeURIComponent(link.getAttribute("href") ?? "")).toBe(
+    const catalog = screen.getByRole("link", { name: /Искать в справочнике/ });
+    expect(decodeURIComponent(catalog.getAttribute("href") ?? "")).toBe(
       "/app/products?q=фуагра",
     );
+
+    // Второй выход — в рецепты. Заказчица искала здесь «суп из говядины»:
+    // название блюда в поиске продуктов. Угадывать за неё, блюдо это или
+    // продукт, нельзя — можно назвать оба места.
+    const recipes = screen.getByRole("link", { name: /Искать в рецептах/ });
+    expect(decodeURIComponent(recipes.getAttribute("href") ?? "")).toBe(
+      "/app/recipes?q=фуагра",
+    );
+  });
+
+  it("не зовёт в рецепты того, у кого этого раздела нет", async () => {
+    // У врача раздела «Рецепты» нет (`SECTIONS_BY_ROLE`), и ссылка увела бы его
+    // на главную — тупик того же рода, который здесь и закрывается (П3).
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({
+      data: { items: [], total: 0 },
+      error: undefined,
+    });
+
+    render(<ProductPicker onPick={() => {}} excludeIds={[]} suggestRecipes />, {
+      wrapper: withRole("doctor"),
+    });
+
+    await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
+
+    expect(
+      await screen.findByText(/По запросу «фуагра» ничего не нашлось/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Искать в рецептах/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /Искать в справочнике/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("вне калькулятора про рецепты не заикается", async () => {
+    // Тот же поиск стоит в форме рецепта и в списке исключённых ребёнку
+    // продуктов: там совет «искать в рецептах» бессмыслен, а уход по ссылке
+    // потерял бы незаписанное.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({
+      data: { items: [], total: 0 },
+      error: undefined,
+    });
+
+    render(<ProductPicker onPick={() => {}} excludeIds={[]} />, {
+      wrapper: withRole("parent"),
+    });
+
+    await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
+
+    expect(
+      await screen.findByText(/По запросу «фуагра» ничего не нашлось/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Искать в рецептах/ }),
+    ).toBeNull();
   });
 
   it("молчит, пока найденное есть", async () => {
