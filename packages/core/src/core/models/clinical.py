@@ -227,6 +227,23 @@ class PatientIntake(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     seizure_frequency_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
     )
+    #: Частота приступов ДО начала кетодиетотерапии — то, с чем сравнивают.
+    #:
+    #: Ответ клиники от 09.09.2026 (вопрос 19): «Исходная частота перед началом
+    #: кетогенной диеты фиксируется отдельно и в дальнейшем не
+    #: перезаписывается». Эффект терапии измеряют снижением ОТНОСИТЕЛЬНО
+    #: исходного уровня (>50 % — ответ, >90 % — почти полный контроль), и если
+    #: исходный уровень лежит одним полем и переписывается при каждой правке
+    #: анкеты, сравнивать становится не с чем: через полгода в карте останется
+    #: только сегодняшняя частота, и «стало лучше» подтвердить будет нечем.
+    #:
+    #: Пишется ОДИН РАЗ, при первом ответе о частоте, — правило живёт в
+    #: репозитории (`repositories.intake.upsert`), а не в ручке: там его
+    #: невозможно обойти новым маршрутом. Наружу поле уходит только на чтение,
+    #: схема записи его не принимает.
+    baseline_seizure_frequency_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
+    )
     seizure_duration_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")
     )
