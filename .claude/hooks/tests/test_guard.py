@@ -719,3 +719,72 @@ class TestEngineCommentsAreNotMath:
             check=True,
         )
         assert done.stdout.strip() == "fresh.py"
+
+    def test_a_constant_change_is_code(self, tmp_path: Path) -> None:
+        """`constants.py` — не исключение: там лежат медицинские константы.
+
+        Файл был исключён из проверки целиком, потому что страж иначе ругался
+        на сам bump версии. Цена: допуск соответствия назначению можно было
+        расширить втрое, не подняв версию и не уронив ни одного теста — тесты
+        ядра значения допусков не пиняют.
+        """
+
+        before = 'ENGINE_VERSION = "1.0.0"\nRATIO_TOLERANCE = 0.15\n'
+        after = 'ENGINE_VERSION = "1.0.0"\nRATIO_TOLERANCE = 0.5\n'
+        assert self._changed(self._repo(tmp_path, before), after) == "engine.py"
+
+    def test_indexed_change_is_still_seen(self, tmp_path: Path) -> None:
+        """`git add` не должен прятать правку от стража.
+
+        `git diff` без ревизии показывает только неиндексированное, поэтому
+        после `git add` правка ядра для стража исчезала — ровно в тот момент,
+        когда до коммита остаётся один шаг.
+        """
+
+        repo = self._repo(tmp_path, self.BEFORE)
+        (repo / "engine.py").write_text(
+            self.BEFORE.replace("(protein + carbs)", "(protein + carbs - fiber)"),
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", "engine.py"], cwd=repo, check=True, capture_output=True)
+
+        done = subprocess.run(
+            ["git", "diff", "HEAD", "--name-only", "--", "."],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert done.stdout.strip() == "engine.py", (
+            "страж обязан сравнивать с HEAD: с индексом проиндексированная правка не видна"
+        )
+
+
+class TestEngineDocstringsAreNotBehaviour:
+    """Предпосылка исключения: docstring в ядре ни на что не влияет.
+
+    `engine_code_changed.py` разрешает менять docstring без bump'а версии, и это
+    верно ровно до тех пор, пока ядро само их не читает. Появится
+    `argparse(description=__doc__)`, doctest или отдача docstring наружу — и
+    исключение станет неверным МОЛЧА: страж пропустит правку, меняющую
+    поведение. Проверять будет некому, поэтому проверка стоит здесь.
+    """
+
+    ROOT = Path(__file__).resolve().parents[3] / "packages" / "keto_engine"
+
+    def test_core_never_reads_its_own_docstrings(self) -> None:
+        offenders = [
+            path.relative_to(self.ROOT)
+            for path in (self.ROOT / "src").rglob("*.py")
+            if "__doc__" in path.read_text(encoding="utf-8")
+        ]
+        assert offenders == [], (
+            f"ядро читает свои docstring'и ({offenders}) — значит они стали поведением, "
+            "и engine_code_changed.py больше не имеет права снимать требование bump'а"
+        )
+
+    def test_doctests_are_not_collected(self) -> None:
+        """Собираемый doctest сделал бы docstring исполняемым кодом."""
+
+        config = (self.ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        assert "--doctest-modules" not in config

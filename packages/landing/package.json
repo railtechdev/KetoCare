@@ -12,7 +12,7 @@
     "lint": "eslint src",
     "format:check": "prettier --check src scripts",
     "format": "prettier --write src scripts",
-    "test": "node scripts/check-constants.mjs"
+    "test": "node scripts/check-constants.mjs && vitest run"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.0",
@@ -25,6 +25,7 @@
     "prettier-plugin-astro": "^0.14.1",
     "sharp": "^0.35.0",
     "typescript": "^5.7.2",
-    "vite": "^6.4.3"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
   }
 }

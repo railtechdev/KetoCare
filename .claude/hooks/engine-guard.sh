@@ -39,14 +39,24 @@ fi
 #    ядре текст, спорящий с кодом. Что считать поясняющей правкой, решает
 #    engine_code_changed.py — сравнением синтаксических деревьев; он умеет
 #    только снимать требование и при любом сомнении отвечает «изменилось».
+#    Сравнение идёт с HEAD, а не с индексом: `git diff` без ревизии показывает
+#    только неиндексированное, и после `git add` правка ядра для стража
+#    исчезала — ровно в тот момент, когда до коммита остаётся один шаг.
+#
+#    `constants.py` проверяется НАРАВНЕ с остальными, хотя раньше был исключён
+#    целиком. Исключение стоило дорого: в этом файле лежат ВСЕ медицинские
+#    константы, и допуск соответствия назначению можно было расширить втрое, не
+#    подняв версию и не уронив ни одного теста. Отдельного случая для самого
+#    `ENGINE_VERSION` не нужно: правка только его — это изменение программы, и
+#    требование «подними версию» она же и удовлетворяет.
 VERSION_FILE="packages/keto_engine/src/keto_engine/constants.py"
-TOUCHED=$(git diff --name-only -- packages/keto_engine/src 2>/dev/null | grep -v "$VERSION_FILE" || true)
+TOUCHED=$(git diff HEAD --name-only -- packages/keto_engine/src 2>/dev/null || true)
 SRC_CHANGED=""
 if [ -n "$TOUCHED" ]; then
   # shellcheck disable=SC2086
   SRC_CHANGED=$(python3 "$ROOT/.claude/hooks/engine_code_changed.py" $TOUCHED 2>/dev/null || echo "$TOUCHED")
 fi
-VERSION_CHANGED=$(git diff -- "$VERSION_FILE" 2>/dev/null | grep -c '^[+-]ENGINE_VERSION' || true)
+VERSION_CHANGED=$(git diff HEAD -- "$VERSION_FILE" 2>/dev/null | grep -c '^[+-]ENGINE_VERSION' || true)
 
 if [ -n "$SRC_CHANGED" ] && [ "${VERSION_CHANGED:-0}" -eq 0 ]; then
   FAILED="${FAILED:+$FAILED,}version"

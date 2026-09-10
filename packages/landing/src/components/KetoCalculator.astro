@@ -115,6 +115,20 @@ const configJson = JSON.stringify({
     </div>
 
     {
+      /* Число, из которого получено соотношение, стоит рядом с ним.
+        Соотношение перестало следовать из углеводов, показанных выше, и без
+        этой строки посетитель не сложит 3,4 г углеводов в 3,54 : 1. Ровно так
+        же устроен `MacroBar` в продукте. */
+    }
+    <p class="calc__net-carbs">
+      {d.home.calc.netCarbs}{" "}
+      <strong class="num" data-calc-net-carbs>
+        {formatNumber(r.netCarbs, locale)}&nbsp;{d.common.grams}
+      </strong>
+      {" — "}{d.home.calc.netCarbsNote}
+    </p>
+
+    {
       /* Итог меняется при движении ползунка — экранный диктор должен
         сообщить об этом, не перебивая ввод: role="status" и aria-live="polite". */
     }

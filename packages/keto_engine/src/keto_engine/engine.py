@@ -242,6 +242,12 @@ def _max_achievable_kcal(ingredients: Sequence[Ingredient], targets: Targets) ->
     carbs_coef = np.array([ing.carbs / 100.0 for ing in ingredients])
     # Соотношение — по чистым углеводам всегда (ответ клиники, вопросы 2 и 6);
     # `carbs_coef` остаётся общим и держит лимит углеводов (вопрос 3).
+    #
+    # Зажим `max(..., 0)` здесь ДИАГНОСТИЧЕСКИЙ и тестом не различается: путь
+    # ищет только человекочитаемую причину `InfeasibleError`, а сработать зажим
+    # может лишь на продукте, у которого клетчатки больше углеводов, — такой
+    # импорт отвергает. Оставлен ради одной формы выражения с решателем: два
+    # написания одного правила расходятся, и разошлись бы молча.
     carbs_ratio_coef = np.array([max(ing.carbs - ing.fiber, 0.0) / 100.0 for ing in ingredients])
     kcal_coef = (
         fat_coef * constants.KCAL_PER_G_FAT

@@ -221,6 +221,14 @@ class TestStorage:
         parent, patient = await _linked_parent(session, make_user, make_patient)
         await _ask(client, parent, patient, auth_headers)
 
-        conversation = (await session.scalars(select(AiConversation))).one()
+        # Выборка сужена до пациента намеренно. Глобальный `.one()` по всей
+        # таблице падал от ЛЮБОЙ строки, попавшей в базу мимо теста, — например
+        # от ручной проверки помощника на дев-стенде. Тест про привязку
+        # переписки к ребёнку, а не про то, что таблица пуста.
+        conversation = (
+            await session.scalars(
+                select(AiConversation).where(AiConversation.patient_id == patient.id)
+            )
+        ).one()
         assert conversation.patient_id == patient.id
         assert conversation.user_id == parent.id

@@ -66,6 +66,23 @@ export const TOLERANCE_GAP_KEY: Record<ToleranceGap, string> = {
   engine_unknown: "engineUnknown",
 };
 
+/** Ключ на случай, когда причины нет вовсе: экран говорит только то, что знает. */
+export const TOLERANCE_GAP_UNKNOWN_KEY = "verdictUnavailable";
+
+/**
+ * Хвост ключа словаря для отсутствующего вердикта.
+ *
+ * Причины нет — берётся нейтральный текст, а не «вероятная» причина. Подставлять
+ * на её место `no_prescription` нельзя: именно эта фраза и была дефектом,
+ * который всё это чинит. Причина пропадает не в теории — ответ из кеша, снятый
+ * до выката, приходит вовсе без поля.
+ */
+export function toleranceGapKey(reason: ToleranceGap | null): string {
+  return reason === null
+    ? TOLERANCE_GAP_UNKNOWN_KEY
+    : TOLERANCE_GAP_KEY[reason];
+}
+
 export function dayVerdict(
   tolerance: DayTolerance | null | undefined,
   gap?: ToleranceGap | null,
