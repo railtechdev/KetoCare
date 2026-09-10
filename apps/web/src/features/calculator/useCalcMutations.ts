@@ -15,8 +15,10 @@ function targetsBody(targets: TargetsInput) {
     ratio: targets.ratio,
     kcal: targets.kcal,
     protein_min_g: targets.proteinMin ?? null,
+    // Лимит углеводов — по ОБЩИМ углеводам (ответ клиники, вопрос 3), а
+    // соотношение сервер считает по чистым. Переключателя `net_carbs` больше
+    // нет: клиника назвала правило, а не выбор.
     carbs_max_g: targets.carbsMax ?? null,
-    net_carbs: false,
   };
 }
 

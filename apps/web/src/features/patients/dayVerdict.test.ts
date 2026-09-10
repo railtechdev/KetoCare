@@ -8,8 +8,33 @@ describe("dayVerdict", () => {
       ratioOffTolerance: false,
       kcalBelowTarget: false,
       unavailable: true,
+      unavailableReason: null,
     });
     expect(dayVerdict(undefined).unavailable).toBe(true);
+  });
+
+  it("причина отсутствия вердикта берётся у сервера, а не угадывается", () => {
+    // Причин две, и экран говорит о них разное. Пока текст был один, кабинет
+    // объяснял смену версии ядра как «активного назначения нет» — при живом
+    // назначении. Догадаться на клиенте нечем: сегодняшнюю версию ядра знает
+    // только сервер.
+    expect(dayVerdict(null, "no_prescription").unavailableReason).toBe(
+      "no_prescription",
+    );
+    expect(dayVerdict(null, "engine_changed").unavailableReason).toBe(
+      "engine_changed",
+    );
+  });
+
+  it("при живом вердикте причины нет", () => {
+    // Иначе экран однажды покажет и вердикт, и объяснение, почему его нет.
+    const verdict = dayVerdict(
+      { ratio_within_tolerance: true, kcal_within_tolerance: true },
+      "engine_changed",
+    );
+
+    expect(verdict.unavailable).toBe(false);
+    expect(verdict.unavailableReason).toBeNull();
   });
 
   it("расхождение кетосоотношения — предупреждение в любой момент дня", () => {
@@ -44,6 +69,7 @@ describe("dayVerdict", () => {
       ratioOffTolerance: false,
       kcalBelowTarget: false,
       unavailable: false,
+      unavailableReason: null,
     });
   });
 });

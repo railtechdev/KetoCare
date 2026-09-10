@@ -1,7 +1,7 @@
 name: scale_triple_portion
 provisional: true
 operation: scale
-note: порция x3
+note: 'порция x3; пересчитано под ENGINE_VERSION 1.0.0: соотношение по чистым углеводам'
 input:
   ingredients:
   - product_id: butter
@@ -36,6 +36,6 @@ expected:
   protein_g: 50.52
   carbs_g: 7.05
   fiber_g: 2.73
-  ratio: 1.791558
+  ratio: 1.880744
 tolerance:
   abs: 1.0e-06

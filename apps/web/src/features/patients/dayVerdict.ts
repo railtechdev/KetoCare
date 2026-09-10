@@ -1,14 +1,23 @@
 import type { components } from "@ketocare/api-client";
 
 export type DayTolerance = components["schemas"]["DayTolerance"];
+export type ToleranceGap = components["schemas"]["ToleranceGap"];
 
 export interface DayVerdict {
   /** Кетосоотношение вышло за допуск назначения. */
   ratioOffTolerance: boolean;
   /** Набранная калорийность не дотягивает до суточной нормы назначения. */
   kcalBelowTarget: boolean;
-  /** Сравнивать не с чем: активного назначения нет или вердикта в ответе нет. */
+  /** Вердикта нет — сравнивать не с чем либо не с сегодняшним правилом. */
   unavailable: boolean;
+  /**
+   * Почему вердикта нет, словами сервера.
+   *
+   * `null`, когда вердикт есть, а также когда сервер причины не назвал — так
+   * бывает у ответа, снятого до появления поля. Экран в этом случае молчит,
+   * а не подставляет вероятную причину: неверная причина хуже её отсутствия.
+   */
+  unavailableReason: ToleranceGap | null;
 }
 
 /**
@@ -34,15 +43,23 @@ export interface DayVerdict {
  * функцией: пока оно было размазано по четырём экранам, правка одного из них не
  * доходила до остальных, и один и тот же день описывался по-разному на главной,
  * в меню и в карте пациента.
+ *
+ * **Отсутствие вердикта объясняется причиной сервера, а не догадкой экрана.**
+ * Причин две: назначения нет вовсе и день посчитан прежней основной версией
+ * ядра (ADR-0030). Пока текст был один, второй случай кабинет объяснял семье
+ * как «активного назначения нет» — при живом назначении. Различить их может
+ * только сервер: он один знает и сохранённую версию, и сегодняшнюю.
  */
 export function dayVerdict(
   tolerance: DayTolerance | null | undefined,
+  gap?: ToleranceGap | null,
 ): DayVerdict {
   if (tolerance === null || tolerance === undefined) {
     return {
       ratioOffTolerance: false,
       kcalBelowTarget: false,
       unavailable: true,
+      unavailableReason: gap ?? null,
     };
   }
 
@@ -50,5 +67,6 @@ export function dayVerdict(
     ratioOffTolerance: !tolerance.ratio_within_tolerance,
     kcalBelowTarget: !tolerance.kcal_within_tolerance,
     unavailable: false,
+    unavailableReason: null,
   };
 }

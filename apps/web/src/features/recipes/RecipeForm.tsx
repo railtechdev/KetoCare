@@ -375,6 +375,10 @@ export function RecipeForm({
                 fatG={computed.dish.fat_g}
                 proteinG={computed.dish.protein_g}
                 carbsG={computed.dish.carbs_g}
+                netCarbs={{
+                  grams: computed.dish.net_carbs_g,
+                  label: t("form.netCarbs"),
+                }}
               />
               <p className="m-0 text-sm text-muted-foreground">
                 {t("form.computedHint")}

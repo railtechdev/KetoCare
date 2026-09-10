@@ -101,8 +101,15 @@ async def _prescription(session, *, patient, author, ratio: float = 3.0, kcal: i
     )
 
 
-async def _menu(session, *, patient, day: date, totals: dict[str, Any] | None) -> Menu:
-    menu = Menu(patient_id=patient.id, date=day, totals=totals, engine_version=ENGINE_VERSION)
+async def _menu(
+    session,
+    *,
+    patient,
+    day: date,
+    totals: dict[str, Any] | None,
+    engine_version: str = ENGINE_VERSION,
+) -> Menu:
+    menu = Menu(patient_id=patient.id, date=day, totals=totals, engine_version=engine_version)
     session.add(menu)
     await session.flush()
     return menu
@@ -222,10 +229,14 @@ class TestOverview:
         response = await client.get(
             f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
         )
-        assert response.json()["day"]["tolerance"] == {
+        body = response.json()
+        assert body["day"]["tolerance"] == {
             "ratio_within_tolerance": True,
             "kcal_within_tolerance": True,
         }
+        # Причина и вердикт исключают друг друга: иначе экран однажды покажет и
+        # вердикт, и объяснение, почему его нет.
+        assert body["day"]["tolerance_gap"] is None
 
     async def test_totals_outside_tolerance_flags(
         self, client, session, make_user, make_patient, auth_headers
@@ -257,6 +268,44 @@ class TestOverview:
         body = response.json()
         assert body["prescription"] is None
         assert body["day"]["tolerance"] is None
+        # Причина названа: без неё экран объяснял бы отсутствие вердикта
+        # единственным текстом, и второй случай (смена версии ядра) читался бы
+        # как «назначения нет».
+        assert body["day"]["tolerance_gap"] == "no_prescription"
+
+    async def test_day_of_another_engine_major_gets_no_verdict(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """День, посчитанный прежним ядром, вердикта не получает.
+
+        Итоги дня хранятся снимком и не пересчитываются, а смена основной версии
+        означает, что изменились сами числа: с 1.0.0 соотношение считается по
+        чистым углеводам (ADR-0030). «В допуске» про соотношение, посчитанное
+        прежним правилом, — старое утверждение, выданное за сегодняшнее.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescription(session, patient=patient, author=parent)
+        await _menu(
+            session,
+            patient=patient,
+            day=_local_today(),
+            totals=TOTALS_ON_TARGET,
+            engine_version="0.4.0",
+        )
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        body = response.json()
+        # Сами числа дня показываются — исчезает только вердикт о них.
+        assert body["day"]["totals"]["ratio"] is not None
+        assert body["day"]["engine_version"] == "0.4.0"
+        assert body["day"]["tolerance"] is None
+        # Назначение у ребёнка есть, и причина обязана это отражать: «нет
+        # назначения» здесь было бы прямой неправдой семье.
+        assert body["day"]["tolerance_gap"] == "engine_changed"
+        assert body["prescription"] is not None
 
     async def test_empty_patient_returns_nulls_not_error(
         self, client, session, make_user, make_patient, auth_headers

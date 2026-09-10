@@ -8,7 +8,11 @@ import {
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { dayVerdict, type DayTolerance } from "../patients/dayVerdict";
+import {
+  dayVerdict,
+  type DayTolerance,
+  type ToleranceGap,
+} from "../patients/dayVerdict";
 import type { DayTargets, DayTotals } from "./useMenu";
 
 interface Props {
@@ -16,6 +20,13 @@ interface Props {
   engineVersion: string | null;
   /** Вердикт о допусках приходит от сервера; на клиенте он не вычисляется */
   tolerance: DayTolerance | null;
+  /**
+   * Почему вердикта нет — тоже от сервера.
+   *
+   * `null` означает «причина неизвестна»: так бывает у прошедших дат, для
+   * которых сервер вердикта не считает вовсе. Тогда остаётся общий текст.
+   */
+  toleranceGap: ToleranceGap | null;
   /** Нормы назначения; `null` — сравнивать не с чем, остаток не показывается */
   targets: DayTargets | null;
 }
@@ -28,6 +39,7 @@ export function DayTotalsPanel({
   totals,
   engineVersion,
   tolerance,
+  toleranceGap,
   targets,
 }: Props) {
   const { t } = useTranslation("menu");
@@ -43,7 +55,7 @@ export function DayTotalsPanel({
     );
   }
 
-  const verdict = dayVerdict(tolerance);
+  const verdict = dayVerdict(tolerance, toleranceGap);
 
   // «Осталось до цели» вместо арифметики в уме (правило П18 канона). Знак
   // разницы решает только формулировку: превышение — не вердикт о соответствии
@@ -130,9 +142,15 @@ export function DayTotalsPanel({
         </p>
       )}
 
+      {/* Причина называется словами сервера. Общий текст остаётся только там,
+          где причины нет: для прошедших дат вердикт не считается вовсе. */}
       {verdict.unavailable && (
         <p className="m-0 text-sm text-muted-foreground">
-          {t("totals.verdictUnavailable")}
+          {verdict.unavailableReason === "no_prescription"
+            ? t("totals.noPrescription")
+            : verdict.unavailableReason === "engine_changed"
+              ? t("totals.engineChanged")
+              : t("totals.verdictUnavailable")}
         </p>
       )}
 

@@ -37,7 +37,7 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
   const { totals } = day;
   const tolerance = day.tolerance ?? null;
 
-  const verdict = dayVerdict(tolerance);
+  const verdict = dayVerdict(tolerance, day.tolerance_gap ?? null);
   const issues = verdict.ratioOffTolerance ? [t("day.offTolerance.ratio")] : [];
 
   return (
@@ -65,8 +65,12 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
         />
 
         {verdict.unavailable ? (
+          // Почему вердикта нет — словами сервера. Причин две, и одним текстом
+          // на обе кабинет говорил семье «назначения нет» при живом назначении.
           <p className="m-0 text-sm text-muted-foreground">
-            {t("day.noPrescription")}
+            {verdict.unavailableReason === "engine_changed"
+              ? t("day.engineChanged")
+              : t("day.noPrescription")}
           </p>
         ) : issues.length > 0 ? (
           <WarningBanner level="warning" title={t("day.offTolerance.title")}>

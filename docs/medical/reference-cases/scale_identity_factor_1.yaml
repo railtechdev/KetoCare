@@ -1,7 +1,7 @@
 name: scale_identity_factor_1
 provisional: true
 operation: scale
-note: scale(r,1.0) == r
+note: 'scale(r,1.0) == r; пересчитано под ENGINE_VERSION 1.0.0: соотношение по чистым углеводам'
 input:
   ingredients:
   - product_id: butter
@@ -36,6 +36,6 @@ expected:
   protein_g: 16.84
   carbs_g: 2.35
   fiber_g: 0.91
-  ratio: 1.791558
+  ratio: 1.880744
 tolerance:
   abs: 1.0e-06

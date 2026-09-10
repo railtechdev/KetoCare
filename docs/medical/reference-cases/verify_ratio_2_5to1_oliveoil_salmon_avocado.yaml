@@ -1,7 +1,8 @@
 name: verify_ratio_2_5to1_oliveoil_salmon_avocado
 provisional: true
 operation: verify
-note: R≈2.5:1 на оливковом масле/лососе/авокадо
+note: 'R≈2.5:1 на оливковом масле/лососе/авокадо; пересчитано под ENGINE_VERSION 1.0.0: соотношение
+  по чистым углеводам'
 input:
   ingredients:
   - product_id: olive_oil
@@ -35,6 +36,6 @@ expected:
   protein_g: 12.64
   carbs_g: 1.7
   fiber_g: 1.34
-  ratio: 2.857741
+  ratio: 3.152308
 tolerance:
   abs: 1.0e-06

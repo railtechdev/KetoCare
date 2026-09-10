@@ -433,6 +433,10 @@ export function CalculatorScreen({ session }: { session: Session }) {
               fatG={dish.fat_g}
               proteinG={dish.protein_g}
               carbsG={dish.carbs_g}
+              netCarbs={{
+                grams: dish.net_carbs_g,
+                label: t("calculator.netCarbs"),
+              }}
             />
           </div>
         )}

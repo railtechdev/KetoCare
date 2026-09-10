@@ -83,7 +83,7 @@ function OverviewPanels({
 
   // Что показывать предупреждением, а что набором, решает patients/dayVerdict —
   // одинаково для главной родителя, меню и этой карты.
-  const verdict = dayVerdict(tolerance);
+  const verdict = dayVerdict(tolerance, day?.tolerance_gap ?? null);
 
   return (
     <>
@@ -181,7 +181,9 @@ function OverviewPanels({
 
             {verdict.unavailable ? (
               <p className="m-0 text-sm text-muted-foreground">
-                {t("summary.day.noPrescription")}
+                {verdict.unavailableReason === "engine_changed"
+                  ? t("summary.day.engineChanged")
+                  : t("summary.day.noPrescription")}
               </p>
             ) : verdict.ratioOffTolerance ? (
               <WarningBanner level="warning" title={t("summary.day.offTitle")}>

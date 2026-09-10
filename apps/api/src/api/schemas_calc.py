@@ -46,7 +46,6 @@ class TargetsIn(BaseModel):
     per_ingredient_bounds: (
         Annotated[dict[str, tuple[float, float | None]], Field(max_length=MAX_INGREDIENTS)] | None
     ) = None
-    net_carbs: bool = False
 
 
 class ExcludedProductOut(BaseModel):
@@ -88,6 +87,11 @@ class DishOut(BaseModel):
     protein_g: float
     carbs_g: float
     fiber_g: float
+    #: Углеводы за вычетом клетчатки — то, по чему считается соотношение
+    #: (ответ клиники от 09.09.2026, вопросы 2 и 6). Показывается рядом с
+    #: соотношением: иначе оно не следует из общих углеводов на экране, и
+    #: проверить его нечем.
+    net_carbs_g: float
     ratio: float | None
     engine_version: str
 

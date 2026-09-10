@@ -108,6 +108,59 @@ class TestVerify:
         for field in ("kcal", "fat_g", "protein_g", "carbs_g", "fiber_g"):
             assert butter[field] + chicken[field] == pytest.approx(dish[field], abs=1e-6)
 
+    async def test_ratio_is_computed_on_net_carbs(self, client, session, make_user, auth_headers):
+        """Соотношение — по чистым углеводам, лимит — по общим.
+
+        Ответ клиники от 09.09.2026 (вопросы 2, 3 и 6). Форму ответа читают два
+        приложения — кабинет (калькулятор и форма рецепта) и калькулятор Mini
+        App; бот в `/calc` не ходит вовсе. `net_carbs_g` стоит рядом с
+        соотношением не для красоты — без него оно не следует из общих углеводов
+        на экране, и проверить его нечем.
+        """
+        user = await make_user(UserRole.PARENT)
+        response = await client.post(
+            "/api/v1/calc/verify",
+            json={
+                "ingredients": [BUTTER, BROCCOLI],
+                "items": [
+                    {"product_id": "butter", "grams": 50},
+                    {"product_id": "broccoli", "grams": 100},
+                ],
+            },
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 200, response.text
+        dish = response.json()["dish"]
+
+        # Брокколи: 6.6 г углеводов и 2.6 г клетчатки на 100 г, масло — 0.1 г
+        # углеводов на 100 г.
+        assert dish["carbs_g"] == pytest.approx(6.65, abs=0.01)
+        assert dish["net_carbs_g"] == pytest.approx(4.05, abs=0.01)
+        # Жиры 40.95 на (белок 3.25 + чистые 4.05) = 5.61, а по общим углеводам
+        # вышло бы 4.14 — разница, ради которой всё и делалось.
+        assert dish["ratio"] == pytest.approx(40.95 / 7.30, abs=0.01)
+
+    async def test_targets_no_longer_accept_the_net_carbs_switch(
+        self, client, session, make_user, auth_headers
+    ):
+        """Переключателя нет: клиника назвала правило, а не выбор.
+
+        Схема запрещает лишние поля, поэтому старый клиент получит внятный отказ,
+        а не тихо посчитанное не по тому правилу.
+        """
+        user = await make_user(UserRole.PARENT)
+        response = await client.post(
+            "/api/v1/calc/verify",
+            json={
+                "ingredients": [BUTTER],
+                "items": [{"product_id": "butter", "grams": 50}],
+                "targets": {"ratio": 3.0, "kcal": 400, "net_carbs": False},
+            },
+            headers=auth_headers(user),
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+
     async def test_tolerance_reported_when_targets_given(
         self, client, session, make_user, auth_headers
     ):

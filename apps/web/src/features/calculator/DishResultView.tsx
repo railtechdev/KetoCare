@@ -9,6 +9,8 @@ export interface DishView {
   protein_g: number;
   carbs_g: number;
   fiber_g: number;
+  /** Углеводы за вычетом клетчатки: по ним считается соотношение */
+  net_carbs_g: number;
   ratio: number | null;
   engine_version: string;
 }
@@ -109,6 +111,10 @@ export function DishResultView({
         fatG={dish.fat_g}
         proteinG={dish.protein_g}
         carbsG={dish.carbs_g}
+        netCarbs={{
+          grams: dish.net_carbs_g,
+          label: t("netCarbs"),
+        }}
       />
 
       {/* Версия движка показывается рядом с результатом: расчёт, сделанный

@@ -45,7 +45,7 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
   const [date, setDate] = useState(todayIso);
 
   const menu = useMenuQuery(patientId, date);
-  const tolerance = useDayTolerance(patientId, date);
+  const dayTolerance = useDayTolerance(patientId, date);
   const targets = useDayTargets(patientId, date);
 
   const items = menu.data?.items ?? [];
@@ -145,7 +145,8 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
         <DayTotalsPanel
           totals={menu.data?.totals ?? null}
           engineVersion={menu.data?.engine_version ?? null}
-          tolerance={tolerance}
+          tolerance={dayTolerance.tolerance}
+          toleranceGap={dayTolerance.gap}
           targets={targets}
         />
       </AsyncSection>

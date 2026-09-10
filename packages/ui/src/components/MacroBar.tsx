@@ -4,6 +4,20 @@ export interface MacroBarProps {
   fatG: number;
   proteinG: number;
   carbsG: number;
+  /**
+   * Углеводы за вычетом клетчатки и подпись к ним.
+   *
+   * Показываются рядом с общими: соотношение считается по чистым (ответ клиники
+   * от 09.09.2026, вопросы 2 и 6), и без этого числа проверить его нечем.
+   *
+   * Подпись приходит из словаря приложения, а не живёт здесь: это клиническая
+   * формулировка, и править её будет медицинская команда — как дисклеймер
+   * помощника. Так же устроен `MacroFacts`.
+   *
+   * Не передано — строки нет: у сохранённых расчётов чистых углеводов не
+   * хранится, и восстановить их из снимка точно нельзя.
+   */
+  netCarbs?: { grams: number; label: string };
   /** Показывать граммы рядом с подписями */
   showGrams?: boolean;
   className?: string;
@@ -33,6 +47,7 @@ export function MacroBar({
   fatG,
   proteinG,
   carbsG,
+  netCarbs,
   showGrams = true,
   className,
 }: MacroBarProps) {
@@ -94,6 +109,15 @@ export function MacroBar({
           </li>
         ))}
       </ul>
+
+      {/* Чистые углеводы — отдельной строкой под полосой, а не четвёртым
+          сегментом: они не добавляют массы, а объясняют соотношение. */}
+      {netCarbs !== undefined && (
+        <p className="mt-1 mb-0 text-sm text-muted-foreground">
+          {netCarbs.label}{" "}
+          <span className="tabular-nums">{netCarbs.grams.toFixed(1)} г</span>
+        </p>
+      )}
     </div>
   );
 }
