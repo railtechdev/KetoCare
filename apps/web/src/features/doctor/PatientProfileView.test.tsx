@@ -9,12 +9,16 @@ import i18n from "../../lib/i18n";
 import childRu from "../../locales/ru/child.json";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
+import { todayIso } from "../menu/dates";
 import { PatientProfileView } from "./PatientProfileView";
 
 /** Последний замер веса из сводки; `null` — замеров не было. */
 let lastWeight: { weight_kg: number; occurred_at: string } | null = null;
 /** Медицинский профиль; `null` — сервер отвечает 404 «ещё не заполнен». */
-let medicalProfile: { diagnosis: string | null } | null = null;
+let medicalProfile: {
+  diagnosis: string | null;
+  therapy_started_on?: string | null;
+} | null = null;
 /** Сводка не отвечает: сбой сети, а не «замеров нет». */
 let overviewFails = false;
 /** Профиль отвечает не 404, а настоящей ошибкой. */
@@ -310,6 +314,76 @@ describe("правка профиля ребёнка специалистом", 
  * диетологу диагноз на запись; запрет править без разрешения читать оставил бы
  * его собирать рацион вслепую, как было до ответа.
  */
+describe("дата начала кетодиетотерапии", () => {
+  it("показывается в профиле", async () => {
+    // Ответ клиники 09.09.2026 (вопрос 17): отдельное поле. От неё считаются
+    // контрольные визиты и точка отсчёта для оценки эффекта диеты.
+    medicalProfile = {
+      diagnosis: "Синдром Драве",
+      therapy_started_on: "2026-04-15",
+    };
+    renderProfile();
+
+    expect(await screen.findByText("15.04.2026")).toBeInTheDocument();
+  });
+
+  it("будущая дата подписана словами — чтобы опечатку было видно", async () => {
+    // «2062» вместо «2026» — одна цифра, и проверкой её не отличить от
+    // намерения: будущая дата законна («диету начинаем с понедельника»).
+    // Единственное честное средство — показать врачу, что он ввёл.
+    medicalProfile = {
+      diagnosis: "Синдром Драве",
+      therapy_started_on: "2062-04-15",
+    };
+    renderProfile();
+
+    expect(
+      await screen.findByText(/2062.*ещё не началась/),
+    ).toBeInTheDocument();
+  });
+
+  it("сегодняшняя дата подписи не получает — день старта это уже терапия", async () => {
+    // Граница проверяется отдельно: без неё мутация `>` → `>=` проходила все
+    // тесты файла, а вместе с UTC-датой в браузере это давало окно с полуночи
+    // до пяти утра, когда карта писала «ещё не началась» про терапию, которую
+    // сервер уже считает начатой. Правило про исходную частоту сравнивает
+    // строго (`<`), и подпись обязана говорить то же самое.
+    medicalProfile = {
+      diagnosis: "Синдром Драве",
+      therapy_started_on: todayIso(),
+    };
+    renderProfile();
+
+    await screen.findByText(new RegExp(new Date().getFullYear().toString()));
+    expect(screen.queryByText(/ещё не началась/)).not.toBeInTheDocument();
+  });
+
+  it("прошедшая дата подписи не получает", async () => {
+    // Обратная сторона: без этого случая проверка выше прошла бы и на экране,
+    // который подписывает «ещё не началась» вообще любую дату.
+    medicalProfile = {
+      diagnosis: "Синдром Драве",
+      therapy_started_on: "2026-04-15",
+    };
+    renderProfile();
+
+    await screen.findByText("15.04.2026");
+    expect(screen.queryByText(/ещё не началась/)).not.toBeInTheDocument();
+  });
+
+  it("незаданная называется словами, а не прочерком", async () => {
+    // Прочерк здесь читался бы как «терапии не было». На деле это «дата не
+    // внесена, и началом пока считается первое назначение» — а это разные
+    // утверждения о ребёнке.
+    medicalProfile = { diagnosis: "Синдром Драве", therapy_started_on: null };
+    renderProfile();
+
+    expect(
+      await screen.findByText(doctorRu.profile.fields.therapyStartNotSet),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("анамнез диетологу — на чтение", () => {
   it("показывает профиль, но не даёт его править", async () => {
     medicalProfile = { diagnosis: "Синдром Драве" };

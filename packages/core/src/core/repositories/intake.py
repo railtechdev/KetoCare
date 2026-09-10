@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..clock import local_today
 from ..models import AedDrug, IntakeOption, PatientIntake
 from ..models.enums import IntakeScale
-from . import prescriptions as prescriptions_repo
+from . import therapy as therapy_repo
 
 
 async def list_options(
@@ -104,8 +104,16 @@ async def upsert(
     # получила бы сегодняшний уровень как исходный, навсегда и молча. Ровно та
     # подмена, ради устранения которой поле и заведено.
     #
-    # Началом считается ДАТА самого раннего назначения, а не сам факт его
-    # наличия. Разница не теоретическая: врач выписывает назначение заранее
+    # Началом считается самое РАННЕЕ свидетельство того, что диета уже идёт:
+    # дата, названная врачом, или дата первого назначения — что раньше. Сам факт
+    # наличия назначения началом не считается.
+    #
+    # Именно самое раннее, а не «слово врача важнее» (`therapy.started_on`).
+    # Вопрос здесь не «какая дата верна», а «могла ли терапия уже идти», и цена
+    # ошибки несимметрична: пустое поле врач увидит и переспросит семью, а
+    # ошибочно записанная исходная частота станет тем, с чем сравнивают эффект
+    # лечения, — навсегда. Опечатка врача в году («2062») по этой причине окна
+    # не открывает, пока у ребёнка есть назначение. Разница не теоретическая: врач выписывает назначение заранее
     # («диету начинаем с двадцатого»), и по факту наличия ребёнок оказался бы «на
     # терапии» уже сегодня — исходная частота не записалась бы никогда, потому
     # что правило «до начала» второй раз не срабатывает. Тот же провал давало бы
@@ -125,7 +133,9 @@ async def upsert(
     # `None` поверх `None` — не изменение), но экономит запрос к назначениям на
     # каждом сохранении анкеты без ответа о частоте.
     if intake.baseline_seizure_frequency_id is None and seizure_frequency_id is not None:
-        therapy_started_on = await prescriptions_repo.started_on(session, patient_id=patient_id)
+        therapy_started_on = await therapy_repo.earliest_evidence_of_therapy(
+            session, patient_id=patient_id
+        )
         if therapy_started_on is None or local_today() < therapy_started_on:
             intake.baseline_seizure_frequency_id = seizure_frequency_id
 

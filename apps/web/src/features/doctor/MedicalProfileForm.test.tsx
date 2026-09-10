@@ -50,6 +50,7 @@ const PROFILE: MedicalProfile = {
   genetics: null,
   comorbidities: null,
   aed_switch_count_id: THREE_PLUS,
+  therapy_started_on: "2026-04-15",
   updated_at: "2026-08-01T10:00:00Z",
 } as MedicalProfile;
 
@@ -59,6 +60,62 @@ function wrapper({ children }: { children: ReactNode }) {
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
+
+/**
+ * Тот же класс, что у числа сменённых ПЭП ниже, и цена выше.
+ *
+ * `PUT /medical-profile` заменяет профиль целиком: поле, которого форма не
+ * отправила, становится пустым. У даты начала терапии это не только потеря
+ * записи — по ней решается, считать ли ответ семьи о частоте приступов исходным
+ * уровнем, и стёртая дата молча открывает это окно заново у ребёнка, который на
+ * диете полгода. Обнулённое число ПЭП врач хотя бы видит в форме.
+ */
+describe("медицинский профиль: дата начала терапии", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as Mock).mockResolvedValue({ data: OPTIONS, error: undefined });
+    (api.PUT as Mock).mockResolvedValue({ data: PROFILE, error: undefined });
+  });
+
+  it("сохраняется при правке остальных полей, а не обнуляется", async () => {
+    const user = userEvent.setup();
+    render(
+      <MedicalProfileForm
+        patientId={PATIENT_ID}
+        profile={PROFILE}
+        onDone={() => {}}
+        onCancel={() => {}}
+      />,
+      { wrapper },
+    );
+
+    await screen.findByRole("option", { name: "3 и более" });
+    await user.clear(screen.getByLabelText(/Диагноз/));
+    await user.type(screen.getByLabelText(/Диагноз/), "Уточнён");
+    await user.click(screen.getByRole("button", { name: /Сохранить/ }));
+
+    const call = (api.PUT as Mock).mock.calls.at(0);
+    expect(call?.[1].body.therapy_started_on).toBe("2026-04-15");
+  });
+
+  it("показывает уже записанную дату, а не пустое поле", async () => {
+    // Пустое поле у заполненного профиля читается как «дата не задана», и врач,
+    // сохранив форму, стёр бы её, ничего не заметив.
+    render(
+      <MedicalProfileForm
+        patientId={PATIENT_ID}
+        profile={PROFILE}
+        onDone={() => {}}
+        onCancel={() => {}}
+      />,
+      { wrapper },
+    );
+
+    expect(
+      await screen.findByLabelText(/Дата начала кетодиетотерапии/),
+    ).toHaveValue("2026-04-15");
+  });
+});
 
 /**
  * Регрессия: `PUT /medical-profile` заменяет профиль целиком, а поля «сколько

@@ -46,6 +46,7 @@ from ..schemas_clinical import (
     MedicationWrite,
 )
 from ..services import intake as intake_service
+from ..services import therapy as therapy_service
 
 router = APIRouter(prefix="/patients/{patient_id}", tags=["clinical"])
 
@@ -106,6 +107,11 @@ async def put_medical_profile(
         scale=IntakeScale.AED_SWITCH_COUNT,
         field="aed_switch_count_id",
     )
+    # Дата начала терапии задаёт расписание визитов и решает судьбу исходной
+    # частоты приступов — опечатка в ней сдвигает молча и то и другое.
+    await therapy_service.check_therapy_start_is_plausible(
+        session, patient_id=patient_id, therapy_started_on=payload.therapy_started_on
+    )
 
     existing = await profiles_repo.get_for_patient(session, patient_id=patient_id)
     before = (
@@ -121,6 +127,7 @@ async def put_medical_profile(
         genetics=payload.genetics.model_dump() if payload.genetics is not None else None,
         comorbidities=payload.comorbidities,
         aed_switch_count_id=payload.aed_switch_count_id,
+        therapy_started_on=payload.therapy_started_on,
     )
 
     # Профиль перезаписывается на месте, истории версий у него нет (в отличие от

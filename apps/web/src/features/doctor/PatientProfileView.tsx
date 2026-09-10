@@ -22,6 +22,7 @@ import { ChildForm } from "../child/ChildForm";
 import { toChildUpdateBody } from "../child/childSchemas";
 import { IntakeView } from "../intake/IntakeView";
 import { useIntakeOptions } from "../intake/useIntake";
+import { todayIso } from "../menu/dates";
 import { allergyNames } from "../patients/allergies";
 import { usePatientOverview } from "../patients/overview";
 import { useUpdateChildMutation } from "../patients/useChildren";
@@ -379,6 +380,21 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
   const { t } = useTranslation("doctor");
   const genetics = profile.genetics ?? null;
 
+  const therapyStart =
+    profile.therapy_started_on === null
+      ? null
+      : formatIsoDate(profile.therapy_started_on);
+  // Сравнение по календарной дате, а не по моменту: «сегодня» началом уже
+  // считается (то же строгое сравнение, что в правиле про исходную частоту).
+  //
+  // `todayIso()`, а не `toISOString()`: тот переводит в UTC, и в поясе клиники
+  // (UTC+5) с полуночи до пяти утра дня старта карта писала бы «ещё не
+  // началась» про терапию, которую сервер уже считает начатой, — то есть
+  // подпись противоречила бы ровно тому правилу, которое поясняет.
+  const therapyStartIsAhead =
+    profile.therapy_started_on !== null &&
+    profile.therapy_started_on > todayIso();
+
   // Число сменённых ПЭП хранится ссылкой на справочник, а не числом: шкала
   // задана медицинской командой («1-2», «3 и более»), и подписи берутся оттуда.
   // Выведенные из употребления варианты запрашиваются вместе с действующими —
@@ -426,6 +442,33 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
         {t("profile.fields.aedSwitchCount")}
       </dt>
       <dd className="m-0">{aedSwitchCount ?? "—"}</dd>
+
+      {/* Дата начала терапии — не «ещё одно поле анамнеза»: от неё считаются
+          контрольные визиты и точка отсчёта для оценки эффекта. Пустая она
+          говорится словами, а не прочерком: прочерк здесь читался бы как
+          «терапии не было», а на деле это «дата не внесена, и началом пока
+          считается первое назначение». */}
+      <dt className="text-muted-foreground">
+        {t("profile.fields.therapyStartedOn")}
+      </dt>
+      <dd className="m-0 tabular-nums">
+        {profile.therapy_started_on === null
+          ? t("profile.fields.therapyStartNotSet")
+          : therapyStart === null
+            ? "—"
+            : // Будущая дата подписывается словами. Она законна — «диету
+              // начинаем с понедельника», — но ровно так же выглядит опечатка в
+              // году: «2062» вместо «2026» это одна цифра, и никакой проверкой
+              // её не отличить от намерения. Единственное, что можно сделать
+              // честно, — показать врачу, что он ввёл: строка «ещё не началась»
+              // рядом с 2062 годом читается сразу.
+              t(
+                therapyStartIsAhead
+                  ? "profile.fields.therapyStartAhead"
+                  : "profile.fields.therapyStartOn",
+                { date: therapyStart },
+              )}
+      </dd>
 
       <dt className="text-muted-foreground">{t("profile.fields.updatedAt")}</dt>
       <dd className="m-0 tabular-nums">
