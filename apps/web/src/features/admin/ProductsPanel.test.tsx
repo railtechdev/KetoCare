@@ -162,9 +162,14 @@ describe("отбор по ведущему макронутриенту", () => 
 
     await user.selectOptions(select, "fat");
 
-    expect(await screen.findByText(/больше всего калорий/)).toHaveTextContent(
-      /не порог/,
-    );
+    const explains = await screen.findByText(/больше всего калорий/);
+    // Название макронутриента подставляется в строку: без него она читается
+    // «…больше всего калорий приходится на .» — и проверки по «не порог» это
+    // не заметят.
+    expect(explains).toHaveTextContent(/на жиры/);
+    expect(explains).toHaveTextContent(/не порог/);
+    // Скринридер должен услышать правило вместе с подписью списка.
+    expect(select).toHaveAttribute("aria-describedby", explains.id);
   });
 
   it("варианты подписаны словами, а не ключами словаря", async () => {

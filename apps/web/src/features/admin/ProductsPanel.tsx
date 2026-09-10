@@ -65,6 +65,9 @@ const IMPORT_ITEM = "import";
  * коллеге, ни обновить страницу: F5 возвращал в список, а «Назад» браузера
  * уводил из раздела целиком.
  */
+/** Пояснение к отбору: на него ссылается сам список (`aria-describedby`). */
+const MACRO_EXPLAINS_ID = "admin-product-macro-explains";
+
 export function ProductsPanel({
   canImport = true,
   chrome = "tab",
@@ -345,6 +348,12 @@ export function ProductsPanel({
             id="admin-product-macro"
             width="wide"
             label={t("products.filters.macro")}
+            // Пояснение стоит под панелью, а не в `hint` (см. комментарий
+            // выше), но связь для скринридера обязана остаться: иначе он
+            // прочитает «Ведущий макронутриент» и не скажет, что это не порог.
+            aria-describedby={
+              filters.macro === "" ? undefined : MACRO_EXPLAINS_ID
+            }
             value={filters.macro}
             onChange={(event) =>
               setFiltersAndResetPage((current) => ({
@@ -406,7 +415,7 @@ export function ProductsPanel({
           приходится больше всего калорий»: по такому списку он подбирает
           замену ребёнку на терапии. */}
       {filters.macro !== "" && (
-        <p className="m-0 text-sm text-muted-foreground">
+        <p id={MACRO_EXPLAINS_ID} className="m-0 text-sm text-muted-foreground">
           {t("products.filters.macroExplains", {
             macro: t(
               `products.filters.macroValue.${filters.macro}`,
