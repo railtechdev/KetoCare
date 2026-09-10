@@ -14,7 +14,10 @@ import { PatientProfileView } from "./PatientProfileView";
 /** Последний замер веса из сводки; `null` — замеров не было. */
 let lastWeight: { weight_kg: number; occurred_at: string } | null = null;
 /** Медицинский профиль; `null` — сервер отвечает 404 «ещё не заполнен». */
-let medicalProfile: { diagnosis: string | null } | null = null;
+let medicalProfile: {
+  diagnosis: string | null;
+  therapy_started_on?: string | null;
+} | null = null;
 /** Сводка не отвечает: сбой сети, а не «замеров нет». */
 let overviewFails = false;
 /** Профиль отвечает не 404, а настоящей ошибкой. */
@@ -310,6 +313,32 @@ describe("правка профиля ребёнка специалистом", 
  * диетологу диагноз на запись; запрет править без разрешения читать оставил бы
  * его собирать рацион вслепую, как было до ответа.
  */
+describe("дата начала кетодиетотерапии", () => {
+  it("показывается в профиле", async () => {
+    // Ответ клиники 09.09.2026 (вопрос 17): отдельное поле. От неё считаются
+    // контрольные визиты и точка отсчёта для оценки эффекта диеты.
+    medicalProfile = {
+      diagnosis: "Синдром Драве",
+      therapy_started_on: "2026-04-15",
+    };
+    renderProfile();
+
+    expect(await screen.findByText("15.04.2026")).toBeInTheDocument();
+  });
+
+  it("незаданная называется словами, а не прочерком", async () => {
+    // Прочерк здесь читался бы как «терапии не было». На деле это «дата не
+    // внесена, и началом пока считается первое назначение» — а это разные
+    // утверждения о ребёнке.
+    medicalProfile = { diagnosis: "Синдром Драве", therapy_started_on: null };
+    renderProfile();
+
+    expect(
+      await screen.findByText(doctorRu.profile.fields.therapyStartNotSet),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("анамнез диетологу — на чтение", () => {
   it("показывает профиль, но не даёт его править", async () => {
     medicalProfile = { diagnosis: "Синдром Драве" };

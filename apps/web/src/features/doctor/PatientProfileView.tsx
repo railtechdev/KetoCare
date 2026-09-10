@@ -427,6 +427,20 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
       </dt>
       <dd className="m-0">{aedSwitchCount ?? "—"}</dd>
 
+      {/* Дата начала терапии — не «ещё одно поле анамнеза»: от неё считаются
+          контрольные визиты и точка отсчёта для оценки эффекта. Пустая она
+          говорится словами, а не прочерком: прочерк здесь читался бы как
+          «терапии не было», а на деле это «дата не внесена, и началом пока
+          считается первое назначение». */}
+      <dt className="text-muted-foreground">
+        {t("profile.fields.therapyStartedOn")}
+      </dt>
+      <dd className="m-0 tabular-nums">
+        {profile.therapy_started_on === null
+          ? t("profile.fields.therapyStartNotSet")
+          : (formatIsoDate(profile.therapy_started_on) ?? "—")}
+      </dd>
+
       <dt className="text-muted-foreground">{t("profile.fields.updatedAt")}</dt>
       <dd className="m-0 tabular-nums">
         {formatTimestamp(profile.updated_at) ?? "—"}

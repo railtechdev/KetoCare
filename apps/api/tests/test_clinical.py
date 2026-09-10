@@ -109,6 +109,77 @@ class TestMedicalProfile:
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "not_found"
 
+    async def test_therapy_start_is_stored_and_returned(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ответ клиники 09.09.2026 (вопрос 17): «отдельное поле».
+
+        От этой даты отсчитываются контрольные визиты, и по ней же решается,
+        считать ли ответ семьи о частоте приступов исходным уровнем. Вывод из
+        первого назначения остаётся запасным — он лжёт у ребёнка, которого
+        перевели из другой клиники уже на диете.
+        """
+
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        url = f"/api/v1/patients/{patient.id}/medical-profile"
+
+        saved = await client.put(
+            url,
+            json={**PROFILE, "therapy_started_on": "2026-04-15"},
+            headers=auth_headers(doctor),
+        )
+
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["therapy_started_on"] == "2026-04-15"
+        assert (await client.get(url, headers=auth_headers(doctor))).json()[
+            "therapy_started_on"
+        ] == "2026-04-15"
+
+    async def test_therapy_start_may_be_in_the_future(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«Диету начинаем с понедельника» — обычное врачебное решение.
+
+        Дата последнего приступа будущей быть не может (вопрос 48), и соблазн
+        применить то же правило здесь велик — но это решение О БУДУЩЕМ, и
+        запретить вносить его заранее значило бы заставить врача возвращаться в
+        карту в день старта.
+        """
+
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        ahead = TODAY.replace(year=TODAY.year + 5)
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/medical-profile",
+            json={**PROFILE, "therapy_started_on": ahead.isoformat()},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["therapy_started_on"] == ahead.isoformat()
+
+    async def test_therapy_start_before_birth_is_a_typo(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """До рождения ребёнка диеты не было — это тождество, а не порог.
+
+        Перепутанный год тихо сдвинул бы и расписание визитов, и правило про
+        исходную частоту приступов, а по результату отличить его от верной даты
+        нельзя.
+        """
+
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        before_birth = patient.birth_date - timedelta(days=1)
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/medical-profile",
+            json={**PROFILE, "therapy_started_on": before_birth.isoformat()},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["details"]["field"] == "therapy_started_on"
+
     async def test_dietitian_reads_the_profile_but_cannot_change_it(
         self, client, session, make_user, make_patient, auth_headers
     ):

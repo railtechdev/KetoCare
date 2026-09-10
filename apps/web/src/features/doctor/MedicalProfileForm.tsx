@@ -32,6 +32,7 @@ const medicalProfileSchema = z.object({
   interpretation: z.string(),
   comorbidities: z.string(),
   aedSwitchCountId: z.string(),
+  therapyStartedOn: z.string(),
 });
 
 type MedicalProfileFormValues = z.infer<typeof medicalProfileSchema>;
@@ -61,6 +62,7 @@ function toBody(values: MedicalProfileFormValues): MedicalProfileBody {
         : { gene, variant, interpretation },
     comorbidities: emptyToNull(values.comorbidities),
     aed_switch_count_id: emptyToNull(values.aedSwitchCountId),
+    therapy_started_on: emptyToNull(values.therapyStartedOn),
   };
 }
 
@@ -110,6 +112,7 @@ export function MedicalProfileForm({
       interpretation: profile?.genetics?.interpretation ?? "",
       comorbidities: profile?.comorbidities ?? "",
       aedSwitchCountId: profile?.aed_switch_count_id ?? "",
+      therapyStartedOn: profile?.therapy_started_on ?? "",
     },
   });
 
@@ -196,6 +199,25 @@ export function MedicalProfileForm({
           optional
           label={t("profile.fields.comorbidities")}
           {...register("comorbidities")}
+        />
+
+        {/* Дата начала терапии — ответ клиники 09.09.2026 (вопрос 17). Стоит
+            здесь, а не в паспорте ребёнка: паспорт правит и семья, а эту дату
+            задаёт врач. От неё отсчитываются контрольные визиты, и по ней же
+            решается, считать ли ответ семьи о частоте приступов исходным
+            уровнем.
+
+            Поле НЕ ограничено сегодняшним днём: врач назначает диету «с
+            понедельника», и `max` запретил бы внести решение заранее. Явную
+            опечатку (год раньше рождения ребёнка) отклоняет сервер. */}
+        <Field
+          id={`${ids}-therapy-started-on`}
+          width="narrow"
+          type="date"
+          optional
+          label={t("profile.fields.therapyStartedOn")}
+          hint={t("profile.fields.therapyStartedOnHint")}
+          {...register("therapyStartedOn")}
         />
 
         <SelectField

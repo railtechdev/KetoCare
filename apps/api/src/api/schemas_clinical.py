@@ -46,6 +46,11 @@ class MedicalProfileWrite(BaseModel):
     # Врачебная часть анкеты регистрации (ADR-0007): вариант шкалы
     # `aed_switch_count` из `/dictionaries/intake-options`.
     aed_switch_count_id: uuid.UUID | None = None
+    # Дата начала кетодиетотерапии — ответ клиники 09.09.2026 (вопрос 17).
+    # Будущая дата разрешена намеренно: врач назначает диету с понедельника, и
+    # запрет означал бы, что дату нельзя внести заранее. Проверка на
+    # правдоподобность — в сервисе (`check_therapy_start_is_plausible`).
+    therapy_started_on: date | None = None
 
 
 class MedicalProfileRead(BaseModel):
@@ -59,6 +64,7 @@ class MedicalProfileRead(BaseModel):
     genetics: Genetics | None
     comorbidities: str | None
     aed_switch_count_id: uuid.UUID | None
+    therapy_started_on: date | None
     created_at: datetime
     updated_at: datetime
 

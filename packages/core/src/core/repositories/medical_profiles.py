@@ -8,6 +8,7 @@ upsert'ом: отдельной ручки создания нет, PUT либо
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Any
 
 from sqlalchemy import select
@@ -38,6 +39,7 @@ async def upsert(
     genetics: dict[str, Any] | None,
     comorbidities: str | None,
     aed_switch_count_id: uuid.UUID | None = None,
+    therapy_started_on: date | None = None,
 ) -> MedicalProfile:
     """Создаёт профиль или полностью перезаписывает существующий."""
 
@@ -62,6 +64,12 @@ async def upsert(
     # (ADR-0007): семья путает и названия, и число попыток, а от этого числа
     # зависит, считается ли эпилепсия фармакорезистентной.
     profile.aed_switch_count_id = aed_switch_count_id
+    # Дата начала кетодиетотерапии — ответ клиники 09.09.2026 (вопрос 17). От
+    # неё отсчитываются контрольные визиты и по ней решается, считать ли ответ
+    # семьи о частоте приступов исходным уровнем; читать её надо через
+    # `repositories.therapy.started_on`, а не отсюда — там же лежит запасной
+    # вывод из первого назначения.
+    profile.therapy_started_on = therapy_started_on
     profile.deleted_at = None
 
     await session.flush()
