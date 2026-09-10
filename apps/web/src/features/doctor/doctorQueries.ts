@@ -113,7 +113,8 @@ export function medicalProfileKey(patientId: string) {
 /**
  * Медицинский профиль. `retry: false` — незаполненный профиль сервер отдаёт как
  * 404 («Медицинский профиль ещё не заполнен»), и повтор запроса его не создаст;
- * то же с 403 у диетолога.
+ * то же с 403 у роли без права на анамнез. Диетолог 403 здесь больше не
+ * получает: чтение ему открыто (ADR-0031), закрыта только запись.
  */
 export function useMedicalProfile(patientId: string, enabled: boolean) {
   return useQuery({

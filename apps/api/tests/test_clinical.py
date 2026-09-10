@@ -1,24 +1,23 @@
-"""Клинические ручки врача: медицинский профиль, препараты, врачебные заметки.
+"""Клинические ручки: медицинский профиль, препараты, врачебные заметки.
 
-Роутер ещё не подключён в `api.main`, поэтому здесь свой `client`: он собирает
-приложение и добавляет проверяемый роутер сам. Остальные фикстуры — из conftest.
-"""
+Клиент берётся общий, из conftest, — тот, что собирает приложение как в бою
+(`create_app()` со всеми роутерами). Раньше файл монтировал `clinical.router`
+себе сам, и это было неправдой дважды: роутер давно подключён в `api.main`, то
+есть тесты ходили по ДУБЛИРУЮЩИМ маршрутам, а зависимости, добавленные при
+подключении в `main.py`, были для них невидимы. Проверено: закомментируй строку
+подключения в `main.py` — вся матрица прав этого файла оставалась зелёной.
+
+Общий клиент заодно даёт каждому тесту свой адрес: ключ ограничения частоты —
+это адрес клиента, и на своём его не было."""
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
 from datetime import date, timedelta
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps.auth import get_session
-from api.main import create_app
-from api.routers import clinical
 from core.models import AuditLog, ClinicalNote, MedicalProfile, Medication
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
@@ -41,21 +40,6 @@ MEDICATION = {
     "frequency": "2 раза в сутки",
     "started_at": TODAY.isoformat(),
 }
-
-
-@pytest_asyncio.fixture
-async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
-    app = create_app()
-    app.include_router(clinical.router, prefix="/api/v1")
-
-    async def _override_session() -> AsyncIterator[AsyncSession]:
-        yield session
-
-    app.dependency_overrides[get_session] = _override_session
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
-        yield http_client
 
 
 async def _attached(session, make_user, make_patient, role: UserRole):
