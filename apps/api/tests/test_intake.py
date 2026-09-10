@@ -349,6 +349,90 @@ class TestPatientIntake:
         assert response.status_code == 422, response.text
         assert response.json()["error"]["details"]["field"] == "last_seizure_on"
 
+    async def test_baseline_frequency_is_written_once_and_never_again(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Исходная частота — точка отсчёта, и переписать её нельзя.
+
+        Ответ клиники 09.09.2026 (вопрос 19). Эффект кетотерапии измеряют
+        снижением ОТНОСИТЕЛЬНО исходного уровня: >50 % считается ответом,
+        >90 % — почти полным контролем. Если исходный уровень переписывается
+        вместе с текущим, сравнивать становится не с чем — через полгода в
+        карте остаётся только сегодняшняя частота.
+
+        Правило живёт в репозитории, поэтому проверяется через ручку: так
+        видно, что его не обойти обычным путём семьи.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        url = f"/api/v1/patients/{patient.id}/intake"
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+        rarer = next(option for option in options if option.code == "freq_rarer")
+
+        first = await client.put(
+            url, json={"seizure_frequency_id": str(daily.id)}, headers=auth_headers(parent)
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
+        # Через полгода приступов стало меньше — семья правит анкету.
+        later = await client.put(
+            url, json={"seizure_frequency_id": str(rarer.id)}, headers=auth_headers(parent)
+        )
+        assert later.status_code == 200, later.text
+        assert later.json()["seizure_frequency_id"] == str(rarer.id)
+        # Текущая изменилась, исходная — нет: иначе улучшение стало бы невидимым.
+        assert later.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
+    async def test_baseline_is_not_accepted_from_the_client(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Точку отсчёта нельзя задать снаружи.
+
+        Схема записи запрещает лишние поля, поэтому попытка прислать исходную
+        частоту — отказ, а не тихо принятое значение. Иначе клиент мог бы
+        объявить исходным сегодняшний уровень и показать улучшение, которого
+        не было.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"baseline_seizure_frequency_id": str(daily.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+
+    async def test_baseline_stays_empty_until_frequency_is_answered(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Пока частоту не назвали, исходной нет — и это не «ноль приступов».
+
+        Пустое значит «исходный уровень неизвестен». Записать туда что-нибудь
+        при первом сохранении анкеты значило бы выдумать точку отсчёта.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        url = f"/api/v1/patients/{patient.id}/intake"
+
+        empty = await client.put(
+            url, json={"developmental_delay": True}, headers=auth_headers(parent)
+        )
+        assert empty.status_code == 200, empty.text
+        assert empty.json()["baseline_seizure_frequency_id"] is None
+
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+        answered = await client.put(
+            url, json={"seizure_frequency_id": str(daily.id)}, headers=auth_headers(parent)
+        )
+        assert answered.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
     async def test_today_is_local_not_the_process_date(
         self, client, session, make_user, make_patient, auth_headers, monkeypatch
     ):

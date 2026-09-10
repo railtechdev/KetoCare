@@ -91,6 +91,16 @@ async def upsert(
     intake.last_seizure_on = last_seizure_on
     intake.onset_age_id = onset_age_id
     intake.seizure_frequency_id = seizure_frequency_id
+
+    # Исходная частота пишется ОДИН РАЗ и дальше не трогается (ответ клиники от
+    # 09.09.2026, вопрос 19). Эффект терапии измеряют снижением относительно
+    # неё, и переписанный исходный уровень стирает сам предмет сравнения.
+    #
+    # Правило стоит здесь, а не в ручке: анкету пишет только `upsert`, и через
+    # него проходит любой маршрут — сегодняшний и будущий. Схема записи это
+    # поле не принимает вовсе, так что подменить его снаружи нечем.
+    if intake.baseline_seizure_frequency_id is None and seizure_frequency_id is not None:
+        intake.baseline_seizure_frequency_id = seizure_frequency_id
     intake.seizure_duration_id = seizure_duration_id
     intake.meals_per_day_id = meals_per_day_id
     intake.developmental_delay = developmental_delay

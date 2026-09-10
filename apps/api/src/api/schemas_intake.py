@@ -85,6 +85,10 @@ class PatientIntakeRead(BaseModel):
     last_seizure_on: date | None
     onset_age_id: uuid.UUID | None
     seizure_frequency_id: uuid.UUID | None
+    #: Частота ДО начала диеты: записывается один раз и не перезаписывается
+    #: (ответ клиники, вопрос 19). Только на чтение — в `PatientIntakeWrite`
+    #: поля нет намеренно, иначе клиент мог бы переписать точку отсчёта.
+    baseline_seizure_frequency_id: uuid.UUID | None
     seizure_duration_id: uuid.UUID | None
     meals_per_day_id: uuid.UUID | None
     developmental_delay: bool | None

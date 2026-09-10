@@ -110,6 +110,20 @@ function Answers({
             : formatIsoDate(intake.last_seizure_on),
         ],
         [t("fields.frequency"), named(intake.seizure_frequency_id)],
+        // Исходная частота показывается только тогда, когда она ОТЛИЧАЕТСЯ от
+        // текущей. Пока анкету не правили, это одно и то же число, и вторая
+        // строка с тем же значением заставляла бы искать разницу там, где её
+        // нет. А когда значения разошлись — это и есть то, ради чего поле
+        // заведено: врач видит, с чем сравнивать (ответ 19).
+        ...(intake.baseline_seizure_frequency_id !== null &&
+        intake.baseline_seizure_frequency_id !== intake.seizure_frequency_id
+          ? ([
+              [
+                t("fields.baselineFrequency"),
+                named(intake.baseline_seizure_frequency_id),
+              ],
+            ] as const)
+          : []),
         [t("fields.duration"), named(intake.seizure_duration_id)],
       ],
     },

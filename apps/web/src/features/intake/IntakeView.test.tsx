@@ -18,6 +18,7 @@ i18n.addResourceBundle("ru", "intake", intakeRu, true, true);
 const PATIENT_ID = "11111111-1111-4111-8111-111111111111";
 const ONSET = "22222222-2222-4222-8222-222222222222";
 const RETIRED_FREQ = "33333333-3333-4333-8333-333333333333";
+const DAILY_FREQ = "66666666-6666-4666-8666-666666666666";
 const DRUG = "44444444-4444-4444-8444-444444444444";
 
 const OPTIONS = {
@@ -38,6 +39,14 @@ const OPTIONS = {
       sort_order: 9,
       retired: true,
     },
+    {
+      id: DAILY_FREQ,
+      scale: "seizure_frequency",
+      code: "freq_daily",
+      name_ru: "Ежедневно",
+      sort_order: 1,
+      retired: false,
+    },
   ],
 };
 
@@ -53,6 +62,7 @@ const INTAKE = {
   last_seizure_on: "2026-07-15",
   onset_age_id: ONSET,
   seizure_frequency_id: RETIRED_FREQ,
+  baseline_seizure_frequency_id: RETIRED_FREQ,
   seizure_duration_id: null,
   meals_per_day_id: null,
   developmental_delay: true,
@@ -123,6 +133,55 @@ describe("анкета глазами специалиста", () => {
     expect(await screen.findByText("Анкета не заполнена")).toBeInTheDocument();
     expect(
       screen.queryByText(/Не удалось загрузить анкету/),
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Исходная частота — точка отсчёта, по которой судят об эффекте терапии
+ * (ответ клиники 09.09.2026, вопрос 19). Она записывается один раз и дальше не
+ * меняется, поэтому в карте появляется ровно тогда, когда текущая от неё
+ * ушла — то есть когда есть о чём говорить.
+ */
+describe("исходная частота приступов", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("показывается, когда текущая частота от неё отличается", async () => {
+    mockGet({
+      ...INTAKE,
+      baseline_seizure_frequency_id: DAILY_FREQ,
+      seizure_frequency_id: RETIRED_FREQ,
+    });
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    expect(
+      await screen.findByText(intakeRu.fields.baselineFrequency),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Ежедневно")).toBeInTheDocument();
+  });
+
+  it("не показывается, пока совпадает с текущей", async () => {
+    // Пока анкету не правили, это одно и то же число: вторая строка с тем же
+    // значением заставляла бы искать разницу там, где её нет.
+    mockGet(INTAKE);
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    await screen.findByText("Прежняя шкала частоты");
+    expect(
+      screen.queryByText(intakeRu.fields.baselineFrequency),
+    ).not.toBeInTheDocument();
+  });
+
+  it("не показывается, если её нет вовсе", async () => {
+    // Пустое значит «исходный уровень неизвестен» — например, анкету правили
+    // до того, как поле появилось. Показывать прочерк как точку отсчёта
+    // нельзя: врач прочтёт его как «приступов не было».
+    mockGet({ ...INTAKE, baseline_seizure_frequency_id: null });
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    await screen.findByText("Прежняя шкала частоты");
+    expect(
+      screen.queryByText(intakeRu.fields.baselineFrequency),
     ).not.toBeInTheDocument();
   });
 });
