@@ -51,9 +51,13 @@ import type { MedicalProfile, Patient } from "./types";
 export function PatientProfileView({
   patient,
   clinicalAllowed,
+  clinicalEditable,
 }: {
   patient: Patient;
+  /** Кому анамнез виден: врач и диетолог (`GET /medical-profile`). */
   clinicalAllowed: boolean;
+  /** Кто его правит: только врач (`PUT /medical-profile`). */
+  clinicalEditable: boolean;
 }) {
   const { t } = useTranslation("doctor");
 
@@ -77,11 +81,11 @@ export function PatientProfileView({
   // диагнозом приходилось прокручивать экран до отдельного блока. Запрос тот
   // же, что у блока ниже, и ключ у них общий.
   //
-  // Строка показывается ТОЛЬКО врачу — как и весь медицинский профиль
-  // (`clinicalAllowed`). Клиника ответила 09.09.2026 (вопрос 7), что диетолог
-  // диагноз видит, но это правка доступа на СЕРВЕРЕ: `GET /medical-profile`
-  // пока за `require_roles(DOCTOR)`, и открывать её здесь было бы UX-проверкой
-  // вместо безопасности (правило 5 CLAUDE.md). Делается отдельной работой.
+  // Строка видна ведущему специалисту — врачу и диетологу (ответ клиники
+  // 09.09.2026, вопрос 7: «Диетолог может видеть диагноз… но не вносить
+  // изменения»). Право открывает СЕРВЕР, `clinicalAllowed` только повторяет
+  // его границу: показывать раздел, который ответит 403, — тупик, а прятать то,
+  // что сервер отдаёт, — не безопасность (правило 5 CLAUDE.md).
   const medicalProfile = useMedicalProfile(patient.id, clinicalAllowed);
   const diagnosis = medicalProfile.data?.diagnosis ?? null;
   // Незаполненный профиль сервер отдаёт как 404 — это состояние, а не сбой.
@@ -249,7 +253,12 @@ export function PatientProfileView({
           доступ к пациенту, поэтому диетолог её тоже видит. */}
       <IntakeView patientId={patient.id} />
 
-      {clinicalAllowed && <MedicalProfilePanel patientId={patient.id} />}
+      {clinicalAllowed && (
+        <MedicalProfilePanel
+          patientId={patient.id}
+          editable={clinicalEditable}
+        />
+      )}
 
       {/* Документы — сразу после анкеты и профиля: анамнез и то, чем он
           подтверждён, читаются вместе. */}
@@ -265,7 +274,13 @@ export function PatientProfileView({
   );
 }
 
-function MedicalProfilePanel({ patientId }: { patientId: string }) {
+function MedicalProfilePanel({
+  patientId,
+  editable,
+}: {
+  patientId: string;
+  editable: boolean;
+}) {
   const { t } = useTranslation("doctor");
   const [editing, setEditing] = useState(false);
 
@@ -316,15 +331,26 @@ function MedicalProfilePanel({ patientId }: { patientId: string }) {
           />
         }
       >
+        {/* Кнопки правки — только тому, кому сервер разрешает `PUT`. Диетолог
+            анамнез читает, но не правит (ответ 7), и кнопка, ведущая в 403, —
+            тот же тупик, что пункт меню без экрана (правило П3 канона).
+            Пустой профиль ему объясняется словами: «ещё не заполнен, заполняет
+            врач» — иначе пустой блок читается как сбой. */}
         {notFilled && (
           <EmptyState
             icon={FileText}
             title={t("profile.empty")}
-            description={t("profile.emptyDescription")}
+            description={
+              editable
+                ? t("profile.emptyDescription")
+                : t("profile.emptyForReader")
+            }
             action={
-              <Button type="button" onClick={() => setEditing(true)}>
-                {t("profile.fill")}
-              </Button>
+              editable ? (
+                <Button type="button" onClick={() => setEditing(true)}>
+                  {t("profile.fill")}
+                </Button>
+              ) : undefined
             }
           />
         )}
@@ -332,14 +358,16 @@ function MedicalProfilePanel({ patientId }: { patientId: string }) {
         {profile.data !== undefined && (
           <>
             <ProfileValues profile={profile.data} />
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start"
-              onClick={() => setEditing(true)}
-            >
-              {t("profile.edit")}
-            </Button>
+            {editable && (
+              <Button
+                type="button"
+                variant="outline"
+                className="self-start"
+                onClick={() => setEditing(true)}
+              >
+                {t("profile.edit")}
+              </Button>
+            )}
           </>
         )}
       </AsyncSection>

@@ -62,6 +62,28 @@ describe("разделы карты пациента", () => {
     expect(patientViewsFor(undefined)).not.toContain("notes");
   });
 
+  it("анамнез диетологу — на чтение, правит его врач", () => {
+    // Ответ клиники 09.09.2026 (вопросы 7 и 31): «Диетолог может видеть
+    // диагноз… но не вносить изменения». Сервер разводит это на две проверки
+    // (`GET /medical-profile` — врач и диетолог, `PUT` — врач), и реестр обязан
+    // повторять ту же границу: иначе диетолог получал бы либо пустой раздел при
+    // открытой ручке, либо кнопку, ведущую в 403.
+    //
+    // Проверяются пропы, а не отрисовка: экран профиля тянет пять запросов и
+    // свой разбор здесь ничего бы не добавил — его границы закреплены в
+    // `PatientProfileView.test.tsx`. Здесь проверяется ПРОВОДКА.
+    const patient = { id: "p1" } as never;
+    const forDietitian = PATIENT_VIEW_SCREENS.profile(patient, "dietitian")
+      .props as Record<string, unknown>;
+    const forDoctor = PATIENT_VIEW_SCREENS.profile(patient, "doctor")
+      .props as Record<string, unknown>;
+
+    expect(forDietitian.clinicalAllowed).toBe(true);
+    expect(forDietitian.clinicalEditable).toBe(false);
+    expect(forDoctor.clinicalAllowed).toBe(true);
+    expect(forDoctor.clinicalEditable).toBe(true);
+  });
+
   it("узнаёт свои разделы и не признаёт чужих", () => {
     expect(isPatientView("diary")).toBe(true);
     expect(isPatientView("prescriptions")).toBe(false);
