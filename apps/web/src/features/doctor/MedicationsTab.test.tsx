@@ -54,7 +54,15 @@ beforeEach(() => {
     if (path.includes("aed-drugs")) {
       return Promise.resolve({
         data: {
-          items: [{ id: DRUG_ID, name_ru: "Вальпроат натрия", retired: false }],
+          items: [
+            {
+              id: DRUG_ID,
+              name_ru: "Вальпроат натрия",
+              synonyms: ["Депакин"],
+              sort: 0,
+              retired: false,
+            },
+          ],
         },
       });
     }
