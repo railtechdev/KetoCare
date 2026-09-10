@@ -14,10 +14,10 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..models import SeizureLog
 from .diary import DiaryLog
@@ -54,25 +54,6 @@ async def latest_log[M: DiaryLog](
     return log
 
 
-async def count_seizures(
-    session: AsyncSession,
-    *,
-    patient_id: uuid.UUID,
-    period_from: datetime,
-    period_to: datetime,
-) -> SeizureTotals:
-    """Приступы за полуоткрытый интервал [period_from, period_to).
-
-    Полуоткрытый — чтобы запись ровно в полночь принадлежала одному дню, а не
-    попадала в счётчики обоих соседних.
-    """
-
-    (totals,) = await count_seizures_by_window(
-        session, patient_id=patient_id, windows=((period_from, period_to),)
-    )
-    return totals
-
-
 async def count_seizures_by_window(
     session: AsyncSession,
     *,
@@ -95,7 +76,7 @@ async def count_seizures_by_window(
     if not windows:
         return []
 
-    columns: list[Any] = []
+    columns: list[ColumnElement[int]] = []
     for period_from, period_to in windows:
         inside = and_(
             SeizureLog.occurred_at >= period_from,

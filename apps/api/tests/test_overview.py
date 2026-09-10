@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import get_session
 from api.main import create_app
 from api.routers.overview import router as overview_router
+from api.services.overview import _TREND_WINDOW_DAYS
 from core.config import get_settings
 from core.models import KetoneLog, Menu, SeizureLog, SeizureType, WeightLog
 from core.models.enums import DiarySource, KetoneMethod, UserRole
@@ -857,6 +858,43 @@ class TestSeizureTrend:
         # Посчитай удалённую девятку — вышло бы 14 против 4, то есть красная
         # пометка «Приступов стало больше» по записи, которой уже нет.
         assert trend["grew"] is False
+
+    async def test_midnight_belongs_to_one_week_only(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Приступ ровно в полночь принадлежит наступившим суткам, а не обоим.
+
+        Интервалы полуоткрытые — `[from, to)`, — и это обещано докстрокой
+        репозитория, но остальные случаи ставят приступы в полдень и мига
+        полуночи не касаются. Мутация `<` → `<=` на верхней границе проходила
+        все проверки, а на данных давала двойной счёт: запись в 00:00 шовного
+        дня попадала и в последнюю неделю, и в предыдущую.
+
+        Полночь достижима руками: в дневнике время вводится `datetime-local` с
+        точностью до минуты, и ночной приступ «в 00:00» — обычная запись.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        midnight_of_seam = datetime.combine(
+            _local_today() - timedelta(days=_TREND_WINDOW_DAYS - 1), time.min, tzinfo=TZ
+        )
+        # Полночь шестых суток назад — первый миг последней недели.
+        await _seizure(session, patient=patient, occurred_at=midnight_of_seam, count=4)
+        # Последний миг предыдущей недели: на микросекунду раньше.
+        await _seizure(
+            session,
+            patient=patient,
+            occurred_at=midnight_of_seam - timedelta(microseconds=1),
+            count=1,
+        )
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        trend = response.json()["seizure_trend"]
+
+        assert trend["recent"] == 4, "полночь принадлежит наступившим суткам"
+        assert trend["previous"] == 1, "последний миг прошлой недели остался в ней"
 
     async def test_growth_just_over_the_threshold_raises_the_flag(
         self, client, session, make_user, make_patient, auth_headers

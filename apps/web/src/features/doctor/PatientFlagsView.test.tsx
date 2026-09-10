@@ -50,14 +50,53 @@ const TONE_PAIRS: Record<string, string> = {
   "bg-warning": "text-warning",
 };
 
+/**
+ * Какую пометку какими словами зовут. Пары названы здесь ЯВНО и независимо от
+ * кода: сам код берёт подпись из общей таблицы, поэтому перестановка двух её
+ * записей целиком осталась бы согласованной — и строка, и легенда сказали бы
+ * одно и то же неверное слово. Значок и цвет тут не помогут: у «стало больше» и
+ * «возобновились» они одинаковые.
+ */
+const EXPECTED_LABEL: Record<string, string> = {
+  "no-prescription": doctorRu.flags.noPrescription,
+  "seizures-grew": doctorRu.flags.seizuresGrew,
+  "seizures-appeared": doctorRu.flags.seizuresAppeared,
+  stale: doctorRu.flags.legend.noReadingsTerm,
+  nutrition: doctorRu.flags.nutritionOff,
+};
+
 describe("пометки строки и легенда говорят одно и то же", () => {
-  it("у каждой пометки в легенде тот же значок и тот же цвет", async () => {
+  it("каждая пометка называется своими словами", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <PatientFlagsView flags={EVERYTHING} />
+        <PatientFlagsLegend />
+      </>,
+    );
+    await user.click(
+      screen.getByRole("button", { name: doctorRu.flags.legend.open }),
+    );
+
+    for (const key of FLAG_KEYS) {
+      const legend = document.querySelector(`[data-legend="${key}"]`);
+      expect(legend?.textContent, `подпись ${key}`).toBe(EXPECTED_LABEL[key]);
+    }
+  });
+
+  it("у каждой пометки в легенде тот же значок, цвет и текст", async () => {
     // Легенда и строка писались двумя рукописными списками и разошлись при
     // первом же добавлении пометки: «Приступов стало больше» получило в легенде
     // оранжевый треугольник вместо красного пульса, две записи остались без
     // значка вовсе, а «Кетосоотношение вне допуска» свой значок потеряло. Врач
     // ищет в легенде ровно то, что видит в строке, — значит расхождение это
     // дефект, а не косметика (правило П19 канона, WCAG 1.4.1).
+    //
+    // Текст сверяется наравне со значком, и для приступных пометок он ВАЖНЕЕ:
+    // значок и цвет у «стало больше» и «возобновились» одинаковые, и различает
+    // их только подпись. Поменяй подписи местами — проверка значков молчала бы,
+    // а врач читал бы «Приступы возобновились» у ребёнка, у которого их стало
+    // больше.
     const user = userEvent.setup();
     render(
       <>
@@ -81,6 +120,18 @@ describe("пометки строки и легенда говорят одно 
       expect(TONE_PAIRS[toneOf(badge as Element, "badge")], `цвет ${key}`).toBe(
         toneOf(legend as Element, "legendIcon"),
       );
+
+      const inRow = (badge as Element).textContent ?? "";
+      const inLegend = (legend as Element).textContent ?? "";
+      if (key === "stale") {
+        // Единственная пометка, где подписи РАЗНЫЕ по замыслу: в строке стоит
+        // срок молчания («Нет замеров: 5 дн.»), в легенде — безусловный термин.
+        // Требуется, чтобы строка начиналась с него, иначе врач не свяжет одно
+        // с другим.
+        expect(inRow.startsWith(inLegend), `подпись ${key}`).toBe(true);
+      } else {
+        expect(inLegend, `подпись ${key}`).toBe(inRow);
+      }
     }
   });
 
