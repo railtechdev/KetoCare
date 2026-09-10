@@ -9,6 +9,7 @@ import i18n from "../../lib/i18n";
 import childRu from "../../locales/ru/child.json";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
+import { todayIso } from "../menu/dates";
 import { PatientProfileView } from "./PatientProfileView";
 
 /** Последний замер веса из сводки; `null` — замеров не было. */
@@ -339,6 +340,22 @@ describe("дата начала кетодиетотерапии", () => {
     expect(
       await screen.findByText(/2062.*ещё не началась/),
     ).toBeInTheDocument();
+  });
+
+  it("сегодняшняя дата подписи не получает — день старта это уже терапия", async () => {
+    // Граница проверяется отдельно: без неё мутация `>` → `>=` проходила все
+    // тесты файла, а вместе с UTC-датой в браузере это давало окно с полуночи
+    // до пяти утра, когда карта писала «ещё не началась» про терапию, которую
+    // сервер уже считает начатой. Правило про исходную частоту сравнивает
+    // строго (`<`), и подпись обязана говорить то же самое.
+    medicalProfile = {
+      diagnosis: "Синдром Драве",
+      therapy_started_on: todayIso(),
+    };
+    renderProfile();
+
+    await screen.findByText(new RegExp(new Date().getFullYear().toString()));
+    expect(screen.queryByText(/ещё не началась/)).not.toBeInTheDocument();
   });
 
   it("прошедшая дата подписи не получает", async () => {

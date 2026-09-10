@@ -22,6 +22,7 @@ import { ChildForm } from "../child/ChildForm";
 import { toChildUpdateBody } from "../child/childSchemas";
 import { IntakeView } from "../intake/IntakeView";
 import { useIntakeOptions } from "../intake/useIntake";
+import { todayIso } from "../menu/dates";
 import { allergyNames } from "../patients/allergies";
 import { usePatientOverview } from "../patients/overview";
 import { useUpdateChildMutation } from "../patients/useChildren";
@@ -385,9 +386,14 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
       : formatIsoDate(profile.therapy_started_on);
   // Сравнение по календарной дате, а не по моменту: «сегодня» началом уже
   // считается (то же строгое сравнение, что в правиле про исходную частоту).
+  //
+  // `todayIso()`, а не `toISOString()`: тот переводит в UTC, и в поясе клиники
+  // (UTC+5) с полуночи до пяти утра дня старта карта писала бы «ещё не
+  // началась» про терапию, которую сервер уже считает начатой, — то есть
+  // подпись противоречила бы ровно тому правилу, которое поясняет.
   const therapyStartIsAhead =
     profile.therapy_started_on !== null &&
-    profile.therapy_started_on > new Date().toISOString().slice(0, 10);
+    profile.therapy_started_on > todayIso();
 
   // Число сменённых ПЭП хранится ссылкой на справочник, а не числом: шкала
   // задана медицинской командой («1-2», «3 и более»), и подписи берутся оттуда.
