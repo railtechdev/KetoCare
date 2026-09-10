@@ -30,17 +30,8 @@ from ..schemas_overview import (
     ToleranceGap,
     WeightReading,
 )
+from .clock import local_today
 from .engine_version import comparable_to_current
-
-
-def local_today() -> date:
-    """Сегодняшняя дата в часовом поясе установки (`settings.tz`), а не в UTC.
-
-    В UTC+5 после 19:00 местных суток UTC-дата уже другая: по UTC-дате семья
-    поздним вечером увидела бы пустой «завтрашний» день вместо своих итогов.
-    """
-
-    return datetime.now(ZoneInfo(get_settings().tz)).date()
 
 
 def _day_bounds(day: date) -> tuple[datetime, datetime]:

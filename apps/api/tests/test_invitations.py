@@ -39,6 +39,30 @@ class TestCreateInvitation:
         )
         assert response.status_code == 403
 
+    async def test_family_cannot_invite_the_second_parent(
+        self, client, session, make_user, auth_headers
+    ):
+        """Второго родителя приглашает врач, а не семья.
+
+        Ответ клиники 09.09.2026 (вопрос 33): «Лучше через врача пригласить
+        второго родителя». Так и было — но держалось это только составом
+        `INVITER_ROLES`, и ни один тест не говорил, ПОЧЕМУ родителя там нет.
+        Расширить список на роль семьи «чтобы удобнее» — правка на одну строку.
+
+        Соседний случай проверяет, что не-администратор не зовёт СОТРУДНИКОВ;
+        здесь речь о приглашении в собственную семью.
+        """
+
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/auth/invitations",
+            json={"email": "second.parent@example.com", "role": "parent"},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 403
+
     async def test_invite_requires_auth(self, client):
         response = await client.post(
             "/api/v1/auth/invitations", json={"email": "x@example.com", "role": "doctor"}
