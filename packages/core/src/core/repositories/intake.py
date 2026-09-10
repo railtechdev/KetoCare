@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AedDrug, IntakeOption, PatientIntake
 from ..models.enums import IntakeScale
+from . import prescriptions as prescriptions_repo
 
 
 async def list_options(
@@ -96,11 +97,27 @@ async def upsert(
     # 09.09.2026, вопрос 19). Эффект терапии измеряют снижением относительно
     # неё, и переписанный исходный уровень стирает сам предмет сравнения.
     #
+    # Записывается, только пока терапия НЕ НАЧАЛАСЬ. Клиника сказала «перед
+    # началом кетогенной диеты», и «первый непустой ответ» — это не то же
+    # самое: семья, впервые ответившая про частоту через полгода на диете,
+    # получила бы сегодняшний уровень как исходный, навсегда и молча. Ровно та
+    # подмена, ради устранения которой поле и заведено.
+    #
+    # Началом считается самое раннее назначение: до него кетодиеты нет.
+    # Признак не выдуман — он уже хранится, и таблица назначений append-only.
+    #
+    # TODO(med): вопрос 49 — что считать исходным уровнем, если частоту впервые
+    # назвали уже на терапии. Сейчас поле остаётся пустым: «неизвестно» честнее
+    # выдуманного, но врач при этом теряет точку отсчёта совсем.
+    #
     # Правило стоит здесь, а не в ручке: анкету пишет только `upsert`, и через
     # него проходит любой маршрут — сегодняшний и будущий. Схема записи это
     # поле не принимает вовсе, так что подменить его снаружи нечем.
     if intake.baseline_seizure_frequency_id is None and seizure_frequency_id is not None:
-        intake.baseline_seizure_frequency_id = seizure_frequency_id
+        therapy_started_on = await prescriptions_repo.started_on(session, patient_id=patient_id)
+        if therapy_started_on is None:
+            intake.baseline_seizure_frequency_id = seizure_frequency_id
+
     intake.seizure_duration_id = seizure_duration_id
     intake.meals_per_day_id = meals_per_day_id
     intake.developmental_delay = developmental_delay

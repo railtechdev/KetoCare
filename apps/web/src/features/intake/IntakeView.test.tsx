@@ -112,7 +112,8 @@ describe("анкета глазами специалиста", () => {
 
     // Выведенный из употребления вариант всё равно называется: показать
     // прочерк вместо прежнего ответа семьи — значит подменить её ответ.
-    expect(screen.getByText("Прежняя шкала частоты")).toBeInTheDocument();
+    // Строк две — текущая частота и исходная: у этого ребёнка они совпадают.
+    expect(screen.getAllByText("Прежняя шкала частоты")).toHaveLength(2);
   });
 
   it("неотвеченный вопрос называет словами, а не прочерком", async () => {
@@ -139,14 +140,15 @@ describe("анкета глазами специалиста", () => {
 
 /**
  * Исходная частота — точка отсчёта, по которой судят об эффекте терапии
- * (ответ клиники 09.09.2026, вопрос 19). Она записывается один раз и дальше не
- * меняется, поэтому в карте появляется ровно тогда, когда текущая от неё
- * ушла — то есть когда есть о чём говорить.
+ * (ответ клиники 09.09.2026, вопрос 19). Записывается один раз и только пока
+ * терапия не началась, поэтому у строки три разных смысла — и все три врач
+ * обязан различать. «Не изменилась» и «сравнивать не с чем» — противоположные
+ * вещи, а раньше обе прятали строку и выглядели одинаково.
  */
 describe("исходная частота приступов", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("показывается, когда текущая частота от неё отличается", async () => {
+  it("показывает прежнее значение, когда текущая от него ушла", async () => {
     mockGet({
       ...INTAKE,
       baseline_seizure_frequency_id: DAILY_FREQ,
@@ -160,26 +162,45 @@ describe("исходная частота приступов", () => {
     expect(screen.getByText("Ежедневно")).toBeInTheDocument();
   });
 
-  it("не показывается, пока совпадает с текущей", async () => {
-    // Пока анкету не правили, это одно и то же число: вторая строка с тем же
-    // значением заставляла бы искать разницу там, где её нет.
-    mockGet(INTAKE);
+  it("показывает то же значение, когда частота не изменилась", async () => {
+    // Точка отсчёта есть, и она равна сегодняшней: это ответ «улучшения нет»,
+    // а не отсутствие данных. Спрятанная строка выдавала бы его за второе.
+    mockGet({
+      ...INTAKE,
+      baseline_seizure_frequency_id: DAILY_FREQ,
+      seizure_frequency_id: DAILY_FREQ,
+    });
     render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
 
-    await screen.findByText("Прежняя шкала частоты");
     expect(
-      screen.queryByText(intakeRu.fields.baselineFrequency),
-    ).not.toBeInTheDocument();
+      await screen.findByText(intakeRu.fields.baselineFrequency),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Ежедневно")).toHaveLength(2);
   });
 
-  it("не показывается, если её нет вовсе", async () => {
-    // Пустое значит «исходный уровень неизвестен» — например, анкету правили
-    // до того, как поле появилось. Показывать прочерк как точку отсчёта
-    // нельзя: врач прочтёт его как «приступов не было».
+  it("говорит словами, что точки отсчёта нет", async () => {
+    // Про частоту впервые ответили уже на терапии: сегодняшний уровень
+    // исходным не считается (вопрос 49). Врачу нужно знать, что снижение
+    // относительно исходного посчитать не с чем.
     mockGet({ ...INTAKE, baseline_seizure_frequency_id: null });
     render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
 
-    await screen.findByText("Прежняя шкала частоты");
+    expect(
+      await screen.findByText(intakeRu.fields.baselineNotRecorded),
+    ).toBeInTheDocument();
+  });
+
+  it("не заводит строку, пока про частоту не отвечали вовсе", async () => {
+    // Незаданный вопрос — это «Не отвечено» у самой частоты, и второй строкой
+    // про точку отсчёта его повторять незачем.
+    mockGet({
+      ...INTAKE,
+      seizure_frequency_id: null,
+      baseline_seizure_frequency_id: null,
+    });
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    await screen.findByText(intakeRu.fields.frequency);
     expect(
       screen.queryByText(intakeRu.fields.baselineFrequency),
     ).not.toBeInTheDocument();
