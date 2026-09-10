@@ -13,7 +13,7 @@ import { lazy, type ReactElement } from "react";
 
 import type { PageLayoutProps } from "../../components/PageLayout";
 import type { Role } from "../auth/roles";
-import { isDoctor, type Patient } from "./types";
+import { isCareRole, isDoctor, type Patient } from "./types";
 
 /**
  * Разделы карты пациента — реестр «раздел → экран, значок, доступность».
@@ -108,7 +108,8 @@ export function patientViewsFor(
 
 /**
  * Экран раздела. Роль — аргумент по той же причине, что и у разделов кабинета:
- * профиль показывает медицинскую часть анамнеза только врачу.
+ * профиль показывает медицинскую часть анамнеза не всем и правит её не всякий,
+ * кто видит.
  */
 export type PatientViewScreen = (
   patient: Patient,
@@ -123,8 +124,15 @@ export const PATIENT_VIEW_SCREENS: Record<PatientView, PatientViewScreen> = {
   diary: (patient) => <DiaryView patientId={patient.id} />,
   reports: (patient) => <ReportsView patientId={patient.id} />,
   notes: (patient) => <NotesView patientId={patient.id} />,
+  // Два разных права, а не одно: диетолог анамнез ЧИТАЕТ (ответ клиники
+  // 09.09.2026, вопросы 7 и 31), но не правит. Сервер разводит их так же —
+  // `GET /medical-profile` открыт обеим ролям, `PUT` только врачу.
   profile: (patient, role) => (
-    <ProfileView patient={patient} clinicalAllowed={isDoctor(role)} />
+    <ProfileView
+      patient={patient}
+      clinicalAllowed={isCareRole(role)}
+      clinicalEditable={isDoctor(role)}
+    />
   ),
 };
 

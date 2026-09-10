@@ -112,7 +112,10 @@ const PATIENT = {
 
 function renderProfile(
   patient: Record<string, unknown> = {},
-  { clinicalAllowed = true }: { clinicalAllowed?: boolean } = {},
+  {
+    clinicalAllowed = true,
+    clinicalEditable = clinicalAllowed,
+  }: { clinicalAllowed?: boolean; clinicalEditable?: boolean } = {},
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -132,6 +135,7 @@ function renderProfile(
     <PatientProfileView
       patient={{ ...PATIENT, ...patient } as never}
       clinicalAllowed={clinicalAllowed}
+      clinicalEditable={clinicalEditable}
     />,
     { wrapper: Wrapper },
   );
@@ -193,9 +197,9 @@ describe("паспорт пациента", () => {
   });
 
   it("кому закрыт медицинский профиль — за диагнозом даже не ходит", async () => {
-    // Диетологу его пока не открывали: `GET /medical-profile` за ролью врача.
-    // Клиника ответила, что диагноз он видеть должен, — это правка ДОСТУПА на
-    // сервере, и до неё строка в интерфейсе была бы обещанием без покрытия.
+    // Роль без права на анамнез. Сегодня в кабинете таких нет — карту пациента
+    // открывают только врач и диетолог, и обоим профиль виден, — но граница
+    // проверяется не составом ролей, а тем, что экран её соблюдает.
     //
     // Проверяется отсутствие ЗАПРОСА, а не отсутствие текста: текста не будет и
     // так, потому что данным неоткуда взяться, — и тест, смотрящий на экран,
@@ -295,6 +299,52 @@ describe("правка профиля ребёнка специалистом", 
         }),
       );
     });
+  });
+});
+
+/**
+ * Ответ клиники 09.09.2026 (вопросы 7 и 31): «Диетолог может видеть диагноз,
+ * календарь приступов, назначения врача по АЭП, но не вносить изменения».
+ *
+ * Два права, а не одно. Разрешение читать без запрета править открыло бы
+ * диетологу диагноз на запись; запрет править без разрешения читать оставил бы
+ * его собирать рацион вслепую, как было до ответа.
+ */
+describe("анамнез диетологу — на чтение", () => {
+  it("показывает профиль, но не даёт его править", async () => {
+    medicalProfile = { diagnosis: "Синдром Драве" };
+    renderProfile({}, { clinicalAllowed: true, clinicalEditable: false });
+
+    // Значения на месте — и в паспорте, и в блоке ниже.
+    expect(await screen.findAllByText("Синдром Драве")).not.toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: doctorRu.profile.edit }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("незаполненный профиль объясняет словами, а не кнопкой", async () => {
+    // Пустой блок без объяснения читается как сбой, а кнопка «Заполнить»
+    // ведёт в 403 — тупик вместо ограничения прав (правило П3 канона).
+    medicalProfile = null;
+    renderProfile({}, { clinicalAllowed: true, clinicalEditable: false });
+
+    expect(
+      await screen.findByText(doctorRu.profile.emptyForReader),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: doctorRu.profile.fill }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("врачу кнопка правки остаётся", async () => {
+    // Обратная сторона: без этого случая проверки выше прошли бы и на экране,
+    // где править профиль нельзя вообще никому.
+    medicalProfile = { diagnosis: "Синдром Драве" };
+    renderProfile();
+
+    expect(
+      await screen.findByRole("button", { name: doctorRu.profile.edit }),
+    ).toBeInTheDocument();
   });
 });
 

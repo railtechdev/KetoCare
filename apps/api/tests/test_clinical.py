@@ -1,24 +1,23 @@
-"""Клинические ручки врача: медицинский профиль, препараты, врачебные заметки.
+"""Клинические ручки: медицинский профиль, препараты, врачебные заметки.
 
-Роутер ещё не подключён в `api.main`, поэтому здесь свой `client`: он собирает
-приложение и добавляет проверяемый роутер сам. Остальные фикстуры — из conftest.
-"""
+Клиент берётся общий, из conftest, — тот, что собирает приложение как в бою
+(`create_app()` со всеми роутерами). Раньше файл монтировал `clinical.router`
+себе сам, и это было неправдой дважды: роутер давно подключён в `api.main`, то
+есть тесты ходили по ДУБЛИРУЮЩИМ маршрутам, а зависимости, добавленные при
+подключении в `main.py`, были для них невидимы. Проверено: закомментируй строку
+подключения в `main.py` — вся матрица прав этого файла оставалась зелёной.
+
+Общий клиент заодно даёт каждому тесту свой адрес: ключ ограничения частоты —
+это адрес клиента, и на своём его не было."""
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
 from datetime import date, timedelta
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps.auth import get_session
-from api.main import create_app
-from api.routers import clinical
 from core.models import AuditLog, ClinicalNote, MedicalProfile, Medication
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
@@ -41,21 +40,6 @@ MEDICATION = {
     "frequency": "2 раза в сутки",
     "started_at": TODAY.isoformat(),
 }
-
-
-@pytest_asyncio.fixture
-async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
-    app = create_app()
-    app.include_router(clinical.router, prefix="/api/v1")
-
-    async def _override_session() -> AsyncIterator[AsyncSession]:
-        yield session
-
-    app.dependency_overrides[get_session] = _override_session
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
-        yield http_client
 
 
 async def _attached(session, make_user, make_patient, role: UserRole):
@@ -125,22 +109,50 @@ class TestMedicalProfile:
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "not_found"
 
-    async def test_dietitian_has_no_access(
+    async def test_dietitian_reads_the_profile_but_cannot_change_it(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        """Раздел 5.3 ТЗ помечает медицинский профиль врачебной ручкой.
+        """Ответ клиники 09.09.2026 (вопросы 7 и 31).
 
-        Возможно, диетологу чтение нужно — он подбирает рацион, а диагноз на это
-        влияет. Но расширять доступ к клиническим данным ребёнка за медицинскую
-        команду нельзя: вопрос в docs/medical/OPEN_QUESTIONS.md, до ответа закрыто.
+        «Диетолог может видеть диагноз, календарь приступов, назначения врача по
+        АЭП, но не вносить изменения.» Раздел 5.3 ТЗ помечал профиль врачебной
+        ручкой целиком, и до ответа он был закрыт — ошибиться в эту сторону было
+        безопаснее. Диагноз определяет, какую диету вообще собирают: подбирать
+        рацион вслепую и был прежний порядок.
+
+        Чтение и запись проверяются одним тестом намеренно: разрешение читать
+        осмысленно ровно в паре с запретом писать, и разведи их по двум тестам —
+        удаление одного осталось бы незамеченным.
         """
-        dietitian, patient = await _attached(session, make_user, make_patient, UserRole.DIETITIAN)
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        await patients_repo.link_doctor(session, doctor_id=dietitian.id, patient_id=patient.id)
         url = f"/api/v1/patients/{patient.id}/medical-profile"
+        await client.put(url, json=PROFILE, headers=auth_headers(doctor))
 
-        assert (await client.get(url, headers=auth_headers(dietitian))).status_code == 403
+        read = await client.get(url, headers=auth_headers(dietitian))
+        assert read.status_code == 200, read.text
+        assert read.json()["diagnosis"] == PROFILE["diagnosis"]
+
         assert (
             await client.put(url, json=PROFILE, headers=auth_headers(dietitian))
         ).status_code == 403
+
+    async def test_dietitian_without_link_cannot_read(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Роль открывает вид данных, а не всех детей клиники.
+
+        Обе ступени обязательны (правило 5 CLAUDE.md): роль отвечает «какие
+        данные», `require_patient_access` — «чей ребёнок». Расширение роли до
+        диетолога не должно превращать её во вторую отмычку.
+        """
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        stranger = await make_user(UserRole.DIETITIAN)
+        url = f"/api/v1/patients/{patient.id}/medical-profile"
+        await client.put(url, json=PROFILE, headers=auth_headers(doctor))
+
+        assert (await client.get(url, headers=auth_headers(stranger))).status_code == 403
 
     async def test_parent_has_no_access(
         self, client, session, make_user, make_patient, auth_headers
@@ -280,6 +292,41 @@ class TestMedications:
         ).status_code == 403
         assert (
             await client.delete(f"{url}/{medication_id}", headers=auth_headers(parent))
+        ).status_code == 403
+
+    async def test_dietitian_sees_the_scheme_but_does_not_prescribe(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ответ клиники 09.09.2026 (вопрос 31).
+
+        «Диетолог не имеет права назначать лекарства — только относительно диеты
+        (но имеет право видеть назначенные препараты).» Чтение здесь и раньше
+        было открыто всем, у кого есть доступ к пациенту, — ради родителя,
+        который даёт препарат ребёнку. Тест закрепляет это как обещание клинике,
+        а не как побочный эффект: сузь ручку до врача — и диетолог, собирающий
+        рацион, перестанет видеть, что ребёнок принимает.
+        """
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        await patients_repo.link_doctor(session, doctor_id=dietitian.id, patient_id=patient.id)
+        url = f"/api/v1/patients/{patient.id}/medications"
+        created = await client.post(url, json=MEDICATION, headers=auth_headers(doctor))
+        medication_id = created.json()["id"]
+
+        listed = await client.get(url, headers=auth_headers(dietitian))
+        assert listed.status_code == 200, listed.text
+        assert [item["drug_name"] for item in listed.json()["items"]] == [MEDICATION["drug_name"]]
+
+        assert (
+            await client.post(url, json=MEDICATION, headers=auth_headers(dietitian))
+        ).status_code == 403
+        assert (
+            await client.put(
+                f"{url}/{medication_id}", json=MEDICATION, headers=auth_headers(dietitian)
+            )
+        ).status_code == 403
+        assert (
+            await client.delete(f"{url}/{medication_id}", headers=auth_headers(dietitian))
         ).status_code == 403
 
     async def test_stopped_medication_stays_in_history(
@@ -446,8 +493,14 @@ class TestClinicalNotes:
     async def test_dietitian_has_no_access(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        """Раздел 5.3 ТЗ относит заметки к врачу; диетолог ведёт медпрофиль, но
-        не врачебный дневник."""
+        """Заметки остаются врачебными и после расширения доступа к профилю.
+
+        В ответе клиники (вопросы 7 и 31) перечислено, что диетолог видит:
+        диагноз, календарь приступов, назначения по АЭП. Врачебных заметок в
+        этом списке нет — это личное свидетельство врача о приёме, а не
+        клинический факт о ребёнке, и добавлять их «заодно» было бы решением за
+        медицинскую команду.
+        """
         dietitian, patient = await _attached(session, make_user, make_patient, UserRole.DIETITIAN)
         response = await client.get(
             f"/api/v1/patients/{patient.id}/clinical-notes", headers=auth_headers(dietitian)
