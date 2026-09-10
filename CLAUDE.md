@@ -21,7 +21,10 @@ KetoCare — платформа сопровождения кетогенной 
 - `packages/core` — все 31 таблица раздела 4.2, Alembic-миграции с сидом справочников, репозитории (`access`, `prescriptions`, `products`, `patients`, `users`, `audit`).
 - `apps/api` — JWT + TOTP, RBAC-зависимости, приглашения, `/auth`, `/patients`, `/prescriptions`, `/products` (включая CSV-импорт), `/calc`. Всего в API сейчас 89 путей и 130 операций.
 - `packages/api-client` — генерируется из OpenAPI (`make openapi`).
-- `Makefile`, `infra/docker-compose.dev.yml`, `.github/workflows/ci.yml`.
+- `Makefile`, `infra/docker-compose.dev.yml`, `.github/workflows/ci.yml` (шесть
+  задач; в том числе **сборка всех трёх целей Dockerfile** — `main` уезжает на
+  стенд автоматически, и до этой задачи сломанный образ обнаруживался бы упавшим
+  выкатом).
 
 **Этап 2 «Веб-кабинеты» завершён:**
 
