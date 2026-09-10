@@ -24,9 +24,11 @@ class Targets:
     ratio: float
     kcal: float
     protein_min_g: float | None = None
+    #: Лимит углеводов — по ОБЩИМ углеводам, включая клетчатку (ответ клиники,
+    #: вопрос 3). Соотношение при этом считается по чистым: две величины
+    #: намеренно считаются по-разному, см. `constants`.
     carbs_max_g: float | None = None
     per_ingredient_bounds: dict[str, tuple[float, float | None]] | None = None
-    net_carbs: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,8 +58,15 @@ class DishResult:
     kcal: float
     fat_g: float
     protein_g: float
+    #: Все углеводы, вместе с клетчаткой. По ним считается лимит из назначения.
     carbs_g: float
     fiber_g: float
+    #: Углеводы за вычетом клетчатки — то, по чему считается соотношение.
+    #:
+    #: Отдельным полем, а не выводится на экране вычитанием: соотношение
+    #: перестало следовать из показанных углеводов, и врач должен видеть число,
+    #: из которого оно получено, иначе проверить его нечем.
+    net_carbs_g: float
     ratio: float | None
     engine_version: str = ""
 

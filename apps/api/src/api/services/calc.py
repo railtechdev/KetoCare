@@ -45,7 +45,6 @@ def to_targets(raw: TargetsIn) -> Targets:
         protein_min_g=raw.protein_min_g,
         carbs_max_g=raw.carbs_max_g,
         per_ingredient_bounds=bounds,
-        net_carbs=raw.net_carbs,
     )
 
 
@@ -68,6 +67,7 @@ def to_dish_out(dish: DishResult) -> DishOut:
         protein_g=dish.protein_g,
         carbs_g=dish.carbs_g,
         fiber_g=dish.fiber_g,
+        net_carbs_g=dish.net_carbs_g,
         ratio=dish.ratio,
         engine_version=dish.engine_version,
     )

@@ -261,6 +261,9 @@ importers:
       vite:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.0)
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.4.0)(jiti@2.7.0)(jsdom@27.4.0)(lightningcss@1.33.0)(yaml@2.9.0)
 
   packages/ui:
     dependencies:

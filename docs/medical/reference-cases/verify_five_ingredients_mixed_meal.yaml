@@ -1,7 +1,8 @@
 name: verify_five_ingredients_mixed_meal
 provisional: true
 operation: verify
-note: составное блюдо из 5 ингредиентов
+note: 'составное блюдо из 5 ингредиентов; пересчитано под ENGINE_VERSION 1.0.0: соотношение
+  по чистым углеводам'
 input:
   ingredients:
   - product_id: butter
@@ -51,6 +52,6 @@ expected:
   protein_g: 19.335
   carbs_g: 2.335
   fiber_g: 0.78
-  ratio: 1.051454
+  ratio: 1.090713
 tolerance:
   abs: 1.0e-06

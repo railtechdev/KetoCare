@@ -106,7 +106,12 @@ class TestRowValidation:
         assert any("превышает 100" in e.message for e in report.errors), report.errors
 
     def test_fiber_greater_than_carbs_rejected(self) -> None:
-        """Клетчатка — часть углеводов; fiber > carbs сломал бы режим net_carbs."""
+        """Клетчатка — часть углеводов; fiber > carbs завысил бы соотношение.
+
+        Знаменатель соотношения — чистые углеводы, и ядро не даёт вкладу
+        продукта уйти в минус (ADR-0030). Но полагаться на это ядро не должно:
+        строка, где клетчатки больше углеводов, — испорченный источник данных.
+        """
         report = parse_csv(_csv("Т,Овощи,50,1,2,5,9,USDA,SR28,2026-01-01"))
         assert not report.ok
         assert any("Клетчатка" in e.message for e in report.errors), report.errors

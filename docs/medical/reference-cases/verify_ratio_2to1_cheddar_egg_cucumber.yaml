@@ -1,7 +1,8 @@
 name: verify_ratio_2to1_cheddar_egg_cucumber
 provisional: true
 operation: verify
-note: R≈2:1 на сыре/яйце/огурце
+note: 'R≈2:1 на сыре/яйце/огурце; пересчитано под ENGINE_VERSION 1.0.0: соотношение по чистым
+  углеводам'
 input:
   ingredients:
   - product_id: cheddar
@@ -35,6 +36,6 @@ expected:
   protein_g: 16.68
   carbs_g: 3.23
   fiber_g: 0.3
-  ratio: 0.934204
+  ratio: 0.948496
 tolerance:
   abs: 1.0e-06

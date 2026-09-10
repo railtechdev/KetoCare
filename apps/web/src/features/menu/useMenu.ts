@@ -2,7 +2,7 @@ import type { components } from "@ketocare/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, errorCodeOf } from "../../lib/api";
-import type { DayTolerance } from "../patients/dayVerdict";
+import type { DayTolerance, ToleranceGap } from "../patients/dayVerdict";
 import { patientOverviewKey, patientOverviewQuery } from "../patients/overview";
 
 export type MenuRead = components["schemas"]["MenuRead"];
@@ -267,22 +267,33 @@ export function useEatenMutation(patientId: string | null, date: string) {
  *
  * Отдаётся ответ сервера как есть: своя форма вердикта была бы четвёртой копией
  * одного и того же, а как его показывать — решает `patients/dayVerdict`.
+ *
+ * Вместе с вердиктом отдаётся причина его отсутствия (`gap`) — тоже серверная.
+ * Причин две, «назначения нет» и «день посчитан прежней версией ядра», и
+ * различить их на клиенте нечем: сегодняшнюю версию ядра знает только сервер.
  */
+export interface DayToleranceState {
+  tolerance: DayTolerance | null;
+  /** `null` — причина неизвестна: другая дата или сводка ещё перезагружается. */
+  gap: ToleranceGap | null;
+}
+
 export function useDayTolerance(
   patientId: string | null,
   date: string,
-): DayTolerance | null {
+): DayToleranceState {
   const overview = useQuery(patientOverviewQuery(patientId));
 
-  const tolerance = overview.data?.day?.tolerance;
+  const day = overview.data?.day;
 
   // Пока сводка перезагружается после правки меню, вердикт относится к прежнему
-  // составу дня: лучше не показывать соответствие, чем показать чужое.
-  if (overview.isFetching || overview.data?.date !== date || !tolerance) {
-    return null;
+  // составу дня: лучше не показывать соответствие, чем показать чужое. Причина
+  // молчит вместе с ним — она относится к тому же дню.
+  if (overview.isFetching || overview.data?.date !== date) {
+    return { tolerance: null, gap: null };
   }
 
-  return tolerance;
+  return { tolerance: day?.tolerance ?? null, gap: day?.tolerance_gap ?? null };
 }
 
 /** Нормы назначения на день: с ними итоги показывают, сколько осталось. */

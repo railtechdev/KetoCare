@@ -1,7 +1,7 @@
 import { MacroBar, RatioBadge, WarningBanner } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { dayVerdict } from "../patients/dayVerdict";
+import { dayVerdict, toleranceGapKey } from "../patients/dayVerdict";
 import { Panel } from "./Panel";
 import type { DaySummary } from "./types";
 
@@ -37,7 +37,7 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
   const { totals } = day;
   const tolerance = day.tolerance ?? null;
 
-  const verdict = dayVerdict(tolerance);
+  const verdict = dayVerdict(tolerance, day.tolerance_gap ?? null);
   const issues = verdict.ratioOffTolerance ? [t("day.offTolerance.ratio")] : [];
 
   return (
@@ -65,8 +65,11 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
         />
 
         {verdict.unavailable ? (
+          // Почему вердикта нет — словами сервера, а не догадкой экрана. Одним
+          // текстом на все причины кабинет говорил семье «назначения нет» при
+          // живом назначении; причины нет вовсе — текст нейтральный.
           <p className="m-0 text-sm text-muted-foreground">
-            {t("day.noPrescription")}
+            {t(`day.${toleranceGapKey(verdict.unavailableReason)}`)}
           </p>
         ) : issues.length > 0 ? (
           <WarningBanner level="warning" title={t("day.offTolerance.title")}>

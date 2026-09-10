@@ -616,3 +616,277 @@ class TestLeavingMainInTheSameCommand:
             check_command('git checkout README.md && git commit -m "в main"', cwd=repo_with_branch)
             == BLOCK
         )
+
+
+class TestEngineCommentsAreNotMath:
+    """Страж ядра требует bump за правку программы, но не за правку пояснений.
+
+    Semver описывает поведение. Пока страж не различал этих правок, у
+    устаревшего docstring'а в расчётном ядре было два исхода: соврать
+    patch-версией или остаться неправдой рядом с формулой. Случай не выдуманный
+    — ADR-0030 оставил такой docstring у `max_non_fat_grams`.
+
+    Проверка умеет только СНИМАТЬ требование, поэтому здесь важнее обратная
+    сторона: любая правка программы обязана остаться замеченной.
+    """
+
+    @staticmethod
+    def _repo(tmp_path: Path, before: str) -> Path:
+        repo = tmp_path / "engine"
+        repo.mkdir()
+        run = lambda *args: subprocess.run(  # noqa: E731
+            args, cwd=repo, check=True, capture_output=True
+        )
+        run("git", "init", "-b", "main")
+        run("git", "config", "user.email", "t@example.com")
+        run("git", "config", "user.name", "t")
+        (repo / "engine.py").write_text(before, encoding="utf-8")
+        run("git", "add", "engine.py")
+        run("git", "commit", "-m", "init")
+        return repo
+
+    @staticmethod
+    def _changed(repo: Path, after: str) -> str:
+        (repo / "engine.py").write_text(after, encoding="utf-8")
+        script = Path(__file__).resolve().parents[1] / "engine_code_changed.py"
+        done = subprocess.run(
+            [sys.executable, str(script), "engine.py"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return done.stdout.strip()
+
+    BEFORE = '''def ratio(fat, protein, carbs, fiber):
+    """Соотношение по общим углеводам."""
+    # старое правило
+    return fat / (protein + carbs)
+'''
+
+    def test_docstring_and_comment_only_edit_needs_no_bump(self, tmp_path: Path) -> None:
+        after = '''def ratio(fat, protein, carbs, fiber):
+    """Соотношение по ЧИСТЫМ углеводам (ADR-0030).
+
+    Пояснение переписано целиком, программа не тронута.
+    """
+    # новое правило описано выше
+    return fat / (protein + carbs)
+'''
+        assert self._changed(self._repo(tmp_path, self.BEFORE), after) == ""
+
+    def test_formula_edit_is_still_caught(self, tmp_path: Path) -> None:
+        after = self.BEFORE.replace("(protein + carbs)", "(protein + carbs - fiber)")
+        assert self._changed(self._repo(tmp_path, self.BEFORE), after) == "engine.py"
+
+    def test_edit_hidden_behind_a_comment_is_still_caught(self, tmp_path: Path) -> None:
+        """Правка программы вместе с комментарием — всё равно правка программы."""
+
+        after = '''def ratio(fat, protein, carbs, fiber):
+    """Соотношение по чистым углеводам."""
+    # текст переписан, и формула тоже
+    return fat / (protein + max(carbs - fiber, 0))
+'''
+        assert self._changed(self._repo(tmp_path, self.BEFORE), after) == "engine.py"
+
+    def test_changed_string_value_is_not_a_comment(self, tmp_path: Path) -> None:
+        """Строка-значение — часть программы: сообщение об ошибке видит человек."""
+
+        before = '''def check(x):
+    if x < 0:
+        raise ValueError("нельзя")
+    return x
+'''
+        after = before.replace('"нельзя"', '"нельзя: значение отрицательное"')
+        assert self._changed(self._repo(tmp_path, before), after) == "engine.py"
+
+    def test_unparseable_file_counts_as_changed(self, tmp_path: Path) -> None:
+        """Разобрать не удалось — считаем, что программа изменилась."""
+
+        assert self._changed(self._repo(tmp_path, self.BEFORE), "def broken(:\n") == "engine.py"
+
+    def test_new_file_counts_as_changed(self, tmp_path: Path) -> None:
+        """Файла нет в git — сравнивать не с чем, требование остаётся."""
+
+        repo = self._repo(tmp_path, self.BEFORE)
+        (repo / "fresh.py").write_text("X = 1\n", encoding="utf-8")
+        script = Path(__file__).resolve().parents[1] / "engine_code_changed.py"
+        done = subprocess.run(
+            [sys.executable, str(script), "fresh.py"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert done.stdout.strip() == "fresh.py"
+
+    def test_a_constant_change_is_code(self, tmp_path: Path) -> None:
+        """`constants.py` — не исключение: там лежат медицинские константы.
+
+        Файл был исключён из проверки целиком, потому что страж иначе ругался
+        на сам bump версии. Цена: допуск соответствия назначению можно было
+        расширить втрое, не подняв версию и не уронив ни одного теста — тесты
+        ядра значения допусков не пиняют.
+        """
+
+        before = 'ENGINE_VERSION = "1.0.0"\nRATIO_TOLERANCE = 0.15\n'
+        after = 'ENGINE_VERSION = "1.0.0"\nRATIO_TOLERANCE = 0.5\n'
+        assert self._changed(self._repo(tmp_path, before), after) == "engine.py"
+
+    def test_guard_compares_with_head_not_with_the_index(self) -> None:
+        """`git add` не должен прятать правку от стража.
+
+        `git diff` без ревизии показывает только неиндексированное, поэтому
+        после `git add` правка ядра для стража исчезала — ровно в тот момент,
+        когда до коммита остаётся один шаг.
+
+        Утверждение о ТЕКСТЕ скрипта, как и `TestRulesAreIntact` рядом: тест,
+        проверяющий поведение git в отдельном репозитории, остался бы зелёным
+        после возврата `git diff` без ревизии — он этой строки не читает.
+        """
+
+        script = (Path(__file__).resolve().parents[1] / "engine-guard.sh").read_text(
+            encoding="utf-8"
+        )
+        assert "git diff HEAD --name-only -- packages/keto_engine/src" in script
+        assert "git diff --name-only -- packages/keto_engine/src" not in script
+
+    def test_guard_also_sees_untracked_sources(self) -> None:
+        """Новый файл с формулой — такая же правка ядра.
+
+        `git diff` неотслеживаемые файлы не показывает вовсе.
+        """
+
+        script = (Path(__file__).resolve().parents[1] / "engine-guard.sh").read_text(
+            encoding="utf-8"
+        )
+        assert "git ls-files --others --exclude-standard -- packages/keto_engine/src" in script
+
+    def test_guard_checks_the_version_by_value(self) -> None:
+        """Bump сверяется значением, а не строками диффа.
+
+        `grep -c '^[+-]ENGINE_VERSION'` засчитывал любую правку строки — смену
+        кавычек и понижение версии в том числе.
+        """
+
+        script = (Path(__file__).resolve().parents[1] / "engine-guard.sh").read_text(
+            encoding="utf-8"
+        )
+        assert "engine_version_bumped.py" in script
+        # Проверяется исполняемая строка, а не упоминание: прежний приём назван
+        # в комментарии рядом, и запрет на любое вхождение запретил бы объяснять,
+        # что именно было не так.
+        executable = [
+            line
+            for line in script.splitlines()
+            if not line.lstrip().startswith("#") and "ENGINE_VERSION" in line
+        ]
+        assert not any("grep -c" in line for line in executable), executable
+
+
+class TestEngineDocstringsAreNotBehaviour:
+    """Предпосылка исключения: docstring в ядре ни на что не влияет.
+
+    `engine_code_changed.py` разрешает менять docstring без bump'а версии, и это
+    верно ровно до тех пор, пока ядро само их не читает. Появится
+    `argparse(description=__doc__)`, doctest или отдача docstring наружу — и
+    исключение станет неверным МОЛЧА: страж пропустит правку, меняющую
+    поведение. Проверять будет некому, поэтому проверка стоит здесь.
+    """
+
+    ROOT = Path(__file__).resolve().parents[3] / "packages" / "keto_engine"
+
+    def test_core_never_reads_its_own_docstrings(self) -> None:
+        offenders = [
+            path.relative_to(self.ROOT)
+            for path in (self.ROOT / "src").rglob("*.py")
+            if "__doc__" in path.read_text(encoding="utf-8")
+        ]
+        assert offenders == [], (
+            f"ядро читает свои docstring'и ({offenders}) — значит они стали поведением, "
+            "и engine_code_changed.py больше не имеет права снимать требование bump'а"
+        )
+
+    def test_doctests_are_not_collected(self) -> None:
+        """Собираемый doctest сделал бы docstring исполняемым кодом.
+
+        Настройки pytest живут в КОРНЕВОМ `pyproject.toml`, а не в пакетном: в
+        пакетном секции нет вовсе, и первая версия этого теста не могла упасть
+        ни при каких обстоятельствах.
+        """
+
+        root = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        config = root.read_text(encoding="utf-8")
+        assert "[tool.pytest.ini_options]" in config, (
+            f"настройки pytest не нашлись в {root} — тест перестал что-либо проверять"
+        )
+        assert "--doctest-modules" not in config
+
+
+class TestEngineVersionMustActuallyGrow:
+    """Bump сверяется значением: любая правка строки версии — не bump.
+
+    Прежняя проверка считала строки диффа, поэтому требование выполняли смена
+    кавычек и понижение версии. Сохранённые расчёты помечаются этой строкой:
+    понижение делает старые и новые значения неразличимыми — ровно то, ради
+    чего правило и заведено.
+    """
+
+    @staticmethod
+    def _verdict(tmp_path: Path, before: str, after: str) -> str:
+        repo = tmp_path / "engine"
+        repo.mkdir()
+        run = lambda *args: subprocess.run(  # noqa: E731
+            args, cwd=repo, check=True, capture_output=True
+        )
+        run("git", "init", "-b", "main")
+        run("git", "config", "user.email", "t@example.com")
+        run("git", "config", "user.name", "t")
+        (repo / "constants.py").write_text(before, encoding="utf-8")
+        run("git", "add", "constants.py")
+        run("git", "commit", "-m", "init")
+        (repo / "constants.py").write_text(after, encoding="utf-8")
+
+        script = Path(__file__).resolve().parents[1] / "engine_version_bumped.py"
+        done = subprocess.run(
+            [sys.executable, str(script), "constants.py"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return done.stdout.strip()
+
+    BEFORE = 'ENGINE_VERSION = "1.0.0"\n'
+
+    def test_growth_counts(self, tmp_path: Path) -> None:
+        assert self._verdict(tmp_path, self.BEFORE, 'ENGINE_VERSION = "1.1.0"\n') == "bumped"
+
+    def test_patch_growth_counts(self, tmp_path: Path) -> None:
+        assert self._verdict(tmp_path, self.BEFORE, 'ENGINE_VERSION = "1.0.1"\n') == "bumped"
+
+    def test_quote_change_is_not_a_bump(self, tmp_path: Path) -> None:
+        verdict = self._verdict(tmp_path, self.BEFORE, "ENGINE_VERSION = '1.0.0'\n")
+        assert verdict != "bumped"
+        assert "осталась 1.0.0" in verdict
+
+    def test_downgrade_is_not_a_bump(self, tmp_path: Path) -> None:
+        verdict = self._verdict(tmp_path, self.BEFORE, 'ENGINE_VERSION = "0.9.9"\n')
+        assert verdict != "bumped"
+        assert "ПОНИЖЕНА" in verdict
+
+    def test_ten_is_greater_than_nine(self, tmp_path: Path) -> None:
+        """Сравнение числовое, а не строковое: «1.10.0» больше «1.9.0»."""
+
+        assert (
+            self._verdict(
+                tmp_path, 'ENGINE_VERSION = "1.9.0"\n', 'ENGINE_VERSION = "1.10.0"\n'
+            )
+            == "bumped"
+        )
+
+    def test_missing_constant_is_not_a_bump(self, tmp_path: Path) -> None:
+        """Константа исчезла или переименована — подтверждать нечего."""
+
+        verdict = self._verdict(tmp_path, self.BEFORE, "VERSION = '1.1.0'\n")
+        assert verdict != "bumped"

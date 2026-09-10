@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import date, datetime
 
@@ -28,6 +29,30 @@ class DayTolerance(BaseModel):
     kcal_within_tolerance: bool
 
 
+class ToleranceGap(enum.StrEnum):
+    """Почему у дня нет вердикта о соответствии назначению.
+
+    Причин две, и на экране они читаются по-разному: «назначения ещё нет» — это
+    про то, что врач не задал цель, а «день посчитан прежней версией ядра» — про
+    то, что цель есть, но сверять с ней старое число нечестно. Пока причина была
+    одна на обе, кабинет говорил семье «активного назначения нет» при живом
+    назначении.
+    """
+
+    #: Активного назначения нет — сравнивать итоги не с чем.
+    NO_PRESCRIPTION = "no_prescription"
+
+    #: День посчитан ядром другой ОСНОВНОЙ версии (ADR-0016, ADR-0030): числа
+    #: получены по прежнему правилу, и вердикт по ним был бы утверждением о
+    #: сегодняшнем правиле на вчерашних числах.
+    ENGINE_CHANGED = "engine_changed"
+
+    #: У дня не записана версия ядра (колонка допускает пустое значение).
+    #: Сверять с ней нечего, но и сказать «посчитан прежней версией» нельзя:
+    #: какой именно — неизвестно, а утверждать больше известного мы не станем.
+    ENGINE_UNKNOWN = "engine_unknown"
+
+
 class DaySummary(BaseModel):
     """Итоги дня из `menus.totals` — те же показатели, что у блюда, поэтому схема
     `DishComputed` переиспользуется, а не копируется (как в `MenuRead.totals`).
@@ -38,8 +63,10 @@ class DaySummary(BaseModel):
     """
 
     totals: DishComputed
-    # null, пока нет активного назначения: сравнивать итоги не с чем
+    # null, если вердикта нет; почему именно — в `tolerance_gap`
     tolerance: DayTolerance | None = None
+    #: Заполнено ровно тогда, когда `tolerance` пуст, и наоборот.
+    tolerance_gap: ToleranceGap | None = None
     engine_version: str | None = None
 
 

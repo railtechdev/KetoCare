@@ -67,6 +67,7 @@ const VERIFIED = {
     protein_g: 0.25,
     carbs_g: 0.4,
     fiber_g: 0,
+    net_carbs_g: 0.4,
     ratio: 63.5,
     engine_version: "1.0.0",
     items: [
@@ -93,6 +94,7 @@ const SOLVED = {
     protein_g: 0.3,
     carbs_g: 0.4,
     fiber_g: 0,
+    net_carbs_g: 0.4,
     ratio: PRESCRIBED_RATIO,
     engine_version: "1.0.0",
     items: [

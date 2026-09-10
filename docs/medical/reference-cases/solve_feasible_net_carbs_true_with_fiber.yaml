@@ -1,7 +1,9 @@
 name: solve_feasible_net_carbs_true_with_fiber
 provisional: true
 operation: solve
-note: net_carbs=True снижает вклад клетчатки авокадо в расчёт соотношения
+note: 'клетчатка авокадо не входит в знаменатель соотношения: оно считается по чистым углеводам
+  (ответ клиники 09.09.2026, вопросы 2 и 6). Прежде это включалось флагом net_carbs, которого
+  больше нет'
 input:
   ingredients:
   - product_id: butter
@@ -25,6 +27,5 @@ input:
   targets:
     ratio: 4.0
     kcal: 500
-    net_carbs: true
 expected:
   infeasible: false

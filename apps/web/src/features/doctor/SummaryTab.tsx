@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
-import { dayVerdict } from "../patients/dayVerdict";
+import { dayVerdict, toleranceGapKey } from "../patients/dayVerdict";
 import { usePatientOverview } from "../patients/overview";
 import { PatientViewLink } from "./PatientViewLink";
 import { LinesSkeleton } from "./skeletons";
@@ -83,7 +83,7 @@ function OverviewPanels({
 
   // Что показывать предупреждением, а что набором, решает patients/dayVerdict —
   // одинаково для главной родителя, меню и этой карты.
-  const verdict = dayVerdict(tolerance);
+  const verdict = dayVerdict(tolerance, day?.tolerance_gap ?? null);
 
   return (
     <>
@@ -181,7 +181,7 @@ function OverviewPanels({
 
             {verdict.unavailable ? (
               <p className="m-0 text-sm text-muted-foreground">
-                {t("summary.day.noPrescription")}
+                {t(`summary.day.${toleranceGapKey(verdict.unavailableReason)}`)}
               </p>
             ) : verdict.ratioOffTolerance ? (
               <WarningBanner level="warning" title={t("summary.day.offTitle")}>

@@ -60,6 +60,15 @@ def _build_ingredients(raw: list[dict[str, Any]]) -> dict[str, Ingredient]:
 
 
 def _build_targets(raw: dict[str, Any]) -> Targets:
+    # `net_carbs` в целях больше нет: соотношение считается по чистым углеводам
+    # всегда (ответ клиники от 09.09.2026, вопросы 2 и 6). Эталон с этим ключом
+    # описывает выбор, которого в предметной области не существует, — падаем, а
+    # не пропускаем молча.
+    assert "net_carbs" not in raw, (
+        "эталон задаёт net_carbs, а переключателя больше нет: "
+        "соотношение считается по чистым углеводам всегда (ENGINE_VERSION 1.0.0)"
+    )
+
     bounds = raw.get("per_ingredient_bounds")
     if bounds is not None:
         bounds = {pid: tuple(v) for pid, v in bounds.items()}
@@ -69,7 +78,6 @@ def _build_targets(raw: dict[str, Any]) -> Targets:
         protein_min_g=raw.get("protein_min_g"),
         carbs_max_g=raw.get("carbs_max_g"),
         per_ingredient_bounds=bounds,
-        net_carbs=raw.get("net_carbs", False),
     )
 
 
@@ -135,15 +143,21 @@ def _assert_solve_result_valid(
     used = {item.ingredient.product_id: item.grams for item in dish.items}
     by_id = {i.product_id: i for i in ingredients}
 
-    fat = protein = carbs = 0.0
+    fat = protein = carbs = net_carbs = 0.0
     for pid, grams in used.items():
         ing = by_id[pid]
         factor = grams / 100.0
         fat += ing.fat * factor
         protein += ing.protein * factor
         carbs += ing.carbs * factor
+        net_carbs += max(ing.carbs - ing.fiber, 0.0) * factor
     kcal = fat * 9.0 + protein * 4.0 + carbs * 4.0
-    ratio = fat / (protein + carbs) if (protein + carbs) > 0 else None
+
+    # Соотношение — по ЧИСТЫМ углеводам, лимит углеводов ниже — по общим: две
+    # величины считаются по-разному намеренно (ответ клиники от 09.09.2026,
+    # вопросы 2, 3 и 6). Проверка пересчитывает всё сама и на поля `SolveResult`
+    # не смотрит — иначе она подтверждала бы ядро им же самим.
+    ratio = fat / (protein + net_carbs) if (protein + net_carbs) > 0 else None
 
     assert ratio is not None, "solve() вернул блюдо без белков/углеводов — ratio не определён"
     assert ratio == pytest.approx(targets.ratio, abs=RATIO_TOLERANCE)

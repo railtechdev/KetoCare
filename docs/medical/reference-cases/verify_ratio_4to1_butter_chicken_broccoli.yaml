@@ -1,7 +1,8 @@
 name: verify_ratio_4to1_butter_chicken_broccoli
 provisional: true
 operation: verify
-note: R≈4:1 на масле/курице/брокколи
+note: 'R≈4:1 на масле/курице/брокколи; пересчитано под ENGINE_VERSION 1.0.0: соотношение по
+  чистым углеводам'
 input:
   ingredients:
   - product_id: butter
@@ -35,6 +36,6 @@ expected:
   protein_g: 16.862
   carbs_g: 2.038
   fiber_g: 0.78
-  ratio: 2.59037
+  ratio: 2.701876
 tolerance:
   abs: 1.0e-06

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { dayVerdict } from "./dayVerdict";
+import doctorRu from "../../locales/ru/doctor.json";
+import homeRu from "../../locales/ru/home.json";
+import menuRu from "../../locales/ru/menu.json";
+import {
+  dayVerdict,
+  TOLERANCE_GAP_KEY,
+  TOLERANCE_GAP_UNKNOWN_KEY,
+  toleranceGapKey,
+} from "./dayVerdict";
 
 describe("dayVerdict", () => {
   it("без вердикта сервера сравнивать не с чем", () => {
@@ -8,8 +16,33 @@ describe("dayVerdict", () => {
       ratioOffTolerance: false,
       kcalBelowTarget: false,
       unavailable: true,
+      unavailableReason: null,
     });
     expect(dayVerdict(undefined).unavailable).toBe(true);
+  });
+
+  it("причина отсутствия вердикта берётся у сервера, а не угадывается", () => {
+    // Причин две, и экран говорит о них разное. Пока текст был один, кабинет
+    // объяснял смену версии ядра как «активного назначения нет» — при живом
+    // назначении. Догадаться на клиенте нечем: сегодняшнюю версию ядра знает
+    // только сервер.
+    expect(dayVerdict(null, "no_prescription").unavailableReason).toBe(
+      "no_prescription",
+    );
+    expect(dayVerdict(null, "engine_changed").unavailableReason).toBe(
+      "engine_changed",
+    );
+  });
+
+  it("при живом вердикте причины нет", () => {
+    // Иначе экран однажды покажет и вердикт, и объяснение, почему его нет.
+    const verdict = dayVerdict(
+      { ratio_within_tolerance: true, kcal_within_tolerance: true },
+      "engine_changed",
+    );
+
+    expect(verdict.unavailable).toBe(false);
+    expect(verdict.unavailableReason).toBeNull();
   });
 
   it("расхождение кетосоотношения — предупреждение в любой момент дня", () => {
@@ -44,6 +77,43 @@ describe("dayVerdict", () => {
       ratioOffTolerance: false,
       kcalBelowTarget: false,
       unavailable: false,
+      unavailableReason: null,
     });
+  });
+});
+
+/**
+ * Ключ, которого нет в словаре, i18n показывает самим ключом: на экране семьи
+ * вместо объяснения появится строка «day.engineUnknown». Экран при этом не
+ * падает, тест экрана тоже — поэтому полнота проверяется здесь, по списку
+ * причин сервера.
+ */
+describe("словари объясняют каждую причину сервера", () => {
+  const screens: Array<[string, Record<string, unknown>]> = [
+    ["главная семьи", homeRu.day as Record<string, unknown>],
+    [
+      "карта пациента",
+      (doctorRu.summary as { day: Record<string, unknown> }).day,
+    ],
+    ["меню", menuRu.totals as Record<string, unknown>],
+  ];
+
+  it.each(screens)("%s", (_name, dictionary) => {
+    for (const key of Object.values(TOLERANCE_GAP_KEY)) {
+      expect(typeof dictionary[key]).toBe("string");
+    }
+    // И нейтральный текст на случай, когда причины нет вовсе.
+    expect(typeof dictionary[TOLERANCE_GAP_UNKNOWN_KEY]).toBe("string");
+  });
+
+  it("без причины берётся нейтральный текст, а не вероятная причина", () => {
+    // Подставить сюда «назначения нет» — вернуть ровно тот дефект, ради
+    // которого причина и заводилась. Причина пропадает не в теории: ответ из
+    // кеша, снятый до выката, приходит без поля вовсе.
+    expect(toleranceGapKey(null)).toBe(TOLERANCE_GAP_UNKNOWN_KEY);
+    expect(toleranceGapKey(null)).not.toBe(TOLERANCE_GAP_KEY.no_prescription);
+    expect(toleranceGapKey("engine_changed")).toBe(
+      TOLERANCE_GAP_KEY.engine_changed,
+    );
   });
 });

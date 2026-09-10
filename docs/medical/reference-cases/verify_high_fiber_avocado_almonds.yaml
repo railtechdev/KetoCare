@@ -1,8 +1,8 @@
 name: verify_high_fiber_avocado_almonds
 provisional: true
 operation: verify
-note: высокая клетчатка (авокадо+миндаль) — total carbs включает клетчатку (net_carbs
-  не влияет на verify)
+note: 'высокая клетчатка (авокадо + миндаль): общие углеводы включают её, а соотношение считается
+  по чистым — на этом случае разница видна лучше всего'
 input:
   ingredients:
   - product_id: avocado
@@ -28,6 +28,6 @@ expected:
   protein_g: 8.36
   carbs_g: 14.98
   fiber_g: 10.45
-  ratio: 1.271208
+  ratio: 2.301784
 tolerance:
   abs: 1.0e-06

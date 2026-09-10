@@ -1,7 +1,7 @@
 name: scale_fractional_factor
 provisional: true
 operation: scale
-note: дробный коэффициент
+note: 'дробный коэффициент; пересчитано под ENGINE_VERSION 1.0.0: соотношение по чистым углеводам'
 input:
   ingredients:
   - product_id: butter
@@ -36,6 +36,6 @@ expected:
   protein_g: 23.0708
   carbs_g: 3.2195
   fiber_g: 1.2467
-  ratio: 1.791558
+  ratio: 1.880744
 tolerance:
   abs: 1.0e-06

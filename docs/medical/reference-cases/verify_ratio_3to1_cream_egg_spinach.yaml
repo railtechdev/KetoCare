@@ -1,7 +1,8 @@
 name: verify_ratio_3to1_cream_egg_spinach
 provisional: true
 operation: verify
-note: R≈3:1 на сливках/яйце/шпинате
+note: 'R≈3:1 на сливках/яйце/шпинате; пересчитано под ENGINE_VERSION 1.0.0: соотношение по
+  чистым углеводам'
 input:
   ingredients:
   - product_id: heavy_cream_33
@@ -35,6 +36,6 @@ expected:
   protein_g: 8.45
   carbs_g: 5.12
   fiber_g: 0.88
-  ratio: 2.512896
+  ratio: 2.687155
 tolerance:
   abs: 1.0e-06

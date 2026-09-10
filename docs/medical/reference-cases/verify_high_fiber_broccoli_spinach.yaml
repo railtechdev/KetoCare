@@ -1,7 +1,7 @@
 name: verify_high_fiber_broccoli_spinach
 provisional: true
 operation: verify
-note: клетчатка из овощей
+note: 'клетчатка из овощей; пересчитано под ENGINE_VERSION 1.0.0: соотношение по чистым углеводам'
 input:
   ingredients:
   - product_id: broccoli
@@ -27,6 +27,6 @@ expected:
   protein_g: 7.1
   carbs_g: 13.5
   fiber_g: 6.1
-  ratio: 0.048544
+  ratio: 0.068966
 tolerance:
   abs: 1.0e-06

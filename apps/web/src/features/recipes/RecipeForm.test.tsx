@@ -27,7 +27,7 @@ const PRODUCT = {
   is_active: true,
 };
 
-/** Ответ ядра: итог блюда и вклад позиции (ENGINE_VERSION 0.4.0). */
+/** Ответ ядра: итог блюда и вклад позиции (ENGINE_VERSION 1.0.0). */
 const VERIFIED = {
   dish: {
     items: [
@@ -46,8 +46,9 @@ const VERIFIED = {
     protein_g: 0.25,
     carbs_g: 0.4,
     fiber_g: 0,
+    net_carbs_g: 0.4,
     ratio: 63.5,
-    engine_version: "0.4.0",
+    engine_version: "1.0.0",
   },
   ratio_within_tolerance: null,
   kcal_within_tolerance: null,

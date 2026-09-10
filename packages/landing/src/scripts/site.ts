@@ -137,6 +137,7 @@ function initCalculator(): void {
     "[data-calc-verdict-text]",
   );
   const ratioEl = root.querySelector<HTMLElement>("[data-calc-ratio]");
+  const netCarbsEl = root.querySelector<HTMLElement>("[data-calc-net-carbs]");
 
   const render = (): void => {
     const r = calculate(grams);
@@ -168,6 +169,11 @@ function initCalculator(): void {
       if (macro)
         macro.textContent = `${formatNumber(value, config.locale)}\u00a0${config.grams}`;
     });
+
+    // Число, по которому считается соотношение: без него полоса макронутриентов
+    // объясняет вердикт наполовину.
+    if (netCarbsEl)
+      netCarbsEl.textContent = `${formatNumber(r.netCarbs, config.locale)}\u00a0${config.grams}`;
 
     if (ratioEl) {
       ratioEl.textContent = `${formatNumber(r.ratio, config.locale, 2)} : 1`;

@@ -46,14 +46,19 @@ expected: {kcal: ..., fat_g: ..., protein_g: ..., carbs_g: ..., fiber_g: ..., ra
 input:
   ingredients: [...]
   targets: {ratio: 4.0, kcal: 400, protein_min_g: 6, carbs_max_g: 3,
-            per_ingredient_bounds: {butter: [0, 60]}, net_carbs: false}
+            per_ingredient_bounds: {butter: [0, 60]}}
 expected:
   infeasible: false        # true → тест ждёт InfeasibleError
   reason_contains: "жировой компонент"   # только при infeasible: true, подстрока причины
 ```
+Ключа `net_carbs` в целях нет и быть не может: соотношение считается по чистым
+углеводам всегда, а `carbs_max_g` — по общим ([ADR-0030](../../../docs/adr/0030-net-carbs-ratio.md)).
+Загрузчик на такой ключ падает намеренно.
+
 При `infeasible: false` эталон не фиксирует конкретные массы: тест сам пересчитывает
-результат и проверяет инварианты (R в ±RATIO_TOLERANCE, kcal в ±KCAL_TOLERANCE_FRACTION,
-границы protein_min/carbs_max/per_ingredient_bounds с допуском на округление).
+результат и проверяет инварианты (R в ±RATIO_TOLERANCE — считая знаменатель по чистым
+углеводам, kcal в ±KCAL_TOLERANCE_FRACTION, границы protein_min/carbs_max — этот по
+общим — и per_ingredient_bounds с допуском на округление).
 
 ## Правила
 

@@ -64,7 +64,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
   const removeDay = useDeleteMenuMutation(patientId);
   const upsert = useUpsertMenuMutation(patientId);
   const eaten = useEatenMutation(patientId, date);
-  const tolerance = useDayTolerance(patientId, date);
+  const dayTolerance = useDayTolerance(patientId, date);
   const targets = useDayTargets(patientId, date);
 
   const items = useMemo(() => menu.data?.items ?? [], [menu.data]);
@@ -226,7 +226,8 @@ export function MenuPage({ patientId }: { patientId: string }) {
               <DayTotalsPanel
                 totals={menu.data?.totals ?? null}
                 engineVersion={menu.data?.engine_version ?? null}
-                tolerance={tolerance}
+                tolerance={dayTolerance.tolerance}
+                toleranceGap={dayTolerance.gap}
                 targets={targets}
               />
             ) : null

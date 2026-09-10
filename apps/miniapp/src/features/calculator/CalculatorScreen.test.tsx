@@ -59,6 +59,7 @@ function verifyResponse(overrides: Record<string, unknown> = {}) {
       protein_g: 0.2,
       carbs_g: 0.2,
       fiber_g: 0,
+      net_carbs_g: 0.2,
       ratio: 3.9,
       engine_version: "1.0.0",
     },
@@ -78,6 +79,7 @@ function solveResponse(overrides: Record<string, unknown> = {}) {
       protein_g: 4,
       carbs_g: 4,
       fiber_g: 0,
+      net_carbs_g: 4,
       ratio: 3.5,
       engine_version: "1.0.0",
     },
@@ -97,6 +99,7 @@ function scaleResponse(overrides: Record<string, unknown> = {}) {
       protein_g: 0.1,
       carbs_g: 0.1,
       fiber_g: 0,
+      net_carbs_g: 0.1,
       ratio: 3.9,
       engine_version: "1.0.0",
     },
@@ -447,8 +450,10 @@ describe("калькулятор в Mini App", () => {
               ratio: 3.5,
               kcal: 300,
               protein_min_g: 6,
+              // Лимит углеводов — по общим; соотношение сервер считает по
+              // чистым. Переключателя `net_carbs` больше нет: клиника назвала
+              // правило, а не выбор (ответы 2, 3 и 6).
               carbs_max_g: 4,
-              net_carbs: false,
             }),
           }),
         }),

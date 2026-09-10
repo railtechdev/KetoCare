@@ -141,12 +141,14 @@ export const uz: Dict = {
       eyebrow: "O‘zingiz sinab ko‘ring",
       h2: "3,5 : 1 tayinloviga mos nonushta yig‘ing",
       lead1:
-        "Keto nisbati — bu yog‘larning oqsil va uglevodlar yig‘indisiga nisbati. Har bir taom shifokor tayinloviga yo‘l qo‘yiladigan chetlanish doirasida tushishi kerak.",
+        "Keto nisbati — bu yog‘larning oqsil va uglevodlar yig‘indisiga nisbati; tolalar hisobga olinmaydi. Har bir taom shifokor tayinloviga yo‘l qo‘yiladigan chetlanish doirasida tushishi kerak.",
       lead2:
         "Slayderlarni suring — hisob bir zumda chiqadi. Hayotda buni platforma bajaradi: har bir ovqatlanishda tarozi-kalkulyator-daftarsiz.",
       note: "Mahsulotlar ma’lumotlari — USDA FoodData Central. Platformada hisobni alohida yadro bajaradi; u texnik topshiriq formulalari bo‘yicha hisoblangan etalon stsenariylarda tekshiriladi. Tibbiy jamoaning tasdig‘i esa hali oldinda.",
       dish: "Qaymoq va brokkolili omlet",
       ingredients: ["Tovuq tuxumi", "Qaymoq 33%", "Sariyog‘", "Brokkoli"],
+      netCarbs: "Shundan sof uglevodlar",
+      netCarbsNote: "nisbat shular bo‘yicha hisoblanadi",
       /** Видимая оговорка: посетитель не должен считать этим завтрак ребёнку. */
       disclaimer:
         "Bu — formulaning namoyishi, ovqatlanishni rejalashtirish vositasi emas. Bolaning ovqatlanishi kabinetda, shifokorning amaldagi tayinlovi bo‘yicha hisoblanadi.",

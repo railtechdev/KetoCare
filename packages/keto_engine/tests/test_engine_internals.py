@@ -278,3 +278,151 @@ class TestItemContributions:
             0,
         )
         assert dish.ratio is None
+
+
+class TestNetCarbsRatio:
+    """Соотношение считается по чистым углеводам, лимит — по общим.
+
+    Ответ клиники от 09.09.2026 (вопросы 2, 3 и 6 в `OPEN_QUESTIONS.md`):
+    «считать „чистые“ углеводы, с вычетом клетчатки», «клетчатка… не входит в
+    чистые углеводы», но «лимит… учитываются все углеводы».
+    """
+
+    def test_fibre_leaves_the_ratio_denominator(self) -> None:
+        # Продукт из одной клетчатки: знаменателя он не даёт вовсе.
+        fat = Ingredient(product_id="oil", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        husk = Ingredient(product_id="husk", kcal=0, fat=0.0, protein=0.0, carbs=10.0, fiber=10.0)
+
+        dish = verify([(fat, 10.0), (husk, 100.0)])
+
+        assert dish.carbs_g == pytest.approx(10.0)
+        assert dish.net_carbs_g == pytest.approx(0.0)
+        # 10 г жира на нулевой знаменатель — соотношения нет, а не бесконечность.
+        assert dish.ratio is None
+
+    def test_ratio_uses_net_carbs(self) -> None:
+        avocado = Ingredient(
+            product_id="avocado", kcal=160, fat=14.7, protein=2.0, carbs=8.5, fiber=6.7
+        )
+
+        dish = verify([(avocado, 100.0)])
+
+        # 14.7 / (2.0 + (8.5 − 6.7)) = 3.868…, а по общим углеводам было бы 1.4.
+        assert dish.net_carbs_g == pytest.approx(1.8)
+        assert dish.ratio == pytest.approx(14.7 / 3.8)
+
+    def test_fibre_over_carbs_does_not_go_negative(self) -> None:
+        # Импорт такой продукт отвергает, но ядро на чужую проверку не полагается:
+        # отрицательный вклад завысил бы соотношение всего блюда.
+        odd = Ingredient(product_id="odd", kcal=0, fat=10.0, protein=1.0, carbs=1.0, fiber=5.0)
+
+        dish = verify([(odd, 100.0)])
+
+        assert dish.net_carbs_g == pytest.approx(0.0)
+        assert dish.ratio == pytest.approx(10.0 / 1.0)
+
+    def test_fibre_is_subtracted_per_product_not_per_dish(self) -> None:
+        """Зажим стоит у КАЖДОГО продукта, а не у итога блюда.
+
+        Случай смешанный намеренно: на блюде из одного продукта оба способа
+        совпадают, и прежний тест не отличал их. Здесь у первого продукта
+        клетчатки больше углеводов (−4 г), у второго — меньше (+4 г).
+
+        По продуктам: 0 + 4 = 4 г чистых, соотношение 10 / (1 + 4) = 2.
+        По блюду целиком: 7.6 − 7.6 = 0 г, соотношение 10 / 1 = 10.
+
+        Разница впятеро. Зажим у итога позволил бы клетчатке одного продукта
+        гасить углеводы другого — то есть соотношение блюда стало бы зависеть
+        от того, чем его дополнили.
+        """
+        odd = Ingredient(product_id="odd", kcal=0, fat=10.0, protein=1.0, carbs=1.0, fiber=5.0)
+        veg = Ingredient(product_id="veg", kcal=34, fat=0.0, protein=0.0, carbs=6.6, fiber=2.6)
+
+        dish = verify([(odd, 100.0), (veg, 100.0)])
+
+        assert dish.carbs_g == pytest.approx(7.6)
+        assert dish.fiber_g == pytest.approx(7.6)
+        # Зажим по блюду дал бы здесь ноль — и соотношение 10.0.
+        assert dish.net_carbs_g == pytest.approx(4.0)
+        assert dish.ratio == pytest.approx(10.0 / 5.0)
+
+    def test_solver_clamps_fibre_per_product_too(self) -> None:
+        """Тот же зажим стоит и в решателе — иначе он промахивается мимо цели.
+
+        `odd` — продукт, у которого клетчатки больше углеводов. Без зажима его
+        вклад в знаменатель ОТРИЦАТЕЛЕН, и решатель считает, что этот продукт
+        гасит углеводы соседей. Он строит равенство на знаменателе, которого у
+        готового блюда нет, и добирает овоща сверх нужного.
+
+        Границы держат `odd` в составе принудительно: без них решатель обходится
+        маслом, оба правила дают один ответ, и случай ничего не различает —
+        именно так первая версия этого теста и прошла на мутанте.
+
+        Мера расхождения: с зажимом подбор даёт ровно 3,0; без него — 2,39 и
+        вердикт «не в допуске» на им же подобранном составе.
+        """
+        oil = Ingredient(product_id="oil", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        odd = Ingredient(product_id="odd", kcal=50, fat=1.0, protein=1.0, carbs=1.0, fiber=5.0)
+        veg = Ingredient(product_id="veg", kcal=34, fat=0.4, protein=2.8, carbs=6.6, fiber=2.6)
+
+        result = solve(
+            [oil, odd, veg],
+            Targets(ratio=3.0, kcal=400, per_ingredient_bounds={"odd": (100.0, 100.0)}),
+        )
+
+        assert result.dish.ratio == pytest.approx(3.0, abs=RATIO_TOLERANCE)
+        assert result.ratio_within_tolerance is True
+        # Клетчатка `odd` не ушла в минус: его вклад в чистые углеводы — ноль,
+        # и все 6,6 г знаменателя пришли от овоща.
+        assert result.dish.net_carbs_g == pytest.approx(6.6, abs=0.05)
+
+    def test_carbs_limit_counts_all_carbs(self) -> None:
+        """Лимит углеводов остаётся по общим — это ответ на вопрос 3.
+
+        Значение подобрано так, чтобы оно РАЗЛИЧАЛО правила: решение требует
+        около 15 г общих углеводов при 9 г чистых. По общим лимит в 10 г
+        недостижим, по чистым — достижим. Возьми кто-нибудь лимит от чистых, и
+        задача стала бы разрешимой, а тест — упал.
+        """
+        fat = Ingredient(product_id="oil", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        veg = Ingredient(product_id="veg", kcal=34, fat=0.4, protein=2.8, carbs=6.6, fiber=2.6)
+
+        targets = Targets(ratio=3.0, kcal=500, carbs_max_g=10.0)
+        with pytest.raises(InfeasibleError):
+            solve([fat, veg], targets)
+
+        # Без лимита та же задача решается, то есть неразрешимость выше — от
+        # лимита, а не от недостижимого соотношения.
+        solved = solve([fat, veg], Targets(ratio=3.0, kcal=500))
+        assert solved.dish.carbs_g > 10.0
+        assert solved.dish.net_carbs_g < 10.0
+
+    def test_solver_targets_the_ratio_on_net_carbs(self) -> None:
+        """Подбор и проверка считают одинаково — иначе они разойдутся.
+
+        Набор выбран так, что решателю НЕЧЕМ обойти клетчатку: источник белка и
+        углеводов один, и он же богат клетчаткой. По чистым углеводам задача
+        решается почти одним авокадо; по общим потребовалось бы вчетверо больше
+        масла, и состав вышел бы совсем другим.
+
+        Без этого случая учёт клетчатки в решателе не проверялся ничем: в
+        единственном эталоне с клетчаткой продукт с ней в решение не попадал.
+        """
+        oil = Ingredient(product_id="oil", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        avocado = Ingredient(
+            product_id="avocado", kcal=160, fat=14.7, protein=2.0, carbs=8.5, fiber=6.7
+        )
+
+        result = solve([oil, avocado], Targets(ratio=4.0, kcal=400))
+        dish = result.dish
+        used = {item.ingredient.product_id: item.grams for item in dish.items}
+
+        # Решение держится на продукте с клетчаткой.
+        assert used.get("avocado", 0.0) > 100.0
+        assert result.ratio_within_tolerance is True
+
+        # Соотношение попадает в цель по чистым углеводам…
+        assert dish.ratio == pytest.approx(4.0, abs=RATIO_TOLERANCE)
+        # …и далеко от неё по общим: правило именно то, а не другое.
+        by_total_carbs = dish.fat_g / (dish.protein_g + dish.carbs_g)
+        assert by_total_carbs < 2.0

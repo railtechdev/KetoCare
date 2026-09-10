@@ -136,12 +136,14 @@ export const en: Dict = {
       eyebrow: "Try it yourself",
       h2: "Build a breakfast for a 3.5 : 1 prescription",
       lead1:
-        "The ketogenic ratio is fat against protein and carbs together. Every meal has to land on the prescribed ratio within the tolerance.",
+        "The ketogenic ratio is fat against protein and carbs together, minus fibre: fibre is left out of the calculation. Every meal has to land on the prescribed ratio within the tolerance.",
       lead2:
         "Move the sliders — the calculation is instant. In real life the platform does this, so there is no scale-calculator-notebook routine at every meal.",
       note: "Food data comes from USDA FoodData Central. In the product the calculation runs in an isolated engine checked against reference cases that are themselves computed from the formulas in the specification. Confirmation by the medical team is still ahead.",
       dish: "Omelette with cream and broccoli",
       ingredients: ["Egg", "Cream 33%", "Butter", "Broccoli"],
+      netCarbs: "Of that, net carbs",
+      netCarbsNote: "the ratio is calculated from these",
       /** Видимая оговорка: посетитель не должен считать этим завтрак ребёнку. */
       disclaimer:
         "This is a demonstration of the formula, not a meal-planning tool. A child's meals are calculated in the workspace, against the prescription currently in effect.",

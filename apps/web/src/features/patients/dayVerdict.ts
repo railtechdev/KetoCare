@@ -1,14 +1,24 @@
 import type { components } from "@ketocare/api-client";
 
 export type DayTolerance = components["schemas"]["DayTolerance"];
+export type ToleranceGap = components["schemas"]["ToleranceGap"];
 
 export interface DayVerdict {
   /** Кетосоотношение вышло за допуск назначения. */
   ratioOffTolerance: boolean;
   /** Набранная калорийность не дотягивает до суточной нормы назначения. */
   kcalBelowTarget: boolean;
-  /** Сравнивать не с чем: активного назначения нет или вердикта в ответе нет. */
+  /** Вердикта нет — сравнивать не с чем либо не с сегодняшним правилом. */
   unavailable: boolean;
+  /**
+   * Почему вердикта нет, словами сервера.
+   *
+   * `null`, когда вердикт есть, а также когда сервер причины не назвал — так
+   * бывает у ответа, снятого до появления поля. Экран в этом случае говорит
+   * нейтральное «соответствие сейчас не показано», а не подставляет вероятную
+   * причину: неверная причина хуже её отсутствия.
+   */
+  unavailableReason: ToleranceGap | null;
 }
 
 /**
@@ -34,15 +44,56 @@ export interface DayVerdict {
  * функцией: пока оно было размазано по четырём экранам, правка одного из них не
  * доходила до остальных, и один и тот же день описывался по-разному на главной,
  * в меню и в карте пациента.
+ *
+ * **Отсутствие вердикта объясняется причиной сервера, а не догадкой экрана.**
+ * Причин две: назначения нет вовсе и день посчитан прежней основной версией
+ * ядра (ADR-0030). Пока текст был один, второй случай кабинет объяснял семье
+ * как «активного назначения нет» — при живом назначении. Различить их может
+ * только сервер: он один знает и сохранённую версию, и сегодняшнюю.
  */
+/**
+ * Причина сервера → имя ключа в словаре экрана.
+ *
+ * Один список на три экрана: у каждого свой префикс (`day.`, `summary.day.`,
+ * `totals.`), но хвост ключа общий. Разъехавшись, экраны объясняли бы одно и то
+ * же состояние по-разному — а речь о соответствии дня назначению ребёнка.
+ *
+ * Полнота словарей проверяется тестом: ключ, которого нет, i18n показывает
+ * самим ключом, и на экране это выглядит как строка «day.engineUnknown».
+ */
+export const TOLERANCE_GAP_KEY: Record<ToleranceGap, string> = {
+  no_prescription: "noPrescription",
+  engine_changed: "engineChanged",
+  engine_unknown: "engineUnknown",
+};
+
+/** Ключ на случай, когда причины нет вовсе: экран говорит только то, что знает. */
+export const TOLERANCE_GAP_UNKNOWN_KEY = "verdictUnavailable";
+
+/**
+ * Хвост ключа словаря для отсутствующего вердикта.
+ *
+ * Причины нет — берётся нейтральный текст, а не «вероятная» причина. Подставлять
+ * на её место `no_prescription` нельзя: именно эта фраза и была дефектом,
+ * который всё это чинит. Причина пропадает не в теории — ответ из кеша, снятый
+ * до выката, приходит вовсе без поля.
+ */
+export function toleranceGapKey(reason: ToleranceGap | null): string {
+  return reason === null
+    ? TOLERANCE_GAP_UNKNOWN_KEY
+    : TOLERANCE_GAP_KEY[reason];
+}
+
 export function dayVerdict(
   tolerance: DayTolerance | null | undefined,
+  gap?: ToleranceGap | null,
 ): DayVerdict {
   if (tolerance === null || tolerance === undefined) {
     return {
       ratioOffTolerance: false,
       kcalBelowTarget: false,
       unavailable: true,
+      unavailableReason: gap ?? null,
     };
   }
 
@@ -50,5 +101,6 @@ export function dayVerdict(
     ratioOffTolerance: !tolerance.ratio_within_tolerance,
     kcalBelowTarget: !tolerance.kcal_within_tolerance,
     unavailable: false,
+    unavailableReason: null,
   };
 }

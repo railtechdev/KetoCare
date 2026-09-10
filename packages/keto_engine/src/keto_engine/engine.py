@@ -47,13 +47,18 @@ def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
     # одна арифметика. Второй расчёт вклада (в API или в браузере) был бы
     # вторым источником клинических чисел.
     positions: list[ItemAmount] = []
-    fat_g = protein_g = carbs_g = fiber_g = 0.0
+    fat_g = protein_g = carbs_g = fiber_g = net_carbs_g = 0.0
     for ingredient, grams in items:
         factor = grams / 100.0
         item_fat = ingredient.fat * factor
         item_protein = ingredient.protein * factor
         item_carbs = ingredient.carbs * factor
         item_fiber = ingredient.fiber * factor
+        # Клетчатка вычитается ПО КАЖДОМУ продукту и не уходит в минус: у
+        # продукта, где её записано больше углеводов, отрицательный вклад
+        # завысил бы соотношение всего блюда. Так же считает решатель — иначе
+        # подбор и проверка разошлись бы на одном составе.
+        item_net_carbs = max(item_carbs - item_fiber, 0.0)
         positions.append(
             ItemAmount(
                 ingredient=ingredient,
@@ -69,14 +74,15 @@ def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
         protein_g += item_protein
         carbs_g += item_carbs
         fiber_g += item_fiber
+        net_carbs_g += item_net_carbs
 
     kcal = _dish_kcal(fat_g, protein_g, carbs_g)
 
-    # TODO(med): net_carbs — ratio считается по общим углеводам (NET_CARBS_DEFAULT).
-    # verify() не принимает Targets (контракт раздела 6.1 ТЗ), поэтому переключить
-    # net_carbs для verify() нельзя; это ограничение зафиксировано в OPEN_QUESTIONS.md.
-    carbs_for_ratio = carbs_g
-    denom = protein_g + carbs_for_ratio
+    # Соотношение — по ЧИСТЫМ углеводам (ответ клиники от 09.09.2026, вопросы 2
+    # и 6; ADR-0030). Переключателя больше нет: клиника назвала правило, а не
+    # выбор. Прежде здесь стоял TODO и общие углеводы, а `verify()` не принимал
+    # `Targets` — то есть переключить учёт для проверки было нечем.
+    denom = protein_g + net_carbs_g
     ratio = fat_g / denom if denom > 0 else None
 
     return DishResult(
@@ -86,6 +92,7 @@ def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
         protein_g=protein_g,
         carbs_g=carbs_g,
         fiber_g=fiber_g,
+        net_carbs_g=net_carbs_g,
         ratio=ratio,
         engine_version=constants.ENGINE_VERSION,
     )
@@ -111,14 +118,22 @@ def within_tolerance(dish: DishResult, targets: Targets) -> tuple[bool, bool]:
 
 
 def max_non_fat_grams(ratio: float, kcal: float) -> float:
-    """Максимум суммы белков и углеводов (г), совместимый с соотношением и калорийностью.
+    """Максимум суммы белков и ЧИСТЫХ углеводов (г) при таком соотношении и калорийности.
 
-    Тождество, а не медицинское правило: из определения соотношения F = R·(P+C) и
-    коэффициентов Атуотера kcal = 9F + 4(P+C) следует
-    kcal = (9R + 4)·(P+C), то есть P+C = kcal / (9R + 4).
+    Тождество, а не медицинское правило: из определения соотношения
+    F = R·(P + Cnet) и коэффициентов Атуотера kcal = 9F + 4P + 4Ctotal следует
+    kcal = (9R + 4)·(P + Cnet) + 4·Fiber, то есть
+    P + Cnet = (kcal − 4·Fiber) / (9R + 4) ≤ kcal / (9R + 4).
+
+    **Это НЕ предел на белок с общими углеводами.** Клетчатка тратит свои
+    4 ккал/г, но в знаменатель соотношения не входит (ADR-0030), поэтому блюдо с
+    клетчаткой даёт больше общих углеводов, чем возвращает эта функция. Граница
+    здесь взята без клетчатки — то есть самая мягкая из возможных, и потому
+    верная для любого набора продуктов.
 
     Назначение, требующее больше белка, чем эта величина, невыполнимо ни при каком
-    наборе продуктов — сколько бы их ни перебирал solve().
+    наборе продуктов — сколько бы их ни перебирал solve(): белок не больше, чем
+    белок вместе с чистыми углеводами.
     """
 
     if ratio <= 0 or kcal <= 0:
@@ -159,18 +174,19 @@ def _build_and_solve(
     fat_coef = np.array([ing.fat / 100.0 for ing in ingredients])
     protein_coef = np.array([ing.protein / 100.0 for ing in ingredients])
     carbs_coef = np.array([ing.carbs / 100.0 for ing in ingredients])
-    carbs_ratio_coef = (
-        np.array([max(ing.carbs - ing.fiber, 0.0) / 100.0 for ing in ingredients])
-        if targets.net_carbs
-        else carbs_coef
-    )
+    # Соотношение — по чистым углеводам всегда (ответ клиники, вопросы 2 и 6);
+    # `carbs_coef` остаётся общим и держит лимит углеводов (вопрос 3).
+    carbs_ratio_coef = np.array([max(ing.carbs - ing.fiber, 0.0) / 100.0 for ing in ingredients])
     kcal_coef = (
         fat_coef * constants.KCAL_PER_G_FAT
         + protein_coef * constants.KCAL_PER_G_PROTEIN
         + carbs_coef * constants.KCAL_PER_G_CARBS
     )
 
-    # Равенство соотношения: F − R·P − R·C = 0 (раздел 6.3 ТЗ)
+    # Равенство соотношения: F − R·P − R·Cnet = 0 (раздел 6.3 ТЗ). В знаменателе
+    # ЧИСТЫЕ углеводы (`carbs_ratio_coef`), а не общие: ответ клиники 09.09.2026,
+    # вопросы 2 и 6 (ADR-0030). Лимит `carbs_max_g` ниже режет по общим — это
+    # намеренное расхождение, а не описка.
     a_eq = np.array(
         [
             np.concatenate(
@@ -224,11 +240,15 @@ def _max_achievable_kcal(ingredients: Sequence[Ingredient], targets: Targets) ->
     fat_coef = np.array([ing.fat / 100.0 for ing in ingredients])
     protein_coef = np.array([ing.protein / 100.0 for ing in ingredients])
     carbs_coef = np.array([ing.carbs / 100.0 for ing in ingredients])
-    carbs_ratio_coef = (
-        np.array([max(ing.carbs - ing.fiber, 0.0) / 100.0 for ing in ingredients])
-        if targets.net_carbs
-        else carbs_coef
-    )
+    # Соотношение — по чистым углеводам всегда (ответ клиники, вопросы 2 и 6);
+    # `carbs_coef` остаётся общим и держит лимит углеводов (вопрос 3).
+    #
+    # Зажим `max(..., 0)` здесь ДИАГНОСТИЧЕСКИЙ и тестом не различается: путь
+    # ищет только человекочитаемую причину `InfeasibleError`, а сработать зажим
+    # может лишь на продукте, у которого клетчатки больше углеводов, — такой
+    # импорт отвергает. Оставлен ради одной формы выражения с решателем: два
+    # написания одного правила расходятся, и разошлись бы молча.
+    carbs_ratio_coef = np.array([max(ing.carbs - ing.fiber, 0.0) / 100.0 for ing in ingredients])
     kcal_coef = (
         fat_coef * constants.KCAL_PER_G_FAT
         + protein_coef * constants.KCAL_PER_G_PROTEIN
@@ -366,9 +386,22 @@ def _repair_rounding(
     step = constants.GRAM_ROUNDING
     base = list(grams)
 
-    # Влияние грамма продукта на соотношение: d(F - R·(P+C)) / dm
+    # Влияние грамма продукта на соотношение: d(F − R·(P + чистые C)) / dm.
+    #
+    # Чистые, а не общие: производная берётся от той же величины, которую
+    # выравнивает решатель, иначе порядок кандидатов считался бы по одной
+    # формуле, а результат проверялся по другой.
+    #
+    # Это ЭВРИСТИКА отбора, а не правило расчёта: она решает, кого двигать
+    # первым, и на верность найденного состава не влияет — итог всё равно
+    # проверяется `_within_bounds` и допусками. Случая, где выбор кандидата
+    # меняет исход, у нас нет, и придумывать его ради красивой цифры не стали:
+    # тест на несуществующее поведение хуже отсутствия теста.
     influence = [
-        (abs(ing.fat - targets.ratio * (ing.protein + ing.carbs)), index)
+        (
+            abs(ing.fat - targets.ratio * (ing.protein + max(ing.carbs - ing.fiber, 0.0))),
+            index,
+        )
         for index, ing in enumerate(ingredients)
     ]
     influence.sort(reverse=True)
