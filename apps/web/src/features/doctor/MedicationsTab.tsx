@@ -51,6 +51,10 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
   const intake = usePatientIntake(patientId);
   const drugs = useAedDrugs();
   const namedInIntake = (drugs.data ?? [])
+    // Только лекарства: в справочнике живут и варианты ответа анкеты («Не знаю
+    // названия», «Другое (указать)»), и семья могла выбрать именно их — тогда
+    // врачу предлагалось бы завести такой «препарат» в схему лечения.
+    .filter((drug) => drug.is_drug)
     .filter((drug) => (intake.data?.current_aed_ids ?? []).includes(drug.id))
     .filter(
       (drug) =>

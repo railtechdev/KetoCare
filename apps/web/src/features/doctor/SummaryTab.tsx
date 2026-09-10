@@ -3,6 +3,7 @@ import {
   Button,
   EmptyState,
   FactList,
+  formatAmount,
   formatOccurredAt,
   MacroBar,
   RatioBadge,
@@ -235,7 +236,7 @@ function OverviewPanels({
             {data.last_weight == null
               ? t("summary.readings.noWeight")
               : t("summary.readings.weightValue", {
-                  value: data.last_weight.weight_kg,
+                  value: formatAmount(data.last_weight.weight_kg),
                   at: formatOccurredAt(new Date(data.last_weight.occurred_at)),
                 })}
           </dd>

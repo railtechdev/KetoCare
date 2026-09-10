@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -27,6 +27,9 @@ const PATIENT_ID = "11111111-1111-4111-8111-111111111111";
 const DRUG_ID = "22222222-2222-4222-8222-222222222222";
 
 let medications: unknown[] = [];
+/** Семья выбрала в анкете вариант «Не знаю названия» — он там законный. */
+let notDrugInIntake = false;
+const NOT_DRUG_ID = "33333333-3333-4333-8333-333333333333";
 
 function renderTab() {
   const client = new QueryClient({
@@ -45,6 +48,7 @@ function renderTab() {
 beforeEach(() => {
   vi.clearAllMocks();
   medications = [];
+  notDrugInIntake = false;
   (api.GET as Mock).mockImplementation((path: string) => {
     if (path.includes("/medications")) {
       return Promise.resolve({
@@ -59,7 +63,16 @@ beforeEach(() => {
               id: DRUG_ID,
               name_ru: "Вальпроат натрия",
               synonyms: ["Депакин"],
+              is_drug: true,
               sort: 0,
+              retired: false,
+            },
+            {
+              id: NOT_DRUG_ID,
+              name_ru: "Не знаю названия",
+              synonyms: ["не знаю"],
+              is_drug: false,
+              sort: 1,
               retired: false,
             },
           ],
@@ -67,7 +80,11 @@ beforeEach(() => {
       });
     }
     if (path.includes("/intake")) {
-      return Promise.resolve({ data: { current_aed_ids: [DRUG_ID] } });
+      return Promise.resolve({
+        data: {
+          current_aed_ids: notDrugInIntake ? [DRUG_ID, NOT_DRUG_ID] : [DRUG_ID],
+        },
+      });
     }
     return Promise.resolve({ data: { items: [], total: 0 } });
   });
@@ -98,6 +115,53 @@ describe("препараты из анкеты семьи", () => {
       await screen.findByDisplayValue("Вальпроат натрия"),
     ).toBeInTheDocument();
     expect(api.POST).not.toHaveBeenCalled();
+  });
+
+  it("выбранное в подсказке название доходит до сервера", async () => {
+    // Стык, ради которого правка и делалась: врач набирает синоним, выбирает
+    // каноническое название — и в `drug_name` уходит именно оно. Ни тест поля,
+    // ни тест вкладки по отдельности этого пути не закрывают.
+    (api.POST as Mock).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+
+    const drug = await screen.findByLabelText("Препарат");
+    await user.clear(drug);
+    await user.type(drug, "депакин");
+    await user.click(
+      await screen.findByRole("option", { name: /Вальпроат натрия/ }),
+    );
+
+    await user.type(screen.getByLabelText(/Принимаемая доза/), "300 мг");
+    await user.type(screen.getByLabelText("Кратность"), "2 раза в день");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    const body = (api.POST as Mock).mock.calls[0]?.[1]?.body;
+    expect(body).toMatchObject({
+      drug_name: "Вальпроат натрия",
+      dose: "300 мг",
+    });
+  });
+
+  it("не предлагает завести «Не знаю названия» как препарат", async () => {
+    // Семья могла выбрать в анкете именно этот вариант — он там законный. Но
+    // это не лекарство, и в схему лечения ему нельзя.
+    //
+    // В анкете названы ОБА: настоящий препарат служит якорем. Ждать «кнопку
+    // добавления» было мало — она рисуется до того, как придут анкета и
+    // справочник, и проверка проходила бы, ничего не проверяя.
+    notDrugInIntake = true;
+    renderTab();
+
+    await screen.findByRole("button", { name: /Вальпроат натрия/ });
+    expect(
+      screen.queryByRole("button", { name: /Не знаю названия/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("не предлагает то, что уже есть в схеме", async () => {

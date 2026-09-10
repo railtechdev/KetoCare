@@ -123,6 +123,10 @@ export function MedicationForm({
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
+              // Без ссылки на поле react-hook-form не находит, куда ставить
+              // фокус после неудачной отправки, и уводит его на следующую
+              // ошибку — то есть человек узнаёт не о той.
+              inputRef={field.ref}
               drugs={drugs.data ?? []}
             />
           )}

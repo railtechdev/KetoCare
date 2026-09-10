@@ -17,6 +17,7 @@ const DRUGS: AedDrug[] = [
     synonyms: ["Кеппра", "Летирам"],
     sort: 0,
     retired: false,
+    is_drug: true,
   },
   {
     id: "2",
@@ -24,6 +25,7 @@ const DRUGS: AedDrug[] = [
     synonyms: ["Депакин"],
     sort: 1,
     retired: false,
+    is_drug: true,
   },
   {
     id: "3",
@@ -31,6 +33,17 @@ const DRUGS: AedDrug[] = [
     synonyms: [],
     sort: 2,
     retired: true,
+    is_drug: true,
+  },
+  // Справочник заводился под анкету семьи, и вариантами ответа в нём стоят
+  // строки, которые препаратами не являются.
+  {
+    id: "4",
+    name_ru: "Не знаю названия",
+    synonyms: ["не знаю"],
+    sort: 3,
+    retired: false,
+    is_drug: false,
   },
 ];
 
@@ -53,7 +66,23 @@ describe("подбор препарата по справочнику", () => {
   it("не предлагает выведенные из употребления", () => {
     // Их держат ради уже заполненных анкет, а не ради новых назначений.
     expect(matchDrugs(DRUGS, "выведен")).toEqual([]);
-    expect(matchDrugs(DRUGS, "").map((m) => m.drug.id)).toEqual(["1", "2"]);
+  });
+
+  it("не предлагает строки, которые не лекарства", () => {
+    // «Не знаю названия» — вариант ответа анкеты. Врач набирает «не», и выбор
+    // подставил бы эту строку в схему лечения как название препарата.
+    expect(matchDrugs(DRUGS, "не знаю")).toEqual([]);
+    expect(matchDrugs(DRUGS, "названия")).toEqual([]);
+  });
+
+  it("на пустом и односимвольном запросе молчит", () => {
+    // Форма открывается панелью, панель ставит фокус в первое поле. Подсказка
+    // на пустом поле закрыла бы форму списком, а Enter вписал бы первый
+    // препарат справочника, которого никто не набирал.
+    expect(matchDrugs(DRUGS, "")).toEqual([]);
+    expect(matchDrugs(DRUGS, "  ")).toEqual([]);
+    expect(matchDrugs(DRUGS, "л")).toEqual([]);
+    expect(matchDrugs(DRUGS, "ле").map((m) => m.drug.id)).toEqual(["1"]);
   });
 
   it("не различает регистр", () => {
@@ -72,7 +101,9 @@ function Harness({ initial = "" }: { initial?: string }) {
         onChange={setValue}
         drugs={DRUGS}
       />
-      <output data-testid="value">{value}</output>
+      {/* Не `output`: у него неявная роль status, и он спорил бы с живой
+          областью самого поля. */}
+      <div data-testid="value">{value}</div>
     </>
   );
 }
@@ -110,7 +141,7 @@ describe("поле названия препарата", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.type(screen.getByLabelText("Препарат"), "а");
+    await user.type(screen.getByLabelText("Препарат"), "вальпро");
     await screen.findByRole("listbox");
     await user.keyboard("{ArrowDown}{Enter}");
 
@@ -135,10 +166,88 @@ describe("поле названия препарата", () => {
 
     await user.type(screen.getByLabelText("Препарат"), "кеппра");
     await screen.findByRole("listbox");
-    await user.keyboard("{Enter}");
+    await user.keyboard("{ArrowDown}{Enter}");
 
     expect(submitted).toBe(false);
     expect(screen.getByTestId("value")).toHaveTextContent("Леветирацетам");
+  });
+
+  it("Enter без выбора отправляет форму, а не подставляет первое попавшееся", () => {
+    // Обратная сторона: подставить вариант за человека, который ничего не
+    // выбирал, значит вписать в схему лечения чужое название. Проверяется
+    // отдельно, потому что это ровно тот случай, который случался на открытии
+    // панели: фокус в поле, список раскрыт, Enter — и препарат назначен.
+    return (async () => {
+      const user = userEvent.setup();
+      let submitted = false;
+      render(
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitted = true;
+          }}
+        >
+          <Harness />
+          <button type="submit">Сохранить</button>
+        </form>,
+      );
+
+      await user.type(screen.getByLabelText("Препарат"), "кеппра");
+      await screen.findByRole("listbox");
+      await user.keyboard("{Enter}");
+
+      expect(submitted).toBe(true);
+      expect(screen.getByTestId("value")).toHaveTextContent("кеппра");
+    })();
+  });
+
+  it("ArrowUp с ничего не выбранного берёт последний вариант", () => {
+    return (async () => {
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.type(screen.getByLabelText("Препарат"), "а");
+      await user.type(screen.getByLabelText("Препарат"), "т");
+      await user.clear(screen.getByLabelText("Препарат"));
+      await user.type(screen.getByLabelText("Препарат"), "ам");
+      await screen.findByRole("listbox");
+      await user.keyboard("{ArrowUp}{Enter}");
+
+      const options = screen.queryAllByRole("option");
+      expect(options.length).toBe(0);
+      expect(screen.getByTestId("value")).toHaveTextContent(/[А-Яа-я]/);
+    })();
+  });
+
+  it("Escape закрывает подсказку, оставляя набранное", () => {
+    return (async () => {
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.type(screen.getByLabelText("Препарат"), "кеппра");
+      await screen.findByRole("listbox");
+      await user.keyboard("{Escape}");
+
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(screen.getByTestId("value")).toHaveTextContent("кеппра");
+    })();
+  });
+
+  it("говорит вслух, что подставило название вместо набранного", () => {
+    // Программная смена значения поля скринридером не объявляется: незрячий
+    // врач набрал «Кеппра», а в поле оказался «Леветирацетам» — и он об этом
+    // не узнает. Подмена названия препарата — худшее место для молчания.
+    return (async () => {
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      await user.type(screen.getByLabelText("Препарат"), "кеппра");
+      const live = await screen.findByRole("status");
+      expect(live).toHaveTextContent(/Подсказка/);
+
+      await user.click(screen.getByRole("option", { name: /Леветирацетам/ }));
+      expect(live).toHaveTextContent(/Подставлено название.*Леветирацетам/);
+    })();
   });
 
   it("на точном совпадении подсказку не открывает", async () => {

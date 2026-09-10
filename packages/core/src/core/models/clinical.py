@@ -18,6 +18,7 @@ from sqlalchemy import (
     event,
     false,
     text,
+    true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -157,6 +158,11 @@ class AedDrug(Base, UUIDPkMixin):
     Каноническое имя и синонимы вместо свободной строки: «Летирам»,
     «Леветирацетам» и «Кеппра» — одно и то же вещество, и свободный ввод сделал
     бы записи несравнимыми. Поиск идёт и по синонимам.
+
+    В таблице живут не только препараты: анкета семьи спрашивает «какие
+    принимает», и вариантами ответа там же стоят «Другое (указать)», «Не
+    принимает противоэпилептические препараты» и «Не знаю названия». Их
+    отличает `is_drug`.
     """
 
     __tablename__ = "aed_drugs"
@@ -167,6 +173,15 @@ class AedDrug(Base, UUIDPkMixin):
     # См. `IntakeOption.retired`: на препарат ссылаются заполненные анкеты.
     retired: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
+    )
+    #: Строка называет ЛЕКАРСТВО, а не вариант ответа анкеты.
+    #:
+    #: Без этого признака подсказка в схеме лечения предлагала врачу «Не знаю
+    #: названия» как препарат, и выбор подставлял эту строку в `drug_name`.
+    #: Отличать служебные строки по названию нельзя: медкоманда ведёт
+    #: справочник через админку и заведёт новые, о которых код не знает.
+    is_drug: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
     )
 
 

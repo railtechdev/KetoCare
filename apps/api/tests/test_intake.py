@@ -64,6 +64,32 @@ class TestIntakeDictionaries:
         items = response.json()["items"]
         assert items and all(item["synonyms"] for item in items)
 
+    async def test_drugs_say_which_rows_are_medicines(self, client, make_user, auth_headers):
+        """Не всякая строка справочника — лекарство, и потребитель должен различать.
+
+        Справочник заводился под анкету семьи («какие препараты принимает»), и
+        вариантами ответа в нём стоят «Другое (указать)», «Не принимает
+        противоэпилептические препараты» и «Не знаю названия».
+
+        Потребитель — кабинет: подсказка названия в схеме лекарственной терапии
+        (`features/doctor/DrugNameField.tsx`) предлагает только `is_drug`, иначе
+        врач, набравший «не», получал бы «Не знаю названия» и выбор подставлял
+        бы эту строку в назначение препарата. Анкета показывает всё.
+        """
+
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.get("/api/v1/dictionaries/aed-drugs", headers=auth_headers(parent))
+
+        assert response.status_code == 200, response.text
+        items = response.json()["items"]
+        assert all("is_drug" in item for item in items)
+
+        by_name = {item["name_ru"]: item for item in items}
+        assert by_name["Не знаю названия"]["is_drug"] is False
+        assert by_name["Другое (указать)"]["is_drug"] is False
+        assert by_name["Леветирацетам"]["is_drug"] is True
+
     async def test_seizure_types_expose_code(self, client, make_user, auth_headers):
         # Месячная сетка дневника подписывает столбцы кодом: «Тонико-клонический»
         # в клетку не помещается, «TC» — да.

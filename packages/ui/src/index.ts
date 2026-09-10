@@ -1,7 +1,7 @@
 export { cn } from "./lib/cn";
 export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
-export { formatRatio, formatOccurredAt } from "./lib/format";
+export { formatAmount, formatRatio, formatOccurredAt } from "./lib/format";
 
 export { RatioBadge } from "./components/RatioBadge";
 export type { RatioBadgeProps } from "./components/RatioBadge";

@@ -15,6 +15,10 @@ import { PatientProfileView } from "./PatientProfileView";
 let lastWeight: { weight_kg: number; occurred_at: string } | null = null;
 /** Медицинский профиль; `null` — сервер отвечает 404 «ещё не заполнен». */
 let medicalProfile: { diagnosis: string | null } | null = null;
+/** Сводка не отвечает: сбой сети, а не «замеров нет». */
+let overviewFails = false;
+/** Профиль отвечает не 404, а настоящей ошибкой. */
+let profileFails = false;
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -25,6 +29,11 @@ vi.mock("../../lib/api", async (importOriginal) => {
       // ответ выбирается по адресу, иначе один из них падает на разборе.
       GET: vi.fn().mockImplementation((path: string) => {
         if (path.includes("medical-profile")) {
+          if (profileFails) {
+            return Promise.resolve({
+              error: { error: { code: "internal", message: "сбой" } },
+            });
+          }
           return Promise.resolve(
             medicalProfile === null
               ? { error: { error: { code: "not_found", message: "нет" } } }
@@ -32,6 +41,11 @@ vi.mock("../../lib/api", async (importOriginal) => {
           );
         }
         if (path.includes("overview")) {
+          if (overviewFails) {
+            return Promise.resolve({
+              error: { error: { code: "internal", message: "сбой" } },
+            });
+          }
           return Promise.resolve({
             data: {
               date: "2026-09-10",
@@ -63,6 +77,8 @@ vi.mock("../../lib/api", async (importOriginal) => {
 beforeEach(() => {
   lastWeight = null;
   medicalProfile = null;
+  overviewFails = false;
+  profileFails = false;
   (api.GET as Mock).mockClear();
 });
 
@@ -156,7 +172,8 @@ describe("паспорт пациента", () => {
     lastWeight = { weight_kg: 18.2, occurred_at: "2026-09-07T09:30:00Z" };
     renderProfile();
 
-    const value = await screen.findByText(/18\.2 кг/);
+    // Число в русской записи: «18,2», а не «18.2».
+    const value = await screen.findByText(/18,2 кг/);
     expect(value).toHaveTextContent("07.09.2026");
   });
 
@@ -210,6 +227,37 @@ describe("паспорт пациента", () => {
         ),
       ).toBe(true),
     );
+  });
+
+  it("сбой загрузки не выдаётся за отсутствие замеров", async () => {
+    // «Вес не измерялся» — утверждение о ребёнке. При обрыве сети запрос уже
+    // не «в процессе», но данных нет, и сказать это было бы неправдой: врач
+    // решает по таким строкам.
+    overviewFails = true;
+    renderProfile();
+
+    expect(
+      await screen.findByText("Не удалось загрузить — обновите страницу"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Не измерялся")).not.toBeInTheDocument();
+  });
+
+  it("сбой профиля не выдаётся за незаполненный диагноз", async () => {
+    // 404 здесь законен: «профиль ещё не заполнен». Любая другая ошибка — сбой.
+    profileFails = true;
+    renderProfile();
+
+    expect(
+      await screen.findByText("Не удалось загрузить — обновите страницу"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Не заполнен")).not.toBeInTheDocument();
+  });
+
+  it("диагноз из одних пробелов считается незаполненным", async () => {
+    medicalProfile = { diagnosis: "   " };
+    renderProfile();
+
+    expect(await screen.findByText("Не заполнен")).toBeInTheDocument();
   });
 
   it("без замеров так и говорит, а не показывает пусто", async () => {

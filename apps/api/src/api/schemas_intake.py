@@ -43,6 +43,10 @@ class AedDrugRead(BaseModel):
     synonyms: list[str]
     sort: int
     retired: bool
+    #: Строка называет лекарство, а не вариант ответа анкеты («Не знаю
+    #: названия», «Другое (указать)»). Схема лечения предлагает только
+    #: лекарства; анкета показывает всё.
+    is_drug: bool = True
 
 
 class PatientIntakeWrite(BaseModel):

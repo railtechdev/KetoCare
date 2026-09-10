@@ -1,5 +1,5 @@
 import { Popover, PopoverAnchor, PopoverContent } from "@ketocare/ui";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
@@ -17,6 +17,16 @@ function normalize(value: string): string {
 }
 
 /**
+ * Сколько знаков нужно набрать, чтобы появилась подсказка.
+ *
+ * Столько же, сколько у поиска продукта. По одной букве список выходит
+ * бессмысленно длинным, а на пустом поле его быть не должно вовсе: форма
+ * препарата открывается панелью, панель ставит фокус в первое поле, и Enter
+ * вписал бы первый препарат справочника, которого никто не набирал.
+ */
+const MIN_QUERY = 2;
+
+/**
  * Препараты, подходящие под набранное, — по названию и по синонимам.
  *
  * Синонимы ищутся наравне с названием: «Кеппра», «Летирам» и «Леветирацетам» —
@@ -32,8 +42,8 @@ export function matchDrugs(
   query: string,
 ): readonly DrugMatch[] {
   const needle = normalize(query);
-  const live = drugs.filter((drug) => !drug.retired);
-  if (needle === "") return live.map((drug) => ({ drug, via: null }));
+  if (needle.length < MIN_QUERY) return [];
+  const live = drugs.filter((drug) => !drug.retired && drug.is_drug);
 
   const matches: DrugMatch[] = [];
   for (const drug of live) {
@@ -70,9 +80,20 @@ export function matchDrugs(
  * только когда фокус внутри него, а фокус здесь обязан оставаться в поле —
  * человек продолжает печатать.
  *
- * Отличие от `ProductPicker` существенное и потому копией он не стал: там поле
- * — строка ПОИСКА, и выбор её очищает; здесь поле и есть значение, а выбор его
- * заменяет.
+ * **Это ТРЕТИЙ рукописный выпадающий список в кабинете, и общая часть у них
+ * скопирована** (`activeIndex`, `dismissed`, `onMouseDown` вместо `click`,
+ * `PopoverAnchor` с шириной по якорю, разметка `ul[role=listbox]`). Сливать их
+ * сегодня не стали, и вот почему: одинаковая на вид механика ведёт себя
+ * по-разному в главном. У `ProductPicker` поле — строка ПОИСКА, выбор её
+ * очищает, и Enter берёт первый вариант; здесь поле И ЕСТЬ значение, выбор его
+ * заменяет, а Enter без явного выбора стрелкой не делает ничего — иначе врач,
+ * открывший форму и нажавший Enter, получал бы в схеме лечения препарат,
+ * которого не набирал. Спрятать это различие в параметр общего хука значит
+ * сделать его невидимым — ровно там, где оно клинически значимо.
+ *
+ * Долг записан в `docs/AUDIT_UX.md`: общую часть надо унести в кит примитивом,
+ * и вместе с ней — живую область, которой при копировании здесь сначала не
+ * оказалось.
  */
 export function DrugNameField({
   id,
@@ -83,6 +104,7 @@ export function DrugNameField({
   onBlur,
   drugs,
   name,
+  inputRef,
 }: {
   id: string;
   label: string;
@@ -92,13 +114,24 @@ export function DrugNameField({
   onBlur?: () => void;
   drugs: readonly AedDrug[];
   name?: string;
+  /**
+   * Ссылка на само поле ввода.
+   *
+   * Нужна react-hook-form: после неудачной отправки он ставит фокус на первое
+   * поле с ошибкой, а без ссылки молча переходит к следующему — человек с
+   * клавиатуры узнаёт не о той ошибке.
+   */
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const { t } = useTranslation("doctor");
   const listId = useId();
   // Список закрыли щелчком мимо или Escape. Само по себе условие открытия
   // производное и закрыться не может: в поле те же буквы, совпадения те же.
   const [dismissed, setDismissed] = useState(true);
-  const [activeIndex, setActiveIndex] = useState(0);
+  // −1 — не выбрано ничего. Enter в этом состоянии подсказку не трогает и ведёт
+  // себя как обычно: подставить первый вариант за человека, который ничего не
+  // выбирал, значит вписать в схему лечения чужое название.
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   const matches = useMemo(() => matchDrugs(drugs, value), [drugs, value]);
   // Точное совпадение подсказку не открывает: список из одной строки,
@@ -108,20 +141,40 @@ export function DrugNameField({
     only !== undefined && normalize(only.drug.name_ru) === normalize(value);
   const isOpen = !dismissed && matches.length > 0 && !exact;
 
+  // Что сказать вслух. Подстановка важнее числа найденного: она меняет то, что
+  // человек набрал, и молчать о ней нельзя.
+  const [substituted, setSubstituted] = useState<string | null>(null);
+  const announcement =
+    substituted !== null
+      ? t("medications.drugNameApplied", { name: substituted })
+      : isOpen
+        ? t("medications.drugNameFound", { count: matches.length })
+        : "";
+
   function pick(match: DrugMatch | undefined) {
     if (match === undefined) return;
     onChange(match.drug.name_ru);
     setDismissed(true);
-    setActiveIndex(0);
+    setActiveIndex(-1);
+    setSubstituted(match.drug.name_ru);
   }
 
   return (
     <Popover open={isOpen} onOpenChange={(open) => setDismissed(!open)}>
       <PopoverAnchor asChild>
         <div className="min-w-0">
+          {/* Что произошло — словами, для того, кто экрана не видит.
+              Появление подсказки скринридер сам не объявляет, а подстановку
+              канонического названия («Кеппра» заменилась «Леветирацетамом») —
+              тем более: программная смена значения поля проходит молча. Это
+              худшее место, где такое может случиться незамеченным. */}
+          <span role="status" aria-live="polite" className="sr-only">
+            {announcement}
+          </span>
           <Field
             id={id}
             name={name}
+            ref={inputRef}
             label={label}
             error={error}
             hint={t("medications.drugNameHint")}
@@ -138,7 +191,8 @@ export function DrugNameField({
             value={value}
             onChange={(event) => {
               onChange(event.target.value);
-              setActiveIndex(0);
+              setActiveIndex(-1);
+              setSubstituted(null);
               setDismissed(false);
             }}
             onFocus={() => setDismissed(false)}
@@ -150,13 +204,13 @@ export function DrugNameField({
                 setActiveIndex((i) => (i + 1) % matches.length);
               } else if (event.key === "ArrowUp") {
                 event.preventDefault();
-                setActiveIndex(
-                  (i) => (i - 1 + matches.length) % matches.length,
+                setActiveIndex((i) =>
+                  i <= 0 ? matches.length - 1 : (i - 1) % matches.length,
                 );
-              } else if (event.key === "Enter") {
-                // Подсказка открыта — Enter выбирает вариант, а не отправляет
-                // форму: иначе назначение уходило бы на сервер с недонабранным
-                // названием.
+              } else if (event.key === "Enter" && activeIndex >= 0) {
+                // Вариант выбран стрелкой — Enter подставляет его, а не
+                // отправляет форму: иначе назначение уходило бы с недонабранным
+                // названием. Ничего не выбрано — Enter обычный.
                 event.preventDefault();
                 pick(matches[activeIndex]);
               } else if (event.key === "Escape") {
@@ -175,7 +229,12 @@ export function DrugNameField({
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
-        <ul id={listId} role="listbox" className="m-0 list-none p-0">
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={t("medications.drugNameSuggestions")}
+          className="m-0 list-none p-0"
+        >
           {matches.map((match, index) => (
             <li
               key={match.drug.id}

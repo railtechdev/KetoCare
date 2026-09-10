@@ -8,6 +8,7 @@ import {
   Metric,
   MetricRow,
   Section,
+  formatAmount,
   formatOccurredAt,
   toast,
 } from "@ketocare/ui";
@@ -83,6 +84,11 @@ export function PatientProfileView({
   // вместо безопасности (правило 5 CLAUDE.md). Делается отдельной работой.
   const medicalProfile = useMedicalProfile(patient.id, clinicalAllowed);
   const diagnosis = medicalProfile.data?.diagnosis ?? null;
+  // Незаполненный профиль сервер отдаёт как 404 — это состояние, а не сбой.
+  const profileNotFilled =
+    medicalProfile.isSuccess ||
+    errorCodeOf(medicalProfile.error) === "not_found";
+  const profileFailed = medicalProfile.isError && !profileNotFilled;
   const [editOpen, setEditOpen] = useState(false);
   const update = useUpdateChildMutation(patient.id);
 
@@ -146,32 +152,40 @@ export function PatientProfileView({
           />
           {/* Дата замера стоит рядом с числом: вес ребёнка на кетодиете —
               величина, которая быстро устаревает, и «18,2 кг» без даты не
-              говорит, вчерашнее это или трёхмесячной давности. */}
+              говорит, вчерашнее это или трёхмесячной давности.
+              «Замеров нет» — утверждение о ребёнке, и говорить его можно
+              только тогда, когда сервер ответил (правило П15 канона): при
+              сбое сети `isPending` уже ложь, а данных всё ещё нет. */}
           <Metric
             label={t("card.weight")}
             value={
-              lastWeight === null
-                ? overview.isPending
-                  ? null
-                  : t("card.noWeight")
-                : t("card.weightValue", {
-                    value: lastWeight.weight_kg,
+              lastWeight !== null
+                ? t("card.weightValue", {
+                    value: formatAmount(lastWeight.weight_kg),
                     // Тот же формат, что в сводке: один и тот же замер,
                     // показанный на двух экранах по-разному, читается как два.
                     at: formatOccurredAt(new Date(lastWeight.occurred_at)),
                   })
+                : overview.isSuccess
+                  ? t("card.noWeight")
+                  : null
             }
+            hint={overview.isError ? t("card.loadFailed") : undefined}
           />
           {clinicalAllowed && (
             <Metric
               label={t("card.diagnosis")}
               value={
-                diagnosis === null || diagnosis.trim() === ""
-                  ? medicalProfile.isPending
-                    ? null
-                    : t("card.noDiagnosis")
-                  : diagnosis
+                diagnosis !== null && diagnosis.trim() !== ""
+                  ? diagnosis
+                  : // 404 здесь законен: «профиль ещё не заполнен». Любая
+                    // другая ошибка — сбой, и выдавать его за незаполненный
+                    // профиль нельзя.
+                    profileNotFilled
+                    ? t("card.noDiagnosis")
+                    : null
               }
+              hint={profileFailed ? t("card.loadFailed") : undefined}
             />
           )}
           {/* Названия, а не идентификаторы: поле хранит ссылки на продукты
