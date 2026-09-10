@@ -8,6 +8,7 @@ import {
   Skeleton,
 } from "@ketocare/ui";
 import {
+  Activity,
   CircleAlert,
   CircleCheck,
   CircleHelp,
@@ -90,6 +91,26 @@ export function PatientFlagsView({
         flags.daysSinceLastReading === null
           ? t("flags.noReadingsEver")
           : t("flags.noReadings", { days: flags.daysSinceLastReading }),
+    });
+  }
+
+  // Приступы — выше питания: ухудшение течения болезни важнее отклонения
+  // рациона за день.
+  if (flags.seizuresGrew) {
+    badges.push({
+      key: "seizures-grew",
+      className: "bg-destructive text-destructive-foreground",
+      icon: Activity,
+      label: t("flags.seizuresGrew"),
+    });
+  }
+
+  if (flags.seizuresAppeared) {
+    badges.push({
+      key: "seizures-appeared",
+      className: "bg-destructive text-destructive-foreground",
+      icon: Activity,
+      label: t("flags.seizuresAppeared"),
     });
   }
 
@@ -190,8 +211,16 @@ export function PatientFlagsLegend() {
           </dd>
           <dt className="flex items-center gap-1.5 font-semibold">
             <TriangleAlert aria-hidden="true" className="size-4 text-warning" />
-            {t("flags.legend.nutritionOffTerm")}
+            {t("flags.legend.seizuresGrewTerm")}
           </dt>
+          <dd className="m-0">{t("flags.legend.seizuresGrew")}</dd>
+
+          <dt className="font-medium">
+            {t("flags.legend.seizuresAppearedTerm")}
+          </dt>
+          <dd className="m-0">{t("flags.legend.seizuresAppeared")}</dd>
+
+          <dt className="font-medium">{t("flags.legend.nutritionOffTerm")}</dt>
           <dd className="m-0">{t("flags.legend.nutritionOff")}</dd>
           <dt className="flex items-center gap-1.5 font-semibold">
             <CircleHelp aria-hidden="true" className="size-4" />

@@ -27,6 +27,7 @@ from ..schemas_overview import (
     KetoneReading,
     PatientOverview,
     SeizuresToday,
+    SeizureTrend,
     ToleranceGap,
     WeightReading,
 )
@@ -123,6 +124,58 @@ def _tolerance(
     return DayTolerance(ratio_within_tolerance=ratio_ok, kcal_within_tolerance=kcal_ok), None
 
 
+#: Окно сравнения, суток. Неделя против недели.
+_TREND_WINDOW_DAYS = 7
+
+#: Во сколько раз должен вырасти показатель, чтобы это считалось ростом.
+#:
+#: «Более 50 %» — дословный ответ клиники от 09.09.2026 (вопрос 12). Строгое
+#: сравнение: ровно +50 % ростом не считается, как и сказано.
+_GROWTH_FACTOR = 1.5
+
+
+async def _seizure_trend(
+    session: AsyncSession, *, patient_id: uuid.UUID, today: date
+) -> SeizureTrend:
+    """Приступы за неделю против предыдущей недели.
+
+    Границы недель — местные сутки, как и всё остальное в сводке: по UTC-датам
+    у клиники в UTC+5 вечерние приступы попадали бы в соседнюю неделю.
+
+    # TODO(med): уточняющий вопрос 12 — как быть, когда предыдущая неделя была
+    # без приступов. Порога для этого случая клиника не задала, поэтому факт
+    # «приступы появились» отдаётся отдельным полем, а не подводится под то же
+    # правило «более 50 %».
+    """
+
+    recent_from, _ = _day_bounds(today - timedelta(days=_TREND_WINDOW_DAYS - 1))
+    _, recent_to = _day_bounds(today)
+    previous_from, _ = _day_bounds(today - timedelta(days=_TREND_WINDOW_DAYS * 2 - 1))
+    _, previous_to = _day_bounds(today - timedelta(days=_TREND_WINDOW_DAYS))
+
+    recent = await overview_repo.count_seizures(
+        session, patient_id=patient_id, period_from=recent_from, period_to=recent_to
+    )
+    previous = await overview_repo.count_seizures(
+        session, patient_id=patient_id, period_from=previous_from, period_to=previous_to
+    )
+
+    if previous.count == 0:
+        return SeizureTrend(
+            recent=recent.count,
+            previous=0,
+            grew=None,
+            appeared=recent.count > 0,
+        )
+
+    return SeizureTrend(
+        recent=recent.count,
+        previous=previous.count,
+        grew=recent.count > previous.count * _GROWTH_FACTOR,
+        appeared=False,
+    )
+
+
 async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> PatientOverview:
     today = local_today()
     day_start, day_end = _day_bounds(today)
@@ -143,4 +196,5 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         last_ketone=KetoneReading.model_validate(ketone) if ketone else None,
         last_weight=WeightReading.model_validate(weight) if weight else None,
         seizures_today=SeizuresToday.model_validate(seizures),
+        seizure_trend=await _seizure_trend(session, patient_id=patient_id, today=today),
     )

@@ -646,3 +646,129 @@ class TestAccessControl:
         )
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
+
+
+class TestSeizureTrend:
+    """Приступов стало больше — врач должен увидеть это в списке пациентов.
+
+    Ответ клиники 09.09.2026 (вопрос 12): считать по СУММАРНОМУ числу приступов,
+    порог — более 50 %. Не по числу записей: одна запись описывает серию, и
+    подменять одно другим значит занижать картину.
+    """
+
+    @staticmethod
+    def _at(days_ago: int) -> datetime:
+        """Полдень местных суток `days_ago` дней назад — заведомо внутри дня."""
+
+        return datetime.combine(_local_today() - timedelta(days=days_ago), time(12), tzinfo=TZ)
+
+    async def test_growth_over_half_raises_the_flag(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        # Прошлая неделя: 4 приступа. Эта: 7 — рост на 75 %.
+        await _seizure(session, patient=patient, occurred_at=self._at(10), count=4)
+        await _seizure(session, patient=patient, occurred_at=self._at(3), count=7)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        trend = response.json()["seizure_trend"]
+
+        assert trend == {"recent": 7, "previous": 4, "grew": True, "appeared": False}
+
+    async def test_exactly_half_is_not_growth(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«Более 50 %» — строго больше. Ровно +50 % флага не даёт.
+
+        Граница названа клиникой словами, и сдвинуть её на «не меньше» значит
+        поменять медицинское правило молча.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _seizure(session, patient=patient, occurred_at=self._at(10), count=4)
+        await _seizure(session, patient=patient, occurred_at=self._at(3), count=6)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        trend = response.json()["seizure_trend"]
+
+        assert trend["recent"] == 6
+        assert trend["previous"] == 4
+        assert trend["grew"] is False
+
+    async def test_counts_seizures_not_entries(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Одна запись «5 абсансов за утро» — это пять приступов, а не один.
+
+        Без этого случая правило проходило бы и на числе записей: там 1 против
+        1, то есть роста нет вовсе.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _seizure(session, patient=patient, occurred_at=self._at(10), count=1)
+        await _seizure(session, patient=patient, occurred_at=self._at(3), count=5)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        trend = response.json()["seizure_trend"]
+
+        assert trend["recent"] == 5
+        assert trend["previous"] == 1
+        assert trend["grew"] is True
+
+    async def test_appearing_after_a_clean_week_is_not_a_percentage(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Неделя без приступов — сравнивать не с чем.
+
+        Любой приступ дал бы рост «на бесконечность», а порога для этого случая
+        клиника не задавала. Поэтому `grew` пуст, а факт отдаётся отдельным
+        полем: выдумать процент — значит выдумать медицинское правило.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _seizure(session, patient=patient, occurred_at=self._at(2), count=3)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        trend = response.json()["seizure_trend"]
+
+        assert trend == {"recent": 3, "previous": 0, "grew": None, "appeared": True}
+
+    async def test_two_clean_weeks_raise_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        trend = response.json()["seizure_trend"]
+
+        assert trend == {"recent": 0, "previous": 0, "grew": None, "appeared": False}
+
+    async def test_older_seizures_do_not_leak_into_the_window(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Окно ровно две недели: приступ пятнадцатидневной давности не считается.
+
+        Иначе «предыдущая неделя» растягивалась бы в прошлое и рост размывался.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _seizure(session, patient=patient, occurred_at=self._at(15), count=9)
+        await _seizure(session, patient=patient, occurred_at=self._at(2), count=1)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        trend = response.json()["seizure_trend"]
+
+        assert trend["previous"] == 0, "приступ за пределами окна попал в сравнение"
+        assert trend["recent"] == 1

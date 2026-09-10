@@ -91,6 +91,7 @@ const SILENT_OVERVIEW = {
   },
   last_weight: null,
   seizures_today: { entries: 0, count: 0 },
+  seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
 };
 
 const FRESH_OVERVIEW = {
@@ -109,6 +110,7 @@ const FRESH_OVERVIEW = {
   },
   last_weight: null,
   seizures_today: { entries: 0, count: 0 },
+  seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
 };
 
 function renderList() {
