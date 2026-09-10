@@ -8,18 +8,110 @@ import {
   Skeleton,
 } from "@ketocare/ui";
 import {
+  Activity,
   CircleAlert,
   CircleCheck,
   CircleHelp,
   ClipboardList,
   TriangleAlert,
 } from "lucide-react";
+import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 
 import { NO_DATA_FLAG_DAYS, type PatientFlags } from "./flags";
 
 const BADGE =
   "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold whitespace-nowrap";
+
+/**
+ * Пометка: значок, цвет, ПОДПИСЬ и место в порядке — в ОДНОМ месте.
+ *
+ * Раньше строка списка и легенда рисовались двумя рукописными списками, и они
+ * разошлись при первом же добавлении пометки: «Приступов стало больше» получило
+ * в легенде оранжевый треугольник вместо красного пульса, две записи остались
+ * вовсе без значка, а «Кетосоотношение вне допуска» свой значок потеряло. Врач
+ * при этом ищет в легенде ровно то, что видит в строке.
+ *
+ * Подпись здесь по той же причине, и она важнее значка: две приступные пометки
+ * различаются ТОЛЬКО текстом — значок и цвет у них одинаковые (это одна беда,
+ * разной природы). Пока подписей было две — своя у строки, своя у легенды, —
+ * их можно было поменять местами, и никакая проверка значков этого не увидела
+ * бы: строка сказала бы «Приступы возобновились» ребёнку, у которого их стало
+ * больше. Ключ словаря один на оба места.
+ *
+ * Порядок ключей здесь — порядок значков в строке, и он совпадает с весами
+ * `attentionRank`: список сортируется по ним, и глаз обязан читать пометки в том
+ * же порядке, в каком они двигают строку вверх.
+ */
+export const FLAG_KEYS = [
+  "no-prescription",
+  "seizures-grew",
+  "seizures-appeared",
+  "stale",
+  "nutrition",
+] as const;
+
+export type FlagKey = (typeof FLAG_KEYS)[number];
+
+/** Цвет пометки. Пара «фон + текст» проверяется на контраст в `packages/ui`. */
+type FlagTone = "danger" | "warning";
+
+const LOOK: Record<
+  FlagKey,
+  {
+    icon: typeof CircleAlert;
+    tone: FlagTone;
+    /** Ключ подписи — один на плашку в строке и на термин в легенде. */
+    label: string;
+    /** Ключ объяснения в легенде. */
+    description: string;
+  }
+> = {
+  "no-prescription": {
+    icon: ClipboardList,
+    tone: "danger",
+    label: "flags.noPrescription",
+    description: "flags.legend.noPrescription",
+  },
+  "seizures-grew": {
+    icon: Activity,
+    tone: "danger",
+    label: "flags.seizuresGrew",
+    description: "flags.legend.seizuresGrew",
+  },
+  "seizures-appeared": {
+    icon: Activity,
+    tone: "danger",
+    label: "flags.seizuresAppeared",
+    description: "flags.legend.seizuresAppeared",
+  },
+  // Единственное исключение: подпись в строке зависит от данных («Нет замеров:
+  // 5 дн.» / «Замеров ещё не было»), поэтому общий ключ здесь — безусловный
+  // термин легенды, а плашка подписывает себя сама.
+  stale: {
+    icon: CircleAlert,
+    tone: "danger",
+    label: "flags.legend.noReadingsTerm",
+    description: "flags.legend.noReadings",
+  },
+  nutrition: {
+    icon: TriangleAlert,
+    tone: "warning",
+    label: "flags.nutritionOff",
+    description: "flags.legend.nutritionOff",
+  },
+};
+
+const BADGE_TONE: Record<FlagTone, string> = {
+  danger: "bg-destructive text-destructive-foreground",
+  warning: "bg-warning text-on-warning",
+};
+
+/** В легенде значок стоит без плашки, поэтому цвет несёт он сам. */
+const LEGEND_TONE: Record<FlagTone, string> = {
+  danger: "text-destructive",
+  warning: "text-warning",
+};
 
 /**
  * Флаги строки списка пациентов (раздел 8.3 ТЗ).
@@ -64,43 +156,34 @@ export function PatientFlagsView({
     );
   }
 
-  const badges: {
-    key: string;
-    className: string;
-    icon: typeof CircleAlert;
-    label: string;
-  }[] = [];
+  // Здесь решается только, ГОРИТ ли пометка. Подпись берётся из `LOOK` —
+  // общего с легендой ключа словаря.
+  const shown: Record<FlagKey, boolean> = {
+    // Первой: это не отклонение в наблюдении, а отсутствие самого наблюдения.
+    "no-prescription": flags.noPrescription,
+    // Приступы — выше молчания семьи и питания: ухудшение течения болезни
+    // важнее отсутствия записей и отклонения рациона за день. Тот же порядок
+    // задан весами в `attentionRank`.
+    "seizures-grew": flags.seizuresGrew,
+    "seizures-appeared": flags.seizuresAppeared,
+    stale: flags.staleData,
+    nutrition: flags.nutritionOff,
+  };
 
-  if (flags.noPrescription) {
-    // Первым: это не отклонение в наблюдении, а отсутствие самого наблюдения.
-    badges.push({
-      key: "no-prescription",
-      className: "bg-destructive text-destructive-foreground",
-      icon: ClipboardList,
-      label: t("flags.noPrescription"),
-    });
-  }
-
-  if (flags.staleData) {
-    badges.push({
-      key: "stale",
-      className: "bg-destructive text-destructive-foreground",
-      icon: CircleAlert,
-      label:
-        flags.daysSinceLastReading === null
+  const badges = FLAG_KEYS.filter((key) => shown[key]).map((key) => ({
+    key,
+    // Молчание семьи подписывает себя сроком: «Нет замеров: 5 дн.» — это
+    // разные ситуации у разных пациентов, и общий термин легенды их не
+    // различает. Остальные пометки берут подпись из `LOOK`.
+    label:
+      key !== "stale"
+        ? t(LOOK[key].label)
+        : flags.daysSinceLastReading === null
           ? t("flags.noReadingsEver")
           : t("flags.noReadings", { days: flags.daysSinceLastReading }),
-    });
-  }
-
-  if (flags.nutritionOff) {
-    badges.push({
-      key: "nutrition",
-      className: "bg-warning text-on-warning",
-      icon: TriangleAlert,
-      label: t("flags.nutritionOff"),
-    });
-  }
+    icon: LOOK[key].icon,
+    className: BADGE_TONE[LOOK[key].tone],
+  }));
 
   if (badges.length === 0) {
     // Давность показывается и у спокойной строки: правило П19 требует в строке
@@ -170,30 +253,38 @@ export function PatientFlagsLegend() {
       <PopoverContent align="start" className="w-96 max-w-[90vw]">
         <PopoverTitle>{t("flags.legend.title")}</PopoverTitle>
         <FactList className="mt-field text-muted-foreground">
-          <dt className="flex items-center gap-1.5 font-semibold">
-            <ClipboardList
-              aria-hidden="true"
-              className="size-4 text-destructive"
-            />
-            {t("flags.legend.noPrescriptionTerm")}
-          </dt>
-          <dd className="m-0">{t("flags.legend.noPrescription")}</dd>
-          <dt className="flex items-center gap-1.5 font-semibold">
-            <CircleAlert
-              aria-hidden="true"
-              className="size-4 text-destructive"
-            />
-            {t("flags.legend.noReadingsTerm")}
-          </dt>
-          <dd className="m-0">
-            {t("flags.legend.noReadings", { days: NO_DATA_FLAG_DAYS })}
-          </dd>
-          <dt className="flex items-center gap-1.5 font-semibold">
-            <TriangleAlert aria-hidden="true" className="size-4 text-warning" />
-            {t("flags.legend.nutritionOffTerm")}
-          </dt>
-          <dd className="m-0">{t("flags.legend.nutritionOff")}</dd>
-          <dt className="flex items-center gap-1.5 font-semibold">
+          {FLAG_KEYS.map((key) => {
+            const Icon = LOOK[key].icon;
+            return (
+              // `Fragment`, а не `div`: `FactList` — это `<dl>` с сеткой, и
+              // лишний узел между `dt` и `dd` сломал бы её колонки.
+              <Fragment key={key}>
+                <dt
+                  className="flex items-center gap-1.5 font-semibold"
+                  data-legend={key}
+                >
+                  <Icon
+                    aria-hidden="true"
+                    className={`size-4 ${LEGEND_TONE[LOOK[key].tone]}`}
+                  />
+                  {t(LOOK[key].label)}
+                </dt>
+                {/* Врач должен видеть порог, по которому помечена строка, а не
+                    догадываться о нём: число живёт в `NO_DATA_FLAG_DAYS` и
+                    подставляется в текст (для остальных пометок подстановки
+                    нет, лишний параметр `t` игнорирует). */}
+                <dd className="m-0">
+                  {t(LOOK[key].description, { days: NO_DATA_FLAG_DAYS })}
+                </dd>
+              </Fragment>
+            );
+          })}
+          {/* «Сводка не получена» — не пометка строки, а её отсутствие:
+              своего места в `FLAG_KEYS` у неё нет, а объяснить её надо. */}
+          <dt
+            className="flex items-center gap-1.5 font-semibold"
+            data-legend="unknown"
+          >
             <CircleHelp aria-hidden="true" className="size-4" />
             {t("flags.legend.unknownTerm")}
           </dt>

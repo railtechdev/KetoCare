@@ -43,6 +43,7 @@ const OVERVIEW = {
   last_ketone: null,
   last_weight: null,
   seizures_today: { entries: 0, count: 0 },
+  seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
 };
 
 const PRODUCTS = {
