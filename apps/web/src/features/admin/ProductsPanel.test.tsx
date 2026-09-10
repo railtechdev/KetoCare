@@ -150,13 +150,39 @@ describe("отбор по ведущему макронутриенту", () => 
     ).toBeUndefined();
   });
 
-  it("правило названо у самого поля, а не спрятано в справке", async () => {
+  it("правило объясняется рядом с отобранным, и только когда отбор задан", async () => {
     // Диетолог должен понимать, по какому признаку отобрано: порога «богатый»
-    // у нас нет, и «Жиры» без пояснения читалось бы как порог.
+    // у нас нет, и «Жиры» без пояснения читалось бы как порог. Но до выбора
+    // объяснять нечего — строка появляется вместе с отбором.
+    const user = userEvent.setup();
     renderPanel();
 
+    const select = await screen.findByLabelText(adminRu.products.filters.macro);
+    expect(screen.queryByText(/больше всего калорий/)).not.toBeInTheDocument();
+
+    await user.selectOptions(select, "fat");
+
+    expect(await screen.findByText(/больше всего калорий/)).toHaveTextContent(
+      /не порог/,
+    );
+  });
+
+  it("варианты подписаны словами, а не ключами словаря", async () => {
+    // Подписи собираются шаблоном (`macroValue.${macro}`), и проверка
+    // неиспользованных ключей до вложенных не достаёт: пропавший ключ показал
+    // бы диетологу «products.filters.macroValue.fat» в выпадающем списке, и
+    // ничего бы не упало.
+    renderPanel();
+
+    const select = await screen.findByLabelText(adminRu.products.filters.macro);
     expect(
-      await screen.findByText(adminRu.products.filters.macroHint),
-    ).toBeInTheDocument();
+      [...select.querySelectorAll("option")].map((o) => o.textContent),
+    ).toEqual([
+      adminRu.products.filters.macroAny,
+      adminRu.products.filters.macroValue.fat,
+      adminRu.products.filters.macroValue.protein,
+      adminRu.products.filters.macroValue.carbs,
+    ]);
+    expect(select.textContent).not.toMatch(/macroValue/);
   });
 });

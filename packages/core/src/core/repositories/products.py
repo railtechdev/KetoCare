@@ -92,9 +92,16 @@ def _leading_macro_condition(macro: LeadingMacro) -> ColumnElement[bool]:
 
     Коэффициенты берутся из ядра (`keto_engine.constants`), а не пишутся числами:
     9/4/4 — медицинские константы, и вторая их копия однажды разойдётся с
-    расчётом. Умножение идёт на `Decimal`, чтобы `numeric` не уехал в double
-    precision: там 4 г жира (36 ккал) против 9 г белка (36 ккал) могли бы
-    разойтись в шестнадцатом знаке, и «ничья» молча превратилась бы в победу.
+    расчётом.
+
+    **Считает Postgres, в numeric.** Проверено: и `Decimal`, и float дают
+    параметр типа `numeric`, потому что SQLAlchemy типизирует бинд по колонке
+    (`Numeric(6, 2)`). `Decimal` стоит здесь не потому, что float «уехал бы в
+    double precision» — не уехал бы, — а потому, что не хочется зависеть от
+    этого вывода типов: перенеси кто-нибудь арифметику в Python, и ничья
+    0,28 г жира против 0,63 г белка (2.5200000000000005 против 2.52) молча
+    получила бы победителя. Таких пар среди представимых в `numeric(6, 2)` —
+    279, и одна из них стоит в тесте ничьей.
 
     Строго больший — по обоим сравнениям. Ничья и продукт без калорий (вода,
     соль) не попадают никуда: у них ведущего макронутриента нет, и назвать
@@ -111,7 +118,12 @@ def _leading_macro_condition(macro: LeadingMacro) -> ColumnElement[bool]:
         LeadingMacro.CARBS: Product.carbs_100g * Decimal(str(KCAL_PER_G_CARBS)),
     }
     leader = by_macro[macro]
-    return and_(*(leader > other for name, other in by_macro.items() if name is not macro))
+    # `!=`, а не `is not`: `LeadingMacro` — `StrEnum`, и словарь находит запись по
+    # строке «fat» наравне с членом перечисления. Позови эту функцию строкой (а
+    # `search` — публичная функция пакета, её зовёт и воркер) — и с `is not`
+    # условие сравнило бы жиры сами с собой: пустая выдача вместо ошибки, то
+    # есть «жировых продуктов в справочнике нет».
+    return and_(*(leader > other for name, other in by_macro.items() if name != macro))
 
 
 async def search(

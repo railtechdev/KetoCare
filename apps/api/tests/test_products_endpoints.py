@@ -1177,8 +1177,17 @@ class TestLeadingMacroFilter:
             session, category, name=f"Курица {tag}", fat=3.6, protein=31.0, carbs=0.0
         )
         await self._product(session, category, name=f"Рис {tag}", fat=0.3, protein=2.7, carbs=28.2)
-        # Ничья по калориям: 4 г жира = 36 ккал = 9 г белка. Ведущего нет.
-        await self._product(session, category, name=f"Ничья {tag}", fat=4.0, protein=9.0, carbs=0.0)
+        # Ничья по калориям: 0,28 г жира = 2,52 ккал = 0,63 г белка. Ведущего нет.
+        #
+        # Пара выбрана НЕ произвольно. Очевидная ничья вроде 4 г жира против 9 г
+        # белка (36 против 36) точно представима в double и потому ничего не
+        # проверяет: замени в репозитории `Decimal` на float — тест всё равно
+        # пройдёт. А здесь float даёт 2.5200000000000005 против 2.52, жир
+        # «побеждает», и продукт без ведущего попадает в жировой список. Таких
+        # пар среди представимых в `numeric(6,2)` — 279.
+        await self._product(
+            session, category, name=f"Ничья {tag}", fat=0.28, protein=0.63, carbs=0.0
+        )
         # Ни одной калории: вода, соль. Ведущего нет и быть не может.
         await self._product(session, category, name=f"Вода {tag}", fat=0.0, protein=0.0, carbs=0.0)
         return category, tag
@@ -1248,6 +1257,34 @@ class TestLeadingMacroFilter:
         )
 
         assert response.status_code == 422, response.text
+
+    async def test_family_gets_the_same_lists_without_retired_items(
+        self, client, session, make_user, auth_headers
+    ):
+        """Ручка открыта всем ролям, и отбор ничего нового семье не открывает.
+
+        Новое условие — функция от полей, которые `ProductRead` и так отдаёт
+        каждому. Но проверить стоит связку: выведенная из оборота позиция не
+        должна просочиться в список через `macro`, минуя `only_active`.
+        """
+
+        parent = await make_user(UserRole.PARENT)
+        category, tag = await self._fixture(session)
+        retired = await self._product(
+            session, category, name=f"Выведенное масло {tag}", fat=90.0, protein=0.0, carbs=0.0
+        )
+        retired.is_active = False
+        await session.flush()
+
+        response = await client.get(
+            "/api/v1/products",
+            params={"macro": "fat", "category_id": str(category.id), "limit": 100},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        names = {item["name_ru"] for item in response.json()["items"]}
+        assert names == {f"Масло {tag}"}, "выведенная позиция просочилась через отбор"
 
     async def test_filter_combines_with_search(self, client, session, make_user, auth_headers):
         """Отбор идёт на СЕРВЕРЕ и складывается с остальными условиями.
