@@ -7,6 +7,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from core.clock import asyncpg_connect_args
 from core.config import get_settings
 from core.models import Base
 
@@ -19,6 +20,17 @@ target_metadata = Base.metadata
 
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
+#: Часовой пояс установки — им же считает и приложение (`core.clock`).
+#:
+#: Миграции идут в поясе клиники, а не в поясе сервера: всякое приведение
+#: `timestamptz` к календарной дате в data-миграции иначе съезжает на сутки для
+#: всего, что записано до пяти утра. Подробности и оба подводных камня — в
+#: докстроке `core.clock.asyncpg_connect_args`.
+#:
+#: Задаётся здесь, а не в каждой ревизии: правило одно на все, и первая же
+#: забытая строка `AT TIME ZONE` вернула бы дефект молча.
+_TZ = get_settings().tz
+
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -29,6 +41,9 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
     )
     with context.begin_transaction():
+        # Тот же пояс, что и в online: сгенерированный SQL обязан выполняться с
+        # тем же результатом, с каким его выполнил бы alembic сам.
+        context.execute(f"SET TIME ZONE '{_TZ}'")
         context.run_migrations()
 
 
@@ -51,6 +66,11 @@ async def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        # Пояс задаётся при подключении, а не отдельным `SET` по соединению:
+        # первый же запрос открыл бы неявную транзакцию, и миграции перестали бы
+        # коммититься МОЛЧА. Разбор — в докстроке функции; проверка того, что
+        # эта строка здесь есть, — в `packages/core/tests/test_clock.py`.
+        connect_args=asyncpg_connect_args(),
     )
 
     async with connectable.connect() as connection:
