@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -39,14 +40,20 @@ const PRODUCT = {
   updated_at: "2026-01-10T10:00:00Z",
 };
 
-function renderPanel(item: string) {
+function renderPanel(item?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <SectionRouter section="products" search={{ item }}>
+        {/* Без `item` панель показывает СПИСОК; с `item` — карточку позиции.
+            Ветка выбирается в самой панели, поэтому параметр нельзя подменить
+            пустой строкой: она тоже «задана». */}
+        <SectionRouter
+          section="products"
+          search={item === undefined ? {} : { item }}
+        >
           {children}
         </SectionRouter>
       </QueryClientProvider>
@@ -97,5 +104,90 @@ describe("карточка продукта вне текущей выборки
     expect(
       screen.getByRole("button", { name: "К списку продуктов" }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * «Богатые белками / жирами / углеводами» — просьба заказчицы, чтобы менять один
+ * продукт на другой по роли в блюде.
+ *
+ * Отбирает СЕРВЕР. Это не оптимизация: страница таблицы — двадцать строк, и
+ * фильтрация полученного дала бы «жировые из тех двадцати, что попали на экран».
+ * Диетолог решил бы, что жировых продуктов в справочнике три.
+ */
+describe("отбор по ведущему макронутриенту", () => {
+  it("уходит в запрос, а не применяется к полученной странице", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await screen.findByLabelText(adminRu.products.filters.macro);
+    await user.selectOptions(
+      screen.getByLabelText(adminRu.products.filters.macro),
+      "protein",
+    );
+
+    await waitFor(() => {
+      const asked = (api.GET as Mock).mock.calls.some(
+        ([path, options]) =>
+          path === "/api/v1/products" &&
+          (options as { params: { query: Record<string, unknown> } }).params
+            .query.macro === "protein",
+      );
+      expect(asked).toBe(true);
+    });
+  });
+
+  it("по умолчанию не задан — справочник не сужается молча", async () => {
+    renderPanel();
+
+    await screen.findByLabelText(adminRu.products.filters.macro);
+    const first = (api.GET as Mock).mock.calls.find(
+      ([path]) => path === "/api/v1/products",
+    );
+    expect(
+      (first?.[1] as { params: { query: Record<string, unknown> } }).params
+        .query.macro,
+    ).toBeUndefined();
+  });
+
+  it("правило объясняется рядом с отобранным, и только когда отбор задан", async () => {
+    // Диетолог должен понимать, по какому признаку отобрано: порога «богатый»
+    // у нас нет, и «Жиры» без пояснения читалось бы как порог. Но до выбора
+    // объяснять нечего — строка появляется вместе с отбором.
+    const user = userEvent.setup();
+    renderPanel();
+
+    const select = await screen.findByLabelText(adminRu.products.filters.macro);
+    expect(screen.queryByText(/больше всего калорий/)).not.toBeInTheDocument();
+
+    await user.selectOptions(select, "fat");
+
+    const explains = await screen.findByText(/больше всего калорий/);
+    // Название макронутриента подставляется в строку: без него она читается
+    // «…больше всего калорий приходится на .» — и проверки по «не порог» это
+    // не заметят.
+    expect(explains).toHaveTextContent(/на жиры/);
+    expect(explains).toHaveTextContent(/не порог/);
+    // Скринридер должен услышать правило вместе с подписью списка.
+    expect(select).toHaveAttribute("aria-describedby", explains.id);
+  });
+
+  it("варианты подписаны словами, а не ключами словаря", async () => {
+    // Подписи собираются шаблоном (`macroValue.${macro}`), и проверка
+    // неиспользованных ключей до вложенных не достаёт: пропавший ключ показал
+    // бы диетологу «products.filters.macroValue.fat» в выпадающем списке, и
+    // ничего бы не упало.
+    renderPanel();
+
+    const select = await screen.findByLabelText(adminRu.products.filters.macro);
+    expect(
+      [...select.querySelectorAll("option")].map((o) => o.textContent),
+    ).toEqual([
+      adminRu.products.filters.macroAny,
+      adminRu.products.filters.macroValue.fat,
+      adminRu.products.filters.macroValue.protein,
+      adminRu.products.filters.macroValue.carbs,
+    ]);
+    expect(select.textContent).not.toMatch(/macroValue/);
   });
 });

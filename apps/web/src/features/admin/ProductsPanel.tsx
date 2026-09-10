@@ -21,10 +21,11 @@ import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import type { Product } from "./types";
 import {
   EMPTY_PRODUCT_FILTERS,
+  LEADING_MACROS,
   PRODUCTS_PAGE_SIZE,
   useAdminProducts,
   useProductCategories,
@@ -64,6 +65,9 @@ const IMPORT_ITEM = "import";
  * коллеге, ни обновить страницу: F5 возвращал в список, а «Назад» браузера
  * уводил из раздела целиком.
  */
+/** Пояснение к отбору: на него ссылается сам список (`aria-describedby`). */
+const MACRO_EXPLAINS_ID = "admin-product-macro-explains";
+
 export function ProductsPanel({
   canImport = true,
   chrome = "tab",
@@ -325,6 +329,48 @@ export function ProductsPanel({
           />
         </div>
 
+        {/* «Богатые белками / жирами / углеводами» — просьба заказчицы, чтобы
+            менять один продукт на другой по роли в блюде. Порога «богатый» ни в
+            одном нашем источнике нет, поэтому отбирается ведущий по КАЛОРИЯМ.
+
+            Правило объясняется СТРОКОЙ ПОД ПАНЕЛЬЮ и только когда отбор задан, а
+            не пояснением у поля. Пояснение здесь ломало саму панель: она
+            выровнена по низу, `hint` рисуется под контролом, и 139 символов
+            внутри `min-w-56` роняли соседей на вторую строку — на 1280 панель
+            вырастала с 82 до 268 px и отодвигала таблицу. Прятать правило
+            нельзя (без него «Жиры» читаются как порог), но его место — рядом с
+            результатом, который оно объясняет.
+
+            Отбирает сервер. На странице в 20 строк «жировые» получились бы из
+            того, что попало на экран. */}
+        <div className="min-w-56">
+          <SelectField
+            id="admin-product-macro"
+            width="wide"
+            label={t("products.filters.macro")}
+            // Пояснение стоит под панелью, а не в `hint` (см. комментарий
+            // выше), но связь для скринридера обязана остаться: иначе он
+            // прочитает «Ведущий макронутриент» и не скажет, что это не порог.
+            aria-describedby={
+              filters.macro === "" ? undefined : MACRO_EXPLAINS_ID
+            }
+            value={filters.macro}
+            onChange={(event) =>
+              setFiltersAndResetPage((current) => ({
+                ...current,
+                macro: event.target.value as ProductFilters["macro"],
+              }))
+            }
+          >
+            <option value="">{t("products.filters.macroAny")}</option>
+            {LEADING_MACROS.map((macro) => (
+              <option key={macro} value={macro}>
+                {t(`products.filters.macroValue.${macro}`)}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
         {/* Без этого флажка снятие «активен» было необратимым: позиция
             исчезала из выдачи для всех, включая того, кто её вывел. */}
         <label className="flex min-h-touch items-center gap-field text-sm">
@@ -363,6 +409,20 @@ export function ProductsPanel({
           </Button>
         )}
       </Section>
+
+      {/* По какому признаку отобрано — рядом с тем, что отобрано. Диетолог
+          должен понимать, что «Жиры» это не порог «жирный», а «на жиры
+          приходится больше всего калорий»: по такому списку он подбирает
+          замену ребёнку на терапии. */}
+      {filters.macro !== "" && (
+        <p id={MACRO_EXPLAINS_ID} className="m-0 text-sm text-muted-foreground">
+          {t("products.filters.macroExplains", {
+            macro: t(
+              `products.filters.macroValue.${filters.macro}`,
+            ).toLowerCase(),
+          })}
+        </p>
+      )}
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection

@@ -1138,3 +1138,171 @@ class TestStaleVerificationFilter:
         names = [item["name_ru"] for item in response.json()["items"]]
         assert stale_name in names
         assert fresh_name not in names
+
+
+class TestLeadingMacroFilter:
+    """Три списка «богатые белками / жирами / углеводами» (просьба заказчицы).
+
+    Порога «богатый» ни в одном нашем источнике нет, поэтому правило другое:
+    ведущий — тот макронутриент, на который приходится больше всего КАЛОРИЙ
+    (9/4/4 из ядра). Оно воспроизводимо и объяснимо одной строкой, но оно наше,
+    а не клиники, — вопрос 50.
+    """
+
+    @staticmethod
+    async def _product(session, category, *, name: str, fat: float, protein: float, carbs: float):
+        product = Product(
+            name_ru=name,
+            category_id=category.id,
+            kcal_100g=fat * 9 + protein * 4 + carbs * 4,
+            fat_100g=fat,
+            protein_100g=protein,
+            carbs_100g=carbs,
+            fiber_100g=0,
+            source="тест",
+            source_version="1",
+            verified_at=date(2026, 1, 1),
+        )
+        session.add(product)
+        await session.flush()
+        return product
+
+    async def _fixture(self, session):
+        category = await _category(session)
+        tag = uuid.uuid4().hex[:8]
+        await self._product(
+            session, category, name=f"Масло {tag}", fat=81.1, protein=0.9, carbs=0.1
+        )
+        await self._product(
+            session, category, name=f"Курица {tag}", fat=3.6, protein=31.0, carbs=0.0
+        )
+        await self._product(session, category, name=f"Рис {tag}", fat=0.3, protein=2.7, carbs=28.2)
+        # Ничья по калориям: 0,28 г жира = 2,52 ккал = 0,63 г белка. Ведущего нет.
+        #
+        # Пара выбрана не произвольно, но и НЕ РАДИ ловли мутации: подмену
+        # `Decimal` на float не поймает ни один тест этого уровня, потому что
+        # ловить нечего — считает Postgres в `numeric` (см. докстроку
+        # `_leading_macro_condition`). Пара документирует, чего мы опасаемся,
+        # если арифметика когда-нибудь переедет в Python: там 0,28 × 9 даёт
+        # 2.5200000000000005 против 2.52, жир «побеждает», и продукт без
+        # ведущего попадает в жировой список. Очевидная ничья 4 г против 9 г
+        # (36 против 36) точно представима в double и даже этого не показала бы.
+        await self._product(
+            session, category, name=f"Ничья {tag}", fat=0.28, protein=0.63, carbs=0.0
+        )
+        # Ни одной калории: вода, соль. Ведущего нет и быть не может.
+        await self._product(session, category, name=f"Вода {tag}", fat=0.0, protein=0.0, carbs=0.0)
+        return category, tag
+
+    async def test_splits_products_by_where_the_calories_are(
+        self, client, session, make_user, auth_headers
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        category, tag = await self._fixture(session)
+
+        async def names(macro: str) -> set[str]:
+            response = await client.get(
+                "/api/v1/products",
+                params={"macro": macro, "category_id": str(category.id), "limit": 100},
+                headers=auth_headers(dietitian),
+            )
+            assert response.status_code == 200, response.text
+            return {item["name_ru"] for item in response.json()["items"]}
+
+        assert await names("fat") == {f"Масло {tag}"}
+        assert await names("protein") == {f"Курица {tag}"}
+        assert await names("carbs") == {f"Рис {tag}"}
+
+    async def test_a_tie_has_no_leader_and_lands_nowhere(
+        self, client, session, make_user, auth_headers
+    ):
+        """0,28 г жира и 0,63 г белка — это 2,52 ккал против 2,52 ккал.
+
+        Назвать у такого продукта ведущий макронутриент значило бы выбрать за
+        клинику: какой из двух «главнее», не следует ни из чего. Продукт просто
+        не попадает ни в один из трёх списков — и то же самое с водой и солью,
+        где калорий нет вовсе.
+
+        Проверка не про экзотику: без неё правило можно было бы записать через
+        нестрогое сравнение, и тогда ничья попала бы СРАЗУ В ДВА списка, а
+        бескалорийная вода — во все три.
+        """
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        category, tag = await self._fixture(session)
+
+        found: set[str] = set()
+        for macro in ("fat", "protein", "carbs"):
+            response = await client.get(
+                "/api/v1/products",
+                params={"macro": macro, "category_id": str(category.id), "limit": 100},
+                headers=auth_headers(dietitian),
+            )
+            found |= {item["name_ru"] for item in response.json()["items"]}
+
+        assert f"Ничья {tag}" not in found
+        assert f"Вода {tag}" not in found
+
+    async def test_unknown_macro_is_rejected_not_ignored(
+        self, client, session, make_user, auth_headers
+    ):
+        """Опечатка в параметре не должна молча отдавать весь справочник.
+
+        Диетолог, получивший полный список вместо «богатых белками», решит, что
+        белковых продуктов у нас двести.
+        """
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+
+        response = await client.get(
+            "/api/v1/products", params={"macro": "protien"}, headers=auth_headers(dietitian)
+        )
+
+        assert response.status_code == 422, response.text
+
+    async def test_family_gets_the_same_lists_without_retired_items(
+        self, client, session, make_user, auth_headers
+    ):
+        """Ручка открыта всем ролям, и отбор ничего нового семье не открывает.
+
+        Новое условие — функция от полей, которые `ProductRead` и так отдаёт
+        каждому. Но проверить стоит связку: выведенная из оборота позиция не
+        должна просочиться в список через `macro`, минуя `only_active`.
+        """
+
+        parent = await make_user(UserRole.PARENT)
+        category, tag = await self._fixture(session)
+        retired = await self._product(
+            session, category, name=f"Выведенное масло {tag}", fat=90.0, protein=0.0, carbs=0.0
+        )
+        retired.is_active = False
+        await session.flush()
+
+        response = await client.get(
+            "/api/v1/products",
+            params={"macro": "fat", "category_id": str(category.id), "limit": 100},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        names = {item["name_ru"] for item in response.json()["items"]}
+        assert names == {f"Масло {tag}"}, "выведенная позиция просочилась через отбор"
+
+    async def test_filter_combines_with_search(self, client, session, make_user, auth_headers):
+        """Отбор идёт на СЕРВЕРЕ и складывается с остальными условиями.
+
+        Иначе «богатые жирами» пришлось бы искать среди первых двухсот строк
+        страницы, а справочник на этом и кончается.
+        """
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        category, tag = await self._fixture(session)
+
+        response = await client.get(
+            "/api/v1/products",
+            params={"macro": "fat", "q": "Курица", "limit": 100},
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["items"] == [], "курица жировой не является"

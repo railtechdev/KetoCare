@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+from core.models import Product, ProductCategory
 from core.models.clinical import AppendOnlyViolationError
 from core.models.enums import Sex, UserRole
 from core.repositories import (
@@ -533,3 +534,57 @@ class TestTherapyStart:
         assert await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id) == date(
             2026, 8, 1
         )
+
+
+class TestLeadingMacroSearch:
+    """Отбор по ведущему макронутриенту — со стороны репозитория.
+
+    `search` — публичная функция пакета, и зовут её не только из API: параметр
+    может прийти обычной строкой, а не членом перечисления. Проверка нужна
+    именно поэтому — через ручку FastAPI всегда приводит значение по типу, и
+    этот путь остаётся непокрытым.
+    """
+
+    @staticmethod
+    async def _product(session, category, *, name, fat, protein, carbs):
+        product = Product(
+            name_ru=name,
+            category_id=category.id,
+            kcal_100g=fat * 9 + protein * 4 + carbs * 4,
+            fat_100g=fat,
+            protein_100g=protein,
+            carbs_100g=carbs,
+            fiber_100g=0,
+            source="тест",
+            source_version="1",
+            verified_at=date(2026, 1, 1),
+        )
+        session.add(product)
+        await session.flush()
+        return product
+
+    async def test_macro_given_as_a_plain_string_still_filters(self, session):
+        """Строка «fat» работает так же, как `LeadingMacro.FAT`.
+
+        `LeadingMacro` — `StrEnum`, и словарь находит запись по строке наравне с
+        членом перечисления. Сравнение через `is not` на этом и ломалось: жиры
+        сравнивались сами с собой, выдача выходила пустой, и выглядело это не как
+        поломка, а как «жировых продуктов в справочнике нет».
+        """
+
+        category = ProductCategory(name_ru=f"Тест {uuid.uuid4().hex[:8]}", sort=0)
+        session.add(category)
+        await session.flush()
+        await self._product(
+            session,
+            category,
+            name=f"Масло {uuid.uuid4().hex[:8]}",
+            fat=81.1,
+            protein=0.9,
+            carbs=0.1,
+        )
+
+        found, total = await products.search(session, category_id=category.id, macro="fat")
+
+        assert total == 1, "отбор строкой вернул пусто — сравнение членов перечисления сломано"
+        assert found[0].name_ru.startswith("Масло")
