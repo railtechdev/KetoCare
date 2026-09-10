@@ -18,6 +18,7 @@ from core.models import KetoneLog, Menu, Prescription, WeightLog
 from core.repositories import menus as menus_repo
 from core.repositories import overview as overview_repo
 from core.repositories import prescriptions as prescriptions_repo
+from core.repositories.overview import SeizureTotals
 from keto_engine import DishResult, Targets, within_tolerance
 
 from ..schemas import DishComputed, PrescriptionRead
@@ -134,31 +135,37 @@ _TREND_WINDOW_DAYS = 7
 _GROWTH_FACTOR = 1.5
 
 
-async def _seizure_trend(
-    session: AsyncSession, *, patient_id: uuid.UUID, today: date
-) -> SeizureTrend:
-    """Приступы за неделю против предыдущей недели.
+def _trend_windows(today: date) -> tuple[tuple[datetime, datetime], tuple[datetime, datetime]]:
+    """Границы последней и предыдущей недель — местными сутками.
 
-    Границы недель — местные сутки, как и всё остальное в сводке: по UTC-датам
-    у клиники в UTC+5 вечерние приступы попадали бы в соседнюю неделю.
+    По UTC-датам у клиники в UTC+5 вечерние приступы попадали бы в соседнюю
+    неделю. Окна стыкуются без зазора и без перекрытия: шов проходит по полуночи
+    между шестыми и седьмыми сутками назад, и это закреплено тестом — сдвиг на
+    сутки посчитал бы приступы шовного дня ОБЕИМ неделям.
 
-    # TODO(med): уточняющий вопрос 12 — как быть, когда предыдущая неделя была
-    # без приступов. Порога для этого случая клиника не задала, поэтому факт
-    # «приступы появились» отдаётся отдельным полем, а не подводится под то же
-    # правило «более 50 %».
+    Последняя неделя включает сегодняшний, ещё не закончившийся день: это шесть
+    полных суток плюс прошедшая часть сегодняшних, тогда как предыдущая — семь
+    полных. Асимметрия намеренная. Убрать её можно только выбросив сегодняшний
+    день, а тогда приступ, записанный утром, не считался бы до завтра — врач
+    открывает список именно сегодня.
     """
 
     recent_from, _ = _day_bounds(today - timedelta(days=_TREND_WINDOW_DAYS - 1))
     _, recent_to = _day_bounds(today)
     previous_from, _ = _day_bounds(today - timedelta(days=_TREND_WINDOW_DAYS * 2 - 1))
     _, previous_to = _day_bounds(today - timedelta(days=_TREND_WINDOW_DAYS))
+    return (recent_from, recent_to), (previous_from, previous_to)
 
-    recent = await overview_repo.count_seizures(
-        session, patient_id=patient_id, period_from=recent_from, period_to=recent_to
-    )
-    previous = await overview_repo.count_seizures(
-        session, patient_id=patient_id, period_from=previous_from, period_to=previous_to
-    )
+
+def _seizure_trend(recent: SeizureTotals, previous: SeizureTotals) -> SeizureTrend:
+    """Приступы за неделю против предыдущей недели.
+
+    # TODO(med): уточняющий вопрос 12 — как быть, когда предыдущая неделя была
+    # без приступов, нужен ли минимум по абсолютному числу и что делать с
+    # большим приростом, не дотянувшим до половины. Порогов для этих случаев
+    # клиника не задала, поэтому факт «приступы появились» отдаётся отдельным
+    # полем, а не подводится под то же правило «более 50 %».
+    """
 
     if previous.count == 0:
         return SeizureTrend(
@@ -178,14 +185,20 @@ async def _seizure_trend(
 
 async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> PatientOverview:
     today = local_today()
-    day_start, day_end = _day_bounds(today)
+    recent_window, previous_window = _trend_windows(today)
 
     prescription = await prescriptions_repo.get_active(session, patient_id=patient_id)
     menu = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=today)
     ketone = await overview_repo.latest_log(session, KetoneLog, patient_id=patient_id)
     weight = await overview_repo.latest_log(session, WeightLog, patient_id=patient_id)
-    seizures = await overview_repo.count_seizures(
-        session, patient_id=patient_id, period_from=day_start, period_to=day_end
+    # Три окна — один запрос: сводка собирается на КАЖДОГО пациента списка
+    # врача (1 + N), и три прохода по одному индексу умножались бы на когорту.
+    # «Сегодня» целиком лежит внутри последней недели — окна пересекаются, и это
+    # нормально: каждое считается своим `FILTER`.
+    seizures, recent, previous = await overview_repo.count_seizures_by_window(
+        session,
+        patient_id=patient_id,
+        windows=(_day_bounds(today), recent_window, previous_window),
     )
 
     return PatientOverview(
@@ -196,5 +209,5 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         last_ketone=KetoneReading.model_validate(ketone) if ketone else None,
         last_weight=WeightReading.model_validate(weight) if weight else None,
         seizures_today=SeizuresToday.model_validate(seizures),
-        seizure_trend=await _seizure_trend(session, patient_id=patient_id, today=today),
+        seizure_trend=_seizure_trend(recent, previous),
     )

@@ -325,13 +325,24 @@ describe("флаг роста приступов", () => {
   it("стоит в порядке внимания выше молчания семьи", () => {
     // Ухудшение течения болезни важнее отсутствия записей: врач, открывший
     // список, должен увидеть такого ребёнка раньше.
+    //
+    // У «выросшего» стоит сегодняшний замер — иначе он молчащий ТОЖЕ, и
+    // сравнивались бы 5 против 2, а не 3 против 2: проверка прошла бы при любом
+    // весе роста, вплоть до единицы.
     const grew = computePatientFlags(
       overview({
+        last_ketone: {
+          value: 3.1,
+          method: "blood",
+          occurred_at: "2026-08-28T09:00:00Z",
+        } as unknown as PatientOverview["last_ketone"],
         seizure_trend: { recent: 7, previous: 4, grew: true, appeared: false },
       }),
     );
     const silent = computePatientFlags(overview({ date: "2026-08-28" }));
 
+    expect(grew?.staleData).toBe(false);
+    expect(silent?.staleData).toBe(true);
     expect(attentionRank(grew)).toBeGreaterThan(attentionRank(silent));
   });
 });

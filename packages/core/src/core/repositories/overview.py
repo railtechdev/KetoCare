@@ -11,10 +11,12 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import SeizureLog
@@ -65,14 +67,54 @@ async def count_seizures(
     попадала в счётчики обоих соседних.
     """
 
-    stmt = select(
-        func.count(SeizureLog.id),
-        func.coalesce(func.sum(SeizureLog.count), 0),
-    ).where(
+    (totals,) = await count_seizures_by_window(
+        session, patient_id=patient_id, windows=((period_from, period_to),)
+    )
+    return totals
+
+
+async def count_seizures_by_window(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    windows: Sequence[tuple[datetime, datetime]],
+) -> list[SeizureTotals]:
+    """Приступы за несколько интервалов — ОДНИМ запросом, в порядке `windows`.
+
+    Сводка спрашивает про три окна одного пациента: сегодня, последняя неделя и
+    предыдущая. Тремя запросами это три прохода по одному и тому же индексу
+    `(patient_id, occurred_at)` — а главная врача собирает сводку на КАЖДОГО
+    пациента списка (1 + N), поэтому цена умножается на размер когорты.
+
+    Окна независимы и могут пересекаться: «сегодня» целиком лежит внутри
+    последней недели, и запись, попавшая в оба, считается в обоих. Каждый
+    интервал полуоткрытый, [from, to) — запись ровно в полночь принадлежит
+    одному дню, а не обоим соседним.
+    """
+
+    if not windows:
+        return []
+
+    columns: list[Any] = []
+    for period_from, period_to in windows:
+        inside = and_(
+            SeizureLog.occurred_at >= period_from,
+            SeizureLog.occurred_at < period_to,
+        )
+        columns.append(func.count(SeizureLog.id).filter(inside))
+        columns.append(func.coalesce(func.sum(SeizureLog.count).filter(inside), 0))
+
+    stmt = select(*columns).where(
         SeizureLog.patient_id == patient_id,
         SeizureLog.deleted_at.is_(None),
-        SeizureLog.occurred_at >= period_from,
-        SeizureLog.occurred_at < period_to,
+        # Общая рамка по всем окнам. Без неё агрегаты с `FILTER` заставили бы
+        # читать дневник пациента целиком: отбор внутри `FILTER` планировщик
+        # индексом не пользуется.
+        SeizureLog.occurred_at >= min(period_from for period_from, _ in windows),
+        SeizureLog.occurred_at < max(period_to for _, period_to in windows),
     )
-    entries, seizures = (await session.execute(stmt)).one()
-    return SeizureTotals(entries=int(entries), count=int(seizures))
+    row = (await session.execute(stmt)).one()
+    return [
+        SeizureTotals(entries=int(row[index * 2]), count=int(row[index * 2 + 1]))
+        for index in range(len(windows))
+    ]
