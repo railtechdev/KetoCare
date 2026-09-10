@@ -164,6 +164,23 @@ describe("препараты из анкеты семьи", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("после неудачной отправки фокус встаёт на первое незаполненное поле", async () => {
+    // react-hook-form обходит поля в порядке РЕГИСТРАЦИИ, а поле препарата
+    // идёт через `Controller` и регистрируется позже соседей: на пустой форме
+    // фокус вставал на дозу, и человек с клавиатуры узнавал не о той ошибке.
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Препарат")).toHaveFocus(),
+    );
+  });
+
   it("не предлагает то, что уже есть в схеме", async () => {
     medications = [
       {

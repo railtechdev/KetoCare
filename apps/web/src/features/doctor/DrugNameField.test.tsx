@@ -35,6 +35,14 @@ const DRUGS: AedDrug[] = [
     retired: true,
     is_drug: true,
   },
+  {
+    id: "5",
+    name_ru: "Топирамат",
+    synonyms: ["Топамакс"],
+    sort: 4,
+    retired: false,
+    is_drug: true,
+  },
   // Справочник заводился под анкету семьи, и вариантами ответа в нём стоят
   // строки, которые препаратами не являются.
   {
@@ -172,82 +180,120 @@ describe("поле названия препарата", () => {
     expect(screen.getByTestId("value")).toHaveTextContent("Леветирацетам");
   });
 
-  it("Enter без выбора отправляет форму, а не подставляет первое попавшееся", () => {
+  it("Enter без выбора отправляет форму, а не подставляет первое попавшееся", async () => {
     // Обратная сторона: подставить вариант за человека, который ничего не
     // выбирал, значит вписать в схему лечения чужое название. Проверяется
     // отдельно, потому что это ровно тот случай, который случался на открытии
     // панели: фокус в поле, список раскрыт, Enter — и препарат назначен.
-    return (async () => {
-      const user = userEvent.setup();
-      let submitted = false;
-      render(
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitted = true;
-          }}
-        >
-          <Harness />
-          <button type="submit">Сохранить</button>
-        </form>,
-      );
+    const user = userEvent.setup();
+    let submitted = false;
+    render(
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitted = true;
+        }}
+      >
+        <Harness />
+        <button type="submit">Сохранить</button>
+      </form>,
+    );
 
-      await user.type(screen.getByLabelText("Препарат"), "кеппра");
-      await screen.findByRole("listbox");
-      await user.keyboard("{Enter}");
+    await user.type(screen.getByLabelText("Препарат"), "кеппра");
+    await screen.findByRole("listbox");
+    await user.keyboard("{Enter}");
 
-      expect(submitted).toBe(true);
-      expect(screen.getByTestId("value")).toHaveTextContent("кеппра");
-    })();
+    expect(submitted).toBe(true);
+    expect(screen.getByTestId("value")).toHaveTextContent("кеппра");
   });
 
-  it("ArrowUp с ничего не выбранного берёт последний вариант", () => {
-    return (async () => {
-      const user = userEvent.setup();
-      render(<Harness />);
+  it("ArrowUp с ничего не выбранного берёт ПОСЛЕДНИЙ вариант", async () => {
+    // Запрос подобран так, чтобы совпадений было два: на одном совпадении
+    // первый и последний — один элемент, и проверка не различала бы ничего.
+    const user = userEvent.setup();
+    render(<Harness />);
 
-      await user.type(screen.getByLabelText("Препарат"), "а");
-      await user.type(screen.getByLabelText("Препарат"), "т");
-      await user.clear(screen.getByLabelText("Препарат"));
-      await user.type(screen.getByLabelText("Препарат"), "ам");
-      await screen.findByRole("listbox");
-      await user.keyboard("{ArrowUp}{Enter}");
+    await user.type(screen.getByLabelText("Препарат"), "ам");
+    const options = await screen.findAllByRole("option");
+    expect(options).toHaveLength(2);
 
-      const options = screen.queryAllByRole("option");
-      expect(options.length).toBe(0);
-      expect(screen.getByTestId("value")).toHaveTextContent(/[А-Яа-я]/);
-    })();
+    await user.keyboard("{ArrowUp}{Enter}");
+
+    // Последний в списке — «Топирамат»: порядок совпадений повторяет порядок
+    // справочника.
+    expect(screen.getByTestId("value")).toHaveTextContent("Топирамат");
   });
 
-  it("Escape закрывает подсказку, оставляя набранное", () => {
-    return (async () => {
-      const user = userEvent.setup();
-      render(<Harness />);
+  it("ArrowDown с ничего не выбранного берёт первый", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
 
-      await user.type(screen.getByLabelText("Препарат"), "кеппра");
-      await screen.findByRole("listbox");
-      await user.keyboard("{Escape}");
+    await user.type(screen.getByLabelText("Препарат"), "ам");
+    await screen.findByRole("listbox");
+    await user.keyboard("{ArrowDown}{Enter}");
 
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-      expect(screen.getByTestId("value")).toHaveTextContent("кеппра");
-    })();
+    expect(screen.getByTestId("value")).toHaveTextContent("Леветирацетам");
   });
 
-  it("говорит вслух, что подставило название вместо набранного", () => {
+  it("Escape закрывает подсказку, оставляя набранное", async () => {
+    // Закрывает её Radix (`DismissableLayer` гасит верхний слой), а не наша
+    // ветка — своей в коде нет. Проверяется то, что важно человеку: подсказка
+    // ушла, набранное осталось, и форма при этом НЕ закрылась.
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.type(screen.getByLabelText("Препарат"), "кеппра");
+    await screen.findByRole("listbox");
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.getByTestId("value")).toHaveTextContent("кеппра");
+    expect(screen.getByLabelText("Препарат")).toBeInTheDocument();
+  });
+
+  it("возвращаясь в заполненное поле, подсказку показывает снова", async () => {
+    // Врач ушёл к дозе, вернулся поправить название — подсказка нужна снова.
+    // Без этого она появлялась бы только при наборе новых букв.
+    const user = userEvent.setup();
+    render(
+      <>
+        <Harness initial="кеппра" />
+        <input aria-label="Соседнее поле" />
+      </>,
+    );
+
+    await user.click(screen.getByLabelText("Соседнее поле"));
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Препарат"));
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+  });
+
+  it("у списка подсказок есть имя для скринридера", async () => {
+    // Без имени скринридер объявляет «список», и непонятно, чего именно.
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.type(screen.getByLabelText("Препарат"), "кеппра");
+
+    expect(
+      await screen.findByRole("listbox", { name: "Из справочника" }),
+    ).toBeInTheDocument();
+  });
+
+  it("говорит вслух, что подставило название вместо набранного", async () => {
     // Программная смена значения поля скринридером не объявляется: незрячий
     // врач набрал «Кеппра», а в поле оказался «Леветирацетам» — и он об этом
     // не узнает. Подмена названия препарата — худшее место для молчания.
-    return (async () => {
-      const user = userEvent.setup();
-      render(<Harness />);
+    const user = userEvent.setup();
+    render(<Harness />);
 
-      await user.type(screen.getByLabelText("Препарат"), "кеппра");
-      const live = await screen.findByRole("status");
-      expect(live).toHaveTextContent(/Подсказка/);
+    await user.type(screen.getByLabelText("Препарат"), "кеппра");
+    const live = await screen.findByRole("status");
+    expect(live).toHaveTextContent(/Подсказка/);
 
-      await user.click(screen.getByRole("option", { name: /Леветирацетам/ }));
-      expect(live).toHaveTextContent(/Подставлено название.*Леветирацетам/);
-    })();
+    await user.click(screen.getByRole("option", { name: /Леветирацетам/ }));
+    expect(live).toHaveTextContent(/Подставлено название.*Леветирацетам/);
   });
 
   it("на точном совпадении подсказку не открывает", async () => {

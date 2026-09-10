@@ -40,6 +40,21 @@ const medicationSchema = z
 
 type MedicationFormValues = z.infer<typeof medicationSchema>;
 
+/**
+ * Порядок полей на экране — он же порядок, в котором ищется первая ошибка.
+ *
+ * Список явный, потому что вывести его неоткуда: `react-hook-form` знает
+ * порядок регистрации (у `Controller` он другой), а zod — порядок объявления
+ * схемы, который с разметкой совпадать не обязан.
+ */
+export const FIELD_ORDER = [
+  "drugName",
+  "dose",
+  "frequency",
+  "startedAt",
+  "stoppedAt",
+] as const satisfies readonly (keyof MedicationFormValues)[];
+
 function toBody(values: MedicationFormValues): MedicationBody {
   return {
     drug_name: values.drugName.trim(),
@@ -90,9 +105,15 @@ export function MedicationForm({
     register,
     control,
     handleSubmit,
+    setFocus,
     formState: { errors },
   } = useForm<MedicationFormValues>({
     resolver: zodResolver(medicationSchema),
+    // Свой фокус вместо встроенного: встроенный обходит поля в порядке
+    // РЕГИСТРАЦИИ и отрабатывает ПОСЛЕ обработчика ошибок, то есть
+    // перебивает его. Порядок регистрации здесь не совпадает с экранным —
+    // поле препарата идёт через `Controller` и регистрируется позже соседей.
+    shouldFocusError: false,
     defaultValues: {
       drugName: medication?.drug_name ?? suggestedDrugName ?? "",
       dose: medication?.dose ?? "",
@@ -105,7 +126,19 @@ export function MedicationForm({
   return (
     <form
       noValidate
-      onSubmit={handleSubmit((values) => onSubmit(toBody(values)))}
+      onSubmit={handleSubmit(
+        (values) => onSubmit(toBody(values)),
+        // Фокус — на ПЕРВОЕ незаполненное поле формы, а не на первое, до
+        // которого дошёл react-hook-form. Он обходит поля в порядке
+        // РЕГИСТРАЦИИ, а поле препарата регистрируется через `Controller`, то
+        // есть позже соседей: на пустой форме фокус вставал на дозу, и человек
+        // с клавиатуры узнавал не о той ошибке. Порядок берётся у схемы —
+        // zod отдаёт ошибки в порядке объявления полей.
+        (invalid) => {
+          const first = FIELD_ORDER.find((field) => field in invalid);
+          if (first !== undefined) setFocus(first);
+        },
+      )}
       className="flex flex-col gap-block"
     >
       <div className="grid gap-block sm:grid-cols-2">

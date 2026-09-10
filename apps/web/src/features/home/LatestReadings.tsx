@@ -1,4 +1,10 @@
-import { Button, DiaryEntryCard, EmptyState, Tiles } from "@ketocare/ui";
+import {
+  Button,
+  DiaryEntryCard,
+  EmptyState,
+  Tiles,
+  formatWeight,
+} from "@ketocare/ui";
 import { Droplets, Scale } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -72,7 +78,7 @@ export function LatestReadings({ ketone, weight }: Props) {
             occurredAt={new Date(weight.occurred_at)}
           >
             <p className="m-0 text-metric font-semibold tabular-nums">
-              {t("weight.value", { value: weight.weight_kg })}
+              {t("weight.value", { value: formatWeight(weight.weight_kg) })}
             </p>
           </DiaryEntryCard>
         )}

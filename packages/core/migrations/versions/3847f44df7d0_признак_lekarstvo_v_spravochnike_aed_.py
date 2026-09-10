@@ -15,13 +15,19 @@ Create Date: 2026-09-10 16:43:35.368068
 названия» — а выбор подставлял эту строку в `drug_name` как каноническое
 название препарата.
 
-**Почему признаком, а не списком имён в коде.** Справочник ведёт медкоманда
-через админку и заведёт новые служебные строки, о которых код не узнает. Отсев
-по названию — догадка, которая молча перестанет работать.
+**Почему признаком, а не списком имён в коде.** Имя — не идентификатор.
+У `aed_drugs`, в отличие от `intake_options`, нет стабильного `code`, поэтому
+отсев по названию цеплялся бы за отображаемую строку: переименуют — и «Не знаю
+названия» снова станет препаратом, молча.
 
 Данные помечает эта же миграция: три строки известны поимённо, потому что их
-завёл наш сид (`bce695d76e00`). Всё остальное — препараты, поэтому умолчание
-`true`, а не `false`.
+завёл наш сид (`bce695d76e00`) и он же переутверждает эти имена при каждом
+прогоне (`ON CONFLICT (name_ru) DO UPDATE`). Всё остальное — препараты, поэтому
+умолчание `true`, а не `false`.
+
+Если помечено не три строки, миграция ПАДАЕТ. `UPDATE ... WHERE name_ru = ANY`
+на несовпадении обновил бы ноль строк и завершился успешно — то есть служебные
+строки остались бы предлагаться врачу как лекарства, и никто бы не узнал.
 """
 
 from collections.abc import Sequence
@@ -48,11 +54,25 @@ def upgrade() -> None:
         "aed_drugs",
         sa.Column("is_drug", sa.Boolean(), server_default=sa.text("true"), nullable=False),
     )
-    op.execute(
-        sa.text("UPDATE aed_drugs SET is_drug = false WHERE name_ru = ANY(:names)").bindparams(
-            sa.bindparam("names", value=list(_NOT_DRUGS), type_=sa.ARRAY(sa.String))
+    marked = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "UPDATE aed_drugs SET is_drug = false WHERE name_ru = ANY(:names) RETURNING name_ru"
+            ).bindparams(sa.bindparam("names", value=list(_NOT_DRUGS), type_=sa.ARRAY(sa.String)))
         )
+        .fetchall()
     )
+
+    found = {row[0] for row in marked}
+    missing = set(_NOT_DRUGS) - found
+    if missing:
+        raise RuntimeError(
+            "Не найдены служебные строки справочника препаратов: "
+            f"{sorted(missing)}. Их переименовали? Пока они помечены как "
+            "лекарства, схема лечения предлагает их врачу как препараты — "
+            "поправьте имена в _NOT_DRUGS и прогоните миграцию заново."
+        )
 
 
 def downgrade() -> None:

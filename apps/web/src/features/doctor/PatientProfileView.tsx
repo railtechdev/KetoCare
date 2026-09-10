@@ -8,9 +8,9 @@ import {
   Metric,
   MetricRow,
   Section,
-  formatAmount,
   formatOccurredAt,
   toast,
+  formatWeight,
 } from "@ketocare/ui";
 import { FileText, Lock, Pencil } from "lucide-react";
 import { useState } from "react";
@@ -161,9 +161,10 @@ export function PatientProfileView({
             value={
               lastWeight !== null
                 ? t("card.weightValue", {
-                    value: formatAmount(lastWeight.weight_kg),
-                    // Тот же формат, что в сводке: один и тот же замер,
-                    // показанный на двух экранах по-разному, читается как два.
+                    value: formatWeight(lastWeight.weight_kg),
+                    // `formatWeight` — одна функция на все пять мест, где
+                    // виден вес: у семьи, у врача и в Mini App. Один и тот же
+                    // замер, показанный по-разному, читается как два.
                     at: formatOccurredAt(new Date(lastWeight.occurred_at)),
                   })
                 : overview.isSuccess

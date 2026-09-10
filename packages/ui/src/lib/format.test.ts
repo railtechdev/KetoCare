@@ -1,22 +1,37 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { formatAmount, formatRatio } from "./format";
+import { formatOccurredAt, formatRatio, formatWeight } from "./format";
 
-describe("формат количеств", () => {
-  it("пишет число по-русски, с запятой", () => {
-    // «18.2 кг» в русском интерфейсе читается как опечатка, а рядом на тех же
-    // экранах уже стоят числа с запятой.
-    expect(formatAmount(18.2)).toBe("18,2");
-    expect(formatAmount(0.05)).toBe("0,1");
+describe("formatRatio", () => {
+  it("форматирует по разделу 8.2 ТЗ: «3.9 : 1»", () => {
+    expect(formatRatio(3.87)).toBe("3.9 : 1");
+    expect(formatRatio(4)).toBe("4.0 : 1");
   });
 
-  it("держит один знак после запятой, даже когда его нет", () => {
-    // Столбец чисел с разной длиной дробной части нельзя сравнивать глазом.
-    expect(formatAmount(18)).toBe("18,0");
+  it("округляет до одного знака, а не отбрасывает", () => {
+    expect(formatRatio(3.96)).toBe("4.0 : 1");
+  });
+});
+
+describe("formatOccurredAt", () => {
+  it("выводит дату и время в русской локали", () => {
+    const formatted = formatOccurredAt(new Date("2026-03-14T09:05:00Z"));
+    expect(formatted).toMatch(/^\d{2}\.\d{2}\.\d{4}/);
+  });
+});
+
+describe("formatWeight", () => {
+  it("не округляет сотые: масса тела — измерение, а не оценка", () => {
+    // `weight_logs.weight_kg` — Numeric(5, 2). Показать 8,25 кг как «8,3»
+    // значит потерять на экране то, что взвесили: по массе считают
+    // калорийность и белок на килограмм.
+    expect(formatWeight(8.25)).toBe("8,25");
+    expect(formatWeight(18.2)).toBe("18,2");
   });
 
-  it("соотношение форматируется своим правилом", () => {
-    // У соотношения запись из раздела 8.2 ТЗ и она не про локаль.
-    expect(formatRatio(3.94)).toBe("3.9 : 1");
+  it("не дописывает нули к целому", () => {
+    // «18,00 кг» выглядит точнее, чем есть: взвесили ровно 18.
+    expect(formatWeight(18)).toBe("18");
   });
 });
