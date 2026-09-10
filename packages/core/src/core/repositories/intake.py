@@ -18,6 +18,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..clock import local_today
 from ..models import AedDrug, IntakeOption, PatientIntake
 from ..models.enums import IntakeScale
 from . import prescriptions as prescriptions_repo
@@ -103,8 +104,14 @@ async def upsert(
     # получила бы сегодняшний уровень как исходный, навсегда и молча. Ровно та
     # подмена, ради устранения которой поле и заведено.
     #
-    # Началом считается самое раннее назначение: до него кетодиеты нет.
-    # Признак не выдуман — он уже хранится, и таблица назначений append-only.
+    # Началом считается ДАТА самого раннего назначения, а не сам факт его
+    # наличия. Разница не теоретическая: врач выписывает назначение заранее
+    # («диету начинаем с двадцатого»), и по факту наличия ребёнок оказался бы «на
+    # терапии» уже сегодня — исходная частота не записалась бы никогда, потому
+    # что правило «до начала» второй раз не срабатывает. Тот же провал давало бы
+    # ошибочное назначение: таблица append-only, самая ранняя строка не исчезает.
+    #
+    # Признак не выдуман — он уже хранится (`prescriptions.effective_from`).
     #
     # TODO(med): вопрос 49 — что считать исходным уровнем, если частоту впервые
     # назвали уже на терапии. Сейчас поле остаётся пустым: «неизвестно» честнее
@@ -113,9 +120,13 @@ async def upsert(
     # Правило стоит здесь, а не в ручке: анкету пишет только `upsert`, и через
     # него проходит любой маршрут — сегодняшний и будущий. Схема записи это
     # поле не принимает вовсе, так что подменить его снаружи нечем.
+    #
+    # Проверка `seizure_frequency_id is not None` поведение не меняет (записать
+    # `None` поверх `None` — не изменение), но экономит запрос к назначениям на
+    # каждом сохранении анкеты без ответа о частоте.
     if intake.baseline_seizure_frequency_id is None and seizure_frequency_id is not None:
         therapy_started_on = await prescriptions_repo.started_on(session, patient_id=patient_id)
-        if therapy_started_on is None:
+        if therapy_started_on is None or local_today() < therapy_started_on:
             intake.baseline_seizure_frequency_id = seizure_frequency_id
 
     intake.seizure_duration_id = seizure_duration_id

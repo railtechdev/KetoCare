@@ -178,16 +178,37 @@ describe("исходная частота приступов", () => {
     expect(screen.getAllByText("Ежедневно")).toHaveLength(2);
   });
 
-  it("говорит словами, что точки отсчёта нет", async () => {
-    // Про частоту впервые ответили уже на терапии: сегодняшний уровень
-    // исходным не считается (вопрос 49). Врачу нужно знать, что снижение
-    // относительно исходного посчитать не с чем.
+  it("называет факт, что точки отсчёта нет, а не причину", async () => {
+    // Врачу нужно знать, что снижение относительно исходного посчитать не с
+    // чем. ПОЧЕМУ её нет, экран не знает: причин несколько (впервые ответили
+    // уже на терапии; анкету правили после старта; назначение выписали задним
+    // числом), и клиенту причина не приходит вовсе — назвать вероятную значило
+    // бы утверждать о ребёнке больше, чем известно.
     mockGet({ ...INTAKE, baseline_seizure_frequency_id: null });
     render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
 
     expect(
       await screen.findByText(intakeRu.fields.baselineNotRecorded),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/терапия уже шла/)).not.toBeInTheDocument();
+  });
+
+  it("записанную, но безымянную не выдаёт за отсутствующую", async () => {
+    // Вариант ответа исчез из справочника: путь почти невозможен (внешний ключ
+    // с `ON DELETE RESTRICT`), но точка отсчёта у ребёнка ЕСТЬ, и сказать
+    // «не зафиксирована» значило бы соврать в клинически значимой строке.
+    mockGet({
+      ...INTAKE,
+      baseline_seizure_frequency_id: "99999999-9999-4999-8999-999999999999",
+    });
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    expect(
+      await screen.findByText(intakeRu.fields.baselineUnnamed),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(intakeRu.fields.baselineNotRecorded),
+    ).not.toBeInTheDocument();
   });
 
   it("не заводит строку, пока про частоту не отвечали вовсе", async () => {

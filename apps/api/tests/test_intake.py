@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import func, select
 
 from api.services import intake as intake_service
+from core.clock import local_today
 from core.models import PatientIntake
 from core.models.enums import IntakeScale, UserRole
 from core.repositories import intake as intake_repo
@@ -480,6 +481,60 @@ class TestPatientIntake:
         # Текущая записана — это правдивый сегодняшний ответ.
         assert response.json()["seizure_frequency_id"] == str(rarer.id)
         # А исходной у этого ребёнка нет и взяться ей неоткуда (вопрос 49).
+        assert response.json()["baseline_seizure_frequency_id"] is None
+
+    async def test_prescription_written_in_advance_does_not_close_the_window(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Назначение, выписанное заранее, — это ещё не начатая терапия.
+
+        Врач говорит «диету начинаем с двадцатого» и записывает назначение
+        сегодня. Считай мы началом сам факт назначения, ответ семьи, данный до
+        двадцатого, исходным бы не стал — и не стал бы уже никогда: правило «до
+        начала» второй раз не срабатывает. Начало — это `effective_from`.
+
+        Тот же провал давало бы ошибочно заведённое и тут же перекрытое
+        назначение: таблица append-only, самая ранняя строка не исчезает.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        await _start_therapy(
+            session, make_user, patient=patient, started_on=local_today() + timedelta(days=10)
+        )
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(daily.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
+    async def test_therapy_started_today_already_closes_the_window(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Обратная сторона: день начала — это уже терапия, а не «до».
+
+        Без этого случая проверку выше можно было бы пройти, вовсе выбросив
+        сравнение дат: тогда исходной становилась бы любая частота, названная
+        при живом назначении.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        await _start_therapy(session, make_user, patient=patient, started_on=local_today())
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(daily.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
         assert response.json()["baseline_seizure_frequency_id"] is None
 
     async def test_baseline_survives_clearing_the_current_frequency(
