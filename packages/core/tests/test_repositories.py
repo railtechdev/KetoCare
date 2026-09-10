@@ -4,13 +4,22 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
 from core.models.clinical import AppendOnlyViolationError
 from core.models.enums import Sex, UserRole
-from core.repositories import access, audit, patients, prescriptions, products, users
+from core.repositories import (
+    access,
+    audit,
+    medical_profiles,
+    patients,
+    prescriptions,
+    products,
+    therapy,
+    users,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -422,3 +431,105 @@ class TestAppendOnlyEnforcement:
         await session.delete(prescription)
         with pytest.raises(AppendOnlyViolationError):
             await session.flush()
+
+
+class TestTherapyStart:
+    """Два разных вопроса об одной дате (`repositories/therapy.py`).
+
+    `started_on` — «когда началась терапия»: слово врача важнее вывода.
+    `earliest_evidence_of_therapy` — «могла ли терапия уже идти»: берётся самое
+    раннее свидетельство из обоих источников. Спутать их легко, а цена ошибки
+    несимметрична: по второму решается судьба исходной частоты приступов.
+    """
+
+    @staticmethod
+    async def _prescribe(session, patient, doctor, effective_from: date):
+        return await prescriptions.create(
+            session,
+            patient_id=patient.id,
+            ratio=4.0,
+            kcal_per_day=1200,
+            protein_g=25.0,
+            carbs_limit_g=10.0,
+            meals_per_day=3,
+            author_id=doctor.id,
+            effective_from=effective_from,
+        )
+
+    async def test_doctors_word_wins_for_the_start_date(self, session):
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        await self._prescribe(session, patient, doctor, date(2026, 6, 1))
+        await medical_profiles.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=date(2026, 1, 15),
+        )
+
+        assert await therapy.started_on(session, patient_id=patient.id) == date(2026, 1, 15)
+
+    async def test_evidence_takes_the_earliest_of_the_two(self, session):
+        """Врач назвал дату ПОЗЖЕ первого назначения — свидетельство раньше.
+
+        Так выглядит и опечатка в году, и просто противоречие в данных. Для
+        вопроса «могла ли терапия уже идти» ответ здесь один: могла.
+        """
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        await self._prescribe(session, patient, doctor, date(2026, 2, 1))
+        await medical_profiles.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=date(2062, 4, 15),
+        )
+
+        assert await therapy.started_on(session, patient_id=patient.id) == date(2062, 4, 15)
+        assert await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id) == date(
+            2026, 2, 1
+        )
+
+    async def test_no_sources_means_no_evidence(self, session):
+        patient = await _make_patient(session)
+
+        assert await therapy.started_on(session, patient_id=patient.id) is None
+        assert await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id) is None
+
+    async def test_deleted_profile_is_not_read(self, session):
+        """Мягко удалённый профиль не читается — как и везде.
+
+        Случай сегодня теоретический (профиль ниоткуда мягко не удаляется), но
+        фильтр здесь решает, чью дату взять, и без проверки его снятие не роняло
+        бы ничего.
+        """
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        await self._prescribe(session, patient, doctor, date(2026, 8, 1))
+        profile = await medical_profiles.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=date(2026, 4, 15),
+        )
+        profile.deleted_at = datetime(2026, 9, 1, tzinfo=UTC)
+        await session.flush()
+
+        assert await therapy.started_on(session, patient_id=patient.id) == date(2026, 8, 1)
+        assert await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id) == date(
+            2026, 8, 1
+        )

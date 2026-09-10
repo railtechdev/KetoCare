@@ -379,6 +379,16 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
   const { t } = useTranslation("doctor");
   const genetics = profile.genetics ?? null;
 
+  const therapyStart =
+    profile.therapy_started_on === null
+      ? null
+      : formatIsoDate(profile.therapy_started_on);
+  // Сравнение по календарной дате, а не по моменту: «сегодня» началом уже
+  // считается (то же строгое сравнение, что в правиле про исходную частоту).
+  const therapyStartIsAhead =
+    profile.therapy_started_on !== null &&
+    profile.therapy_started_on > new Date().toISOString().slice(0, 10);
+
   // Число сменённых ПЭП хранится ссылкой на справочник, а не числом: шкала
   // задана медицинской командой («1-2», «3 и более»), и подписи берутся оттуда.
   // Выведенные из употребления варианты запрашиваются вместе с действующими —
@@ -438,7 +448,20 @@ function ProfileValues({ profile }: { profile: MedicalProfile }) {
       <dd className="m-0 tabular-nums">
         {profile.therapy_started_on === null
           ? t("profile.fields.therapyStartNotSet")
-          : (formatIsoDate(profile.therapy_started_on) ?? "—")}
+          : therapyStart === null
+            ? "—"
+            : // Будущая дата подписывается словами. Она законна — «диету
+              // начинаем с понедельника», — но ровно так же выглядит опечатка в
+              // году: «2062» вместо «2026» это одна цифра, и никакой проверкой
+              // её не отличить от намерения. Единственное, что можно сделать
+              // честно, — показать врачу, что он ввёл: строка «ещё не началась»
+              // рядом с 2062 годом читается сразу.
+              t(
+                therapyStartIsAhead
+                  ? "profile.fields.therapyStartAhead"
+                  : "profile.fields.therapyStartOn",
+                { date: therapyStart },
+              )}
       </dd>
 
       <dt className="text-muted-foreground">{t("profile.fields.updatedAt")}</dt>

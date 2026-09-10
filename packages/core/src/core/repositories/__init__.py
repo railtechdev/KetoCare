@@ -29,6 +29,7 @@ from . import (
     report_jobs,
     reports,
     telegram,
+    therapy,
     users,
 )
 
@@ -58,5 +59,6 @@ __all__ = [
     "report_jobs",
     "reports",
     "telegram",
+    "therapy",
     "users",
 ]

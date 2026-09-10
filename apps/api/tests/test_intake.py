@@ -570,10 +570,10 @@ class TestPatientIntake:
         assert response.status_code == 200, response.text
         assert response.json()["baseline_seizure_frequency_id"] is None
 
-    async def test_doctors_start_date_can_also_open_the_window(
+    async def test_doctors_future_date_keeps_the_window_open(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        """Обратная сторона: врач назвал БУДУЩУЮ дату — терапия ещё не началась.
+        """Врач назвал будущую дату — терапия ещё не началась.
 
         Без этого случая проверку выше можно было бы пройти, объявив «есть дата
         — значит на терапии»: тогда исходная частота не записалась бы уже
@@ -583,8 +583,6 @@ class TestPatientIntake:
         parent, patient = await _parent_with_child(session, make_user, make_patient)
         doctor = await make_user(UserRole.DOCTOR)
         await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
-        # А назначение при этом уже записано — вывод из него сказал бы «на терапии».
-        await _start_therapy(session, make_user, patient=patient, started_on=local_today())
         await client.put(
             f"/api/v1/patients/{patient.id}/medical-profile",
             json={"therapy_started_on": (local_today() + timedelta(days=7)).isoformat()},
@@ -601,6 +599,44 @@ class TestPatientIntake:
 
         assert response.status_code == 200, response.text
         assert response.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
+    async def test_any_evidence_of_therapy_closes_the_window(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Источники противоречат друг другу — верим тому, что закрывает окно.
+
+        Врач сказал «диету начинаем через неделю», но назначение уже записано и
+        действует с сегодня. Что из этого правда, система не знает; зато знает
+        цену ошибки, и та несимметрична: пустая исходная частота — это
+        «неизвестно», врач увидит и переспросит семью, а записанная ошибочно
+        объявит сегодняшний уровень ребёнка тем, с чем сравнивают эффект
+        лечения — навсегда и без возможности поправить через API.
+
+        Тот же механизм гасит опечатку в году: «2062» вместо «2026» — одна
+        цифра, и она прошла бы проверку правдоподобности (будущая дата
+        разрешена намеренно). У ребёнка с назначением окна она не откроет.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        await _start_therapy(session, make_user, patient=patient, started_on=local_today())
+        await client.put(
+            f"/api/v1/patients/{patient.id}/medical-profile",
+            json={"therapy_started_on": (local_today() + timedelta(days=7)).isoformat()},
+            headers=auth_headers(doctor),
+        )
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(daily.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["baseline_seizure_frequency_id"] is None
 
     async def test_baseline_survives_clearing_the_current_frequency(
         self, client, session, make_user, make_patient, auth_headers
