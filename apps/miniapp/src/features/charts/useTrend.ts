@@ -73,6 +73,7 @@ export function useTrend(patientId: string, kind: TrendKind) {
       if (error || !data) throw error ?? new Error("Empty weight response");
       return data.items.map((item) => ({
         at: new Date(item.occurred_at),
+        // weight:raw — точка графика: подпись оси форматирует сама ось.
         value: item.weight_kg,
       }));
     },

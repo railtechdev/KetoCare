@@ -496,6 +496,8 @@ function WeightForm({
 
   const defaults = (): WeightValues => ({
     occurredAt: editing ? occurredInput(editing.occurred_at) : nowInput(),
+    // weight:raw — значение поля ввода, а не показ: форматированную запятую
+    // сервер не примет, а человек правит ровно то, что записал.
     weightKg: editing ? String(editing.weight_kg) : "",
     heightCm: editing ? numberInput(editing.height_cm) : "",
   });

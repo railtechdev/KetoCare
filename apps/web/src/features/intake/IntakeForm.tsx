@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import { toDateInput } from "../diary/time";
 import {
   optionsOfScale,
   visibleDrugs,
@@ -114,6 +115,20 @@ export function IntakeForm({
   const stepIndex = STEPS.indexOf(step);
   const isLast = stepIndex === STEPS.length - 1;
 
+  // «Приступов нет» без даты — ответ, который ничего не говорит: свобода от
+  // приступов измеряется СРОКОМ (ответ клиники 09.09.2026, вопрос 19).
+  //
+  // Вариант узнаётся по КОДУ, а не по названию: формулировки справочника
+  // клиника уже правила, а код уникален в паре со шкалой. Правило живёт на
+  // сервере (`services/intake.check_last_seizure_known`), здесь оно только
+  // видимо заранее — иначе семья узнавала бы о нём отказом после «Сохранить».
+  const answeredNoSeizures =
+    (options.data ?? []).some(
+      (option) =>
+        option.code === "freq_none" &&
+        option.id === (values ?? EMPTY).seizureFrequencyId,
+    ) && (values ?? EMPTY).lastSeizureOn === "";
+
   function patch(change: Partial<Values>) {
     setValues((current) => ({ ...(current ?? EMPTY), ...change }));
   }
@@ -169,6 +184,17 @@ export function IntakeForm({
           noValidate
           onSubmit={(event) => {
             event.preventDefault();
+            // Дальше не пускаем, пока дата не указана: ошибка стоит на этом
+            // шаге, и уводить с него значило бы спрятать её. Сервер откажет
+            // всё равно — но уже после «Сохранить», на последнем шаге.
+            //
+            // Шаг назван явно: без него блокировка сработала бы на ЛЮБОМ шаге,
+            // и стоило полю переехать — «Далее» начало бы молча ничего не
+            // делать, потому что фокусировать было бы нечего.
+            if (step === "seizures" && answeredNoSeizures) {
+              document.getElementById("intake-last-seizure")?.focus();
+              return;
+            }
             if (isLast) submit();
             else setStep(STEPS[stepIndex + 1]!);
           }}
@@ -194,6 +220,14 @@ export function IntakeForm({
                 width="date"
                 label={t("fields.lastSeizureOn")}
                 hint={t("fields.lastSeizureHint")}
+                error={
+                  answeredNoSeizures
+                    ? t("errors.lastSeizureRequired")
+                    : undefined
+                }
+                // Будущую дату не принимает и сервер: по ней измеряется срок
+                // свободы от приступов.
+                max={toDateInput(new Date())}
                 value={values.lastSeizureOn}
                 onChange={(event) =>
                   patch({ lastSeizureOn: event.target.value })

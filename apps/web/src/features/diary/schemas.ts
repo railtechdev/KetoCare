@@ -194,6 +194,7 @@ export function weightBody(values: WeightValues): DiaryBody | null {
     kind: "weight",
     body: {
       occurred_at,
+      // weight:raw — число уходит на сервер, а не на экран.
       weight_kg: Number(values.weightKg),
       height_cm: optionalNumberOf(values.heightCm),
     },

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import func, select
 
+from api.services import intake as intake_service
 from core.models import PatientIntake
 from core.models.enums import IntakeScale, UserRole
 from core.repositories import intake as intake_repo
@@ -89,6 +90,47 @@ class TestIntakeDictionaries:
         assert by_name["Не знаю названия"]["is_drug"] is False
         assert by_name["Другое (указать)"]["is_drug"] is False
         assert by_name["Леветирацетам"]["is_drug"] is True
+
+    async def test_scales_carry_the_wording_the_clinic_approved(self, session):
+        """Итог миграции текстов — не только код, но и то, что читает семья.
+
+        Тесты шкал сверяли `code`, поэтому переименование справочника не
+        держалось ничем: удали карту переименований в миграции — все тесты
+        зелёные. А миграция ищет строки ПО ИМЕНИ и падает, если не нашла, —
+        значит имена стали частью контракта.
+
+        Формулировки — из утверждённой клиникой шкалы (ответ 19 от 09.09.2026)
+        и из перехода на терминологию ASM (ответ 21).
+        """
+
+        options = await intake_repo.list_options(
+            session, scale=IntakeScale.SEIZURE_FREQUENCY, include_retired=True
+        )
+        by_code = {option.code: option.name_ru for option in options}
+        assert by_code["freq_weekly"] == "Несколько раз в неделю"
+        assert by_code["freq_none"] == "Приступов нет"
+
+        drugs, _ = await intake_repo.list_drugs(session, limit=1000, include_retired=True)
+        names = {drug.name_ru for drug in drugs}
+        assert "Не принимает противоприступные препараты" in names
+        assert "Не принимает противоэпилептические препараты" not in names
+
+    async def test_retired_switch_count_options_are_named_not_coded(self, session):
+        """Выведенные варианты подписаны человеческими именами.
+
+        На них ссылаются анкеты, заполненные до замены шкалы, и врач читает эти
+        подписи в карте. Проверка появилась после того, как я принял дрейф
+        одной локальной базы за дефект продукта и чуть не «починил» его
+        миграцией, которая на откате записала бы коды в имена.
+        """
+
+        options = await intake_repo.list_options(
+            session, scale=IntakeScale.AED_SWITCH_COUNT, include_retired=True
+        )
+        for option in options:
+            assert option.name_ru != option.code, (
+                f"вариант «{option.code}» подписан своим кодом — врач прочитает его в карте"
+            )
 
     async def test_seizure_types_expose_code(self, client, make_user, auth_headers):
         # Месячная сетка дневника подписывает столбцы кодом: «Тонико-клонический»
@@ -200,6 +242,206 @@ class TestPatientIntake:
         )
 
         assert response.status_code == 404
+
+    async def test_no_seizures_requires_the_last_date(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«Приступов нет» без даты — ответ, который ничего не говорит.
+
+        Ответ клиники 09.09.2026 (вопрос 19): устойчивая свобода от приступов
+        измеряется СРОКОМ. Без даты непонятно, неделя это или два года, — а
+        именно по снижению относительно исходного уровня оценивают эффект
+        кетотерапии.
+
+        Потребитель — анкета в кабинете (`features/intake/IntakeForm.tsx`): она
+        делает поле обязательным на экране, но правило живёт здесь.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        none_option = next(option for option in options if option.code == "freq_none")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(none_option.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["details"]["field"] == "last_seizure_on"
+
+        # С датой тот же ответ проходит.
+        ok = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={
+                "seizure_frequency_id": str(none_option.id),
+                "last_seizure_on": "2026-06-01",
+            },
+            headers=auth_headers(parent),
+        )
+        assert ok.status_code == 200, ok.text
+
+    async def test_rule_applies_when_editing_an_existing_intake(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Правило действует и на уже заполненную анкету — это её цена.
+
+        PUT заменяет анкету целиком, поэтому строка, сохранённая раньше с
+        «Приступов нет» и без даты, теперь не сохранится, пока дату не введут:
+        семья не поправит в анкете НИЧЕГО другого. Клиника про уже собранные
+        анкеты не говорила, и это записано вопросом 48 — до ответа работает
+        самый строгий вариант, ближайший к сказанному.
+
+        Случай проверяется отдельно, потому что мутация «применять правило
+        только при создании» на тестах создания зелена.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        url = f"/api/v1/patients/{patient.id}/intake"
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        none_option = next(option for option in options if option.code == "freq_none")
+
+        # Анкета из прошлого: ответ «Приступов нет» уже стоит, даты нет.
+        intake = await intake_repo.upsert(
+            session,
+            patient_id=patient.id,
+            last_seizure_on=None,
+            onset_age_id=None,
+            seizure_frequency_id=none_option.id,
+            seizure_duration_id=None,
+            meals_per_day_id=None,
+            developmental_delay=None,
+            meals_regular=None,
+            current_aed_ids=[],
+        )
+        assert intake.last_seizure_on is None
+
+        # Семья правит совсем другое поле — и упирается в дату.
+        response = await client.put(
+            url,
+            json={
+                "seizure_frequency_id": str(none_option.id),
+                "developmental_delay": True,
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["details"]["field"] == "last_seizure_on"
+
+    async def test_future_date_is_a_typo_not_an_answer(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """По этой дате измеряют срок свободы от приступов.
+
+        «2062-06-01» дало бы отрицательный срок. Проверка стоит отдельно от
+        обязательности: опечатка возможна при любом ответе о частоте.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"last_seizure_on": "2062-06-01"},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["details"]["field"] == "last_seizure_on"
+
+    async def test_today_is_local_not_the_process_date(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """«Сегодня» берётся из настроек установки, а не у процесса.
+
+        Наивный `date.today()` зависит от переменной `TZ` окружения, а форма
+        считает `max` по часам устройства семьи. В UTC+5 вечером это разные
+        даты, и сервер назвал бы сегодняшний ответ будущим.
+
+        Подменяется `local_today`, поэтому тест не зависит от часов машины и от
+        времени суток: вернись код к `date.today()`, подменённая функция
+        перестанет вызываться, и второй запрос пройдёт вместо отказа.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        pinned = date(2026, 6, 15)
+        monkeypatch.setattr(intake_service, "local_today", lambda: pinned)
+        url = f"/api/v1/patients/{patient.id}/intake"
+
+        today_ok = await client.put(
+            url,
+            json={"last_seizure_on": pinned.isoformat()},
+            headers=auth_headers(parent),
+        )
+        assert today_ok.status_code == 200, today_ok.text
+
+        tomorrow = await client.put(
+            url,
+            json={"last_seizure_on": (pinned + timedelta(days=1)).isoformat()},
+            headers=auth_headers(parent),
+        )
+        assert tomorrow.status_code == 422, tomorrow.text
+        assert tomorrow.json()["error"]["details"]["field"] == "last_seizure_on"
+
+    async def test_retired_no_seizures_option_still_requires_the_date(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Выведенный из употребления вариант правила не отменяет.
+
+        Справочник ведёт медкоманда, и «Приступов нет» однажды может быть
+        заменён другой формулировкой. Анкеты, ссылающиеся на прежний вариант,
+        обязаны сохраняться дальше — но и правило по ним не должно отваливаться
+        молча. Без этого случая флип `include_retired` на `False` не роняет
+        ничего.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        none_option = next(option for option in options if option.code == "freq_none")
+        none_option.retired = True
+        await session.flush()
+
+        # Предпосылка теста: клиент видит ту же подмену. Без этой проверки он
+        # остался бы зелёным и в тот день, когда клиенту дадут свою сессию, —
+        # 422 пришёл бы по обычной ветке, а правило про выведенный вариант
+        # молча перестало бы работать.
+        visible = await client.get(
+            "/api/v1/dictionaries/intake-options?scale=seizure_frequency",
+            headers=auth_headers(parent),
+        )
+        assert visible.status_code == 200, visible.text
+        assert all(item["code"] != "freq_none" for item in visible.json()["items"])
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(none_option.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["details"]["field"] == "last_seizure_on"
+
+    async def test_other_frequencies_do_not_require_the_date(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Остальные варианты дату не требуют.
+
+        Ребёнок с ежедневными приступами и так есть в дневнике, а семья на
+        первом визите даты может не помнить. Требовать её везде значило бы
+        сделать анкету незаполняемой ради правила, которого клиника не давала.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(daily.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
 
 
 class TestDoctorPartOfIntake:

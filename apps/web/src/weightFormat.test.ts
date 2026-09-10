@@ -10,11 +10,20 @@ import { describe, expect, it } from "vitest";
  * двух местах из пяти. Правило, записанное только комментарием, не выполняется
  * даже автором в тот же день — урок `SECURITY_REVIEW`.
  *
- * Проверка идёт по исходникам, а не по экранам: экранов с весом пять, и тест на
- * каждый из них пришлось бы помнить завести — а забытый шестой экран снова
- * покажет сырое число. Здесь забыть нельзя.
+ * **Проверяется каждое чтение `weight_kg`, а не «похоже на показ».** Первая
+ * версия искала рядом вызов `t(` и потому зависела от расстояния между словами:
+ * подпись, добавленная рядом с точкой графика, зажгла бы её ложно, а число,
+ * выведенное прямо в разметке (`{weight.weight_kg} кг`), она пропускала. Теперь
+ * правило простое: либо `formatWeight(`, либо явная пометка `weight:raw` с
+ * объяснением, зачем сырое число здесь уместно.
+ *
+ * Пометка — не лазейка: её видно в ревью, и она заставляет назвать причину.
+ * Молчаливого способа вывести сырой вес не осталось.
  */
 const SRC = __dirname;
+
+/** Пометка «здесь сырое число намеренно» — ставится в той же или соседней строке. */
+const RAW_MARKER = "weight:raw";
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -24,70 +33,51 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-/**
- * Окно перед `weight_kg`, в котором ищется признак подстановки в текст.
- *
- * Ста двадцати знаков хватает и на однострочный `t("…", { value: … })`, и на
- * многострочный, где ключ стоит строкой выше. Число, уходящее в ГРАФИК
- * (`value: log.weight_kg` рядом с `new Date(...)`), в окно с `t(` не попадает —
- * и правильно: там формат ни при чём, точка на оси форматируется осью.
- */
-const WRAPPER_NEAR = 60;
-const TRANSLATION_NEAR = 200;
-const TRANSLATION = /\bt\(/;
+/** Строки файла, где `weight_kg` читается без обёртки и без пометки. */
+export function rawWeightUsages(source: string): number[] {
+  const lines = source.split("\n");
+  const found: number[] = [];
 
-function rawWeightUsages(source: string): number[] {
-  const lines: number[] = [];
-  for (const match of source.matchAll(/\bweight_kg\b/g)) {
-    const at = match.index ?? 0;
-    // Два окна, каждое под свою задачу. Обёртка стоит вплотную
-    // (`formatWeight(entry.` — девятнадцать знаков), и узкое окно не зависит от
-    // того, как перенесёт строки prettier. Ключ словаря бывает и абзацем выше,
-    // поэтому его окно шире.
-    const wrapped = source
-      .slice(Math.max(0, at - WRAPPER_NEAR), at)
-      .includes("formatWeight(");
-    const translated = TRANSLATION.test(
-      source.slice(Math.max(0, at - TRANSLATION_NEAR), at),
-    );
-    if (translated && !wrapped) {
-      lines.push(source.slice(0, at).split("\n").length);
-    }
-  }
-  return lines;
+  lines.forEach((line, index) => {
+    if (!/\bweight_kg\b/.test(line)) return;
+    // Объявление типа или поля схемы — не показ.
+    if (/weight_kg\s*[?:]\s*(number|string|z\.)/.test(line)) return;
+    if (line.includes("formatWeight(")) return;
+
+    const nearby = lines.slice(Math.max(0, index - 2), index + 1).join("\n");
+    if (nearby.includes(RAW_MARKER)) return;
+
+    found.push(index + 1);
+  });
+
+  return found;
 }
 
 describe("вес показывается одним форматом", () => {
-  it("ни один экран не подставляет сырое weight_kg в текст", () => {
-    const offenders = sourceFiles(SRC).flatMap((path) => {
-      const source = readFileSync(path, "utf8");
-      return rawWeightUsages(source).map(
+  it("ни одно место не читает weight_kg без обёртки и без пометки", () => {
+    const offenders = sourceFiles(SRC).flatMap((path) =>
+      rawWeightUsages(readFileSync(path, "utf8")).map(
         (line) => `${relative(SRC, path)}:${line}`,
-      );
-    });
+      ),
+    );
 
     expect(offenders).toEqual([]);
   });
 
-  it("проверка ловит сырое и пропускает обёрнутое", () => {
-    // Без этого случая регулярка могла бы не совпадать ни с чем, и тест был бы
+  it("ловит сырое, пропускает обёрнутое и помеченное", () => {
+    // Без этого случая правило могло бы не совпадать ни с чем, и тест был бы
     // зелёным всегда.
+    expect(rawWeightUsages("value: entry.weight_kg,")).toEqual([1]);
+    expect(rawWeightUsages("<span>{weight.weight_kg} кг</span>")).toEqual([1]);
+    expect(rawWeightUsages("value: formatWeight(entry.weight_kg),")).toEqual(
+      [],
+    );
     expect(
-      rawWeightUsages('t("weight.value", { value: entry.weight_kg })'),
-    ).toEqual([1]);
-    expect(
-      rawWeightUsages(
-        't("weight.value", { value: formatWeight(entry.weight_kg) })',
-      ),
+      rawWeightUsages("// weight:raw — точка графика\nvalue: log.weight_kg,"),
     ).toEqual([]);
   });
 
-  it("не считает нарушением число, уходящее в график", () => {
-    // Точку на оси форматирует ось, а не словарь.
-    expect(
-      rawWeightUsages(
-        "return [{ at: new Date(log.occurred_at), value: log.weight_kg }];",
-      ),
-    ).toEqual([]);
+  it("не считает показом объявление типа", () => {
+    expect(rawWeightUsages("  weight_kg: number;")).toEqual([]);
   });
 });

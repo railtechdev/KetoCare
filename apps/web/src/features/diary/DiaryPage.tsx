@@ -219,6 +219,7 @@ function DiaryTab({
           return [{ at: new Date(log.occurred_at), value: log.value }];
         }
         if (log.kind === "weight") {
+          // weight:raw — точка графика: подпись оси форматирует сама ось.
           return [{ at: new Date(log.occurred_at), value: log.weight_kg }];
         }
         return [];
