@@ -8,10 +8,12 @@ import pytest
 from sqlalchemy import func, select
 
 from api.services import intake as intake_service
+from core.clock import local_today
 from core.models import PatientIntake
 from core.models.enums import IntakeScale, UserRole
 from core.repositories import intake as intake_repo
 from core.repositories import patients as patients_repo
+from core.repositories import prescriptions as prescriptions_repo
 
 pytestmark = pytest.mark.asyncio
 
@@ -26,6 +28,23 @@ async def _parent_with_child(session, make_user, make_patient):
 async def _option_id(session, scale: IntakeScale, index: int = 0):
     options = await intake_repo.list_options(session, scale=scale)
     return str(options[index].id)
+
+
+async def _start_therapy(session, make_user, *, patient, started_on: date):
+    """Заводит первое назначение — им и определяется начало кетодиетотерапии."""
+
+    doctor = await make_user(UserRole.DOCTOR)
+    return await prescriptions_repo.create(
+        session,
+        patient_id=patient.id,
+        ratio=3.0,
+        kcal_per_day=1200,
+        protein_g=30.0,
+        carbs_limit_g=10.0,
+        meals_per_day=4,
+        author_id=doctor.id,
+        effective_from=started_on,
+    )
 
 
 class TestIntakeDictionaries:
@@ -432,6 +451,120 @@ class TestPatientIntake:
             url, json={"seizure_frequency_id": str(daily.id)}, headers=auth_headers(parent)
         )
         assert answered.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
+    async def test_answer_given_on_therapy_does_not_become_the_baseline(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Частота, названная УЖЕ на диете, исходной не становится.
+
+        Клиника сказала «перед началом кетогенной диеты» (ответ 19), а «первый
+        непустой ответ» — не то же самое. Семья, впервые ответившая про частоту
+        через полгода терапии, получила бы сегодняшний уровень как исходный —
+        навсегда и молча, и снижение относительно него было бы нулевым при любом
+        улучшении. Пустое значит «исходный уровень неизвестен».
+
+        Началом считается самое раннее назначение: до него кетодиеты нет.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        await _start_therapy(session, make_user, patient=patient, started_on=date(2026, 3, 1))
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        rarer = next(option for option in options if option.code == "freq_rarer")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(rarer.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        # Текущая записана — это правдивый сегодняшний ответ.
+        assert response.json()["seizure_frequency_id"] == str(rarer.id)
+        # А исходной у этого ребёнка нет и взяться ей неоткуда (вопрос 49).
+        assert response.json()["baseline_seizure_frequency_id"] is None
+
+    async def test_prescription_written_in_advance_does_not_close_the_window(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Назначение, выписанное заранее, — это ещё не начатая терапия.
+
+        Врач говорит «диету начинаем с двадцатого» и записывает назначение
+        сегодня. Считай мы началом сам факт назначения, ответ семьи, данный до
+        двадцатого, исходным бы не стал — и не стал бы уже никогда: правило «до
+        начала» второй раз не срабатывает. Начало — это `effective_from`.
+
+        Тот же провал давало бы ошибочно заведённое и тут же перекрытое
+        назначение: таблица append-only, самая ранняя строка не исчезает.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        await _start_therapy(
+            session, make_user, patient=patient, started_on=local_today() + timedelta(days=10)
+        )
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(daily.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
+    async def test_therapy_started_today_already_closes_the_window(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Обратная сторона: день начала — это уже терапия, а не «до».
+
+        Без этого случая проверку выше можно было бы пройти, вовсе выбросив
+        сравнение дат: тогда исходной становилась бы любая частота, названная
+        при живом назначении.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        await _start_therapy(session, make_user, patient=patient, started_on=local_today())
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(daily.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["baseline_seizure_frequency_id"] is None
+
+    async def test_baseline_survives_clearing_the_current_frequency(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Стёртый сегодняшний ответ не стирает точку отсчёта.
+
+        Анкета сохраняется целиком, и не отмеченная в форме частота приходит
+        как `null`. Записать этот `null` в исходную значило бы потерять её от
+        одной неполной отправки — а восстановить будет нечем: терапия уже идёт,
+        и правило «до начала» второй раз не сработает.
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        url = f"/api/v1/patients/{patient.id}/intake"
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        daily = next(option for option in options if option.code == "freq_daily")
+
+        first = await client.put(
+            url, json={"seizure_frequency_id": str(daily.id)}, headers=auth_headers(parent)
+        )
+        assert first.json()["baseline_seizure_frequency_id"] == str(daily.id)
+
+        cleared = await client.put(
+            url, json={"developmental_delay": True}, headers=auth_headers(parent)
+        )
+
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json()["seizure_frequency_id"] is None
+        assert cleared.json()["baseline_seizure_frequency_id"] == str(daily.id)
 
     async def test_today_is_local_not_the_process_date(
         self, client, session, make_user, make_patient, auth_headers, monkeypatch

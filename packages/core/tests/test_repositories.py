@@ -97,6 +97,48 @@ class TestPrescriptionsAppendOnly:
         exposed = {name for name in dir(prescriptions) if not name.startswith("_")}
         assert not (forbidden & exposed), f"prescriptions не должен иметь: {forbidden & exposed}"
 
+    async def test_started_on_is_the_earliest_not_the_active(self, session):
+        """Начало терапии — САМОЕ РАННЕЕ назначение, а не действующее.
+
+        Назначение меняют по ходу лечения, и «когда началось» — это первая
+        строка, а не последняя. Ошибиться легко ровно потому, что рядом лежит
+        `get_active`, устроенный наоборот; путаница здесь стоит дорого: по этой
+        дате решается, считать ли ответ семьи о частоте приступов исходным
+        уровнем, с которым сравнивают эффект кетотерапии.
+
+        Строки заводятся в обратном порядке дат намеренно: при сортировке по
+        `created_at` (как у активного) тест вернул бы позднюю дату.
+        """
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+
+        for effective_from in (date(2026, 6, 1), date(2026, 2, 1), date(2026, 9, 1)):
+            await prescriptions.create(
+                session,
+                patient_id=patient.id,
+                ratio=4.0,
+                kcal_per_day=1200,
+                protein_g=25.0,
+                carbs_limit_g=10.0,
+                meals_per_day=3,
+                author_id=doctor.id,
+                effective_from=effective_from,
+            )
+
+        assert await prescriptions.started_on(session, patient_id=patient.id) == date(2026, 2, 1)
+
+    async def test_started_on_is_none_without_prescriptions(self, session):
+        """Назначений нет — терапия не начиналась, и это НЕ «началась давно».
+
+        Пустое значение здесь означает «ещё до диеты», и подмена его любой датой
+        закрыла бы окно, в котором записывается исходная частота приступов.
+        """
+
+        patient = await _make_patient(session)
+
+        assert await prescriptions.started_on(session, patient_id=patient.id) is None
+
 
 class TestPatientAccess:
     """Правило 5 CLAUDE.md: доступ проверяется на сервере; админ к клинике доступа не имеет."""

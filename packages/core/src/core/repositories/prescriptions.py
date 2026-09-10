@@ -60,6 +60,26 @@ async def get_active(session: AsyncSession, *, patient_id: uuid.UUID) -> Prescri
     return result
 
 
+async def started_on(session: AsyncSession, *, patient_id: uuid.UUID) -> date | None:
+    """Дата начала терапии — `effective_from` самого раннего назначения.
+
+    `None` — назначений нет вовсе, то есть кетодиетотерапия ещё не начиналась.
+
+    Берётся самое раннее, а не активное: назначение меняют по ходу лечения, и
+    «когда началось» — это первая строка, а не последняя. Таблица append-only
+    (правило 4), поэтому первая строка никуда не денется.
+    """
+
+    stmt = (
+        select(Prescription.effective_from)
+        .where(Prescription.patient_id == patient_id)
+        .order_by(Prescription.effective_from, Prescription.created_at)
+        .limit(1)
+    )
+    result: date | None = await session.scalar(stmt)
+    return result
+
+
 async def list_history(
     session: AsyncSession, *, patient_id: uuid.UUID, limit: int = 50, offset: int = 0
 ) -> tuple[list[Prescription], int]:
