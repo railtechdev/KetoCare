@@ -211,6 +211,25 @@ describe("исходная частота приступов", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("остаётся, когда семья стёрла текущую частоту", async () => {
+    // Анкета сохраняется целиком, и неотмеченное в форме поле приходит как
+    // `null`. Точку отсчёта сервер при этом бережёт (`upsert` пишет её один
+    // раз) — а экран гейтил строку по ТЕКУЩЕЙ частоте и прятал исходную
+    // вместе с ней. Врач читал «данных нет» про ребёнка, у которого точка
+    // отсчёта есть.
+    mockGet({
+      ...INTAKE,
+      seizure_frequency_id: null,
+      baseline_seizure_frequency_id: DAILY_FREQ,
+    });
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    expect(
+      await screen.findByText(intakeRu.fields.baselineFrequency),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Ежедневно")).toBeInTheDocument();
+  });
+
   it("не заводит строку, пока про частоту не отвечали вовсе", async () => {
     // Незаданный вопрос — это «Не отвечено» у самой частоты, и второй строкой
     // про точку отсчёта его повторять незачем.

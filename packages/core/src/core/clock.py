@@ -21,13 +21,25 @@ from zoneinfo import ZoneInfo
 from .config import get_settings
 
 
-def local_tz() -> ZoneInfo:
-    """Часовой пояс установки."""
-
-    return ZoneInfo(get_settings().tz)
-
-
 def local_today() -> date:
     """Сегодняшняя дата в часовом поясе установки."""
 
-    return datetime.now(local_tz()).date()
+    return datetime.now(ZoneInfo(get_settings().tz)).date()
+
+
+def asyncpg_connect_args() -> dict[str, dict[str, str]]:
+    """Пояс соединения для asyncpg — тот же, по которому считает приложение.
+
+    Нужен миграциям (`migrations/env.py`): Postgres в контейнере работает в UTC
+    (`TZ` ему никто не задаёт), а data-миграции сравнивают момент записи с
+    календарной датой клиники (`effective_from`, `menus.date`). Без пояса
+    `timestamptz::date` даёт вчерашнюю дату для всего, что записано до пяти утра,
+    и заметить это по результату нельзя.
+
+    Задаётся при ПОДКЛЮЧЕНИИ, а не отдельным `SET` по соединению: первый же
+    запрос открыл бы неявную транзакцию, `context.begin_transaction()`
+    присоединился бы к ней вложенным блоком — и ничего не коммитилось бы, при
+    том что журнал печатал бы все ревизии как успешные.
+    """
+
+    return {"server_settings": {"timezone": get_settings().tz}}
