@@ -29,6 +29,7 @@ function overview(patch: Partial<PatientOverview> = {}): PatientOverview {
     last_ketone: null,
     last_weight: null,
     seizures_today: { entries: 0, count: 0 },
+    seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
     ...patch,
   };
 }
@@ -245,6 +246,8 @@ describe("attentionRank", () => {
         daysSinceLastReading: 5,
         staleData: true,
         nutritionOff: false,
+        seizuresGrew: false,
+        seizuresAppeared: false,
       }),
     ).toBeGreaterThan(
       attentionRank({
@@ -252,11 +255,94 @@ describe("attentionRank", () => {
         daysSinceLastReading: 0,
         staleData: false,
         nutritionOff: true,
+        seizuresGrew: false,
+        seizuresAppeared: false,
       }),
     );
   });
 
   it("строка без сводки не поднимается наверх", () => {
     expect(attentionRank(null)).toBe(0);
+  });
+});
+
+/**
+ * Приступов стало больше — врач видит это в списке пациентов.
+ *
+ * Вердикт считает сервер: порог «более 50 %» — медицинское правило (ответ
+ * клиники 09.09.2026, вопрос 12), и его копия здесь однажды разошлась бы с
+ * расчётом. Задача этого модуля — только показать вердикт и взвесить его в
+ * порядке внимания.
+ */
+describe("флаг роста приступов", () => {
+  it("поднимается по вердикту сервера, а не по числам", () => {
+    // Числа в сводке есть, но считать по ним «больше ли на 50 %» здесь нельзя:
+    // это второй источник медицинского правила.
+    const flags = computePatientFlags(
+      overview({
+        seizure_trend: { recent: 7, previous: 4, grew: true, appeared: false },
+      }),
+    );
+
+    expect(flags?.seizuresGrew).toBe(true);
+    expect(flags?.seizuresAppeared).toBe(false);
+  });
+
+  it("не поднимается, когда сервер сказал «нет»", () => {
+    const flags = computePatientFlags(
+      overview({
+        seizure_trend: { recent: 6, previous: 4, grew: false, appeared: false },
+      }),
+    );
+
+    expect(flags?.seizuresGrew).toBe(false);
+  });
+
+  it("возобновление — отдельный флаг, а не рост", () => {
+    // Предыдущая неделя без приступов: процент не считается, сравнивать не с
+    // чем. Свести это к «стало больше» значило бы выдумать величину.
+    const flags = computePatientFlags(
+      overview({
+        seizure_trend: { recent: 3, previous: 0, grew: null, appeared: true },
+      }),
+    );
+
+    expect(flags?.seizuresGrew).toBe(false);
+    expect(flags?.seizuresAppeared).toBe(true);
+  });
+
+  it("две спокойные недели не поднимают ничего", () => {
+    const flags = computePatientFlags(
+      overview({
+        seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
+      }),
+    );
+
+    expect(flags?.seizuresGrew).toBe(false);
+    expect(flags?.seizuresAppeared).toBe(false);
+  });
+
+  it("стоит в порядке внимания выше молчания семьи", () => {
+    // Ухудшение течения болезни важнее отсутствия записей: врач, открывший
+    // список, должен увидеть такого ребёнка раньше.
+    //
+    // У «выросшего» стоит сегодняшний замер — иначе он молчащий ТОЖЕ, и
+    // сравнивались бы 5 против 2, а не 3 против 2: проверка прошла бы при любом
+    // весе роста, вплоть до единицы.
+    const grew = computePatientFlags(
+      overview({
+        last_ketone: {
+          value: 3.1,
+          method: "blood",
+          occurred_at: "2026-08-28T09:00:00Z",
+        } as unknown as PatientOverview["last_ketone"],
+        seizure_trend: { recent: 7, previous: 4, grew: true, appeared: false },
+      }),
+    );
+    const silent = computePatientFlags(overview({ date: "2026-08-28" }));
+
+    expect(grew?.staleData).toBe(false);
+    expect(silent?.staleData).toBe(true);
+    expect(attentionRank(grew)).toBeGreaterThan(attentionRank(silent));
   });
 });
