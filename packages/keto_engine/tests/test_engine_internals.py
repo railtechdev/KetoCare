@@ -321,6 +321,61 @@ class TestNetCarbsRatio:
         assert dish.net_carbs_g == pytest.approx(0.0)
         assert dish.ratio == pytest.approx(10.0 / 1.0)
 
+    def test_fibre_is_subtracted_per_product_not_per_dish(self) -> None:
+        """Зажим стоит у КАЖДОГО продукта, а не у итога блюда.
+
+        Случай смешанный намеренно: на блюде из одного продукта оба способа
+        совпадают, и прежний тест не отличал их. Здесь у первого продукта
+        клетчатки больше углеводов (−4 г), у второго — меньше (+4 г).
+
+        По продуктам: 0 + 4 = 4 г чистых, соотношение 10 / (1 + 4) = 2.
+        По блюду целиком: 7.6 − 7.6 = 0 г, соотношение 10 / 1 = 10.
+
+        Разница впятеро. Зажим у итога позволил бы клетчатке одного продукта
+        гасить углеводы другого — то есть соотношение блюда стало бы зависеть
+        от того, чем его дополнили.
+        """
+        odd = Ingredient(product_id="odd", kcal=0, fat=10.0, protein=1.0, carbs=1.0, fiber=5.0)
+        veg = Ingredient(product_id="veg", kcal=34, fat=0.0, protein=0.0, carbs=6.6, fiber=2.6)
+
+        dish = verify([(odd, 100.0), (veg, 100.0)])
+
+        assert dish.carbs_g == pytest.approx(7.6)
+        assert dish.fiber_g == pytest.approx(7.6)
+        # Зажим по блюду дал бы здесь ноль — и соотношение 10.0.
+        assert dish.net_carbs_g == pytest.approx(4.0)
+        assert dish.ratio == pytest.approx(10.0 / 5.0)
+
+    def test_solver_clamps_fibre_per_product_too(self) -> None:
+        """Тот же зажим стоит и в решателе — иначе он промахивается мимо цели.
+
+        `odd` — продукт, у которого клетчатки больше углеводов. Без зажима его
+        вклад в знаменатель ОТРИЦАТЕЛЕН, и решатель считает, что этот продукт
+        гасит углеводы соседей. Он строит равенство на знаменателе, которого у
+        готового блюда нет, и добирает овоща сверх нужного.
+
+        Границы держат `odd` в составе принудительно: без них решатель обходится
+        маслом, оба правила дают один ответ, и случай ничего не различает —
+        именно так первая версия этого теста и прошла на мутанте.
+
+        Мера расхождения: с зажимом подбор даёт ровно 3,0; без него — 2,39 и
+        вердикт «не в допуске» на им же подобранном составе.
+        """
+        oil = Ingredient(product_id="oil", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        odd = Ingredient(product_id="odd", kcal=50, fat=1.0, protein=1.0, carbs=1.0, fiber=5.0)
+        veg = Ingredient(product_id="veg", kcal=34, fat=0.4, protein=2.8, carbs=6.6, fiber=2.6)
+
+        result = solve(
+            [oil, odd, veg],
+            Targets(ratio=3.0, kcal=400, per_ingredient_bounds={"odd": (100.0, 100.0)}),
+        )
+
+        assert result.dish.ratio == pytest.approx(3.0, abs=RATIO_TOLERANCE)
+        assert result.ratio_within_tolerance is True
+        # Клетчатка `odd` не ушла в минус: его вклад в чистые углеводы — ноль,
+        # и все 6,6 г знаменателя пришли от овоща.
+        assert result.dish.net_carbs_g == pytest.approx(6.6, abs=0.05)
+
     def test_carbs_limit_counts_all_carbs(self) -> None:
         """Лимит углеводов остаётся по общим — это ответ на вопрос 3.
 

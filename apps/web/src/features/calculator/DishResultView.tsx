@@ -114,6 +114,7 @@ export function DishResultView({
         netCarbs={{
           grams: dish.net_carbs_g,
           label: t("netCarbs"),
+          note: t("netCarbsNote"),
         }}
       />
 

@@ -1,0 +1,47 @@
+{
+  "_comment": "Числа демонстрационного калькулятора лендинга. Файл читают ДВОЕ: keto.ts на сборке страницы и packages/keto_engine/tests/test_public_demo_matches_engine.py — тот прогоняет их через настоящее ядро и требует, чтобы граммовки по умолчанию попадали в цель по сегодняшнему правилу расчёта. Пока числа лежали только в TypeScript, лендинг пережил смену правила молча и показывал «в допуске» там, где продукт говорил «выше назначения».",
+  "_source": "USDA FoodData Central, те же значения, что в infra/scripts/seed_demo.py",
+  "target_ratio": 3.5,
+  "ingredients": [
+    {
+      "id": "egg",
+      "fat": 10.6,
+      "protein": 12.6,
+      "carbs": 1.1,
+      "fiber": 0,
+      "kcal": 155,
+      "max": 110,
+      "initial": 40
+    },
+    {
+      "id": "cream",
+      "fat": 33.0,
+      "protein": 2.5,
+      "carbs": 3.6,
+      "fiber": 0,
+      "kcal": 337,
+      "max": 90,
+      "initial": 35
+    },
+    {
+      "id": "butter",
+      "fat": 81.1,
+      "protein": 0.9,
+      "carbs": 0.1,
+      "fiber": 0,
+      "kcal": 717,
+      "max": 60,
+      "initial": 22
+    },
+    {
+      "id": "broccoli",
+      "fat": 0.4,
+      "protein": 2.8,
+      "carbs": 6.6,
+      "fiber": 2.6,
+      "kcal": 34,
+      "max": 90,
+      "initial": 25
+    }
+  ]
+}

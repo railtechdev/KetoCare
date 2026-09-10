@@ -616,3 +616,106 @@ class TestLeavingMainInTheSameCommand:
             check_command('git checkout README.md && git commit -m "в main"', cwd=repo_with_branch)
             == BLOCK
         )
+
+
+class TestEngineCommentsAreNotMath:
+    """Страж ядра требует bump за правку программы, но не за правку пояснений.
+
+    Semver описывает поведение. Пока страж не различал этих правок, у
+    устаревшего docstring'а в расчётном ядре было два исхода: соврать
+    patch-версией или остаться неправдой рядом с формулой. Случай не выдуманный
+    — ADR-0030 оставил такой docstring у `max_non_fat_grams`.
+
+    Проверка умеет только СНИМАТЬ требование, поэтому здесь важнее обратная
+    сторона: любая правка программы обязана остаться замеченной.
+    """
+
+    @staticmethod
+    def _repo(tmp_path: Path, before: str) -> Path:
+        repo = tmp_path / "engine"
+        repo.mkdir()
+        run = lambda *args: subprocess.run(  # noqa: E731
+            args, cwd=repo, check=True, capture_output=True
+        )
+        run("git", "init", "-b", "main")
+        run("git", "config", "user.email", "t@example.com")
+        run("git", "config", "user.name", "t")
+        (repo / "engine.py").write_text(before, encoding="utf-8")
+        run("git", "add", "engine.py")
+        run("git", "commit", "-m", "init")
+        return repo
+
+    @staticmethod
+    def _changed(repo: Path, after: str) -> str:
+        (repo / "engine.py").write_text(after, encoding="utf-8")
+        script = Path(__file__).resolve().parents[1] / "engine_code_changed.py"
+        done = subprocess.run(
+            [sys.executable, str(script), "engine.py"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return done.stdout.strip()
+
+    BEFORE = '''def ratio(fat, protein, carbs, fiber):
+    """Соотношение по общим углеводам."""
+    # старое правило
+    return fat / (protein + carbs)
+'''
+
+    def test_docstring_and_comment_only_edit_needs_no_bump(self, tmp_path: Path) -> None:
+        after = '''def ratio(fat, protein, carbs, fiber):
+    """Соотношение по ЧИСТЫМ углеводам (ADR-0030).
+
+    Пояснение переписано целиком, программа не тронута.
+    """
+    # новое правило описано выше
+    return fat / (protein + carbs)
+'''
+        assert self._changed(self._repo(tmp_path, self.BEFORE), after) == ""
+
+    def test_formula_edit_is_still_caught(self, tmp_path: Path) -> None:
+        after = self.BEFORE.replace("(protein + carbs)", "(protein + carbs - fiber)")
+        assert self._changed(self._repo(tmp_path, self.BEFORE), after) == "engine.py"
+
+    def test_edit_hidden_behind_a_comment_is_still_caught(self, tmp_path: Path) -> None:
+        """Правка программы вместе с комментарием — всё равно правка программы."""
+
+        after = '''def ratio(fat, protein, carbs, fiber):
+    """Соотношение по чистым углеводам."""
+    # текст переписан, и формула тоже
+    return fat / (protein + max(carbs - fiber, 0))
+'''
+        assert self._changed(self._repo(tmp_path, self.BEFORE), after) == "engine.py"
+
+    def test_changed_string_value_is_not_a_comment(self, tmp_path: Path) -> None:
+        """Строка-значение — часть программы: сообщение об ошибке видит человек."""
+
+        before = '''def check(x):
+    if x < 0:
+        raise ValueError("нельзя")
+    return x
+'''
+        after = before.replace('"нельзя"', '"нельзя: значение отрицательное"')
+        assert self._changed(self._repo(tmp_path, before), after) == "engine.py"
+
+    def test_unparseable_file_counts_as_changed(self, tmp_path: Path) -> None:
+        """Разобрать не удалось — считаем, что программа изменилась."""
+
+        assert self._changed(self._repo(tmp_path, self.BEFORE), "def broken(:\n") == "engine.py"
+
+    def test_new_file_counts_as_changed(self, tmp_path: Path) -> None:
+        """Файла нет в git — сравнивать не с чем, требование остаётся."""
+
+        repo = self._repo(tmp_path, self.BEFORE)
+        (repo / "fresh.py").write_text("X = 1\n", encoding="utf-8")
+        script = Path(__file__).resolve().parents[1] / "engine_code_changed.py"
+        done = subprocess.run(
+            [sys.executable, str(script), "fresh.py"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert done.stdout.strip() == "fresh.py"

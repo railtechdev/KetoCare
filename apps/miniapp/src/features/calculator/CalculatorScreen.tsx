@@ -436,6 +436,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
               netCarbs={{
                 grams: dish.net_carbs_g,
                 label: t("calculator.netCarbs"),
+                note: t("calculator.netCarbsNote"),
               }}
             />
           </div>

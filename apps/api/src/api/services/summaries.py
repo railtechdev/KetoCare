@@ -38,6 +38,7 @@ from core.models.enums import KetoneMethod
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import reports as reports_repo
 
+from .engine_version import comparable_to_current
 from .reports import period_bounds
 
 #: Сколько самых длинных пропусков перечислять. Больше — это уже ряд, а не замечание.
@@ -315,11 +316,17 @@ def _menu(
     Калорийность сравнивается со СУТОЧНОЙ нормой, а день мог быть спланирован не
     до конца — из-за этого отклонение систематически уходит в минус (открытый
     вопрос 9). Поэтому число называется отклонением плана, а не недобором.
+
+    В среднее по соотношению идут только дни, посчитанные ядром ТЕКУЩЕЙ основной
+    версии. Остальные считаются отдельно (`days_other_engine`): их соотношение
+    получено по прежнему правилу, и среднее по обоим правилам не описывало бы
+    ничего.
     """
 
     ratio_deviations: list[float] = []
     kcal_deviations: list[float] = []
     versions: set[str] = set()
+    days_other_engine = 0
 
     for day in menu_days:
         prescription = _active_prescription(history, day.date)
@@ -329,8 +336,17 @@ def _menu(
             versions.add(day.engine_version)
         ratio = day.totals.get("ratio")
         kcal = day.totals.get("kcal")
-        if ratio is not None:
+        # Соотношение дня прежней ОСНОВНОЙ версии в среднее не идёт: с 1.0.0 оно
+        # считается по чистым углеводам (ADR-0030), и усреднить его со
+        # сегодняшним значит выдать модели, а через неё врачу, число, которого
+        # не существует. То же решение и по той же причине принял `/overview`,
+        # когда перестал выносить таким дням вердикт.
+        #
+        # Калорийности это не касается: килокалории считаются как считались.
+        if ratio is not None and comparable_to_current(day.engine_version):
             ratio_deviations.append(float(ratio) - float(prescription.ratio))
+        elif ratio is not None:
+            days_other_engine += 1
         if kcal is not None and prescription.kcal_per_day:
             kcal_deviations.append(
                 (float(kcal) - float(prescription.kcal_per_day))
@@ -344,6 +360,10 @@ def _menu(
         "items_planned": adherence.items_planned,
         "items_eaten": adherence.items_eaten,
         "days_compared": len(ratio_deviations),
+        # Дни, посчитанные ядром другой основной версии: в среднее по
+        # соотношению они не вошли. Число названо явно, иначе «сравнено 3 дня из
+        # 14» выглядело бы пропажей записей, а не сменой правила расчёта.
+        "days_other_engine": days_other_engine,
         "ratio_mean_deviation": _mean(ratio_deviations),
         "kcal_mean_deviation_pct": _round(_mean(kcal_deviations) or 0.0, 1)
         if kcal_deviations

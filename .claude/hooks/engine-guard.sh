@@ -32,8 +32,20 @@ fi
 # 2. Изменение математики требует поднятия ENGINE_VERSION (semver).
 #    Сравниваем с состоянием в git: правка ядра без bump'а версии оставит
 #    сохранённые computed-значения помеченными старой версией движка.
+#
+#    Правка ОДНИХ ПОЯСНЕНИЙ версии не требует: semver описывает поведение, а
+#    комментарий его не меняет. Раньше страж этого не различал и на устаревший
+#    docstring предлагал либо соврать patch-версией, либо оставить в расчётном
+#    ядре текст, спорящий с кодом. Что считать поясняющей правкой, решает
+#    engine_code_changed.py — сравнением синтаксических деревьев; он умеет
+#    только снимать требование и при любом сомнении отвечает «изменилось».
 VERSION_FILE="packages/keto_engine/src/keto_engine/constants.py"
-SRC_CHANGED=$(git diff --name-only -- packages/keto_engine/src 2>/dev/null | grep -v "$VERSION_FILE" || true)
+TOUCHED=$(git diff --name-only -- packages/keto_engine/src 2>/dev/null | grep -v "$VERSION_FILE" || true)
+SRC_CHANGED=""
+if [ -n "$TOUCHED" ]; then
+  # shellcheck disable=SC2086
+  SRC_CHANGED=$(python3 "$ROOT/.claude/hooks/engine_code_changed.py" $TOUCHED 2>/dev/null || echo "$TOUCHED")
+fi
 VERSION_CHANGED=$(git diff -- "$VERSION_FILE" 2>/dev/null | grep -c '^[+-]ENGINE_VERSION' || true)
 
 if [ -n "$SRC_CHANGED" ] && [ "${VERSION_CHANGED:-0}" -eq 0 ]; then

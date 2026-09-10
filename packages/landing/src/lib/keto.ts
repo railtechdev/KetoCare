@@ -6,15 +6,26 @@
  * медицинской команды. Здесь — иллюстрация формулы на четырёх продуктах,
  * и клинических решений по ней принимать нельзя.
  *
- * Формула кетосоотношения совпадает с ядром: R = F / (P + C).
+ * Формула кетосоотношения совпадает с ядром: R = F / (P + Cnet), где Cnet —
+ * углеводы за вычетом клетчатки, по каждому продукту и не в минус (ADR-0030).
  * TARGET_RATIO и TOLERANCE держатся в согласии с `keto_engine/constants.py`
  * (`RATIO_TOLERANCE = 0.15`, помечена там как ожидающая подтверждения
  * медицинской командой). Меняется там — меняется и здесь.
+ *
+ * Обещание «меняется там — меняется и здесь» однажды не сработало: ядро
+ * перешло на чистые углеводы, а страница осталась на общих и на тех же
+ * граммовках показывала 3,54 и «в допуске» там, где продукт давал 3,78 и
+ * «выше назначения». Публичная страница про клинический расчёт спорила с самим
+ * расчётом. Отсюда `landingMatchesEngine.test.ts`: он сверяет обе формулы на
+ * одном наборе чисел, и следующее расхождение упадёт тестом, а не выйдет в
+ * интернет.
  *
  * Одни и те же функции считают и на сборке (значения по умолчанию попадают
  * в HTML), и в браузере при движении ползунков. Поэтому страница без
  * JavaScript показывает корректный расчёт, а не пустые прочерки.
  */
+
+import demo from "./demo-dish.json";
 
 export interface Ingredient {
   /** Граммы жиров, белков, углеводов и ккал на 100 г. Источник — USDA
@@ -22,6 +33,8 @@ export interface Ingredient {
   fat: number;
   protein: number;
   carbs: number;
+  /** Клетчатка на 100 г: входит в `carbs`, но не в знаменатель соотношения. */
+  fiber: number;
   kcal: number;
   /** Верхняя граница ползунка, г. */
   max: number;
@@ -31,24 +44,25 @@ export interface Ingredient {
 
 /*
  * Граммовки по умолчанию подобраны так, чтобы блюдо СРАЗУ попадало в
- * назначение: 3,54 : 1 при 368 ккал. Раздел называется «Соберите завтрак под
+ * назначение: 3,54 : 1 при 346 ккал. Раздел называется «Соберите завтрак под
  * назначение 3,5 : 1», и открывать его красной надписью «ниже назначения»
  * — значит показывать посетителю поломку вместо примера.
+ *
+ * Масло уменьшено с 25 до 22 г вместе с переходом на чистые углеводы: клетчатка
+ * брокколи вышла из знаменателя, соотношение на прежних граммовках поднялось до
+ * 3,78 — за допуск.
  */
-export const INGREDIENTS: Ingredient[] = [
-  { fat: 10.6, protein: 12.6, carbs: 1.1, kcal: 155, max: 110, initial: 40 },
-  { fat: 33.0, protein: 2.5, carbs: 3.6, kcal: 337, max: 90, initial: 35 },
-  { fat: 81.1, protein: 0.9, carbs: 0.1, kcal: 717, max: 60, initial: 25 },
-  { fat: 0.4, protein: 2.8, carbs: 6.6, kcal: 34, max: 90, initial: 25 },
-];
+export const INGREDIENTS: Ingredient[] = demo.ingredients;
 
-export const TARGET_RATIO = 3.5;
+export const TARGET_RATIO = demo.target_ratio;
 export const TOLERANCE = 0.15;
 
 export interface CalcResult {
   fat: number;
   protein: number;
   carbs: number;
+  /** Углеводы за вычетом клетчатки — по ним считается соотношение. */
+  netCarbs: number;
   kcal: number;
   ratio: number;
   /** Доли для полосы макронутриентов, проценты. */
@@ -62,6 +76,7 @@ export function calculate(grams: number[]): CalcResult {
   let fat = 0;
   let protein = 0;
   let carbs = 0;
+  let netCarbs = 0;
   let kcal = 0;
 
   INGREDIENTS.forEach((ing, i) => {
@@ -69,10 +84,13 @@ export function calculate(grams: number[]): CalcResult {
     fat += (g * ing.fat) / 100;
     protein += (g * ing.protein) / 100;
     carbs += (g * ing.carbs) / 100;
+    // Зажим стоит у КАЖДОГО продукта, как в ядре: клетчатка одного не должна
+    // гасить углеводы другого.
+    netCarbs += Math.max((g * (ing.carbs - ing.fiber)) / 100, 0);
     kcal += (g * ing.kcal) / 100;
   });
 
-  const denominator = protein + carbs;
+  const denominator = protein + netCarbs;
   const ratio = denominator > 0 ? fat / denominator : 0;
   // Защита от деления на ноль, когда все ползунки в нуле.
   const total = Math.max(fat + protein + carbs, 0.001);
@@ -88,6 +106,7 @@ export function calculate(grams: number[]): CalcResult {
     fat,
     protein,
     carbs,
+    netCarbs,
     kcal,
     ratio,
     fatPct: (fat / total) * 100,

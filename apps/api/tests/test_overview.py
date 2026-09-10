@@ -107,7 +107,7 @@ async def _menu(
     patient,
     day: date,
     totals: dict[str, Any] | None,
-    engine_version: str = ENGINE_VERSION,
+    engine_version: str | None = ENGINE_VERSION,
 ) -> Menu:
     menu = Menu(patient_id=patient.id, date=day, totals=totals, engine_version=engine_version)
     session.add(menu)
@@ -306,6 +306,64 @@ class TestOverview:
         # назначения» здесь было бы прямой неправдой семье.
         assert body["day"]["tolerance_gap"] == "engine_changed"
         assert body["prescription"] is not None
+
+    async def test_minor_bump_keeps_the_verdict(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Разошлись только minor и patch — вердикт остаётся.
+
+        Молчание стоит на смене ОСНОВНОЙ версии: она означает, что изменились
+        сами числа. Minor чисел не меняет (0.3.0 → 0.4.0 добавила вклад позиций
+        и не тронула итоги), и снимать по нему вердикт со всех сохранённых дней
+        значило бы наказывать семью за безобидный выпуск.
+
+        Без этого случая сравнение версии целиком проходило бы все тесты.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescription(session, patient=patient, author=parent)
+        major = ENGINE_VERSION.split(".", 1)[0]
+        await _menu(
+            session,
+            patient=patient,
+            day=_local_today(),
+            totals=TOTALS_ON_TARGET,
+            engine_version=f"{major}.99.99",
+        )
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        body = response.json()
+        assert body["day"]["tolerance"] is not None
+        assert body["day"]["tolerance_gap"] is None
+
+    async def test_day_without_engine_version_does_not_claim_a_previous_one(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Версия не записана — так и говорим, а не «посчитан прежней».
+
+        Колонка допускает пустое значение. Сверять с ним нечего, но назвать
+        такой день посчитанным прежней версией — утверждение о том, чего мы не
+        знаем: какой именно версией, неизвестно.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescription(session, patient=patient, author=parent)
+        await _menu(
+            session,
+            patient=patient,
+            day=_local_today(),
+            totals=TOTALS_ON_TARGET,
+            engine_version=None,
+        )
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        body = response.json()
+        assert body["day"]["tolerance"] is None
+        assert body["day"]["tolerance_gap"] == "engine_unknown"
 
     async def test_empty_patient_returns_nulls_not_error(
         self, client, session, make_user, make_patient, auth_headers

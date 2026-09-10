@@ -1,7 +1,7 @@
 import { MacroBar, RatioBadge, WarningBanner } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { dayVerdict } from "../patients/dayVerdict";
+import { dayVerdict, TOLERANCE_GAP_KEY } from "../patients/dayVerdict";
 import { Panel } from "./Panel";
 import type { DaySummary } from "./types";
 
@@ -68,9 +68,9 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
           // Почему вердикта нет — словами сервера. Причин две, и одним текстом
           // на обе кабинет говорил семье «назначения нет» при живом назначении.
           <p className="m-0 text-sm text-muted-foreground">
-            {verdict.unavailableReason === "engine_changed"
-              ? t("day.engineChanged")
-              : t("day.noPrescription")}
+            {t(
+              `day.${TOLERANCE_GAP_KEY[verdict.unavailableReason ?? "no_prescription"]}`,
+            )}
           </p>
         ) : issues.length > 0 ? (
           <WarningBanner level="warning" title={t("day.offTolerance.title")}>

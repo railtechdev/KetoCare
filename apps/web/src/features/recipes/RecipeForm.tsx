@@ -378,6 +378,7 @@ export function RecipeForm({
                 netCarbs={{
                   grams: computed.dish.net_carbs_g,
                   label: t("form.netCarbs"),
+                  note: t("form.netCarbsNote"),
                 }}
               />
               <p className="m-0 text-sm text-muted-foreground">

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { dayVerdict } from "./dayVerdict";
+import doctorRu from "../../locales/ru/doctor.json";
+import homeRu from "../../locales/ru/home.json";
+import menuRu from "../../locales/ru/menu.json";
+import { dayVerdict, TOLERANCE_GAP_KEY } from "./dayVerdict";
 
 describe("dayVerdict", () => {
   it("без вердикта сервера сравнивать не с чем", () => {
@@ -71,5 +74,28 @@ describe("dayVerdict", () => {
       unavailable: false,
       unavailableReason: null,
     });
+  });
+});
+
+/**
+ * Ключ, которого нет в словаре, i18n показывает самим ключом: на экране семьи
+ * вместо объяснения появится строка «day.engineUnknown». Экран при этом не
+ * падает, тест экрана тоже — поэтому полнота проверяется здесь, по списку
+ * причин сервера.
+ */
+describe("словари объясняют каждую причину сервера", () => {
+  const screens: Array<[string, Record<string, unknown>]> = [
+    ["главная семьи", homeRu.day as Record<string, unknown>],
+    [
+      "карта пациента",
+      (doctorRu.summary as { day: Record<string, unknown> }).day,
+    ],
+    ["меню", menuRu.totals as Record<string, unknown>],
+  ];
+
+  it.each(screens)("%s", (_name, dictionary) => {
+    for (const key of Object.values(TOLERANCE_GAP_KEY)) {
+      expect(typeof dictionary[key]).toBe("string");
+    }
   });
 });

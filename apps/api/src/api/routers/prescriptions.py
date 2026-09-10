@@ -72,20 +72,24 @@ async def create_prescription(
     # OPEN_QUESTIONS.md.
     #
     # Проверяется только арифметическая выполнимость: из определения соотношения
-    # F = R·(P+C) и коэффициентов Атуотера следует P+C = kcal/(9R+4). Цель по белку
-    # выше этой величины недостижима ни при каком наборе продуктов — это тождество,
-    # а не медицинское суждение, и назначение с такой опечаткой семья физически не
-    # сможет выполнить.
-    max_protein_and_carbs = max_non_fat_grams(payload.ratio, float(payload.kcal_per_day))
-    if payload.protein_g > max_protein_and_carbs:
+    # F = R·(P + Cnet) и коэффициентов Атуотера следует, что белок ни при каком
+    # наборе продуктов не превысит kcal/(9R+4). Это тождество, а не медицинское
+    # суждение, и назначение с такой опечаткой семья физически не сможет выполнить.
+    #
+    # Говорить в сообщении «на белки и углеводы приходится не более N г» больше
+    # нельзя: с 1.0.0 знаменатель соотношения — ЧИСТЫЕ углеводы (ADR-0030), и
+    # блюдо с клетчаткой спокойно даёт больше N г белка с общими углеводами. Под
+    # предел попадает именно цель по белку, о ней и речь.
+    max_protein = max_non_fat_grams(payload.ratio, float(payload.kcal_per_day))
+    if payload.protein_g > max_protein:
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
             f"При соотношении {payload.ratio:g}:1 и {payload.kcal_per_day} ккал в сутки "
-            f"на белки и углеводы приходится не более {max_protein_and_carbs:.1f} г, "
-            f"а цель по белку — {payload.protein_g:g} г. Проверьте значения.",
+            f"цель по белку не может быть больше {max_protein:.1f} г, "
+            f"а задано {payload.protein_g:g} г. Проверьте значения.",
             details={
                 "protein_g": payload.protein_g,
-                "max_protein_and_carbs_g": round(max_protein_and_carbs, 1),
+                "max_protein_g": round(max_protein, 1),
             },
         )
 

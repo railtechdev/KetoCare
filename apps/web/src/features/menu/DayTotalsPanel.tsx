@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   dayVerdict,
+  TOLERANCE_GAP_KEY,
   type DayTolerance,
   type ToleranceGap,
 } from "../patients/dayVerdict";
@@ -146,11 +147,9 @@ export function DayTotalsPanel({
           где причины нет: для прошедших дат вердикт не считается вовсе. */}
       {verdict.unavailable && (
         <p className="m-0 text-sm text-muted-foreground">
-          {verdict.unavailableReason === "no_prescription"
-            ? t("totals.noPrescription")
-            : verdict.unavailableReason === "engine_changed"
-              ? t("totals.engineChanged")
-              : t("totals.verdictUnavailable")}
+          {verdict.unavailableReason === null
+            ? t("totals.verdictUnavailable")
+            : t(`totals.${TOLERANCE_GAP_KEY[verdict.unavailableReason]}`)}
         </p>
       )}
 

@@ -18,7 +18,7 @@ from core.models import KetoneLog, Menu, Prescription, WeightLog
 from core.repositories import menus as menus_repo
 from core.repositories import overview as overview_repo
 from core.repositories import prescriptions as prescriptions_repo
-from keto_engine import ENGINE_VERSION, DishResult, Targets, within_tolerance
+from keto_engine import DishResult, Targets, within_tolerance
 
 from ..schemas import DishComputed, PrescriptionRead
 from ..schemas_overview import (
@@ -30,6 +30,7 @@ from ..schemas_overview import (
     ToleranceGap,
     WeightReading,
 )
+from .engine_version import comparable_to_current
 
 
 def local_today() -> date:
@@ -74,12 +75,6 @@ def _day_summary(menu: Menu | None, prescription: Prescription | None) -> DaySum
     )
 
 
-def _major(version: str | None) -> str | None:
-    """Старшая часть версии ядра: «1.0.0» → «1»."""
-
-    return version.split(".", 1)[0] if version else None
-
-
 def _tolerance(
     totals: DishComputed, prescription: Prescription | None, engine_version: str | None
 ) -> tuple[DayTolerance | None, ToleranceGap | None]:
@@ -94,6 +89,12 @@ def _tolerance(
     if prescription is None:
         return None, ToleranceGap.NO_PRESCRIPTION
 
+    # Версия могла не записаться вовсе: колонка это допускает. Сверять нечего,
+    # но и назвать день «посчитанным прежней версией» нельзя — какой именно,
+    # неизвестно.
+    if engine_version is None:
+        return None, ToleranceGap.ENGINE_UNKNOWN
+
     # День, посчитанный ядром другой ОСНОВНОЙ версии, вердикта не получает.
     #
     # Итоги дня хранятся снимком (ADR-0016) и не пересчитываются, а major
@@ -101,7 +102,15 @@ def _tolerance(
     # чистым углеводам (ADR-0030). Сказать «в допуске» про соотношение,
     # посчитанное прежним правилом, — значит выдать старое утверждение за
     # сегодняшнее; экран умеет показывать день без вердикта.
-    if _major(engine_version) != _major(ENGINE_VERSION):
+    #
+    # Сравниваются ТОЛЬКО старшие части: minor и patch по семантике версий
+    # чисел не меняют, и на них вердикт сниматься не должен — иначе следующий
+    # безобидный бамп молча оставит без вердикта все сохранённые дни.
+    #
+    # Сравниваются ТОЛЬКО старшие части: minor и patch по семантике версий чисел
+    # не меняют, и на них вердикт сниматься не должен — иначе следующий
+    # безобидный бамп молча оставит без вердикта все сохранённые дни.
+    if not comparable_to_current(engine_version):
         return None, ToleranceGap.ENGINE_CHANGED
 
     # DishResult собирается из сохранённых итогов только ради вызова

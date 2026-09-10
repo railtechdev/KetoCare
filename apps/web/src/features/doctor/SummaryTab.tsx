@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
-import { dayVerdict } from "../patients/dayVerdict";
+import { dayVerdict, TOLERANCE_GAP_KEY } from "../patients/dayVerdict";
 import { usePatientOverview } from "../patients/overview";
 import { PatientViewLink } from "./PatientViewLink";
 import { LinesSkeleton } from "./skeletons";
@@ -181,9 +181,9 @@ function OverviewPanels({
 
             {verdict.unavailable ? (
               <p className="m-0 text-sm text-muted-foreground">
-                {verdict.unavailableReason === "engine_changed"
-                  ? t("summary.day.engineChanged")
-                  : t("summary.day.noPrescription")}
+                {t(
+                  `summary.day.${TOLERANCE_GAP_KEY[verdict.unavailableReason ?? "no_prescription"]}`,
+                )}
               </p>
             ) : verdict.ratioOffTolerance ? (
               <WarningBanner level="warning" title={t("summary.day.offTitle")}>

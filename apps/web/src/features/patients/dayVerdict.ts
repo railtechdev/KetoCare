@@ -50,6 +50,22 @@ export interface DayVerdict {
  * как «активного назначения нет» — при живом назначении. Различить их может
  * только сервер: он один знает и сохранённую версию, и сегодняшнюю.
  */
+/**
+ * Причина сервера → имя ключа в словаре экрана.
+ *
+ * Один список на три экрана: у каждого свой префикс (`day.`, `summary.day.`,
+ * `totals.`), но хвост ключа общий. Разъехавшись, экраны объясняли бы одно и то
+ * же состояние по-разному — а речь о соответствии дня назначению ребёнка.
+ *
+ * Полнота словарей проверяется тестом: ключ, которого нет, i18n показывает
+ * самим ключом, и на экране это выглядит как строка «day.engineUnknown».
+ */
+export const TOLERANCE_GAP_KEY: Record<ToleranceGap, string> = {
+  no_prescription: "noPrescription",
+  engine_changed: "engineChanged",
+  engine_unknown: "engineUnknown",
+};
+
 export function dayVerdict(
   tolerance: DayTolerance | null | undefined,
   gap?: ToleranceGap | null,
