@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
 from core.models import Product, ProductCategory
-from core.models.enums import UserRole
+from core.models.enums import LeadingMacro, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
@@ -72,6 +72,16 @@ async def search_products(
     page: PaginationDep,
     q: str | None = None,
     category_id: uuid.UUID | None = None,
+    macro: Annotated[
+        LeadingMacro | None,
+        Query(
+            description=(
+                "Ведущий макронутриент: на что из трёх приходится больше всего "
+                "калорий (9/4/4). Продукты, где ведущего нет — ничья или нет "
+                "калорий вовсе, — не попадают ни в один список"
+            )
+        ),
+    ] = None,
     include_inactive: bool = False,
     verified_before: Annotated[
         date | None,
@@ -93,6 +103,7 @@ async def search_products(
         session,
         q=q,
         category_id=category_id,
+        macro=macro,
         only_active=only_active,
         verified_before=verified_before,
         limit=page.limit,

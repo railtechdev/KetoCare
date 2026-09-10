@@ -7,13 +7,17 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from keto_engine.constants import KCAL_PER_G_CARBS, KCAL_PER_G_FAT, KCAL_PER_G_PROTEIN
+
 from ..models import Product, ProductCategory, ProductRevision
+from ..models.enums import LeadingMacro
 
 _SNAPSHOT_FIELDS = (
     "name_ru",
@@ -82,11 +86,40 @@ def _name_matches(q: str) -> ColumnElement[bool]:
     )
 
 
+def _leading_macro_condition(macro: LeadingMacro) -> ColumnElement[bool]:
+    """Продукты, у которых на `macro` приходится СТРОГО больше калорий, чем на
+    каждый из двух остальных.
+
+    Коэффициенты берутся из ядра (`keto_engine.constants`), а не пишутся числами:
+    9/4/4 — медицинские константы, и вторая их копия однажды разойдётся с
+    расчётом. Умножение идёт на `Decimal`, чтобы `numeric` не уехал в double
+    precision: там 4 г жира (36 ккал) против 9 г белка (36 ккал) могли бы
+    разойтись в шестнадцатом знаке, и «ничья» молча превратилась бы в победу.
+
+    Строго больший — по обоим сравнениям. Ничья и продукт без калорий (вода,
+    соль) не попадают никуда: у них ведущего макронутриента нет, и назвать
+    его — значит выбрать за клинику.
+    """
+
+    by_macro = {
+        LeadingMacro.FAT: Product.fat_100g * Decimal(str(KCAL_PER_G_FAT)),
+        LeadingMacro.PROTEIN: Product.protein_100g * Decimal(str(KCAL_PER_G_PROTEIN)),
+        # Углеводы ОБЩИЕ, не чистые. Это свойство продукта, а не его вклад в
+        # кетосоотношение: лимит углеводов в назначении тоже считается по общим
+        # (ответ клиники 3). Клетчатка переставила бы отруби из углеводных в
+        # никакие — вопрос 50.
+        LeadingMacro.CARBS: Product.carbs_100g * Decimal(str(KCAL_PER_G_CARBS)),
+    }
+    leader = by_macro[macro]
+    return and_(*(leader > other for name, other in by_macro.items() if name is not macro))
+
+
 async def search(
     session: AsyncSession,
     *,
     q: str | None = None,
     category_id: uuid.UUID | None = None,
+    macro: LeadingMacro | None = None,
     only_active: bool = True,
     verified_before: date | None = None,
     limit: int = 50,
@@ -115,6 +148,8 @@ async def search(
         conditions.append(Product.is_active.is_(True))
     if category_id is not None:
         conditions.append(Product.category_id == category_id)
+    if macro is not None:
+        conditions.append(_leading_macro_condition(macro))
     if q:
         conditions.append(_name_matches(q))
     if verified_before is not None:

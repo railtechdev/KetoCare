@@ -22,12 +22,32 @@ export interface ProductFilters {
    * Сервер отдаёт их только ролям, которые ведут справочник, — здесь это UX.
    */
   includeInactive: boolean;
+  /**
+   * Ведущий макронутриент: пустая строка — фильтр не задан.
+   *
+   * «Богатые белками / жирами / углеводами» — просьба заказчицы, чтобы менять
+   * один продукт на другой по роли в блюде. Порога «богатый» ни в одном нашем
+   * источнике нет, поэтому правило другое: ведущий — тот, на который приходится
+   * больше всего КАЛОРИЙ. Считает сервер (`GET /products?macro=`): отбор по
+   * странице в 20 строк выдавал бы «жировых» из того, что попало на экран.
+   */
+  macro: LeadingMacro | "";
 }
+
+/** Значения совпадают со схемой API (`LeadingMacro` на сервере). */
+export type LeadingMacro = "fat" | "protein" | "carbs";
+
+export const LEADING_MACROS: readonly LeadingMacro[] = [
+  "fat",
+  "protein",
+  "carbs",
+];
 
 export const EMPTY_PRODUCT_FILTERS: ProductFilters = {
   q: "",
   categoryId: "",
   includeInactive: false,
+  macro: "",
 };
 
 /**
@@ -70,6 +90,7 @@ export function useAdminProducts(filters: ProductFilters, page = 0) {
     q: filters.q.trim() || undefined,
     category_id: filters.categoryId.trim() || undefined,
     include_inactive: filters.includeInactive || undefined,
+    macro: filters.macro || undefined,
     limit: PRODUCTS_PAGE_SIZE,
     offset: page * PRODUCTS_PAGE_SIZE,
   };

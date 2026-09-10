@@ -21,10 +21,11 @@ import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import type { Product } from "./types";
 import {
   EMPTY_PRODUCT_FILTERS,
+  LEADING_MACROS,
   PRODUCTS_PAGE_SIZE,
   useAdminProducts,
   useProductCategories,
@@ -323,6 +324,37 @@ export function ProductsPanel({
               }))
             }
           />
+        </div>
+
+        {/* «Богатые белками / жирами / углеводами» — просьба заказчицы, чтобы
+            менять один продукт на другой по роли в блюде. Порога «богатый» ни в
+            одном нашем источнике нет, поэтому в списке стоит ведущий по
+            КАЛОРИЯМ, и правило написано прямо в пояснении к полю: диетолог
+            должен понимать, по какому признаку отобрано, а не доверять слову.
+
+            Отбирает сервер. На странице в 20 строк «жировые» получились бы из
+            того, что попало на экран. */}
+        <div className="min-w-56">
+          <SelectField
+            id="admin-product-macro"
+            width="wide"
+            label={t("products.filters.macro")}
+            hint={t("products.filters.macroHint")}
+            value={filters.macro}
+            onChange={(event) =>
+              setFiltersAndResetPage((current) => ({
+                ...current,
+                macro: event.target.value as ProductFilters["macro"],
+              }))
+            }
+          >
+            <option value="">{t("products.filters.macroAny")}</option>
+            {LEADING_MACROS.map((macro) => (
+              <option key={macro} value={macro}>
+                {t(`products.filters.macroValue.${macro}`)}
+              </option>
+            ))}
+          </SelectField>
         </div>
 
         {/* Без этого флажка снятие «активен» было необратимым: позиция
