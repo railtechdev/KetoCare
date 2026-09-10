@@ -166,3 +166,43 @@ jobs:
           pnpm --filter @ketocare/api-client run generate
       - name: Клиент компилируется
         run: pnpm --filter @ketocare/api-client run typecheck
+
+  # Образ, который поедет на стенд, собирается ЗДЕСЬ, а не впервые на сервере.
+  #
+  # До этой задачи docker-сборки не было ни в одной проверке: `main` уезжает на
+  # пред-прод автоматически, а первая настоящая сборка происходила в
+  # `infra/scripts/deploy.sh` на VPS с 2 ГБ памяти. Сломанный Dockerfile или
+  # разъехавшийся `uv.lock` обнаруживались бы как упавший выкат — то есть уже
+  # после merge, когда чинить надо на боевом стенде.
+  #
+  # Повод завести её конкретный: ветка `feat/products-by-macro` изменила
+  # `uv.lock` (в `packages/core` появилась зависимость от `keto_engine`), это
+  # инвалидировало слой зависимостей, и пересборка scipy/numpy с нуля не
+  # уложилась в память рабочей машины. На стенде выкат прошёл, но узнали мы это
+  # только по факту.
+  #
+  # Собираются все три цели: `api`, `bot` и `worker` — у них разные слои поверх
+  # общей базы, и сломать можно любую по отдельности.
+  docker:
+    name: Образ собирается
+    runs-on: ubuntu-latest
+    strategy:
+      # Не `fail-fast`: если сломаны две цели, полезно увидеть обе разом.
+      fail-fast: false
+      matrix:
+        target: [api, bot, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Сборка образа (${{ matrix.target }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          target: ${{ matrix.target }}
+          # Никуда не публикуем: задача отвечает на вопрос «собирается ли»,
+          # а выкат по-прежнему собирает у себя (`deploy.sh`).
+          push: false
+          # Кеш между прогонами: без него каждый PR пересобирал бы scipy.
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
