@@ -5,6 +5,7 @@ import {
   EmptyState,
   Skeleton,
   Tiles,
+  formatWeight,
 } from "@ketocare/ui";
 import { NotebookPen } from "lucide-react";
 import type { TFunction } from "i18next";
@@ -196,7 +197,9 @@ function DiaryEntry({
         };
       case "weight":
         return {
-          title: t("weight.cardTitle", { value: entry.weight_kg }),
+          title: t("weight.cardTitle", {
+            value: formatWeight(entry.weight_kg),
+          }),
           lines: [
             entry.height_cm === null
               ? null

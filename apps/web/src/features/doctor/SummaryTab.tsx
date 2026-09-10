@@ -8,6 +8,7 @@ import {
   RatioBadge,
   Section,
   WarningBanner,
+  formatWeight,
 } from "@ketocare/ui";
 import { CalendarOff, ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -235,7 +236,7 @@ function OverviewPanels({
             {data.last_weight == null
               ? t("summary.readings.noWeight")
               : t("summary.readings.weightValue", {
-                  value: data.last_weight.weight_kg,
+                  value: formatWeight(data.last_weight.weight_kg),
                   at: formatOccurredAt(new Date(data.last_weight.occurred_at)),
                 })}
           </dd>

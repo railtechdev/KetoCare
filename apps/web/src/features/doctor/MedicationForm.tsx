@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useId } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
@@ -10,6 +10,8 @@ import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { parseDateInput, toDateInput } from "../diary/time";
+import { useAedDrugs } from "../intake/useIntake";
+import { DrugNameField } from "./DrugNameField";
 import type { Medication, MedicationBody } from "./types";
 
 /**
@@ -37,6 +39,21 @@ const medicationSchema = z
   );
 
 type MedicationFormValues = z.infer<typeof medicationSchema>;
+
+/**
+ * Порядок полей на экране — он же порядок, в котором ищется первая ошибка.
+ *
+ * Список явный, потому что вывести его неоткуда: `react-hook-form` знает
+ * порядок регистрации (у `Controller` он другой), а zod — порядок объявления
+ * схемы, который с разметкой совпадать не обязан.
+ */
+export const FIELD_ORDER = [
+  "drugName",
+  "dose",
+  "frequency",
+  "startedAt",
+  "stoppedAt",
+] as const satisfies readonly (keyof MedicationFormValues)[];
 
 function toBody(values: MedicationFormValues): MedicationBody {
   return {
@@ -80,12 +97,23 @@ export function MedicationForm({
   const { t } = useTranslation("doctor");
   const ids = useId();
 
+  // Справочник тот же, что у анкеты семьи, и ключ у запроса общий: карта
+  // пациента почти всегда уже показала анкету, поэтому список приходит из кэша.
+  const drugs = useAedDrugs();
+
   const {
     register,
+    control,
     handleSubmit,
+    setFocus,
     formState: { errors },
   } = useForm<MedicationFormValues>({
     resolver: zodResolver(medicationSchema),
+    // Свой фокус вместо встроенного: встроенный обходит поля в порядке
+    // РЕГИСТРАЦИИ и отрабатывает ПОСЛЕ обработчика ошибок, то есть
+    // перебивает его. Порядок регистрации здесь не совпадает с экранным —
+    // поле препарата идёт через `Controller` и регистрируется позже соседей.
+    shouldFocusError: false,
     defaultValues: {
       drugName: medication?.drug_name ?? suggestedDrugName ?? "",
       dose: medication?.dose ?? "",
@@ -98,20 +126,53 @@ export function MedicationForm({
   return (
     <form
       noValidate
-      onSubmit={handleSubmit((values) => onSubmit(toBody(values)))}
+      onSubmit={handleSubmit(
+        (values) => onSubmit(toBody(values)),
+        // Фокус — на ПЕРВОЕ незаполненное поле формы, а не на первое, до
+        // которого дошёл react-hook-form. Он обходит поля в порядке
+        // РЕГИСТРАЦИИ, а поле препарата регистрируется через `Controller`, то
+        // есть позже соседей: на пустой форме фокус вставал на дозу, и человек
+        // с клавиатуры узнавал не о той ошибке. Порядок берётся у схемы —
+        // zod отдаёт ошибки в порядке объявления полей.
+        (invalid) => {
+          const first = FIELD_ORDER.find((field) => field in invalid);
+          if (first !== undefined) setFocus(first);
+        },
+      )}
       className="flex flex-col gap-block"
     >
       <div className="grid gap-block sm:grid-cols-2">
-        <Field
-          id={`${ids}-drug`}
-          label={t("medications.fields.drugName")}
-          error={errors.drugName && t("medications.errors.required")}
-          {...register("drugName")}
+        {/* Поле остаётся текстовым: справочник неполон, и закрывать список
+            нельзя — врач назначает и то, чего в нём нет. */}
+        <Controller
+          control={control}
+          name="drugName"
+          render={({ field }) => (
+            <DrugNameField
+              id={`${ids}-drug`}
+              name={field.name}
+              label={t("medications.fields.drugName")}
+              error={errors.drugName && t("medications.errors.required")}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              // Без ссылки на поле react-hook-form не находит, куда ставить
+              // фокус после неудачной отправки, и уводит его на следующую
+              // ошибку — то есть человек узнаёт не о той.
+              inputRef={field.ref}
+              drugs={drugs.data ?? []}
+            />
+          )}
         />
+        {/* Доза — свободная строка, и единицу подсказывает пояснение, а не
+            подпись поля. Заказчица написала «мг/сут», но у сиропов миллилитры,
+            у АКТГ единицы действия, у части схем мг/кг/сут: зашитая единица
+            сделала бы часть карт неверными МОЛЧА. Вопрос 44 медкоманде. */}
         <Field
           id={`${ids}-dose`}
           label={t("medications.fields.dose")}
           placeholder={t("medications.dosePlaceholder")}
+          hint={t("medications.doseHint")}
           error={errors.dose && t("medications.errors.required")}
           {...register("dose")}
         />

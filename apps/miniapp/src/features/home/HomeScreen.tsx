@@ -4,6 +4,7 @@ import {
   RatioBadge,
   Section,
   formatOccurredAt,
+  formatWeight,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
@@ -114,7 +115,9 @@ function Summary({ overview }: { overview: Overview }) {
             label={t("home.readings.weight")}
             value={
               weight
-                ? t("home.readings.weightValue", { value: weight.weight_kg })
+                ? t("home.readings.weightValue", {
+                    value: formatWeight(weight.weight_kg),
+                  })
                 : null
             }
             at={weight?.occurred_at}
