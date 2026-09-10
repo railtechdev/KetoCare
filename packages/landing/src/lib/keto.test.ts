@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import demo from "./demo-dish.json";
-import { calculate, INGREDIENTS, TARGET_RATIO, TOLERANCE } from "./keto";
+import {
+  calculate,
+  calculateFrom,
+  INGREDIENTS,
+  TARGET_RATIO,
+  TOLERANCE,
+  type Ingredient,
+} from "./keto";
 
 const DEFAULTS = INGREDIENTS.map((ing) => ing.initial);
 
@@ -30,13 +37,53 @@ describe("расчёт демо-калькулятора", () => {
   });
 
   it("зажимает клетчатку по каждому продукту, а не по блюду", () => {
-    // Продукта с клетчаткой больше углеводов в наборе нет, поэтому проверяется
-    // сама форма выражения: вклад позиции не может быть отрицательным.
-    const one = INGREDIENTS.map((_, i) => (i === 3 ? 50 : 0));
-    const r = calculate(one);
+    // На продуктах страницы оба способа совпадают: ни у одного клетчатки не
+    // больше углеводов. Поэтому набор здесь синтетический — иначе тест назывался
+    // бы одним, а проверял другое.
+    //
+    // По продуктам: 0 + 4 = 4 г чистых, соотношение 10 / (1 + 4) = 2.
+    // По блюду целиком: 7,6 − 7,6 = 0, соотношение 10 / 1 = 10. Разница впятеро.
+    const odd: Ingredient = {
+      fat: 10,
+      protein: 1,
+      carbs: 1,
+      fiber: 5,
+      kcal: 0,
+      max: 100,
+      initial: 100,
+    };
+    const veg: Ingredient = {
+      fat: 0,
+      protein: 0,
+      carbs: 6.6,
+      fiber: 2.6,
+      kcal: 34,
+      max: 100,
+      initial: 100,
+    };
 
-    expect(r.netCarbs).toBeGreaterThanOrEqual(0);
-    expect(r.netCarbs).toBeCloseTo(2.0, 6);
+    const r = calculateFrom([odd, veg], [100, 100]);
+
+    expect(r.carbs).toBeCloseTo(7.6, 6);
+    expect(r.netCarbs).toBeCloseTo(4.0, 6);
+    expect(r.ratio).toBeCloseTo(2.0, 6);
+  });
+
+  it("вклад продукта в чистые углеводы не уходит в минус", () => {
+    const odd: Ingredient = {
+      fat: 10,
+      protein: 1,
+      carbs: 1,
+      fiber: 5,
+      kcal: 0,
+      max: 100,
+      initial: 100,
+    };
+
+    const r = calculateFrom([odd], [100]);
+
+    expect(r.netCarbs).toBeCloseTo(0, 6);
+    expect(r.ratio).toBeCloseTo(10.0, 6);
   });
 
   it("граммовки по умолчанию попадают в назначение, и это видно вердиктом", () => {
@@ -49,12 +96,32 @@ describe("расчёт демо-калькулятора", () => {
   });
 
   it("соотношение считается по чистым углеводам, а не по общим", () => {
-    // Разделяющая проверка: верните знаменатель к общим углеводам, и она
-    // упадёт — на граммовках по умолчанию разница 3,54 против 3,25.
+    // Сверять соотношение с `fat / (protein + netCarbs)` бессмысленно: это
+    // функция против самой себя. Различает вторая строка — по общим углеводам
+    // на тех же граммовках вышло бы заметно меньше.
     const r = calculate(DEFAULTS);
 
-    expect(r.ratio).toBeCloseTo(r.fat / (r.protein + r.netCarbs), 9);
     expect(r.ratio).not.toBeCloseTo(r.fat / (r.protein + r.carbs), 2);
+    expect(r.ratio).toBeGreaterThan(r.fat / (r.protein + r.carbs));
+  });
+
+  it("блюдо выше назначения показывается как выше, а не как в допуске", () => {
+    // Публичный дефект, с которого всё началось, был именно таким: страница
+    // называла «в допуске» блюдо, которое продукт считал вне его. Вердикт,
+    // закреплённый только с зелёной стороны, этого не ловит.
+    const fatty = INGREDIENTS.map((ing, i) => (i === 2 ? ing.max : 0));
+    const r = calculate(fatty);
+
+    expect(r.ratio).toBeGreaterThan(TARGET_RATIO + TOLERANCE);
+    expect(r.state).toBe("high");
+  });
+
+  it("блюдо ниже назначения показывается как ниже", () => {
+    const lean = INGREDIENTS.map((ing, i) => (i === 0 ? ing.max : 0));
+    const r = calculate(lean);
+
+    expect(r.ratio).toBeLessThan(TARGET_RATIO - TOLERANCE);
+    expect(r.state).toBe("low");
   });
 
   it("нулевой состав не делит на ноль", () => {

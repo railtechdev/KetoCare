@@ -81,14 +81,25 @@ export interface CalcResult {
   state: "ok" | "low" | "high";
 }
 
-export function calculate(grams: number[]): CalcResult {
+/**
+ * Расчёт по произвольному набору продуктов.
+ *
+ * Набор параметром, а не из модуля, ровно ради проверяемости: в демо-наборе нет
+ * продукта, у которого клетчатки больше углеводов, и на нём зажим по каждому
+ * продукту неотличим от зажима по блюду целиком — тест на него ничего бы не
+ * различал. Страница зовёт `calculate`, тест подставляет синтетический продукт.
+ */
+export function calculateFrom(
+  ingredients: readonly Ingredient[],
+  grams: number[],
+): CalcResult {
   let fat = 0;
   let protein = 0;
   let carbs = 0;
   let netCarbs = 0;
   let kcal = 0;
 
-  INGREDIENTS.forEach((ing, i) => {
+  ingredients.forEach((ing, i) => {
     const g = grams[i] ?? 0;
     fat += (g * ing.fat) / 100;
     protein += (g * ing.protein) / 100;
@@ -123,6 +134,11 @@ export function calculate(grams: number[]): CalcResult {
     carbsPct: (carbs / total) * 100,
     state,
   };
+}
+
+/** Расчёт по продуктам страницы — то, что зовут виджет и сборка. */
+export function calculate(grams: number[]): CalcResult {
+  return calculateFrom(INGREDIENTS, grams);
 }
 
 /**

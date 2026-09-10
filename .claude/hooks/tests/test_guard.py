@@ -733,31 +733,55 @@ class TestEngineCommentsAreNotMath:
         after = 'ENGINE_VERSION = "1.0.0"\nRATIO_TOLERANCE = 0.5\n'
         assert self._changed(self._repo(tmp_path, before), after) == "engine.py"
 
-    def test_indexed_change_is_still_seen(self, tmp_path: Path) -> None:
+    def test_guard_compares_with_head_not_with_the_index(self) -> None:
         """`git add` не должен прятать правку от стража.
 
         `git diff` без ревизии показывает только неиндексированное, поэтому
         после `git add` правка ядра для стража исчезала — ровно в тот момент,
         когда до коммита остаётся один шаг.
+
+        Утверждение о ТЕКСТЕ скрипта, как и `TestRulesAreIntact` рядом: тест,
+        проверяющий поведение git в отдельном репозитории, остался бы зелёным
+        после возврата `git diff` без ревизии — он этой строки не читает.
         """
 
-        repo = self._repo(tmp_path, self.BEFORE)
-        (repo / "engine.py").write_text(
-            self.BEFORE.replace("(protein + carbs)", "(protein + carbs - fiber)"),
-            encoding="utf-8",
+        script = (Path(__file__).resolve().parents[1] / "engine-guard.sh").read_text(
+            encoding="utf-8"
         )
-        subprocess.run(["git", "add", "engine.py"], cwd=repo, check=True, capture_output=True)
+        assert "git diff HEAD --name-only -- packages/keto_engine/src" in script
+        assert "git diff --name-only -- packages/keto_engine/src" not in script
 
-        done = subprocess.run(
-            ["git", "diff", "HEAD", "--name-only", "--", "."],
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            check=True,
+    def test_guard_also_sees_untracked_sources(self) -> None:
+        """Новый файл с формулой — такая же правка ядра.
+
+        `git diff` неотслеживаемые файлы не показывает вовсе.
+        """
+
+        script = (Path(__file__).resolve().parents[1] / "engine-guard.sh").read_text(
+            encoding="utf-8"
         )
-        assert done.stdout.strip() == "engine.py", (
-            "страж обязан сравнивать с HEAD: с индексом проиндексированная правка не видна"
+        assert "git ls-files --others --exclude-standard -- packages/keto_engine/src" in script
+
+    def test_guard_checks_the_version_by_value(self) -> None:
+        """Bump сверяется значением, а не строками диффа.
+
+        `grep -c '^[+-]ENGINE_VERSION'` засчитывал любую правку строки — смену
+        кавычек и понижение версии в том числе.
+        """
+
+        script = (Path(__file__).resolve().parents[1] / "engine-guard.sh").read_text(
+            encoding="utf-8"
         )
+        assert "engine_version_bumped.py" in script
+        # Проверяется исполняемая строка, а не упоминание: прежний приём назван
+        # в комментарии рядом, и запрет на любое вхождение запретил бы объяснять,
+        # что именно было не так.
+        executable = [
+            line
+            for line in script.splitlines()
+            if not line.lstrip().startswith("#") and "ENGINE_VERSION" in line
+        ]
+        assert not any("grep -c" in line for line in executable), executable
 
 
 class TestEngineDocstringsAreNotBehaviour:
@@ -784,7 +808,85 @@ class TestEngineDocstringsAreNotBehaviour:
         )
 
     def test_doctests_are_not_collected(self) -> None:
-        """Собираемый doctest сделал бы docstring исполняемым кодом."""
+        """Собираемый doctest сделал бы docstring исполняемым кодом.
 
-        config = (self.ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        Настройки pytest живут в КОРНЕВОМ `pyproject.toml`, а не в пакетном: в
+        пакетном секции нет вовсе, и первая версия этого теста не могла упасть
+        ни при каких обстоятельствах.
+        """
+
+        root = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        config = root.read_text(encoding="utf-8")
+        assert "[tool.pytest.ini_options]" in config, (
+            f"настройки pytest не нашлись в {root} — тест перестал что-либо проверять"
+        )
         assert "--doctest-modules" not in config
+
+
+class TestEngineVersionMustActuallyGrow:
+    """Bump сверяется значением: любая правка строки версии — не bump.
+
+    Прежняя проверка считала строки диффа, поэтому требование выполняли смена
+    кавычек и понижение версии. Сохранённые расчёты помечаются этой строкой:
+    понижение делает старые и новые значения неразличимыми — ровно то, ради
+    чего правило и заведено.
+    """
+
+    @staticmethod
+    def _verdict(tmp_path: Path, before: str, after: str) -> str:
+        repo = tmp_path / "engine"
+        repo.mkdir()
+        run = lambda *args: subprocess.run(  # noqa: E731
+            args, cwd=repo, check=True, capture_output=True
+        )
+        run("git", "init", "-b", "main")
+        run("git", "config", "user.email", "t@example.com")
+        run("git", "config", "user.name", "t")
+        (repo / "constants.py").write_text(before, encoding="utf-8")
+        run("git", "add", "constants.py")
+        run("git", "commit", "-m", "init")
+        (repo / "constants.py").write_text(after, encoding="utf-8")
+
+        script = Path(__file__).resolve().parents[1] / "engine_version_bumped.py"
+        done = subprocess.run(
+            [sys.executable, str(script), "constants.py"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return done.stdout.strip()
+
+    BEFORE = 'ENGINE_VERSION = "1.0.0"\n'
+
+    def test_growth_counts(self, tmp_path: Path) -> None:
+        assert self._verdict(tmp_path, self.BEFORE, 'ENGINE_VERSION = "1.1.0"\n') == "bumped"
+
+    def test_patch_growth_counts(self, tmp_path: Path) -> None:
+        assert self._verdict(tmp_path, self.BEFORE, 'ENGINE_VERSION = "1.0.1"\n') == "bumped"
+
+    def test_quote_change_is_not_a_bump(self, tmp_path: Path) -> None:
+        verdict = self._verdict(tmp_path, self.BEFORE, "ENGINE_VERSION = '1.0.0'\n")
+        assert verdict != "bumped"
+        assert "осталась 1.0.0" in verdict
+
+    def test_downgrade_is_not_a_bump(self, tmp_path: Path) -> None:
+        verdict = self._verdict(tmp_path, self.BEFORE, 'ENGINE_VERSION = "0.9.9"\n')
+        assert verdict != "bumped"
+        assert "ПОНИЖЕНА" in verdict
+
+    def test_ten_is_greater_than_nine(self, tmp_path: Path) -> None:
+        """Сравнение числовое, а не строковое: «1.10.0» больше «1.9.0»."""
+
+        assert (
+            self._verdict(
+                tmp_path, 'ENGINE_VERSION = "1.9.0"\n', 'ENGINE_VERSION = "1.10.0"\n'
+            )
+            == "bumped"
+        )
+
+    def test_missing_constant_is_not_a_bump(self, tmp_path: Path) -> None:
+        """Константа исчезла или переименована — подтверждать нечего."""
+
+        verdict = self._verdict(tmp_path, self.BEFORE, "VERSION = '1.1.0'\n")
+        assert verdict != "bumped"

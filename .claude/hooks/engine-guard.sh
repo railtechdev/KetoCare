@@ -49,16 +49,36 @@ fi
 #    подняв версию и не уронив ни одного теста. Отдельного случая для самого
 #    `ENGINE_VERSION` не нужно: правка только его — это изменение программы, и
 #    требование «подними версию» она же и удовлетворяет.
+#    Bump проверяется ПО ЗНАЧЕНИЮ, а не по строкам диффа. Прежняя проверка
+#    (`grep -c '^[+-]ENGINE_VERSION'`) засчитывала любую правку этой строки:
+#    смену кавычек и даже ПОНИЖЕНИЕ версии.
+#
+#    Чего страж не умеет и уметь не может: судить о СОРАЗМЕРНОСТИ. Из
+#    синтаксиса не вывести, тянет ли правка на major, — «сняли зажим клетчатки
+#    и подняли patch» он пропустит. Это предмет ревью человеком, и полагаться
+#    здесь на автоматику нельзя.
+#
+#    Ещё одно следствие сравнения с HEAD: bump, уже попавший в коммит, следующую
+#    правку математики не покрывает. Внутри одного PR за вторым коммитом с
+#    математикой страж попросит второй bump — это верно по смыслу, хотя и
+#    неожиданно.
 VERSION_FILE="packages/keto_engine/src/keto_engine/constants.py"
-TOUCHED=$(git diff HEAD --name-only -- packages/keto_engine/src 2>/dev/null || true)
+# Неотслеживаемые файлы `git diff` не показывает, а новый модуль с формулой —
+# такая же правка ядра, как и любая другая.
+TOUCHED=$(
+  {
+    git diff HEAD --name-only -- packages/keto_engine/src 2>/dev/null || true
+    git ls-files --others --exclude-standard -- packages/keto_engine/src 2>/dev/null || true
+  } | sort -u
+)
 SRC_CHANGED=""
 if [ -n "$TOUCHED" ]; then
   # shellcheck disable=SC2086
   SRC_CHANGED=$(python3 "$ROOT/.claude/hooks/engine_code_changed.py" $TOUCHED 2>/dev/null || echo "$TOUCHED")
 fi
-VERSION_CHANGED=$(git diff HEAD -- "$VERSION_FILE" 2>/dev/null | grep -c '^[+-]ENGINE_VERSION' || true)
+VERSION_VERDICT=$(python3 "$ROOT/.claude/hooks/engine_version_bumped.py" "$VERSION_FILE" 2>/dev/null || echo "проверка версии не запустилась")
 
-if [ -n "$SRC_CHANGED" ] && [ "${VERSION_CHANGED:-0}" -eq 0 ]; then
+if [ -n "$SRC_CHANGED" ] && [ "$VERSION_VERDICT" != "bumped" ]; then
   FAILED="${FAILED:+$FAILED,}version"
 fi
 
@@ -83,7 +103,13 @@ fi
       echo "Любое изменение математики требует semver-bump: результаты расчётов"
       echo "сохраняются в БД вместе с engine_version, и без bump'а старые и новые"
       echo "значения станут неразличимы."
+      echo "Причина: $VERSION_VERDICT"
       echo "Изменены: $(echo "$SRC_CHANGED" | tr '\n' ' ')"
+      echo
+      echo "Правка ОДНИХ пояснений bump'а не требует — страж это различает."
+      echo "Сравнение идёт с HEAD: если bump уже в коммите, следующая правка"
+      echo "математики попросит следующий."
+      echo "СОРАЗМЕРНОСТЬ (patch или major) страж не проверяет — это к ревью."
       ;;
   esac
 } >&2
