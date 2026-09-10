@@ -8,6 +8,7 @@ import {
   Metric,
   MetricRow,
   Section,
+  formatOccurredAt,
   toast,
 } from "@ketocare/ui";
 import { FileText, Lock, Pencil } from "lucide-react";
@@ -21,6 +22,7 @@ import { toChildUpdateBody } from "../child/childSchemas";
 import { IntakeView } from "../intake/IntakeView";
 import { useIntakeOptions } from "../intake/useIntake";
 import { allergyNames } from "../patients/allergies";
+import { usePatientOverview } from "../patients/overview";
 import { useUpdateChildMutation } from "../patients/useChildren";
 import { CareTeamPanel } from "./CareTeamPanel";
 import { FamilyPanel } from "./FamilyPanel";
@@ -55,6 +57,32 @@ export function PatientProfileView({
   const { t } = useTranslation("doctor");
 
   const allergies = allergyNames(patient, t("card.unknownProduct"));
+  // Вес — не поле карточки, а последний замер из дневника.
+  //
+  // Заказчица просила «добавить вес рядом с ростом». Завести второе поле было
+  // нельзя: вес уже есть серией `weight_logs`, по ней строится динамика и по
+  // ней будут считаться z-баллы. Поле в профиле стало бы вторым источником
+  // одного числа, и однажды они разошлись бы молча — как уже случилось с
+  // ростом (`patients.height_cm` и `weight_logs.height_cm` живут параллельно).
+  //
+  // Запрос тот же, что у сводки, и ключ у них общий: карта пациента почти
+  // всегда открывает сводку первой, поэтому здесь берётся уже готовый ответ.
+  const overview = usePatientOverview(patient.id);
+  const lastWeight = overview.data?.last_weight ?? null;
+
+  // Диагноз — в паспорте, а не только в медицинском профиле ниже.
+  //
+  // Просьба заказчицы: врач принимает решения, глядя на паспорт, а за
+  // диагнозом приходилось прокручивать экран до отдельного блока. Запрос тот
+  // же, что у блока ниже, и ключ у них общий.
+  //
+  // Строка показывается ТОЛЬКО врачу — как и весь медицинский профиль
+  // (`clinicalAllowed`). Клиника ответила 09.09.2026 (вопрос 7), что диетолог
+  // диагноз видит, но это правка доступа на СЕРВЕРЕ: `GET /medical-profile`
+  // пока за `require_roles(DOCTOR)`, и открывать её здесь было бы UX-проверкой
+  // вместо безопасности (правило 5 CLAUDE.md). Делается отдельной работой.
+  const medicalProfile = useMedicalProfile(patient.id, clinicalAllowed);
+  const diagnosis = medicalProfile.data?.diagnosis ?? null;
   const [editOpen, setEditOpen] = useState(false);
   const update = useUpdateChildMutation(patient.id);
 
@@ -116,6 +144,36 @@ export function PatientProfileView({
                 : t("card.heightValue", { value: patient.height_cm })
             }
           />
+          {/* Дата замера стоит рядом с числом: вес ребёнка на кетодиете —
+              величина, которая быстро устаревает, и «18,2 кг» без даты не
+              говорит, вчерашнее это или трёхмесячной давности. */}
+          <Metric
+            label={t("card.weight")}
+            value={
+              lastWeight === null
+                ? overview.isPending
+                  ? null
+                  : t("card.noWeight")
+                : t("card.weightValue", {
+                    value: lastWeight.weight_kg,
+                    // Тот же формат, что в сводке: один и тот же замер,
+                    // показанный на двух экранах по-разному, читается как два.
+                    at: formatOccurredAt(new Date(lastWeight.occurred_at)),
+                  })
+            }
+          />
+          {clinicalAllowed && (
+            <Metric
+              label={t("card.diagnosis")}
+              value={
+                diagnosis === null || diagnosis.trim() === ""
+                  ? medicalProfile.isPending
+                    ? null
+                    : t("card.noDiagnosis")
+                  : diagnosis
+              }
+            />
+          )}
           {/* Названия, а не идентификаторы: поле хранит ссылки на продукты
               вперемешку со свободными метками, и «dcf7df2c-349b…» в карте —
               это мусор в клинически значимой строке. */}
