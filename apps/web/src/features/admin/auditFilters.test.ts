@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import adminRu from "../../locales/ru/admin.json";
 import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITIES,
   AUDIT_PAGE_SIZE,
   EMPTY_AUDIT_FILTERS,
   endOfDayIso,
@@ -109,5 +112,36 @@ describe("toAuditQuery", () => {
     expect(query.offset).toBe(AUDIT_PAGE_SIZE);
     expect(query.from).toBeDefined();
     expect(query.to).toBeDefined();
+  });
+});
+
+describe("подписи фильтров журнала", () => {
+  it("у каждого значения фильтра есть подпись", () => {
+    // Без подписи в выпадающем списке стоит сырое имя таблицы или действия.
+    // Что фильтр знает всё, что пишет API, проверяет тест на стороне API
+    // (`apps/api/tests/test_audit_filter_lists.py`).
+    // Ключи с точкой («ai_summary.approve») i18next ищет вложенным объектом,
+    // поэтому подпись проверяется по пути, а не плоским ключом.
+    const labelOf = (root: unknown, key: string): unknown =>
+      key
+        .split(".")
+        .reduce<unknown>(
+          (node, part) =>
+            typeof node === "object" && node !== null
+              ? (node as Record<string, unknown>)[part]
+              : undefined,
+          root,
+        );
+
+    expect(
+      AUDIT_ENTITIES.filter(
+        (value) => typeof labelOf(adminRu.audit.entities, value) !== "string",
+      ),
+    ).toEqual([]);
+    expect(
+      AUDIT_ACTIONS.filter(
+        (value) => typeof labelOf(adminRu.audit.actions, value) !== "string",
+      ),
+    ).toEqual([]);
   });
 });
