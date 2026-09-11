@@ -731,7 +731,7 @@ directory`. Защита при этом выглядит настроенной
   [ADR-0005](docs/adr/0005-ui-kit-and-react-19.md) и проверяется при каждом обновлении.
 - **Встроенные кнопки закрытия кита подписаны по-английски** («Close» у `SheetContent`,
   `DialogContent` и `DialogFooter showCloseButton`, «Command Palette» у `CommandDialog`).
-  Панель — через `FormSheet`; где кит используется напрямую, встроенная кнопка выключается
+  Форма в панели — через `FormSheet`; где кит используется напрямую, встроенная кнопка выключается
   (`showCloseButton={false}`) и ставится своя с подписью из словаря. Держит
   `apps/web/src/builtInClose.test.ts`.
 - **Импорт — только через `@ketocare/ui`.** У пакета один публичный вход; внутренняя раскладка

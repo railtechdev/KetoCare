@@ -31,7 +31,10 @@ const RULES: { tag: string; ok: (tag: string) => boolean }[] = [
   {
     tag: "CommandDialog",
     ok: (tag) =>
-      FLAG_OFF.test(tag) && /\btitle=/.test(tag) && /\bdescription=/.test(tag),
+      FLAG_OFF.test(tag) &&
+      // Не `\b`: он срабатывает после дефиса, и `data-title` сошёл бы за заголовок.
+      /(?<![\w-])title=/.test(tag) &&
+      /(?<![\w-])description=/.test(tag),
   },
   // Здесь наоборот: кнопки нет, пока флаг не включён.
   {
@@ -118,10 +121,16 @@ describe("встроенные кнопки закрытия кита", () => {
 
   it("разбор тега не засчитывает флаг соседнего и не спотыкается о стрелку", () => {
     // Лишняя закрывающая и лишняя открывающая скобка в строке атрибута: в
-    // обоих случаях тег не разобран, и флаг следующего тега ему не достаётся.
+    // обоих случаях тег не разобран, и флаг следующего тега ему не достаётся —
+    // в том числе когда сосед стоит внутри выражения и скобки снова сходятся.
     const neighbour = "x</SheetContent><SheetContent showCloseButton={false}>";
+    const inExpression =
+      "x</SheetContent>\n{open && <SheetContent showCloseButton={false}>y</SheetContent>}";
     expect(
       violations("a.tsx", `<SheetContent title={"}"}>${neighbour}`),
+    ).not.toEqual([]);
+    expect(
+      violations("a2.tsx", `<SheetContent title={"}"}>${inExpression}`),
     ).not.toEqual([]);
     expect(
       violations("b.tsx", `<SheetContent title={"{"}>${neighbour}`),
@@ -137,6 +146,20 @@ describe("встроенные кнопки закрытия кита", () => {
   it("CommandDialog — без кнопки и со своими заголовком и описанием, DialogFooter — без кнопки", () => {
     expect(
       violations("c.tsx", "<CommandDialog showCloseButton={false}>"),
+    ).not.toEqual([]);
+    // Настоящий заголовок и описание только в `aria-`/`data-` атрибуте —
+    // по отдельности, иначе второе нарушение прикрыло бы первое.
+    expect(
+      violations(
+        "c2.tsx",
+        '<CommandDialog showCloseButton={false} data-title="x" description={t("y")}>',
+      ),
+    ).not.toEqual([]);
+    expect(
+      violations(
+        "c3.tsx",
+        '<CommandDialog showCloseButton={false} title={t("x")} aria-description="y">',
+      ),
     ).not.toEqual([]);
     expect(
       violations(
