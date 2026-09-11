@@ -63,6 +63,26 @@ describe("поиск продукта в калькуляторе", () => {
     vi.clearAllMocks();
   });
 
+  it("в паузу перед запросом не говорит «ничего не нашлось»", async () => {
+    // Пока набор не устоялся, запроса по нему ещё не было: ответ в эту паузу
+    // был бы о прежних буквах, а человек у плиты читает его как приговор
+    // продукту. Проверка стоит сразу после набора — внутри задержки.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({
+      data: { items: [], total: 0 },
+      error: undefined,
+    });
+
+    render(<ProductPicker onPick={() => {}} excludeIds={[]} />, { wrapper });
+
+    await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
+    expect(screen.queryByText(/ничего не нашлось/)).toBeNull();
+
+    expect(
+      await screen.findByText(/По запросу «фуагра» ничего не нашлось/),
+    ).toBeInTheDocument();
+  });
+
   it("за набранное слово уходит один запрос, а не запрос на букву", async () => {
     // Поиск продукта стоит в калькуляторе, форме рецепта и исключённых
     // продуктах ребёнка и шёл без задержки: «фуагра» — пять запросов к
