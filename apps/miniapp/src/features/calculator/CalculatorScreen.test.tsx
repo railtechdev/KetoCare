@@ -18,6 +18,8 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
 });
 
+const WAITING = "Нет связи — посчитаем, когда она появится.";
+
 const SESSION = {
   patientId: "11111111-1111-4111-8111-111111111111",
   patientName: "Амина",
@@ -310,6 +312,70 @@ describe("калькулятор в Mini App", () => {
       expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument(),
     );
     expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+  });
+
+  it("новый состав без сети говорит, что ждёт связи, и досчитывает с её возвратом", async () => {
+    // Без сети запрос встаёт на паузу, а `isFetching` на паузе ложно: набранный
+    // состав оставался без чисел, без «Пересчитываем…» и без объяснения.
+    const user = userEvent.setup();
+    renderScreen();
+    await user.type(screen.getByLabelText("Найдите продукт"), "масло");
+    await user.click(
+      await screen.findByRole("button", { name: "Масло сливочное" }),
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(
+        await screen.findByLabelText(/Масло сливочное, граммы/),
+        "30",
+      );
+
+      expect(await screen.findByText(WAITING)).toBeInTheDocument();
+      expect(screen.queryByText(/224 ккал/)).not.toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("вердикт из кэша без сети не выдаётся за посчитанный по этому вводу", async () => {
+    // Возврат к прежней граммовке берёт её расчёт из кэша и перезапрашивает
+    // его, если он устарел. Без сети перезапрос ждёт на паузе, и прежний
+    // вердикт стоял как свежий, хотя сервер его не подтверждал.
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+    const grams = screen.getByLabelText(/Масло сливочное, граммы/);
+    await user.type(grams, "0");
+    await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(grams, "{Backspace}");
+
+      expect(await screen.findByText(WAITING)).toBeInTheDocument();
+      expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+      expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it("называет причину отказа проверки текстом сервера, как кабинет", async () => {
@@ -644,6 +710,8 @@ describe("калькулятор в Mini App", () => {
 
       const busy = screen.getByRole("button", { name: "Повторяем…" });
       expect(busy).toHaveFocus();
+      // Об отказе и повторе уже сказано — «ждём связи» третьим голосом лишнее.
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
       expect(
         screen.getByText("Внутренняя ошибка сервера."),
       ).toBeInTheDocument();

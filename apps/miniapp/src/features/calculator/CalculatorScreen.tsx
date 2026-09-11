@@ -165,7 +165,13 @@ export function CalculatorScreen({ session }: { session: Session }) {
    * выдача, а неверное утверждение, и по нему готовят еду ребёнку.
    */
   const staleInput = rows !== debouncedRows || goal !== debouncedGoal;
-  const stale = staleInput || verify.isFetching;
+  // Без сети запрос не идёт, а ждёт связи (`fetchStatus: "paused"`), и
+  // `isFetching` на паузе ложно: вердикт из кэша выдавался за посчитанный по
+  // этому вводу, а новый ввод не показывал ничего и ничего не объяснял. Пока
+  // правка не догнала расчёт, прежний запрос тоже стоит на паузе — и «нет
+  // связи» остаётся на экране, а не мигает «Пересчитываем…».
+  const waitingForNetwork = verify.fetchStatus === "paused";
+  const stale = staleInput || verify.fetchStatus !== "idle";
 
   /**
    * Правка состава и цели обесценивает подобранное и пересчитанное.
@@ -482,7 +488,15 @@ export function CalculatorScreen({ session }: { session: Session }) {
           </p>
         )}
 
-        {/* Пустой расчёт молчит: о ненабранном составе сказано выше. */}
+        {/* Пустой расчёт молчит: о ненабранном составе сказано выше. Кроме
+            ожидания связи — иначе набранный состав остаётся без ответа и без
+            объяснения. На повторе без сети говорят отказ и «Повторяем…». */}
+        {dish === null && waitingForNetwork && !retrying && (
+          <p role="status" className="m-0 text-sm text-muted-foreground">
+            {t("calculator.waitingForNetwork")}
+          </p>
+        )}
+
         {dish !== null && (
           <div className="flex flex-col gap-field">
             <div className="flex flex-wrap items-center gap-field">
@@ -510,6 +524,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
             <Verdict
               stale={stale}
+              waitingForNetwork={waitingForNetwork}
               ratioOk={verify.data?.ratio_within_tolerance}
               kcalOk={verify.data?.kcal_within_tolerance}
             />
@@ -777,10 +792,12 @@ function KcalDelta({
  */
 function Verdict({
   stale,
+  waitingForNetwork,
   ratioOk,
   kcalOk,
 }: {
   stale: boolean;
+  waitingForNetwork: boolean;
   ratioOk: boolean | null | undefined;
   kcalOk: boolean | null | undefined;
 }): ReactNode {
@@ -789,7 +806,9 @@ function Verdict({
   if (stale) {
     return (
       <p role="status" className="m-0 text-sm text-muted-foreground">
-        {t("calculator.recalculating")}
+        {waitingForNetwork
+          ? t("calculator.waitingForNetwork")
+          : t("calculator.recalculating")}
       </p>
     );
   }
