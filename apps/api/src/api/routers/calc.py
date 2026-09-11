@@ -178,7 +178,12 @@ async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
         exact = Decimal(str(max(item.grams for item in payload.items))) * Decimal(
             str(payload.factor)
         )
-        tenths = exact.quantize(Decimal("0.1"), rounding=ROUND_CEILING)
+        # Граница проверена во float: превышение меньше шага float в Decimal
+        # может дать ровно 5000 — текст всё равно обязан быть больше предела.
+        tenths = max(
+            exact.quantize(Decimal("0.1"), rounding=ROUND_CEILING),
+            Decimal(str(CALC_GRAMS_MAX)) + Decimal("0.1"),
+        )
         shown = f"{tenths:f}".removesuffix(".0").replace(".", ",")
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
