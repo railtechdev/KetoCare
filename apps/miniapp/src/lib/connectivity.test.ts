@@ -35,15 +35,16 @@ afterEach(() => {
 });
 
 describe("источник сети в Mini App", () => {
-  it("спрашивает браузер сразу при подключении", () => {
-    // Query стартует с «в сети»: открытое без сети приложение считало бы
-    // себя подключённым до первого события.
+  it("не уводит в офлайн по navigator.onLine", () => {
+    // `navigator.onLine === false` бывает ложным. Поверить ему значит создать
+    // ровно тот отказ, который этот источник чинит: пауза при живой связи.
     setNavigatorOnline(false);
     const setOnline = vi.fn();
 
     connectivityListener(setOnline);
+    document.dispatchEvent(new Event("visibilitychange"));
 
-    expect(setOnline).toHaveBeenLastCalledWith(false);
+    expect(setOnline).not.toHaveBeenCalledWith(false);
   });
 
   it("перепроверяет сеть, когда приложение снова на экране", () => {
@@ -52,6 +53,7 @@ describe("источник сети в Mini App", () => {
     setNavigatorOnline(false);
     const setOnline = vi.fn();
     connectivityListener(setOnline);
+    window.dispatchEvent(new Event("offline"));
 
     setNavigatorOnline(true);
     document.dispatchEvent(new Event("visibilitychange"));
@@ -64,6 +66,7 @@ describe("источник сети в Mini App", () => {
     setNavigatorOnline(false);
     const setOnline = vi.fn();
     connectivityListener(setOnline);
+    window.dispatchEvent(new Event("offline"));
 
     setNavigatorOnline(true);
     handlers.get("activated")?.();
@@ -112,13 +115,15 @@ describe("источник сети в Mini App", () => {
     watchConnectivity();
     const unsubscribe = onlineManager.subscribe(() => undefined);
 
-    setNavigatorOnline(false);
-    document.dispatchEvent(new Event("visibilitychange"));
-    expect(onlineManager.isOnline()).toBe(false);
+    try {
+      window.dispatchEvent(new Event("offline"));
+      expect(onlineManager.isOnline()).toBe(false);
 
-    setNavigatorOnline(true);
-    document.dispatchEvent(new Event("visibilitychange"));
-    expect(onlineManager.isOnline()).toBe(true);
-    unsubscribe();
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(onlineManager.isOnline()).toBe(true);
+    } finally {
+      unsubscribe();
+      onlineManager.setOnline(true);
+    }
   });
 });
