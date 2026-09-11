@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -9,6 +9,7 @@ import diaryRu from "../../locales/ru/diary.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { SessionProvider } from "../auth/session";
 import { DiaryPage } from "./DiaryPage";
+import { toDateTimeLocalInput } from "./time";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -109,6 +110,32 @@ describe("DiaryPage", () => {
     expect(
       await screen.findByRole("dialog", { name: "Новая запись" }),
     ).toBeInTheDocument();
+  });
+
+  it("на будущую дату форма кетонов называет причину, а не просит указать дату", async () => {
+    // Будущий замер гасил пометку «нет замеров» у врача. Сервер такую запись
+    // отклонит, но общим «проверьте поля»; причину обязана назвать форма — и
+    // именно у кетонов и веса, а не только у приступа, где её подключили сначала.
+    const user = userEvent.setup();
+    renderPage({ kind: "ketones" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Добавить запись" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Новая запись" });
+    fireEvent.change(within(dialog).getByLabelText("Дата и время"), {
+      target: {
+        value: toDateTimeLocalInput(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+      },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Добавить" }));
+
+    expect(
+      await within(dialog).findByText(/Это время ещё не наступило/),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Укажите дату и время события."),
+    ).not.toBeInTheDocument();
   });
 });
 

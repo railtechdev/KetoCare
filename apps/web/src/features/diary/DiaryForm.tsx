@@ -123,6 +123,23 @@ function nowInput(): string {
   return toDateTimeLocalInput(new Date());
 }
 
+/**
+ * Текст ошибки поля «когда» — один на все шесть форм.
+ *
+ * Причины две, и лечатся они по-разному: неразобранное значение надо ввести, а
+ * время, которое ещё не наступило, — исправить. Сервер на запись из будущего
+ * отвечает общим «проверьте поля», поэтому причину называет форма. Пока выбор
+ * жил в одной форме, пять остальных, включая кетоны и вес, на будущую дату
+ * писали «укажите дату» у уже заполненного поля.
+ */
+function occurredAtErrorKey(
+  message: string | undefined,
+): "form.occurredAtFuture" | "form.occurredAtInvalid" {
+  return message === OCCURRED_AT_FUTURE
+    ? "form.occurredAtFuture"
+    : "form.occurredAtInvalid";
+}
+
 function occurredInput(occurredAt: string): string {
   return toDateTimeLocalInput(new Date(occurredAt));
 }
@@ -316,11 +333,7 @@ function SeizureForm({
           label={t("form.occurredAt")}
           error={
             errors.occurredAt &&
-            t(
-              errors.occurredAt.message === OCCURRED_AT_FUTURE
-                ? "form.occurredAtFuture"
-                : "form.occurredAtInvalid",
-            )
+            t(occurredAtErrorKey(errors.occurredAt.message))
           }
           {...register("occurredAt")}
         />
@@ -457,7 +470,9 @@ function KetoneForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={errors.occurredAt && t("form.occurredAtInvalid")}
+        error={
+          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
+        }
         {...register("occurredAt")}
       />
       <Field
@@ -543,7 +558,9 @@ function WeightForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={errors.occurredAt && t("form.occurredAtInvalid")}
+        error={
+          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
+        }
         {...register("occurredAt")}
       />
       <Field
@@ -643,7 +660,9 @@ function MedicationForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={errors.occurredAt && t("form.occurredAtInvalid")}
+        error={
+          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
+        }
         {...register("occurredAt")}
       />
       <SelectField
@@ -724,7 +743,9 @@ function MealForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={errors.occurredAt && t("form.occurredAtInvalid")}
+        error={
+          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
+        }
         {...register("occurredAt")}
       />
       <TextAreaField
@@ -789,7 +810,9 @@ function SideEffectForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={errors.occurredAt && t("form.occurredAtInvalid")}
+        error={
+          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
+        }
         {...register("occurredAt")}
       />
       <Field
