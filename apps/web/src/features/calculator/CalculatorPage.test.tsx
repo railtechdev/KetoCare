@@ -156,20 +156,22 @@ async function addButter(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("option", { name: /Масло/ }));
 }
 
-describe("калькулятор", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    (api.GET as Mock).mockImplementation(async (path: string) =>
-      path.includes("overview")
-        ? { data: OVERVIEW, error: undefined }
-        : { data: PRODUCTS, error: undefined },
-    );
-    (api.POST as Mock).mockImplementation(async (path: string) => ({
-      data: path.includes("solve") ? SOLVED : VERIFIED,
-      error: undefined,
-    }));
-  });
+// Заглушки API — на весь файл, а не на первый блок: тесты других блоков
+// брали их по наследству от предыдущих и в одиночном запуске падали.
+beforeEach(() => {
+  vi.clearAllMocks();
+  (api.GET as Mock).mockImplementation(async (path: string) =>
+    path.includes("overview")
+      ? { data: OVERVIEW, error: undefined }
+      : { data: PRODUCTS, error: undefined },
+  );
+  (api.POST as Mock).mockImplementation(async (path: string) => ({
+    data: path.includes("solve") ? SOLVED : VERIFIED,
+    error: undefined,
+  }));
+});
 
+describe("калькулятор", () => {
   it("берёт кетосоотношение из активного назначения, а не из кода экрана", async () => {
     renderCalculator(PATIENT_ID);
 
@@ -1073,6 +1075,7 @@ describe("калькулятор", () => {
           screen.getByLabelText(/Масса продукта «Масло сливочное»/),
         ).toHaveValue(100),
       );
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }
@@ -1112,6 +1115,123 @@ describe("калькулятор", () => {
       expect(
         screen.getByLabelText(/Масса продукта «Масло сливочное»/),
       ).toHaveValue(50);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("правка множителя на паузе не даёт пересчёту переписать граммовку", async () => {
+    (api.POST as Mock).mockImplementation(async (path: string) => ({
+      data: path.includes("scale")
+        ? {
+            dish: {
+              ...VERIFIED.dish,
+              items: [{ ...VERIFIED.dish.items[0], grams: 100 }],
+            },
+          }
+        : VERIFIED,
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: /Пересчитать порции/ }),
+      );
+      await screen.findByRole("button", { name: "Пересчитываем…" });
+      const factor = screen.getByLabelText(/Коэффициент порции/);
+      await user.clear(factor);
+      await user.type(factor, "3");
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() =>
+        expect(
+          (api.POST as Mock).mock.calls.some(([path]) =>
+            String(path).includes("scale"),
+          ),
+        ).toBe(true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(
+        screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+      ).toHaveValue(50);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("сохранение ждёт подбора, стоящего на паузе, и называет почему", async () => {
+    // Иначе после возврата связи в блюда ребёнка ушли бы граммы до подбора, а
+    // экран показал бы подобранные и «Сохранено».
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      );
+      await screen.findByRole("button", { name: "Подбираем…" });
+
+      expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+      expect(
+        screen.getByText("Дождитесь подбора граммовки или пересчёта порций."),
+      ).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("причина ожидания названа, пока правка не догнала повтор на паузе", async () => {
+    // Плашки отказа в это окно нет: описывать кнопку ею нельзя, и причину
+    // называет строка действий.
+    (api.POST as Mock).mockImplementation((path: string) =>
+      path.includes("verify")
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : Promise.resolve({ data: SOLVED, error: undefined }),
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      await screen.findAllByText(WAITING);
+      await user.click(
+        screen.getByRole("button", { name: /Пересчитать порции/ }),
+      );
+      const busy = await screen.findByRole("button", {
+        name: "Пересчитываем…",
+      });
+      await user.type(screen.getByLabelText(/Углеводы не более/), "5");
+
+      expect(busy).toHaveAccessibleDescription(WAITING);
     } finally {
       onlineManager.setOnline(true);
     }
@@ -1477,6 +1597,28 @@ describe("калькулятор", () => {
 });
 
 describe("калькулятор без выбранного ребёнка", () => {
+  it("передача пациенту ждёт пересчёта, стоящего на паузе", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+    await addButter(user);
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: /Пересчитать порции/ }),
+      );
+      await screen.findByRole("button", { name: "Пересчитываем…" });
+
+      expect(
+        screen.getByText("Дождитесь подбора граммовки или пересчёта порций."),
+      ).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("считает и не требует выбирать пациента", async () => {
     // «Выйдет ли 4:1 на этих продуктах» — вопрос о продуктах. Пока он был
     // общим с вопросом «годится ли это ЭТОМУ ребёнку», специалист с когортой в

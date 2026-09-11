@@ -363,8 +363,14 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const saveBlockedBy =
     tooHeavyReason ??
     (verify.isError && checkedNow ? t("save.blocked.checkFailed") : null);
+  // Подбор и пересчёт тоже расчёт: пока они идут (или ждут связи), в составе
+  // ещё не те граммы, что сохранятся, — иначе после возврата связи в блюда
+  // ребёнка ушли бы граммы до подбора, а экран показал бы подобранные.
+  const actionsBusyReason =
+    solve.isPending || scale.isPending ? t("actionsBusy") : null;
   const saveWaitsFor =
-    verify.isSuccess && checkedNow ? null : t("save.blocked.notChecked");
+    actionsBusyReason ??
+    (verify.isSuccess && checkedNow ? null : t("save.blocked.notChecked"));
   const scaleBlockedBy = noRows
     ? t("blocked.noRows")
     : tooHeavyReason !== null
@@ -428,7 +434,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const actionsPaused = solve.isPaused || scale.isPaused;
   const verifyWaitingId = waitingForNetwork
     ? waitingId
-    : retrying && verify.isPaused
+    : retrying && verify.isPaused && refusalMessage !== null
       ? refusalId
       : null;
   const actionWaitingReason =
@@ -718,7 +724,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                 min={0.1}
                 step={0.1}
                 value={factor}
-                onChange={(event) => setFactor(Number(event.target.value))}
+                onChange={(event) => {
+                  // Пересчёт, ждущий связи, иначе вписал бы граммы по прежнему
+                  // множителю — как в Mini App.
+                  setFactor(Number(event.target.value));
+                  scale.reset();
+                }}
                 className="tabular-nums"
               />
               <Button
@@ -774,7 +785,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               в карте ребёнка — сразу в его блюда, в общем калькуляторе —
               вместе с выбором ребёнка. */}
           {patientId === undefined ? (
-            <HandOffToPatient rows={rows} blockedBy={tooHeavyReason} />
+            <HandOffToPatient
+              rows={rows}
+              blockedBy={tooHeavyReason ?? actionsBusyReason}
+            />
           ) : (
             <SaveDishForm
               patientId={patientId}
