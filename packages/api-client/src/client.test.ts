@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createApiClient } from "./client";
+import { createApiClient, NetworkError } from "./client";
 
 /**
  * Продление сессии на лету.
@@ -172,6 +172,57 @@ describe("клиент API: продление сессии", () => {
     expect(boundary).toBeDefined();
     expect(sent[0]?.body).toContain(`--${boundary}`);
     expect(sent[0]?.body).toContain("%PDF-1.4 выписка");
+  });
+
+  it("отказ сети отдаёт отдельным классом, а не голым TypeError", async () => {
+    globalThis.fetch = browserFetch(() => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: "http://test" });
+
+    await expect(
+      api.POST("/api/v1/patients/{patient_id}/custom-dishes", {
+        params: { path: { patient_id: "child-1" } },
+        body: { title: "Суп", ingredients: [] },
+      }),
+    ).rejects.toBeInstanceOf(NetworkError);
+  });
+
+  it("отмена запроса остаётся отменой, а не «нет сети»", async () => {
+    globalThis.fetch = browserFetch(() => {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: "http://test" });
+
+    const failure = await api.GET("/api/v1/patients", {}).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).not.toBeInstanceOf(NetworkError);
+  });
+
+  it("обрыв сети на повторе после обновления — тоже отказ сети", async () => {
+    let token = "old-token";
+    globalThis.fetch = browserFetch((request) => {
+      if (request.headers.get("Authorization") === "Bearer new-token") {
+        throw new TypeError("Failed to fetch");
+      }
+      return unauthorized();
+    }) as unknown as typeof fetch;
+    const api = createApiClient({
+      baseUrl: "http://test",
+      getAccessToken: () => token,
+      refreshAccessToken: async () => {
+        token = "new-token";
+        return token;
+      },
+    });
+
+    await expect(api.GET("/api/v1/patients", {})).rejects.toBeInstanceOf(
+      NetworkError,
+    );
   });
 
   it("на все параллельные 401 приходится одно обновление", async () => {

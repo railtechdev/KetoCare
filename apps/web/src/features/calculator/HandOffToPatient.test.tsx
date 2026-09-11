@@ -1,3 +1,4 @@
+import { NetworkError } from "@ketocare/api-client";
 import { Toaster } from "@ketocare/ui";
 import {
   onlineManager,
@@ -182,7 +183,7 @@ describe("передача состава пациенту", () => {
   it("без сети передача не встаёт в очередь: отказ сразу и без второго блюда потом", async () => {
     // Запись на паузе создала бы блюдо молча после возврата связи — возможно,
     // уже с закрытого экрана, — а повторное нажатие дало бы дубль.
-    (api.POST as Mock).mockRejectedValue(new TypeError("Failed to fetch"));
+    (api.POST as Mock).mockRejectedValue(new NetworkError());
     const user = userEvent.setup();
     renderHandOff();
 
@@ -214,6 +215,40 @@ describe("передача состава пациенту", () => {
     } finally {
       onlineManager.setOnline(true);
     }
+  });
+
+  it("ошибка в коде не выдаётся за «нет связи», а сообщение сервера важнее", async () => {
+    // `TypeError` бросает и ошибка в коде: назвать её «нет связи» значило бы
+    // отправить человека проверять сеть при исправной сети.
+    (api.POST as Mock)
+      .mockRejectedValueOnce(new TypeError("x is not a function"))
+      .mockResolvedValueOnce({
+        error: {
+          error: { code: "conflict", message: "Такое блюдо уже есть." },
+        },
+      });
+    const user = userEvent.setup();
+    renderHandOff();
+
+    await user.type(
+      await screen.findByLabelText("Название блюда"),
+      "Завтрак 4:1",
+    );
+    await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Иван Петров/ }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Передать" }));
+    expect(
+      await screen.findByText("Что-то пошло не так. Попробуйте ещё раз."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Нет связи/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Передать" }));
+    expect(
+      await screen.findByText("Такое блюдо уже есть."),
+    ).toBeInTheDocument();
   });
 
   it("состав, который нельзя передать, не уходит и в обход кнопки", async () => {

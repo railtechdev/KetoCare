@@ -1,3 +1,4 @@
+import { NetworkError } from "@ketocare/api-client";
 import {
   onlineManager,
   QueryClient,
@@ -1691,10 +1692,14 @@ describe("калькулятор без выбранного ребёнка", ()
     // связи, а повторное нажатие дало бы второе.
     (api.POST as Mock).mockImplementation(async (path: string) => {
       if (path.includes("custom-dishes")) {
-        throw new TypeError("Failed to fetch");
+        throw new NetworkError();
       }
       return { data: VERIFIED, error: undefined };
     });
+    const saves = () =>
+      (api.POST as Mock).mock.calls.filter(([path]) =>
+        String(path).includes("custom-dishes"),
+      ).length;
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);
     await addButter(user);
@@ -1712,6 +1717,13 @@ describe("калькулятор без выбранного ребёнка", ()
       expect(
         await screen.findByText("Нет связи с сервером. Проверьте подключение."),
       ).toBeInTheDocument();
+      expect(saves()).toBe(1);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(saves()).toBe(1);
     } finally {
       onlineManager.setOnline(true);
     }
