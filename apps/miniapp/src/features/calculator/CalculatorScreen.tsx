@@ -165,7 +165,13 @@ export function CalculatorScreen({ session }: { session: Session }) {
    * выдача, а неверное утверждение, и по нему готовят еду ребёнку.
    */
   const staleInput = rows !== debouncedRows || goal !== debouncedGoal;
-  const stale = staleInput || verify.isFetching;
+  // Без сети запрос не идёт, а ждёт связи (`fetchStatus: "paused"`), и
+  // `isFetching` на паузе ложно: вердикт из кэша выдавался за посчитанный по
+  // этому вводу, а новый ввод не показывал ничего и ничего не объяснял. Пока
+  // правка не догнала расчёт, прежний запрос тоже стоит на паузе — и «нет
+  // связи» остаётся на экране, а не мигает «Пересчитываем…».
+  const waitingForNetwork = verify.fetchStatus === "paused";
+  const stale = staleInput || verify.fetchStatus !== "idle";
 
   /**
    * Правка состава и цели обесценивает подобранное и пересчитанное.
@@ -180,6 +186,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
   }
 
   const dish = verify.data?.dish ?? null;
+  // Вердикт — только по ответу, который сервер дал на этот ввод. Перезапрос,
+  // упавший при сохранённых прежних данных (связь пропала без события
+  // `offline`), оставляет числа, но не подтверждение: «Цель достигнута»
+  // рядом с «Не удалось посчитать» — противоречие, а по нему готовят еду.
+  const verdict = stale || verify.isError ? undefined : verify.data;
   const excluded = verify.data?.excluded ?? [];
   // Подбор не предупреждает об исключённом, а вычёркивает его со входа, и
   // сказать об этом больше негде: своего блока у результата подбора нет —
@@ -283,6 +294,10 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // Идёт — и когда запрос на паузе без сети: `isFetching` на паузе ложно, и
   // нажатая без связи кнопка пропадала вместе с фокусом и текстом отказа.
   const retrying = retryIsThisRequest && verify.fetchStatus !== "idle";
+  // Повтор, который видно. Пока правка не догнала расчёт, отказ и кнопка
+  // скрыты, и молчать ради «Повторяем…», которого на экране нет, нельзя:
+  // остались бы прежние числа без единого слова.
+  const retryingShown = retrying && !staleInput;
   // Отказал именно повтор: ошибок стало больше, чем было при нажатии. Сверка
   // счётчика — страховка на случай отмены запроса с откатом (`cancelQueries`):
   // он возвращается в прежнюю ошибку и покой, и без сверки скрытая строка
@@ -482,7 +497,15 @@ export function CalculatorScreen({ session }: { session: Session }) {
           </p>
         )}
 
-        {/* Пустой расчёт молчит: о ненабранном составе сказано выше. */}
+        {/* Пустой расчёт молчит: о ненабранном составе сказано выше. Кроме
+            ожидания связи — иначе набранный состав остаётся без ответа и без
+            объяснения. На повторе без сети говорят отказ и «Повторяем…». */}
+        {dish === null && waitingForNetwork && !retryingShown && (
+          <p role="status" className="m-0 text-sm text-muted-foreground">
+            {t("calculator.waitingForNetwork")}
+          </p>
+        )}
+
         {dish !== null && (
           <div className="flex flex-col gap-field">
             <div className="flex flex-wrap items-center gap-field">
@@ -492,11 +515,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
                   ровно противоположное тому, что на весах. */}
               <RatioBadge
                 ratio={dish.ratio}
-                withinTolerance={
-                  stale
-                    ? undefined
-                    : (verify.data?.ratio_within_tolerance ?? undefined)
-                }
+                withinTolerance={verdict?.ratio_within_tolerance ?? undefined}
               />
               <span className="tabular-nums">
                 {t("calculator.kcalValue", { kcal: dish.kcal.toFixed(0) })}
@@ -504,14 +523,16 @@ export function CalculatorScreen({ session }: { session: Session }) {
               <KcalDelta
                 dish={dish.kcal}
                 goal={goal}
-                within={stale ? undefined : verify.data?.kcal_within_tolerance}
+                within={verdict?.kcal_within_tolerance}
               />
             </div>
 
             <Verdict
               stale={stale}
-              ratioOk={verify.data?.ratio_within_tolerance}
-              kcalOk={verify.data?.kcal_within_tolerance}
+              waitingForNetwork={waitingForNetwork}
+              retrying={retryingShown}
+              ratioOk={verdict?.ratio_within_tolerance}
+              kcalOk={verdict?.kcal_within_tolerance}
             />
 
             <MacroBar
@@ -662,7 +683,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
       {/* Постоянная область: повторный отказ с тем же текстом баннер заново
           не объявляет. */}
       <p role="status" className="sr-only">
-        {retrying
+        {retryingShown
           ? t("actions.retrying")
           : announceRetryFailed
             ? refusalMessage
@@ -777,19 +798,28 @@ function KcalDelta({
  */
 function Verdict({
   stale,
+  waitingForNetwork,
+  retrying,
   ratioOk,
   kcalOk,
 }: {
   stale: boolean;
+  waitingForNetwork: boolean;
+  retrying: boolean;
   ratioOk: boolean | null | undefined;
   kcalOk: boolean | null | undefined;
 }): ReactNode {
   const { t } = useTranslation();
 
   if (stale) {
+    // На повторе о ходе уже говорит строка «Повторяем…»: второй голос с
+    // другим текстом зачитывался бы вперемешку с ней.
+    if (retrying) return null;
     return (
       <p role="status" className="m-0 text-sm text-muted-foreground">
-        {t("calculator.recalculating")}
+        {waitingForNetwork
+          ? t("calculator.waitingForNetwork")
+          : t("calculator.recalculating")}
       </p>
     );
   }

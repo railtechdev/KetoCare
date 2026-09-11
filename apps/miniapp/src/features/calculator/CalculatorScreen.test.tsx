@@ -18,6 +18,8 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
 });
 
+const WAITING = "Нет связи — посчитаем, когда она появится.";
+
 const SESSION = {
   patientId: "11111111-1111-4111-8111-111111111111",
   patientName: "Амина",
@@ -162,6 +164,39 @@ function renderScreen() {
     wrapper: Wrapper,
   });
   return Object.assign(result, { client });
+}
+
+/**
+ * Проверка 30 г сначала отвечает, а её перезапросы — как скажет `refetch`.
+ * Остальные массы отвечают всегда.
+ */
+function refetchOf30Fails(refetch: () => Promise<unknown>) {
+  let calls30 = 0;
+  (api.POST as Mock).mockImplementation(
+    (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+      if (!path.endsWith("/calc/verify")) {
+        return Promise.resolve({ data: solveResponse() });
+      }
+      if (options.body?.items?.[0]?.grams !== 30) {
+        return Promise.resolve({ data: verifyResponse() });
+      }
+      calls30 += 1;
+      return calls30 === 1
+        ? Promise.resolve({ data: verifyResponse() })
+        : refetch();
+    },
+  );
+}
+
+/** 30 г посчитано, 300 г посчитано, снова 30 г — расчёт из кэша перезапрашивается. */
+async function returnToCachedGrams(user: ReturnType<typeof userEvent.setup>) {
+  await addProduct(user);
+  expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+  const grams = screen.getByLabelText(/Масло сливочное, граммы/);
+  await user.type(grams, "0");
+  await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(2));
+  expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+  await user.type(grams, "{Backspace}");
 }
 
 async function addProduct(user: ReturnType<typeof userEvent.setup>) {
@@ -310,6 +345,163 @@ describe("калькулятор в Mini App", () => {
       expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument(),
     );
     expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+  });
+
+  it("новый состав без сети говорит, что ждёт связи, и досчитывает с её возвратом", async () => {
+    // Без сети запрос встаёт на паузу, а `isFetching` на паузе ложно: набранный
+    // состав оставался без чисел, без «Пересчитываем…» и без объяснения.
+    const user = userEvent.setup();
+    renderScreen();
+    await user.type(screen.getByLabelText("Найдите продукт"), "масло");
+    await user.click(
+      await screen.findByRole("button", { name: "Масло сливочное" }),
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(
+        await screen.findByLabelText(/Масло сливочное, граммы/),
+        "30",
+      );
+
+      expect(await screen.findByText(WAITING)).toBeInTheDocument();
+      expect(screen.queryByText(/224 ккал/)).not.toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("вердикт из кэша без сети не выдаётся за посчитанный по этому вводу", async () => {
+    // Возврат к прежней граммовке берёт её расчёт из кэша и перезапрашивает
+    // его, если он устарел (в бою — через 30 с, у тестового клиента — сразу).
+    // Без сети перезапрос ждёт на паузе, и прежний вердикт стоял как свежий,
+    // хотя сервер его не подтверждал.
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+    const grams = screen.getByLabelText(/Масло сливочное, граммы/);
+    await user.type(grams, "0");
+    await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(grams, "{Backspace}");
+
+      expect(await screen.findByText(WAITING)).toBeInTheDocument();
+      expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+      expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("упавший перезапрос при прежних данных не оставляет вердикт рядом с отказом", async () => {
+    // Связь пропала без события `offline`: запрос не встаёт на паузу, а
+    // падает, и данные прежнего ответа остаются. «Цель достигнута» рядом с
+    // «Не удалось посчитать» — противоречие.
+    refetchOf30Fails(() =>
+      Promise.resolve({
+        error: {
+          error: { code: "internal", message: "Внутренняя ошибка сервера." },
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await returnToCachedGrams(user);
+
+    expect(
+      await screen.findByText("Внутренняя ошибка сервера."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Соотношение /)).toHaveAttribute(
+      "data-state",
+      "neutral",
+    );
+    expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+  });
+
+  it("повтор при прежних данных говорит одним голосом", async () => {
+    // Вердикт на время повтора писал «Пересчитываем…», а скрытая строка —
+    // «Повторяем…»: два разных объявления одновременно.
+    let refetches = 0;
+    refetchOf30Fails(() => {
+      refetches += 1;
+      return refetches === 1
+        ? Promise.resolve({
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          })
+        : new Promise(() => {});
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await returnToCachedGrams(user);
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Повторяем…" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Пересчитываем…")).not.toBeInTheDocument();
+  });
+
+  it("правка ввода во время повтора при прежних данных говорит «Пересчитываем…»", async () => {
+    // Пока правка не догнала расчёт, отказ и кнопка скрыты. Вердикт молчал ради
+    // «Повторяем…», и на экране оставались прежние числа без единого слова.
+    let refetches = 0;
+    refetchOf30Fails(() => {
+      refetches += 1;
+      return refetches === 1
+        ? Promise.resolve({
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          })
+        : new Promise(() => {});
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await returnToCachedGrams(user);
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+    await screen.findByRole("button", { name: "Повторяем…" });
+    await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "5");
+
+    // Окно проверки — до конца задержки: после неё у новой граммовки ещё нет
+    // блюда, и строки «Пересчитываем…» нет вместе с ним. Первая проверка
+    // называет причину, если машина не успела: запрос новой граммовки уже ушёл.
+    expect(
+      (api.POST as Mock).mock.calls.some(
+        ([, options]) => options?.body?.items?.[0]?.grams === 305,
+      ),
+    ).toBe(false);
+    expect(screen.getByText("Пересчитываем…")).toBeInTheDocument();
+    // И кнопка, и скрытая строка: во время правки «Повторяем…» не звучит.
+    expect(screen.queryByText("Повторяем…")).not.toBeInTheDocument();
   });
 
   it("называет причину отказа проверки текстом сервера, как кабинет", async () => {
@@ -644,6 +836,8 @@ describe("калькулятор в Mini App", () => {
 
       const busy = screen.getByRole("button", { name: "Повторяем…" });
       expect(busy).toHaveFocus();
+      // Об отказе и повторе уже сказано — «ждём связи» третьим голосом лишнее.
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
       expect(
         screen.getByText("Внутренняя ошибка сервера."),
       ).toBeInTheDocument();
