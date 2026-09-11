@@ -72,7 +72,10 @@ const ROWS: DishRow[] = [
   },
 ];
 
-function renderHandOff(blockedBy: string | null = null) {
+function renderHandOff(
+  blockedBy: string | null = null,
+  waitingFor: string | null = null,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -86,9 +89,14 @@ function renderHandOff(blockedBy: string | null = null) {
     );
   }
 
-  return render(<HandOffToPatient rows={ROWS} blockedBy={blockedBy} />, {
-    wrapper: Wrapper,
-  });
+  return render(
+    <HandOffToPatient
+      rows={ROWS}
+      blockedBy={blockedBy}
+      waitingFor={waitingFor}
+    />,
+    { wrapper: Wrapper },
+  );
 }
 
 beforeEach(() => {
@@ -249,6 +257,74 @@ describe("передача состава пациенту", () => {
     expect(
       await screen.findByText("Такое блюдо уже есть."),
     ).toBeInTheDocument();
+  });
+
+  describe("ожидание называется последним, как у формы сохранения", () => {
+    const WAITING = "Дождитесь подбора граммовки или пересчёта порций.";
+
+    async function fill(
+      user: ReturnType<typeof userEvent.setup>,
+      { title = true, patient = true } = {},
+    ) {
+      if (title) {
+        await user.type(
+          await screen.findByLabelText("Название блюда"),
+          "Завтрак 4:1",
+        );
+      }
+      if (patient) {
+        await user.click(
+          await screen.findByRole("button", { name: /Выбрать пациента/ }),
+        );
+        await user.click(
+          await screen.findByRole("option", { name: /Иван Петров/ }),
+        );
+      }
+    }
+
+    it("без названия называет название, а не ожидание", async () => {
+      const user = userEvent.setup();
+      renderHandOff(null, WAITING);
+      await fill(user, { title: false });
+
+      expect(
+        screen.getByRole("button", { name: "Передать" }),
+      ).toHaveAccessibleDescription(calculatorRu.handoff.blocked.noTitle);
+    });
+
+    it("без пациента называет пациента, а не ожидание", async () => {
+      const user = userEvent.setup();
+      renderHandOff(null, WAITING);
+      await fill(user, { patient: false });
+
+      expect(
+        screen.getByRole("button", { name: "Передать" }),
+      ).toHaveAccessibleDescription(calculatorRu.handoff.blocked.noPatient);
+    });
+
+    it("то, что устраняет человек, важнее ожидания", async () => {
+      const user = userEvent.setup();
+      renderHandOff("Масса продукта больше 5000 г.", WAITING);
+      await fill(user);
+
+      expect(
+        screen.getByRole("button", { name: "Передать" }),
+      ).toHaveAccessibleDescription("Масса продукта больше 5000 г.");
+    });
+
+    it("при заполненной форме ждёт и не уходит и в обход кнопки", async () => {
+      const user = userEvent.setup();
+      renderHandOff(null, WAITING);
+      await fill(user);
+
+      const handOff = screen.getByRole("button", { name: "Передать" });
+      expect(handOff).toBeDisabled();
+      expect(handOff).toHaveAccessibleDescription(WAITING);
+
+      fireEvent.submit(handOff.closest("form") as HTMLFormElement);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(api.POST).not.toHaveBeenCalled();
+    });
   });
 
   it("состав, который нельзя передать, не уходит и в обход кнопки", async () => {

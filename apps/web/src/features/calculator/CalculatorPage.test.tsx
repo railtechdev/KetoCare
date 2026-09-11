@@ -1599,9 +1599,41 @@ describe("калькулятор", () => {
 
 describe("калькулятор без выбранного ребёнка", () => {
   it("передача пациенту ждёт пересчёта, стоящего на паузе", async () => {
+    // Ожидание называется последним — после названия и пациента, как у формы
+    // сохранения: сначала то, что устраняет человек.
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/patients"
+        ? {
+            data: {
+              items: [
+                {
+                  id: PATIENT_ID,
+                  full_name: "Иван Петров",
+                  birth_date: "2020-05-14",
+                  sex: "m",
+                  height_cm: 108,
+                  allergies: [],
+                  notes: null,
+                },
+              ],
+              total: 1,
+            },
+            error: undefined,
+          }
+        : path.includes("overview")
+          ? { data: OVERVIEW, error: undefined }
+          : { data: PRODUCTS, error: undefined },
+    );
     const user = userEvent.setup();
     renderCalculator();
     await addButter(user);
+    await user.type(screen.getByLabelText("Название блюда"), "Завтрак");
+    await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Иван Петров/ }),
+    );
+    const handOff = screen.getByRole("button", { name: "Передать" });
+    await waitFor(() => expect(handOff).toBeEnabled());
 
     try {
       act(() => {
@@ -1612,9 +1644,10 @@ describe("калькулятор без выбранного ребёнка", ()
       );
       await screen.findByRole("button", { name: "Пересчитываем…" });
 
-      expect(
-        screen.getByText("Дождитесь подбора граммовки или пересчёта порций."),
-      ).toBeInTheDocument();
+      expect(handOff).toBeDisabled();
+      expect(handOff).toHaveAccessibleDescription(
+        "Дождитесь подбора граммовки или пересчёта порций.",
+      );
     } finally {
       onlineManager.setOnline(true);
     }
