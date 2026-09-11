@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -304,6 +305,13 @@ def _number(
     try:
         value = float(raw)
     except ValueError:
+        errors.append(RowError(line, column, f"Ожидалось число, получено: {raw!r}."))
+        return None
+    # `float` понимает «nan» и «inf», а NaN не проходит ни одно сравнение: ни
+    # «<= 0», ни «> maximum». Без этой ветки граммовка «nan» уходила в состав,
+    # и расчёт соотношения рецепта становился NaN — тот же дефект нашёлся в
+    # импорте продуктов (PR #132).
+    if not math.isfinite(value):
         errors.append(RowError(line, column, f"Ожидалось число, получено: {raw!r}."))
         return None
     if value <= 0:

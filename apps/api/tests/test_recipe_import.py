@@ -134,6 +134,25 @@ class TestParsing:
         assert bound(RecipeWrite, "title", "max_length") == recipe_import.TITLE_MAX
         assert bound(RecipeIngredientIn, "grams", "le") == recipe_import.GRAMS_MAX
 
+    @pytest.mark.parametrize("value", ["nan", "inf"])
+    def test_non_finite_grams_are_rejected(self, value):
+        """«nan» — число для `float`, но не для расчёта.
+
+        NaN не проходит ни «<= 0», ни «> предела», поэтому граммовка «nan»
+        разбиралась без ошибок и делала соотношение рецепта NaN.
+        """
+
+        report = parse_csv(_csv(f'Омлет,breakfast,120,1,"1. Растопите.",Масло,{value}'))
+
+        assert not report.ok
+        assert any(error.column == "grams" for error in report.errors), report.errors
+
+    def test_non_finite_yield_is_rejected(self):
+        report = parse_csv(_csv('Омлет,breakfast,nan,1,"1. Растопите.",Масло,30'))
+
+        assert not report.ok
+        assert any(error.column == "yield_g" for error in report.errors), report.errors
+
     def test_a_broken_header_does_not_attach_rows_to_the_previous_recipe(self):
         """Иначе в превью появятся чужие граммы с посчитанными по ним ккал."""
 
