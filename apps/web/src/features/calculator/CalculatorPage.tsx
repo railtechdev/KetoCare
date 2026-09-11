@@ -9,6 +9,7 @@ import {
   exceedsCalcGrams,
   mealTargetsFrom,
 } from "@ketocare/ui";
+import { onlineManager } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -401,12 +402,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
     : verifyShown
       ? (errorMessageOf(verify.error) ?? t("common:errors.unexpected"))
       : retrying
-        ? // Повтор без сети не уходит, а ждёт: прежний отказ («что-то пошло не
-          // так») рядом с «Повторяем…» не говорил главного. Голос один — тот
-          // же отказ на своём месте, но словами о сети.
-          verify.isPaused
-          ? t("waitingForNetwork")
-          : (retry?.message ?? null)
+        ? (retry?.message ?? null)
         : null;
   // Повтор отказал снова ТЕМ ЖЕ текстом: область `role="alert"` не меняется и
   // заново не объявляется — поэтому скрытая строка ниже. Отказ с другим
@@ -571,7 +567,18 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                 aria-busy={retrying || undefined}
                 onClick={() => {
                   if (retrying) return;
-                  setRetry({ input: verifyInput, message: refusalMessage });
+                  // Без сети повтор не уходит, а ждёт: прежний отказ («что-то
+                  // пошло не так») рядом с «Повторяем…» не говорил главного.
+                  // Текст ожидания запоминается как показанный отказ — и после
+                  // возврата сети плашка не возвращается к старому отказу, а
+                  // новый отказ объявит себя сам. Пауза бывает только при
+                  // запуске без сети: мутация, начатая с сетью, падает.
+                  setRetry({
+                    input: verifyInput,
+                    message: onlineManager.isOnline()
+                      ? refusalMessage
+                      : t("waitingForNetwork"),
+                  });
                   runVerify();
                 }}
               >
