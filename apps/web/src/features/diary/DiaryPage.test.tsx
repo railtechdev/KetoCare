@@ -152,15 +152,6 @@ describe("DiaryPage", () => {
       ).not.toBeInTheDocument();
     },
   );
-    await user.click(within(dialog).getByRole("button", { name: "Добавить" }));
-
-    expect(
-      await within(dialog).findByText(/Это время ещё не наступило/),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).queryByText("Укажите дату и время события."),
-    ).not.toBeInTheDocument();
-  });
 });
 
 describe("вкладка «Лекарства» без схемы", () => {
