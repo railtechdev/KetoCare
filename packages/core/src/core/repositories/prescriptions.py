@@ -60,31 +60,6 @@ async def get_active(session: AsyncSession, *, patient_id: uuid.UUID) -> Prescri
     return result
 
 
-async def started_on(session: AsyncSession, *, patient_id: uuid.UUID) -> date | None:
-    """`effective_from` самого раннего назначения. `None` — назначений нет.
-
-    **Снаружи звать не это, а `repositories.therapy`.** Здесь только один из двух
-    источников: с тех пор как врач называет дату начала терапии прямо
-    (`medical_profiles.therapy_started_on`, ответ клиники на вопрос 17), вывод из
-    назначений стал запасным. Позвав эту функцию напрямую, потребитель молча
-    потеряет слово врача — а от даты старта зависят и расписание визитов, и
-    судьба исходной частоты приступов.
-
-    Берётся самое раннее, а не активное: назначение меняют по ходу лечения, и
-    «когда началось» — это первая строка, а не последняя. Таблица append-only
-    (правило 4), поэтому первая строка никуда не денется.
-    """
-
-    stmt = (
-        select(Prescription.effective_from)
-        .where(Prescription.patient_id == patient_id)
-        .order_by(Prescription.effective_from, Prescription.created_at)
-        .limit(1)
-    )
-    result: date | None = await session.scalar(stmt)
-    return result
-
-
 async def list_history(
     session: AsyncSession, *, patient_id: uuid.UUID, limit: int = 50, offset: int = 0
 ) -> tuple[list[Prescription], int]:

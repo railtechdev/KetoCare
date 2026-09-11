@@ -19,6 +19,7 @@ i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
 const EVERYTHING: PatientFlags = {
   noPrescription: true,
   daysSinceLastReading: 5,
+  strictMonitoring: false,
   staleData: true,
   nutritionOff: true,
   seizuresGrew: true,
@@ -153,6 +154,7 @@ describe("пометки строки и легенда говорят одно 
     const QUIET: PatientFlags = {
       noPrescription: false,
       daysSinceLastReading: 0,
+      strictMonitoring: false,
       staleData: false,
       nutritionOff: false,
       seizuresGrew: false,
@@ -171,12 +173,50 @@ describe("пометки строки и легенда говорят одно 
     expect(weights).toEqual([...weights].sort((a, b) => b - a));
   });
 
+  it("в первый месяц терапии пометка молчания говорит, почему она раньше", () => {
+    // Порог в этот месяц короче обычного, и «Нет замеров: 2 дн.» рядом с
+    // легендой про трое суток читалось бы как ошибка кабинета.
+    render(
+      <PatientFlagsView
+        flags={{
+          noPrescription: false,
+          daysSinceLastReading: 2,
+          strictMonitoring: true,
+          staleData: true,
+          nutritionOff: false,
+          seizuresGrew: false,
+          seizuresAppeared: false,
+        }}
+      />,
+    );
+
+    expect(document.querySelector('[data-flag="stale"]')).toHaveTextContent(
+      /первый месяц терапии/,
+    );
+  });
+
+  it("легенда называет оба порога", async () => {
+    const user = userEvent.setup();
+    render(<PatientFlagsLegend />);
+    await user.click(
+      screen.getByRole("button", { name: doctorRu.flags.legend.open }),
+    );
+
+    const stale = document.querySelector(
+      '[data-legend="stale"]',
+    )?.nextElementSibling;
+    expect(stale).toHaveTextContent(/3 и более дня назад/);
+    expect(stale).toHaveTextContent(/первый месяц терапии/);
+    expect(stale).toHaveTextContent(/2 и более дня назад/);
+  });
+
   it("спокойная строка называет давность данных, а не молчит", () => {
     render(
       <PatientFlagsView
         flags={{
           noPrescription: false,
           daysSinceLastReading: 0,
+          strictMonitoring: false,
           staleData: false,
           nutritionOff: false,
           seizuresGrew: false,

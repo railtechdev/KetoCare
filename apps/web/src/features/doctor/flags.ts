@@ -12,6 +12,26 @@ import type { PatientOverview } from "./types";
  */
 export const NO_DATA_FLAG_DAYS = 3;
 
+/**
+ * Порог молчания в первый месяц терапии — строгое наблюдение.
+ *
+ * Ответ клиники от 09.09.2026 (вопрос 11): «от начала диеты в течение месяца
+ * должен идти строгий мониторинг, и здесь даже один день молчания будет
+ * звонком». Режим («первый месяц или нет») решает сервер — ему нужна дата
+ * начала терапии, а она лежит в медицинском профиле. Порог в днях живёт здесь,
+ * рядом с обычным: оба подставляются в легенду пометок.
+ *
+ * **Почему 2, а не 1.** Счёт тот же, что у обычного порога: календарные сутки
+ * от последней записи до сегодня. «Один день молчания» — это целые прошедшие
+ * сутки без записей: вчера семья не внесла ничего, последняя запись позавчера,
+ * разница 2. С порогом 1 пометка загоралась бы с утра у каждой семьи, которая
+ * сегодня ещё не успела записать, — а сегодняшний день ещё идёт, и молчанием
+ * его не назовёшь. Флаг, горящий у всего списка, перестаёт что-либо выделять.
+ *
+ * TODO(med): вопрос 11 — толкование «одного дня» переспрошено.
+ */
+export const STRICT_NO_DATA_FLAG_DAYS = 2;
+
 export interface PatientFlags {
   /**
    * Активного назначения нет.
@@ -24,22 +44,32 @@ export interface PatientFlags {
    */
   noPrescription: boolean;
   /**
-   * Сутки с последнего замера, известного серверу; null — замеров ещё не было.
+   * Сутки с последней записи, известной серверу; null — записей ещё не было.
    *
    * Именно «не было», а не «не удалось посчитать»: неразобранная дата сводки
    * отсекается раньше и даёт `null` вместо всего набора флагов.
    */
   daysSinceLastReading: number | null;
   /**
-   * Замеров нет дольше `NO_DATA_FLAG_DAYS` — или их не было вовсе.
+   * Замеров нет дольше порога — или их не было вовсе. Порог зависит от режима
+   * наблюдения: `STRICT_NO_DATA_FLAG_DAYS` в первый месяц терапии,
+   * `NO_DATA_FLAG_DAYS` после.
    *
-   * «Данные» здесь — то, о чём сводка сообщает с меткой времени: последний замер
-   * кетонов, последний замер веса и записи о приступах за сегодня. Полный
-   * признак «семья ничего не вносила N дней» по всем шести дневникам сводка не
-   * отдаёт, а собирать его на клиенте — это шесть запросов на каждого пациента
-   * списка (см. отчёт: требует серверной поддержки).
+   * «Данные» здесь — последний замер кетонов, последний замер веса и записи о
+   * приступах за сегодня; их день сервер отдаёт готовым (`last_reading_on`).
+   * Полный признак «семья ничего не вносила N дней» по всем шести дневникам
+   * сводка не отдаёт — и легенда пометок говорит об этом прямо (вопрос 11).
    */
   staleData: boolean;
+  /**
+   * Пациент в первом месяце терапии — строгое наблюдение (вопрос 11).
+   *
+   * Режим приходит от сервера: ему нужна дата начала терапии. Нужен не только
+   * для порога, но и строке пациента: пометка в этот месяц загорается раньше
+   * обычного, и без пояснения «Нет замеров: 2 дн.» рядом с легендой про трое
+   * суток читалось бы как ошибка.
+   */
+  strictMonitoring: boolean;
   /**
    * Кетосоотношение дня не уложилось в допуски назначения.
    *
@@ -79,22 +109,18 @@ export interface PatientFlags {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Календарных суток между двумя моментами по местному календарю.
+ * Календарных суток между двумя датами сервера.
  *
- * Считается по датам, а не по разнице в миллисекундах: замер вчера вечером и
- * взгляд врача сегодня утром — это одни сутки, а не «0 дней», и в сутках
- * перевода часов не 24 часа.
+ * Обе даты уже местные для клиники (`date` и `last_reading_on` сводки), и здесь
+ * они только вычитаются. Раньше вместо дня записи бралась её метка времени и
+ * переводилась в пояс браузера: у врача в Москве замер в 00:30 по Ташкенту
+ * падал на предыдущие сутки, в Токио вечерний — на следующие. При строгом
+ * пороге в двое суток такой сдвиг — половина порога.
  */
 function calendarDaysBetween(from: Date, to: Date): number {
   const start = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
   const end = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
   return Math.round((end - start) / MS_PER_DAY);
-}
-
-function parseMoment(value: string | undefined): Date | null {
-  if (value === undefined) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 /**
@@ -120,30 +146,37 @@ export function computePatientFlags(
   // за клинический факт.
   if (today === null) return null;
 
-  const readings = [
-    parseMoment(overview.last_ketone?.occurred_at),
-    parseMoment(overview.last_weight?.occurred_at),
-    // Приступы за сегодня приходят числом без метки времени, но по смыслу
-    // относятся к дате сводки: запись есть — молчания нет.
-    overview.seizures_today.entries > 0 ? today : null,
-  ].filter((value): value is Date => value !== null);
+  // Поле пришло вместе со строгим месяцем. Старый ответ API — секунды между
+  // выкатом кабинета и перезапуском сервера — о дне записи не говорит ничего,
+  // и «записей не было» по нему было бы ложной красной пометкой. Судить не о чем.
+  if (overview.last_reading_on === undefined) return null;
 
-  const daysSinceLastReading =
-    readings.length === 0
+  const lastReadingOn =
+    overview.last_reading_on === null
       ? null
-      : Math.max(
-          0,
-          Math.min(
-            ...readings.map((reading) => calendarDaysBetween(reading, today)),
-          ),
-        );
+      : parseDateInput(overview.last_reading_on);
+  if (overview.last_reading_on !== null && lastReadingOn === null) return null;
+
+  // Запись «из будущего» (часы устройства семьи спешат) — это ноль суток, а не
+  // отрицательное число.
+  const daysSinceLastReading =
+    lastReadingOn === null
+      ? null
+      : Math.max(0, calendarDaysBetween(lastReadingOn, today));
 
   const tolerance = overview.day?.tolerance ?? null;
   const noPrescription = (overview.prescription ?? null) === null;
+  // Отсутствие поля (старая версия API в секунды между выкатами) читается как
+  // обычный контроль — то есть как было до ответа клиники, а не как тревога.
+  const strictMonitoring = overview.monitoring_phase === "strict";
+  const silenceThreshold = strictMonitoring
+    ? STRICT_NO_DATA_FLAG_DAYS
+    : NO_DATA_FLAG_DAYS;
 
   return {
     noPrescription,
     daysSinceLastReading,
+    strictMonitoring,
     // Молчание семьи считается только там, где семье уже сказано, что делать.
     // Без назначения кетодиеты ещё нет, и «замеров нет трое суток» — не сигнал
     // о семье, а следствие того, что врач не дошёл до назначения. Флаг о
@@ -152,7 +185,7 @@ export function computePatientFlags(
     staleData:
       !noPrescription &&
       (daysSinceLastReading === null ||
-        daysSinceLastReading >= NO_DATA_FLAG_DAYS),
+        daysSinceLastReading >= silenceThreshold),
     nutritionOff: tolerance !== null && !tolerance.ratio_within_tolerance,
     // Вердикт приходит от сервера целиком: порог «более 50 %» — медицинское
     // правило, и считать его на клиенте значило бы завести вторую копию.

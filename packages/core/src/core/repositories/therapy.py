@@ -7,14 +7,19 @@
 **Здесь два вопроса, и они разные.** Их легко спутать, поэтому границу стоит
 назвать вслух:
 
-- `started_on()` — «когда началась терапия». Ответ показывают врачу, от него
-  отсчитываются контрольные визиты (ответ клиники 09.09.2026, вопрос 17).
-  Главный источник — слово врача: назвал дату, значит она и есть.
+- `started_on()` — «когда началась терапия». От этой даты будут отсчитываться
+  контрольные визиты (ответ клиники 09.09.2026, вопрос 17); расписания визитов
+  пока нет, и вызовов вне тестов у функции сегодня нет — она оставлена как
+  готовый ответ на этот вопрос. Главный источник — слово врача: назвал дату,
+  значит она и есть.
 - `earliest_evidence_of_therapy()` — «могла ли терапия уже идти, когда семья
   давала этот ответ». По нему решается судьба исходной частоты приступов
   (вопрос 19), и вопрос тут не «какая дата верна», а «есть ли хоть одно
   свидетельство». Поэтому берётся САМОЕ РАННЕЕ из обоих источников, а не
   главный.
+- `start_sources()` — оба источника как есть, для вопроса «идёт ли сейчас
+  первый месяц терапии» (вопрос 11). Ни старшинство, ни минимум здесь не
+  годятся: каждый из них теряет месяц, который видит другой источник.
 
 Разница не теоретическая. Врач ошибается в году — вводит «2062» вместо «2026»
 одной цифрой; `started_on()` честно повторит опечатку, а вот исходную частоту по
@@ -29,24 +34,44 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import ScalarSelect
 
-from ..models import MedicalProfile
-from . import prescriptions as prescriptions_repo
+from ..models import MedicalProfile, Prescription
 
 
-async def _named_by_doctor(session: AsyncSession, patient_id: uuid.UUID) -> date | None:
-    """Дата, которую врач назвал прямо. Фильтр по `deleted_at` — как в
-    `medical_profiles.get_for_patient`: удалённый профиль не читается нигде."""
+def _sources(patient_id: uuid.UUID) -> tuple[ScalarSelect[date | None], ScalarSelect[date]]:
+    """Оба источника даты начала — скалярными подзапросами, чтобы ответ был
+    одним запросом.
 
-    named: date | None = await session.scalar(
-        select(MedicalProfile.therapy_started_on).where(
+    **Почему один запрос.** Даты начала читает сводка `/overview`, а главная
+    врача собирает сводку на КАЖДОГО пациента списка (1 + N). Два прохода —
+    сначала профиль, потом назначения — умножались бы на когорту.
+
+    Названная врачом дата читается с фильтром по `deleted_at`, как в
+    `medical_profiles.get_for_patient`: удалённый профиль не читается нигде.
+
+    Из назначений берётся `min(effective_from)` — самое РАННЕЕ, а не действующее.
+    У действующего сортировка по `created_at`, и путать их нельзя: назначение
+    меняют по ходу лечения, а «когда началось» — это первая строка. Таблица
+    append-only (правило 4), и первая строка никуда не денется.
+    """
+
+    named = (
+        select(MedicalProfile.therapy_started_on)
+        .where(
             MedicalProfile.patient_id == patient_id,
             MedicalProfile.deleted_at.is_(None),
         )
+        .scalar_subquery()
     )
-    return named
+    first_prescription = (
+        select(func.min(Prescription.effective_from))
+        .where(Prescription.patient_id == patient_id)
+        .scalar_subquery()
+    )
+    return named, first_prescription
 
 
 async def started_on(session: AsyncSession, *, patient_id: uuid.UUID) -> date | None:
@@ -60,18 +85,16 @@ async def started_on(session: AsyncSession, *, patient_id: uuid.UUID) -> date | 
     завели в системе уже на диете (первое НАШЕ назначение позже настоящего
     старта), либо назначение записали заранее, а диету начали не в тот день.
 
-    Вывод из самого раннего назначения остаётся запасным: поле новое, у ранее
-    заведённых детей оно пусто.
+    Вывод из самого раннего назначения остаётся запасным: у ранее заведённых
+    детей поле пусто.
 
     Для правила про исходную частоту приступов нужна не эта функция, а
     `earliest_evidence_of_therapy` — см. докстроку модуля.
     """
 
-    named = await _named_by_doctor(session, patient_id)
-    if named is not None:
-        return named
-
-    return await prescriptions_repo.started_on(session, patient_id=patient_id)
+    named, first_prescription = _sources(patient_id)
+    result: date | None = await session.scalar(select(func.coalesce(named, first_prescription)))
+    return result
 
 
 async def earliest_evidence_of_therapy(
@@ -93,14 +116,33 @@ async def earliest_evidence_of_therapy(
     полгода находящегося на диете, тем, с чем сравнивают эффект лечения; поле
     пишется один раз, схема записи его не принимает, и исправить это через API
     будет уже нечем.
+
+    `LEAST` в PostgreSQL пропускает NULL и возвращает NULL, только если пусты все
+    аргументы, — ровно «минимум из названных дат». По стандарту SQL было бы
+    иначе, но база у продукта одна.
     """
 
-    dates = [
-        candidate
-        for candidate in (
-            await _named_by_doctor(session, patient_id),
-            await prescriptions_repo.started_on(session, patient_id=patient_id),
-        )
-        if candidate is not None
-    ]
-    return min(dates) if dates else None
+    named, first_prescription = _sources(patient_id)
+    result: date | None = await session.scalar(select(func.least(named, first_prescription)))
+    return result
+
+
+async def start_sources(
+    session: AsyncSession, *, patient_id: uuid.UUID
+) -> tuple[date | None, date | None]:
+    """Оба источника даты начала как есть: (названная врачом, первое назначение).
+
+    Нужны сводке для режима наблюдения (вопрос 11): «идёт ли сейчас первый месяц
+    терапии». Сведение к одной дате теряет месяц в обе стороны:
+
+    - `started_on` берёт слово врача — и опечатка в году («2062») при назначении
+      от сегодня спрятала бы строгий месяц целиком;
+    - `earliest_evidence_of_therapy` берёт минимум — и дата врача «сегодня» при
+      назначении, записанном полгода назад, дала бы обычный контроль.
+
+    Поэтому сводка сверяет сегодняшний день с каждым источником сама.
+    """
+
+    named, first_prescription = _sources(patient_id)
+    row = (await session.execute(select(named, first_prescription))).one()
+    return row[0], row[1]

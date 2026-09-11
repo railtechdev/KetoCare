@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, date, datetime
 
 import pytest
+from sqlalchemy import event
 
 from core.models import Product, ProductCategory
 from core.models.clinical import AppendOnlyViolationError
@@ -106,48 +107,6 @@ class TestPrescriptionsAppendOnly:
         forbidden = {"update", "delete", "remove", "edit", "patch"}
         exposed = {name for name in dir(prescriptions) if not name.startswith("_")}
         assert not (forbidden & exposed), f"prescriptions не должен иметь: {forbidden & exposed}"
-
-    async def test_started_on_is_the_earliest_not_the_active(self, session):
-        """Начало терапии — САМОЕ РАННЕЕ назначение, а не действующее.
-
-        Назначение меняют по ходу лечения, и «когда началось» — это первая
-        строка, а не последняя. Ошибиться легко ровно потому, что рядом лежит
-        `get_active`, устроенный наоборот; путаница здесь стоит дорого: по этой
-        дате решается, считать ли ответ семьи о частоте приступов исходным
-        уровнем, с которым сравнивают эффект кетотерапии.
-
-        Строки заводятся в обратном порядке дат намеренно: при сортировке по
-        `created_at` (как у активного) тест вернул бы позднюю дату.
-        """
-
-        doctor = await _make_user(session, UserRole.DOCTOR)
-        patient = await _make_patient(session)
-
-        for effective_from in (date(2026, 6, 1), date(2026, 2, 1), date(2026, 9, 1)):
-            await prescriptions.create(
-                session,
-                patient_id=patient.id,
-                ratio=4.0,
-                kcal_per_day=1200,
-                protein_g=25.0,
-                carbs_limit_g=10.0,
-                meals_per_day=3,
-                author_id=doctor.id,
-                effective_from=effective_from,
-            )
-
-        assert await prescriptions.started_on(session, patient_id=patient.id) == date(2026, 2, 1)
-
-    async def test_started_on_is_none_without_prescriptions(self, session):
-        """Назначений нет — терапия не начиналась, и это НЕ «началась давно».
-
-        Пустое значение здесь означает «ещё до диеты», и подмена его любой датой
-        закрыла бы окно, в котором записывается исходная частота приступов.
-        """
-
-        patient = await _make_patient(session)
-
-        assert await prescriptions.started_on(session, patient_id=patient.id) is None
 
 
 class TestPatientAccess:
@@ -534,6 +493,94 @@ class TestTherapyStart:
         assert await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id) == date(
             2026, 8, 1
         )
+        assert await therapy.start_sources(session, patient_id=patient.id) == (
+            None,
+            date(2026, 8, 1),
+        )
+
+    async def test_start_is_the_earliest_prescription_not_the_active(self, session):
+        """Без слова врача начало — САМОЕ РАННЕЕ назначение, а не действующее.
+
+        Назначение меняют по ходу лечения, и «когда началось» — это первая
+        строка, а не последняя. Ошибиться легко ровно потому, что рядом лежит
+        `prescriptions.get_active`, устроенный наоборот.
+
+        Строки заводятся в обратном порядке дат намеренно: при сортировке по
+        `created_at` (как у активного) тест вернул бы позднюю дату.
+        """
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        for effective_from in (date(2026, 6, 1), date(2026, 2, 1), date(2026, 9, 1)):
+            await self._prescribe(session, patient, doctor, effective_from)
+
+        assert await therapy.started_on(session, patient_id=patient.id) == date(2026, 2, 1)
+        assert await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id) == date(
+            2026, 2, 1
+        )
+
+    async def test_sources_are_returned_as_they_are(self, session):
+        """Режиму наблюдения нужны обе даты, а не одна сведённая.
+
+        Опечатка врача в году рядом с назначениями: `started_on` ответит 2062,
+        `earliest_evidence_of_therapy` — первым назначением, а сводка сверяет
+        сегодняшний день с каждой датой. Назначений два, и в паре стоит самое
+        раннее — не действующее.
+        """
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        for effective_from in (date(2026, 6, 1), date(2026, 2, 1)):
+            await self._prescribe(session, patient, doctor, effective_from)
+        await medical_profiles.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=date(2062, 4, 15),
+        )
+
+        assert await therapy.start_sources(session, patient_id=patient.id) == (
+            date(2062, 4, 15),
+            date(2026, 2, 1),
+        )
+
+    async def test_no_sources_come_back_empty(self, session):
+        patient = await _make_patient(session)
+
+        assert await therapy.start_sources(session, patient_id=patient.id) == (None, None)
+
+    async def test_each_answer_is_one_query(self, session):
+        """По одному запросу на ответ.
+
+        Даты начала читает сводка `/overview`, а главная врача собирает сводку на
+        КАЖДОГО пациента списка (1 + N). Два прохода — профиль, потом назначения —
+        умножались бы на когорту; на полусотне пациентов это сотня лишних
+        обращений на одно открытие главной.
+        """
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        await self._prescribe(session, patient, doctor, date(2026, 6, 1))
+
+        statements: list[str] = []
+        engine = session.get_bind().engine
+
+        def _count(conn, cursor, statement, params, context, executemany):  # type: ignore[no-untyped-def]
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _count)
+        try:
+            await therapy.started_on(session, patient_id=patient.id)
+            await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id)
+            await therapy.start_sources(session, patient_id=patient.id)
+        finally:
+            event.remove(engine, "before_cursor_execute", _count)
+
+        assert len(statements) == 3, statements
 
 
 class TestLeadingMacroSearch:

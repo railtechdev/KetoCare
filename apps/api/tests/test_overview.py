@@ -22,10 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import get_session
 from api.main import create_app
 from api.routers.overview import router as overview_router
+from api.services.monitoring import add_months
 from api.services.overview import _TREND_WINDOW_DAYS
 from core.config import get_settings
 from core.models import KetoneLog, Menu, SeizureLog, SeizureType, WeightLog
 from core.models.enums import DiarySource, KetoneMethod, UserRole
+from core.repositories import medical_profiles as medical_profiles_repo
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from keto_engine import ENGINE_VERSION
@@ -514,6 +516,93 @@ class TestLatestReadings:
         ).json()
         assert body["last_ketone"] is None
 
+    async def test_last_reading_day_is_counted_by_the_clinic_clock(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """День последнего замера — по часам клиники, а не по UTC и не браузера.
+
+        Замер в 00:30 местного времени у клиники восточнее Гринвича по UTC ещё
+        вчерашний. Кабинет в другом поясе отнёс бы его к соседним суткам, а при
+        строгом пороге в двое суток это половина порога (вопрос 11).
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        just_after_midnight = _local_midnight() + timedelta(minutes=30)
+        await _ketone(session, patient=patient, occurred_at=just_after_midnight, value=2.0)
+
+        body = (
+            await client.get(
+                f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+            )
+        ).json()
+
+        assert just_after_midnight.astimezone(UTC).date() != _local_today(), (
+            "проверка имеет смысл только в поясе восточнее UTC — как у клиники"
+        )
+        assert body["last_reading_on"] == _local_today().isoformat()
+
+    async def test_the_newest_of_ketone_and_weight_decides(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _ketone(
+            session, patient=patient, occurred_at=_local_midnight() - timedelta(days=5), value=2.0
+        )
+        await _weight(
+            session,
+            patient=patient,
+            occurred_at=_local_midnight() - timedelta(days=1) + timedelta(hours=9),
+            weight_kg=18.0,
+        )
+
+        body = (
+            await client.get(
+                f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+            )
+        ).json()
+
+        assert body["last_reading_on"] == (_local_today() - timedelta(days=1)).isoformat()
+
+    async def test_a_seizure_today_is_a_record_today(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _weight(
+            session,
+            patient=patient,
+            occurred_at=_local_midnight() - timedelta(days=5),
+            weight_kg=18.0,
+        )
+        await _seizure(session, patient=patient, occurred_at=_local_midnight() + timedelta(hours=1))
+
+        body = (
+            await client.get(
+                f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+            )
+        ).json()
+
+        assert body["last_reading_on"] == _local_today().isoformat()
+
+    async def test_an_earlier_seizure_is_not_a_record(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Приступ вчера молчание не снимает — так и сказано в легенде пометок.
+
+        Сводка знает о приступах только за сегодня. Если это правило когда-нибудь
+        расширят, тест упадёт вместе с текстом, который врач читает.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _seizure(session, patient=patient, occurred_at=_local_midnight() - timedelta(hours=3))
+
+        body = (
+            await client.get(
+                f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+            )
+        ).json()
+
+        assert body["last_reading_on"] is None
+
 
 class TestSeizuresToday:
     async def test_counted_by_local_day_not_utc(
@@ -917,3 +1006,134 @@ class TestSeizureTrend:
         trend = response.json()["seizure_trend"]
 
         assert trend == {"recent": 16, "previous": 10, "grew": True, "appeared": False}
+
+
+class TestMonitoringPhase:
+    """Первый месяц терапии — строгое наблюдение (ответ клиники на вопрос 11).
+
+    Сводка отдаёт РЕЖИМ, а кабинет по нему выбирает порог молчания семьи. Режим
+    считается от обеих дат начала терапии — названной врачом и первого
+    назначения: строгий, пока месяц не истёк хотя бы от одной.
+    """
+
+    @staticmethod
+    async def _named_start(session, patient, on: date) -> None:
+        await medical_profiles_repo.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=on,
+        )
+
+    @staticmethod
+    async def _prescribed(session, make_user, patient, *, on: date):
+        doctor = await make_user(UserRole.DOCTOR)
+        return await prescriptions_repo.create(
+            session,
+            patient_id=patient.id,
+            ratio=3.0,
+            kcal_per_day=1200,
+            protein_g=30.0,
+            carbs_limit_g=10.0,
+            meals_per_day=4,
+            author_id=doctor.id,
+            effective_from=on,
+        )
+
+    async def _phase(self, client, patient, parent, auth_headers) -> dict[str, Any]:
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        assert response.status_code == 200, response.text
+        body: dict[str, Any] = response.json()
+        return body
+
+    async def test_first_month_after_the_first_prescription_is_strict(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._prescribed(session, make_user, patient, on=_local_today())
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "strict"
+
+    async def test_after_the_first_month_it_is_routine(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ровно месяц назад — уже обычный контроль: день, в который месяц
+        истекает, строгим не считается."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._prescribed(session, make_user, patient, on=add_months(_local_today(), -1))
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "routine"
+
+    async def test_without_therapy_there_is_nothing_to_monitor(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "before_start"
+
+    async def test_an_early_prescription_does_not_end_the_named_month(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Назначение полугодовой давности, но врач назвал началом сегодня.
+
+        Так бывает, когда назначение записали заранее, а диету начали позже:
+        клиника сказала «от начала диеты», и начало диеты — это то, что указал
+        врач (ответ 17). Минимум из двух дат этот месяц потерял бы.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._prescribed(session, make_user, patient, on=_local_today() - timedelta(days=180))
+        await self._named_start(session, patient, _local_today())
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "strict"
+
+    async def test_a_typo_in_the_named_year_does_not_hide_the_month(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Врач ошибся в году одной цифрой, назначение — от сегодня.
+
+        Слово врача, взятое как главное, дало бы «ещё не началась», и строгий
+        месяц прошёл бы без единой пометки: в списке пациентов режим не виден.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._prescribed(session, make_user, patient, on=_local_today())
+        await self._named_start(session, patient, _local_today().replace(year=2062))
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "strict"
+
+    async def test_the_summary_carries_no_start_date(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """В сводке режим, а не сама дата.
+
+        Сводка общая для семьи и врача, а дата начала терапии лежит в
+        медицинском профиле, который семье закрыт. Проверка ловит только прямую
+        утечку поля: по смене режима день в день дату можно восстановить
+        с точностью до дня, и это допущение записано в ADR-0031.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._named_start(session, patient, date(2026, 3, 15))
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert "therapy_started_on" not in str(body)
+        assert "2026-03-15" not in str(body)

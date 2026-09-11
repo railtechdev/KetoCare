@@ -87,6 +87,7 @@ function overview(id: string, calm: boolean) {
     last_weight: null,
     seizures_today: { entries: calm ? 1 : 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
+    last_reading_on: calm ? TODAY : null,
   };
 }
 
