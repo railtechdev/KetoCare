@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import i18n from "../../lib/i18n";
@@ -18,6 +18,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 i18n.addResourceBundle("ru", "calculator", calculatorRu, true, true);
 
 const PATIENT_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_PATIENT_ID = "33333333-3333-4333-8333-333333333333";
 const BUTTER = "22222222-2222-4222-8222-222222222222";
 
 const PRESCRIBED_RATIO = 3.5;
@@ -176,8 +177,10 @@ describe("калькулятор", () => {
 
     // «Добавляю продукты — ничего не происходит»: расчёт запускала кнопка,
     // которая на ноутбуке стояла ниже сгиба, а на телефоне — тем более.
+    // Ждём сами показатели: форма сохранения стоит, пока есть состав, и о
+    // расчёте не говорит ничего.
     expect(
-      await screen.findByText("Сохранить как моё блюдо", undefined, {
+      await screen.findByText(/374 ккал/, undefined, {
         timeout: AUTO_CALC_TIMEOUT_MS,
       }),
     ).toBeInTheDocument();
@@ -484,6 +487,211 @@ describe("калькулятор", () => {
     expect(screen.queryByText(/Для подбора нужна цель/)).toBeNull();
   });
 
+  it("масса тяжелее предела названа у поля и у кнопки и в расчёт не уходит", async () => {
+    // Сервер не принимает позицию тяжелее 5000 г. До этой проверки показатели
+    // пропадали, а на их месте стоял общий отказ — без слова о поле и пределе.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(/374 ккал/, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+    const title = screen.getByLabelText(/Название блюда/);
+    await user.type(title, "Суп");
+
+    const grams = screen.getByLabelText(/Масса продукта/);
+    await user.clear(grams);
+    await user.type(grams, "5001");
+
+    const fieldError = screen.getByText(/Не больше 5000 г/);
+    expect(grams).toHaveAttribute("aria-invalid", "true");
+    expect(grams).toHaveAttribute("aria-describedby", fieldError.id);
+
+    const scale = screen.getByRole("button", { name: /Пересчитать порции/ });
+    expect(scale).toBeDisabled();
+    // Причина одна и та же у пересчёта и у сохранения — две строки, по одной
+    // на каждый блок действий.
+    const reasons = screen
+      .getAllByText("Масса продукта «Масло сливочное» больше 5000 г.")
+      .map((element) => element.id);
+    expect(reasons).toContain(scale.getAttribute("aria-describedby"));
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+    expect(reasons).toContain(save.getAttribute("aria-describedby"));
+    // Подбор граммов со входа не берёт — предел его не выключает.
+    expect(
+      screen.getByRole("button", { name: /Подобрать граммовку/ }),
+    ).toBeEnabled();
+
+    // Числа прежней массы уходят — они о другом блюде, — а тяжёлая масса на
+    // сервер не отправляется вовсе.
+    await waitFor(
+      () => expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument(),
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    const sent = (api.POST as Mock).mock.calls
+      .filter(([path]) => String(path).includes("verify"))
+      .map(([, options]) => options.body.items[0].grams);
+    expect(sent).not.toContain(5001);
+
+    // Форма сохранения не исчезала вместе с показателями: набранное название
+    // на месте, и после исправления массы и нового расчёта сохранить снова можно.
+    await user.clear(grams);
+    await user.type(grams, "50");
+    expect(screen.getByLabelText(/Название блюда/)).toHaveValue("Суп");
+    await waitFor(
+      () =>
+        expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled(),
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+  });
+
+  it("в карте ребёнка сохранение ждёт проверки — она называет исключённое", async () => {
+    // Сервер при сохранении исключённые ребёнку продукты не проверяет, а
+    // предупреждение приходит только с ответом проверки. Форма видна сразу,
+    // но состав, о котором проверка ещё ничего не сказала, не отправляется.
+    (api.POST as Mock).mockImplementation((path: string) =>
+      path.includes("verify")
+        ? new Promise(() => {})
+        : Promise.resolve({ data: SOLVED, error: undefined }),
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+    const reason = await screen.findByText(/Сохранить можно после расчёта/);
+    expect(save).toHaveAttribute("aria-describedby", reason.id);
+  });
+
+  it("после правки состава сохранение не включается ни на миг до нового ответа", async () => {
+    // Разрешение давал тайминг: через коммит после срабатывания задержки
+    // состав считался проверенным, хотя запрос по нему ещё не ушёл, — и клик в
+    // это окно сохранял непроверенное. Наблюдатель ловит само окно.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.resolve({ data: VERIFIED, error: undefined })
+        : new Promise(() => {});
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeEnabled();
+
+    let enabledAfterEdit = false;
+    const observer = new MutationObserver(() => {
+      if (!save.hasAttribute("disabled")) enabledAfterEdit = true;
+    });
+    observer.observe(save, { attributes: true, attributeFilter: ["disabled"] });
+    await user.type(screen.getByLabelText(/Масса продукта/), "0");
+    // Сразу после правки: ответ был о другом составе. Наблюдатель ниже
+    // ловит только переходы, и кнопка, не выключившаяся вовсе, прошла бы мимо.
+    expect(save).toBeDisabled();
+
+    await waitFor(() => expect(verifyCalls).toBe(2), {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    observer.disconnect();
+
+    expect(enabledAfterEdit).toBe(false);
+    expect(save).toBeDisabled();
+  });
+
+  it("ответ проверки о другом ребёнке не разрешает сохранить этому", async () => {
+    // Переключатель в шапке карты не пересоздаёт экран: состав и название
+    // остаются, а исключённые продукты у другого ребёнка свои. Пациент
+    // меняется состоянием внутри роутера — `rerender` до экрана не доходит,
+    // роутер теста захватывает содержимое один раз.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.resolve({ data: VERIFIED, error: undefined })
+        : new Promise(() => {});
+    });
+
+    function SwitchablePatient() {
+      const [patientId, setPatientId] = useState(PATIENT_ID);
+      return (
+        <>
+          <button type="button" onClick={() => setPatientId(OTHER_PATIENT_ID)}>
+            test: другой пациент
+          </button>
+          <CalculatorPage patientId={patientId} />
+        </>
+      );
+    }
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <SectionRouter section="calculator">
+          <SwitchablePatient />
+        </SectionRouter>
+      </QueryClientProvider>,
+    );
+
+    const user = userEvent.setup();
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
+
+    // Синхронно, без ожиданий: уведомление о новом запросе проверки приходит
+    // таймером, и асинхронный клик успел бы его дождаться — тест прошёл бы на
+    // одном тайминге, а не на сверке ребёнка.
+    fireEvent.click(
+      screen.getByRole("button", { name: "test: другой пациент" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+  });
+
+  it("отказ проверки не даёт сохранить и называет почему", async () => {
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify")
+        ? {
+            data: undefined,
+            error: {
+              error: { code: "internal", message: "Сервис недоступен." },
+            },
+          }
+        : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+
+    const reason = await screen.findByText(/Расчёт не прошёл/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute("aria-describedby", reason.id);
+  });
+
   it("причина не говорит о назначении: экран работает и без ребёнка", async () => {
     // Калькулятор специалиста открывается без выбранного пациента (ADR-0027),
     // и «у ребёнка нет назначения» было бы там утверждением о ком-то, кого он
@@ -554,6 +762,23 @@ describe("калькулятор без выбранного ребёнка", ()
     );
     expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
     expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument();
+  });
+
+  it("масса тяжелее предела не передаётся пациенту, и причина названа", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+    await addButter(user);
+
+    const grams = screen.getByLabelText(/Масса продукта/);
+    await user.clear(grams);
+    await user.type(grams, "5001");
+
+    const handOff = screen.getByRole("button", { name: "Передать" });
+    expect(handOff).toBeDisabled();
+    const reasons = screen
+      .getAllByText("Масса продукта «Масло сливочное» больше 5000 г.")
+      .map((element) => element.id);
+    expect(reasons).toContain(handOff.getAttribute("aria-describedby"));
   });
 
   it("предлагает передать состав пациенту вместо «сохранить себе»", async () => {

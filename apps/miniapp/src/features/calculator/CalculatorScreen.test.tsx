@@ -636,6 +636,45 @@ describe("калькулятор в Mini App", () => {
     ).toBeInTheDocument();
   });
 
+  it("масса тяжелее предела названа у поля и у кнопки и в расчёт не уходит", async () => {
+    // Сервер не принимает позицию тяжелее 5000 г. До этой проверки показатели
+    // пропадали, а на их месте стоял общий отказ — без слова о поле и пределе.
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
+
+    const grams = screen.getByLabelText(/Масло сливочное, граммы/);
+    await user.clear(grams);
+    // С запятой: предел сравнивается с тем же числом, что уходит в расчёт.
+    await user.type(grams, "5000,5");
+
+    const fieldError = screen.getByText(/Не больше 5000 г/);
+    expect(grams).toHaveAttribute("aria-invalid", "true");
+    expect(grams).toHaveAttribute("aria-describedby", fieldError.id);
+
+    const scale = screen.getByRole("button", { name: "Пересчитать порции" });
+    expect(scale).toBeDisabled();
+    const reason = screen.getByText(
+      "Масса продукта «Масло сливочное» больше 5000 г.",
+    );
+    expect(scale).toHaveAttribute("aria-describedby", reason.id);
+    // Подбор граммов со входа не берёт — предел его не выключает.
+    expect(
+      screen.getByRole("button", { name: "Подобрать граммовку" }),
+    ).toBeEnabled();
+
+    // Числа прежней массы уходят — они о другом блюде, — а тяжёлая масса на
+    // сервер не отправляется вовсе.
+    await waitFor(() =>
+      expect(screen.queryByText(/224 ккал/)).not.toBeInTheDocument(),
+    );
+    const sent = (api.POST as Mock).mock.calls
+      .filter(([path]) => path === "/api/v1/calc/verify")
+      .map(([, options]) => options.body.items[0].grams);
+    expect(sent).not.toContain(5000.5);
+  });
+
   it("пересчёт порций тоже переписывает состав, запятую понимает", async () => {
     // Пока пересчёт показывал массы отдельным списком, а старые оставлял в
     // полях, из результата вёл один выход — принять как есть.

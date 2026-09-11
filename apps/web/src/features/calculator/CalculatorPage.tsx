@@ -1,9 +1,11 @@
 import {
   ActionReason,
   Button,
+  CALC_GRAMS_MAX,
   Section,
   Separator,
   WarningBanner,
+  exceedsCalcGrams,
   mealTargetsFrom,
 } from "@ketocare/ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -201,6 +203,14 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       verifyReset();
       return;
     }
+    if (debouncedRows.some((row) => exceedsCalcGrams(row.grams))) {
+      // Массу тяжелее предела сервер не примет, и на месте показателей встал
+      // бы общий отказ без слова о поле. Причина уже названа у самого поля и
+      // у кнопки пересчёта; числа прежнего состава снимаются, как у пустого:
+      // они о блюде, которого на экране больше нет.
+      verifyReset();
+      return;
+    }
     verifyMutate({
       rows: debouncedRows,
       targets: debouncedTargets ?? undefined,
@@ -287,17 +297,53 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    * выбирал.
    */
   const noRows = rows.length === 0;
+  // Первая позиция тяжелее предела — её и называем: по имени человек найдёт
+  // поле. Подбор граммов со входа не берёт, поэтому предел его не выключает.
+  // Но переписывает он только то, что вошло в раскладку: строка, которую он
+  // отбросил (легче 2 г или исключённая ребёнку), сохранит прежнюю массу, и
+  // ошибка у поля останется.
+  const tooHeavy = rows.find((row) => exceedsCalcGrams(row.grams));
   const solveBlockedBy = noRows
     ? t("blocked.noRows")
     : targets === null
       ? t("blocked.noTargets")
       : null;
   // Пересчёт цели не требует: множитель применяется к тому, что уже набрано.
+  const tooHeavyReason =
+    tooHeavy === undefined
+      ? null
+      : t("blocked.tooHeavy", {
+          name: tooHeavy.product.name,
+          max: CALC_GRAMS_MAX,
+        });
+  // Сохранение в карте ребёнка разрешает не тайминг, а сам ответ проверки:
+  // успешный, на ЭТОТ массив состава (задержка передаёт ту же ссылку) и на
+  // ЭТОГО ребёнка. Условие «не устарело и показатели есть» один коммит после
+  // срабатывания задержки считало проверенным состав, запрос по которому ещё
+  // не ушёл, — и сохранение успевало уйти. Только проверка называет продукты,
+  // исключённые ребёнку, а сервер при сохранении их не проверяет (вопрос 29 —
+  // предупреждение, а не запрет). Правка цели тоже перезапускает проверку и на
+  // это время снимает её ответ вместе с предупреждением — поэтому ждёт и
+  // сохранение.
+  //
+  // Передача из общего калькулятора ждёт только предела массы: сверять
+  // исключённое там не с кем, а после передачи сразу открывается карта
+  // ребёнка, где проверка идёт уже с ним и предупреждение появится.
+  const checkedNow =
+    verify.variables?.rows === rows &&
+    verify.variables?.patientId === patientId;
+  const saveBlockedBy =
+    tooHeavyReason ??
+    (verify.isError && checkedNow ? t("save.blocked.checkFailed") : null);
+  const saveWaitsFor =
+    verify.isSuccess && checkedNow ? null : t("save.blocked.notChecked");
   const scaleBlockedBy = noRows
     ? t("blocked.noRows")
-    : factor > 0
-      ? null
-      : t("blocked.noFactor");
+    : tooHeavyReason !== null
+      ? tooHeavyReason
+      : factor > 0
+        ? null
+        : t("blocked.noFactor");
   // Показывается причина того действия, ради которого экран открывают: подбор
   // первый и главный. Если он доступен, а пересчёт нет — говорит пересчёт.
   const actionsBlockedBy = solveBlockedBy ?? scaleBlockedBy;
@@ -575,15 +621,25 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         <FormError>{actionMessage ?? t("common:errors.unexpected")}</FormError>
       )}
 
-      {dish && (
+      {/* Форма стоит, пока есть состав, а не пока есть показатели: показатели
+          пропадают на каждой массе тяжелее предела, и вместе с формой
+          пропадали бы набранное название и выбранный пациент. Состав тяжелее
+          предела или ещё не проверенный форма отправить не даёт и говорит
+          почему. */}
+      {rows.length > 0 && (
         <>
           {/* Куда уходит собранный состав, зависит от того, чей это экран:
               в карте ребёнка — сразу в его блюда, в общем калькуляторе —
               вместе с выбором ребёнка. */}
           {patientId === undefined ? (
-            <HandOffToPatient rows={rows} />
+            <HandOffToPatient rows={rows} blockedBy={tooHeavyReason} />
           ) : (
-            <SaveDishForm patientId={patientId} rows={rows} />
+            <SaveDishForm
+              patientId={patientId}
+              rows={rows}
+              blockedBy={saveBlockedBy}
+              waitingFor={saveWaitsFor}
+            />
           )}
         </>
       )}

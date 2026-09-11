@@ -1,6 +1,7 @@
 import {
   ActionReason,
   Button,
+  CALC_GRAMS_MAX,
   EmptyState,
   Input,
   MacroBar,
@@ -10,6 +11,7 @@ import {
   Separator,
   WarningBanner,
   cn,
+  exceedsCalcGrams,
   mealTargetsFrom,
 } from "@ketocare/ui";
 import { Trash2 } from "lucide-react";
@@ -195,6 +197,12 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
   const filled =
     rows.length > 0 && rows.every((row) => parseAmount(row.grams) > 0);
+  // Первая позиция тяжелее предела — её и называем: по имени семья найдёт
+  // поле. Подбор граммов со входа не берёт, поэтому предел его не выключает.
+  // Но переписывает он только то, что вошло в раскладку: строка, которую он
+  // отбросил (легче 2 г или исключённая ребёнку), сохранит прежнюю массу, и
+  // ошибка у поля останется.
+  const tooHeavy = rows.find((row) => exceedsCalcGrams(parseAmount(row.grams)));
   const solveTargets: Targets | null =
     goal === null
       ? null
@@ -226,9 +234,14 @@ export function CalculatorScreen({ session }: { session: Session }) {
       ? t("calculator.blocked.noRows")
       : !filled
         ? t("calculator.blocked.noGrams")
-        : parseAmount(factor) > 0
-          ? null
-          : t("calculator.blocked.noFactor");
+        : tooHeavy !== undefined
+          ? t("calculator.blocked.tooHeavy", {
+              name: tooHeavy.product.name,
+              max: CALC_GRAMS_MAX,
+            })
+          : parseAmount(factor) > 0
+            ? null
+            : t("calculator.blocked.noFactor");
   // Одна строка на блок действий, а не по одной на кнопку: при пустом составе
   // причины совпадают, и два одинаковых абзаца — второе сообщение об одном и
   // том же (правило П27), озвученное дважды.
@@ -274,6 +287,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
           <ul className="m-0 flex list-none flex-col gap-field p-0">
             {rows.map((row, index) => {
               const contribution = contributions.get(row.product.id);
+              // Массу тяжелее предела сервер не примет. Сказать об этом
+              // обязано само поле: общий отказ расчёта не называл ни поля,
+              // ни предела.
+              const tooHeavyRow = exceedsCalcGrams(parseAmount(row.grams));
+              const errorId = `grams-${row.product.id}-error`;
 
               return (
                 <li
@@ -292,6 +310,8 @@ export function CalculatorScreen({ session }: { session: Session }) {
                         name: row.product.name,
                       })}
                       value={row.grams}
+                      aria-invalid={tooHeavyRow || undefined}
+                      aria-describedby={tooHeavyRow ? errorId : undefined}
                       onChange={(event) => {
                         const grams = event.target.value;
                         setRows(
@@ -316,6 +336,12 @@ export function CalculatorScreen({ session }: { session: Session }) {
                       <Trash2 aria-hidden className="size-4" />
                     </Button>
                   </div>
+
+                  {tooHeavyRow && (
+                    <p id={errorId} className="m-0 text-sm text-destructive">
+                      {t("calculator.gramsTooMuch", { max: CALC_GRAMS_MAX })}
+                    </p>
+                  )}
 
                   {/* Что даёт этот продукт — тем же компонентом кита, что и в
                       кабинете: по вкладу видно, что менять, когда блюдо мимо
