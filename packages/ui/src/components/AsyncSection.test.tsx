@@ -77,6 +77,15 @@ describe("AsyncSection", () => {
     expect(screen.queryByText("Нет связи")).not.toBeInTheDocument();
   });
 
+  it("ожидание показывается и там, где пустоты не бывает", () => {
+    // `loading` здесь означает «данных ещё нет» (`isPending`): экран сводки
+    // Mini App передаёт `isEmpty={false}` всегда, и опереться на него нельзя.
+    renderSection({ loading: true, isEmpty: false, waiting: "Нет связи" });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Нет связи");
+    expect(screen.queryByText("данные")).not.toBeInTheDocument();
+  });
+
   it("ошибка важнее ожидания связи", () => {
     // Отказ уже случился: обещать, что «покажем, когда связь появится», —
     // неправда.

@@ -1,4 +1,10 @@
-import { AsyncSection, Section, TrendChart, WarningBanner } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Section,
+  StatusNote,
+  TrendChart,
+  WarningBanner,
+} from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
@@ -51,9 +57,7 @@ export function ChartsScreen({ session }: { session: Session }) {
       )}
 
       {waitingForNetwork && (
-        <p role="status" className="text-muted-foreground">
-          {t("errors.waitingForNetwork")}
-        </p>
+        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
       )}
 
       {KINDS.map((kind) => (
@@ -95,7 +99,11 @@ function Trend({
         }
         retryLabel={t("actions.retry")}
         onRetry={() => void trend.refetch()}
-        isEmpty={false}
+        // Пока ответа нет, блок молчит: у графика своё «записей нет», и на
+        // паузе он утверждал бы, что записей за месяц не было, — при живых
+        // записях и рядом со строкой «нет связи». Пустой ответ от пустого
+        // ожидания отличает именно `undefined`.
+        isEmpty={trend.data === undefined}
         empty={null}
       >
         <TrendChart

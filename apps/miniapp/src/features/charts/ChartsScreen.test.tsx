@@ -73,6 +73,11 @@ describe("динамика в Mini App", () => {
       expect(
         screen.getAllByText("Нет связи — покажем, как только она появится."),
       ).toHaveLength(1);
+      // И ни один график не утверждает, что записей нет: это было бы третье
+      // утверждение об одном и том же, вдобавок ложное.
+      expect(screen.queryAllByText("Записей за этот период нет.")).toHaveLength(
+        0,
+      );
       expect(api.GET).not.toHaveBeenCalled();
     } finally {
       onlineManager.setOnline(true);

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { ErrorState } from "./ErrorState";
+import { StatusNote } from "./StatusNote";
 
 export interface AsyncSectionProps {
   /** Идёт первая загрузка или обновление */
@@ -15,6 +16,12 @@ export interface AsyncSectionProps {
    * Это не ошибка и не загрузка: без сети запрос не уходит и не отказывает, а
    * стоит на паузе (`fetchStatus: "paused"`) и продолжится сам, когда связь
    * вернётся. Повторять нечего, поэтому кнопки здесь нет.
+   *
+   * Работает в паре с `loading`, и `loading` обязан быть `isPending`, то есть
+   * «данных ещё нет». На `isLoading` опереться нельзя: он равен
+   * `isPending && isFetching`, а на паузе запрос не идёт — состояние не
+   * показалось бы никогда. Опереться на `isEmpty` тоже нельзя: экраны, где
+   * пустоты не бывает, передают его постоянным `false`.
    */
   waiting?: string | null;
   retryLabel: string;
@@ -71,13 +78,7 @@ export function AsyncSection({
     );
   }
 
-  if (waiting !== null && loading) {
-    return (
-      <p role="status" className="text-muted-foreground">
-        {waiting}
-      </p>
-    );
-  }
+  if (waiting !== null && loading) return <StatusNote>{waiting}</StatusNote>;
 
   if (loading && isEmpty) return <>{skeleton}</>;
 
