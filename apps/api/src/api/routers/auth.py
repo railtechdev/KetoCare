@@ -14,9 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import Invitation, User
 from core.models.enums import UserRole
+from core.repositories import access as access_repo
 from core.repositories import audit as audit_repo
 from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import invitations as invitations_repo
+from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
@@ -27,6 +29,7 @@ from ..deps.auth import (
     PasswordResetUserDep,
     SessionDep,
     TotpSetupUserDep,
+    assert_patient_access,
     channel_of,
     require_roles,
 )
@@ -456,13 +459,26 @@ async def create_invitation(
     if user.role is not UserRole.ADMIN and payload.role in STAFF_ROLES:
         raise ApiError(ErrorCode.FORBIDDEN, "Сотрудников приглашает администратор.")
 
+    if payload.patient_id is not None:
+        # Второго родителя зовёт тот, кто уже ведёт ребёнка (ADR-0032). Без этой
+        # проверки приглашение стало бы отмычкой: специалист выдал бы доступ к
+        # чужому ребёнку кому угодно, в том числе своей второй учётной записи.
+        # Незнакомый идентификатор даёт тот же 403: существование пациента не
+        # раскрывается.
+        await assert_patient_access(session, user, payload.patient_id)
+
     existing = await users_repo.get_by_email(session, payload.email)
     if existing is not None:
         raise ApiError(ErrorCode.CONFLICT, "Пользователь с таким email уже существует.")
 
     token = invitations_repo.generate_token()
     invitation = await invitations_repo.create(
-        session, email=payload.email, role=payload.role, token=token, created_by=user.id
+        session,
+        email=payload.email,
+        role=payload.role,
+        token=token,
+        created_by=user.id,
+        patient_id=payload.patient_id,
     )
 
     await audit_repo.write_audit_log(
@@ -471,7 +487,11 @@ async def create_invitation(
         action="invite",
         entity="invitations",
         entity_id=invitation.id,
-        after={"email": payload.email, "role": payload.role.value},
+        after={
+            "email": payload.email,
+            "role": payload.role.value,
+            "patient_id": None if payload.patient_id is None else str(payload.patient_id),
+        },
     )
 
     return InvitationCreated(
@@ -480,6 +500,7 @@ async def create_invitation(
         role=invitation.role,
         token=token,
         expires_at=invitation.expires_at,
+        patient_id=invitation.patient_id,
     )
 
 
@@ -523,6 +544,7 @@ async def list_invitations(
                 invited_by_name=(
                     None if invitation.created_by is None else names.get(invitation.created_by)
                 ),
+                patient_id=invitation.patient_id,
             )
             for invitation in items
         ],
@@ -571,7 +593,12 @@ async def revoke_invitation(
             action="revoke",
             entity="invitations",
             entity_id=invitation.id,
-            after={"email": invitation.email, "role": invitation.role.value},
+            after={
+                "email": invitation.email,
+                "role": invitation.role.value,
+                # Отзыв приглашения к ребёнку иначе не отличить от обычного.
+                "patient_id": None if invitation.patient_id is None else str(invitation.patient_id),
+            },
         )
 
     return InvitationRead(
@@ -581,6 +608,7 @@ async def revoke_invitation(
         status=_invitation_status(invitation),
         expires_at=invitation.expires_at,
         created_at=invitation.created_at,
+        patient_id=invitation.patient_id,
     )
 
 
@@ -623,6 +651,18 @@ async def accept_invitation(
     if await users_repo.get_by_email(session, invitation.email) is not None:
         raise ApiError(ErrorCode.CONFLICT, "Пользователь с таким email уже существует.")
 
+    # Приглашение к ребёнку действует, пока пригласивший его ведёт (ADR-0032).
+    # Ссылка живёт неделю, и специалист, которого за это время сняли с
+    # пациента или отключили, иначе продолжал бы раздавать доступ к ребёнку
+    # через уже выданное приглашение. Отказ откатывает и отметку о принятии:
+    # приглашение остаётся в списке, и его можно отозвать.
+    if invitation.patient_id is not None and not await _inviter_still_leads(session, invitation):
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Приглашение больше не действует: пригласивший специалист не ведёт этого "
+            "ребёнка. Попросите лечащего врача выдать новое.",
+        )
+
     user = await users_repo.create(
         session,
         role=invitation.role,
@@ -643,7 +683,40 @@ async def accept_invitation(
         entity_id=user.id,
         after={"email": user.email, "role": user.role.value},
     )
+
+    if invitation.patient_id is not None:
+        await patients_repo.link_parent(
+            session, parent_id=user.id, patient_id=invitation.patient_id
+        )
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="link_parent",
+            # Как у `grant_patient_access`: сущность — сама связь, объект — ребёнок.
+            entity="parent_patient",
+            entity_id=invitation.patient_id,
+            after={
+                "parent_id": str(user.id),
+                "invitation_id": str(invitation.id),
+                "invited_by": None if invitation.created_by is None else str(invitation.created_by),
+            },
+            ip=client_address(request),
+        )
+
     return UserRead.model_validate(user)
+
+
+async def _inviter_still_leads(session: AsyncSession, invitation: Invitation) -> bool:
+    """Пригласивший ко ребёнку специалист активен и по-прежнему его ведёт."""
+
+    if invitation.created_by is None or invitation.patient_id is None:
+        return False
+    inviter = await users_repo.get(session, invitation.created_by)
+    if inviter is None or not inviter.is_active:
+        return False
+    return await access_repo.user_has_patient_access(
+        session, user_id=inviter.id, role=inviter.role, patient_id=invitation.patient_id
+    )
 
 
 @router.get(

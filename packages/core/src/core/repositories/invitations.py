@@ -35,6 +35,7 @@ async def create(
     role: UserRole,
     token: str,
     created_by: uuid.UUID | None = None,
+    patient_id: uuid.UUID | None = None,
 ) -> Invitation:
     invitation = Invitation(
         email=email,
@@ -42,6 +43,7 @@ async def create(
         token_hash=hash_token(token),
         expires_at=datetime.now(UTC) + INVITATION_TTL,
         created_by=created_by,
+        patient_id=patient_id,
     )
     session.add(invitation)
     await session.flush()

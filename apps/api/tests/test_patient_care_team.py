@@ -10,10 +10,14 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from api.deps.auth import get_session
+from api.main import create_app
 from core.models import AuditLog, User
 from core.models.enums import UserRole
+from core.repositories import access as access_repo
 from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
 
@@ -380,6 +384,310 @@ class TestInvitingSpecialistBecomesLead:
         )
         patient_id = uuid.UUID(created.json()["id"])
         assert await patients_repo.list_doctor_ids(session, patient_id=patient_id) == []
+
+
+class TestSecondParent:
+    """Второй родитель уже заведённого ребёнка (ответ клиники на вопрос 33, ADR-0032).
+
+    Приглашение к ребёнку раздаёт доступ к его данным, поэтому это тесты
+    безопасности не меньше, чем функциональности: выдать его может только тот,
+    кто ребёнка ведёт, и сработает оно, только пока ведёт.
+    """
+
+    PASSWORD = "correct horse battery staple"
+
+    @staticmethod
+    async def _led_patient(session, make_user, make_patient, *, lead=UserRole.DOCTOR):
+        specialist = await make_user(lead)
+        first_parent = await make_user(UserRole.PARENT)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=specialist.id, patient_id=patient.id)
+        await patients_repo.link_parent(session, parent_id=first_parent.id, patient_id=patient.id)
+        return specialist, first_parent, patient
+
+    @staticmethod
+    def _email() -> str:
+        return f"second-{uuid.uuid4().hex[:8]}@example.com"
+
+    async def _invite(self, client, auth_headers, inviter, patient_id, *, role="parent"):
+        return await client.post(
+            INVITATIONS_URL,
+            json={"email": self._email(), "role": role, "patient_id": str(patient_id)},
+            headers=auth_headers(inviter),
+        )
+
+    async def _accept(self, client, token):
+        return await client.post(
+            "/api/v1/auth/invitations/accept",
+            json={"token": token, "full_name": "Отец", "password": self.PASSWORD},
+        )
+
+    @pytest.mark.parametrize("lead", [UserRole.DOCTOR, UserRole.DIETITIAN])
+    async def test_accepted_parent_joins_the_existing_child(
+        self, client, session, make_user, make_patient, auth_headers, lead
+    ):
+        """Полный путь: врач зовёт второго родителя → тот видит того же ребёнка.
+
+        До этого второй родитель видел «Ребёнок ещё не заведён» и заводил
+        двойника, а у врача в списке появлялись два одинаковых имени с разными
+        дневниками (docs/AUDIT_JOURNEY.md).
+        """
+
+        specialist, first_parent, patient = await self._led_patient(
+            session, make_user, make_patient, lead=lead
+        )
+
+        invited = await self._invite(client, auth_headers, specialist, patient.id)
+        assert invited.status_code == 201, invited.text
+        assert invited.json()["patient_id"] == str(patient.id)
+
+        # Список выданных помечает приглашение к ребёнку, а журнал называет ребёнка:
+        # иначе два приглашения «родитель» не различить ни в кабинете, ни в аудите.
+        listed_invites = await client.get(INVITATIONS_URL, headers=auth_headers(specialist))
+        row = next(i for i in listed_invites.json()["items"] if i["id"] == invited.json()["id"])
+        assert row["patient_id"] == str(patient.id)
+        invite_entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "invite",
+                AuditLog.entity_id == uuid.UUID(invited.json()["id"]),
+            )
+        )
+        assert invite_entry is not None
+        assert invite_entry.after["patient_id"] == str(patient.id)
+
+        accepted = await self._accept(client, invited.json()["token"])
+        assert accepted.status_code == 201, accepted.text
+        second = await session.scalar(
+            select(User).where(User.id == uuid.UUID(accepted.json()["id"]))
+        )
+        assert second is not None
+
+        assert set(await patients_repo.list_parent_ids(session, patient_id=patient.id)) == {
+            first_parent.id,
+            second.id,
+        }
+        listed = await client.get("/api/v1/patients", headers=auth_headers(second))
+        assert [item["id"] for item in listed.json()["items"]] == [str(patient.id)]
+        # Пациент у специалиста по-прежнему один, а не два.
+        assert await patients_repo.list_doctor_ids(session, patient_id=patient.id) == [
+            specialist.id
+        ]
+
+    async def test_specialist_without_access_cannot_invite(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, patient = await self._led_patient(session, make_user, make_patient)
+        stranger = await make_user(UserRole.DOCTOR)
+
+        response = await self._invite(client, auth_headers, stranger, patient.id)
+
+        assert response.status_code == 403
+        listed = await client.get(INVITATIONS_URL, headers=auth_headers(stranger))
+        assert listed.json()["total"] == 0, "отказ не должен оставлять приглашения"
+
+    async def test_unknown_child_is_403_not_404(self, client, make_user, auth_headers):
+        """Существование пациента по идентификатору не раскрывается."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+
+        response = await self._invite(client, auth_headers, doctor, uuid.uuid4())
+
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("role", ["doctor", "dietitian", "admin"])
+    async def test_only_a_parent_is_invited_to_a_child(
+        self, client, session, make_user, make_patient, auth_headers, role
+    ):
+        """Специалиста подключают в «Кто ведёт пациента», а не приглашением к ребёнку."""
+
+        specialist, _, patient = await self._led_patient(session, make_user, make_patient)
+
+        response = await self._invite(client, auth_headers, specialist, patient.id, role=role)
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "validation_error"
+
+    async def test_family_cannot_invite_a_second_parent(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ответ клиники: «через врача». Семья к своему ребёнку не зовёт."""
+
+        _, first_parent, patient = await self._led_patient(session, make_user, make_patient)
+
+        response = await self._invite(client, auth_headers, first_parent, patient.id)
+
+        assert response.status_code == 403
+
+    async def test_admin_cannot_invite_a_second_parent(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, patient = await self._led_patient(session, make_user, make_patient)
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await self._invite(client, auth_headers, admin, patient.id)
+
+        assert response.status_code == 403
+
+    async def test_inviter_removed_from_the_child_gives_no_access(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Сняли специалиста с пациента, пока ссылка жила, — доступа по ней нет."""
+
+        specialist, first_parent, patient = await self._led_patient(
+            session, make_user, make_patient
+        )
+        successor = await make_user(UserRole.DOCTOR)
+        await patients_repo.link_doctor(session, doctor_id=successor.id, patient_id=patient.id)
+        invited = await self._invite(client, auth_headers, specialist, patient.id)
+        email = invited.json()["email"]
+
+        removed = await client.delete(
+            f"{doctors_url(patient.id)}/{specialist.id}", headers=auth_headers(successor)
+        )
+        assert removed.status_code in (200, 204), removed.text
+
+        accepted = await self._accept(client, invited.json()["token"])
+
+        assert accepted.status_code == 409, accepted.text
+        assert await session.scalar(select(User).where(User.email == email)) is None
+        assert await patients_repo.list_parent_ids(session, patient_id=patient.id) == [
+            first_parent.id
+        ]
+
+    async def test_deactivated_inviter_gives_no_access(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        specialist, first_parent, patient = await self._led_patient(
+            session, make_user, make_patient
+        )
+        invited = await self._invite(client, auth_headers, specialist, patient.id)
+
+        specialist.is_active = False
+        await session.flush()
+
+        accepted = await self._accept(client, invited.json()["token"])
+
+        assert accepted.status_code == 409, accepted.text
+        assert await patients_repo.list_parent_ids(session, patient_id=patient.id) == [
+            first_parent.id
+        ]
+
+    async def test_refused_acceptance_leaves_the_invitation_pending(
+        self, session, make_user, make_patient
+    ):
+        """Отказ 409 откатывает и отметку о принятии: приглашение снова «ждёт».
+
+        ADR-0032 обещает, что такое приглашение остаётся в списке и его можно
+        отозвать. Общий `client` этого не видит: там сессия подменена без отката.
+        Здесь подмена ведёт себя как настоящая `get_session` — ошибка ручки
+        откатывает всё, что ручка успела записать.
+        """
+
+        specialist, _, patient = await self._led_patient(session, make_user, make_patient)
+        token = invitations_repo.generate_token()
+        invitation = await invitations_repo.create(
+            session,
+            email=self._email(),
+            role=UserRole.PARENT,
+            token=token,
+            created_by=specialist.id,
+            patient_id=patient.id,
+        )
+        specialist.is_active = False
+        await session.flush()
+
+        app = create_app()
+
+        async def _rolling_back_session():
+            nested = await session.begin_nested()
+            try:
+                yield session
+            except Exception:
+                await nested.rollback()
+                raise
+            else:
+                await nested.commit()
+
+        app.dependency_overrides[get_session] = _rolling_back_session
+        transport = ASGITransport(app=app, client=("10.33.0.1", 33033))
+        async with AsyncClient(transport=transport, base_url="http://test") as own_client:
+            accepted = await self._accept(own_client, token)
+
+        assert accepted.status_code == 409, accepted.text
+        await session.refresh(invitation)
+        assert invitation.accepted_at is None
+
+    async def test_revoking_a_child_invitation_names_the_child_in_the_audit(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Отзыв приглашения к ребёнку в журнале отличим от отзыва обычного."""
+
+        specialist, _, patient = await self._led_patient(session, make_user, make_patient)
+        invited = await self._invite(client, auth_headers, specialist, patient.id)
+
+        revoked = await client.post(
+            f"{INVITATIONS_URL}/{invited.json()['id']}/revoke",
+            headers=auth_headers(specialist),
+        )
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json()["patient_id"] == str(patient.id)
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "revoke",
+                AuditLog.entity_id == uuid.UUID(invited.json()["id"]),
+            )
+        )
+        assert entry is not None
+        assert entry.after["patient_id"] == str(patient.id)
+
+    async def test_link_is_audited_with_its_invitation(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Доступ к ребёнку появился — в журнале видно, по чьему приглашению."""
+
+        specialist, _, patient = await self._led_patient(session, make_user, make_patient)
+        invited = await self._invite(client, auth_headers, specialist, patient.id)
+        accepted = await self._accept(client, invited.json()["token"])
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "link_parent", AuditLog.entity_id == patient.id
+            )
+        )
+
+        assert entry is not None
+        assert entry.entity == "parent_patient"
+        assert entry.after["parent_id"] == accepted.json()["id"]
+        assert entry.after["invitation_id"] == invited.json()["id"]
+        assert entry.after["invited_by"] == str(specialist.id)
+
+    async def test_family_invitation_without_a_child_links_nobody(
+        self, client, session, make_user, auth_headers
+    ):
+        """Прежний путь не тронут: первый родитель ребёнка заводит сам."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+        invited = await client.post(
+            INVITATIONS_URL,
+            json={"email": self._email(), "role": "parent"},
+            headers=auth_headers(doctor),
+        )
+        assert invited.json()["patient_id"] is None
+
+        accepted = await self._accept(client, invited.json()["token"])
+        assert accepted.status_code == 201, accepted.text
+
+        parent_id = uuid.UUID(accepted.json()["id"])
+        assert (
+            await access_repo.list_accessible_patient_ids(
+                session, user_id=parent_id, role=UserRole.PARENT
+            )
+            == []
+        )
+        listed = await client.get(INVITATIONS_URL, headers=auth_headers(doctor))
+        row = next(i for i in listed.json()["items"] if i["id"] == invited.json()["id"])
+        assert row["patient_id"] is None
 
 
 class TestPatientProfileUpdate:

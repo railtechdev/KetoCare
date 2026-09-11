@@ -107,4 +107,32 @@ describe("список приглашений", () => {
       }),
     );
   });
+
+  it("помечает приглашение второго родителя к заведённому ребёнку", async () => {
+    // Два приглашения «родитель» иначе не различить: одно заводит ребёнка,
+    // другое зовёт к уже заведённому (ADR-0032).
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        items: [
+          PENDING,
+          {
+            ...PENDING,
+            id: "3",
+            email: "dad@example.com",
+            patient_id: "44444444-4444-4444-8444-444444444444",
+          },
+        ],
+        total: 2,
+      },
+      error: undefined,
+    });
+
+    renderList();
+
+    expect(await screen.findByText("dad@example.com")).toBeInTheDocument();
+    expect(
+      screen.getByText("родитель · к заведённому ребёнку"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Родитель")).toHaveLength(1);
+  });
 });

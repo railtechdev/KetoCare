@@ -20,7 +20,7 @@ from sqlalchemy import delete, func, select
 
 from core.config import get_settings
 from core.db import get_engine, get_sessionmaker
-from core.models import Attachment, AuditLog, KetoneLog, Patient, User
+from core.models import Attachment, AuditLog, Invitation, KetoneLog, Patient, User
 from core.models.enums import (
     AttachmentOwnerKind,
     DiarySource,
@@ -29,6 +29,7 @@ from core.models.enums import (
     UserRole,
 )
 from core.repositories import diary as diary_repo
+from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
 from core.tools.erase_patient import erase, patient_scoped_tables
@@ -50,6 +51,10 @@ class TestScopeDiscovery:
 
         # Косвенная: позиции меню ссылаются на меню, а не на пациента.
         assert "menu_items" in tables
+
+        # Приглашение второго родителя к ребёнку несёт его почту (ADR-0032) и
+        # стирается вместе с ребёнком — по той же колонке patient_id.
+        assert "invitations" in tables
 
         # Дети идут раньше родителей, иначе внешние ключи не дадут удалить.
         assert tables.index("menu_items") < tables.index("menus")
@@ -95,6 +100,7 @@ class TestErase:
         async with get_sessionmaker()() as s:
             await s.execute(delete(KetoneLog).where(KetoneLog.patient_id == patient_id))
             await s.execute(delete(Attachment).where(Attachment.owner_id == patient_id))
+            await s.execute(delete(Invitation).where(Invitation.patient_id == patient_id))
             await s.execute(delete(AuditLog).where(AuditLog.entity_id == patient_id))
             await s.execute(delete(Patient).where(Patient.id == patient_id))
             await s.execute(delete(User).where(User.id == parent_id))
@@ -140,6 +146,16 @@ class TestErase:
                     uploaded_by=parent.id,
                 )
             )
+            # Непринятое приглашение второго родителя несёт его почту (ADR-0032) и
+            # обязано уйти вместе с ребёнком — раньше самого пациента, иначе FK.
+            await invitations_repo.create(
+                s,
+                email=f"second-{uuid.uuid4().hex[:10]}@example.com",
+                role=UserRole.PARENT,
+                token=invitations_repo.generate_token(),
+                created_by=parent.id,
+                patient_id=patient.id,
+            )
             # Запись журнала с клинической нагрузкой: её надо очистить, а не удалить.
             s.add(
                 AuditLog(
@@ -179,6 +195,13 @@ class TestErase:
                         .where(Attachment.owner_id == patient_id)
                     )
                 ) == 0
+                assert (
+                    await s.scalar(
+                        select(func.count())
+                        .select_from(Invitation)
+                        .where(Invitation.patient_id == patient_id)
+                    )
+                ) == 0, "приглашение к ребёнку с почтой второго родителя стирается с ним"
 
                 # 2. Журнал: строка осталась, клиническая нагрузка стёрта.
                 entry = await s.scalar(
