@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -95,20 +95,33 @@ describe("план дня в Mini App", () => {
   it("отметка, не дошедшая до сервера, называет причину", async () => {
     // Без сети отметка отказывает сразу (ADR-0034); молча вернувшаяся галочка
     // читалась бы как «нажатие не сработало».
+    const omelette = menu().items[0];
+    (api.GET as Mock).mockResolvedValue({
+      data: menu({
+        items: [
+          omelette,
+          { ...omelette, id: "item-2", meal_index: 2, title: "Суфле" },
+        ],
+      }),
+      response: { status: 200 },
+    });
     (api.POST as Mock).mockImplementation(() =>
       Promise.reject(new NetworkError()),
     );
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("checkbox", { name: /Омлет/ }));
+    const checkbox = await screen.findByRole("checkbox", { name: /Омлет/ });
+    await user.click(checkbox);
 
+    // Под той позицией, которую не приняли: внизу экрана при плане из
+    // нескольких приёмов баннер оказывался ниже сгиба.
+    const row = within(checkbox.closest("li")!);
+    expect(await row.findByText("Отметка не сохранилась")).toBeInTheDocument();
     expect(
-      await screen.findByText("Отметка не сохранилась"),
+      row.getByText("Нет связи с сервером. Проверьте подключение."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Нет связи с сервером. Проверьте подключение."),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText("Отметка не сохранилась")).toHaveLength(1);
   });
 
   it("снимает ошибочную отметку", async () => {

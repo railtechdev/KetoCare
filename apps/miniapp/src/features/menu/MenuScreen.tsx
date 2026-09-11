@@ -65,18 +65,11 @@ export function MenuScreen({ session }: { session: Session }) {
               mark.mutate({ itemId: item.id, eaten: !item.eaten })
             }
             pendingId={mark.isPending ? mark.variables?.itemId : undefined}
+            failedId={mark.isError ? mark.variables?.itemId : undefined}
+            failure={errorMessageOf(mark.error) ?? t("menu.markFailedHint")}
           />
         )}
       </AsyncSection>
-
-      {/* Отказ отметки называется словами: без сети она отказывает сразу
-          (ADR-0034), и галочка, молча вернувшаяся назад, читалась бы как
-          «нажатие не сработало» — родитель жал бы снова, не зная почему. */}
-      {mark.isError && (
-        <WarningBanner level="danger" title={t("menu.markFailed")}>
-          {errorMessageOf(mark.error) ?? t("home.loadErrorHint")}
-        </WarningBanner>
-      )}
     </main>
   );
 }
@@ -85,10 +78,14 @@ function DayPlan({
   menu,
   onToggle,
   pendingId,
+  failedId,
+  failure,
 }: {
   menu: Menu;
   onToggle: (item: MenuItem) => void;
   pendingId: string | undefined;
+  failedId: string | undefined;
+  failure: string;
 }) {
   const { t } = useTranslation();
 
@@ -144,6 +141,21 @@ function DayPlan({
                       )}
                     </span>
                   </label>
+
+                  {/* Отказ отметки называется словами и стоит под той
+                      позицией, которую не приняли: без сети отметка отказывает
+                      сразу (ADR-0034), а галочка, молча вернувшаяся назад,
+                      читалась бы как «нажатие не сработало». Внизу экрана
+                      баннер на телефоне оказывался ниже сгиба. */}
+                  {failedId === item.id && (
+                    <WarningBanner
+                      level="danger"
+                      title={t("menu.markFailed")}
+                      className="mt-1"
+                    >
+                      {failure}
+                    </WarningBanner>
+                  )}
 
                   {/* Что и сколько взвесить — по требованию, как в кабинете:
                       у плиты нужна граммовка, при беглом взгляде — названия.
