@@ -412,6 +412,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const duplicateOfVerify =
     verifyShown && actionMessage === errorMessageOf(verify.error);
   const busy = solve.isPending || scale.isPending;
+  // Без сети проверка не уходит, а ждёт связи (`isPaused`). Результат прежнего
+  // запуска мутация при старте уже сбросила, и блок расчёта пропадал без
+  // единого слова — будто состав не считается вовсе. С возвратом сети
+  // TanStack продолжает её сам. На повторе без сети говорят отказ и
+  // «Повторяем…».
+  const waitingForNetwork = verify.isPaused && !retrying;
 
   function resetActions() {
     solve.reset();
@@ -510,6 +516,11 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
             блоке состава — строкой над этим. Своя фраза здесь была вторым
             сообщением об одном и том же (правило П27 канона), и вместе с
             рамкой пустого состава они отодвигали цель на 200 px вниз. */}
+        {waitingForNetwork && (
+          <p role="status" className="m-0 text-sm text-muted-foreground">
+            {t("waitingForNetwork")}
+          </p>
+        )}
         {dish === null ? null : (
           <div
             aria-busy={stale}

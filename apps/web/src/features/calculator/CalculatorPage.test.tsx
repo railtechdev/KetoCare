@@ -1,5 +1,15 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -22,6 +32,8 @@ const OTHER_PATIENT_ID = "33333333-3333-4333-8333-333333333333";
 const BUTTER = "22222222-2222-4222-8222-222222222222";
 
 const PRESCRIBED_RATIO = 3.5;
+
+const WAITING = "Нет связи — посчитаем, когда она появится.";
 
 /** Задержка автопересчёта (400 мс) плюс запас: findBy по умолчанию ждёт 1 с. */
 const AUTO_CALC_TIMEOUT_MS = 3000;
@@ -392,6 +404,76 @@ describe("калькулятор", () => {
     );
 
     expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+  });
+
+  it("без сети говорит, что ждёт связи, и досчитывает с её возвратом", async () => {
+    // Без сети проверка встаёт на паузу, а прежний результат мутация при
+    // старте уже сбросила: блок расчёта пропадал без единого слова.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+
+      expect(
+        await screen.findByText(WAITING, undefined, {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("«Повторить» без сети не добавляет третьего голоса к отказу", async () => {
+    // Об отказе и о повторе уже сказано рядом с кнопкой.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : Promise.resolve({ data: VERIFIED, error: undefined });
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+
+      expect(
+        await screen.findByRole("button", { name: "Повторяем…" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it("после успешного повтора в карте ребёнка снова можно сохранить", async () => {
