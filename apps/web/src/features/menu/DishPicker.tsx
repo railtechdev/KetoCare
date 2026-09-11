@@ -187,7 +187,7 @@ export function DishPicker({
         </PopoverContent>
 
         {isError && (
-          <p className="m-0 text-sm text-destructive" role="alert">
+          <p className="m-0 text-sm break-words text-destructive" role="alert">
             {errorMessageOf(error) ?? t("picker.failed")}
           </p>
         )}
