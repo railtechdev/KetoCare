@@ -1,3 +1,4 @@
+import { RECALC_DELAY_MS } from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
@@ -35,12 +36,6 @@ interface ItemContribution {
   protein_g: number;
   carbs_g: number;
 }
-
-/**
- * Задержка автопересчёта. Та же, что у калькулятора: правка граммовки — это
- * несколько нажатий подряд, и каждое не должно уходить в расчёт.
- */
-const RECALC_DELAY_MS = 400;
 
 /**
  * Показатели рецепта по мере правки состава.

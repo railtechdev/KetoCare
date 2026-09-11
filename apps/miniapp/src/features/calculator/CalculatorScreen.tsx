@@ -2,6 +2,7 @@ import {
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
+  RECALC_DELAY_MS,
   EmptyState,
   Input,
   MacroBar,
@@ -42,8 +43,8 @@ import {
   useVerify,
 } from "./useCalculator";
 
-/** Та же задержка, что у поисковых полей: правка граммовки — несколько нажатий. */
-const RECALC_DELAY_MS = 400;
+/** Задержка поиска продукта: запрос уходит, когда набор стоит спокойно. */
+const SEARCH_DELAY_MS = 400;
 
 /**
  * Калькулятор: один экран, три функции раздела 9 ТЗ.
@@ -894,7 +895,7 @@ function ProductPicker({
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const debounced = useDebouncedValue(query, RECALC_DELAY_MS);
+  const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const found = useProductSearch(debounced);
 
   return (

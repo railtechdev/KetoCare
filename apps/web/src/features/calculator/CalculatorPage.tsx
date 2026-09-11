@@ -2,6 +2,7 @@ import {
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
+  RECALC_DELAY_MS,
   canRetry,
   Section,
   Separator,
@@ -34,7 +35,6 @@ import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
-import { AUTO_CALC_DELAY_MS } from "./calcTiming";
 import { SaveDishForm } from "./SaveDishForm";
 import type { DishRow } from "./types";
 import { useProduct } from "./useProducts";
@@ -194,8 +194,8 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    * после сбоя: без него экран оставался тупиком, из которого выводила только
    * фиктивная правка состава.
    */
-  const debouncedRows = useDebouncedValue(rows, AUTO_CALC_DELAY_MS);
-  const debouncedTargets = useDebouncedValue(targets, AUTO_CALC_DELAY_MS);
+  const debouncedRows = useDebouncedValue(rows, RECALC_DELAY_MS);
+  const debouncedTargets = useDebouncedValue(targets, RECALC_DELAY_MS);
   const verifyMutate = verify.mutate;
   const verifyReset = verify.reset;
 
