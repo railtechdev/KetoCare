@@ -162,6 +162,7 @@ class TestIdempotencyKey:
         other = await client.post(_url(second_child), json=_body(butter), headers=headers)
 
         assert other.status_code == 422, other.text
+        assert other.json()["error"]["details"] == {"header": "Idempotency-Key"}
         assert await _dishes(session, second_child.id) == 0
 
     async def test_quoted_key_is_the_same_key(
