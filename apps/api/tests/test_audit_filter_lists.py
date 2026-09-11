@@ -34,12 +34,22 @@ FILTERS = REPO / "apps/web/src/features/admin/auditFilters.ts"
 #: `action=` у `argparse.add_argument` — не действие журнала.
 _ARGPARSE_ACTIONS = frozenset({"store_true", "store_false", "store_const", "append", "count"})
 
-#: Справочники: сущность журнала — имя таблицы модели (`services/admin.py`).
-#: Модели берутся из ограничений параметра типа, а не перечисляются здесь:
-#: новый справочник попадёт в проверку сам.
-_DYNAMIC_ENTITIES = frozenset(
-    model.__tablename__ for model in create_dictionary_entry.__type_params__[0].__constraints__
-)
+
+def _dictionary_entities() -> frozenset[str]:
+    """Справочники: сущность журнала — имя таблицы модели (`services/admin.py`).
+
+    Модели берутся из ограничений параметра типа, а не перечисляются здесь:
+    новый справочник попадёт в проверку сам. Если параметр типа убрали или
+    заменили на `bound`, проверка сломалась бы молча — отсюда явный отказ.
+    """
+
+    params = getattr(create_dictionary_entry, "__type_params__", ())
+    constraints = params[0].__constraints__ if params else ()
+    assert constraints, (
+        "create_dictionary_entry больше не перечисляет модели справочников "
+        "ограничением типа — поправьте сбор сущностей справочников в этом тесте"
+    )
+    return frozenset(model.__tablename__ for model in constraints)
 
 
 def _written(kind: str) -> set[str]:
@@ -69,7 +79,7 @@ def test_filter_knows_every_written_action() -> None:
 
 
 def test_filter_knows_every_written_entity() -> None:
-    written = _written("entity") | _DYNAMIC_ENTITIES
+    written = _written("entity") | _dictionary_entities()
     listed = _filter_list("AUDIT_ENTITIES")
 
     assert written - listed == set(), "API пишет сущности, которых нет в фильтре журнала"
