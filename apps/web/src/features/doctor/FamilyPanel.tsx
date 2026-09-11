@@ -48,12 +48,9 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
   const family = useFamily(patientId);
   const [inviteOpen, setInviteOpen] = useState(false);
 
+  // Подпись одна: «родителя» верно и при пустой семье, и при одном родителе.
+  // Две подписи по числу родителей меняли ширину кнопки после загрузки семьи.
   const canInvite = isCareRole(session?.role);
-  // Пока семьи нет, «второго» быть не может: кнопка зовёт просто родителя.
-  const inviteLabel =
-    (family.data ?? []).length === 0
-      ? t("family.inviteFirst")
-      : t("family.invite");
 
   return (
     <Section
@@ -64,7 +61,7 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
         canInvite && (
           <Button type="button" onClick={() => setInviteOpen(true)}>
             <UserPlus aria-hidden="true" />
-            {inviteLabel}
+            {t("family.invite")}
           </Button>
         )
       }

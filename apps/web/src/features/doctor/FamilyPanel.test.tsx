@@ -153,7 +153,7 @@ describe("кто ведёт ребёнка дома", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Пригласить второго родителя",
+        name: "Пригласить родителя",
       }),
     );
     await user.type(
@@ -187,7 +187,7 @@ describe("кто ведёт ребёнка дома", () => {
 
     expect(await screen.findByText("Мать")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Пригласить второго родителя" }),
+      screen.queryByRole("button", { name: "Пригласить родителя" }),
     ).not.toBeInTheDocument();
   });
 });
