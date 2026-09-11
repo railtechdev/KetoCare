@@ -349,6 +349,14 @@ async def publish_recipe(
             ErrorCode.VALIDATION_ERROR,
             "Нельзя опубликовать рецепт без состава: показатели считать не по чему.",
         )
+    # Опубликованный рецепт с нулём порций семья добавила бы в меню, и день не
+    # сохранился бы. Такие строки остались от импорта до ограничения в базе
+    # (миграция 5b1e8d3f9a27, NOT VALID).
+    if recipe.servings < 1:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Нельзя опубликовать рецепт без числа порций: укажите, на сколько порций он рассчитан.",
+        )
 
     computed, engine_version = await recipes_service.compute(
         session, composition=recipes_service.stored_composition(stored)

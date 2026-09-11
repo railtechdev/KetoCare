@@ -8,10 +8,11 @@ from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy import event
+from sqlalchemy.exc import IntegrityError
 
-from core.models import Product, ProductCategory
+from core.models import Product, ProductCategory, Recipe
 from core.models.clinical import AppendOnlyViolationError
-from core.models.enums import Sex, UserRole
+from core.models.enums import RecipeCategory, Sex, UserRole
 from core.repositories import (
     access,
     audit,
@@ -635,3 +636,29 @@ class TestLeadingMacroSearch:
 
         assert total == 1, "отбор строкой вернул пусто — сравнение членов перечисления сломано"
         assert found[0].name_ru.startswith("Масло")
+
+
+class TestRecipeServingsConstraint:
+    """Порций в рецепте не меньше одной — это правило базы, а не только схем.
+
+    CSV-импорт писал в репозиторий мимо `RecipeWrite` и превращал «0,5» в ноль
+    порций, а меню делит на их число. Следующая такая дверь упрётся в базу.
+    """
+
+    @pytest.mark.parametrize("servings", [0, -1])
+    async def test_database_rejects_a_recipe_without_servings(self, session, servings):
+        author = await _make_user(session, UserRole.DIETITIAN)
+
+        with pytest.raises(IntegrityError):
+            async with session.begin_nested():
+                session.add(
+                    Recipe(
+                        title=f"Рецепт {uuid.uuid4().hex[:8]}",
+                        category=RecipeCategory.BREAKFAST,
+                        yield_g=100,
+                        servings=servings,
+                        instructions="Смешать",
+                        author_id=author.id,
+                    )
+                )
+                await session.flush()

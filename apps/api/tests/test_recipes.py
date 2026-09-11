@@ -14,7 +14,7 @@ from datetime import date
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps.auth import get_session
@@ -310,6 +310,45 @@ class TestCreate:
             headers=auth_headers(dietitian),
         )
         assert response.status_code == 422
+
+
+async def _legacy_zero_servings(session, recipe_id) -> None:
+    """Рецепт с нулём порций, записанный до ограничения в базе.
+
+    `ck_recipes_servings_positive` стоит NOT VALID: новые и изменяемые строки оно
+    не пускает, а старые не проверяет. Старая строка имитируется снятием
+    ограничения внутри транзакции теста — откат фикстуры вернёт его на место.
+    """
+
+    await session.execute(
+        text("ALTER TABLE recipes DROP CONSTRAINT IF EXISTS ck_recipes_servings_positive")
+    )
+    await session.execute(text("UPDATE recipes SET servings = 0 WHERE id = :id"), {"id": recipe_id})
+    # Обновить только сам рецепт: `expire_all` делал устаревшими и пользователей
+    # теста, и их чтение для заголовков авторизации шло синхронно — MissingGreenlet.
+    recipe = await session.get(Recipe, recipe_id)
+    if recipe is not None:
+        await session.refresh(recipe)
+
+
+class TestPublishNeedsServings:
+    async def test_recipe_without_servings_is_not_published(
+        self, client, session, make_user, auth_headers, make_recipe
+    ):
+        """Опубликованный рецепт с нулём порций семья добавила бы в меню, и день
+        не сохранился бы."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await make_recipe((butter, 50), author=dietitian)
+        await _legacy_zero_servings(session, uuid.UUID(recipe["id"]))
+
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(dietitian)
+        )
+
+        assert response.status_code == 422, response.text
+        assert "порций" in response.json()["error"]["message"]
 
 
 class TestUnpublish:

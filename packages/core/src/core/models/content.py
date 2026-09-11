@@ -6,7 +6,17 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -97,6 +107,12 @@ class Recipe(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
             text("to_tsvector('russian', title)"),
             postgresql_using="gin",
         ),
+        # Порций не меньше одной: меню делит состав рецепта на их число, и ноль
+        # ронял сохранение дня пятисоткой. Стоит в базе, а не только в схемах:
+        # импорт рецептов писал в репозиторий мимо `RecipeWrite` и однажды уже
+        # превратил «0,5» в ноль. Миграция `5b1e8d3f9a27` ставит его NOT VALID —
+        # строки, записанные раньше, она не проверяет.
+        CheckConstraint("servings >= 1", name="ck_recipes_servings_positive"),
     )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)

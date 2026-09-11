@@ -420,7 +420,18 @@ def _servings(item: MenuItemWrite, recipes: dict[uuid.UUID, Recipe]) -> int:
 
     if item.recipe_id is None:
         return 1
-    return recipes[item.recipe_id].servings
+    recipe = recipes[item.recipe_id]
+    # Ноль порций ронял сохранение дня делением в `totals_from_items`. База такие
+    # рецепты больше не пускает, но записанные раньше ограничение не проверяет
+    # (миграция 5b1e8d3f9a27, NOT VALID) — отказ называет рецепт, а не падает.
+    if recipe.servings < 1:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"У рецепта «{recipe.title}» не указано число порций. "
+            "Его нужно исправить, прежде чем добавлять в меню.",
+            details={"recipe_id": str(recipe.id)},
+        )
+    return recipe.servings
 
 
 async def _compositions(
