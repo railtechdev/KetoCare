@@ -84,13 +84,34 @@ beforeEach(() => {
   (api.POST as Mock).mockResolvedValue({ data: undefined, error: undefined });
 });
 
-/** Что сейчас в адресе: ребёнок | задача | объект | вкладка. */
+/** Что сейчас в адресе: ребёнок | задача | объект | вкладка | вид | поиск. */
 function SearchProbe() {
   const search = useSearch({ from: "/app/$section" });
   return (
     <output data-testid="search">
-      {`${search.patient ?? ""}|${search.job ?? ""}|${search.item ?? ""}|${search.tab ?? ""}`}
+      {[
+        search.patient,
+        search.job,
+        search.item,
+        search.tab,
+        search.kind,
+        search.q,
+      ]
+        .map((value) => value ?? "")
+        .join("|")}
     </output>
+  );
+}
+
+/**
+ * Все объявленные параметры адреса — точно, а не подстрокой: лишний сброс или
+ * подстановка одного из них при смене ребёнка иначе прошли бы мимо. Ключи вне
+ * этого списка тестовый роутер пропускает, а боевой отбрасывает, — новый
+ * параметр раздела нужно добавить и в пробу.
+ */
+async function expectSearch(value: string) {
+  await waitFor(() =>
+    expect(screen.getByTestId("search").textContent).toBe(value),
   );
 }
 
@@ -149,21 +170,18 @@ describe("кабинет семьи: смена ребёнка в шапке", (
     // первого.
     renderIn(
       "reports",
-      { patient: FIRST, job: "job-1", tab: "pdf" },
+      { patient: FIRST, job: "job-1", tab: "pdf", kind: "k1", q: "масло" },
       <>
         <PatientSwitcher />
         <SearchProbe />
       </>,
     );
-    expect(await screen.findByTestId("search")).toHaveTextContent(
-      `${FIRST}|job-1||pdf`,
-    );
+    await expectSearch(`${FIRST}|job-1||pdf|k1|масло`);
 
     await switchTo(SECOND);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("search")).toHaveTextContent(`${SECOND}|||pdf`),
-    );
+    // Вкладка, вид и поиск — не о ребёнке и остаются.
+    await expectSearch(`${SECOND}|||pdf|k1|масло`);
   });
 
   it("своё блюдо прежнего ребёнка к новому не переходит", async () => {
@@ -177,15 +195,11 @@ describe("кабинет семьи: смена ребёнка в шапке", (
         <SearchProbe />
       </>,
     );
-    expect(await screen.findByTestId("search")).toHaveTextContent(
-      `${FIRST}||dish:1|`,
-    );
+    await expectSearch(`${FIRST}||dish:1|||`);
 
     await switchTo(SECOND);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("search")).toHaveTextContent(`${SECOND}|||`),
-    );
+    await expectSearch(`${SECOND}|||||`);
   });
 
   it("открытый рецепт от смены ребёнка не закрывается", async () => {
@@ -199,15 +213,11 @@ describe("кабинет семьи: смена ребёнка в шапке", (
         <SearchProbe />
       </>,
     );
-    expect(await screen.findByTestId("search")).toHaveTextContent(
-      `${FIRST}||r1|`,
-    );
+    await expectSearch(`${FIRST}||r1|||`);
 
     await switchTo(SECOND);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("search")).toHaveTextContent(`${SECOND}||r1|`),
-    );
+    await expectSearch(`${SECOND}||r1|||`);
   });
 
   it("первый выбор ребёнка не теряет рецепт, пришедший ссылкой «В калькулятор»", async () => {
@@ -225,10 +235,6 @@ describe("кабинет семьи: смена ребёнка в шапке", (
 
     await user.click(await screen.findByRole("button", { name: "Ребёнок 2" }));
 
-    await waitFor(() =>
-      expect(screen.getByTestId("search")).toHaveTextContent(
-        `${SECOND}||recipe:r1|`,
-      ),
-    );
+    await expectSearch(`${SECOND}||recipe:r1|||`);
   });
 });

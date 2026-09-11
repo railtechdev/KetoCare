@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -6,17 +7,15 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import calculatorRu from "../../locales/ru/calculator.json";
-import { useSearch } from "@tanstack/react-router";
-
 import { SectionRouter } from "../../test/SectionRouter";
 import { CalculatorPage } from "./CalculatorPage";
+import { incomingRecipe } from "./incomingItem";
 
 /** Показывает `?item=` из адреса: тест смотрит на него, а не на догадки. */
 function ItemProbe() {
   const search = useSearch({ from: "/app/$section" });
   return <span data-testid="item-param">{search.item ?? "—"}</span>;
 }
-import { incomingRecipe } from "./incomingDish";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();

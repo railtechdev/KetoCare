@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { incomingDish, incomingRecipe, parseIncoming } from "./incomingDish";
+import {
+  incomingDish,
+  incomingRecipe,
+  ownedByChild,
+  parseIncoming,
+} from "./incomingItem";
 
 describe("что приходит в калькулятор через ?item=", () => {
   it("голый идентификатор — это продукт из справочника", () => {
@@ -26,5 +31,14 @@ describe("что приходит в калькулятор через ?item=", 
   it("пустое значение — это ничего, а не пустой продукт", () => {
     expect(parseIncoming(undefined)).toBeNull();
     expect(parseIncoming("")).toBeNull();
+  });
+});
+
+describe("что из адреса принадлежит ребёнку", () => {
+  it("своё блюдо — да, рецепт, продукт и пустое — нет", () => {
+    expect(ownedByChild(incomingDish("d1"))).toBe(true);
+    expect(ownedByChild(incomingRecipe("r1"))).toBe(false);
+    expect(ownedByChild("11111111-1111-4111-8111-111111111111")).toBe(false);
+    expect(ownedByChild(undefined)).toBe(false);
   });
 });
