@@ -37,6 +37,7 @@ from ..schemas_reports import (
     SeizureSection,
     SideEffectRow,
 )
+from .medication_frequency import describe_frequency
 
 
 def period_bounds(period_from: date, period_to: date) -> tuple[datetime, datetime]:
@@ -175,7 +176,8 @@ async def build_report(
             MedicationRow(
                 drug_name=item.drug_name,
                 dose=item.dose,
-                frequency=item.frequency,
+                # Словами, как в карте: отчёт читают без словарей кабинета.
+                frequency=describe_frequency(item.frequency_code, item.frequency),
                 started_at=item.started_at,
                 stopped_at=item.stopped_at,
             )

@@ -37,7 +37,8 @@ PROFILE = {
 MEDICATION = {
     "drug_name": "Вальпроевая кислота",
     "dose": "300 мг",
-    "frequency": "2 раза в сутки",
+    "frequency_code": "twice_daily",
+    "frequency": "утром и на ночь",
     "started_at": TODAY.isoformat(),
 }
 
@@ -507,6 +508,12 @@ class TestMedications:
             {**MEDICATION, "drug_name": ""},
             {**MEDICATION, "dose": ""},
             {**MEDICATION, "started_at": "не дата"},
+            # Кратность — из списка (ADR-0033): без кода и с чужим кодом нельзя.
+            {key: value for key, value in MEDICATION.items() if key != "frequency_code"},
+            {**MEDICATION, "frequency_code": "BID"},
+            # «Другая схема» без слов не говорит, как давать препарат.
+            {**MEDICATION, "frequency_code": "other", "frequency": None},
+            {**MEDICATION, "frequency_code": "other", "frequency": "   "},
         ],
     )
     async def test_invalid_payload_rejected(
@@ -520,6 +527,61 @@ class TestMedications:
         )
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
+
+    async def test_code_alone_describes_frequency(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/medications",
+            # Пустое уточнение — это «уточнения нет», а не строка из пробелов.
+            json={**MEDICATION, "frequency_code": "once_daily", "frequency": "  "},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 201, response.text
+        assert response.json()["frequency_code"] == "once_daily"
+        assert response.json()["frequency"] is None
+
+    async def test_other_scheme_with_words_is_accepted(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/medications",
+            json={**MEDICATION, "frequency_code": "other", "frequency": "через два дня на третий"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 201, response.text
+        assert response.json()["frequency"] == "через два дня на третий"
+
+    async def test_record_from_before_the_list_keeps_its_words(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Запись, заведённая до списка, читается как была: код не выдумывается."""
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        session.add(
+            Medication(
+                patient_id=patient.id,
+                drug_name="Леветирацетам",
+                dose="250 мг",
+                frequency="утром и на ночь",
+                started_at=TODAY,
+                author_id=doctor.id,
+            )
+        )
+        await session.flush()
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/medications", headers=auth_headers(doctor)
+        )
+
+        [item] = response.json()["items"]
+        assert item["frequency_code"] is None
+        assert item["frequency"] == "утром и на ночь"
 
     async def test_unknown_medication_returns_404(
         self, client, session, make_user, make_patient, auth_headers

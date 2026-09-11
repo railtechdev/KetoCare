@@ -15,6 +15,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Medication
+from ..models.enums import MedicationFrequency
 
 
 async def get(session: AsyncSession, medication_id: uuid.UUID) -> Medication | None:
@@ -63,7 +64,8 @@ async def create(
     patient_id: uuid.UUID,
     drug_name: str,
     dose: str,
-    frequency: str,
+    frequency_code: MedicationFrequency,
+    frequency: str | None,
     started_at: date,
     stopped_at: date | None,
     author_id: uuid.UUID,
@@ -72,6 +74,7 @@ async def create(
         patient_id=patient_id,
         drug_name=drug_name,
         dose=dose,
+        frequency_code=frequency_code,
         frequency=frequency,
         started_at=started_at,
         stopped_at=stopped_at,
@@ -88,7 +91,8 @@ async def update(
     medication: Medication,
     drug_name: str,
     dose: str,
-    frequency: str,
+    frequency_code: MedicationFrequency,
+    frequency: str | None,
     started_at: date,
     stopped_at: date | None,
 ) -> Medication:
@@ -97,6 +101,7 @@ async def update(
 
     medication.drug_name = drug_name
     medication.dose = dose
+    medication.frequency_code = frequency_code
     medication.frequency = frequency
     medication.started_at = started_at
     medication.stopped_at = stopped_at

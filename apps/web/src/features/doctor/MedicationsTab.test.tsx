@@ -137,7 +137,10 @@ describe("препараты из анкеты семьи", () => {
     );
 
     await user.type(screen.getByLabelText(/Принимаемая доза/), "300 мг");
-    await user.type(screen.getByLabelText("Кратность"), "2 раза в день");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "2 раза в сутки",
+    );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(api.POST).toHaveBeenCalled());
@@ -145,6 +148,9 @@ describe("препараты из анкеты семьи", () => {
     expect(body).toMatchObject({
       drug_name: "Вальпроат натрия",
       dose: "300 мг",
+      frequency_code: "twice_daily",
+      // Пустое уточнение уходит как «уточнения нет».
+      frequency: null,
     });
   });
 
@@ -200,5 +206,63 @@ describe("препараты из анкеты семьи", () => {
     expect(
       screen.queryByRole("button", { name: /^Вальпроат натрия$/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("кратность приёма из списка", () => {
+  it("«Другая схема» без слов не отправляется, ошибка у поля уточнения", async () => {
+    // Сервер отказал бы общей строкой; врач узнаёт, чего не хватает, у поля.
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+    await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
+    await user.type(screen.getByLabelText(/Принимаемая доза/), "300 мг");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "Другая схема",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(
+      await screen.findByText("Для «Другой схемы» опишите кратность словами."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Уточнение к кратности/)).toHaveFocus();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+
+  it("в таблице кратность словами: подпись с уточнением и слова старой записи", async () => {
+    medications = [
+      {
+        id: "m1",
+        patient_id: PATIENT_ID,
+        drug_name: "Леветирацетам",
+        dose: "250 мг",
+        frequency_code: "twice_daily",
+        frequency: "утром и на ночь",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+      {
+        id: "m2",
+        patient_id: PATIENT_ID,
+        drug_name: "Топирамат",
+        dose: "25 мг",
+        frequency_code: null,
+        frequency: "на ночь",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+    ];
+    renderTab();
+
+    expect(
+      await screen.findByText("2 раза в сутки — утром и на ночь"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("на ночь")).toBeInTheDocument();
+    // Код врачу не показывается никогда.
+    expect(screen.queryByText("twice_daily")).not.toBeInTheDocument();
   });
 });
