@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 
 import { useAttemptKey } from "./useAttemptKey";
 
-/** Ключ, который примет сервер: видимые символы ASCII, до 255 (ADR-0035). */
-const SERVER_ACCEPTS = /^[\x21-\x7e]{1,255}$/;
+/**
+ * Ключ, который примет сервер: видимые символы ASCII без кавычки и обратной
+ * косой черты, до 255 — тот же класс, что в `deps/idempotency.py` (ADR-0035).
+ */
+const SERVER_ACCEPTS = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
 
 /** Среда без `crypto.randomUUID`: http в локальной сети, Safari до 15.4. */
 function withoutRandomUUID<T>(body: () => T): T {
-  const original = crypto.randomUUID;
+  const own = Object.getOwnPropertyDescriptor(crypto, "randomUUID");
   Object.defineProperty(crypto, "randomUUID", {
     value: undefined,
     configurable: true,
@@ -16,10 +19,10 @@ function withoutRandomUUID<T>(body: () => T): T {
   try {
     return body();
   } finally {
-    Object.defineProperty(crypto, "randomUUID", {
-      value: original,
-      configurable: true,
-    });
+    // Если метод жил на прототипе, своё свойство нужно снять, а не подменить
+    // значением: иначе среда останется не той, какой была.
+    if (own === undefined) Reflect.deleteProperty(crypto, "randomUUID");
+    else Object.defineProperty(crypto, "randomUUID", own);
   }
 }
 

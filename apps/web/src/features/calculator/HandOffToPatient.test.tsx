@@ -183,7 +183,9 @@ describe("передача состава пациенту", () => {
             // Ключ попытки: потерянный ответ и второе нажатие не создадут
             // второго блюда (ADR-0035).
             header: {
-              "Idempotency-Key": expect.stringMatching(/^[\x21-\x7e]{1,255}$/),
+              "Idempotency-Key": expect.stringMatching(
+                /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/,
+              ),
             },
           },
           body: expect.objectContaining({
