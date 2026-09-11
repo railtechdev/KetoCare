@@ -583,6 +583,51 @@ class TestMedications:
         assert item["frequency_code"] is None
         assert item["frequency"] == "утром и на ночь"
 
+    async def test_editing_a_record_from_before_the_list_asks_for_a_code(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Правка старой записи: код выбирает врач, слова остаются, журнал видит оба."""
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        legacy = Medication(
+            patient_id=patient.id,
+            drug_name="Топирамат",
+            dose="25 мг",
+            frequency="на ночь",
+            started_at=TODAY,
+            author_id=doctor.id,
+        )
+        session.add(legacy)
+        await session.flush()
+        url = f"/api/v1/patients/{patient.id}/medications/{legacy.id}"
+
+        without_code = await client.put(
+            url,
+            json={key: value for key, value in MEDICATION.items() if key != "frequency_code"},
+            headers=auth_headers(doctor),
+        )
+        assert without_code.status_code == 422
+
+        response = await client.put(
+            url,
+            json={**MEDICATION, "frequency_code": "once_daily", "frequency": "на ночь"},
+            headers=auth_headers(doctor),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["frequency_code"] == "once_daily"
+        assert response.json()["frequency"] == "на ночь"
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "medications",
+                AuditLog.action == "update",
+                AuditLog.entity_id == legacy.id,
+            )
+        )
+        assert entry is not None
+        assert entry.before["frequency_code"] is None
+        assert entry.before["frequency"] == "на ночь"
+        assert entry.after["frequency_code"] == "once_daily"
+
     async def test_unknown_medication_returns_404(
         self, client, session, make_user, make_patient, auth_headers
     ):

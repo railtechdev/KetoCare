@@ -186,8 +186,9 @@ async def build_summary_input(
                 "not_taken": row.entries - row.taken,
                 # Доля считается здесь, а не моделью: сводка обязана брать числа
                 # готовыми (`worker.ai.grounding`). Знаменатель — отметки, а не
-                # «положено приёмов»: числа приёмов в сутки в схеме нет
-                # (вопрос 37).
+                # «положено приёмов»: нужен ли такой показатель, клиника не
+                # ответила (вопрос 37), а у записей до списка кратности числа
+                # приёмов нет вовсе.
                 "taken_pct": round(row.taken / row.entries * 100, 1) if row.entries else None,
             }
             for row in medications

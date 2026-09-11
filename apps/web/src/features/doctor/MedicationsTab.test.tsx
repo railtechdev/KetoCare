@@ -265,4 +265,45 @@ describe("кратность приёма из списка", () => {
     // Код врачу не показывается никогда.
     expect(screen.queryByText("twice_daily")).not.toBeInTheDocument();
   });
+
+  it("правка старой записи просит выбрать код и не подставляет его молча", async () => {
+    // Кратность такой записи — слова. Угадывать по ним код нельзя: форма
+    // переносит слова в уточнение, оставляет список пустым и без выбора не
+    // отправляет.
+    medications = [
+      {
+        id: "m3",
+        patient_id: PATIENT_ID,
+        drug_name: "Топирамат",
+        dose: "25 мг",
+        frequency_code: null,
+        frequency: "3 раза в день",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+    ];
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Изменить назначение препарата Топирамат",
+      }),
+    );
+
+    expect(
+      await screen.findByText(/Раньше кратность записывалась словами/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Кратность")).toHaveValue("");
+    expect(screen.getByLabelText(/Уточнение к кратности/)).toHaveValue(
+      "3 раза в день",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(
+      await screen.findByText("Выберите кратность из списка."),
+    ).toBeInTheDocument();
+    expect(api.PUT).not.toHaveBeenCalled();
+  });
 });

@@ -3,7 +3,7 @@
 Кабинет подписывает кратность своими словарями (`doctor.json`,
 `medications.frequencyCodes`), а отчёт собирает сервер, и словарей у него нет.
 Две записи одних и тех же слов сверяет тест
-(`test_clinical.py::TestMedicationFrequencyLabels`): семья и врач не должны
+(`test_medication_frequency.py`): семья и врач не должны
 читать в отчёте одно, а в карте другое.
 """
 
