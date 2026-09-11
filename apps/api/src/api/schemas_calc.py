@@ -10,41 +10,69 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .schemas_recipes import RecipeIngredientIn
+from .services.product_import import KCAL_MAX, MACRO_MAX
+
 # Верхняя граница размера задачи. Блюдо из сотни ингредиентов нереалистично,
 # а без предела один запрос со списком на десятки тысяч позиций занял бы решатель
 # надолго (LP решается синхронно).
 MAX_INGREDIENTS = 100
 
+#: Граммы позиции — та же граница, что у состава рецепта (`RecipeIngredientIn`):
+#: второй вход в тот же расчёт обязан иметь те же пределы.
+CALC_GRAMS_MAX = next(
+    float(meta.le)
+    for meta in RecipeIngredientIn.model_fields["grams"].metadata
+    if getattr(meta, "le", None) is not None
+)
+
+# Входные модели не принимают `inf` и `nan` (`allow_inf_nan=False`). JSON-разбор
+# понимает `Infinity` и `NaN`, а поля с одной нижней границей (`ge=0`) пропускали
+# бесконечность: `inf >= 0`. Ядро получало бы бесконечные массы и отдавало NaN.
+
 
 class IngredientIn(BaseModel):
     """Пищевая ценность на 100 г."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     product_id: str
-    kcal: Annotated[float, Field(ge=0)]
-    fat: Annotated[float, Field(ge=0)]
-    protein: Annotated[float, Field(ge=0)]
-    carbs: Annotated[float, Field(ge=0)]
-    fiber: Annotated[float, Field(ge=0)] = 0.0
+    # Верхние границы — как у справочника продуктов (`product_import`): без них
+    # конечное, но огромное число («1e308») переполняло ядро, и ответ приходил
+    # 200 с `null` вместо калорийности и мусорным соотношением.
+    kcal: Annotated[float, Field(ge=0, le=KCAL_MAX)]
+    fat: Annotated[float, Field(ge=0, le=MACRO_MAX)]
+    protein: Annotated[float, Field(ge=0, le=MACRO_MAX)]
+    carbs: Annotated[float, Field(ge=0, le=MACRO_MAX)]
+    fiber: Annotated[float, Field(ge=0, le=MACRO_MAX)] = 0.0
 
 
 class ItemIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     product_id: str
-    grams: Annotated[float, Field(ge=0)]
+    grams: Annotated[float, Field(ge=0, le=CALC_GRAMS_MAX)]
 
 
 class TargetsIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ratio: Annotated[float, Field(ge=1.0, le=5.0)]
     kcal: Annotated[float, Field(gt=0, le=5000)]
     protein_min_g: Annotated[float, Field(ge=0)] | None = None
     carbs_max_g: Annotated[float, Field(ge=0)] | None = None
     per_ingredient_bounds: (
-        Annotated[dict[str, tuple[float, float | None]], Field(max_length=MAX_INGREDIENTS)] | None
+        Annotated[
+            dict[
+                str,
+                tuple[
+                    Annotated[float, Field(ge=0, le=CALC_GRAMS_MAX)],
+                    Annotated[float, Field(ge=0, le=CALC_GRAMS_MAX)] | None,
+                ],
+            ],
+            Field(max_length=MAX_INGREDIENTS),
+        ]
+        | None
     ) = None
 
 
@@ -97,7 +125,7 @@ class DishOut(BaseModel):
 
 
 class VerifyRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     items: list[ItemIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
@@ -130,7 +158,7 @@ class VerifyResponse(BaseModel):
 
 
 class SolveRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     targets: TargetsIn
@@ -155,7 +183,7 @@ class SolveResponse(BaseModel):
 
 
 class ScaleRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     items: list[ItemIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)

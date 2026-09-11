@@ -197,6 +197,126 @@ class TestVerify:
         assert response.json()["error"]["code"] == "validation_error"
 
 
+class TestNonFiniteNumbers:
+    """`Infinity` и `NaN` — валидный JSON для разбора, но не масса и не цель.
+
+    Поля с одной нижней границей (`ge=0`) пропускали бесконечность: `inf >= 0`.
+    Тела пишутся строкой — `json=` у клиента такие числа не отправит.
+    """
+
+    @pytest.mark.parametrize(
+        ("url", "body"),
+        [
+            (
+                "/api/v1/calc/verify",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": Infinity,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "items": [{"product_id": "butter", "grams": 50}]}',
+            ),
+            (
+                "/api/v1/calc/verify",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": 81.1,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "items": [{"product_id": "butter", "grams": Infinity}]}',
+            ),
+            (
+                "/api/v1/calc/solve",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": 81.1,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "targets": {"ratio": 3, "kcal": 400, "protein_min_g": Infinity}}',
+            ),
+            (
+                "/api/v1/calc/verify",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": NaN,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "items": [{"product_id": "butter", "grams": 50}]}',
+            ),
+        ],
+    )
+    async def test_infinity_is_rejected(self, client, make_user, auth_headers, url, body):
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            url,
+            content=body,
+            headers={**auth_headers(user), "Content-Type": "application/json"},
+        )
+
+        assert response.status_code == 422, response.text
+        # 422 отдаёт и «недостижимо» (`infeasible_calculation`): отказ обязан быть
+        # отказом схемы, иначе бесконечность дошла до решателя.
+        assert response.json()["error"]["code"] == "validation_error"
+
+
+class TestHugeNumbers:
+    """Конечное, но огромное число переполняло ядро: 200 с `null` в итогах."""
+
+    @pytest.mark.parametrize(
+        ("url", "body"),
+        [
+            (
+                "/api/v1/calc/verify",
+                {"ingredients": [BUTTER], "items": [{"product_id": "butter", "grams": 1e308}]},
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "kcal": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "fat": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "protein": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "carbs": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "fiber": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/solve",
+                {
+                    "ingredients": [BUTTER],
+                    "targets": {
+                        "ratio": 3,
+                        "kcal": 400,
+                        "per_ingredient_bounds": {"butter": [-5, None]},
+                    },
+                },
+            ),
+        ],
+    )
+    async def test_out_of_range_is_a_schema_refusal(
+        self, client, make_user, auth_headers, url, body
+    ):
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(url, json=body, headers=auth_headers(user))
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "validation_error"
+
+
 class TestSolve:
     async def test_solves_within_tolerance(self, client, session, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)
@@ -288,6 +408,84 @@ class TestScale:
         assert scaled_dish["kcal"] == pytest.approx(base_dish["kcal"] * 2)
         # Соотношение инвариантно к масштабу порции
         assert scaled_dish["ratio"] == pytest.approx(base_dish["ratio"])
+
+    async def test_scaling_beyond_the_grams_limit_is_refused_with_a_reason(
+        self, client, make_user, auth_headers
+    ):
+        """3000 г × 2 — это 6000 г, которые следующая проверка отклонит.
+
+        Отказ на самом пересчёте называет причину и не даёт переписать состав
+        массами, с которыми расчёт уже не работает.
+        """
+
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/scale",
+            json={
+                "ingredients": [BUTTER],
+                "items": [{"product_id": "butter", "grams": 3000}],
+                "factor": 2.0,
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422, response.text
+        error = response.json()["error"]
+        assert error["code"] == "validation_error"
+        assert "коэффициент" in error["message"]
+
+    async def test_refusal_just_above_the_limit_does_not_contradict_itself(
+        self, client, make_user, auth_headers
+    ):
+        """2500,001 г × 2 — это 5000,002 г: текст не может говорить «5000 — больше 5000»."""
+
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/scale",
+            json={
+                "ingredients": [BUTTER],
+                "items": [{"product_id": "butter", "grams": 2500.001}],
+                "factor": 2.0,
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422, response.text
+        assert "весила бы 5000,1 г" in response.json()["error"]["message"]
+
+    @pytest.mark.parametrize(
+        ("grams", "factor", "shown"),
+        [
+            (512.2, 15, "7683 г"),
+            (1234.568, 100, "123456,8 г"),
+            # Превышение в миллиардные доли — всё равно больше 5000, а не «5000».
+            (2500.00000000005, 2, "5000,1 г"),
+            # Во float больше 5000 на шаг, в Decimal — ровно 5000.
+            (196.0015680125441, 25.51, "5000,1 г"),
+        ],
+    )
+    async def test_refusal_amount_has_no_float_noise(
+        self, client, make_user, auth_headers, grams, factor, shown
+    ):
+        """7683.000000000001 — это «7683», а не «7683,1»; и десятые не пропадают
+        у больших чисел, как при `:g`."""
+
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/scale",
+            json={
+                "ingredients": [BUTTER],
+                "items": [{"product_id": "butter", "grams": grams}],
+                "factor": factor,
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422, response.text
+        assert f"весила бы {shown}" in response.json()["error"]["message"]
 
     async def test_zero_factor_rejected(self, client, session, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)

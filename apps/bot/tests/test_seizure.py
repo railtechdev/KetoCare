@@ -106,12 +106,46 @@ class TestScale:
         assert "duration_option_id" not in payload
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(("raw", "seconds"), [("0", 0), (" 90 ", 90), ("090", 90)])
+    async def test_typed_seconds_are_still_accepted(self, ready, linked_store, state, raw, seconds):
+        """Строже стали только к «цифрам», которых не набирают: ноль, пробелы по
+        краям и ведущий ноль принимаются, как раньше."""
+
+        await _to_duration(ready, linked_store, state)
+        callback = FakeCallback(data=keyboards.SEIZURE_EXACT_DATA)
+        await scenarios.seizure_duration_exact_ask(callback, state)
+
+        message = FakeMessage(text=raw)
+        await scenarios.seizure_duration_exact(message, state)
+        await answer_when_now(message, state, ready, linked_store)
+
+        assert ready.logs[0]["payload"]["duration_sec"] == seconds
+
+    @pytest.mark.asyncio
     async def test_nonsense_duration_is_asked_again(self, ready, linked_store, state):
         await _to_duration(ready, linked_store, state)
         callback = FakeCallback(data=keyboards.SEIZURE_EXACT_DATA)
         await scenarios.seizure_duration_exact_ask(callback, state)
 
         message = FakeMessage(text="полторы минуты")
+        await scenarios.seizure_duration_exact(message, state)
+
+        assert "число" in message.last
+        assert ready.logs == []
+        assert await state.get_state() == scenarios.Seizure.duration_exact.state
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("raw", ["３", "１２", "²", "1e2", "+90"])
+    async def test_what_isdigit_takes_is_asked_again(self, ready, linked_store, state, raw):
+        """«３» записалось бы тремя секундами, а на «²» `int()` бросал исключение
+        и родитель не получал ответа вовсе: `str.isdigit()` понимает не только
+        цифры, которые набирают."""
+
+        await _to_duration(ready, linked_store, state)
+        callback = FakeCallback(data=keyboards.SEIZURE_EXACT_DATA)
+        await scenarios.seizure_duration_exact_ask(callback, state)
+
+        message = FakeMessage(text=raw)
         await scenarios.seizure_duration_exact(message, state)
 
         assert "число" in message.last

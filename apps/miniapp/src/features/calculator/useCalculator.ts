@@ -96,6 +96,10 @@ export function useVerify(
       targets,
     ],
     enabled: ready,
+    // Проверка зависит только от ввода: возврат в Telegram ничего в ней не
+    // меняет. Перезапрос по фокусу снимал баннер отказа на время запроса —
+    // у запроса с ошибкой нет данных, и он всегда считается устаревшим.
+    refetchOnWindowFocus: false,
     queryFn: async (): Promise<Verify> => {
       const { data, error } = await api.POST("/api/v1/calc/verify", {
         body: {

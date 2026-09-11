@@ -1,5 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -301,6 +305,127 @@ describe("калькулятор в Mini App", () => {
       expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument(),
     );
     expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+  });
+
+  it("называет причину отказа проверки текстом сервера, как кабинет", async () => {
+    // Общая подсказка скрывала причину: после пересчёта порций в массы, которые
+    // расчёт не принимает, семья не узнавала, что не так (ADR-0028: экраны
+    // кабинета и Mini App ведут себя одинаково).
+    respond({
+      "/calc/verify": new ApiFailure({
+        error: {
+          code: "validation_error",
+          message: "Проверьте правильность заполнения полей.",
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    expect(
+      await screen.findByText("Проверьте правильность заполнения полей."),
+    ).toBeInTheDocument();
+
+    // Отказ о прежнем составе не висит рядом с правкой, пока расчёт не догнал.
+    await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "0");
+    expect(
+      screen.queryByText("Проверьте правильность заполнения полей."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("отказ проверки не мигает при возврате в приложение", async () => {
+    // Запрос с ошибкой всегда считается устаревшим, и перезапрос по фокусу
+    // снимал баннер на время запроса — кабинет так себя не ведёт.
+    const message = "Проверьте правильность заполнения полей.";
+    respond({
+      "/calc/verify": new ApiFailure({
+        error: { code: "validation_error", message },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    const calls = (api.POST as Mock).mock.calls.length;
+
+    // Повторная проверка, если бы она случилась, повисла бы: пока она идёт,
+    // баннер скрыт, и мерцание было бы видно не только по числу запросов.
+    (api.POST as Mock).mockImplementation(() => new Promise(() => {}));
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect((api.POST as Mock).mock.calls.length).toBe(calls);
+      expect(screen.getByText(message)).toBeInTheDocument();
+    } finally {
+      // Фокус глобален: упавший тест не должен оставлять его принудительным.
+      focusManager.setFocused(undefined);
+    }
+  });
+
+  it("один и тот же отказ не показывается двумя баннерами", async () => {
+    // Больше 5000 г руками: проверка и пересчёт отказывают одним текстом, и два
+    // одинаковых красных баннера нарушали правило П27.
+    const message = "Проверьте правильность заполнения полей.";
+    const refusal = { error: { code: "validation_error", message } };
+    respond({
+      "/calc/verify": new ApiFailure(refusal),
+      "/calc/scale": new ApiFailure(refusal),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Умножить на");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: "Пересчитать порции" }),
+    );
+
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/calc/scale",
+        expect.anything(),
+      ),
+    );
+    expect(screen.getAllByText(message)).toHaveLength(1);
+  });
+
+  it("другая причина отказа действия видна рядом с отказом проверки", async () => {
+    // Прятать отказ действия только потому, что проверка в ошибке, — значит
+    // съесть другую причину: нажал «Пересчитать» — и ничего не произошло.
+    respond({
+      "/calc/verify": new ApiFailure({
+        error: {
+          code: "validation_error",
+          message: "Проверьте правильность заполнения полей.",
+        },
+      }),
+      "/calc/scale": new ApiFailure({
+        error: { code: "internal", message: "Сервер недоступен." },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(
+      await screen.findByText("Проверьте правильность заполнения полей."),
+    ).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Умножить на");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: "Пересчитать порции" }),
+    );
+
+    expect(await screen.findByText("Сервер недоступен.")).toBeInTheDocument();
   });
 
   it("запятая в граммовке считается, а не глушит расчёт", async () => {

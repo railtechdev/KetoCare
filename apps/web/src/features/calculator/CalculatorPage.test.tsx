@@ -244,6 +244,123 @@ describe("калькулятор", () => {
     expect(screen.getByText(/374 ккал/)).toBeInTheDocument();
   });
 
+  it("говорит, почему показателей нет, когда проверка отказала", async () => {
+    // Отказ проверки не показывался вовсе: после пересчёта порций в массы,
+    // которые расчёт уже не принимает, показатели молча исчезали.
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify")
+        ? {
+            data: undefined,
+            error: {
+              error: {
+                code: "validation_error",
+                message: "Проверьте правильность заполнения полей.",
+              },
+            },
+          }
+        : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    expect(
+      await screen.findByText(
+        "Проверьте правильность заполнения полей.",
+        undefined,
+        { timeout: AUTO_CALC_TIMEOUT_MS },
+      ),
+    ).toBeInTheDocument();
+
+    // Отказ относится к прежнему составу: после правки он не висит рядом с
+    // новым числом в поле, пока пересчёт не догнал.
+    await user.type(screen.getByLabelText(/Масса продукта/), "0");
+    expect(
+      screen.queryByText("Проверьте правильность заполнения полей."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("один и тот же отказ показывается одной строкой", async () => {
+    // Больше 5000 г руками: проверка и пересчёт отказывают одним текстом, и две
+    // одинаковые строки ошибки подряд нарушали правило П27.
+    const message = "Проверьте правильность заполнения полей.";
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify") || path.includes("scale")
+        ? {
+            data: undefined,
+            error: { error: { code: "validation_error", message } },
+          }
+        : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(message, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Коэффициент порции");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: /Пересчитать порции/ }),
+    );
+
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/calc/scale",
+        expect.anything(),
+      ),
+    );
+    expect(screen.getAllByText(message)).toHaveLength(1);
+  });
+
+  it("другая причина отказа действия видна рядом с отказом проверки", async () => {
+    // Прятать отказ действия только потому, что проверка в ошибке, — значит
+    // съесть другую причину: нажал «Пересчитать» — и ничего не произошло.
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify")
+        ? {
+            data: undefined,
+            error: {
+              error: {
+                code: "validation_error",
+                message: "Проверьте правильность заполнения полей.",
+              },
+            },
+          }
+        : path.includes("scale")
+          ? {
+              data: undefined,
+              error: {
+                error: { code: "internal", message: "Сервер недоступен." },
+              },
+            }
+          : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(
+        "Проверьте правильность заполнения полей.",
+        undefined,
+        { timeout: AUTO_CALC_TIMEOUT_MS },
+      ),
+    ).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Коэффициент порции");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: /Пересчитать порции/ }),
+    );
+
+    expect(await screen.findByText("Сервер недоступен.")).toBeInTheDocument();
+  });
+
   it("убранный из состава продукт не оставляет своих чисел на экране", async () => {
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);

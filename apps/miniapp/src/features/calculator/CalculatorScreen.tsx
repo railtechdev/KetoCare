@@ -237,6 +237,18 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
   const actionError = solve.error ?? scale.error;
   const infeasible = errorCodeOf(actionError) === "infeasible_calculation";
+  // Отказ действия прячется, только если он дословно повторяет отказ проверки,
+  // который на экране. Прятать по одному признаку «проверка в ошибке» значило бы
+  // съесть другую причину — например, обрыв сети при подборе: нажал — и ничего.
+  // Сравнивается только текст: заголовки обоих баннеров сейчас одинаковые
+  // («Не удалось посчитать»). Переименуете один из них — сравнивайте и заголовок,
+  // иначе начнёт прятаться баннер с другим заголовком.
+  const verifyShown = verify.isError && !stale;
+  const duplicateOfVerify =
+    verifyShown &&
+    actionError !== null &&
+    actionError !== undefined &&
+    errorMessageOf(actionError) === errorMessageOf(verify.error);
 
   return (
     <main className="flex flex-col gap-block p-block">
@@ -519,22 +531,31 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
       {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3
           ТЗ): сервер возвращает человекочитаемую причину, её и показываем. */}
-      {actionError !== null && actionError !== undefined && (
-        <WarningBanner
-          level="danger"
-          title={
-            infeasible
-              ? t("calculator.infeasible")
-              : t("calculator.actionFailed")
-          }
-        >
-          {errorMessageOf(actionError) ?? t("calculator.errorHint")}
-        </WarningBanner>
-      )}
+      {/* Отказ действия, дословно повторяющий видимый отказ проверки, — второй
+          красный баннер с тем же текстом (правило П27). «Недостижимо» остаётся
+          всегда: это самостоятельный ответ. */}
+      {actionError !== null &&
+        actionError !== undefined &&
+        (infeasible || !duplicateOfVerify) && (
+          <WarningBanner
+            level="danger"
+            title={
+              infeasible
+                ? t("calculator.infeasible")
+                : t("calculator.actionFailed")
+            }
+          >
+            {errorMessageOf(actionError) ?? t("calculator.errorHint")}
+          </WarningBanner>
+        )}
 
-      {verify.isError && (
+      {/* Причина отказа — текстом сервера, как в кабинете (ADR-0028: экраны
+          одинаковые). Общая подсказка скрывала её, и после пересчёта порций в
+          массы, которые расчёт не принимает, семья не узнавала, что не так.
+          Пока правка не догнала расчёт, прежний отказ не показывается. */}
+      {verifyShown && (
         <WarningBanner level="danger" title={t("calculator.error")}>
-          {t("calculator.errorHint")}
+          {errorMessageOf(verify.error) ?? t("calculator.errorHint")}
         </WarningBanner>
       )}
     </main>

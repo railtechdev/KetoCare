@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from decimal import ROUND_CEILING, Decimal
 
 from fastapi import APIRouter
 from starlette.concurrency import run_in_threadpool
@@ -21,6 +22,7 @@ from keto_engine import InfeasibleError, scale, solve, verify, within_tolerance
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
 from ..schemas_calc import (
+    CALC_GRAMS_MAX,
     ExcludedProductOut,
     ScaleRequest,
     ScaleResponse,
@@ -163,6 +165,32 @@ async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
         items = calc_service.to_items(ingredients, payload.items)
     except KeyError as exc:
         raise _unknown_product(exc) from exc
+
+    # Пересчёт не должен выдавать массы, которые следующая проверка отклонит:
+    # кабинет и Mini App записывают результат прямо в состав и сразу его
+    # проверяют. Без этого отказа 3000 г × 2 давали 6000 г, проверка отвечала
+    # общим «проверьте поля», а состав был уже переписан.
+    heaviest = max(item.grams for item in payload.items) * payload.factor
+    if heaviest > CALC_GRAMS_MAX:
+        # Сумма для текста — в Decimal от кратчайшей записи чисел и вверх до
+        # десятых. Через float шум давал то «7683,1» вместо 7683, то «5000» при
+        # превышении в миллиардные доли — «весила бы 5000 г — больше 5000 г».
+        exact = Decimal(str(max(item.grams for item in payload.items))) * Decimal(
+            str(payload.factor)
+        )
+        # Граница проверена во float: превышение меньше шага float в Decimal
+        # может дать ровно 5000 — текст всё равно обязан быть больше предела.
+        tenths = max(
+            exact.quantize(Decimal("0.1"), rounding=ROUND_CEILING),
+            Decimal(str(CALC_GRAMS_MAX)) + Decimal("0.1"),
+        )
+        shown = f"{tenths:f}".removesuffix(".0").replace(".", ",")
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"После пересчёта позиция весила бы {shown} г — больше "
+            f"{CALC_GRAMS_MAX:g} г, с которыми работает расчёт. Уменьшите коэффициент порции.",
+            details={"max_grams": CALC_GRAMS_MAX},
+        )
 
     scaled = scale(verify(items), payload.factor)
     return ScaleResponse(dish=calc_service.to_dish_out(scaled))

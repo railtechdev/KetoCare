@@ -305,6 +305,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
 
   const infeasible = errorCodeOf(solve.error) === "infeasible_calculation";
   const actionError = solve.isError || scale.isError;
+  // Отказ действия прячется, только если он дословно повторяет видимый отказ
+  // проверки: по одному признаку «проверка в ошибке» пропала бы другая причина.
+  const verifyShown = verify.isError && !stale;
+  const actionMessage = errorMessageOf(solve.error ?? scale.error);
+  const duplicateOfVerify =
+    verifyShown && actionMessage === errorMessageOf(verify.error);
   const busy = solve.isPending || scale.isPending;
 
   function resetActions() {
@@ -421,6 +427,16 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               </p>
             )}
           </div>
+        )}
+
+        {/* Отказ проверки не показывался вовсе: показатели просто исчезали, и
+            после пересчёта порций в массы, которые расчёт уже не принимает,
+            человек видел пустоту без причины. Пока правка не догнала расчёт,
+            прежний отказ не показывается — он о другом составе. */}
+        {verifyShown && (
+          <FormError>
+            {errorMessageOf(verify.error) ?? t("common:errors.unexpected")}
+          </FormError>
         )}
 
         <Separator />
@@ -553,11 +569,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         </WarningBanner>
       )}
 
-      {actionError && !infeasible && (
-        <FormError>
-          {errorMessageOf(solve.error ?? scale.error) ??
-            t("common:errors.unexpected")}
-        </FormError>
+      {/* Отказ действия, дословно повторяющий видимый отказ проверки, — вторая
+          строка с тем же текстом (правило П27). */}
+      {actionError && !infeasible && !duplicateOfVerify && (
+        <FormError>{actionMessage ?? t("common:errors.unexpected")}</FormError>
       )}
 
       {dish && (
