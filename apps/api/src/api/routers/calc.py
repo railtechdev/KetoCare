@@ -21,6 +21,7 @@ from keto_engine import InfeasibleError, scale, solve, verify, within_tolerance
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
 from ..schemas_calc import (
+    CALC_GRAMS_MAX,
     ExcludedProductOut,
     ScaleRequest,
     ScaleResponse,
@@ -163,6 +164,19 @@ async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
         items = calc_service.to_items(ingredients, payload.items)
     except KeyError as exc:
         raise _unknown_product(exc) from exc
+
+    # Пересчёт не должен выдавать массы, которые следующая проверка отклонит:
+    # кабинет и Mini App записывают результат прямо в состав и сразу его
+    # проверяют. Без этого отказа 3000 г × 2 давали 6000 г, проверка отвечала
+    # общим «проверьте поля», а состав был уже переписан.
+    heaviest = max(item.grams for item in payload.items) * payload.factor
+    if heaviest > CALC_GRAMS_MAX:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"После пересчёта позиция весила бы {heaviest:g} г — больше "
+            f"{CALC_GRAMS_MAX:g} г, с которыми работает расчёт. Уменьшите коэффициент порции.",
+            details={"max_grams": CALC_GRAMS_MAX},
+        )
 
     scaled = scale(verify(items), payload.factor)
     return ScaleResponse(dish=calc_service.to_dish_out(scaled))

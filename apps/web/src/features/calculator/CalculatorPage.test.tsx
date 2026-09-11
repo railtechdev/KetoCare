@@ -244,6 +244,35 @@ describe("калькулятор", () => {
     expect(screen.getByText(/374 ккал/)).toBeInTheDocument();
   });
 
+  it("говорит, почему показателей нет, когда проверка отказала", async () => {
+    // Отказ проверки не показывался вовсе: после пересчёта порций в массы,
+    // которые расчёт уже не принимает, показатели молча исчезали.
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify")
+        ? {
+            data: undefined,
+            error: {
+              error: {
+                code: "validation_error",
+                message: "Проверьте правильность заполнения полей.",
+              },
+            },
+          }
+        : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    expect(
+      await screen.findByText(
+        "Проверьте правильность заполнения полей.",
+        undefined,
+        { timeout: AUTO_CALC_TIMEOUT_MS },
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("убранный из состава продукт не оставляет своих чисел на экране", async () => {
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);

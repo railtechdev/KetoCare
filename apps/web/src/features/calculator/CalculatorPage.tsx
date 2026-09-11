@@ -423,6 +423,16 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           </div>
         )}
 
+        {/* Отказ проверки не показывался вовсе: показатели просто исчезали, и
+            после пересчёта порций в массы, которые расчёт уже не принимает,
+            человек видел пустоту без причины. Пока правка не догнала расчёт,
+            прежний отказ не показывается — он о другом составе. */}
+        {verify.isError && !stale && (
+          <FormError>
+            {errorMessageOf(verify.error) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
+
         <Separator />
 
         {/* Два действия, и у каждого свой ввод прямо над ним.

@@ -266,6 +266,34 @@ class TestHugeNumbers:
                 },
             ),
             (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "fat": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "protein": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "carbs": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "fiber": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
                 "/api/v1/calc/solve",
                 {
                     "ingredients": [BUTTER],
@@ -380,6 +408,32 @@ class TestScale:
         assert scaled_dish["kcal"] == pytest.approx(base_dish["kcal"] * 2)
         # Соотношение инвариантно к масштабу порции
         assert scaled_dish["ratio"] == pytest.approx(base_dish["ratio"])
+
+    async def test_scaling_beyond_the_grams_limit_is_refused_with_a_reason(
+        self, client, make_user, auth_headers
+    ):
+        """3000 г × 2 — это 6000 г, которые следующая проверка отклонит.
+
+        Отказ на самом пересчёте называет причину и не даёт переписать состав
+        массами, с которыми расчёт уже не работает.
+        """
+
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/scale",
+            json={
+                "ingredients": [BUTTER],
+                "items": [{"product_id": "butter", "grams": 3000}],
+                "factor": 2.0,
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422, response.text
+        error = response.json()["error"]
+        assert error["code"] == "validation_error"
+        assert "коэффициент" in error["message"]
 
     async def test_zero_factor_rejected(self, client, session, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)
