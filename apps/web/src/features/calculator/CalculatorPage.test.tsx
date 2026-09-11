@@ -617,16 +617,12 @@ describe("калькулятор", () => {
     // остаются, а исключённые продукты у другого ребёнка свои. Пациент
     // меняется состоянием внутри роутера — `rerender` до экрана не доходит,
     // роутер теста захватывает содержимое один раз.
-    let verifyCalls = 0;
-    (api.POST as Mock).mockImplementation((path: string) => {
-      if (!path.includes("verify")) {
-        return Promise.resolve({ data: SOLVED, error: undefined });
-      }
-      verifyCalls += 1;
-      return verifyCalls === 1
-        ? Promise.resolve({ data: VERIFIED, error: undefined })
-        : new Promise(() => {});
-    });
+    (api.POST as Mock).mockImplementation((path: string) =>
+      Promise.resolve({
+        data: path.includes("verify") ? VERIFIED : SOLVED,
+        error: undefined,
+      }),
+    );
 
     function SwitchablePatient() {
       const [patientId, setPatientId] = useState(PATIENT_ID);
@@ -666,6 +662,17 @@ describe("калькулятор", () => {
     );
 
     expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+
+    // И не навсегда: ответ проверки по новому ребёнку снова разрешает сохранить.
+    await waitFor(
+      () =>
+        expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled(),
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    const verifies = (api.POST as Mock).mock.calls.filter(([path]) =>
+      String(path).includes("verify"),
+    );
+    expect(verifies.at(-1)?.[1]?.body?.patient_id).toBe(OTHER_PATIENT_ID);
   });
 
   it("отказ проверки не даёт сохранить и называет почему", async () => {

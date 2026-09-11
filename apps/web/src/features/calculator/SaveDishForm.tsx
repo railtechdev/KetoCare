@@ -49,6 +49,10 @@ export function SaveDishForm({
         className="flex flex-col gap-block"
         onSubmit={(event) => {
           event.preventDefault();
+          // Выключенная кнопка — не единственная защита: форма — последняя
+          // проверка перед сохранением (сервер исключённое ребёнку не сверяет),
+          // и отправка в обход кнопки не должна её миновать.
+          if (blockedBy !== null || waitingFor !== null) return;
           save.mutate(
             { title: title.trim(), rows },
             {
@@ -100,7 +104,7 @@ export function SaveDishForm({
               : (blockedBy ??
                 (title.trim() === ""
                   ? t("save.blocked.noTitle")
-                  : (waitingFor ?? t("save.blocked.noTitle"))))
+                  : (waitingFor ?? undefined)))
           }
         />
       </form>

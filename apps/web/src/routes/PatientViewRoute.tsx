@@ -52,7 +52,13 @@ export function PatientViewRoute() {
       // (правило П26 канона).
       density="compact"
     >
-      <Suspense fallback={<ViewSkeleton />}>
+      {/* Ключ — пациент. Переключатель в шапке карты меняет пациента в адресе,
+          а раздел оставляет, и без ключа React сохранял экран раздела вместе с
+          его состоянием: калькулятор держал цель и состав прежнего ребёнка, и
+          вердикт «в допуске» выносился против чужого назначения. Что должно
+          пережить переход — открытый раздел, вкладка, фильтры — живёт в
+          адресе и не теряется. */}
+      <Suspense key={patient.data.id} fallback={<ViewSkeleton />}>
         {PATIENT_VIEW_SCREENS[view](patient.data, session?.role)}
       </Suspense>
     </PageLayout>
