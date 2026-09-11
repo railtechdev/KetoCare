@@ -63,6 +63,30 @@ describe("поиск продукта в калькуляторе", () => {
     vi.clearAllMocks();
   });
 
+  it("за набранное слово уходит один запрос, а не запрос на букву", async () => {
+    // Поиск продукта стоит в калькуляторе, форме рецепта и исключённых
+    // продуктах ребёнка и шёл без задержки: «фуагра» — пять запросов к
+    // полнотекстовому поиску, из них четыре о недонабранном слове.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({
+      data: { items: [], total: 0 },
+      error: undefined,
+    });
+
+    render(<ProductPicker onPick={() => {}} excludeIds={[]} />, { wrapper });
+
+    await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
+    expect(
+      await screen.findByText(/По запросу «фуагра» ничего не нашлось/),
+    ).toBeInTheDocument();
+
+    const searches = (api.GET as Mock).mock.calls.filter(
+      ([path]) => path === "/api/v1/products",
+    );
+    expect(searches).toHaveLength(1);
+    expect(searches[0]?.[1]?.params?.query?.q).toBe("фуагра");
+  });
+
   it("говорит, что ничего не нашлось, и даёт два выхода с тем же запросом", async () => {
     const user = userEvent.setup();
     (api.GET as Mock).mockResolvedValue({
