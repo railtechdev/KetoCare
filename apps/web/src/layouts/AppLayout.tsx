@@ -5,7 +5,6 @@ import {
   SheetContent,
   SheetTitle,
   SheetTrigger,
-  Toaster,
   TooltipProvider,
   cn,
 } from "@ketocare/ui";
@@ -19,6 +18,7 @@ import { NAV } from "./navWidth";
 import { useSession } from "../features/auth/useSession";
 import { isPatientView } from "../features/doctor/patientViews";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
+import { AppToaster } from "./AppToaster";
 import { SidebarNav } from "./SidebarNav";
 import { UserMenu } from "./UserMenu";
 
@@ -133,7 +133,7 @@ export function AppLayout() {
           </main>
         </div>
 
-        <Toaster position="bottom-right" />
+        <AppToaster />
       </div>
     </TooltipProvider>
   );
