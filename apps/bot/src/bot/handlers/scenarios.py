@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -142,15 +143,32 @@ def _format_value(value: Decimal) -> str:
     return str(value).replace(".", ",")
 
 
+#: Число, как его набирают: цифры, одна точка или запятая, необязательный минус
+#: (отрицательное переспрашивается своим текстом — «вне диапазона»).
+#:
+#: Тот же вид, что у CSV-импорта в API (`api/services/csv_numbers.py`): бот не
+#: зависит от пакета API, поэтому правило повторено здесь. `re.ASCII` — иначе
+#: `\d` принимает любые цифры Юникода.
+_TYPED_NUMBER = re.compile(r"-?(?:\d+(?:\.\d*)?|\.\d+)", re.ASCII)
+
+
 def _parse_number(raw: str) -> Decimal | None:
     """Число из текста. Запятая — тоже разделитель: её набирают чаще точки.
 
     Decimal, а не float: значение уходит в клиническую запись, и 3.2 должно
     остаться 3.2, а не превратиться в 3.2000000000000002.
+
+    Но голый `Decimal` понимает больше, чем набирают: «1_0» — это 10, «1e1» —
+    тоже 10, «NaN» — число. Первые два проходили границы кетонов (0–12) и
+    записывались как десять ммоль/л после опечатки; спасало только эхо перед
+    подтверждением. Поэтому текст сначала сверяется с видом числа.
     """
 
+    text = raw.strip().replace(",", ".")
+    if not _TYPED_NUMBER.fullmatch(text):
+        return None
     try:
-        return Decimal(raw.strip().replace(",", "."))
+        return Decimal(text)
     except (InvalidOperation, ValueError):
         return None
 

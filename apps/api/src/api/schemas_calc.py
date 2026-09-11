@@ -15,11 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field
 # надолго (LP решается синхронно).
 MAX_INGREDIENTS = 100
 
+# Входные модели не принимают `inf` и `nan` (`allow_inf_nan=False`). JSON-разбор
+# понимает `Infinity` и `NaN`, а поля с одной нижней границей (`ge=0`) пропускали
+# бесконечность: `inf >= 0`. Ядро получало бы бесконечные массы и отдавало NaN.
+
 
 class IngredientIn(BaseModel):
     """Пищевая ценность на 100 г."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     product_id: str
     kcal: Annotated[float, Field(ge=0)]
@@ -30,14 +34,14 @@ class IngredientIn(BaseModel):
 
 
 class ItemIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     product_id: str
     grams: Annotated[float, Field(ge=0)]
 
 
 class TargetsIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ratio: Annotated[float, Field(ge=1.0, le=5.0)]
     kcal: Annotated[float, Field(gt=0, le=5000)]
@@ -97,7 +101,7 @@ class DishOut(BaseModel):
 
 
 class VerifyRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     items: list[ItemIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
@@ -130,7 +134,7 @@ class VerifyResponse(BaseModel):
 
 
 class SolveRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     targets: TargetsIn
@@ -155,7 +159,7 @@ class SolveResponse(BaseModel):
 
 
 class ScaleRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ingredients: list[IngredientIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)
     items: list[ItemIn] = Field(min_length=1, max_length=MAX_INGREDIENTS)

@@ -197,6 +197,48 @@ class TestVerify:
         assert response.json()["error"]["code"] == "validation_error"
 
 
+class TestNonFiniteNumbers:
+    """`Infinity` и `NaN` — валидный JSON для разбора, но не масса и не цель.
+
+    Поля с одной нижней границей (`ge=0`) пропускали бесконечность: `inf >= 0`.
+    Тела пишутся строкой — `json=` у клиента такие числа не отправит.
+    """
+
+    @pytest.mark.parametrize(
+        ("url", "body"),
+        [
+            (
+                "/api/v1/calc/verify",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": Infinity,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "items": [{"product_id": "butter", "grams": 50}]}',
+            ),
+            (
+                "/api/v1/calc/verify",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": 81.1,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "items": [{"product_id": "butter", "grams": Infinity}]}',
+            ),
+            (
+                "/api/v1/calc/solve",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": 81.1,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "targets": {"ratio": 3, "kcal": 400, "protein_min_g": Infinity}}',
+            ),
+        ],
+    )
+    async def test_infinity_is_rejected(self, client, make_user, auth_headers, url, body):
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            url,
+            content=body,
+            headers={**auth_headers(user), "Content-Type": "application/json"},
+        )
+
+        assert response.status_code == 422, response.text
+
+
 class TestSolve:
     async def test_solves_within_tolerance(self, client, session, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)

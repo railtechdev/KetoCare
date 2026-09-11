@@ -215,13 +215,21 @@ class TestKetones:
         assert await state.get_state() == scenarios.Ketones.value.state
 
     @pytest.mark.asyncio
-    async def test_not_a_number_is_re_asked(self, state):
-        message = FakeMessage(text="много")
+    @pytest.mark.parametrize("raw", ["много", "1_0", "1e1", "NaN", "３"])
+    async def test_not_a_number_is_re_asked(self, state, raw):
+        """«1_0» и «1e1» — это 10 для `Decimal` и опечатка для человека.
+
+        Оба в пределах нормы кетонов и без проверки вида записались бы как
+        десять ммоль/л.
+        """
+
+        message = FakeMessage(text=raw)
         await state.set_state(scenarios.Ketones.value)
 
         await scenarios.ketones_value(message, state)
 
         assert message.last == texts.KETONES_NOT_A_NUMBER
+        assert await state.get_state() == scenarios.Ketones.value.state
 
     @pytest.mark.asyncio
     async def test_comma_is_accepted_as_a_separator(self, state):
