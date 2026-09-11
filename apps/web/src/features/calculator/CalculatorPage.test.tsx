@@ -1303,6 +1303,62 @@ describe("калькулятор", () => {
     }
   });
 
+  it("подбор, не изменивший граммы, не гоняет проверку заново", async () => {
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("verify")) {
+        verifyCalls += 1;
+        return { data: VERIFIED, error: undefined };
+      }
+      return {
+        data: {
+          ...SOLVED,
+          dish: {
+            ...SOLVED.dish,
+            items: [{ ...SOLVED.dish.items[0], grams: 50 }],
+          },
+        },
+        error: undefined,
+      };
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await waitFor(() => expect(verifyCalls).toBe(1));
+
+    await user.click(
+      screen.getByRole("button", { name: /Подобрать граммовку/ }),
+    );
+    await screen.findByRole("button", { name: /Подобрать граммовку/ });
+    // Дольше задержки автопересчёта: лишняя проверка успела бы уйти.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(verifyCalls).toBe(1);
+  });
+
+  it("форма сохранения не уходит в обход кнопки без названия", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+
+    fireEvent.submit(save.closest("form") as HTMLFormElement);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(
+      (api.POST as Mock).mock.calls.some(([path]) =>
+        String(path).includes("custom-dishes"),
+      ),
+    ).toBe(false);
+  });
+
   it("подбор недоступен, пока не задана цель, и говорит об этом", async () => {
     // Подбирать граммовку не подо что: цель — вход этого действия. Но серая
     // кнопка без объяснения — это тупик: заказчица так и не дошла до подбора,
