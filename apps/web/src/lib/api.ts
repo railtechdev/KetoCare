@@ -87,6 +87,14 @@ export function errorCodeOf(body: unknown): string | null {
   return null;
 }
 
+/**
+ * Ответа нет вовсе: запрос не дошёл до сервера (нет сети, сервер недоступен).
+ * `fetch` в этом случае отклоняется `TypeError`, и тела ошибки у него нет.
+ */
+export function isNetworkFailure(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
 /** Готовое к показу сообщение из ответа API — оно уже локализовано сервером. */
 export function errorMessageOf(body: unknown): string | null {
   if (

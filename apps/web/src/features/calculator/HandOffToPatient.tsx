@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { errorMessageOf } from "../../lib/api";
+import { errorMessageOf, isNetworkFailure } from "../../lib/api";
 import type { Patient } from "../doctor/types";
 import { PatientPicker } from "../patients/PatientPicker";
 import { incomingDish } from "./incomingItem";
@@ -104,7 +104,10 @@ export function HandOffToPatient({
 
         {save.isError && (
           <FormError>
-            {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
+            {errorMessageOf(save.error) ??
+              (isNetworkFailure(save.error)
+                ? t("common:errors.network")
+                : t("common:errors.unexpected"))}
           </FormError>
         )}
 

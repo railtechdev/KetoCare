@@ -1686,6 +1686,37 @@ describe("калькулятор без выбранного ребёнка", ()
     ).toBeInTheDocument();
   });
 
+  it("сохранение без сети отказывает сразу и называет причину", async () => {
+    // Запись не ждёт сети в очереди: блюдо создалось бы молча после возврата
+    // связи, а повторное нажатие дало бы второе.
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("custom-dishes")) {
+        throw new TypeError("Failed to fetch");
+      }
+      return { data: VERIFIED, error: undefined };
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+      expect(
+        await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+      ).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("в карте ребёнка сохраняет сразу ему, ничего не спрашивая", async () => {
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);
