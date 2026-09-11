@@ -57,6 +57,9 @@ beforeEach(() => {
   });
 });
 
+/** Кэш открытого экрана: чистим до возврата сети, чтобы паузы не снимались. */
+let screenClient: QueryClient | undefined;
+
 describe("динамика в Mini App", () => {
   it("пауза без сети объясняется словами, а не пустотой", async () => {
     // Тот же случай, что в плане дня: запрос ждёт связи, а график выглядел
@@ -65,7 +68,8 @@ describe("динамика в Mini App", () => {
     onlineManager.setOnline(false);
 
     try {
-      renderScreen();
+      const { client } = renderScreen();
+      screenClient = client;
 
       expect(
         await screen.findByText(
@@ -84,6 +88,7 @@ describe("динамика в Mini App", () => {
       );
       expect(api.GET).not.toHaveBeenCalled();
     } finally {
+      screenClient?.clear();
       onlineManager.setOnline(true);
     }
   });
@@ -101,13 +106,9 @@ describe("динамика в Mini App", () => {
     // Блок молчит, только пока ответа нет. Если сервер ответил и записей за
     // месяц действительно нет, это надо сказать: иначе экран одинаково молчит
     // и когда связи нет, и когда ребёнок месяц не измерялся.
-    (api.GET as Mock).mockImplementation((path: string) =>
-      Promise.resolve(
-        path.includes("prescriptions")
-          ? { data: { items: [], total: 0 } }
-          : { data: { items: [], total: 0 } },
-      ),
-    );
+    (api.GET as Mock).mockResolvedValue({
+      data: { items: [], total: 0 },
+    });
 
     renderScreen();
 
@@ -131,6 +132,7 @@ describe("динамика в Mini App", () => {
     // где данные уже на экране, значит говорить о том, что и так видно, — и
     // отнимать место у самих графиков на телефоне.
     const { client } = renderScreen();
+    screenClient = client;
     expect(await screen.findAllByRole("figure")).toHaveLength(2);
 
     onlineManager.setOnline(false);
@@ -148,6 +150,7 @@ describe("динамика в Mini App", () => {
         screen.queryByText("Нет связи — покажем, как только она появится."),
       ).toBeNull();
     } finally {
+      screenClient?.clear();
       onlineManager.setOnline(true);
     }
   });
