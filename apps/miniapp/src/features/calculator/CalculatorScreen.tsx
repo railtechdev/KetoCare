@@ -841,7 +841,7 @@ function ProductPicker({
             <li key={product.id}>
               <button
                 type="button"
-                className="min-h-(--spacing-touch) w-full text-left"
+                className="min-h-(--spacing-touch) w-full text-left break-words"
                 onClick={() => {
                   onPick(product);
                   setQuery("");
