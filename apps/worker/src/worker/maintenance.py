@@ -30,6 +30,7 @@ from core.config import Settings
 from core.db import get_sessionmaker
 from core.repositories import ai_jobs as ai_jobs_repo
 from core.repositories import attachments as attachments_repo
+from core.repositories import idempotency as idempotency_repo
 from core.repositories import report_jobs as jobs_repo
 
 #: После какого простоя обращение к модели считается оборвавшимся.
@@ -95,6 +96,20 @@ async def purge_files(ctx: dict[str, Any]) -> dict[str, int]:
         await session.commit()
 
     return {"reports": reports, "attachments": files}
+
+
+async def purge_idempotency_keys(ctx: dict[str, Any]) -> dict[str, int]:
+    """Снять ключи повторной отправки старше суток (ADR-0035).
+
+    В сохранённом ответе — данные ребёнка, а нужен он только для повтора
+    потерянного ответа. Держать его дольше незачем.
+    """
+
+    sessionmaker = get_sessionmaker()
+    async with sessionmaker() as session:
+        removed = await idempotency_repo.purge_expired(session, now=datetime.now(UTC))
+        await session.commit()
+    return {"idempotency_keys": removed}
 
 
 async def close_stuck_ai_jobs(ctx: dict[str, Any]) -> dict[str, int]:

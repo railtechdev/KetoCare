@@ -14,6 +14,7 @@ from . import (
     diary,
     dictionaries,
     doctor_summaries,
+    idempotency,
     intake,
     invitations,
     knowledge_base,
