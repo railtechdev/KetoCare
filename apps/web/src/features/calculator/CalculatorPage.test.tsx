@@ -317,6 +317,50 @@ describe("калькулятор", () => {
     expect(screen.getAllByText(message)).toHaveLength(1);
   });
 
+  it("другая причина отказа действия видна рядом с отказом проверки", async () => {
+    // Прятать отказ действия только потому, что проверка в ошибке, — значит
+    // съесть другую причину: нажал «Пересчитать» — и ничего не произошло.
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify")
+        ? {
+            data: undefined,
+            error: {
+              error: {
+                code: "validation_error",
+                message: "Проверьте правильность заполнения полей.",
+              },
+            },
+          }
+        : path.includes("scale")
+          ? {
+              data: undefined,
+              error: {
+                error: { code: "internal", message: "Сервер недоступен." },
+              },
+            }
+          : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(
+        "Проверьте правильность заполнения полей.",
+        undefined,
+        { timeout: AUTO_CALC_TIMEOUT_MS },
+      ),
+    ).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Коэффициент порции");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: /Пересчитать порции/ }),
+    );
+
+    expect(await screen.findByText("Сервер недоступен.")).toBeInTheDocument();
+  });
+
   it("убранный из состава продукт не оставляет своих чисел на экране", async () => {
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);

@@ -457,7 +457,12 @@ class TestScale:
 
     @pytest.mark.parametrize(
         ("grams", "factor", "shown"),
-        [(512.2, 15, "7683 г"), (1234.568, 100, "123456,8 г")],
+        [
+            (512.2, 15, "7683 г"),
+            (1234.568, 100, "123456,8 г"),
+            # Превышение в миллиардные доли — всё равно больше 5000, а не «5000».
+            (2500.00000000005, 2, "5000,1 г"),
+        ],
     )
     async def test_refusal_amount_has_no_float_noise(
         self, client, make_user, auth_headers, grams, factor, shown

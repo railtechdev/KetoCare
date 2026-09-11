@@ -237,6 +237,15 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
   const actionError = solve.error ?? scale.error;
   const infeasible = errorCodeOf(actionError) === "infeasible_calculation";
+  // Отказ действия прячется, только если он дословно повторяет отказ проверки,
+  // который на экране. Прятать по одному признаку «проверка в ошибке» значило бы
+  // съесть другую причину — например, обрыв сети при подборе: нажал — и ничего.
+  const verifyShown = verify.isError && !stale;
+  const duplicateOfVerify =
+    verifyShown &&
+    actionError !== null &&
+    actionError !== undefined &&
+    errorMessageOf(actionError) === errorMessageOf(verify.error);
 
   return (
     <main className="flex flex-col gap-block p-block">
@@ -519,12 +528,12 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
       {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3
           ТЗ): сервер возвращает человекочитаемую причину, её и показываем. */}
-      {/* Пока проверка состава в ошибке, отказ действия о том же составе —
-          второй красный баннер с тем же текстом (правило П27). «Недостижимо»
-          остаётся: это самостоятельный ответ, а не повтор отказа проверки. */}
+      {/* Отказ действия, дословно повторяющий видимый отказ проверки, — второй
+          красный баннер с тем же текстом (правило П27). «Недостижимо» остаётся
+          всегда: это самостоятельный ответ. */}
       {actionError !== null &&
         actionError !== undefined &&
-        (infeasible || !verify.isError) && (
+        (infeasible || !duplicateOfVerify) && (
           <WarningBanner
             level="danger"
             title={
@@ -541,7 +550,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
           одинаковые). Общая подсказка скрывала её, и после пересчёта порций в
           массы, которые расчёт не принимает, семья не узнавала, что не так.
           Пока правка не догнала расчёт, прежний отказ не показывается. */}
-      {verify.isError && !stale && (
+      {verifyShown && (
         <WarningBanner level="danger" title={t("calculator.error")}>
           {errorMessageOf(verify.error) ?? t("calculator.errorHint")}
         </WarningBanner>

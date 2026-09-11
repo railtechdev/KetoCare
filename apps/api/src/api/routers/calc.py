@@ -7,9 +7,9 @@
 
 from __future__ import annotations
 
-import math
 import uuid
 from collections.abc import Sequence
+from decimal import ROUND_CEILING, Decimal
 
 from fastapi import APIRouter
 from starlette.concurrency import run_in_threadpool
@@ -172,12 +172,14 @@ async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
     # общим «проверьте поля», а состав был уже переписан.
     heaviest = max(item.grams for item in payload.items) * payload.factor
     if heaviest > CALC_GRAMS_MAX:
-        # Вверх до десятых: `:g` оставлял шесть значащих цифр, и 5000,002 г
-        # превращались в «весила бы 5000 г — больше 5000 г». `round(…, 6)` перед
-        # округлением снимает шум float: 512,2 × 15 = 7683.000000000001 иначе
-        # показывалось бы как «7683,1».
-        tenths = math.ceil(round(heaviest * 10, 6)) / 10
-        shown = f"{tenths:.1f}".removesuffix(".0").replace(".", ",")
+        # Сумма для текста — в Decimal от кратчайшей записи чисел и вверх до
+        # десятых. Через float шум давал то «7683,1» вместо 7683, то «5000» при
+        # превышении в миллиардные доли — «весила бы 5000 г — больше 5000 г».
+        exact = Decimal(str(max(item.grams for item in payload.items))) * Decimal(
+            str(payload.factor)
+        )
+        tenths = exact.quantize(Decimal("0.1"), rounding=ROUND_CEILING)
+        shown = f"{tenths:f}".removesuffix(".0").replace(".", ",")
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
             f"После пересчёта позиция весила бы {shown} г — больше "

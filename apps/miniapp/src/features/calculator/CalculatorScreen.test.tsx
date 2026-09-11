@@ -352,15 +352,19 @@ describe("калькулятор в Mini App", () => {
     // Повторная проверка, если бы она случилась, повисла бы: пока она идёт,
     // баннер скрыт, и мерцание было бы видно не только по числу запросов.
     (api.POST as Mock).mockImplementation(() => new Promise(() => {}));
-    await act(async () => {
-      focusManager.setFocused(false);
-      focusManager.setFocused(true);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
 
-    expect((api.POST as Mock).mock.calls.length).toBe(calls);
-    expect(screen.getByText(message)).toBeInTheDocument();
-    focusManager.setFocused(undefined);
+      expect((api.POST as Mock).mock.calls.length).toBe(calls);
+      expect(screen.getByText(message)).toBeInTheDocument();
+    } finally {
+      // Фокус глобален: упавший тест не должен оставлять его принудительным.
+      focusManager.setFocused(undefined);
+    }
   });
 
   it("один и тот же отказ не показывается двумя баннерами", async () => {
@@ -391,6 +395,37 @@ describe("калькулятор в Mini App", () => {
       ),
     );
     expect(screen.getAllByText(message)).toHaveLength(1);
+  });
+
+  it("другая причина отказа действия видна рядом с отказом проверки", async () => {
+    // Прятать отказ действия только потому, что проверка в ошибке, — значит
+    // съесть другую причину: нажал «Пересчитать» — и ничего не произошло.
+    respond({
+      "/calc/verify": new ApiFailure({
+        error: {
+          code: "validation_error",
+          message: "Проверьте правильность заполнения полей.",
+        },
+      }),
+      "/calc/scale": new ApiFailure({
+        error: { code: "internal", message: "Сервер недоступен." },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(
+      await screen.findByText("Проверьте правильность заполнения полей."),
+    ).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Умножить на");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: "Пересчитать порции" }),
+    );
+
+    expect(await screen.findByText("Сервер недоступен.")).toBeInTheDocument();
   });
 
   it("запятая в граммовке считается, а не глушит расчёт", async () => {
