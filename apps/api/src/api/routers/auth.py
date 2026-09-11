@@ -593,7 +593,12 @@ async def revoke_invitation(
             action="revoke",
             entity="invitations",
             entity_id=invitation.id,
-            after={"email": invitation.email, "role": invitation.role.value},
+            after={
+                "email": invitation.email,
+                "role": invitation.role.value,
+                # Отзыв приглашения к ребёнку иначе не отличить от обычного.
+                "patient_id": None if invitation.patient_id is None else str(invitation.patient_id),
+            },
         )
 
     return InvitationRead(
@@ -687,13 +692,15 @@ async def accept_invitation(
             session,
             user_id=user.id,
             action="link_parent",
-            entity="patients",
+            # Как у `grant_patient_access`: сущность — сама связь, объект — ребёнок.
+            entity="parent_patient",
             entity_id=invitation.patient_id,
             after={
                 "parent_id": str(user.id),
                 "invitation_id": str(invitation.id),
                 "invited_by": None if invitation.created_by is None else str(invitation.created_by),
             },
+            ip=client_address(request),
         )
 
     return UserRead.model_validate(user)

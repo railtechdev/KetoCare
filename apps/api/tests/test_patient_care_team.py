@@ -10,8 +10,11 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from api.deps.auth import get_session
+from api.main import create_app
 from core.models import AuditLog, User
 from core.models.enums import UserRole
 from core.repositories import access as access_repo
@@ -438,6 +441,20 @@ class TestSecondParent:
         assert invited.status_code == 201, invited.text
         assert invited.json()["patient_id"] == str(patient.id)
 
+        # Список выданных помечает приглашение к ребёнку, а журнал называет ребёнка:
+        # иначе два приглашения «родитель» не различить ни в кабинете, ни в аудите.
+        listed_invites = await client.get(INVITATIONS_URL, headers=auth_headers(specialist))
+        row = next(i for i in listed_invites.json()["items"] if i["id"] == invited.json()["id"])
+        assert row["patient_id"] == str(patient.id)
+        invite_entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "invite",
+                AuditLog.entity_id == uuid.UUID(invited.json()["id"]),
+            )
+        )
+        assert invite_entry is not None
+        assert invite_entry.after["patient_id"] == str(patient.id)
+
         accepted = await self._accept(client, invited.json()["token"])
         assert accepted.status_code == 201, accepted.text
         second = await session.scalar(
@@ -555,6 +572,75 @@ class TestSecondParent:
             first_parent.id
         ]
 
+    async def test_refused_acceptance_leaves_the_invitation_pending(
+        self, session, make_user, make_patient
+    ):
+        """Отказ 409 откатывает и отметку о принятии: приглашение снова «ждёт».
+
+        ADR-0032 обещает, что такое приглашение остаётся в списке и его можно
+        отозвать. Общий `client` этого не видит: там сессия подменена без отката.
+        Здесь подмена ведёт себя как настоящая `get_session` — ошибка ручки
+        откатывает всё, что ручка успела записать.
+        """
+
+        specialist, _, patient = await self._led_patient(session, make_user, make_patient)
+        token = invitations_repo.generate_token()
+        invitation = await invitations_repo.create(
+            session,
+            email=self._email(),
+            role=UserRole.PARENT,
+            token=token,
+            created_by=specialist.id,
+            patient_id=patient.id,
+        )
+        specialist.is_active = False
+        await session.flush()
+
+        app = create_app()
+
+        async def _rolling_back_session():
+            nested = await session.begin_nested()
+            try:
+                yield session
+            except Exception:
+                await nested.rollback()
+                raise
+            else:
+                await nested.commit()
+
+        app.dependency_overrides[get_session] = _rolling_back_session
+        transport = ASGITransport(app=app, client=("10.33.0.1", 33033))
+        async with AsyncClient(transport=transport, base_url="http://test") as own_client:
+            accepted = await self._accept(own_client, token)
+
+        assert accepted.status_code == 409, accepted.text
+        await session.refresh(invitation)
+        assert invitation.accepted_at is None
+
+    async def test_revoking_a_child_invitation_names_the_child_in_the_audit(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Отзыв приглашения к ребёнку в журнале отличим от отзыва обычного."""
+
+        specialist, _, patient = await self._led_patient(session, make_user, make_patient)
+        invited = await self._invite(client, auth_headers, specialist, patient.id)
+
+        revoked = await client.post(
+            f"{INVITATIONS_URL}/{invited.json()['id']}/revoke",
+            headers=auth_headers(specialist),
+        )
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json()["patient_id"] == str(patient.id)
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "revoke",
+                AuditLog.entity_id == uuid.UUID(invited.json()["id"]),
+            )
+        )
+        assert entry is not None
+        assert entry.after["patient_id"] == str(patient.id)
+
     async def test_link_is_audited_with_its_invitation(
         self, client, session, make_user, make_patient, auth_headers
     ):
@@ -571,6 +657,7 @@ class TestSecondParent:
         )
 
         assert entry is not None
+        assert entry.entity == "parent_patient"
         assert entry.after["parent_id"] == accepted.json()["id"]
         assert entry.after["invitation_id"] == invited.json()["id"]
         assert entry.after["invited_by"] == str(specialist.id)
