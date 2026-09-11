@@ -369,6 +369,65 @@ describe("калькулятор в Mini App", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("на время повтора отказ и кнопка остаются, фокус не теряется", async () => {
+    let calls30 = 0;
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams !== 30) {
+          return Promise.resolve({ data: verifyResponse() });
+        }
+        calls30 += 1;
+        return calls30 === 1
+          ? Promise.resolve({
+              error: {
+                error: {
+                  code: "internal",
+                  message: "Внутренняя ошибка сервера.",
+                },
+              },
+            })
+          : new Promise(() => {});
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+
+    const busy = await screen.findByRole("button", { name: "Повторяем…" });
+    expect(busy).toHaveAttribute("aria-busy", "true");
+    expect(busy).toHaveAttribute("aria-disabled", "true");
+    expect(busy).toHaveFocus();
+    expect(screen.getByText("Внутренняя ошибка сервера.")).toBeInTheDocument();
+  });
+
+  it("сетевой сбой — ответа нет вовсе — тоже можно повторить", async () => {
+    let failed = false;
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams === 30 && !failed) {
+          failed = true;
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return Promise.resolve({ data: verifyResponse() });
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+
+    expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
+  });
+
   it("отказ проверки по данным повторить не предлагает", async () => {
     respond({
       "/calc/verify": new ApiFailure({

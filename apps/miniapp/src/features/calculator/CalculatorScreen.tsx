@@ -164,8 +164,8 @@ export function CalculatorScreen({ session }: { session: Session }) {
    * посчитанное при прежней граммовке, рядом с новым числом — не устаревшая
    * выдача, а неверное утверждение, и по нему готовят еду ребёнку.
    */
-  const stale =
-    rows !== debouncedRows || goal !== debouncedGoal || verify.isFetching;
+  const staleInput = rows !== debouncedRows || goal !== debouncedGoal;
+  const stale = staleInput || verify.isFetching;
 
   /**
    * Правка состава и цели обесценивает подобранное и пересчитанное.
@@ -258,6 +258,15 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // («Не удалось посчитать»). Переименуете один из них — сравнивайте и заголовок,
   // иначе начнёт прятаться баннер с другим заголовком.
   const verifyShown = verify.isError && !stale;
+  // Отказ на время повтора остаётся прежним текстом — как в кабинете: иначе на
+  // его месте было бы пусто, а нажатая кнопка исчезала бы вместе с фокусом.
+  const [retryRefusal, setRetryRefusal] = useState<string | null>(null);
+  const retrying = retryRefusal !== null;
+  const refusalMessage = staleInput
+    ? null
+    : verifyShown
+      ? (errorMessageOf(verify.error) ?? t("calculator.errorHint"))
+      : retryRefusal;
   const duplicateOfVerify =
     verifyShown &&
     actionError !== null &&
@@ -580,28 +589,33 @@ export function CalculatorScreen({ session }: { session: Session }) {
           одинаковые). Общая подсказка скрывала её, и после пересчёта порций в
           массы, которые расчёт не принимает, семья не узнавала, что не так.
           Пока правка не догнала расчёт, прежний отказ не показывается. */}
-      {verifyShown && (
+      {refusalMessage !== null && (
         <WarningBanner level="danger" title={t("calculator.error")}>
-          <div className="flex flex-col items-start gap-field">
-            <p className="m-0">
-              {errorMessageOf(verify.error) ?? t("calculator.errorHint")}
-            </p>
-            {/* Повтор — только при сбое, тем же правилом, что в кабинете:
-                отказ по данным при том же составе повторится слово в слово.
-                Без кнопки из сбоя выводила только фиктивная правка состава. */}
-            {canRetry(errorCodeOf(verify.error)) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void verify.refetch()}
-              >
-                {t("actions.retry")}
-              </Button>
-            )}
-          </div>
+          {refusalMessage}
         </WarningBanner>
       )}
+      {/* Кнопка — вне баннера: внутри `role="alert"` она зачитывалась бы
+          частью сообщения. Повтор — только при сбое, тем же правилом, что в
+          кабинете: отказ по данным при том же составе повторится слово в
+          слово. */}
+      {refusalMessage !== null &&
+        (retrying || canRetry(errorCodeOf(verify.error))) && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            aria-disabled={retrying || undefined}
+            aria-busy={retrying || undefined}
+            onClick={() => {
+              if (retrying) return;
+              setRetryRefusal(refusalMessage);
+              void verify.refetch().finally(() => setRetryRefusal(null));
+            }}
+          >
+            {retrying ? t("actions.retrying") : t("actions.retry")}
+          </Button>
+        )}
     </main>
   );
 }

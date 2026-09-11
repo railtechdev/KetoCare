@@ -323,6 +323,120 @@ describe("калькулятор", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("на время повтора отказ и кнопка остаются, фокус не теряется", async () => {
+    // Кнопка размонтировалась по клику, и фокус уходил в начало страницы, а
+    // на месте ошибки было пусто, пока шёл запрос.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.resolve({
+            data: undefined,
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          })
+        : new Promise(() => {});
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: "Повторить" },
+        {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        },
+      ),
+    );
+
+    const busy = await screen.findByRole("button", { name: "Повторяем…" });
+    expect(busy).toHaveAttribute("aria-busy", "true");
+    expect(busy).toHaveAttribute("aria-disabled", "true");
+    expect(busy).toHaveFocus();
+    expect(screen.getByText("Внутренняя ошибка сервера.")).toBeInTheDocument();
+  });
+
+  it("сетевой сбой — ответа нет вовсе — тоже можно повторить", async () => {
+    // У ошибки сети нет кода в теле: это и есть главный повод для кнопки.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : Promise.resolve({ data: VERIFIED, error: undefined });
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: "Повторить" },
+        {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        },
+      ),
+    );
+
+    expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+  });
+
+  it("после успешного повтора в карте ребёнка снова можно сохранить", async () => {
+    // Сохранение ждёт ответа проверки на этот самый состав — повтор обязан его
+    // дать, иначе кнопка «Повторить» вела бы в тот же тупик.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.resolve({
+            data: undefined,
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          })
+        : Promise.resolve({ data: VERIFIED, error: undefined });
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: "Повторить" },
+        {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        },
+      ),
+    );
+
+    await waitFor(() => expect(save).toBeEnabled(), {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+  });
+
   it("отказ проверки по данным повторить не предлагает", async () => {
     // Тот же состав откажут так же: кнопка обещала бы то, чего не будет.
     (api.POST as Mock).mockImplementation(async (path: string) =>
