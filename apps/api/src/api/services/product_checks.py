@@ -23,7 +23,7 @@ from enum import StrEnum
 
 from keto_engine.constants import KCAL_PER_G_CARBS, KCAL_PER_G_FAT, KCAL_PER_G_PROTEIN
 
-from .product_import import KCAL_MAX, MACRO_MAX
+from .product_import import KCAL_MAX, MACRO_MAX, macro_sum_exceeds_limit
 
 
 class Anomaly(StrEnum):
@@ -96,7 +96,7 @@ def check(values: Values) -> list[ProductAnomaly]:
     found: list[ProductAnomaly] = []
 
     macro_sum = values.fat + values.protein + values.carbs
-    if macro_sum > MACRO_MAX:
+    if macro_sum_exceeds_limit(values.fat, values.protein, values.carbs):
         found.append(ProductAnomaly(Anomaly.MACRO_SUM, {"sum": round(macro_sum, 2)}))
 
     for field, value in (

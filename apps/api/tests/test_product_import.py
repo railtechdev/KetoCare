@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from api.services.product_import import parse_csv
@@ -105,6 +107,42 @@ class TestRowValidation:
         assert not report.ok
         assert any("превышает 100" in e.message for e in report.errors), report.errors
 
+    def test_rounding_of_the_source_is_tolerated(self) -> None:
+        """Сумма чуть больше 100 г — округление источника, а не ошибка ввода.
+
+        Льняное масло в USDA (fdc 167702): жиры 99,98 г, белки 0,11 г — в сумме
+        100,09. Каждый нутриент источник округлил отдельно, и строка блокировала
+        загрузку всего файла. Ответ клиники на вопрос 27: допуск допустим.
+        """
+
+        report = parse_csv(_csv("Масло льняное,Жиры,884,99.98,0.11,0,0,USDA,SR28,2026-09-11"))
+        assert report.ok, report.errors
+
+    def test_the_tolerance_is_half_a_gram_inclusive(self) -> None:
+        """100,5 г проходит, 100,6 г — уже нет.
+
+        Слагаемые подобраны так, что в двоичной арифметике их сумма выходит
+        100.50000000000001: без округления перед сравнением граница зависела бы
+        от того, какими числами набрана сумма, и ровно 100,5 отклонялось бы.
+        """
+
+        assert 99.01 + 0.12 + 1.37 > 100.5, "подбор слагаемых перестал проверять округление"
+
+        at_limit = parse_csv(_csv("Т,Жиры,880,99.01,0.12,1.37,0,USDA,SR28,2026-01-01"))
+        over_limit = parse_csv(_csv("Т,Жиры,880,99.01,0.12,1.47,0,USDA,SR28,2026-01-01"))
+
+        assert at_limit.ok, at_limit.errors
+        assert not over_limit.ok
+        assert any("превышает 100" in e.message for e in over_limit.errors), over_limit.errors
+
+    def test_a_single_field_gets_no_tolerance(self) -> None:
+        """Допуск — у суммы, а не у отдельного поля: 100,3 г жира на 100 г
+        продукта — не округление, а ошибка."""
+
+        report = parse_csv(_csv("Т,Жиры,900,100.3,0,0,0,USDA,SR28,2026-01-01"))
+        assert not report.ok
+        assert any(e.column == "fat_100g" for e in report.errors), report.errors
+
     def test_fiber_greater_than_carbs_rejected(self) -> None:
         """Клетчатка — часть углеводов; fiber > carbs завысил бы соотношение.
 
@@ -193,3 +231,21 @@ class TestFieldLengthsAreCheckedInPreview:
         report = parse_csv(_csv(f"{'М' * 255},Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01"))
 
         assert report.ok, report.errors
+
+
+class TestSeedFile:
+    def test_seed_file_imports_cleanly(self) -> None:
+        """Стартовая база продуктов проходит импорт без единой ошибки.
+
+        `infra/seed/README.md` обещал «прогнан парсером: ноль ошибок», но
+        держалось это только на словах. Правка правил импорта, отклоняющая
+        строку стартовой базы, теперь падает здесь, а не у администратора
+        клиники, — так льняное масло и выпадало из файла до вопроса 27.
+        """
+
+        seed = Path(__file__).resolve().parents[3] / "infra" / "seed" / "products-usda.csv"
+        report = parse_csv(seed.read_bytes())
+
+        assert report.ok, report.errors[:5]
+        assert report.total_rows == 99
+        assert "Масло льняное" in {row.values["name_ru"] for row in report.valid_rows}
