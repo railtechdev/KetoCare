@@ -103,7 +103,7 @@ describe("тач-цель на сенсорном вводе", () => {
     // уже пальца там, где подписи нет. Замер на /dev/ui — 36 × 44 → 44 × 44.
     const coarse = CSS.slice(CSS.indexOf("@media (pointer: coarse)"));
     expect(coarse).toMatch(
-      /\[data-size\^="icon"\]\s*\{\s*min-width:\s*var\(--spacing-touch\);/,
+      /\[data-slot="button"\]\[data-size\^="icon"\]\s*\{\s*min-width:\s*var\(--spacing-touch\);/,
     );
   });
 
@@ -114,6 +114,6 @@ describe("тач-цель на сенсорном вводе", () => {
       "utf-8",
     );
     expect(button).toContain("data-size={size}");
-    expect(button).toMatch(/icon: "size-9"/);
+    expect(button).toContain('data-slot="button"');
   });
 });
