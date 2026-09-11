@@ -435,8 +435,9 @@ describe("калькулятор", () => {
     }
   });
 
-  it("«Повторить» без сети не добавляет третьего голоса к отказу", async () => {
-    // Об отказе и о повторе уже сказано рядом с кнопкой.
+  it("«Повторить» без сети говорит о сети одним голосом", async () => {
+    // Сетевой отказ без тела даёт «Что-то пошло не так», и после нажатия без
+    // сети оно висело рядом с «Повторяем…», не называя причины.
     let verifyCalls = 0;
     (api.POST as Mock).mockImplementation((path: string) => {
       if (!path.includes("verify")) {
@@ -462,15 +463,72 @@ describe("калькулятор", () => {
       });
       await user.click(retry);
 
+      const busy = await screen.findByRole("button", { name: "Повторяем…" });
+      expect(busy).toHaveFocus();
+      expect(await screen.findAllByText(WAITING)).toHaveLength(1);
+      expect(screen.queryByText(/Что-то пошло не так/)).not.toBeInTheDocument();
       expect(
-        await screen.findByRole("button", { name: "Повторяем…" }),
-      ).toBeInTheDocument();
-      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+        screen
+          .getAllByRole("status")
+          .some((el) => el.textContent === "Повторяем…"),
+      ).toBe(false);
 
       act(() => {
         onlineManager.setOnline(true);
       });
       expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("правка без сети снимает прежние числа, называет причину и не даёт сохранить", async () => {
+    // Ради этого сценария и строка ожидания: результат был, сеть пропала,
+    // человек поправил массу — числа исчезли, а сохранение обязано ждать
+    // ответа по новому составу.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return Promise.resolve({ data: VERIFIED, error: undefined });
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeEnabled();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(screen.getByLabelText(/Масса продукта/), "0");
+
+      expect(
+        await screen.findByText(WAITING, undefined, {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument();
+      expect(save).toBeDisabled();
+      expect(
+        screen.getByText(/Сохранить можно после расчёта/),
+      ).toBeInTheDocument();
+      expect(verifyCalls).toBe(1);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+      await waitFor(() => expect(save).toBeEnabled());
+      expect(verifyCalls).toBe(2);
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }

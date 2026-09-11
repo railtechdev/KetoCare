@@ -401,7 +401,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
     : verifyShown
       ? (errorMessageOf(verify.error) ?? t("common:errors.unexpected"))
       : retrying
-        ? (retry?.message ?? null)
+        ? // Повтор без сети не уходит, а ждёт: прежний отказ («что-то пошло не
+          // так») рядом с «Повторяем…» не говорил главного. Голос один — тот
+          // же отказ на своём месте, но словами о сети.
+          verify.isPaused
+          ? t("waitingForNetwork")
+          : (retry?.message ?? null)
         : null;
   // Повтор отказал снова ТЕМ ЖЕ текстом: область `role="alert"` не меняется и
   // заново не объявляется — поэтому скрытая строка ниже. Отказ с другим
@@ -512,15 +517,20 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           }}
         />
 
+        {/* Область постоянна: живую область, появившуюся вместе с текстом,
+            озвучивают не все программы чтения с экрана. Пустая — вне потока. */}
+        <p
+          role="status"
+          className={
+            waitingForNetwork ? "m-0 text-sm text-muted-foreground" : "sr-only"
+          }
+        >
+          {waitingForNetwork ? t("waitingForNetwork") : ""}
+        </p>
         {/* Пустой расчёт молчит: о том, что состав не набран, уже сказано в
             блоке состава — строкой над этим. Своя фраза здесь была вторым
             сообщением об одном и том же (правило П27 канона), и вместе с
             рамкой пустого состава они отодвигали цель на 200 px вниз. */}
-        {waitingForNetwork && (
-          <p role="status" className="m-0 text-sm text-muted-foreground">
-            {t("waitingForNetwork")}
-          </p>
-        )}
         {dish === null ? null : (
           <div
             aria-busy={stale}
@@ -575,7 +585,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         {/* Постоянная область: появившаяся вместе с текстом объявляется не
             всеми программами чтения с экрана. */}
         <p role="status" className="sr-only">
-          {retrying
+          {retrying && !verify.isPaused
             ? t("common:actions.retrying")
             : announceRetryFailed
               ? refusalMessage
