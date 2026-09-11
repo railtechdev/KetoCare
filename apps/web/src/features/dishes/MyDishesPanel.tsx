@@ -112,7 +112,15 @@ export function MyDishesPanel({
 
               {/* Своё блюдо тоже уходит в калькулятор: править состав здесь
                   нечем и не нужно — считает ядро, а не форма списка. */}
-              <Button asChild variant="ghost" size="icon">
+              {/* `asChild`: `data-size` до `<a>` не доходит — ссылка принимает
+                  закрытый список пропов, — а с ним и тач-ширина из темы.
+                  Поэтому здесь она классом. */}
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="min-w-touch"
+              >
                 {openIn === "card" && patientId !== null ? (
                   <PatientViewLink
                     patientId={patientId}
