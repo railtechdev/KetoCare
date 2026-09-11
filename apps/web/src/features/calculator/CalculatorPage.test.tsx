@@ -515,11 +515,19 @@ describe("калькулятор", () => {
         onlineManager.setOnline(true);
       });
       await waitFor(() => expect(verifyCalls).toBe(2));
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      // Возобновление объявляет скрытая строка — и только она.
+      await waitFor(() =>
+        expect(
+          screen
+            .getAllByRole("status")
+            .some((el) => el.textContent === "Повторяем…"),
+        ).toBe(true),
+      );
 
       expect(
         screen.getByRole("button", { name: "Повторяем…" }),
       ).toBeInTheDocument();
+      expect(screen.getAllByText(WAITING)).toHaveLength(1);
       expect(screen.queryByText(/Что-то пошло не так/)).not.toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
