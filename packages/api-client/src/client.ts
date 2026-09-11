@@ -57,8 +57,9 @@ export function createApiClient({
    * `fetch` читает тело, и собрать повтор из уже отправленного `Request` нельзя:
    * конструктор бросает TypeError. Любой POST, PUT или PATCH после пятнадцати
    * минут простоя падал, хотя сессия обновлялась успешно, — первое сохранение
-   * блюда, дневника или назначения. Копия снимается до отправки; запрос без
-   * тела повторяется из самого себя.
+   * блюда, дневника или назначения. Копия снимается до отправки у всего, что
+   * не GET и не HEAD: по методу, а не по `request.body` — в Firefox свойства
+   * нет вовсе, и признак тела зависел бы от движка.
    */
   const untouched = new WeakMap<Request, Request>();
 
@@ -76,7 +77,11 @@ export function createApiClient({
       if (token) {
         request.headers.set("Authorization", `Bearer ${token}`);
       }
-      if (refreshAccessToken !== undefined && request.body !== null) {
+      if (
+        refreshAccessToken !== undefined &&
+        request.method !== "GET" &&
+        request.method !== "HEAD"
+      ) {
         untouched.set(request, request.clone());
       }
       return request;
@@ -108,7 +113,10 @@ export function createApiClient({
       const source = untouched.get(request) ?? request;
       const retry = new Request(source, { headers: request.headers });
       retry.headers.set("Authorization", `Bearer ${token}`);
-      return options.fetch(retry);
+      // Не `options.fetch(retry)`: вызов методом передаёт `this = options`, и
+      // браузер отклоняет его («Illegal invocation») — повтор не уходил вовсе.
+      const { fetch: send } = options;
+      return send(retry);
     },
   });
 

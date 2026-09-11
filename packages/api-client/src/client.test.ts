@@ -34,6 +34,23 @@ describe("клиент API: продление сессии", () => {
    * Отказ по существу запроса (неверный текущий пароль) заголовка не несёт, и
    * ниже это отдельный случай.
    */
+  /**
+   * Подделка `fetch`, которая ведёт себя как браузерная: вызов с чужим `this`
+   * («options.fetch(request)») браузер отклоняет — «Illegal invocation».
+   * Стрелочная подделка это пропускала, и повтор после обновления токена в
+   * браузере не уходил вовсе.
+   */
+  function browserFetch(
+    handler: (request: Request) => Promise<Response> | Response,
+  ) {
+    return vi.fn(function (this: unknown, input: RequestInfo | URL) {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch': Illegal invocation");
+      }
+      return Promise.resolve(handler(input as Request));
+    });
+  }
+
   function unauthorized(status = 401) {
     return jsonResponse({ error: { code: "unauthorized" } }, status, {
       "WWW-Authenticate": "Bearer",
@@ -44,8 +61,7 @@ describe("клиент API: продление сессии", () => {
     let token = "old-token";
     const seen: (string | null)[] = [];
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const request = input as Request;
+    const fetchMock = browserFetch((request) => {
       const auth = request.headers.get("Authorization");
       seen.push(auth);
       return auth === "Bearer new-token"
@@ -75,10 +91,11 @@ describe("клиент API: продление сессии", () => {
     // после пятнадцати минут простоя падало, хотя сессия обновлялась.
     let token = "old-token";
     const bodies: string[] = [];
+    const seen: (string | null)[] = [];
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const request = input as Request;
+    const fetchMock = browserFetch(async (request) => {
       bodies.push(await request.text());
+      seen.push(request.headers.get("Authorization"));
       return request.headers.get("Authorization") === "Bearer new-token"
         ? jsonResponse({ id: "dish-1" }, 201)
         : unauthorized();
@@ -106,6 +123,55 @@ describe("клиент API: продление сессии", () => {
     expect(error).toBeUndefined();
     expect(data).toEqual({ id: "dish-1" });
     expect(bodies).toEqual([JSON.stringify(body), JSON.stringify(body)]);
+    expect(seen).toEqual(["Bearer old-token", "Bearer new-token"]);
+  });
+
+  it("повторяет загрузку файла: те же байты и та же граница multipart", async () => {
+    let token = "old-token";
+    const sent: { contentType: string | null; body: string }[] = [];
+
+    const fetchMock = browserFetch(async (request) => {
+      sent.push({
+        contentType: request.headers.get("Content-Type"),
+        body: await request.text(),
+      });
+      return request.headers.get("Authorization") === "Bearer new-token"
+        ? jsonResponse({ ok: true }, 201)
+        : unauthorized();
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const api = createApiClient({
+      baseUrl: "http://test",
+      getAccessToken: () => token,
+      refreshAccessToken: async () => {
+        token = "new-token";
+        return token;
+      },
+    });
+
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob(["%PDF-1.4 выписка"], { type: "application/pdf" }),
+      "discharge.pdf",
+    );
+    const { error } = await api.POST(
+      "/api/v1/patients/{patient_id}/attachments" as never,
+      {
+        params: { path: { patient_id: "child-1" } },
+        body: form,
+        bodySerializer: (value: FormData) => value,
+      } as never,
+    );
+
+    expect(error).toBeUndefined();
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual(sent[0]);
+    const boundary = /boundary=(.+)$/.exec(sent[0]?.contentType ?? "")?.[1];
+    expect(boundary).toBeDefined();
+    expect(sent[0]?.body).toContain(`--${boundary}`);
+    expect(sent[0]?.body).toContain("%PDF-1.4 выписка");
   });
 
   it("на все параллельные 401 приходится одно обновление", async () => {
