@@ -135,9 +135,12 @@ class TestRowValidation:
         assert not over_limit.ok
         assert any("превышает 100" in e.message for e in over_limit.errors), over_limit.errors
 
-    @pytest.mark.parametrize("value", ["nan", "NaN", "inf", "-inf"])
+    @pytest.mark.parametrize("value", ["nan", "NaN", "inf", "-inf", "1e2", "1_00", "8_1"])
     def test_non_finite_numbers_rejected(self, value: str) -> None:
-        """«nan» — число для `float`, но не для расчёта.
+        """«nan», «1e2», «1_00» — числа для `float`, но не для таблицы составов.
+
+        «1_00» молча становилось 100, «8_1» — 81: опечатка в ячейке превращалась
+        в другое число без единого слова.
 
         NaN не проходит ни одно сравнение, поэтому ни граница поля, ни проверка
         суммы его не ловили: строка с жирами «nan» проходила импорт без ошибок.

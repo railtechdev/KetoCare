@@ -134,6 +134,21 @@ class TestParsing:
         assert bound(RecipeWrite, "title", "max_length") == recipe_import.TITLE_MAX
         assert bound(RecipeIngredientIn, "grams", "le") == recipe_import.GRAMS_MAX
 
+    @pytest.mark.parametrize("value", ["nan", "inf", "1e2", "1_00"])
+    def test_what_float_takes_but_a_table_does_not_write_is_rejected(self, value):
+        """«nan» делал соотношение рецепта NaN, «1_00» молча становилось 100."""
+
+        report = parse_csv(_csv(f'Омлет,breakfast,120,1,"1. Растопите.",Масло,{value}'))
+
+        assert not report.ok
+        assert any(error.column == "grams" for error in report.errors), report.errors
+
+    def test_comma_decimal_grams_accepted(self):
+        report = parse_csv(_csv('Омлет,breakfast,120,1,"1. Растопите.",Масло,"30,5"'))
+
+        assert report.ok, report.errors
+        assert report.recipes[0].ingredients[0].grams == 30.5
+
     def test_a_broken_header_does_not_attach_rows_to_the_previous_recipe(self):
         """Иначе в превью появятся чужие граммы с посчитанными по ним ккал."""
 
