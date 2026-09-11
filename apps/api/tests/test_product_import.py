@@ -135,6 +135,18 @@ class TestRowValidation:
         assert not over_limit.ok
         assert any("превышает 100" in e.message for e in over_limit.errors), over_limit.errors
 
+    @pytest.mark.parametrize("value", ["nan", "NaN", "inf", "-inf"])
+    def test_non_finite_numbers_rejected(self, value: str) -> None:
+        """«nan» — число для `float`, но не для расчёта.
+
+        NaN не проходит ни одно сравнение, поэтому ни граница поля, ни проверка
+        суммы его не ловили: строка с жирами «nan» проходила импорт без ошибок.
+        """
+
+        report = parse_csv(_csv(f"Т,Жиры,700,{value},1,1,0,USDA,SR28,2026-01-01"))
+        assert not report.ok
+        assert any(e.column == "fat_100g" for e in report.errors), report.errors
+
     def test_a_single_field_gets_no_tolerance(self) -> None:
         """Допуск — у суммы, а не у отдельного поля: 100,3 г жира на 100 г
         продукта — не округление, а ошибка."""
