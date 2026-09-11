@@ -137,7 +137,10 @@ describe("препараты из анкеты семьи", () => {
     );
 
     await user.type(screen.getByLabelText(/Принимаемая доза/), "300 мг");
-    await user.type(screen.getByLabelText("Кратность"), "2 раза в день");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "2 раза в сутки",
+    );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(api.POST).toHaveBeenCalled());
@@ -145,6 +148,9 @@ describe("препараты из анкеты семьи", () => {
     expect(body).toMatchObject({
       drug_name: "Вальпроат натрия",
       dose: "300 мг",
+      frequency_code: "twice_daily",
+      // Пустое уточнение уходит как «уточнения нет».
+      frequency: null,
     });
   });
 
@@ -200,5 +206,142 @@ describe("препараты из анкеты семьи", () => {
     expect(
       screen.queryByRole("button", { name: /^Вальпроат натрия$/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("кратность приёма из списка", () => {
+  it("«Другая схема» без слов не отправляется, ошибка у поля уточнения", async () => {
+    // Сервер отказал бы общей строкой; врач узнаёт, чего не хватает, у поля.
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+    await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
+    await user.type(screen.getByLabelText(/Принимаемая доза/), "300 мг");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "Другая схема",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(
+      await screen.findByText("Для «Другой схемы» опишите кратность словами."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Уточнение к кратности/)).toHaveFocus();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+
+  it("в таблице кратность словами: подпись с уточнением и слова старой записи", async () => {
+    medications = [
+      {
+        id: "m1",
+        patient_id: PATIENT_ID,
+        drug_name: "Леветирацетам",
+        dose: "250 мг",
+        frequency_code: "twice_daily",
+        frequency: "утром и на ночь",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+      {
+        id: "m2",
+        patient_id: PATIENT_ID,
+        drug_name: "Топирамат",
+        dose: "25 мг",
+        frequency_code: null,
+        frequency: "на ночь",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+    ];
+    renderTab();
+
+    expect(
+      await screen.findByText("2 раза в сутки — утром и на ночь"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("на ночь")).toBeInTheDocument();
+    // Код врачу не показывается никогда.
+    expect(screen.queryByText("twice_daily")).not.toBeInTheDocument();
+  });
+
+  it("правка старой записи просит выбрать код и не подставляет его молча", async () => {
+    // Кратность такой записи — слова. Угадывать по ним код нельзя: форма
+    // переносит слова в уточнение, оставляет список пустым и без выбора не
+    // отправляет.
+    medications = [
+      {
+        id: "m3",
+        patient_id: PATIENT_ID,
+        drug_name: "Топирамат",
+        dose: "25 мг",
+        frequency_code: null,
+        frequency: "3 раза в день",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+    ];
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Изменить назначение препарата Топирамат",
+      }),
+    );
+
+    expect(
+      await screen.findByText(doctorRu.medications.frequencyLegacyHint),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Кратность")).toHaveValue("");
+    expect(screen.getByLabelText(/Уточнение к кратности/)).toHaveValue(
+      "3 раза в день",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(
+      await screen.findByText("Выберите кратность из списка."),
+    ).toBeInTheDocument();
+    expect(api.PUT).not.toHaveBeenCalled();
+  });
+
+  it("правка старой записи: выбранный код и прежние слова уходят вместе", async () => {
+    // Слова переносит в уточнение кабинет, а не сервер: потеря их при отправке
+    // стёрла бы кратность, которую врач однажды записал.
+    medications = [
+      {
+        id: "m3",
+        patient_id: PATIENT_ID,
+        drug_name: "Топирамат",
+        dose: "25 мг",
+        frequency_code: null,
+        frequency: "на ночь",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+    ];
+    (api.PUT as Mock).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Изменить назначение препарата Топирамат",
+      }),
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Кратность"),
+      "1 раз в сутки",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalled());
+    const body = (api.PUT as Mock).mock.calls[0]?.[1]?.body;
+    expect(body).toMatchObject({
+      frequency_code: "once_daily",
+      frequency: "на ночь",
+    });
   });
 });

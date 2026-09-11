@@ -32,8 +32,11 @@ describe("порядок полей формы препарата", () => {
       />,
     );
 
+    // Кратность — список: `select` входит в порядок наравне с полями ввода.
     const inputs = Array.from(
-      document.querySelectorAll<HTMLInputElement>("form input[name]"),
+      document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        "form input[name], form select[name]",
+      ),
     ).map((input) => input.name);
 
     expect(inputs).toEqual([...FIELD_ORDER]);

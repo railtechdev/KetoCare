@@ -17,6 +17,7 @@ import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { MedicationForm } from "./MedicationForm";
+import { describeFrequency } from "./medicationFrequency";
 import { formatIsoDate } from "./dates";
 import { useMedicationMutations } from "./doctorMutations";
 import { useMedications } from "./doctorQueries";
@@ -69,7 +70,15 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
     const base: ColumnDef<Medication, unknown>[] = [
       { accessorKey: "drug_name", header: t("medications.fields.drugName") },
       { accessorKey: "dose", header: t("medications.fields.dose") },
-      { accessorKey: "frequency", header: t("medications.fields.frequency") },
+      {
+        id: "frequency",
+        header: t("medications.fields.frequency"),
+        // Словами, тем же правилом, что отчёт: код без подписи врачу не нужен.
+        cell: ({ row }) =>
+          describeFrequency(row.original, (code) =>
+            t(`medications.frequencyCodes.${code}`),
+          ),
+      },
       {
         accessorKey: "started_at",
         header: t("medications.fields.startedAt"),

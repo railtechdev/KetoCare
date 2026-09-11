@@ -6,12 +6,16 @@ import { z } from "zod";
 
 import { FormFooter } from "@ketocare/ui";
 
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { parseDateInput, toDateInput } from "../diary/time";
 import { useAedDrugs } from "../intake/useIntake";
 import { DrugNameField } from "./DrugNameField";
+import {
+  MEDICATION_FREQUENCIES,
+  isMedicationFrequency,
+} from "./medicationFrequency";
 import type { Medication, MedicationBody } from "./types";
 
 /**
@@ -25,12 +29,27 @@ const medicationSchema = z
   .object({
     drugName: z.string().trim().min(1),
     dose: z.string().trim().min(1),
-    frequency: z.string().trim().min(1),
+    // Кратность — из списка (ADR-0033). Пустой выбор — строка, а не значение
+    // перечисления: так форма отличает «не выбрано» от выбранного.
+    // Проверка с явным `boolean`, а не охранник типа: охранник (и стрелка, из
+    // которой TypeScript выводит его сам) сузил бы тип значения формы до
+    // перечисления, и пустой выбор по умолчанию перестал бы им быть.
+    frequencyCode: z
+      .string()
+      .refine((value): boolean => isMedicationFrequency(value)),
+    frequency: z.string(),
     startedAt: z.string().refine((value) => parseDateInput(value) !== null),
     stoppedAt: z
       .string()
       .refine((value) => value === "" || parseDateInput(value) !== null),
   })
+  .refine(
+    // «Другая схема» без слов не говорит, как давать препарат. Сервер
+    // проверяет то же; здесь — чтобы ошибка встала у поля, а не общей строкой.
+    (values) =>
+      values.frequencyCode !== "other" || values.frequency.trim() !== "",
+    { path: ["frequency"] },
+  )
   .refine(
     // Даты в формате YYYY-MM-DD сравниваются как строки: лексикографический
     // порядок у них совпадает с календарным, и разбор в Date не нужен.
@@ -50,16 +69,24 @@ type MedicationFormValues = z.infer<typeof medicationSchema>;
 export const FIELD_ORDER = [
   "drugName",
   "dose",
+  "frequencyCode",
   "frequency",
   "startedAt",
   "stoppedAt",
 ] as const satisfies readonly (keyof MedicationFormValues)[];
 
 function toBody(values: MedicationFormValues): MedicationBody {
+  // Схема уже проверила код; сужение нужно типам, а не данным.
+  if (!isMedicationFrequency(values.frequencyCode)) {
+    throw new Error(`Unknown frequency code: ${values.frequencyCode}`);
+  }
+  const note = values.frequency.trim();
+
   return {
     drug_name: values.drugName.trim(),
     dose: values.dose.trim(),
-    frequency: values.frequency.trim(),
+    frequency_code: values.frequencyCode,
+    frequency: note === "" ? null : note,
     started_at: values.startedAt,
     stopped_at: values.stoppedAt === "" ? null : values.stoppedAt,
   };
@@ -96,6 +123,12 @@ export function MedicationForm({
 }) {
   const { t } = useTranslation("doctor");
   const ids = useId();
+  // Запись, заведённая до списка: кратность у неё словами, кода нет. Слова
+  // встают в уточнение, а код выбирает врач — угадывать его по строке нельзя.
+  const legacy =
+    medication !== null &&
+    (medication.frequency_code === null ||
+      medication.frequency_code === undefined);
 
   // Справочник тот же, что у анкеты семьи, и ключ у запроса общий: карта
   // пациента почти всегда уже показала анкету, поэтому список приходит из кэша.
@@ -117,6 +150,7 @@ export function MedicationForm({
     defaultValues: {
       drugName: medication?.drug_name ?? suggestedDrugName ?? "",
       dose: medication?.dose ?? "",
+      frequencyCode: medication?.frequency_code ?? "",
       frequency: medication?.frequency ?? "",
       startedAt: medication?.started_at ?? toDateInput(new Date()),
       stoppedAt: medication?.stopped_at ?? "",
@@ -176,11 +210,30 @@ export function MedicationForm({
           error={errors.dose && t("medications.errors.required")}
           {...register("dose")}
         />
+        {/* Список, а не строка: одно и то же назначение, записанное по-разному,
+            нельзя ни сравнить, ни посчитать (вопрос 45 медкоманде). Значения —
+            коды кратности HL7 FHIR, ADR-0033. */}
+        <SelectField
+          id={`${ids}-frequency-code`}
+          label={t("medications.fields.frequency")}
+          hint={legacy ? t("medications.frequencyLegacyHint") : undefined}
+          error={errors.frequencyCode && t("medications.errors.frequencyCode")}
+          {...register("frequencyCode")}
+        >
+          <option value="">{t("medications.frequencyNotSet")}</option>
+          {MEDICATION_FREQUENCIES.map((code) => (
+            <option key={code} value={code}>
+              {t(`medications.frequencyCodes.${code}`)}
+            </option>
+          ))}
+        </SelectField>
         <Field
           id={`${ids}-frequency`}
-          label={t("medications.fields.frequency")}
-          placeholder={t("medications.frequencyPlaceholder")}
-          error={errors.frequency && t("medications.errors.required")}
+          optional
+          label={t("medications.fields.frequencyNote")}
+          placeholder={t("medications.frequencyNotePlaceholder")}
+          hint={t("medications.frequencyNoteHint")}
+          error={errors.frequency && t("medications.errors.frequencyNote")}
           {...register("frequency")}
         />
         <Field

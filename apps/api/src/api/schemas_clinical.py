@@ -10,7 +10,16 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+from core.models.enums import MedicationFrequency
 
 from .schemas import RequiredLongText, RequiredName
 
@@ -77,11 +86,31 @@ class MedicationWrite(BaseModel):
 
     drug_name: RequiredName
     dose: RequiredName
-    frequency: RequiredName
+    #: Кратность — из списка (ADR-0033, вопрос 45). Обязательна у каждой новой
+    #: записи и у каждой правки: запись, заведённая до списка, при правке
+    #: получает код, и выбирает его врач, а не разбор строки.
+    frequency_code: MedicationFrequency
+    #: Уточнение к кратности («утром и на ночь»). Для «другой схемы» обязательно.
+    frequency: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = (
+        None
+    )
     started_at: date
     stopped_at: date | None = Field(
         default=None, description="Последний день приёма; пусто — препарат принимается"
     )
+
+    @field_validator("frequency")
+    @classmethod
+    def _blank_note_is_none(cls, value: str | None) -> str | None:
+        # Пустое уточнение — это «уточнения нет», а не строка из пробелов в карте.
+        return value or None
+
+    @model_validator(mode="after")
+    def _check_other_is_described(self) -> MedicationWrite:
+        # «Другая схема» без слов не говорит, как давать препарат.
+        if self.frequency_code is MedicationFrequency.OTHER and self.frequency is None:
+            raise ValueError("Для «Другой схемы» опишите кратность приёма словами.")
+        return self
 
     @model_validator(mode="after")
     def _check_period(self) -> MedicationWrite:
@@ -99,7 +128,9 @@ class MedicationRead(BaseModel):
     patient_id: uuid.UUID
     drug_name: str
     dose: str
-    frequency: str
+    #: Пусто только у записей, заведённых до списка: их кратность — в `frequency`.
+    frequency_code: MedicationFrequency | None
+    frequency: str | None
     started_at: date
     stopped_at: date | None
     author_id: uuid.UUID

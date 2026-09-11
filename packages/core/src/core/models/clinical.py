@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
+    CheckConstraint,
     Date,
     ForeignKey,
     Integer,
@@ -25,7 +26,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, SoftDeleteMixin, UpdatedAtMixin, UUIDPkMixin
-from .enums import IntakeScale, pg_enum
+from .enums import IntakeScale, MedicationFrequency, pg_enum
 
 
 class MedicalProfile(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
@@ -121,13 +122,31 @@ def _forbid_prescription_delete(_mapper: object, _connection: object, target: Pr
 
 class Medication(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
     __tablename__ = "medications"
+    __table_args__ = (
+        # Кратность обязана быть описана: кодом из списка или словами. «Другая
+        # схема» без слов не описывает ничего — по ней не понять, как давать
+        # препарат.
+        CheckConstraint(
+            "(frequency_code IS NOT NULL AND frequency_code <> 'other') OR frequency IS NOT NULL",
+            name="ck_medications_frequency_described",
+        ),
+    )
 
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
     )
     drug_name: Mapped[str] = mapped_column(String(255), nullable=False)
     dose: Mapped[str] = mapped_column(String(255), nullable=False)
-    frequency: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Кратность — кодом из списка (ADR-0033). Пусто только у записей, заведённых
+    # до списка: их кратность осталась словами в `frequency`, и перевести её в
+    # код без врача нельзя — «утром и на ночь» бывает и двумя приёмами, и одним
+    # вечерним с утренней проверкой.
+    frequency_code: Mapped[MedicationFrequency | None] = mapped_column(
+        pg_enum(MedicationFrequency, "medication_frequency")
+    )
+    # Уточнение к кратности («утром и на ночь») — или вся кратность у записей
+    # до списка.
+    frequency: Mapped[str | None] = mapped_column(String(255))
     started_at: Mapped[date] = mapped_column(nullable=False)
     stopped_at: Mapped[date | None]
     author_id: Mapped[uuid.UUID] = mapped_column(
@@ -286,5 +305,6 @@ class PatientIntake(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
 
     # Что ребёнок принимает — со слов семьи, ориентировочно. Точный список с
     # дозами ведёт врач в `medications`: на анкете родитель дозы не знает, а
-    # `medications.dose` и `frequency` обязательны и обязательными остаются.
+    # доза и кратность приёма у `medications` обязательны и обязательными
+    # остаются.
     current_aed_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
