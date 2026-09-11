@@ -519,18 +519,23 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
       {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3
           ТЗ): сервер возвращает человекочитаемую причину, её и показываем. */}
-      {actionError !== null && actionError !== undefined && (
-        <WarningBanner
-          level="danger"
-          title={
-            infeasible
-              ? t("calculator.infeasible")
-              : t("calculator.actionFailed")
-          }
-        >
-          {errorMessageOf(actionError) ?? t("calculator.errorHint")}
-        </WarningBanner>
-      )}
+      {/* Пока проверка состава в ошибке, отказ действия о том же составе —
+          второй красный баннер с тем же текстом (правило П27). «Недостижимо»
+          остаётся: это самостоятельный ответ, а не повтор отказа проверки. */}
+      {actionError !== null &&
+        actionError !== undefined &&
+        (infeasible || !verify.isError) && (
+          <WarningBanner
+            level="danger"
+            title={
+              infeasible
+                ? t("calculator.infeasible")
+                : t("calculator.actionFailed")
+            }
+          >
+            {errorMessageOf(actionError) ?? t("calculator.errorHint")}
+          </WarningBanner>
+        )}
 
       {/* Причина отказа — текстом сервера, как в кабинете (ADR-0028: экраны
           одинаковые). Общая подсказка скрывала её, и после пересчёта порций в

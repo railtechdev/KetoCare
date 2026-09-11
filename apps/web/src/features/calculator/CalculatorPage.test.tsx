@@ -280,6 +280,43 @@ describe("калькулятор", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("один и тот же отказ показывается одной строкой", async () => {
+    // Больше 5000 г руками: проверка и пересчёт отказывают одним текстом, и две
+    // одинаковые строки ошибки подряд нарушали правило П27.
+    const message = "Проверьте правильность заполнения полей.";
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify") || path.includes("scale")
+        ? {
+            data: undefined,
+            error: { error: { code: "validation_error", message } },
+          }
+        : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(message, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Коэффициент порции");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: /Пересчитать порции/ }),
+    );
+
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/calc/scale",
+        expect.anything(),
+      ),
+    );
+    expect(screen.getAllByText(message)).toHaveLength(1);
+  });
+
   it("убранный из состава продукт не оставляет своих чисел на экране", async () => {
     const user = userEvent.setup();
     renderCalculator(PATIENT_ID);

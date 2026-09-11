@@ -563,7 +563,9 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         </WarningBanner>
       )}
 
-      {actionError && !infeasible && (
+      {/* Пока проверка состава в ошибке, отказ действия о том же составе
+          повторил бы её текст второй строкой (правило П27). */}
+      {actionError && !infeasible && !verify.isError && (
         <FormError>
           {errorMessageOf(solve.error ?? scale.error) ??
             t("common:errors.unexpected")}

@@ -455,6 +455,31 @@ class TestScale:
         assert response.status_code == 422, response.text
         assert "весила бы 5000,1 г" in response.json()["error"]["message"]
 
+    @pytest.mark.parametrize(
+        ("grams", "factor", "shown"),
+        [(512.2, 15, "7683 г"), (1234.568, 100, "123456,8 г")],
+    )
+    async def test_refusal_amount_has_no_float_noise(
+        self, client, make_user, auth_headers, grams, factor, shown
+    ):
+        """7683.000000000001 — это «7683», а не «7683,1»; и десятые не пропадают
+        у больших чисел, как при `:g`."""
+
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/scale",
+            json={
+                "ingredients": [BUTTER],
+                "items": [{"product_id": "butter", "grams": grams}],
+                "factor": factor,
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422, response.text
+        assert f"весила бы {shown}" in response.json()["error"]["message"]
+
     async def test_zero_factor_rejected(self, client, session, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)
         response = await client.post(

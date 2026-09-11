@@ -173,8 +173,11 @@ async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
     heaviest = max(item.grams for item in payload.items) * payload.factor
     if heaviest > CALC_GRAMS_MAX:
         # Вверх до десятых: `:g` оставлял шесть значащих цифр, и 5000,002 г
-        # превращались в «весила бы 5000 г — больше 5000 г».
-        shown = f"{math.ceil(heaviest * 10) / 10:g}".replace(".", ",")
+        # превращались в «весила бы 5000 г — больше 5000 г». `round(…, 6)` перед
+        # округлением снимает шум float: 512,2 × 15 = 7683.000000000001 иначе
+        # показывалось бы как «7683,1».
+        tenths = math.ceil(round(heaviest * 10, 6)) / 10
+        shown = f"{tenths:.1f}".removesuffix(".0").replace(".", ",")
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
             f"После пересчёта позиция весила бы {shown} г — больше "

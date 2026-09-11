@@ -1,5 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -328,6 +332,65 @@ describe("калькулятор в Mini App", () => {
     expect(
       screen.queryByText("Проверьте правильность заполнения полей."),
     ).not.toBeInTheDocument();
+  });
+
+  it("отказ проверки не мигает при возврате в приложение", async () => {
+    // Запрос с ошибкой всегда считается устаревшим, и перезапрос по фокусу
+    // снимал баннер на время запроса — кабинет так себя не ведёт.
+    const message = "Проверьте правильность заполнения полей.";
+    respond({
+      "/calc/verify": new ApiFailure({
+        error: { code: "validation_error", message },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    const calls = (api.POST as Mock).mock.calls.length;
+
+    // Повторная проверка, если бы она случилась, повисла бы: пока она идёт,
+    // баннер скрыт, и мерцание было бы видно не только по числу запросов.
+    (api.POST as Mock).mockImplementation(() => new Promise(() => {}));
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect((api.POST as Mock).mock.calls.length).toBe(calls);
+    expect(screen.getByText(message)).toBeInTheDocument();
+    focusManager.setFocused(undefined);
+  });
+
+  it("один и тот же отказ не показывается двумя баннерами", async () => {
+    // Больше 5000 г руками: проверка и пересчёт отказывают одним текстом, и два
+    // одинаковых красных баннера нарушали правило П27.
+    const message = "Проверьте правильность заполнения полей.";
+    const refusal = { error: { code: "validation_error", message } };
+    respond({
+      "/calc/verify": new ApiFailure(refusal),
+      "/calc/scale": new ApiFailure(refusal),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+
+    const factor = screen.getByLabelText("Умножить на");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: "Пересчитать порции" }),
+    );
+
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/calc/scale",
+        expect.anything(),
+      ),
+    );
+    expect(screen.getAllByText(message)).toHaveLength(1);
   });
 
   it("запятая в граммовке считается, а не глушит расчёт", async () => {
