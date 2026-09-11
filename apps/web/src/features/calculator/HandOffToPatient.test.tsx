@@ -1,6 +1,6 @@
 import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -61,7 +61,7 @@ const ROWS: DishRow[] = [
   },
 ];
 
-function renderHandOff() {
+function renderHandOff(blockedBy: string | null = null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -75,7 +75,9 @@ function renderHandOff() {
     );
   }
 
-  return render(<HandOffToPatient rows={ROWS} />, { wrapper: Wrapper });
+  return render(<HandOffToPatient rows={ROWS} blockedBy={blockedBy} />, {
+    wrapper: Wrapper,
+  });
 }
 
 beforeEach(() => {
@@ -165,5 +167,28 @@ describe("передача состава пациенту", () => {
         }),
       );
     });
+  });
+
+  it("состав, который нельзя передать, не уходит и в обход кнопки", async () => {
+    // Кнопка выключена причиной сверху (например, масса тяжелее предела), но
+    // форма — последняя проверка: отправка мимо кнопки её не миновала бы.
+    const user = userEvent.setup();
+    renderHandOff("Масса продукта «Кокосовое масло» больше 5000 г.");
+
+    await user.type(
+      await screen.findByLabelText("Название блюда"),
+      "Завтрак 4:1",
+    );
+    await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Иван Петров/ }),
+    );
+
+    const handOff = screen.getByRole("button", { name: "Передать" });
+    expect(handOff).toBeDisabled();
+    fireEvent.submit(handOff.closest("form") as HTMLFormElement);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(api.POST).not.toHaveBeenCalled();
   });
 });

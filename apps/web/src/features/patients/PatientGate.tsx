@@ -1,6 +1,6 @@
 import { Button, EmptyState, ErrorState, Skeleton } from "@ketocare/ui";
 import { Baby, Users } from "lucide-react";
-import type { ReactElement } from "react";
+import { Fragment, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SectionLink } from "../../components/SectionLink";
@@ -118,5 +118,10 @@ export function PatientGate({
     );
   }
 
-  return render(patientId);
+  // Ключ — ребёнок. Выбор в шапке меняет `?patient=`, а маршрут раздела
+  // остаётся тем же, и без ключа React сохранял экран вместе с состоянием
+  // прежнего ребёнка: калькулятор держал его кетосоотношение и калорийность и
+  // выносил вердикт против чужого назначения, помощник — открытый разговор. Тот
+  // же дефект, что в карте пациента у врача (`PatientViewRoute`).
+  return <Fragment key={patientId}>{render(patientId)}</Fragment>;
 }

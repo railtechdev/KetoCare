@@ -32,7 +32,15 @@ export function useSelectedPatient() {
     (patientId: string) => {
       void navigate({
         to: ".",
-        search: (previous) => ({ ...previous, patient: patientId }),
+        search: (previous) => ({
+          ...previous,
+          patient: patientId,
+          // Открытый объект и задача PDF — о прежнем ребёнке: блюдо из его
+          // списка и готовый отчёт с его данными не должны открыться на
+          // экране другого. Вкладка и вид дневника — не о ребёнке и остаются.
+          item: undefined,
+          job: undefined,
+        }),
       });
     },
     [navigate],
