@@ -34,7 +34,8 @@ export function HomeScreen({ session }: { session: Session }) {
   return (
     <main className="flex flex-col gap-block p-block">
       <header>
-        <h1 className="text-page-title">{session.patientName}</h1>
+        {/* Имя ребёнка без пробелов не должно распирать экран телефона. */}
+        <h1 className="break-words text-page-title">{session.patientName}</h1>
       </header>
 
       <AsyncSection

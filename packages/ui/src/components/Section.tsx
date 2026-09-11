@@ -21,7 +21,13 @@ export interface SectionProps {
   level?: 2 | 3;
   /** Пояснение под заголовком */
   description?: ReactNode;
-  /** Действие блока — в правом верхнем углу */
+  /**
+   * Действие блока — в правом верхнем углу.
+   *
+   * Не переносится: кнопка кита держит строку (`whitespace-nowrap`), и место
+   * уступает заголовок. Переносимый текст здесь (голая ссылка) отнял бы место у
+   * заголовка первым, и тот рвался бы там, где сейчас помещается.
+   */
   action?: ReactNode;
   /**
    * `compact` — служебные экраны (врач, администратор) и плотные списки.
@@ -84,8 +90,18 @@ export function Section({
       )}
     >
       <CardHeader className={cn(compact && "px-block")}>
+        {/* `min-w-0 break-words`: шапка карточки — сетка (`1fr auto` при
+            действии), и без `min-w-0` заголовок с именем без пробелов не
+            сжимался, а распирал блок. `hyphens-auto` — только рядом с
+            действием: там колонка бывает у́же обычного слова («Схема
+            лекарственной терапии» рядом с кнопкой на телефоне), и без переноса
+            по слогам оно рвалось посередине без дефиса. Без действия класс
+            ничего не спасает, а Chromium переносит по слогам везде, где
+            строка и так ломается, — «исклю- / чённый» при свободном месте. */}
         <CardTitle
           className={cn(
+            "min-w-0 break-words",
+            action && "hyphens-auto",
             level === 2 ? "text-section-title" : "text-card-title",
             titleHidden && "sr-only",
           )}
@@ -93,7 +109,9 @@ export function Section({
           <Heading className="m-0 font-semibold">{title}</Heading>
         </CardTitle>
         {description && (
-          <CardDescription className={cn(titleHidden && "sr-only")}>
+          <CardDescription
+            className={cn("min-w-0 break-words", titleHidden && "sr-only")}
+          >
             {description}
           </CardDescription>
         )}
