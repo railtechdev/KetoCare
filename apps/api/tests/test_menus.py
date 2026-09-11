@@ -9,7 +9,7 @@ from datetime import date
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from api.deps.auth import get_session
 from api.main import API_PREFIX, create_app
@@ -104,6 +104,21 @@ async def _recipe(
         )
     await session.flush()
     return recipe
+
+
+async def _legacy_zero_servings(session, recipe_id) -> None:
+    """Рецепт с нулём порций — такие остались от CSV-импорта, приводившего «0,5»
+    к нулю.
+
+    Схема записи рецепта (`RecipeWrite`, `ge=1`) такой не пропустит, поэтому строка
+    правится прямо в базе. Обновляется только сам рецепт: `expire_all` сделал бы
+    устаревшими и пользователей теста, и их чтение шло бы синхронно.
+    """
+
+    await session.execute(text("UPDATE recipes SET servings = 0 WHERE id = :id"), {"id": recipe_id})
+    recipe = await session.get(Recipe, recipe_id)
+    if recipe is not None:
+        await session.refresh(recipe)
 
 
 async def _custom_dish(session, patient, *, ingredients: Sequence[tuple[Product, float]]):
@@ -514,6 +529,31 @@ class TestValidation:
         )
         assert response.status_code == 422
         assert "опубликованные" in response.json()["error"]["message"]
+
+    async def test_recipe_without_servings_is_named_not_a_server_error(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Меню делит состав на число порций: ноль ронял сохранение дня пятисоткой."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+        await _legacy_zero_servings(session, recipe.id)
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+        body = response.json()["error"]
+        assert "порций" in body["message"]
+        assert body["details"]["recipe_id"] == str(recipe.id)
 
     async def test_unknown_recipe_rejected(
         self, client, session, make_user, make_patient, auth_headers

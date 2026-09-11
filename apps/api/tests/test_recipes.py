@@ -14,7 +14,7 @@ from datetime import date
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps.auth import get_session
@@ -310,6 +310,68 @@ class TestCreate:
             headers=auth_headers(dietitian),
         )
         assert response.status_code == 422
+
+
+async def _legacy_zero_servings(session, recipe_id) -> None:
+    """Рецепт с нулём порций — такие остались от CSV-импорта, приводившего «0,5»
+    к нулю.
+
+    Схема записи рецепта (`RecipeWrite`, `ge=1`) такой не пропустит, поэтому строка
+    правится прямо в базе. Обновляется только сам рецепт: `expire_all` сделал бы
+    устаревшими и пользователей теста, и их чтение шло бы синхронно.
+    """
+
+    await session.execute(text("UPDATE recipes SET servings = 0 WHERE id = :id"), {"id": recipe_id})
+    recipe = await session.get(Recipe, recipe_id)
+    if recipe is not None:
+        await session.refresh(recipe)
+
+
+class TestRecipeWithoutServings:
+    """Рецепт с нулём порций — наследство импорта, приводившего «0,5» к нулю."""
+
+    async def test_is_not_published(self, client, session, make_user, auth_headers, make_recipe):
+        """Опубликованный рецепт с нулём порций семья добавила бы в меню, и день
+        не сохранился бы."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await make_recipe((butter, 50), author=dietitian)
+        await _legacy_zero_servings(session, uuid.UUID(recipe["id"]))
+
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(dietitian)
+        )
+
+        assert response.status_code == 422, response.text
+        assert "порций" in response.json()["error"]["message"]
+
+    async def test_can_still_be_unpublished(
+        self, client, session, make_user, auth_headers, make_recipe
+    ):
+        """Снять такой рецепт с публикации — первое, что сделает диетолог.
+
+        Первая версия этой правки ставила в базе CHECK `servings >= 1` NOT VALID,
+        а он проверяет каждое обновление старой строки: снятие с публикации и
+        загрузка фото такого рецепта стали бы 500 (это UPDATE; физическое удаление
+        CHECK не затрагивает). Тест держит этот
+        путь открытым, если ограничение когда-нибудь вернут без проверки строк.
+        """
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await make_recipe((butter, 50), author=dietitian)
+        published = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(dietitian)
+        )
+        assert published.status_code == 200, published.text
+        await _legacy_zero_servings(session, uuid.UUID(recipe["id"]))
+
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/unpublish", headers=auth_headers(dietitian)
+        )
+
+        assert response.status_code == 200, response.text
 
 
 class TestUnpublish:

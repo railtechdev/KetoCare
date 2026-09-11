@@ -420,7 +420,20 @@ def _servings(item: MenuItemWrite, recipes: dict[uuid.UUID, Recipe]) -> int:
 
     if item.recipe_id is None:
         return 1
-    return recipes[item.recipe_id].servings
+    recipe = recipes[item.recipe_id]
+    # Ноль порций ронял сохранение дня делением в `totals_from_items` — пятисотка,
+    # и семья теряла весь день. Такие рецепты остались от CSV-импорта, который
+    # приводил «0,5» к нулю. Ограничения в базе нет намеренно: CHECK проверяет и
+    # любое обновление старой строки, и снятие такого рецепта с публикации или
+    # загрузка фото стали бы 500. Поэтому отказ здесь и называет рецепт.
+    if recipe.servings < 1:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"У рецепта «{recipe.title}» не указано число порций, и посчитать его "
+            "для меню нельзя. Выберите другое блюдо или сообщите диетологу.",
+            details={"recipe_id": str(recipe.id)},
+        )
+    return recipe.servings
 
 
 async def _compositions(
