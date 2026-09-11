@@ -96,3 +96,24 @@ describe("токены темы", () => {
     expect(found).toEqual([]);
   });
 });
+
+describe("тач-цель на сенсорном вводе", () => {
+  it("кнопка-иконка получает и ширину 44 px, а не только высоту", () => {
+    // Базовое правило задавало одну высоту: кнопка-иконка оставалась 36 × 44,
+    // уже пальца там, где подписи нет. Замер на /dev/ui — 36 × 44 → 44 × 44.
+    const coarse = CSS.slice(CSS.indexOf("@media (pointer: coarse)"));
+    expect(coarse).toMatch(
+      /\[data-size\^="icon"\]\s*\{\s*min-width:\s*var\(--spacing-touch\);/,
+    );
+  });
+
+  it("правило держится на атрибуте, который ставит сам Button кита", () => {
+    // Обновление shadcn без `data-size` молча сняло бы ширину со всех иконок.
+    const button = readFileSync(
+      join(SRC, "components", "ui", "button.tsx"),
+      "utf-8",
+    );
+    expect(button).toContain("data-size={size}");
+    expect(button).toMatch(/icon: "size-9"/);
+  });
+});

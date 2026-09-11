@@ -31,7 +31,7 @@ import {
   toast,
   WarningBanner,
 } from "@ketocare/ui";
-import { Inbox } from "lucide-react";
+import { Inbox, Pencil, Trash2, X } from "lucide-react";
 
 import { Field, SelectField, TextAreaField } from "../components/Field";
 import { PageLayout } from "../components/PageLayout";
@@ -63,6 +63,17 @@ export function UiShowcase() {
           <Button disabled>Заблокирована</Button>
           <Button size="sm">Мелкая</Button>
           <Button size="lg">Крупная</Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-block">
+          <Button variant="ghost" size="icon" aria-label="Переименовать">
+            <Pencil />
+          </Button>
+          <Button variant="outline" size="icon" aria-label="Удалить">
+            <Trash2 />
+          </Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Закрыть">
+            <X />
+          </Button>
         </div>
       </Section>
 
