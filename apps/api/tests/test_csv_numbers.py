@@ -45,6 +45,8 @@ class TestRejected:
             "1,2,3",
             "12 г",
             "0x10",
+            "５",
+            "1٥",
         ],
     )
     def test_what_float_would_take_but_a_table_would_not_write(self, raw: str) -> None:

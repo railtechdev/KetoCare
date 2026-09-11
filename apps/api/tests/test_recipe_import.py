@@ -143,6 +143,15 @@ class TestParsing:
         assert not report.ok
         assert any(error.column == "grams" for error in report.errors), report.errors
 
+    @pytest.mark.parametrize("value", ["2.5", "0,5"])
+    def test_fractional_servings_are_rejected(self, value):
+        """«0,5» становилось нулём порций (деление на ноль в меню), «2,5» — двумя."""
+
+        report = parse_csv(_csv(f'Омлет,breakfast,120,"{value}","1. Растопите.",Масло,30'))
+
+        assert not report.ok
+        assert any(error.column == "servings" for error in report.errors), report.errors
+
     def test_comma_decimal_grams_accepted(self):
         report = parse_csv(_csv('Омлет,breakfast,120,1,"1. Растопите.",Масло,"30,5"'))
 

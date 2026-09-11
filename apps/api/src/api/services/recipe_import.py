@@ -251,7 +251,7 @@ def _header(
         category = RecipeCategory.BREAKFAST
 
     yield_g = _number(row, "yield_g", line, errors, maximum=YIELD_MAX)
-    servings = _number(row, "servings", line, errors, maximum=MAX_SERVINGS)
+    servings = _number(row, "servings", line, errors, maximum=MAX_SERVINGS, integer=True)
     if len(title) > TITLE_MAX:
         # Иначе строка проходит превью чисто, а на записи роняет вставку: в
         # таблице `title` — varchar(255), и СУБД ответит пятисоткой вместо
@@ -296,7 +296,13 @@ def _ingredient(row: dict[str, Any], line: int) -> tuple[ParsedIngredient | None
 
 
 def _number(
-    row: dict[str, Any], column: str, line: int, errors: list[RowError], *, maximum: float
+    row: dict[str, Any],
+    column: str,
+    line: int,
+    errors: list[RowError],
+    *,
+    maximum: float,
+    integer: bool = False,
 ) -> float | None:
     raw = (row.get(column) or "").strip()
     if not raw:
@@ -306,6 +312,12 @@ def _number(
     value = parse_decimal(raw)
     if value is None:
         errors.append(RowError(line, column, f"Ожидалось число, получено: {raw!r}."))
+        return None
+    # Порции — целое число. Дробное проходило и приводилось через `int()`:
+    # «0,5» становилось нулём порций, и добавление рецепта в меню делило на
+    # ноль, а «2,5» молча превращалось в 2 — каждая порция на четверть больше.
+    if integer and not value.is_integer():
+        errors.append(RowError(line, column, f"Ожидалось целое число, получено: {raw!r}."))
         return None
     if value <= 0:
         errors.append(RowError(line, column, "Значение должно быть больше нуля."))
