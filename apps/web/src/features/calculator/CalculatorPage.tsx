@@ -787,7 +787,8 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           {patientId === undefined ? (
             <HandOffToPatient
               rows={rows}
-              blockedBy={tooHeavyReason ?? actionsBusyReason}
+              blockedBy={tooHeavyReason}
+              waitingFor={actionsBusyReason}
             />
           ) : (
             <SaveDishForm

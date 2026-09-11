@@ -35,10 +35,16 @@ import { useSaveDishMutation } from "./useCalcMutations";
 export function HandOffToPatient({
   rows,
   blockedBy = null,
+  waitingFor = null,
 }: {
   rows: DishRow[];
   /** Почему набранный состав передать нельзя — например, масса тяжелее предела. */
   blockedBy?: string | null;
+  /**
+   * Чего передача ждёт и что пройдёт само — например, подбора граммовки. Как у
+   * формы сохранения, называется последним: сначала то, что устраняет человек.
+   */
+  waitingFor?: string | null;
 }) {
   const { t } = useTranslation("calculator");
   const navigate = useNavigate();
@@ -48,7 +54,11 @@ export function HandOffToPatient({
   const [patient, setPatient] = useState<Patient | null>(null);
   const save = useSaveDishMutation(patient?.id ?? null);
 
-  const ready = title.trim() !== "" && patient !== null && blockedBy === null;
+  const ready =
+    title.trim() !== "" &&
+    patient !== null &&
+    blockedBy === null &&
+    waitingFor === null;
 
   return (
     <Section
@@ -61,7 +71,8 @@ export function HandOffToPatient({
         onSubmit={(event) => {
           event.preventDefault();
           // Та же причина, что выключает кнопку, — и для отправки в обход неё.
-          if (patient === null || blockedBy !== null) return;
+          if (patient === null || blockedBy !== null || waitingFor !== null)
+            return;
 
           save.mutate(
             { title: title.trim(), rows },
@@ -127,7 +138,9 @@ export function HandOffToPatient({
             blockedBy ??
             (title.trim() === ""
               ? t("handoff.blocked.noTitle")
-              : t("handoff.blocked.noPatient"))
+              : patient === null
+                ? t("handoff.blocked.noPatient")
+                : (waitingFor ?? undefined))
           }
         />
       </form>
