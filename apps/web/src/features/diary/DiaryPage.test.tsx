@@ -112,22 +112,46 @@ describe("DiaryPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("на будущую дату форма кетонов называет причину, а не просит указать дату", async () => {
-    // Будущий замер гасил пометку «нет замеров» у врача. Сервер такую запись
-    // отклонит, но общим «проверьте поля»; причину обязана назвать форма — и
-    // именно у кетонов и веса, а не только у приступа, где её подключили сначала.
-    const user = userEvent.setup();
-    renderPage({ kind: "ketones" });
+  // Препаратов в списке нет: без схемы врача у семьи нет и формы (тест ниже).
+  it.each([
+    ["ketones", "Добавить"],
+    ["weight", "Добавить"],
+    ["meals", "Добавить"],
+    ["side-effects", "Добавить"],
+    // Мастер приступа проверяет дату уже на первом шаге.
+    ["seizures", "Далее"],
+  ])(
+    "на будущую дату форма «%s» называет причину, а не просит указать дату",
+    async (kind, submit) => {
+      // Будущий замер гасил пометку «нет замеров» у врача. Сервер такую запись
+      // отклонит, но общим «проверьте поля»; причину обязана назвать каждая
+      // форма — сначала её подключили только к приступу.
+      const user = userEvent.setup();
+      renderPage({ kind });
 
-    await user.click(
-      await screen.findByRole("button", { name: "Добавить запись" }),
-    );
-    const dialog = await screen.findByRole("dialog", { name: "Новая запись" });
-    fireEvent.change(within(dialog).getByLabelText("Дата и время"), {
-      target: {
-        value: toDateTimeLocalInput(new Date(Date.now() + 24 * 60 * 60 * 1000)),
-      },
-    });
+      await user.click(
+        await screen.findByRole("button", { name: "Добавить запись" }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Новая запись",
+      });
+      fireEvent.change(within(dialog).getByLabelText("Дата и время"), {
+        target: {
+          value: toDateTimeLocalInput(
+            new Date(Date.now() + 24 * 60 * 60 * 1000),
+          ),
+        },
+      });
+      await user.click(within(dialog).getByRole("button", { name: submit }));
+
+      expect(
+        await within(dialog).findByText(/Это время ещё не наступило/),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).queryByText("Укажите дату и время события."),
+      ).not.toBeInTheDocument();
+    },
+  );
     await user.click(within(dialog).getByRole("button", { name: "Добавить" }));
 
     expect(
