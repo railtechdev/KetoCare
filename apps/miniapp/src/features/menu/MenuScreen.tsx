@@ -68,6 +68,15 @@ export function MenuScreen({ session }: { session: Session }) {
           />
         )}
       </AsyncSection>
+
+      {/* Отказ отметки называется словами: без сети она отказывает сразу
+          (ADR-0034), и галочка, молча вернувшаяся назад, читалась бы как
+          «нажатие не сработало» — родитель жал бы снова, не зная почему. */}
+      {mark.isError && (
+        <WarningBanner level="danger" title={t("menu.markFailed")}>
+          {errorMessageOf(mark.error) ?? t("home.loadErrorHint")}
+        </WarningBanner>
+      )}
     </main>
   );
 }

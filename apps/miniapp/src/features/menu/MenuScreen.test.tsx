@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
+import { NetworkError } from "@ketocare/api-client";
+
 import "../../lib/i18n";
 import { api } from "../../lib/api";
 import { MenuScreen } from "./MenuScreen";
@@ -88,6 +90,25 @@ describe("план дня в Mini App", () => {
         expect.objectContaining({ body: { eaten: true } }),
       );
     });
+  });
+
+  it("отметка, не дошедшая до сервера, называет причину", async () => {
+    // Без сети отметка отказывает сразу (ADR-0034); молча вернувшаяся галочка
+    // читалась бы как «нажатие не сработало».
+    (api.POST as Mock).mockImplementation(() =>
+      Promise.reject(new NetworkError()),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("checkbox", { name: /Омлет/ }));
+
+    expect(
+      await screen.findByText("Отметка не сохранилась"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Нет связи с сервером. Проверьте подключение."),
+    ).toBeInTheDocument();
   });
 
   it("снимает ошибочную отметку", async () => {
