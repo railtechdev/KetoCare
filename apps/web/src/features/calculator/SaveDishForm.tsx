@@ -52,7 +52,13 @@ export function SaveDishForm({
           // Выключенная кнопка — не единственная защита: форма — последняя
           // проверка перед сохранением (сервер исключённое ребёнку не сверяет),
           // и отправка в обход кнопки не должна её миновать.
-          if (blockedBy !== null || waitingFor !== null) return;
+          if (
+            title.trim() === "" ||
+            rows.length === 0 ||
+            blockedBy !== null ||
+            waitingFor !== null
+          )
+            return;
           save.mutate(
             { title: title.trim(), rows },
             {

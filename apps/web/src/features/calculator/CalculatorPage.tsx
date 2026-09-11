@@ -257,21 +257,30 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    */
   const solvedItems = solve.data?.dish.items;
   const scaledItems = scale.data?.dish.items;
+  const resultItems = solvedItems ?? scaledItems;
 
-  useEffect(() => {
-    const items = solvedItems ?? scaledItems;
-    if (items === undefined) return;
-
-    const grams = new Map(items.map((item) => [item.product_id, item.grams]));
-    setRows((current) =>
-      current.map((row) => {
-        const next = grams.get(row.product.id);
-        return next === undefined || next === row.grams
-          ? row
-          : { ...row, grams: next };
-      }),
-    );
-  }, [solvedItems, scaledItems]);
+  // Перенос — во время рендера, а не в эффекте. Обновление из пассивного
+  // эффекта React откладывает в отдельную задачу, и между двумя коммитами
+  // «Сохранить» и «Передать» были открыты со старыми граммами: ответ подбора
+  // уже пришёл (ожидание снято), а проверка ещё относилась к прежнему составу.
+  // Клик или Enter в это окно отправляли в блюда ребёнка граммы до подбора.
+  const [appliedItems, setAppliedItems] = useState(resultItems);
+  if (resultItems !== appliedItems) {
+    setAppliedItems(resultItems);
+    if (resultItems !== undefined) {
+      const grams = new Map(
+        resultItems.map((item) => [item.product_id, item.grams]),
+      );
+      setRows((current) =>
+        current.map((row) => {
+          const next = grams.get(row.product.id);
+          return next === undefined || next === row.grams
+            ? row
+            : { ...row, grams: next };
+        }),
+      );
+    }
+  }
 
   // Исключения приходят от сервера: сопоставить состав с тем, что ребёнку
   // нельзя, может только он — в браузере нет ни аллергий, ни каталога.

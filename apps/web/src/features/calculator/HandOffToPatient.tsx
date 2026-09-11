@@ -71,8 +71,7 @@ export function HandOffToPatient({
         onSubmit={(event) => {
           event.preventDefault();
           // Та же причина, что выключает кнопку, — и для отправки в обход неё.
-          if (patient === null || blockedBy !== null || waitingFor !== null)
-            return;
+          if (!ready || patient === null) return;
 
           save.mutate(
             { title: title.trim(), rows },
