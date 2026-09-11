@@ -363,8 +363,14 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const saveBlockedBy =
     tooHeavyReason ??
     (verify.isError && checkedNow ? t("save.blocked.checkFailed") : null);
+  // Подбор и пересчёт тоже расчёт: пока они идут (или ждут связи), в составе
+  // ещё не те граммы, что сохранятся, — иначе после возврата связи в блюда
+  // ребёнка ушли бы граммы до подбора, а экран показал бы подобранные.
+  const actionsBusyReason =
+    solve.isPending || scale.isPending ? t("actionsBusy") : null;
   const saveWaitsFor =
-    verify.isSuccess && checkedNow ? null : t("save.blocked.notChecked");
+    actionsBusyReason ??
+    (verify.isSuccess && checkedNow ? null : t("save.blocked.notChecked"));
   const scaleBlockedBy = noRows
     ? t("blocked.noRows")
     : tooHeavyReason !== null
@@ -374,8 +380,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         : t("blocked.noFactor");
   // Показывается причина того действия, ради которого экран открывают: подбор
   // первый и главный. Если он доступен, а пересчёт нет — говорит пересчёт.
-  const actionsBlockedBy = solveBlockedBy ?? scaleBlockedBy;
+  const blockedBy = solveBlockedBy ?? scaleBlockedBy;
   const reasonId = useId();
+  const waitingId = useId();
+  const refusalId = useId();
 
   const infeasible = errorCodeOf(solve.error) === "infeasible_calculation";
   const actionError = solve.isError || scale.isError;
@@ -419,6 +427,25 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   // TanStack продолжает её сам. На повторе без сети говорят отказ и
   // «Повторяем…».
   const waitingForNetwork = verify.isPaused && !retrying;
+  // Без сети подбор и пересчёт тоже не уходят, а ждут связи, и кнопка стояла
+  // на «Подбираем…» без причины. Если о связи уже говорит проверка — строкой
+  // ожидания или плашкой повтора, — второй строкой с тем же текстом это не
+  // повторяется (правило П27), и занятая кнопка описывается тем, что на экране.
+  const actionsPaused = solve.isPaused || scale.isPaused;
+  const verifyWaitingId = waitingForNetwork
+    ? waitingId
+    : retrying && verify.isPaused && refusalMessage !== null
+      ? refusalId
+      : null;
+  const actionWaitingReason =
+    actionsPaused && verifyWaitingId === null ? t("waitingForNetwork") : null;
+  const actionsBlockedBy = actionWaitingReason ?? blockedBy;
+  const actionsWaitingDescription =
+    actionWaitingReason !== null
+      ? reasonId
+      : actionsPaused && verifyWaitingId !== null
+        ? verifyWaitingId
+        : undefined;
 
   function resetActions() {
     solve.reset();
@@ -516,6 +543,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         {/* Область постоянна: живую область, появившуюся вместе с текстом,
             озвучивают не все программы чтения с экрана. Пустая — вне потока. */}
         <p
+          id={waitingId}
           role="status"
           className={
             waitingForNetwork ? "m-0 text-sm text-muted-foreground" : "sr-only"
@@ -552,7 +580,9 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
             прежний отказ не показывается — он о другом составе. */}
         {refusalMessage !== null && (
           <div className="flex flex-col items-start gap-field">
-            <FormError>{refusalMessage}</FormError>
+            <div id={refusalId}>
+              <FormError>{refusalMessage}</FormError>
+            </div>
             {/* Повтор — только при сбое: отказ по данным при том же составе
                 повторится слово в слово (правило в ките, общее с Mini App). */}
             {(retrying || canRetry(errorCodeOf(verify.error))) && (
@@ -626,9 +656,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               min={0}
               step={1}
               value={proteinMin ?? ""}
-              onChange={(e) =>
-                setProteinMin(e.target.value === "" ? null : +e.target.value)
-              }
+              onChange={(e) => {
+                // Подбор, ждущий связи, иначе вписал бы раскладку по прежнему
+                // пределу, и вердикт этого не заметил бы: пределов он не судит.
+                setProteinMin(e.target.value === "" ? null : +e.target.value);
+                solve.reset();
+              }}
               className="tabular-nums"
             />
             <Field
@@ -641,9 +674,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               min={0}
               step={1}
               value={carbsMax ?? ""}
-              onChange={(e) =>
-                setCarbsMax(e.target.value === "" ? null : +e.target.value)
-              }
+              onChange={(e) => {
+                setCarbsMax(e.target.value === "" ? null : +e.target.value);
+                solve.reset();
+              }}
               className="tabular-nums"
             />
           </div>
@@ -657,7 +691,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                 disabled={solveBlockedBy !== null || busy}
                 aria-busy={solve.isPending}
                 aria-describedby={
-                  solveBlockedBy === null ? undefined : reasonId
+                  solveBlockedBy !== null ? reasonId : actionsWaitingDescription
                 }
                 onClick={() => {
                   if (targets === null) return;
@@ -690,7 +724,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                 min={0.1}
                 step={0.1}
                 value={factor}
-                onChange={(event) => setFactor(Number(event.target.value))}
+                onChange={(event) => {
+                  // Пересчёт, ждущий связи, иначе вписал бы граммы по прежнему
+                  // множителю — как в Mini App.
+                  setFactor(Number(event.target.value));
+                  scale.reset();
+                }}
                 className="tabular-nums"
               />
               <Button
@@ -700,7 +739,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                 disabled={scaleBlockedBy !== null || busy}
                 aria-busy={scale.isPending}
                 aria-describedby={
-                  scaleBlockedBy === null ? undefined : reasonId
+                  scaleBlockedBy !== null ? reasonId : actionsWaitingDescription
                 }
                 onClick={() => {
                   solve.reset();
@@ -746,7 +785,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               в карте ребёнка — сразу в его блюда, в общем калькуляторе —
               вместе с выбором ребёнка. */}
           {patientId === undefined ? (
-            <HandOffToPatient rows={rows} blockedBy={tooHeavyReason} />
+            <HandOffToPatient
+              rows={rows}
+              blockedBy={tooHeavyReason ?? actionsBusyReason}
+            />
           ) : (
             <SaveDishForm
               patientId={patientId}
