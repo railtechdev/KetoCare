@@ -9,6 +9,7 @@ import {
   exceedsCalcGrams,
   mealTargetsFrom,
 } from "@ketocare/ui";
+import { onlineManager } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -412,6 +413,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const duplicateOfVerify =
     verifyShown && actionMessage === errorMessageOf(verify.error);
   const busy = solve.isPending || scale.isPending;
+  // Без сети проверка не уходит, а ждёт связи (`isPaused`). Результат прежнего
+  // запуска мутация при старте уже сбросила, и блок расчёта пропадал без
+  // единого слова — будто состав не считается вовсе. С возвратом сети
+  // TanStack продолжает её сам. На повторе без сети говорят отказ и
+  // «Повторяем…».
+  const waitingForNetwork = verify.isPaused && !retrying;
 
   function resetActions() {
     solve.reset();
@@ -506,6 +513,16 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           }}
         />
 
+        {/* Область постоянна: живую область, появившуюся вместе с текстом,
+            озвучивают не все программы чтения с экрана. Пустая — вне потока. */}
+        <p
+          role="status"
+          className={
+            waitingForNetwork ? "m-0 text-sm text-muted-foreground" : "sr-only"
+          }
+        >
+          {waitingForNetwork ? t("waitingForNetwork") : ""}
+        </p>
         {/* Пустой расчёт молчит: о том, что состав не набран, уже сказано в
             блоке состава — строкой над этим. Своя фраза здесь была вторым
             сообщением об одном и том же (правило П27 канона), и вместе с
@@ -550,7 +567,18 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                 aria-busy={retrying || undefined}
                 onClick={() => {
                   if (retrying) return;
-                  setRetry({ input: verifyInput, message: refusalMessage });
+                  // Без сети повтор не уходит, а ждёт: прежний отказ («что-то
+                  // пошло не так») рядом с «Повторяем…» не говорил главного.
+                  // Текст ожидания запоминается как показанный отказ — и после
+                  // возврата сети плашка не возвращается к старому отказу, а
+                  // новый отказ объявит себя сам. Пауза бывает только при
+                  // запуске без сети: мутация, начатая с сетью, падает.
+                  setRetry({
+                    input: verifyInput,
+                    message: onlineManager.isOnline()
+                      ? refusalMessage
+                      : t("waitingForNetwork"),
+                  });
                   runVerify();
                 }}
               >
@@ -564,7 +592,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         {/* Постоянная область: появившаяся вместе с текстом объявляется не
             всеми программами чтения с экрана. */}
         <p role="status" className="sr-only">
-          {retrying
+          {retrying && !verify.isPaused
             ? t("common:actions.retrying")
             : announceRetryFailed
               ? refusalMessage

@@ -1,5 +1,15 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -22,6 +32,8 @@ const OTHER_PATIENT_ID = "33333333-3333-4333-8333-333333333333";
 const BUTTER = "22222222-2222-4222-8222-222222222222";
 
 const PRESCRIBED_RATIO = 3.5;
+
+const WAITING = "Нет связи — посчитаем, когда она появится.";
 
 /** Задержка автопересчёта (400 мс) плюс запас: findBy по умолчанию ждёт 1 с. */
 const AUTO_CALC_TIMEOUT_MS = 3000;
@@ -392,6 +404,227 @@ describe("калькулятор", () => {
     );
 
     expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+  });
+
+  it("без сети говорит, что ждёт связи, и досчитывает с её возвратом", async () => {
+    // Без сети проверка встаёт на паузу, а прежний результат мутация при
+    // старте уже сбросила: блок расчёта пропадал без единого слова.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+
+      expect(
+        await screen.findByText(WAITING, undefined, {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("«Повторить» без сети говорит о сети одним голосом", async () => {
+    // Сетевой отказ без тела даёт «Что-то пошло не так», и после нажатия без
+    // сети оно висело рядом с «Повторяем…», не называя причины.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : Promise.resolve({ data: VERIFIED, error: undefined });
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+
+      const busy = await screen.findByRole("button", { name: "Повторяем…" });
+      expect(busy).toHaveFocus();
+      expect(await screen.findAllByText(WAITING)).toHaveLength(1);
+      expect(screen.queryByText(/Что-то пошло не так/)).not.toBeInTheDocument();
+      expect(
+        screen
+          .getAllByRole("status")
+          .some((el) => el.textContent === "Повторяем…"),
+      ).toBe(false);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("после возврата сети повтор не возвращает на плашку прежний отказ", async () => {
+    // Возобновлённый запрос идёт уже с сетью: плашка показывала бы «Что-то
+    // пошло не так» на всё время запроса, хотя человек видел «Нет связи».
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : new Promise(() => {});
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      expect(await screen.findAllByText(WAITING)).toHaveLength(1);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() => expect(verifyCalls).toBe(2));
+      // Возобновление объявляет скрытая строка — и только она.
+      await waitFor(() =>
+        expect(
+          screen
+            .getAllByRole("status")
+            .some((el) => el.textContent === "Повторяем…"),
+        ).toBe(true),
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Повторяем…" }),
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(WAITING)).toHaveLength(1);
+      expect(screen.queryByText(/Что-то пошло не так/)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("повтор, упавший после возврата сети, объявляется один раз", async () => {
+    // Отказ отличается от текста ожидания — плашка объявит его сама, а
+    // скрытая строка второй раз его не повторяет.
+    (api.POST as Mock).mockImplementation((path: string) =>
+      path.includes("verify")
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : Promise.resolve({ data: SOLVED, error: undefined }),
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      expect(await screen.findAllByText(WAITING)).toHaveLength(1);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+
+      expect(await screen.findAllByText(/Что-то пошло не так/)).toHaveLength(1);
+      expect(
+        screen
+          .getAllByRole("status")
+          .some((el) => el.textContent?.includes("Что-то пошло не так")),
+      ).toBe(false);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("правка без сети снимает прежние числа, называет причину и не даёт сохранить", async () => {
+    // Ради этого сценария и строка ожидания: результат был, сеть пропала,
+    // человек поправил массу — числа исчезли, а сохранение обязано ждать
+    // ответа по новому составу.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return Promise.resolve({ data: VERIFIED, error: undefined });
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeEnabled();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(screen.getByLabelText(/Масса продукта/), "0");
+
+      expect(
+        await screen.findByText(WAITING, undefined, {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument();
+      expect(save).toBeDisabled();
+      expect(
+        screen.getByText(/Сохранить можно после расчёта/),
+      ).toBeInTheDocument();
+      expect(verifyCalls).toBe(1);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled(),
+      );
+      expect(verifyCalls).toBe(2);
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it("после успешного повтора в карте ребёнка снова можно сохранить", async () => {

@@ -24,6 +24,14 @@ function targetsBody(targets: TargetsInput) {
 
 export function useVerifyMutation() {
   return useMutation({
+    // Экран калькулятора считает, что проверка встаёт на паузу, только если
+    // запущена без сети: по этому признаку «Повторить» запоминает текст
+    // ожидания. Так и есть лишь при `networkMode: "online"` без `retry` и без
+    // `scope` — с ними пауза разойдётся с сетью, а текст на плашке с паузой.
+    networkMode: "online",
+    // Явно, а не по умолчанию: общий `retry` для мутаций поставил бы на паузу
+    // запрос, начатый с сетью.
+    retry: false,
     mutationFn: async (input: {
       rows: DishRow[];
       targets?: TargetsInput;
