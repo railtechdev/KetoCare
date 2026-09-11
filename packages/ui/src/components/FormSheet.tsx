@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { cn } from "@ui/lib/cn";
 import { Button } from "./ui/button";
@@ -45,6 +45,15 @@ export interface FormSheetProps {
  * Отдельным экраном остаётся то, что экраном и является: объект со своим
  * адресом (рецепт, продукт, ребёнок) — правило П29.
  */
+const FOCUSABLE = [
+  'input:not([disabled]):not([type="hidden"])',
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "button:not([disabled])",
+  "a[href]",
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
 export function FormSheet({
   open,
   onOpenChange,
@@ -54,10 +63,23 @@ export function FormSheet({
   className,
   children,
 }: FormSheetProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         showCloseButton={false}
+        // Radix ставит фокус на первый фокусируемый элемент панели, а первой
+        // теперь стоит кнопка закрытия в шапке. Фокус уходит к первому полю
+        // тела, как было до переноса кнопки: иначе Enter по привычке закрывал
+        // панель, в том числе с одноразовым временным паролем. Тело пустое —
+        // фокус остаётся на кнопке закрытия.
+        onOpenAutoFocus={(event) => {
+          const first = bodyRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+          if (!first) return;
+          event.preventDefault();
+          first.focus();
+        }}
         className={cn("w-full overflow-y-auto sm:max-w-xl", className)}
       >
         {/* Кнопка закрытия — в строке заголовка, а не поверх него: встроенная
@@ -88,7 +110,9 @@ export function FormSheet({
           </SheetClose>
         </SheetHeader>
 
-        <div className="flex flex-col gap-block px-4 pb-4">{children}</div>
+        <div ref={bodyRef} className="flex flex-col gap-block px-4 pb-4">
+          {children}
+        </div>
       </SheetContent>
     </Sheet>
   );

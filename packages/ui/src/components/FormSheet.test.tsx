@@ -30,4 +30,41 @@ describe("FormSheet", () => {
     await user.click(close);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it("при открытии фокус встаёт на первое поле, а не на «Закрыть»", () => {
+    // Кнопка закрытия стоит в шапке, то есть первой в панели. Фокус на ней
+    // превращал привычный Enter в закрытие — в панели временного пароля
+    // пароль после этого второй раз не показать.
+    render(
+      <FormSheet
+        open
+        onOpenChange={vi.fn()}
+        title="Новый препарат"
+        closeLabel="Закрыть"
+      >
+        <label>
+          Название
+          <input />
+        </label>
+        <button type="button">Сохранить</button>
+      </FormSheet>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Название" })).toHaveFocus();
+  });
+
+  it("без полей фокус остаётся на кнопке закрытия", () => {
+    render(
+      <FormSheet
+        open
+        onOpenChange={vi.fn()}
+        title="Справка"
+        closeLabel="Закрыть"
+      >
+        <p>только текст</p>
+      </FormSheet>,
+    );
+
+    expect(screen.getByRole("button", { name: "Закрыть" })).toHaveFocus();
+  });
 });
