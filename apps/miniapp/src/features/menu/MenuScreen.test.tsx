@@ -122,6 +122,16 @@ describe("план дня в Mini App", () => {
       row.getByText("Нет связи с сервером. Проверьте подключение."),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Отметка не сохранилась")).toHaveLength(1);
+    // Причина читается и при фокусе на самой позиции.
+    expect(checkbox).toHaveAccessibleDescription(/Нет связи с сервером/);
+
+    // Следующее нажатие уводит баннер: он о последней отметке, а не о первой.
+    await user.click(screen.getByRole("checkbox", { name: /Суфле/ }));
+    const next = within(
+      screen.getByRole("checkbox", { name: /Суфле/ }).closest("li")!,
+    );
+    expect(await next.findByText("Отметка не сохранилась")).toBeInTheDocument();
+    expect(row.queryByText("Отметка не сохранилась")).not.toBeInTheDocument();
   });
 
   it("снимает ошибочную отметку", async () => {
