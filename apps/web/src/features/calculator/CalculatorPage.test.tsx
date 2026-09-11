@@ -996,6 +996,192 @@ describe("калькулятор", () => {
     expect(grams).not.toHaveAttribute("readonly");
   });
 
+  it("подбор без сети называет причину и доходит с возвратом связи", async () => {
+    // Мутация без сети встаёт на паузу: кнопка стояла на «Подбираем…» серой,
+    // и ни слова о том, почему.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      );
+
+      const busy = await screen.findByRole("button", { name: "Подбираем…" });
+      expect(busy).toHaveAccessibleDescription(WAITING);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+        ).toHaveValue(29),
+      );
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("пересчёт порций без сети тоже называет причину и доходит с возвратом связи", async () => {
+    (api.POST as Mock).mockImplementation(async (path: string) => ({
+      data: path.includes("solve")
+        ? SOLVED
+        : path.includes("scale")
+          ? {
+              dish: {
+                ...VERIFIED.dish,
+                items: [{ ...VERIFIED.dish.items[0], grams: 100 }],
+              },
+            }
+          : VERIFIED,
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: /Пересчитать порции/ }),
+      );
+
+      const busy = await screen.findByRole("button", {
+        name: "Пересчитываем…",
+      });
+      expect(busy).toHaveAccessibleDescription(WAITING);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+        ).toHaveValue(100),
+      );
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("правка предела на паузе не даёт подбору переписать граммовку", async () => {
+    // Раскладка по прежнему пределу углеводов легла бы в состав после
+    // возврата связи, и вердикт этого не заметил бы: пределов он не судит.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      );
+      await screen.findByRole("button", { name: "Подбираем…" });
+      await user.type(screen.getByLabelText(/Углеводы не более/), "5");
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() =>
+        expect(
+          (api.POST as Mock).mock.calls.some(([path]) =>
+            String(path).includes("solve"),
+          ),
+        ).toBe(true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(
+        screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+      ).toHaveValue(50);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("о связи говорит одна строка, когда ждут и проверка, и подбор", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(screen.getByLabelText(/Масса продукта/), "0");
+      expect(
+        await screen.findByText(WAITING, undefined, {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        }),
+      ).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      );
+
+      const busy = await screen.findByRole("button", { name: "Подбираем…" });
+      expect(screen.getAllByText(WAITING)).toHaveLength(1);
+      expect(busy).toHaveAccessibleDescription(WAITING);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("подбор на повторе без сети описан плашкой повтора", async () => {
+    // Плашка повтора уже говорит о сети — строка действий не повторяет её, а
+    // занятая кнопка описана самой плашкой.
+    (api.POST as Mock).mockImplementation((path: string) =>
+      path.includes("verify")
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : Promise.resolve({ data: SOLVED, error: undefined }),
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      expect(await screen.findAllByText(WAITING)).toHaveLength(1);
+      await user.click(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      );
+
+      const busy = await screen.findByRole("button", { name: "Подбираем…" });
+      expect(screen.getAllByText(WAITING)).toHaveLength(1);
+      expect(busy).toHaveAccessibleDescription(WAITING);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("подбор недоступен, пока не задана цель, и говорит об этом", async () => {
     // Подбирать граммовку не подо что: цель — вход этого действия. Но серая
     // кнопка без объяснения — это тупик: заказчица так и не дошла до подбора,
