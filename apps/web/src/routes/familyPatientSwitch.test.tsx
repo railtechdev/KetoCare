@@ -2,12 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
+import { PatientGate } from "../features/patients/PatientGate";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
 import i18n from "../lib/i18n";
 import { api } from "../lib/api";
 import calculatorRu from "../locales/ru/calculator.json";
+import commonRu from "../locales/ru/common.json";
+import type { SectionSearch } from "../router";
 import { SectionRouter } from "../test/SectionRouter";
 import { SectionRoute } from "./SectionRoute";
 
@@ -80,23 +84,51 @@ beforeEach(() => {
   (api.POST as Mock).mockResolvedValue({ data: undefined, error: undefined });
 });
 
+/** Что сейчас в адресе: ребёнок | задача | объект | вкладка. */
+function SearchProbe() {
+  const search = useSearch({ from: "/app/$section" });
+  return (
+    <output data-testid="search">
+      {`${search.patient ?? ""}|${search.job ?? ""}|${search.item ?? ""}|${search.tab ?? ""}`}
+    </output>
+  );
+}
+
+function renderIn(section: string, search: SectionSearch, children: ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <SectionRouter section={section} search={search}>
+        {children}
+      </SectionRouter>
+    </QueryClientProvider>,
+  );
+}
+
+async function switchTo(patientId: string) {
+  const user = userEvent.setup();
+  // По подписи, а не первым полем выбора: на экране калькулятора свои
+  // списки, а связь подписи с полем переключателя проверяется заодно.
+  await user.selectOptions(
+    await screen.findByRole("combobox", { name: commonRu.nav.patient }),
+    patientId,
+  );
+}
+
 describe("кабинет семьи: смена ребёнка в шапке", () => {
   it("калькулятор берёт цель нового ребёнка, а не держит прежнюю", async () => {
     // У родителя двое детей. Выбор в шапке меняет `?patient=`, маршрут раздела
     // тот же. Без ключа по ребёнку экран сохранялся, и кетосоотношение первого
-    // ребёнка оставалось в цели второго: проверка уходила с его назначением
-    // чужим.
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const user = userEvent.setup();
-    render(
-      <QueryClientProvider client={client}>
-        <SectionRouter section="calculator" search={{ patient: FIRST }}>
-          <PatientSwitcher />
-          <SectionRoute />
-        </SectionRouter>
-      </QueryClientProvider>,
+    // ребёнка оставалось в цели второго.
+    renderIn(
+      "calculator",
+      { patient: FIRST },
+      <>
+        <PatientSwitcher />
+        <SectionRoute />
+      </>,
     );
 
     await waitFor(
@@ -104,10 +136,7 @@ describe("кабинет семьи: смена ребёнка в шапке", (
       { timeout: 5000 },
     );
 
-    await user.selectOptions(
-      document.querySelector("select") as HTMLSelectElement,
-      SECOND,
-    );
+    await switchTo(SECOND);
 
     await waitFor(
       () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue(4),
@@ -115,48 +144,91 @@ describe("кабинет семьи: смена ребёнка в шапке", (
     );
   }, 15000);
 
-  it("задача отчёта и открытый объект прежнего ребёнка к новому не переходят", async () => {
+  it("задача отчёта прежнего ребёнка к новому не переходит, вкладка остаётся", async () => {
     // Иначе экран отчёта второго ребёнка показывал готовность и ссылку на PDF
-    // первого, а калькулятор — блюдо из его списка.
-    function SearchProbe() {
-      const search = useSearch({ from: "/app/$section" });
-      return (
-        <output data-testid="search">
-          {`${search.patient ?? ""}|${search.job ?? ""}|${search.item ?? ""}|${search.tab ?? ""}`}
-        </output>
-      );
-    }
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const user = userEvent.setup();
-    render(
-      <QueryClientProvider client={client}>
-        <SectionRouter
-          section="reports"
-          search={{ patient: FIRST, job: "job-1", item: "dish:1", tab: "pdf" }}
-        >
-          <PatientSwitcher />
-          <SearchProbe />
-        </SectionRouter>
-      </QueryClientProvider>,
+    // первого.
+    renderIn(
+      "reports",
+      { patient: FIRST, job: "job-1", tab: "pdf" },
+      <>
+        <PatientSwitcher />
+        <SearchProbe />
+      </>,
     );
-
     expect(await screen.findByTestId("search")).toHaveTextContent(
-      `${FIRST}|job-1|dish:1|pdf`,
-    );
-    await waitFor(() =>
-      expect(document.querySelector("select")).not.toBeNull(),
+      `${FIRST}|job-1||pdf`,
     );
 
-    await user.selectOptions(
-      document.querySelector("select") as HTMLSelectElement,
-      SECOND,
-    );
+    await switchTo(SECOND);
 
-    // Вкладка — не о ребёнке и остаётся.
     await waitFor(() =>
       expect(screen.getByTestId("search")).toHaveTextContent(`${SECOND}|||pdf`),
+    );
+  });
+
+  it("своё блюдо прежнего ребёнка к новому не переходит", async () => {
+    // Своё блюдо принадлежит ребёнку: в калькуляторе другого оно не должно
+    // открыться.
+    renderIn(
+      "calculator",
+      { patient: FIRST, item: "dish:1" },
+      <>
+        <PatientSwitcher />
+        <SearchProbe />
+      </>,
+    );
+    expect(await screen.findByTestId("search")).toHaveTextContent(
+      `${FIRST}||dish:1|`,
+    );
+
+    await switchTo(SECOND);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("search")).toHaveTextContent(`${SECOND}|||`),
+    );
+  });
+
+  it("открытый рецепт от смены ребёнка не закрывается", async () => {
+    // Рецепт общий, от ребёнка не зависит: смена в шапке не должна закрывать
+    // его карточку.
+    renderIn(
+      "recipes",
+      { patient: FIRST, item: "r1" },
+      <>
+        <PatientSwitcher />
+        <SearchProbe />
+      </>,
+    );
+    expect(await screen.findByTestId("search")).toHaveTextContent(
+      `${FIRST}||r1|`,
+    );
+
+    await switchTo(SECOND);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("search")).toHaveTextContent(`${SECOND}||r1|`),
+    );
+  });
+
+  it("первый выбор ребёнка не теряет рецепт, пришедший ссылкой «В калькулятор»", async () => {
+    // Ребёнок ещё не выбран, гейт просит выбрать — а в адресе уже рецепт.
+    // После выбора он обязан остаться: за ним человек и пришёл.
+    const user = userEvent.setup();
+    renderIn(
+      "calculator",
+      { item: "recipe:r1" },
+      <>
+        <PatientGate render={() => <p>экран ребёнка</p>} />
+        <SearchProbe />
+      </>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Ребёнок 2" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("search")).toHaveTextContent(
+        `${SECOND}||recipe:r1|`,
+      ),
     );
   });
 });

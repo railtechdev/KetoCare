@@ -1,6 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback } from "react";
 
+import { parseIncoming } from "../calculator/incomingDish";
 import { usePatients } from "./usePatients";
 
 /**
@@ -35,11 +36,17 @@ export function useSelectedPatient() {
         search: (previous) => ({
           ...previous,
           patient: patientId,
-          // Открытый объект и задача PDF — о прежнем ребёнке: блюдо из его
-          // списка и готовый отчёт с его данными не должны открыться на
-          // экране другого. Вкладка и вид дневника — не о ребёнке и остаются.
-          item: undefined,
+          // Сбрасывается только то, что принадлежит ребёнку. Задача PDF —
+          // всегда о нём: готовый отчёт одного не должен открыться на экране
+          // другого. Из открытых объектов о ребёнке лишь своё блюдо (`dish:`);
+          // рецепт, продукт и профиль в разделе «Ребёнок» от выбора в шапке
+          // не зависят. Иначе первый выбор после ссылки «В калькулятор» терял
+          // рецепт, а смена ребёнка закрывала открытую карточку.
           job: undefined,
+          item:
+            parseIncoming(previous.item)?.kind === "dish"
+              ? undefined
+              : previous.item,
         }),
       });
     },
