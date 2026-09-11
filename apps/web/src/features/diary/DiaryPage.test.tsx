@@ -42,7 +42,14 @@ function respond(path: string) {
     return { data: { items: [], total: 0 } };
   }
   if (path === "/api/v1/dictionaries/seizure-types") {
-    return { data: { items: [], total: 0 } };
+    // Без типов мастер приступа показывает предупреждение вместо полей, и
+    // проверить дату в нём было бы нечем.
+    return {
+      data: {
+        items: [{ id: "st-1", name_ru: "Тонико-клонический", code: "TC" }],
+        total: 1,
+      },
+    };
   }
   return { data: { items: [], total: 0 } };
 }
