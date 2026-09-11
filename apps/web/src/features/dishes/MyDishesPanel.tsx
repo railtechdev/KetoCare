@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { Field } from "../../components/Field";
 import { SectionLink } from "../../components/SectionLink";
 import { PatientViewLink } from "../doctor/PatientViewLink";
-import { incomingDish } from "../calculator/incomingDish";
+import { incomingDish } from "../calculator/incomingItem";
 import { errorMessageOf } from "../../lib/api";
 import {
   useCustomDishes,

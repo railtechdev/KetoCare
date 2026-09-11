@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
-import { incomingRecipe } from "../calculator/incomingDish";
+import { incomingRecipe } from "../calculator/incomingItem";
 import { errorMessageOf } from "../../lib/api";
 import { formatGrams } from "./format";
 import { FileField } from "../../components/Field";

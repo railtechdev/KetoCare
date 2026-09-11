@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback } from "react";
 
-import { parseIncoming } from "../calculator/incomingDish";
+import { ownedByChild } from "../calculator/incomingItem";
 import { usePatients } from "./usePatients";
 
 /**
@@ -43,10 +43,7 @@ export function useSelectedPatient() {
           // не зависят. Иначе первый выбор после ссылки «В калькулятор» терял
           // рецепт, а смена ребёнка закрывала открытую карточку.
           job: undefined,
-          item:
-            parseIncoming(previous.item)?.kind === "dish"
-              ? undefined
-              : previous.item,
+          item: ownedByChild(previous.item) ? undefined : previous.item,
         }),
       });
     },

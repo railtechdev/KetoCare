@@ -16,7 +16,7 @@ function ItemProbe() {
   const search = useSearch({ from: "/app/$section" });
   return <span data-testid="item-param">{search.item ?? "—"}</span>;
 }
-import { incomingRecipe } from "./incomingDish";
+import { incomingRecipe } from "./incomingItem";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();

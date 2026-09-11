@@ -9,7 +9,7 @@ import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import type { Patient } from "../doctor/types";
 import { PatientPicker } from "../patients/PatientPicker";
-import { incomingDish } from "./incomingDish";
+import { incomingDish } from "./incomingItem";
 import type { DishRow } from "./types";
 import { useSaveDishMutation } from "./useCalcMutations";
 

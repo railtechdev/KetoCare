@@ -3,48 +3,12 @@ import type { components } from "@ketocare/api-client";
 
 import { api } from "../../lib/api";
 import { useCustomDishes } from "../dishes/useCustomDishes";
+import type { Incoming } from "./incomingItem";
 import type { DishRow } from "./types";
 import type { ProductOption } from "./useProducts";
 
 type Recipe = components["schemas"]["RecipeRead"];
 type CustomDish = components["schemas"]["CustomDishRead"];
-
-/**
- * Что пришло в калькулятор через `?item=`.
- *
- * Раньше это был только идентификатор продукта из справочника. Теперь тем же
- * параметром приходит готовое блюдо — рецепт или своя раскладка: у вкладки
- * «Пересчитать» не было источника вовсе, и «пересчитать готовое блюдо»
- * начиналось с набора состава руками, то есть не давало ничего сверх
- * «Проверить».
- *
- * Префикс, а не отдельный параметр: значение по-прежнему описывает один
- * предмет, который экран должен открыть, и разбирать его в одном месте дешевле,
- * чем сводить два параметра, которые могут прийти вместе.
- */
-export type Incoming =
-  | { kind: "product"; id: string }
-  | { kind: "recipe"; id: string }
-  | { kind: "dish"; id: string };
-
-export function parseIncoming(item: string | undefined): Incoming | null {
-  if (item === undefined || item === "") return null;
-  if (item.startsWith("recipe:")) {
-    return { kind: "recipe", id: item.slice("recipe:".length) };
-  }
-  if (item.startsWith("dish:")) {
-    return { kind: "dish", id: item.slice("dish:".length) };
-  }
-  return { kind: "product", id: item };
-}
-
-export function incomingRecipe(recipeId: string): string {
-  return `recipe:${recipeId}`;
-}
-
-export function incomingDish(dishId: string): string {
-  return `dish:${dishId}`;
-}
 
 /**
  * Состав пришедшего блюда строками калькулятора.
