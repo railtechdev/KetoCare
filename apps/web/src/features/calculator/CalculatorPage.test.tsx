@@ -566,6 +566,16 @@ describe("калькулятор", () => {
     expect(save).toBeDisabled();
     const reason = await screen.findByText(/Сохранить можно после расчёта/);
     expect(save).toHaveAttribute("aria-describedby", reason.id);
+
+    // Отправка в обход выключенной кнопки не проходит тоже: форма — последняя
+    // проверка, сервер исключённое ребёнку при сохранении не сверяет.
+    fireEvent.submit(save.closest("form") as HTMLFormElement);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      (api.POST as Mock).mock.calls.some(([path]) =>
+        String(path).includes("custom-dishes"),
+      ),
+    ).toBe(false);
   });
 
   it("после правки состава сохранение не включается ни на миг до нового ответа", async () => {

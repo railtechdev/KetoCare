@@ -8,6 +8,7 @@ import i18n from "../lib/i18n";
 import { api } from "../lib/api";
 import calculatorRu from "../locales/ru/calculator.json";
 import doctorRu from "../locales/ru/doctor.json";
+import { patientKey } from "../features/patients/usePatient";
 import { PatientRouter } from "../test/PatientRouter";
 import { PatientViewRoute } from "./PatientViewRoute";
 
@@ -96,6 +97,13 @@ describe("раздел карты пациента", () => {
     // поэтому сохранённый экран её не обновлял.
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
+    });
+    // Второй пациент уже в кэше — так бывает, когда врач открывал его раньше
+    // или его подгрузил поиск переключателя. Только тогда маршрут не отдаёт
+    // пустоту на время загрузки, экран не размонтируется сам, и дефект виден.
+    client.setQueryData(patientKey(SECOND), {
+      id: SECOND,
+      full_name: "Пациент 2",
     });
     const user = userEvent.setup();
     render(
