@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -78,6 +82,27 @@ beforeEach(() => {
 });
 
 describe("план дня в Mini App", () => {
+  it("пауза без сети объясняется словами, а не пустотой", async () => {
+    // Без сети запрос не уходит и не отказывает: он ждёт связи и продолжится
+    // сам, когда она вернётся (ADR-0036). Экран при этом показывал пустоту —
+    // ни объяснения, ни выхода, — и план дня выглядел несуществующим.
+    (api.GET as Mock).mockImplementation(() => new Promise(() => undefined));
+    onlineManager.setOnline(false);
+
+    try {
+      renderScreen();
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+      expect(api.GET).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("отмечает съеденное", async () => {
     const user = userEvent.setup();
     renderScreen();

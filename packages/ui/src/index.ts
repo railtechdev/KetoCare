@@ -67,6 +67,7 @@ export { TargetBar } from "./components/TargetBar";
 export type { TargetBarProps } from "./components/TargetBar";
 
 export { Section } from "./components/Section";
+export { StatusNote } from "./components/StatusNote";
 export type { SectionProps } from "./components/Section";
 
 export { TabsBar } from "./components/TabsBar";

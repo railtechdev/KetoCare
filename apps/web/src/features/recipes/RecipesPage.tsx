@@ -208,7 +208,7 @@ export function RecipesPage() {
                 onReset={resetFilters}
               />
 
-              {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+              {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанную выдачу. */}
               <AsyncSection
                 loading={recipes.isLoading}
@@ -265,7 +265,7 @@ export function RecipesPage() {
             onReset={resetFilters}
           />
 
-          {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+          {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанную выдачу. */}
           <AsyncSection
             loading={recipes.isLoading}

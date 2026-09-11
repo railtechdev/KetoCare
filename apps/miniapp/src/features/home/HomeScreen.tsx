@@ -50,6 +50,11 @@ export function HomeScreen({ session }: { session: Session }) {
               }
             : null
         }
+        waiting={
+          overview.fetchStatus === "paused"
+            ? t("errors.waitingForNetwork")
+            : null
+        }
         retryLabel={t("actions.retry")}
         onRetry={() => void overview.refetch()}
         isEmpty={false}
