@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
+import { exceedsCalcGrams } from "@ketocare/ui";
 
 import { api } from "../../lib/api";
 
@@ -84,8 +85,14 @@ export function useVerify(
   rows: DishRow[],
   targets: Targets | null,
 ) {
+  // Массу тяжелее предела сервер не примет: вместо показателей пришёл бы
+  // общий отказ, а причину экран уже называет у поля.
   const ready =
-    rows.length > 0 && rows.every((row) => parseAmount(row.grams) > 0);
+    rows.length > 0 &&
+    rows.every((row) => {
+      const grams = parseAmount(row.grams);
+      return grams > 0 && !exceedsCalcGrams(grams);
+    });
 
   return useQuery({
     queryKey: [

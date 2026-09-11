@@ -7,18 +7,23 @@ packages/keto_engine): корректность маппинга, наличие
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from api.schemas_calc import CALC_GRAMS_MAX
 from core.models import Product, ProductCategory
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
 from keto_engine import ENGINE_VERSION
 
 pytestmark = pytest.mark.asyncio
+
+REPO = Path(__file__).resolve().parents[3]
 
 BUTTER = {
     "product_id": "butter",
@@ -315,6 +320,42 @@ class TestHugeNumbers:
 
         assert response.status_code == 422, response.text
         assert response.json()["error"]["code"] == "validation_error"
+
+
+class TestGramsLimitMirroredInKit:
+    """Предел массы позиции продублирован в ките: экраны проверяют его до запроса.
+
+    Потребители — калькуляторы кабинета (`apps/web/src/features/calculator`) и
+    Mini App (`apps/miniapp/src/features/calculator`), оба через
+    `packages/ui/src/lib/calcLimits.ts`. Разойдись числа — экран либо пропустит
+    массу, на которую сервер ответит общим отказом без слова о поле, либо
+    запретит допустимую.
+    """
+
+    async def test_kit_constant_equals_schema_bound(self):
+        source = (REPO / "packages/ui/src/lib/calcLimits.ts").read_text(encoding="utf-8")
+        match = re.search(r"^export const CALC_GRAMS_MAX = (\d+(?:\.\d+)?);$", source, re.MULTILINE)
+
+        assert match is not None, "в ките не нашлось объявления CALC_GRAMS_MAX"
+        assert float(match.group(1)) == CALC_GRAMS_MAX
+
+    @pytest.mark.parametrize(
+        ("grams", "status"), [(CALC_GRAMS_MAX, 200), (CALC_GRAMS_MAX + 0.1, 422)]
+    )
+    async def test_the_bound_itself_is_accepted(
+        self, client, make_user, auth_headers, grams, status
+    ):
+        # Кит считает сам предел допустимым (`exceedsCalcGrams(5000)` — нет);
+        # здесь закреплено, что и сервер проверяет «не больше», а не «меньше».
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/verify",
+            json={"ingredients": [BUTTER], "items": [{"product_id": "butter", "grams": grams}]},
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == status, response.text
 
 
 class TestSolve:

@@ -1,4 +1,12 @@
-import { Button, EmptyState, Input, MacroFacts, cn } from "@ketocare/ui";
+import {
+  Button,
+  CALC_GRAMS_MAX,
+  EmptyState,
+  Input,
+  MacroFacts,
+  cn,
+  exceedsCalcGrams,
+} from "@ketocare/ui";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -66,6 +74,10 @@ export function DishRows({
     <ul className="m-0 flex list-none flex-col gap-field p-0">
       {rows.map((row) => {
         const contribution = contributions?.get(row.product.id);
+        // Массу тяжелее предела сервер не примет. Сказать об этом обязано
+        // само поле: общий отказ расчёта не называл ни поля, ни предела.
+        const tooHeavy = exceedsCalcGrams(row.grams);
+        const errorId = `grams-${row.product.id}-error`;
 
         return (
           <li
@@ -94,8 +106,11 @@ export function DishRows({
                   type="number"
                   inputMode="decimal"
                   min={0}
+                  max={CALC_GRAMS_MAX}
                   step={1}
                   readOnly={readOnlyGrams}
+                  aria-invalid={tooHeavy || undefined}
+                  aria-describedby={tooHeavy ? errorId : undefined}
                   value={Number.isFinite(row.grams) ? row.grams : ""}
                   onChange={(event) =>
                     onChangeGrams?.(row.product.id, Number(event.target.value))
@@ -125,6 +140,12 @@ export function DishRows({
                 )}
               </div>
             </div>
+
+            {tooHeavy && (
+              <p id={errorId} className="m-0 text-sm text-destructive">
+                {t("gramsTooMuch", { max: CALC_GRAMS_MAX })}
+              </p>
+            )}
 
             {/* Вклад позиции — компонентом кита: те же числа и то же
                 округление стоят в Mini App, а две копии однажды разошлись бы.

@@ -484,6 +484,52 @@ describe("калькулятор", () => {
     expect(screen.queryByText(/Для подбора нужна цель/)).toBeNull();
   });
 
+  it("масса тяжелее предела названа у поля и у кнопки и в расчёт не уходит", async () => {
+    // Сервер не принимает позицию тяжелее 5000 г. До этой проверки показатели
+    // пропадали, а на их месте стоял общий отказ — без слова о поле и пределе.
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    expect(
+      await screen.findByText(/374 ккал/, undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+
+    const grams = screen.getByLabelText(/Масса продукта/);
+    await user.clear(grams);
+    await user.type(grams, "5001");
+
+    const fieldError = screen.getByText(/Не больше 5000 г/);
+    expect(grams).toHaveAttribute("aria-invalid", "true");
+    expect(grams).toHaveAttribute("aria-describedby", fieldError.id);
+
+    const scale = screen.getByRole("button", { name: /Пересчитать порции/ });
+    expect(scale).toBeDisabled();
+    const reason = screen.getByText(
+      "Масса продукта «Масло сливочное» больше 5000 г.",
+    );
+    expect(scale).toHaveAttribute("aria-describedby", reason.id);
+    // Подбор граммов не берёт, он их пишет: предел ему не мешает.
+    expect(
+      screen.getByRole("button", { name: /Подобрать граммовку/ }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByText("Сохранить как моё блюдо"),
+    ).not.toBeInTheDocument();
+
+    // Числа прежней массы уходят — они о другом блюде, — а тяжёлая масса на
+    // сервер не отправляется вовсе.
+    await waitFor(
+      () => expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument(),
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    const sent = (api.POST as Mock).mock.calls
+      .filter(([path]) => String(path).includes("verify"))
+      .map(([, options]) => options.body.items[0].grams);
+    expect(sent).not.toContain(5001);
+  });
+
   it("причина не говорит о назначении: экран работает и без ребёнка", async () => {
     // Калькулятор специалиста открывается без выбранного пациента (ADR-0027),
     // и «у ребёнка нет назначения» было бы там утверждением о ком-то, кого он
