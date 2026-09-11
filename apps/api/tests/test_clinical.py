@@ -606,6 +606,10 @@ class TestMedications:
             headers=auth_headers(doctor),
         )
         assert without_code.status_code == 422
+        # Отказ именно из-за кода, а не по другой причине схемы.
+        assert [error["field"] for error in without_code.json()["error"]["details"]["fields"]] == [
+            "frequency_code"
+        ]
 
         response = await client.put(
             url,

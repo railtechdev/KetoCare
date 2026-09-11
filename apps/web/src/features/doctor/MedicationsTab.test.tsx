@@ -292,7 +292,7 @@ describe("кратность приёма из списка", () => {
     );
 
     expect(
-      await screen.findByText(/Раньше кратность записывалась словами/),
+      await screen.findByText(doctorRu.medications.frequencyLegacyHint),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Кратность")).toHaveValue("");
     expect(screen.getByLabelText(/Уточнение к кратности/)).toHaveValue(
@@ -305,5 +305,43 @@ describe("кратность приёма из списка", () => {
       await screen.findByText("Выберите кратность из списка."),
     ).toBeInTheDocument();
     expect(api.PUT).not.toHaveBeenCalled();
+  });
+
+  it("правка старой записи: выбранный код и прежние слова уходят вместе", async () => {
+    // Слова переносит в уточнение кабинет, а не сервер: потеря их при отправке
+    // стёрла бы кратность, которую врач однажды записал.
+    medications = [
+      {
+        id: "m3",
+        patient_id: PATIENT_ID,
+        drug_name: "Топирамат",
+        dose: "25 мг",
+        frequency_code: null,
+        frequency: "на ночь",
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+    ];
+    (api.PUT as Mock).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Изменить назначение препарата Топирамат",
+      }),
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Кратность"),
+      "1 раз в сутки",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalled());
+    const body = (api.PUT as Mock).mock.calls[0]?.[1]?.body;
+    expect(body).toMatchObject({
+      frequency_code: "once_daily",
+      frequency: "на ночь",
+    });
   });
 });
