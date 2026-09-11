@@ -4,6 +4,8 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  SEARCH_DELAY_MS,
+  useDebouncedValue,
 } from "@ketocare/ui";
 import { PackageSearch } from "lucide-react";
 import { useId, useState } from "react";
@@ -91,7 +93,12 @@ export function ProductPicker({
 
   const listId = useId();
   const inputId = useId();
-  const { data, isFetching, isError, error, refetch } = useProductSearch(query);
+  // Запрос уходит, когда набор стоит спокойно, — как у всех поисков: без
+  // задержки каждая буква после второй шла полнотекстовым запросом к базе.
+  const debouncedQuery = useDebouncedValue(query, SEARCH_DELAY_MS);
+  const settling = query.trim() !== debouncedQuery.trim();
+  const { data, isFetching, isError, error, refetch } =
+    useProductSearch(debouncedQuery);
 
   const recent = useRecentProducts(patientId);
 
@@ -112,8 +119,14 @@ export function ProductPicker({
   // ждать, и повторяла запрос по буквам. Ответ нужен явный, и вместе с ним —
   // выход: справочник по тому же слову, где видно, что продукта нет вовсе, а
   // не что опечатка в наборе.
+  // Пока набор не устоялся, запроса по нему ещё не было: «ничего не нашлось»
+  // в эту паузу было бы ответом на прежние буквы.
   const nothingFound =
-    query.trim().length >= 2 && !isFetching && !isError && options.length === 0;
+    query.trim().length >= 2 &&
+    !settling &&
+    !isFetching &&
+    !isError &&
+    options.length === 0;
 
   function pick(product: ProductOption | undefined) {
     if (!product) return;
