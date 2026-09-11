@@ -243,7 +243,9 @@ export function ProductPicker({
         >
           <span className="flex items-center gap-field">
             <PackageSearch aria-hidden="true" className="size-4 shrink-0" />
-            <span>
+            {/* Запрос набирает человек: вставленный артикул или адрес без
+                пробелов раздвигал бы строку. */}
+            <span className="min-w-0 break-words">
               {canOpenRecipes
                 ? t("noMatchesDish", { query: query.trim() })
                 : t("noMatches", { query: query.trim() })}
