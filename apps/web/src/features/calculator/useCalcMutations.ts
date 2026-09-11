@@ -55,6 +55,10 @@ export function useVerifyMutation() {
 
 export function useSolveMutation() {
   return useMutation({
+    // Расчёт, а не запись: ничего не сохраняет и без сети ждёт связи со
+    // строкой ожидания на экране. Закреплено против общего «отказ сразу» для
+    // записей (ADR-0034).
+    networkMode: "online",
     mutationFn: async (input: {
       rows: DishRow[];
       targets: TargetsInput;
@@ -77,6 +81,10 @@ export function useSolveMutation() {
 
 export function useScaleMutation() {
   return useMutation({
+    // Расчёт, а не запись: ничего не сохраняет и без сети ждёт связи со
+    // строкой ожидания на экране. Закреплено против общего «отказ сразу» для
+    // записей (ADR-0034).
+    networkMode: "online",
     mutationFn: async (input: { rows: DishRow[]; factor: number }) => {
       const { data, error } = await api.POST("/api/v1/calc/scale", {
         body: {

@@ -18,6 +18,11 @@ import { today, useMarkEaten, useMenu } from "./useMenu";
 function plannedMeals(items: readonly { meal_index: number }[]): number[] {
   return [...new Set(items.map((item) => item.meal_index))];
 }
+/** Причина отказа отметки — описание её чекбокса для скринридера. */
+function markFailedId(itemId: string): string {
+  return `mark-failed-${itemId}`;
+}
+
 /** Целые граммы — целыми: «50 г», а не «50.0 г». Дробные — с одним знаком. */
 function formatGrams(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -65,6 +70,8 @@ export function MenuScreen({ session }: { session: Session }) {
               mark.mutate({ itemId: item.id, eaten: !item.eaten })
             }
             pendingId={mark.isPending ? mark.variables?.itemId : undefined}
+            failedId={mark.isError ? mark.variables?.itemId : undefined}
+            failure={errorMessageOf(mark.error) ?? t("menu.markFailedHint")}
           />
         )}
       </AsyncSection>
@@ -76,10 +83,14 @@ function DayPlan({
   menu,
   onToggle,
   pendingId,
+  failedId,
+  failure,
 }: {
   menu: Menu;
   onToggle: (item: MenuItem) => void;
   pendingId: string | undefined;
+  failedId: string | undefined;
+  failure: string;
 }) {
   const { t } = useTranslation();
 
@@ -120,6 +131,9 @@ function DayPlan({
                       className="mt-1 size-5 shrink-0 accent-primary"
                       checked={item.eaten}
                       disabled={pendingId === item.id}
+                      aria-describedby={
+                        failedId === item.id ? markFailedId(item.id) : undefined
+                      }
                       onChange={() => {
                         onToggle(item);
                       }}
@@ -135,6 +149,22 @@ function DayPlan({
                       )}
                     </span>
                   </label>
+
+                  {/* Отказ отметки называется словами и стоит под той
+                      позицией, которую не приняли: без сети отметка отказывает
+                      сразу (ADR-0034), а галочка, молча вернувшаяся назад,
+                      читалась бы как «нажатие не сработало». Внизу экрана
+                      баннер на телефоне оказывался ниже сгиба. */}
+                  {failedId === item.id && (
+                    <WarningBanner
+                      id={markFailedId(item.id)}
+                      level="danger"
+                      title={t("menu.markFailed")}
+                      className="mt-1 ml-9 w-auto"
+                    >
+                      {failure}
+                    </WarningBanner>
+                  )}
 
                   {/* Что и сколько взвесить — по требованию, как в кабинете:
                       у плиты нужна граммовка, при беглом взгляде — названия.

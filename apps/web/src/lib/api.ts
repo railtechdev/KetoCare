@@ -1,5 +1,7 @@
 import { createApiClient, NetworkError } from "@ketocare/api-client";
 
+import i18n from "./i18n";
+
 /**
  * Единственная точка обращения к API (раздел 8.4 ТЗ): ручных fetch во фронтенде
  * быть не должно — клиент генерируется из OpenAPI (`make openapi`).
@@ -88,16 +90,17 @@ export function errorCodeOf(body: unknown): string | null {
 }
 
 /**
- * Ответа нет вовсе: запрос не дошёл до сервера (нет сети, сервер недоступен).
+ * Готовое к показу объяснение отказа: сообщение сервера (оно уже на русском)
+ * или, если запрос до сервера не дошёл, «нет связи».
+ *
+ * Отказ сети назван здесь, а не в каждой форме: записи без сети отказывают
+ * сразу (ADR-0034), и шаблон «сообщение сервера или „что-то пошло не так“»,
+ * повторённый в формах, иначе называл бы обрыв связи непонятной ошибкой.
  * Клиент API отдаёт такой отказ отдельным классом — не по `TypeError`, который
  * бросает и ошибка в коде.
  */
-export function isNetworkFailure(error: unknown): boolean {
-  return error instanceof NetworkError;
-}
-
-/** Готовое к показу сообщение из ответа API — оно уже локализовано сервером. */
 export function errorMessageOf(body: unknown): string | null {
+  if (body instanceof NetworkError) return i18n.t("common:errors.network");
   if (
     typeof body === "object" &&
     body !== null &&

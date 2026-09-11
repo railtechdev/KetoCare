@@ -167,6 +167,12 @@ export function MyDishesPanel({
                 onConfirm={() => {
                   remove.mutate(dish.id, {
                     onSuccess: () => toast.success(t("myDishes.deleted")),
+                    // Отказ, в том числе без сети (ADR-0034), не проходит молча:
+                    // иначе блюдо остаётся в списке без единого слова почему.
+                    onError: (error) =>
+                      toast.error(
+                        errorMessageOf(error) ?? t("common:errors.unexpected"),
+                      ),
                   });
                 }}
               />

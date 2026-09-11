@@ -169,6 +169,10 @@ export type Scale = components["schemas"]["ScaleResponse"];
  */
 export function useSolve(patientId: string) {
   return useMutation({
+    // Расчёт, а не запись: ничего не сохраняет и без сети ждёт связи со
+    // строкой ожидания на экране. Закреплено против общего «отказ сразу» для
+    // записей (ADR-0034).
+    networkMode: "online",
     mutationFn: async (input: {
       rows: DishRow[];
       targets: Targets;
@@ -195,6 +199,10 @@ export function useSolve(patientId: string) {
  */
 export function useScale() {
   return useMutation({
+    // Расчёт, а не запись: ничего не сохраняет и без сети ждёт связи со
+    // строкой ожидания на экране. Закреплено против общего «отказ сразу» для
+    // записей (ADR-0034).
+    networkMode: "online",
     mutationFn: async (input: {
       rows: DishRow[];
       factor: number;

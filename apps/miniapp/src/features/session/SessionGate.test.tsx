@@ -3,6 +3,8 @@ import { act, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { NetworkError } from "@ketocare/api-client";
+
 import "../../lib/i18n";
 import { notifySessionExpired } from "../../lib/api";
 import { SessionGate } from "./SessionGate";
@@ -121,6 +123,21 @@ describe("вход в Mini App", () => {
 });
 
 describe("истечение сессии посреди работы", () => {
+  it("без сети вход не висит, а говорит «не удалось открыть» с повтором", async () => {
+    // Запросы без сети отказывают сразу (ADR-0034), и отказ клиента не должен
+    // выйти за три известных экрану состояния.
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockImplementation(() => Promise.reject(new NetworkError()));
+    renderGate();
+
+    expect(
+      await screen.findByText("Не удалось открыть кабинет"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Повторить" }),
+    ).toBeInTheDocument();
+  });
+
   it("переоткрывает вход и честно называет отзыв привязки", async () => {
     // Отзыв привязки прежде выглядел как «проверьте связь» на каждом экране:
     // refresh мёртв, а истечение сессии не слушал никто (находка М4 аудита).

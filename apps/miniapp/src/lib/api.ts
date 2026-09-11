@@ -1,4 +1,6 @@
-import { createApiClient } from "@ketocare/api-client";
+import { createApiClient, NetworkError } from "@ketocare/api-client";
+
+import i18n from "./i18n";
 
 /**
  * Единственная точка обращения к API. Ручных `fetch` в экранах быть не должно —
@@ -100,8 +102,13 @@ export function errorCodeOf(body: unknown): string | null {
   return typeof error?.code === "string" ? error.code : null;
 }
 
-/** Человеческое сообщение из ответа API — его пишет сервер, и оно на русском. */
+/**
+ * Человеческое объяснение отказа: сообщение сервера (оно на русском) или, если
+ * запрос до сервера не дошёл, «нет связи». Отказ сети назван здесь, а не в
+ * каждом экране: записи без сети отказывают сразу (ADR-0034).
+ */
 export function errorMessageOf(body: unknown): string | null {
+  if (body instanceof NetworkError) return i18n.t("errors.network");
   if (typeof body !== "object" || body === null || !("error" in body))
     return null;
   const { error } = body as { error?: { message?: unknown } };
