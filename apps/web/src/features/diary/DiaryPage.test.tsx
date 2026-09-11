@@ -159,6 +159,32 @@ describe("DiaryPage", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("без справочника типов приступа объясняет, почему форму не открыть", async () => {
+    // Тип приступа берётся только из справочника: придумать идентификатор
+    // нельзя. Пустой справочник раньше ничем не проверялся — после того как
+    // мок стал отдавать тип, эта ветка формы осталась без теста вовсе.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/dictionaries/seizure-types"
+          ? { data: { items: [], total: 0 } }
+          : respond(path),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage({ kind: "seizures" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Добавить запись" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Новая запись" });
+
+    expect(
+      await within(dialog).findByText("Добавить приступ пока нельзя"),
+    ).toBeInTheDocument();
+    // Предупреждение вместо формы: полей, которые не сохранить, на экране нет.
+    expect(within(dialog).queryByLabelText("Дата и время")).toBeNull();
+  });
 });
 
 describe("вкладка «Лекарства» без схемы", () => {
