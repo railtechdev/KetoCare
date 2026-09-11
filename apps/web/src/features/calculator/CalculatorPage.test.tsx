@@ -19,6 +19,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import calculatorRu from "../../locales/ru/calculator.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { AUTO_CALC_DELAY_MS } from "./calcTiming";
 import { CalculatorPage, CalculatorView } from "./CalculatorPage";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -1332,11 +1333,54 @@ describe("калькулятор", () => {
     await user.click(
       screen.getByRole("button", { name: /Подобрать граммовку/ }),
     );
-    await screen.findByRole("button", { name: /Подобрать граммовку/ });
+    // Отсчёт — от пришедшего ответа, а не от клика: кнопка называется так же и
+    // до него.
+    await waitFor(() =>
+      expect(
+        (api.POST as Mock).mock.calls.some(([path]) =>
+          String(path).includes("solve"),
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Подобрать граммовку/ }),
+      ).not.toHaveAttribute("aria-busy", "true"),
+    );
     // Дольше задержки автопересчёта: лишняя проверка успела бы уйти.
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await new Promise((resolve) =>
+      setTimeout(resolve, AUTO_CALC_DELAY_MS + 300),
+    );
 
     expect(verifyCalls).toBe(1);
+  });
+
+  it("подбор, изменивший граммы, проверяет подобранный состав", async () => {
+    // Обратный контроль к соседнему тесту: тот же счёт проверок видит
+    // проверку, когда граммы действительно изменились.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("verify")) {
+        verifyCalls += 1;
+        return { data: VERIFIED, error: undefined };
+      }
+      return { data: SOLVED, error: undefined };
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await waitFor(() => expect(verifyCalls).toBe(1));
+
+    await user.click(
+      screen.getByRole("button", { name: /Подобрать граммовку/ }),
+    );
+
+    await waitFor(() => expect(verifyCalls).toBe(2), {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
   });
 
   it("форма сохранения не уходит в обход кнопки без названия", async () => {

@@ -34,6 +34,7 @@ import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
+import { AUTO_CALC_DELAY_MS } from "./calcTiming";
 import { SaveDishForm } from "./SaveDishForm";
 import type { DishRow } from "./types";
 import { useProduct } from "./useProducts";
@@ -43,14 +44,6 @@ import {
   useVerifyMutation,
   type TargetsInput,
 } from "./useCalcMutations";
-
-/**
- * Задержка автоматического пересчёта.
- *
- * Правка граммовки — это несколько нажатий подряд; без задержки каждое
- * уходило бы в расчёт. Та же величина, что у поисковых полей.
- */
-const AUTO_CALC_DELAY_MS = 400;
 
 /**
  * Калькулятор: один экран, три функции раздела 9 ТЗ.
