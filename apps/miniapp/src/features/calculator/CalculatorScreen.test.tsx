@@ -1185,8 +1185,192 @@ describe("калькулятор в Mini App", () => {
         screen.getByRole("button", { name: "Подобрать граммовку" }),
       );
 
-      await screen.findByRole("button", { name: "Считаем…" });
+      const busy = await screen.findByRole("button", { name: "Считаем…" });
       expect(screen.getAllByText(WAITING)).toHaveLength(1);
+      // Строка одна, но занятая кнопка описана ею — иначе программа чтения
+      // услышала бы «Считаем…» без причины.
+      expect(busy).toHaveAccessibleDescription(WAITING);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("подбор на прежних числах без сети описан строкой ожидания над ними", async () => {
+    // Возврат к прежней граммовке: числа из кэша на месте, перезапрос ждёт
+    // связи, и «Нет связи» стоит в строке вердикта — подбор описан ею.
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+    const grams = screen.getByLabelText(/Масло сливочное, граммы/);
+    await user.type(grams, "0");
+    await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(grams, "{Backspace}");
+      expect(await screen.findByText(WAITING)).toBeInTheDocument();
+      expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+
+      const busy = await screen.findByRole("button", { name: "Считаем…" });
+      expect(screen.getAllByText(WAITING)).toHaveLength(1);
+      expect(busy).toHaveAccessibleDescription(WAITING);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("пересчёт порций без сети тоже называет причину и доходит с возвратом связи", async () => {
+    respond({ "/calc/scale": scaleResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      const factor = screen.getByLabelText("Умножить на");
+      await user.clear(factor);
+      await user.type(factor, "2");
+      await user.click(
+        screen.getByRole("button", { name: "Пересчитать порции" }),
+      );
+
+      const busy = await screen.findByRole("button", { name: "Считаем…" });
+      expect(busy).toHaveAccessibleDescription(WAITING);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+          "15",
+        ),
+      );
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("правка предела на паузе не даёт подбору переписать граммовку", async () => {
+    // Раскладка по прежнему пределу углеводов легла бы в состав после
+    // возврата связи, и вердикт этого не заметил бы: пределов он не судит.
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+      await screen.findByRole("button", { name: "Считаем…" });
+      await user.type(screen.getByLabelText("Углеводы не больше, г"), "5");
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() =>
+        expect(
+          (api.POST as Mock).mock.calls.some(([path]) =>
+            String(path).endsWith("/calc/solve"),
+          ),
+        ).toBe(true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+        "30",
+      );
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("правка состава на паузе не даёт подбору переписать граммовку", async () => {
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+      await screen.findByRole("button", { name: "Считаем…" });
+      await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "0");
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() =>
+        expect(
+          (api.POST as Mock).mock.calls.some(([path]) =>
+            String(path).endsWith("/calc/solve"),
+          ),
+        ).toBe(true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+        "300",
+      );
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("подбор на повторе без сети называет причину строкой действий", async () => {
+    // Проверка упала, повтор ждёт связи: строки ожидания проверки нет — о
+    // повторе говорят отказ и «Повторяем…», и подбору некем описаться, кроме
+    // своей строки.
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (path.endsWith("/calc/solve")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams !== 30) {
+          return Promise.resolve({ data: verifyResponse() });
+        }
+        return Promise.resolve({
+          error: {
+            error: { code: "internal", message: "Внутренняя ошибка сервера." },
+          },
+        });
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      await screen.findByRole("button", { name: "Повторяем…" });
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+
+      const busy = await screen.findByRole("button", { name: "Считаем…" });
+      expect(busy).toHaveAccessibleDescription(WAITING);
     } finally {
       onlineManager.setOnline(true);
     }

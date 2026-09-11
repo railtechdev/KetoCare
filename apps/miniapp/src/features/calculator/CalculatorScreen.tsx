@@ -227,13 +227,6 @@ export function CalculatorScreen({ session }: { session: Session }) {
           carbs_max_g: parseAmount(carbsMax) > 0 ? parseAmount(carbsMax) : null,
         };
   const busy = solve.isPending || scale.isPending;
-  // Без сети подбор и пересчёт не уходят, а ждут связи, и кнопка стояла на
-  // «Считаем…» без причины. Когда о связи уже говорит проверка, второй
-  // строкой с тем же текстом это не повторяется (правило П27).
-  const actionWaitingReason =
-    (solve.isPaused || scale.isPaused) && !waitingForNetwork
-      ? t("calculator.waitingForNetwork")
-      : null;
 
   /**
    * Чего не хватает, чтобы нажать (правило П44 канона).
@@ -264,9 +257,9 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // Одна строка на блок действий, а не по одной на кнопку: при пустом составе
   // причины совпадают, и два одинаковых абзаца — второе сообщение об одном и
   // том же (правило П27), озвученное дважды.
-  const actionsBlockedBy =
-    actionWaitingReason ?? solveBlockedBy ?? scaleBlockedBy;
+  const blockedBy = solveBlockedBy ?? scaleBlockedBy;
   const reasonId = useId();
+  const waitingId = useId();
 
   const actionError = solve.error ?? scale.error;
   const infeasible = errorCodeOf(actionError) === "infeasible_calculation";
@@ -306,6 +299,24 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // скрыты, и молчать ради «Повторяем…», которого на экране нет, нельзя:
   // остались бы прежние числа без единого слова.
   const retryingShown = retrying && !staleInput;
+  // Без сети подбор и пересчёт не уходят, а ждут связи, и кнопка стояла на
+  // «Считаем…» без причины. Если о связи уже говорит строка проверки (над
+  // числами или вместо них), второй строкой с тем же текстом это не
+  // повторяется (правило П27) — занятая кнопка описывается той строкой. На
+  // повторе без сети строки проверки нет, и причину называет строка действий.
+  const actionsPaused = solve.isPaused || scale.isPaused;
+  const verifyWaitingShown = waitingForNetwork && !retryingShown;
+  const actionWaitingReason =
+    actionsPaused && !verifyWaitingShown
+      ? t("calculator.waitingForNetwork")
+      : null;
+  const actionsBlockedBy = actionWaitingReason ?? blockedBy;
+  const actionsWaitingDescription =
+    actionWaitingReason !== null
+      ? reasonId
+      : actionsPaused && verifyWaitingShown
+        ? waitingId
+        : undefined;
   // Отказал именно повтор: ошибок стало больше, чем было при нажатии. Сверка
   // счётчика — страховка на случай отмены запроса с откатом (`cancelQueries`):
   // он возвращается в прежнюю ошибку и покой, и без сверки скрытая строка
@@ -509,7 +520,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
             ожидания связи — иначе набранный состав остаётся без ответа и без
             объяснения. На повторе без сети говорят отказ и «Повторяем…». */}
         {dish === null && waitingForNetwork && !retryingShown && (
-          <p role="status" className="m-0 text-sm text-muted-foreground">
+          <p
+            id={waitingId}
+            role="status"
+            className="m-0 text-sm text-muted-foreground"
+          >
             {t("calculator.waitingForNetwork")}
           </p>
         )}
@@ -538,6 +553,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
             <Verdict
               stale={stale}
               waitingForNetwork={waitingForNetwork}
+              waitingId={waitingId}
               retrying={retryingShown}
               ratioOk={verdict?.ratio_within_tolerance}
               kcalOk={verdict?.kcal_within_tolerance}
@@ -567,13 +583,21 @@ export function CalculatorScreen({ session }: { session: Session }) {
             id="protein-min"
             label={t("calculator.proteinMin")}
             value={proteinMin}
-            onChange={setProteinMin}
+            onChange={(value) => {
+              // Подбор, ждущий связи, иначе вписал бы раскладку по прежнему
+              // пределу, и вердикт этого не заметил бы: пределов он не судит.
+              setProteinMin(value);
+              solve.reset();
+            }}
           />
           <NumberField
             id="carbs-max"
             label={t("calculator.carbsMax")}
             value={carbsMax}
-            onChange={setCarbsMax}
+            onChange={(value) => {
+              setCarbsMax(value);
+              solve.reset();
+            }}
           />
         </div>
         <p className="m-0 text-sm text-muted-foreground">
@@ -585,9 +609,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
           disabled={solveBlockedBy !== null || busy}
           aria-busy={solve.isPending}
           aria-describedby={
-            solveBlockedBy === null && actionWaitingReason === null
-              ? undefined
-              : reasonId
+            solveBlockedBy !== null ? reasonId : actionsWaitingDescription
           }
           onClick={() => {
             if (solveTargets === null) return;
@@ -617,9 +639,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
             disabled={scaleBlockedBy !== null || busy}
             aria-busy={scale.isPending}
             aria-describedby={
-              scaleBlockedBy === null && actionWaitingReason === null
-                ? undefined
-                : reasonId
+              scaleBlockedBy !== null ? reasonId : actionsWaitingDescription
             }
             onClick={() => {
               solve.reset();
@@ -815,12 +835,15 @@ function KcalDelta({
 function Verdict({
   stale,
   waitingForNetwork,
+  waitingId,
   retrying,
   ratioOk,
   kcalOk,
 }: {
   stale: boolean;
   waitingForNetwork: boolean;
+  /** Идентификатор строки ожидания: ею описана занятая кнопка подбора. */
+  waitingId: string;
   retrying: boolean;
   ratioOk: boolean | null | undefined;
   kcalOk: boolean | null | undefined;
@@ -832,7 +855,11 @@ function Verdict({
     // другим текстом зачитывался бы вперемешку с ней.
     if (retrying) return null;
     return (
-      <p role="status" className="m-0 text-sm text-muted-foreground">
+      <p
+        id={waitingForNetwork ? waitingId : undefined}
+        role="status"
+        className="m-0 text-sm text-muted-foreground"
+      >
         {waitingForNetwork
           ? t("calculator.waitingForNetwork")
           : t("calculator.recalculating")}
