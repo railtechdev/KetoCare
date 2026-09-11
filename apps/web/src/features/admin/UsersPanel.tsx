@@ -8,6 +8,8 @@ import {
   Section,
   formatOccurredAt,
   toast,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, RotateCcwKey, SearchX, UserPlus, Users } from "lucide-react";
@@ -18,7 +20,6 @@ import { InvitationsList } from "../invitations/InvitationsList";
 import { InviteForm } from "../invitations/InvitePanel";
 import type { Role } from "../invitations/useInvitations";
 import { errorMessageOf } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { Field, SelectField } from "../../components/Field";
 import { useSession } from "../auth/useSession";
 import { SubPageHeader } from "../../components/SubPageHeader";
@@ -54,7 +55,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   const [filter, setFilter] = useState<UsersFilter>(EMPTY_USERS_FILTER);
   // Задержка — чтобы запрос уходил не на каждую букву; отбор всё равно делает
   // сервер (см. `useAdminUsers`).
-  const debouncedQuery = useDebouncedValue(filter.q, 300);
+  const debouncedQuery = useDebouncedValue(filter.q, SEARCH_DELAY_MS);
   const users = useAdminUsers({ ...filter, q: debouncedQuery });
   const update = useUpdateUserMutation();
   const resetTotp = useResetTotpMutation();

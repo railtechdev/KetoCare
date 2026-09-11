@@ -6,12 +6,13 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useDishOptions, type DishOption } from "./useDishCatalog";
 
 interface Props {
@@ -52,7 +53,7 @@ export function DishPicker({
 
   const listId = useId();
   const inputId = useId();
-  const debounced = useDebouncedValue(query, 300);
+  const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const { options, isFetching, isError, error } = useDishOptions(
     patientId,
     debounced,

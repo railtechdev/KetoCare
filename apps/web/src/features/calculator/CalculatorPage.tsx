@@ -9,6 +9,7 @@ import {
   WarningBanner,
   exceedsCalcGrams,
   mealTargetsFrom,
+  useDebouncedValue,
 } from "@ketocare/ui";
 import { onlineManager } from "@tanstack/react-query";
 import {
@@ -20,7 +21,6 @@ import {
   useState,
 } from "react";
 
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";

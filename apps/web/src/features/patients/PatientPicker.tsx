@@ -10,12 +10,13 @@ import {
   PopoverContent,
   PopoverTrigger,
   cn,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import type { Patient } from "../doctor/types";
 import { usePatients } from "./usePatients";
 
@@ -57,7 +58,7 @@ export function PatientPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const debouncedQuery = useDebouncedValue(query, 300);
+  const debouncedQuery = useDebouncedValue(query, SEARCH_DELAY_MS);
   const patients = usePatients(debouncedQuery);
   const items = patients.data?.items ?? [];
 

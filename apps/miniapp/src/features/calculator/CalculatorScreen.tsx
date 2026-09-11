@@ -15,6 +15,8 @@ import {
   cn,
   exceedsCalcGrams,
   mealTargetsFrom,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import { Trash2 } from "lucide-react";
 import {
@@ -28,7 +30,6 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import type { Session } from "../session/useSession";
 import { usePatientOverview } from "../home/useOverview";
 import {
@@ -42,9 +43,6 @@ import {
   useSolve,
   useVerify,
 } from "./useCalculator";
-
-/** Задержка поиска продукта: запрос уходит, когда набор стоит спокойно. */
-const SEARCH_DELAY_MS = 400;
 
 /**
  * Калькулятор: один экран, три функции раздела 9 ТЗ.

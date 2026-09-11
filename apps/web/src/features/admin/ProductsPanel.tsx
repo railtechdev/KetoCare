@@ -6,6 +6,8 @@ import {
   RatioBadge,
   Section,
   toast,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Apple, PackageSearch, Plus, Upload, X } from "lucide-react";
@@ -15,7 +17,6 @@ import { useSectionItem } from "../../routes/useSectionTab";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useProductDetail } from "../products/useProductDetail";
 import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
@@ -95,7 +96,7 @@ export function ProductsPanel({
   const fetched = useProductDetail(missingFromRows ? item : null);
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
-  const debouncedQuery = useDebouncedValue(filters.q, 300);
+  const debouncedQuery = useDebouncedValue(filters.q, SEARCH_DELAY_MS);
   const products = useAdminProducts({ ...filters, q: debouncedQuery }, page);
 
   const rows = useMemo(() => products.data?.items ?? [], [products.data]);
