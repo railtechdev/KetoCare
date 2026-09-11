@@ -34,6 +34,7 @@ import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
+import { AUTO_CALC_DELAY_MS } from "./calcTiming";
 import { SaveDishForm } from "./SaveDishForm";
 import type { DishRow } from "./types";
 import { useProduct } from "./useProducts";
@@ -43,14 +44,6 @@ import {
   useVerifyMutation,
   type TargetsInput,
 } from "./useCalcMutations";
-
-/**
- * Задержка автоматического пересчёта.
- *
- * Правка граммовки — это несколько нажатий подряд; без задержки каждое
- * уходило бы в расчёт. Та же величина, что у поисковых полей.
- */
-const AUTO_CALC_DELAY_MS = 400;
 
 /**
  * Калькулятор: один экран, три функции раздела 9 ТЗ.
@@ -271,14 +264,18 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       const grams = new Map(
         resultItems.map((item) => [item.product_id, item.grams]),
       );
-      setRows((current) =>
-        current.map((row) => {
-          const next = grams.get(row.product.id);
-          return next === undefined || next === row.grams
-            ? row
-            : { ...row, grams: next };
-        }),
-      );
+      // Ни одна масса не изменилась — прежний массив: новый, пусть и с теми же
+      // числами, запускал бы лишнюю проверку и держал «Сохранить» ещё на неё.
+      setRows((current) => {
+        let changed = false;
+        const next = current.map((row) => {
+          const solved = grams.get(row.product.id);
+          if (solved === undefined || solved === row.grams) return row;
+          changed = true;
+          return { ...row, grams: solved };
+        });
+        return changed ? next : current;
+      });
     }
   }
 
