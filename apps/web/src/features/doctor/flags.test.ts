@@ -30,6 +30,7 @@ function overview(patch: Partial<PatientOverview> = {}): PatientOverview {
     last_weight: null,
     seizures_today: { entries: 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
+    monitoring_phase: "routine",
     ...patch,
   };
 }
@@ -244,6 +245,7 @@ describe("attentionRank", () => {
       attentionRank({
         noPrescription: false,
         daysSinceLastReading: 5,
+        strictMonitoring: false,
         staleData: true,
         nutritionOff: false,
         seizuresGrew: false,
@@ -253,6 +255,7 @@ describe("attentionRank", () => {
       attentionRank({
         noPrescription: false,
         daysSinceLastReading: 0,
+        strictMonitoring: false,
         staleData: false,
         nutritionOff: true,
         seizuresGrew: false,
@@ -344,5 +347,77 @@ describe("флаг роста приступов", () => {
     expect(grew?.staleData).toBe(false);
     expect(silent?.staleData).toBe(true);
     expect(attentionRank(grew)).toBeGreaterThan(attentionRank(silent));
+  });
+});
+
+/**
+ * Первый месяц терапии — строгое наблюдение (ответ клиники 09.09.2026, вопрос
+ * 11): «даже один день молчания будет звонком».
+ *
+ * Режим решает сервер (ему нужна дата начала терапии), кабинет выбирает по нему
+ * порог. «Один день молчания» — целые прошедшие сутки без записей: сегодня ещё
+ * идёт и молчанием не считается.
+ */
+describe("строгое наблюдение в первый месяц терапии", () => {
+  /** Последний замер веса за `daysAgo` суток до даты сводки 2026-08-28. */
+  function weighedDaysAgo(daysAgo: number): Partial<PatientOverview> {
+    const day = String(28 - daysAgo).padStart(2, "0");
+    return {
+      last_weight: {
+        weight_kg: 18.4,
+        occurred_at: `2026-08-${day}T09:00:00+05:00`,
+      } as unknown as PatientOverview["last_weight"],
+    };
+  }
+
+  it("помечает целые сутки без записей", () => {
+    // Последняя запись позавчера: вчера семья не внесла ничего.
+    const flags = computePatientFlags(
+      overview({ ...weighedDaysAgo(2), monitoring_phase: "strict" }),
+    );
+
+    expect(flags?.strictMonitoring).toBe(true);
+    expect(flags?.staleData).toBe(true);
+  });
+
+  it("не помечает семью, которая ещё не записала сегодня", () => {
+    // Последняя запись вчера. С порогом «1» пометка стояла бы с утра у каждой
+    // такой семьи — и перестала бы что-либо выделять.
+    const flags = computePatientFlags(
+      overview({ ...weighedDaysAgo(1), monitoring_phase: "strict" }),
+    );
+
+    expect(flags?.staleData).toBe(false);
+  });
+
+  it("после первого месяца порог прежний", () => {
+    // Обратная сторона: строгий порог не должен протечь в обычный контроль —
+    // иначе проверки выше прошли бы и на кабинете с порогом «2» для всех.
+    const flags = computePatientFlags(
+      overview({ ...weighedDaysAgo(2), monitoring_phase: "routine" }),
+    );
+
+    expect(flags?.strictMonitoring).toBe(false);
+    expect(flags?.staleData).toBe(false);
+  });
+
+  it("до начала терапии строгого режима нет", () => {
+    const flags = computePatientFlags(
+      overview({ ...weighedDaysAgo(2), monitoring_phase: "before_start" }),
+    );
+
+    expect(flags?.staleData).toBe(false);
+  });
+
+  it("без поля от сервера — обычный контроль, а не тревога", () => {
+    // Секунды между выкатом кабинета и перезапуском API: новая страница
+    // разговаривает со старым ответом.
+    const stale = overview(weighedDaysAgo(2)) as Partial<PatientOverview>;
+    delete stale.monitoring_phase;
+
+    const flags = computePatientFlags(stale as PatientOverview);
+
+    expect(flags?.strictMonitoring).toBe(false);
+    expect(flags?.staleData).toBe(false);
   });
 });

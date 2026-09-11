@@ -18,6 +18,7 @@ from core.models import KetoneLog, Menu, Prescription, WeightLog
 from core.repositories import menus as menus_repo
 from core.repositories import overview as overview_repo
 from core.repositories import prescriptions as prescriptions_repo
+from core.repositories import therapy as therapy_repo
 from core.repositories.overview import SeizureTotals
 from keto_engine import DishResult, Targets, within_tolerance
 
@@ -34,6 +35,7 @@ from ..schemas_overview import (
 )
 from .clock import local_today
 from .engine_version import comparable_to_current
+from .monitoring import monitoring_phase
 
 
 def _day_bounds(day: date) -> tuple[datetime, datetime]:
@@ -201,6 +203,13 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         windows=(_day_bounds(today), recent_window, previous_window),
     )
 
+    # Режим наблюдения считается от даты начала терапии — слова врача, иначе
+    # первого назначения (`therapy.started_on`). Именно от неё, а не от «самого
+    # раннего свидетельства»: вопрос здесь «когда началась терапия», клиника
+    # сказала «от начала диеты», и начало диеты — это поле, которое заполняет
+    # врач (ответ 17). Опечатка в годе видна в карте подписью «ещё не началась».
+    started_on = await therapy_repo.started_on(session, patient_id=patient_id)
+
     return PatientOverview(
         patient_id=patient_id,
         date=today,
@@ -210,4 +219,5 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         last_weight=WeightReading.model_validate(weight) if weight else None,
         seizures_today=SeizuresToday.model_validate(seizures),
         seizure_trend=_seizure_trend(recent, previous),
+        monitoring_phase=monitoring_phase(started_on=started_on, today=today),
     )

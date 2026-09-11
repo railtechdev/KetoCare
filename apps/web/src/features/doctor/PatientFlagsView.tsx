@@ -18,7 +18,11 @@ import {
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 
-import { NO_DATA_FLAG_DAYS, type PatientFlags } from "./flags";
+import {
+  NO_DATA_FLAG_DAYS,
+  STRICT_NO_DATA_FLAG_DAYS,
+  type PatientFlags,
+} from "./flags";
 
 const BADGE =
   "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold whitespace-nowrap";
@@ -180,7 +184,15 @@ export function PatientFlagsView({
         ? t(LOOK[key].label)
         : flags.daysSinceLastReading === null
           ? t("flags.noReadingsEver")
-          : t("flags.noReadings", { days: flags.daysSinceLastReading }),
+          : // В первый месяц терапии пометка загорается раньше обычного, и
+            // строка обязана сказать почему: иначе «Нет замеров: 2 дн.» рядом
+            // с легендой про трое суток читается как ошибка.
+            t(
+              flags.strictMonitoring
+                ? "flags.noReadingsStrict"
+                : "flags.noReadings",
+              { days: flags.daysSinceLastReading },
+            ),
     icon: LOOK[key].icon,
     className: BADGE_TONE[LOOK[key].tone],
   }));
@@ -226,7 +238,8 @@ function recencyLabel(
 /**
  * Расшифровка флагов — по требованию, а не постоянным блоком.
  *
- * Порог вынесен в `NO_DATA_FLAG_DAYS` и подставляется сюда: врач должен видеть,
+ * Пороги вынесены в `NO_DATA_FLAG_DAYS` и `STRICT_NO_DATA_FLAG_DAYS` (первый месяц
+ * терапии) и подставляются сюда: врач должен видеть,
  * по какому именно порогу помечена строка, а не догадываться о нём.
  *
  * Почему в поповере. Раскрытой легенда стояла вплотную под списком, в том же
@@ -270,11 +283,14 @@ export function PatientFlagsLegend() {
                   {t(LOOK[key].label)}
                 </dt>
                 {/* Врач должен видеть порог, по которому помечена строка, а не
-                    догадываться о нём: число живёт в `NO_DATA_FLAG_DAYS` и
-                    подставляется в текст (для остальных пометок подстановки
-                    нет, лишний параметр `t` игнорирует). */}
+                    догадываться о нём: оба числа живут в `flags.ts` и
+                    подставляются в текст (для остальных пометок подстановки
+                    нет, лишние параметры `t` игнорирует). */}
                 <dd className="m-0">
-                  {t(LOOK[key].description, { days: NO_DATA_FLAG_DAYS })}
+                  {t(LOOK[key].description, {
+                    days: NO_DATA_FLAG_DAYS,
+                    strictDays: STRICT_NO_DATA_FLAG_DAYS,
+                  })}
                 </dd>
               </Fragment>
             );

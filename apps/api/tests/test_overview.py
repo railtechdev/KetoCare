@@ -22,10 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps.auth import get_session
 from api.main import create_app
 from api.routers.overview import router as overview_router
+from api.services.monitoring import add_months
 from api.services.overview import _TREND_WINDOW_DAYS
 from core.config import get_settings
 from core.models import KetoneLog, Menu, SeizureLog, SeizureType, WeightLog
 from core.models.enums import DiarySource, KetoneMethod, UserRole
+from core.repositories import medical_profiles as medical_profiles_repo
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from keto_engine import ENGINE_VERSION
@@ -917,3 +919,120 @@ class TestSeizureTrend:
         trend = response.json()["seizure_trend"]
 
         assert trend == {"recent": 16, "previous": 10, "grew": True, "appeared": False}
+
+
+class TestMonitoringPhase:
+    """Первый месяц терапии — строгое наблюдение (ответ клиники на вопрос 11).
+
+    Сводка отдаёт РЕЖИМ, а кабинет по нему выбирает порог молчания семьи. Режим
+    считается от даты начала терапии: слова врача, иначе первого назначения.
+    """
+
+    @staticmethod
+    async def _prescribed(session, make_user, patient, *, on: date):
+        doctor = await make_user(UserRole.DOCTOR)
+        return await prescriptions_repo.create(
+            session,
+            patient_id=patient.id,
+            ratio=3.0,
+            kcal_per_day=1200,
+            protein_g=30.0,
+            carbs_limit_g=10.0,
+            meals_per_day=4,
+            author_id=doctor.id,
+            effective_from=on,
+        )
+
+    async def _phase(self, client, patient, parent, auth_headers) -> dict[str, Any]:
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        assert response.status_code == 200, response.text
+        body: dict[str, Any] = response.json()
+        return body
+
+    async def test_first_month_after_the_first_prescription_is_strict(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._prescribed(session, make_user, patient, on=_local_today())
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "strict"
+
+    async def test_after_the_first_month_it_is_routine(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ровно месяц назад — уже обычный контроль: день, в который месяц
+        истекает, строгим не считается."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._prescribed(session, make_user, patient, on=add_months(_local_today(), -1))
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "routine"
+
+    async def test_without_therapy_there_is_nothing_to_monitor(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "before_start"
+
+    async def test_the_doctors_start_date_decides_the_month(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Назначение полугодовой давности, но врач назвал началом сегодня.
+
+        Так бывает, когда назначение записали заранее, а диету начали позже:
+        клиника сказала «от начала диеты», и начало диеты — это то, что указал
+        врач (ответ 17), а не дата первой строки назначений.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await self._prescribed(session, make_user, patient, on=_local_today() - timedelta(days=180))
+        await medical_profiles_repo.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=_local_today(),
+        )
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert body["monitoring_phase"] == "strict"
+
+    async def test_the_start_date_itself_does_not_reach_the_family(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """В сводку уходит режим, а не дата.
+
+        Сводка общая для семьи и врача, а дата начала терапии лежит в
+        медицинском профиле, который семье закрыт. Положи её сюда — и доступ
+        расширился бы молча, мимо проверки ролей у `/medical-profile`.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await medical_profiles_repo.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=date(2026, 3, 15),
+        )
+
+        body = await self._phase(client, patient, parent, auth_headers)
+
+        assert "therapy_started_on" not in str(body)
+        assert "2026-03-15" not in str(body)
