@@ -6,9 +6,9 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
-from core.models import CustomDish, IdempotencyKey, Product, ProductCategory
+from core.models import CustomDish, IdempotencyKey, ParentPatient, Product, ProductCategory
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
 
@@ -126,6 +126,68 @@ class TestIdempotencyKey:
 
         assert await _dishes(session, patient.id) == 2
 
+    async def test_repeat_after_access_revoked_is_forbidden(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Сохранённый ответ не отдаёт данные ребёнка тому, у кого доступ отозван."""
+        patient = await make_patient()
+        parent = await _linked_parent(session, make_user, patient)
+        butter = await _product(session)
+        headers = {**auth_headers(parent), "Idempotency-Key": str(uuid.uuid4())}
+
+        first = await client.post(_url(patient), json=_body(butter), headers=headers)
+        await session.execute(
+            delete(ParentPatient).where(
+                ParentPatient.parent_id == parent.id, ParentPatient.patient_id == patient.id
+            )
+        )
+        repeat = await client.post(_url(patient), json=_body(butter), headers=headers)
+
+        assert first.status_code == 201, first.text
+        assert repeat.status_code == 403, repeat.text
+        assert first.json()["id"] not in repeat.text
+
+    async def test_same_key_for_another_patient_is_rejected(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Путь входит в отпечаток: ответ по одному ребёнку не выдаётся за другого."""
+        first_child = await make_patient()
+        second_child = await make_patient()
+        parent = await _linked_parent(session, make_user, first_child)
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=second_child.id)
+        butter = await _product(session)
+        headers = {**auth_headers(parent), "Idempotency-Key": str(uuid.uuid4())}
+
+        await client.post(_url(first_child), json=_body(butter), headers=headers)
+        other = await client.post(_url(second_child), json=_body(butter), headers=headers)
+
+        assert other.status_code == 422, other.text
+        assert await _dishes(session, second_child.id) == 0
+
+    async def test_quoted_key_is_the_same_key(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Форма черновика IETF (`"ключ"`) и форма без кавычек — один ключ."""
+        patient = await make_patient()
+        parent = await _linked_parent(session, make_user, patient)
+        butter = await _product(session)
+        key = str(uuid.uuid4())
+
+        first = await client.post(
+            _url(patient),
+            json=_body(butter),
+            headers={**auth_headers(parent), "Idempotency-Key": f'"{key}"'},
+        )
+        second = await client.post(
+            _url(patient),
+            json=_body(butter),
+            headers={**auth_headers(parent), "Idempotency-Key": key},
+        )
+
+        assert first.status_code == 201, first.text
+        assert second.json() == first.json()
+        assert await _dishes(session, patient.id) == 1
+
     async def test_forbidden_request_does_not_reserve_the_key(
         self, client, session, make_user, make_patient, auth_headers
     ):
@@ -190,7 +252,7 @@ class TestIdempotencyKey:
         assert second.json()["id"] != first.json()["id"]
         assert await _dishes(session, patient.id) == 2
 
-    @pytest.mark.parametrize("key", ["two keys", "a" * 256, ""])
+    @pytest.mark.parametrize("key", ["two keys", "a" * 256, "", '""', '"open', 'a"b'])
     async def test_malformed_key_is_rejected(
         self, client, session, make_user, make_patient, auth_headers, key
     ):
