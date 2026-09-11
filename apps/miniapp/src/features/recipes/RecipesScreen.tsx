@@ -190,7 +190,7 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
       </Section>
 
       <Section title={t("recipes.instructions")} density="compact">
-        <p className="whitespace-pre-line">{recipe.instructions}</p>
+        <p className="break-words whitespace-pre-line">{recipe.instructions}</p>
       </Section>
     </div>
   );

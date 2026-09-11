@@ -117,7 +117,7 @@ function DayPlan({
                   <label className="flex items-start gap-field">
                     <input
                       type="checkbox"
-                      className="mt-1 size-5 accent-primary"
+                      className="mt-1 size-5 shrink-0 accent-primary"
                       checked={item.eaten}
                       disabled={pendingId === item.id}
                       onChange={() => {
