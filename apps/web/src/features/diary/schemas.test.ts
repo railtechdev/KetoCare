@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   KETONE_MAX_MMOL,
+  OCCURRED_AT_CLOCK_SKEW_MS,
+  OCCURRED_AT_FUTURE,
   KETONE_MIN_MMOL,
   WEIGHT_MAX_KG,
   WEIGHT_MIN_KG,
@@ -19,6 +21,45 @@ import {
 import { toDateTimeLocalInput } from "./time";
 
 const OCCURRED_AT = "2026-03-01T07:45";
+
+/**
+ * Будущего у дневника нет. Сервер отклонит такую запись сам, но ответит общим
+ * «проверьте поля» — форма обязана назвать причину у поля даты.
+ */
+describe("момент события не в будущем", () => {
+  const at = (offsetMs: number) =>
+    toDateTimeLocalInput(new Date(Date.now() + offsetMs));
+
+  it("завтра — ошибка поля даты со своей причиной", () => {
+    const result = ketoneSchema.safeParse({
+      occurredAt: at(24 * 60 * 60 * 1000),
+      value: "2.5",
+      method: "blood",
+    });
+
+    expect(result.success).toBe(false);
+    const issue = result.error?.issues.find(
+      (item) => item.path[0] === "occurredAt",
+    );
+    expect(issue?.message).toBe(OCCURRED_AT_FUTURE);
+  });
+
+  it("минута вперёд — расхождение часов, а не ошибка", () => {
+    expect(
+      ketoneSchema.safeParse({
+        occurredAt: at(60 * 1000),
+        value: "2.5",
+        method: "blood",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("допуск тот же, что у сервера, — пять минут", () => {
+    // Зеркало OCCURRED_AT_CLOCK_SKEW в schemas_logs.py: разойдись они — и
+    // форма пропускала бы то, что сервер отклонит без объяснения причины.
+    expect(OCCURRED_AT_CLOCK_SKEW_MS).toBe(5 * 60 * 1000);
+  });
+});
 
 describe("границы раздела 7.3 ТЗ", () => {
   it("кетоны принимаются на краях диапазона и отвергаются за ним", () => {

@@ -176,6 +176,89 @@ class TestCreate:
         assert response.status_code == 422
 
 
+class TestEventTimeIsNotInTheFuture:
+    """Будущего у дневника нет: момент события не позже текущего времени.
+
+    Запись из будущего не безобидна. Опечатка в годе у замера становится
+    «последним замером» в сводке, и пометка «семья молчит» у врача гаснет на
+    годы. Допуск — пять минут на расхождение часов телефона и сервера.
+    """
+
+    @pytest.mark.parametrize("kind", KINDS)
+    async def test_future_event_rejected_for_every_diary(
+        self, client, session, make_user, make_patient, auth_headers, kind
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        tomorrow = datetime.now(UTC) + timedelta(days=1)
+        payload = await _payload(
+            session, kind, patient=patient, author=parent, occurred_at=tomorrow
+        )
+
+        response = await client.post(
+            _url(patient.id, kind), json=payload, headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 422, response.text
+        fields = {item["field"] for item in response.json()["error"]["details"]["fields"]}
+        assert "occurred_at" in fields
+
+    async def test_a_minute_of_clock_skew_is_tolerated(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Запись «только что» с телефона, чьи часы спешат на минуту, — не ошибка."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.post(
+            _url(patient.id, "ketones"),
+            json={
+                "occurred_at": (datetime.now(UTC) + timedelta(minutes=1)).isoformat(),
+                "value": 2.5,
+                "method": "blood",
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 201, response.text
+
+    async def test_skew_is_bounded(self, client, session, make_user, make_patient, auth_headers):
+        """Допуск — минуты, а не часы: через полчаса — уже будущее."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.post(
+            _url(patient.id, "ketones"),
+            json={
+                "occurred_at": (datetime.now(UTC) + timedelta(minutes=30)).isoformat(),
+                "value": 2.5,
+                "method": "blood",
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+
+    async def test_moving_an_entry_into_the_future_rejected(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        url = _url(patient.id, "ketones")
+        headers = auth_headers(parent)
+        created = await client.post(
+            url,
+            json={"occurred_at": OCCURRED_AT.isoformat(), "value": 2.5, "method": "blood"},
+            headers=headers,
+        )
+
+        moved = await client.patch(
+            f"{url}/{created.json()['id']}",
+            json={"occurred_at": (datetime.now(UTC) + timedelta(days=365)).isoformat()},
+            headers=headers,
+        )
+
+        assert moved.status_code == 422, moved.text
+
+
 class TestValidation:
     @pytest.mark.parametrize("value", [-0.1, 12.1, 100])
     async def test_ketones_outside_range_rejected(

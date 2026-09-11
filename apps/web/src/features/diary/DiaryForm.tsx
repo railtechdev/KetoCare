@@ -10,6 +10,7 @@ import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import type { DiaryBody, DiaryKind, DiaryLog } from "./diaryApi";
 import {
+  OCCURRED_AT_FUTURE,
   KETONE_MAX_MMOL,
   KETONE_MIN_MMOL,
   SEIZURE_COUNT_MIN,
@@ -313,7 +314,14 @@ function SeizureForm({
           width="medium"
           type="datetime-local"
           label={t("form.occurredAt")}
-          error={errors.occurredAt && t("form.occurredAtInvalid")}
+          error={
+            errors.occurredAt &&
+            t(
+              errors.occurredAt.message === OCCURRED_AT_FUTURE
+                ? "form.occurredAtFuture"
+                : "form.occurredAtInvalid",
+            )
+          }
           {...register("occurredAt")}
         />
 

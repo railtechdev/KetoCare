@@ -12,10 +12,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from pydantic import (
+    AfterValidator,
     AwareDatetime,
     BaseModel,
     BeforeValidator,
@@ -58,7 +59,34 @@ def _reject_explicit_null(value: Any) -> Any:
 
 type NotNull[T] = Annotated[T | None, BeforeValidator(_reject_explicit_null)]
 
-OccurredAt = Annotated[AwareDatetime, Field(description="Момент события, со смещением UTC")]
+#: На сколько момент события может опережать часы сервера.
+#:
+#: Будущего у дневника нет: замер, приступ, приём пищи или лекарства — то, что
+#: уже произошло. Но часы телефона семьи расходятся с часами сервера на минуты,
+#: и запись «только что» не должна отклоняться из-за этого. Величина
+#: техническая — расхождение часов, а не медицинский порог.
+OCCURRED_AT_CLOCK_SKEW = timedelta(minutes=5)
+
+
+def _not_in_the_future(value: datetime) -> datetime:
+    """Момент события уже наступил — с допуском на расхождение часов.
+
+    Запись из будущего не безобидна. Опечатка в годе у замера («2062»)
+    становится «последним замером» в сводке, и пометка «семья молчит» у врача
+    гаснет на годы: кабинет честно считает, что замер свежее сегодняшнего дня.
+    На графиках такая точка растягивает ось до чужого десятилетия.
+    """
+
+    if value > datetime.now(UTC) + OCCURRED_AT_CLOCK_SKEW:
+        raise ValueError("момент события ещё не наступил — проверьте дату и время")
+    return value
+
+
+OccurredAt = Annotated[
+    AwareDatetime,
+    AfterValidator(_not_in_the_future),
+    Field(description="Момент события, со смещением UTC; не позже текущего времени"),
+]
 KetoneValue = Annotated[
     float, Field(ge=KETONE_MIN_MMOL, le=KETONE_MAX_MMOL, description="Кетоны, ммоль/л")
 ]
