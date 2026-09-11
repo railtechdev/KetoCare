@@ -44,7 +44,7 @@ export interface PatientFlags {
    */
   noPrescription: boolean;
   /**
-   * Сутки с последнего замера, известного серверу; null — замеров ещё не было.
+   * Сутки с последней записи, известной серверу; null — записей ещё не было.
    *
    * Именно «не было», а не «не удалось посчитать»: неразобранная дата сводки
    * отсекается раньше и даёт `null` вместо всего набора флагов.
@@ -55,11 +55,10 @@ export interface PatientFlags {
    * наблюдения: `STRICT_NO_DATA_FLAG_DAYS` в первый месяц терапии,
    * `NO_DATA_FLAG_DAYS` после.
    *
-   * «Данные» здесь — то, о чём сводка сообщает с меткой времени: последний замер
-   * кетонов, последний замер веса и записи о приступах за сегодня. Полный
-   * признак «семья ничего не вносила N дней» по всем шести дневникам сводка не
-   * отдаёт, а собирать его на клиенте — это шесть запросов на каждого пациента
-   * списка (см. отчёт: требует серверной поддержки).
+   * «Данные» здесь — последний замер кетонов, последний замер веса и записи о
+   * приступах за сегодня; их день сервер отдаёт готовым (`last_reading_on`).
+   * Полный признак «семья ничего не вносила N дней» по всем шести дневникам
+   * сводка не отдаёт — и легенда пометок говорит об этом прямо (вопрос 11).
    */
   staleData: boolean;
   /**
@@ -110,22 +109,18 @@ export interface PatientFlags {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Календарных суток между двумя моментами по местному календарю.
+ * Календарных суток между двумя датами сервера.
  *
- * Считается по датам, а не по разнице в миллисекундах: замер вчера вечером и
- * взгляд врача сегодня утром — это одни сутки, а не «0 дней», и в сутках
- * перевода часов не 24 часа.
+ * Обе даты уже местные для клиники (`date` и `last_reading_on` сводки), и здесь
+ * они только вычитаются. Раньше вместо дня записи бралась её метка времени и
+ * переводилась в пояс браузера: у врача в Москве замер в 00:30 по Ташкенту
+ * падал на предыдущие сутки, в Токио вечерний — на следующие. При строгом
+ * пороге в двое суток такой сдвиг — половина порога.
  */
 function calendarDaysBetween(from: Date, to: Date): number {
   const start = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
   const end = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
   return Math.round((end - start) / MS_PER_DAY);
-}
-
-function parseMoment(value: string | undefined): Date | null {
-  if (value === undefined) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 /**
@@ -151,23 +146,23 @@ export function computePatientFlags(
   // за клинический факт.
   if (today === null) return null;
 
-  const readings = [
-    parseMoment(overview.last_ketone?.occurred_at),
-    parseMoment(overview.last_weight?.occurred_at),
-    // Приступы за сегодня приходят числом без метки времени, но по смыслу
-    // относятся к дате сводки: запись есть — молчания нет.
-    overview.seizures_today.entries > 0 ? today : null,
-  ].filter((value): value is Date => value !== null);
+  // Поле пришло вместе со строгим месяцем. Старый ответ API — секунды между
+  // выкатом кабинета и перезапуском сервера — о дне записи не говорит ничего,
+  // и «записей не было» по нему было бы ложной красной пометкой. Судить не о чем.
+  if (overview.last_reading_on === undefined) return null;
 
-  const daysSinceLastReading =
-    readings.length === 0
+  const lastReadingOn =
+    overview.last_reading_on === null
       ? null
-      : Math.max(
-          0,
-          Math.min(
-            ...readings.map((reading) => calendarDaysBetween(reading, today)),
-          ),
-        );
+      : parseDateInput(overview.last_reading_on);
+  if (overview.last_reading_on !== null && lastReadingOn === null) return null;
+
+  // Запись «из будущего» (часы устройства семьи спешат) — это ноль суток, а не
+  // отрицательное число.
+  const daysSinceLastReading =
+    lastReadingOn === null
+      ? null
+      : Math.max(0, calendarDaysBetween(lastReadingOn, today));
 
   const tolerance = overview.day?.tolerance ?? null;
   const noPrescription = (overview.prescription ?? null) === null;

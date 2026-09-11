@@ -493,6 +493,10 @@ class TestTherapyStart:
         assert await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id) == date(
             2026, 8, 1
         )
+        assert await therapy.start_sources(session, patient_id=patient.id) == (
+            None,
+            date(2026, 8, 1),
+        )
 
     async def test_start_is_the_earliest_prescription_not_the_active(self, session):
         """Без слова врача начало — САМОЕ РАННЕЕ назначение, а не действующее.
@@ -515,10 +519,44 @@ class TestTherapyStart:
             2026, 2, 1
         )
 
+    async def test_sources_are_returned_as_they_are(self, session):
+        """Режиму наблюдения нужны обе даты, а не одна сведённая.
+
+        Опечатка врача в году рядом с назначениями: `started_on` ответит 2062,
+        `earliest_evidence_of_therapy` — первым назначением, а сводка сверяет
+        сегодняшний день с каждой датой. Назначений два, и в паре стоит самое
+        раннее — не действующее.
+        """
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        for effective_from in (date(2026, 6, 1), date(2026, 2, 1)):
+            await self._prescribe(session, patient, doctor, effective_from)
+        await medical_profiles.upsert(
+            session,
+            patient_id=patient.id,
+            diagnosis=None,
+            epilepsy_type=None,
+            onset_age_months=None,
+            genetics=None,
+            comorbidities=None,
+            therapy_started_on=date(2062, 4, 15),
+        )
+
+        assert await therapy.start_sources(session, patient_id=patient.id) == (
+            date(2062, 4, 15),
+            date(2026, 2, 1),
+        )
+
+    async def test_no_sources_come_back_empty(self, session):
+        patient = await _make_patient(session)
+
+        assert await therapy.start_sources(session, patient_id=patient.id) == (None, None)
+
     async def test_each_answer_is_one_query(self, session):
         """По одному запросу на ответ.
 
-        `started_on` зовёт сводка `/overview`, а главная врача собирает сводку на
+        Даты начала читает сводка `/overview`, а главная врача собирает сводку на
         КАЖДОГО пациента списка (1 + N). Два прохода — профиль, потом назначения —
         умножались бы на когорту; на полусотне пациентов это сотня лишних
         обращений на одно открытие главной.
@@ -538,10 +576,11 @@ class TestTherapyStart:
         try:
             await therapy.started_on(session, patient_id=patient.id)
             await therapy.earliest_evidence_of_therapy(session, patient_id=patient.id)
+            await therapy.start_sources(session, patient_id=patient.id)
         finally:
             event.remove(engine, "before_cursor_execute", _count)
 
-        assert len(statements) == 2, statements
+        assert len(statements) == 3, statements
 
 
 class TestLeadingMacroSearch:

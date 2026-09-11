@@ -49,6 +49,33 @@ def _day_bounds(day: date) -> tuple[datetime, datetime]:
     return start, end
 
 
+def _last_reading_on(
+    *,
+    ketone: KetoneLog | None,
+    weight: WeightLog | None,
+    seizures_today: int,
+    today: date,
+) -> date | None:
+    """Календарный день последней записи, снимающей «молчание семьи».
+
+    Записью считается то, о чём сводка и так сообщает: последний замер кетонов,
+    последний замер веса и приступы за сегодня. Остальные дневники в счёт не
+    идут — это сказано и в легенде пометок, и клинике в вопросе 11.
+
+    **День считается здесь, по часам клиники**, а не в кабинете. Кабинет
+    переводил `occurred_at` в пояс браузера и сравнивал с местной датой сервера:
+    у врача в Москве замер в 00:30 по Ташкенту падал на предыдущие сутки, в
+    Токио вечерний — на следующие. При пороге в двое суток (строгий месяц)
+    такой сдвиг — половина порога.
+    """
+
+    tz = ZoneInfo(get_settings().tz)
+    days = [log.occurred_at.astimezone(tz).date() for log in (ketone, weight) if log is not None]
+    if seizures_today > 0:
+        days.append(today)
+    return max(days, default=None)
+
+
 def _day_summary(menu: Menu | None, prescription: Prescription | None) -> DaySummary | None:
     """Итоги дня и их соответствие назначению.
 
@@ -203,12 +230,9 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         windows=(_day_bounds(today), recent_window, previous_window),
     )
 
-    # Режим наблюдения считается от даты начала терапии — слова врача, иначе
-    # первого назначения (`therapy.started_on`). Именно от неё, а не от «самого
-    # раннего свидетельства»: вопрос здесь «когда началась терапия», клиника
-    # сказала «от начала диеты», и начало диеты — это поле, которое заполняет
-    # врач (ответ 17). Опечатка в годе видна в карте подписью «ещё не началась».
-    started_on = await therapy_repo.started_on(session, patient_id=patient_id)
+    # Режим наблюдения — от ОБОИХ источников даты начала сразу: строгий месяц
+    # идёт, пока он не истёк хотя бы от одного (`monitoring_phase`).
+    therapy_starts = await therapy_repo.start_sources(session, patient_id=patient_id)
 
     return PatientOverview(
         patient_id=patient_id,
@@ -219,5 +243,8 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         last_weight=WeightReading.model_validate(weight) if weight else None,
         seizures_today=SeizuresToday.model_validate(seizures),
         seizure_trend=_seizure_trend(recent, previous),
-        monitoring_phase=monitoring_phase(started_on=started_on, today=today),
+        last_reading_on=_last_reading_on(
+            ketone=ketone, weight=weight, seizures_today=seizures.entries, today=today
+        ),
+        monitoring_phase=monitoring_phase(starts=therapy_starts, today=today),
     )

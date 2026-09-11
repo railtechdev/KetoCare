@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import calendar
+from collections.abc import Iterable
 from datetime import date
 
 from ..schemas_overview import MonitoringPhase
@@ -42,20 +43,35 @@ def add_months(day: date, months: int) -> date:
     return date(year, month, min(day.day, last_day))
 
 
-def monitoring_phase(*, started_on: date | None, today: date) -> MonitoringPhase:
-    """Режим наблюдения на сегодня.
+def monitoring_phase(*, starts: Iterable[date | None], today: date) -> MonitoringPhase:
+    """Режим наблюдения на сегодня по всем известным датам начала терапии.
 
-    - `before_start` — терапия не началась: даты нет вовсе или она в будущем;
-    - `strict` — первый месяц: `started_on <= today < started_on + 1 месяц`;
-    - `routine` — после.
+    `starts` — дата, названная врачом, и дата первого назначения; любая может
+    отсутствовать.
 
-    День начала — уже терапия (то же строгое сравнение, что в правиле про
-    исходную частоту приступов), а день, в который месяц истекает, — уже
-    обычный контроль: старт 15 марта, последний день строгого режима 14 апреля.
+    - `strict` — сегодня внутри месяца хотя бы от одной из дат:
+      `start <= today < start + 1 месяц`;
+    - `routine` — месяц от каждой уже начавшейся даты прошёл;
+    - `before_start` — ни одна дата не наступила или дат нет вовсе.
+
+    **Окна объединяются, а не выбирается одна дата.** Цена ошибок несимметрична.
+    Пропущенный строгий месяц невидим: пометка просто загорается на сутки
+    позже, чем должна, и в списке ничто не говорит, что режим не тот. Лишний
+    строгий месяц объясняет себя сам — подписью «первый месяц терапии» у
+    пометки. Так опечатка врача в годе не выключает строгий месяц при
+    назначении от сегодня, а назначение, записанное заранее, не съедает месяц,
+    отсчитанный от названной врачом даты. Обратная сторона — ребёнок,
+    переведённый из другой клиники уже на диете, получит строгий месяц от
+    нашего первого назначения; это сказано клинике в вопросе 11.
+
+    День начала — уже терапия (то же сравнение, что в правиле про исходную
+    частоту приступов), а день, в который месяц истекает, — уже обычный
+    контроль: старт 15 марта, последний день строгого режима 14 апреля.
     """
 
-    if started_on is None or today < started_on:
-        return MonitoringPhase.BEFORE_START
-    if today < add_months(started_on, STRICT_MONITORING_MONTHS):
+    started = [start for start in starts if start is not None and start <= today]
+    if any(today < add_months(start, STRICT_MONITORING_MONTHS) for start in started):
         return MonitoringPhase.STRICT
-    return MonitoringPhase.ROUTINE
+    if started:
+        return MonitoringPhase.ROUTINE
+    return MonitoringPhase.BEFORE_START

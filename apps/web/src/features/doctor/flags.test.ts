@@ -30,6 +30,7 @@ function overview(patch: Partial<PatientOverview> = {}): PatientOverview {
     last_weight: null,
     seizures_today: { entries: 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
+    last_reading_on: null,
     monitoring_phase: "routine",
     ...patch,
   };
@@ -56,33 +57,23 @@ describe("computePatientFlags", () => {
     const flags = computePatientFlags(
       overview({
         date: "не дата",
-        last_ketone: {
-          value: 3.1,
-          method: "blood",
-          occurred_at: "2026-08-28T08:00:00+05:00",
-        },
+        last_reading_on: "2026-08-28",
       }),
     );
 
     expect(flags).toBeNull();
   });
 
-  it("считает сутки по календарю, а не по разнице часов", () => {
-    const flags = computePatientFlags(
-      overview({
-        last_ketone: {
-          value: 3.1,
-          method: "blood",
-          occurred_at: "2026-08-27T22:30:00+05:00",
-        },
-      }),
-    );
+  it("не выдаёт неразобранный день записи за отсутствие записей", () => {
+    const flags = computePatientFlags(overview({ last_reading_on: "вчера" }));
 
-    expect(flags?.daysSinceLastReading).toBe(1);
-    expect(flags?.staleData).toBe(false);
+    expect(flags).toBeNull();
   });
 
-  it("берёт самый свежий из замеров", () => {
+  it("считает сутки от дня записи, который назвал сервер", () => {
+    // Метка времени замера намеренно с другого дня: день записи по часам
+    // клиники считает сервер, а пояс браузера его больше не сдвигает. Возьми
+    // кабинет снова `occurred_at` — получил бы 18 суток вместо одних.
     const flags = computePatientFlags(
       overview({
         last_ketone: {
@@ -90,48 +81,45 @@ describe("computePatientFlags", () => {
           method: "blood",
           occurred_at: "2026-08-10T09:00:00+05:00",
         },
-        last_weight: {
-          weight_kg: 18.4,
-          occurred_at: "2026-08-26T09:00:00+05:00",
-        },
+        last_reading_on: "2026-08-27",
       }),
     );
 
-    expect(flags?.daysSinceLastReading).toBe(2);
+    expect(flags?.daysSinceLastReading).toBe(1);
+    expect(flags?.staleData).toBe(false);
   });
 
-  it("записи о приступах за сегодня снимают молчание", () => {
+  it("запись сегодня — ноль суток", () => {
     const flags = computePatientFlags(
-      overview({
-        last_ketone: {
-          value: 3.1,
-          method: "blood",
-          occurred_at: "2026-07-01T09:00:00+05:00",
-        },
-        seizures_today: { entries: 1, count: 2 },
-      }),
+      overview({ last_reading_on: "2026-08-28" }),
     );
 
     expect(flags?.daysSinceLastReading).toBe(0);
     expect(flags?.staleData).toBe(false);
   });
 
+  it("запись с датой позже сводки — тоже ноль суток, а не минус", () => {
+    const flags = computePatientFlags(
+      overview({ last_reading_on: "2026-08-29" }),
+    );
+
+    expect(flags?.daysSinceLastReading).toBe(0);
+  });
+
+  it("без поля от сервера — судить не о чем, а не «записей не было»", () => {
+    // Секунды между выкатом кабинета и перезапуском API.
+    const old = overview() as Partial<PatientOverview>;
+    delete old.last_reading_on;
+
+    expect(computePatientFlags(old as PatientOverview)).toBeNull();
+  });
+
   it("помечает молчание ровно на пороге ТЗ", () => {
     const atThreshold = computePatientFlags(
-      overview({
-        last_weight: {
-          weight_kg: 18.4,
-          occurred_at: "2026-08-25T09:00:00+05:00",
-        },
-      }),
+      overview({ last_reading_on: "2026-08-25" }),
     );
     const beforeThreshold = computePatientFlags(
-      overview({
-        last_weight: {
-          weight_kg: 18.4,
-          occurred_at: "2026-08-26T09:00:00+05:00",
-        },
-      }),
+      overview({ last_reading_on: "2026-08-26" }),
     );
 
     expect(NO_DATA_FLAG_DAYS).toBe(3);
@@ -334,11 +322,7 @@ describe("флаг роста приступов", () => {
     // весе роста, вплоть до единицы.
     const grew = computePatientFlags(
       overview({
-        last_ketone: {
-          value: 3.1,
-          method: "blood",
-          occurred_at: "2026-08-28T09:00:00Z",
-        } as unknown as PatientOverview["last_ketone"],
+        last_reading_on: "2026-08-28",
         seizure_trend: { recent: 7, previous: 4, grew: true, appeared: false },
       }),
     );
@@ -359,15 +343,10 @@ describe("флаг роста приступов", () => {
  * идёт и молчанием не считается.
  */
 describe("строгое наблюдение в первый месяц терапии", () => {
-  /** Последний замер веса за `daysAgo` суток до даты сводки 2026-08-28. */
+  /** Последняя запись за `daysAgo` суток до даты сводки 2026-08-28. */
   function weighedDaysAgo(daysAgo: number): Partial<PatientOverview> {
     const day = String(28 - daysAgo).padStart(2, "0");
-    return {
-      last_weight: {
-        weight_kg: 18.4,
-        occurred_at: `2026-08-${day}T09:00:00+05:00`,
-      } as unknown as PatientOverview["last_weight"],
-    };
+    return { last_reading_on: `2026-08-${day}` };
   }
 
   it("помечает целые сутки без записей", () => {
