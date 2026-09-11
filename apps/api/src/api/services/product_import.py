@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import csv
 import io
-import math
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
+
+from .csv_numbers import parse_decimal
 
 REQUIRED_COLUMNS = (
     "name_ru",
@@ -46,9 +47,10 @@ KCAL_MAX = 1000.0
 #: 99,98 г и белки 0,11 г, в сумме 100,09. Допуск открывает только полосу от
 #: 100 до 100,5 г: ошибка того же размера ниже 100 г проходила всегда. Грубые
 #: ошибки переноса эта проверка и раньше ловила не все: переставленные жиры,
-#: белки и углеводы сумму не меняют, калорийность в колонке макронутриента
-#: отсекает граница поля, а килоджоули вместо килокалорий — `KCAL_MAX` и
-#: проверка расхождения калорийности в `product_checks`.
+#: белки и углеводы сумму не меняют, калорийность выше 100 ккал в колонке
+#: макронутриента отсекает граница поля, а килоджоули вместо килокалорий —
+#: `KCAL_MAX` при импорте и проверка расхождения калорийности уже загруженной
+#: базы (`product_checks`).
 #: Ответ клиники 09.09.2026 на вопрос 27: «допустимо».
 #:
 #: К отдельным полям допуск не относится: 100,3 г жира на 100 г продукта —
@@ -247,18 +249,11 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
         ("carbs_100g", MACRO_MAX),
         ("fiber_100g", MACRO_MAX),
     ):
-        raw_value = (row.get(column) or "").strip().replace(",", ".")
-        try:
-            number = float(raw_value)
-        except ValueError:
-            errors.append(RowError(line_no, column, f"Ожидалось число, получено: {raw_value!r}."))
-            continue
-
-        if not math.isfinite(number):
-            # `float` понимает «nan» и «inf», а NaN не проходит ни одно
-            # сравнение: ни «< 0», ни «> limit», ни проверку суммы. Без этой
-            # ветки продукт с жирами «nan» проходил импорт без единой ошибки и
-            # ломал бы каждый расчёт, где он встретится.
+        raw_value = (row.get(column) or "").strip()
+        # Не `float`: он принимает «nan», «inf», «1e2» и «1_00», и NaN не
+        # проходит ни одно сравнение ниже (`csv_numbers`).
+        number = parse_decimal(raw_value)
+        if number is None:
             errors.append(RowError(line_no, column, f"Ожидалось число, получено: {raw_value!r}."))
             continue
         if number < 0:
