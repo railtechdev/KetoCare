@@ -126,6 +126,7 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
 
       {canInvite && (
         <FormSheet
+          closeLabel={t("common:actions.close")}
           open={inviteOpen}
           onOpenChange={setInviteOpen}
           title={t("family.inviteTitle")}

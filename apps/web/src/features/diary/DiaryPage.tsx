@@ -450,6 +450,7 @@ function DiaryTab({
       </AsyncSection>
 
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={formOpen}
         onOpenChange={(open) => {
           if (!open) onCloseForm();

@@ -136,6 +136,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
       </Section>
 
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={formOpen}
         onOpenChange={(open) => (open ? setFormOpen(true) : closeForm())}
         title={t("notes.addTitle")}

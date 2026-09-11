@@ -123,4 +123,32 @@ describe("отключение специалиста", () => {
 
     expect(await screen.findByText(/ведёт только он/)).toBeInTheDocument();
   });
+
+  it("панель временного пароля: фокус на «Скопировать», Enter её не закрывает", async () => {
+    // Показать пароль второй раз нельзя. Кнопка закрытия стоит в шапке панели
+    // первой, и фокус на ней превращал привычный Enter в потерю пароля.
+    (api.POST as Mock).mockResolvedValue({
+      data: { temporary_password: "Kc-7Q2m-9xW4" },
+    });
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Сбросить пароль: Ольга Диетолог",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Сбросить пароль" }),
+    );
+
+    const copy = await screen.findByRole("button", { name: "Скопировать" });
+    await waitFor(() => expect(copy).toHaveFocus());
+    await user.keyboard("{Enter}");
+
+    expect(
+      screen.getByRole("dialog", { name: "Временный пароль" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Kc-7Q2m-9xW4")).toBeInTheDocument();
+  });
 });

@@ -176,6 +176,7 @@ export function MyDishesPanel({
       </AsyncSection>
 
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={renaming !== null}
         onOpenChange={(open) => (open ? undefined : setRenaming(null))}
         title={t("myDishes.renameTitle")}

@@ -271,6 +271,7 @@ export function PatientsListView() {
           Панелью, а не блоком над списком: врач приходит сюда за триажем, а
           приглашает семью считаные разы (правило П32 канона). */}
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         title={t("invitations:title")}

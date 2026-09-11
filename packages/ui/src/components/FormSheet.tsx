@@ -1,8 +1,11 @@
-import type { ReactNode } from "react";
+import { X } from "lucide-react";
+import { useRef, type ReactNode } from "react";
 
 import { cn } from "@ui/lib/cn";
+import { Button } from "./ui/button";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -13,10 +16,31 @@ export interface FormSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /**
+   * Подпись кнопки закрытия — из словаря экрана («Закрыть»).
+   *
+   * Обязательна, потому что кнопка кита подписана по-английски («Close») и
+   * зачитывалась так в русском интерфейсе; своя кнопка стоит в строке
+   * заголовка, а не поверх неё.
+   */
+  closeLabel: string;
   description?: ReactNode;
   className?: string;
   children: ReactNode;
 }
+
+/**
+ * Кандидаты на фокус при открытии: поля, кнопки и элементы с неотрицательным
+ * `tabindex`. Как и Radix, пропускает ссылки и `tabindex="-1"`; `:disabled`
+ * учитывает и `<fieldset disabled>`, атрибут на самом элементе — нет.
+ */
+const FOCUSABLE = [
+  'input:not(:disabled):not([type="hidden"]):not([tabindex="-1"])',
+  'select:not(:disabled):not([tabindex="-1"])',
+  'textarea:not(:disabled):not([tabindex="-1"])',
+  'button:not(:disabled):not([tabindex="-1"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
 
 /**
  * Панель с формой добавления или правки — не уводя со списка.
@@ -38,29 +62,76 @@ export function FormSheet({
   open,
   onOpenChange,
   title,
+  closeLabel,
   description,
   className,
   children,
 }: FormSheetProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        showCloseButton={false}
+        // Radix ставит фокус на первый фокусируемый элемент панели, а первой
+        // теперь стоит кнопка закрытия в шапке. Фокус уходит к первому полю
+        // тела, как было до переноса кнопки: иначе Enter по привычке закрывал
+        // панель, в том числе с одноразовым временным паролем. Тело пустое —
+        // фокус остаётся на кнопке закрытия.
+        onOpenAutoFocus={(event) => {
+          // Кандидаты перебираются в порядке документа (в любом движке, и в
+          // jsdom тестов тоже). Скрытый элемент (`display: none`, свёрнутый
+          // `<details>`) селектору подходит, но фокуса не берёт. Успех — как у
+          // Radix: фокус ушёл с прежнего места. Иначе переход дальше отнял бы
+          // фокус у элемента, куда его увёл сам кандидат, лишним blur
+          // (валидация `onBlur`, закрытый список). Ход Radix отменяется только
+          // при успехе. Выделение и `preventScroll` — тоже как у Radix: панель
+          // ещё выезжает, а набор в поле правки заменяет значение.
+          const previous = document.activeElement;
+          const candidates = Array.from(
+            bodyRef.current?.querySelectorAll<HTMLElement>("*") ?? [],
+          ).filter((element) => element.matches(FOCUSABLE));
+          for (const candidate of candidates) {
+            candidate.focus({ preventScroll: true });
+            if (document.activeElement === previous) continue;
+            if (candidate instanceof HTMLInputElement) candidate.select();
+            event.preventDefault();
+            return;
+          }
+        }}
         className={cn("w-full overflow-y-auto sm:max-w-xl", className)}
       >
-        <SheetHeader className="gap-1">
-          {/* Заголовок панели несёт имя («Профиль: …») — слово без пробелов
-              не должно давать панели горизонтальную прокрутку. */}
-          <SheetTitle className="break-words text-section-title">
-            {title}
-          </SheetTitle>
-          {description && (
-            <SheetDescription className="break-words">
-              {description}
-            </SheetDescription>
-          )}
+        {/* Кнопка закрытия — в строке заголовка, а не поверх него: встроенная
+            кнопка кита стоит `absolute`, и длинный заголовок уходил под неё. */}
+        <SheetHeader className="flex-row items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {/* Заголовок панели несёт имя («Профиль: …») — слово без пробелов
+                не должно давать панели горизонтальную прокрутку. */}
+            <SheetTitle className="break-words text-section-title">
+              {title}
+            </SheetTitle>
+            {description && (
+              <SheetDescription className="break-words">
+                {description}
+              </SheetDescription>
+            )}
+          </div>
+          <SheetClose asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="-mt-1 -mr-2 shrink-0"
+              aria-label={closeLabel}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </SheetClose>
         </SheetHeader>
 
-        <div className="flex flex-col gap-block px-4 pb-4">{children}</div>
+        <div ref={bodyRef} className="flex flex-col gap-block px-4 pb-4">
+          {children}
+        </div>
       </SheetContent>
     </Sheet>
   );

@@ -167,6 +167,7 @@ export function CareTeamPanel({
       )}
 
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open);

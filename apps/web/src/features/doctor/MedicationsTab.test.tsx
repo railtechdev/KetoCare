@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -182,6 +182,25 @@ describe("препараты из анкеты семьи", () => {
     );
     await user.click(await screen.findByRole("button", { name: "Сохранить" }));
 
+    await waitFor(() =>
+      expect(screen.getByLabelText("Препарат")).toHaveFocus(),
+    );
+  });
+
+  it("панель препарата: «Закрыть» по-русски, фокус на первом поле", async () => {
+    // Ключ подписи идёт из словаря экрана: опечатка в нём дала бы кнопку без
+    // имени, и ни один тест кита этого не увидел бы.
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("button", { name: "Закрыть" }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByLabelText("Препарат")).toHaveFocus(),
     );

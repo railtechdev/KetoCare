@@ -254,6 +254,7 @@ function EditForm({
 
   return (
     <FormSheet
+      closeLabel={t("common:actions.close")}
       open
       onOpenChange={(open) => !open && onClose()}
       title={
@@ -339,6 +340,7 @@ function MergeForm({
 
   return (
     <FormSheet
+      closeLabel={t("common:actions.close")}
       open
       onOpenChange={(open) => !open && onClose()}
       title={t("categories.merge.title", { name: category.name_ru })}

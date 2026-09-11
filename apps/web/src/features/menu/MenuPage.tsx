@@ -281,6 +281,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
       </AsyncSection>
 
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={addingMeal !== null}
         onOpenChange={(open) => {
           if (!open) setAddingMeal(null);
@@ -308,6 +309,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
       {/* key по дате: форма перечитывает дату-источник по умолчанию и
           не предлагает скопировать день сам в себя после перехода. */}
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={copying}
         onOpenChange={setCopying}
         title={t("copy.title")}

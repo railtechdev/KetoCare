@@ -226,6 +226,7 @@ export function PatientProfileView({
       </Section>
 
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={editOpen}
         onOpenChange={setEditOpen}
         title={t("card.editTitle", { name: patient.full_name })}
