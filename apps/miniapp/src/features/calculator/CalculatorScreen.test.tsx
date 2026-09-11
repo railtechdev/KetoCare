@@ -489,15 +489,21 @@ describe("калькулятор в Mini App", () => {
     await returnToCachedGrams(user);
     await user.click(await screen.findByRole("button", { name: "Повторить" }));
     await screen.findByRole("button", { name: "Повторяем…" });
+    // Расчёт новой граммовки не отвечает: иначе на медленной машине он успел
+    // бы прийти после задержки, и проверка ниже прошла бы впустую.
+    const answered = (api.POST as Mock).getMockImplementation();
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) =>
+        options.body?.items?.[0]?.grams === 305
+          ? new Promise(() => {})
+          : answered?.(path, options),
+    );
 
     await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "5");
 
     expect(screen.getByText("Пересчитываем…")).toBeInTheDocument();
-    expect(
-      screen
-        .getAllByRole("status")
-        .some((el) => el.textContent === "Повторяем…"),
-    ).toBe(false);
+    // И кнопка, и скрытая строка: во время правки «Повторяем…» не звучит.
+    expect(screen.queryByText("Повторяем…")).not.toBeInTheDocument();
   });
 
   it("называет причину отказа проверки текстом сервера, как кабинет", async () => {
