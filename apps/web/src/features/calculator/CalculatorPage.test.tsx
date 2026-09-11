@@ -19,7 +19,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import calculatorRu from "../../locales/ru/calculator.json";
 import { SectionRouter } from "../../test/SectionRouter";
-import { AUTO_CALC_DELAY_MS } from "./calcTiming";
+import { RECALC_DELAY_MS } from "@ketocare/ui";
 import { CalculatorPage, CalculatorView } from "./CalculatorPage";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -1348,9 +1348,7 @@ describe("калькулятор", () => {
       ).not.toHaveAttribute("aria-busy", "true"),
     );
     // Дольше задержки автопересчёта: лишняя проверка успела бы уйти.
-    await new Promise((resolve) =>
-      setTimeout(resolve, AUTO_CALC_DELAY_MS + 300),
-    );
+    await new Promise((resolve) => setTimeout(resolve, RECALC_DELAY_MS + 300));
 
     expect(verifyCalls).toBe(1);
   });
