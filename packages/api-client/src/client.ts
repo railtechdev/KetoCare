@@ -51,6 +51,17 @@ export function createApiClient({
    */
   let refreshing: Promise<string | null> | null = null;
 
+  /**
+   * Нетронутая копия каждого запроса с телом — для повтора после обновления.
+   *
+   * `fetch` читает тело, и собрать повтор из уже отправленного `Request` нельзя:
+   * конструктор бросает TypeError. Любой POST, PUT или PATCH после пятнадцати
+   * минут простоя падал, хотя сессия обновлялась успешно, — первое сохранение
+   * блюда, дневника или назначения. Копия снимается до отправки; запрос без
+   * тела повторяется из самого себя.
+   */
+  const untouched = new WeakMap<Request, Request>();
+
   function refreshOnce(): Promise<string | null> {
     if (refreshAccessToken === undefined) return Promise.resolve(null);
     refreshing ??= refreshAccessToken().finally(() => {
@@ -64,6 +75,9 @@ export function createApiClient({
       const token = getAccessToken?.();
       if (token) {
         request.headers.set("Authorization", `Bearer ${token}`);
+      }
+      if (refreshAccessToken !== undefined && request.body !== null) {
+        untouched.set(request, request.clone());
       }
       return request;
     },
@@ -91,7 +105,8 @@ export function createApiClient({
 
       // Повтор идёт напрямую через fetch, минуя мидлвари: иначе новый 401 снова
       // попал бы сюда, и обновление зациклилось бы.
-      const retry = new Request(request, { headers: request.headers });
+      const source = untouched.get(request) ?? request;
+      const retry = new Request(source, { headers: request.headers });
       retry.headers.set("Authorization", `Bearer ${token}`);
       return options.fetch(retry);
     },

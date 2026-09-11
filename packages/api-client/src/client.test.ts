@@ -69,6 +69,45 @@ describe("клиент API: продление сессии", () => {
     expect(seen).toEqual(["Bearer old-token", "Bearer new-token"]);
   });
 
+  it("повторяет запрос с телом: POST после обновления токена доходит целиком", async () => {
+    // `fetch` читает тело запроса, и собрать повтор из уже отправленного
+    // `Request` нельзя — конструктор бросает TypeError. Первое сохранение
+    // после пятнадцати минут простоя падало, хотя сессия обновлялась.
+    let token = "old-token";
+    const bodies: string[] = [];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const request = input as Request;
+      bodies.push(await request.text());
+      return request.headers.get("Authorization") === "Bearer new-token"
+        ? jsonResponse({ id: "dish-1" }, 201)
+        : unauthorized();
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const api = createApiClient({
+      baseUrl: "http://test",
+      getAccessToken: () => token,
+      refreshAccessToken: async () => {
+        token = "new-token";
+        return token;
+      },
+    });
+
+    const body = {
+      title: "Завтрак",
+      ingredients: [{ product_id: "p1", grams: 30 }],
+    };
+    const { data, error } = await api.POST(
+      "/api/v1/patients/{patient_id}/custom-dishes",
+      { params: { path: { patient_id: "child-1" } }, body },
+    );
+
+    expect(error).toBeUndefined();
+    expect(data).toEqual({ id: "dish-1" });
+    expect(bodies).toEqual([JSON.stringify(body), JSON.stringify(body)]);
+  });
+
   it("на все параллельные 401 приходится одно обновление", async () => {
     // Экран открывает несколько запросов сразу, и после истечения токена все
     // они получают 401 одновременно. Без общего обещания каждый устроил бы своё
