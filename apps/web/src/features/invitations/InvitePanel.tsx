@@ -51,8 +51,20 @@ export function InvitePanel({ roles }: { roles: readonly Role[] }) {
   );
 }
 
-/** Форма приглашения без обёртки: для панели, у которой свой заголовок. */
-export function InviteForm({ roles }: { roles: readonly Role[] }) {
+/**
+ * Форма приглашения без обёртки: для панели, у которой свой заголовок.
+ *
+ * `patientId` — приглашение второго родителя к уже заведённому ребёнку
+ * (ADR-0032): приняв его, родитель сразу видит этого ребёнка. Право выдать
+ * такое приглашение проверяет сервер — по доступу автора к ребёнку.
+ */
+export function InviteForm({
+  roles,
+  patientId,
+}: {
+  roles: readonly Role[];
+  patientId?: string;
+}) {
   const { t } = useTranslation("invitations");
   const ids = useId();
   const invite = useCreateInvitationMutation();
@@ -74,7 +86,11 @@ export function InviteForm({ roles }: { roles: readonly Role[] }) {
     <>
       <form
         onSubmit={handleSubmit((values) => {
-          invite.mutate(values, {
+          const body =
+            patientId === undefined
+              ? values
+              : { ...values, patient_id: patientId };
+          invite.mutate(body, {
             onSuccess: () => reset({ email: "", role: values.role }),
           });
         })}

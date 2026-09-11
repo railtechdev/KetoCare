@@ -51,6 +51,10 @@ class TestScopeDiscovery:
         # Косвенная: позиции меню ссылаются на меню, а не на пациента.
         assert "menu_items" in tables
 
+        # Приглашение второго родителя к ребёнку несёт его почту (ADR-0032) и
+        # стирается вместе с ребёнком — по той же колонке patient_id.
+        assert "invitations" in tables
+
         # Дети идут раньше родителей, иначе внешние ключи не дадут удалить.
         assert tables.index("menu_items") < tables.index("menus")
 

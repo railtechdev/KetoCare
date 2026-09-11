@@ -433,6 +433,11 @@ class InvitationRead(BaseModel):
     #: Кто пригласил. Администратор видит чужие приглашения, и «кто-то» его не
     #: устраивает: приглашение семьи делает автора её ведущим специалистом.
     invited_by_name: str | None = None
+    #: Ребёнок, к которому зовут второго родителя (ADR-0032); пусто у остальных.
+    #:
+    #: Идентификатор, а не имя: список видит и администратор, а к данным
+    #: пациентов доступа у него нет (правило 5 CLAUDE.md).
+    patient_id: uuid.UUID | None = None
 
 
 class ProductCategoryWrite(BaseModel):
@@ -611,6 +616,24 @@ class PatientDoctorAdd(BaseModel):
 class InvitationCreate(BaseModel):
     email: EmailStr
     role: UserRole
+    #: К какому уже заведённому ребёнку зовут (ответ клиники на вопрос 33).
+    #:
+    #: Пусто — приглашение сотрудника или первого родителя, который сам заведёт
+    #: ребёнка (ADR-0003). Заполнено — второй родитель: при принятии он
+    #: привязывается к этому ребёнку и не заводит его второй карточкой.
+    patient_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _only_a_parent_joins_a_child(self) -> InvitationCreate:
+        # Специалиста к пациенту подключает ручка `/patients/{id}/doctors`:
+        # приглашение с ребёнком для сотрудника дало бы вторую дверь к той же
+        # связи, мимо её правил и её аудита.
+        if self.patient_id is not None and self.role is not UserRole.PARENT:
+            raise ValueError(
+                "К ребёнку приглашают только родителя. Специалиста подключают "
+                "в разделе «Кто ведёт пациента»."
+            )
+        return self
 
 
 class InvitationCreated(BaseModel):
@@ -621,6 +644,7 @@ class InvitationCreated(BaseModel):
     role: UserRole
     token: str
     expires_at: datetime
+    patient_id: uuid.UUID | None = None
 
 
 class InvitationAccept(BaseModel):

@@ -43,7 +43,12 @@ export function InvitationsList() {
       {
         accessorKey: "role",
         header: t("list.columns.role"),
-        cell: ({ row }) => t(`common:roles.${row.original.role}`),
+        // Второй родитель отличается от первого не ролью, а тем, что ребёнок
+        // уже заведён: без пометки два приглашения «родитель» не различить.
+        cell: ({ row }) =>
+          row.original.patient_id != null
+            ? t("list.secondParent")
+            : t(`common:roles.${row.original.role}`),
       },
       {
         accessorKey: "status",

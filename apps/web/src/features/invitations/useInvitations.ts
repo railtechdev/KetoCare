@@ -62,6 +62,8 @@ export function useCreateInvitationMutation() {
     mutationFn: async (body: {
       email: string;
       role: Role;
+      /** Ребёнок, к которому зовут второго родителя (ADR-0032). */
+      patient_id?: string;
     }): Promise<InvitationCreated> => {
       const { data, error } = await api.POST("/api/v1/auth/invitations", {
         body,

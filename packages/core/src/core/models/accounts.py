@@ -150,6 +150,18 @@ class Invitation(Base, UUIDPkMixin, CreatedAtMixin):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    #: К какому уже заведённому ребёнку зовут (ответ клиники на вопрос 33, ADR-0032).
+    #:
+    #: Пусто — приглашение сотрудника или первого родителя, который сам заведёт
+    #: ребёнка (ADR-0003). Заполнено — второй родитель: при принятии он
+    #: привязывается к этому ребёнку, а не заводит его второй карточкой.
+    #:
+    #: Имя `patient_id` не случайно: `core.tools.erase_patient` выводит таблицы
+    #: пациента из метаданных по этой колонке, и приглашение с почтой второго
+    #: родителя стирается вместе с ребёнком.
+    patient_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=True, index=True
+    )
 
 
 class TelegramAccount(Base, UUIDPkMixin):
