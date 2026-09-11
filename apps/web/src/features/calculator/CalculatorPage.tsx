@@ -316,15 +316,27 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           name: tooHeavy.product.name,
           max: CALC_GRAMS_MAX,
         });
-  // В карте ребёнка сохранение ждёт проверки: только она называет продукты,
+  // Сохранение в карте ребёнка разрешает не тайминг, а сам ответ проверки:
+  // успешный, на ЭТОТ массив состава (задержка передаёт ту же ссылку) и на
+  // ЭТОГО ребёнка. Условие «не устарело и показатели есть» один коммит после
+  // срабатывания задержки считало проверенным состав, запрос по которому ещё
+  // не ушёл, — и сохранение успевало уйти. Только проверка называет продукты,
   // исключённые ребёнку, а сервер при сохранении их не проверяет (вопрос 29 —
-  // предупреждение, а не запрет). Форма при этом видна — иначе набранное
-  // название терялось бы на каждой перепроверке, — но состав, о котором
-  // проверка ещё ничего не сказала, отправить нельзя. В общем калькуляторе
-  // ребёнка нет и исключать нечего: передача ждёт только предела массы.
+  // предупреждение, а не запрет). Правка цели тоже перезапускает проверку и на
+  // это время снимает её ответ вместе с предупреждением — поэтому ждёт и
+  // сохранение.
+  //
+  // Передача из общего калькулятора ждёт только предела массы: сверять
+  // исключённое там не с кем, а после передачи сразу открывается карта
+  // ребёнка, где проверка идёт уже с ним и предупреждение появится.
+  const checkedNow =
+    verify.variables?.rows === rows &&
+    verify.variables?.patientId === patientId;
   const saveBlockedBy =
     tooHeavyReason ??
-    (stale || dish === null ? t("save.blocked.notChecked") : null);
+    (verify.isError && checkedNow ? t("save.blocked.checkFailed") : null);
+  const saveWaitsFor =
+    verify.isSuccess && checkedNow ? null : t("save.blocked.notChecked");
   const scaleBlockedBy = noRows
     ? t("blocked.noRows")
     : tooHeavyReason !== null
@@ -626,6 +638,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               patientId={patientId}
               rows={rows}
               blockedBy={saveBlockedBy}
+              waitingFor={saveWaitsFor}
             />
           )}
         </>

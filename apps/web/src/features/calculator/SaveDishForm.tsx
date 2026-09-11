@@ -23,10 +23,21 @@ interface Props {
    * предела расчёта. `null` — препятствий в составе нет.
    */
   blockedBy?: string | null;
+  /**
+   * Чего форма ждёт само собой — ответа проверки. Называется после того, что
+   * человеку нужно сделать самому: иначе строка прыгала бы между «блюдо не
+   * названо» и «ждём расчёта» на каждой правке состава.
+   */
+  waitingFor?: string | null;
 }
 
 /** «Сохранить как моё блюдо» (раздел 8.3 ТЗ). */
-export function SaveDishForm({ patientId, rows, blockedBy = null }: Props) {
+export function SaveDishForm({
+  patientId,
+  rows,
+  blockedBy = null,
+  waitingFor = null,
+}: Props) {
   const { t } = useTranslation("calculator");
   const queryClient = useQueryClient();
   const save = useSaveDishMutation(patientId);
@@ -76,13 +87,20 @@ export function SaveDishForm({ patientId, rows, blockedBy = null }: Props) {
           pendingLabel={t("save.saving")}
           pending={save.isPending}
           disabled={
-            title.trim() === "" || rows.length === 0 || blockedBy !== null
+            title.trim() === "" ||
+            rows.length === 0 ||
+            blockedBy !== null ||
+            waitingFor !== null
           }
-          // Состав выше названия: в том порядке, в каком их устраняют.
+          // Сначала то, что устраняет человек, — в порядке, в каком устраняют;
+          // ожидание проверки последним: оно проходит само.
           reason={
             rows.length === 0
               ? t("blocked.noRows")
-              : (blockedBy ?? t("save.blocked.noTitle"))
+              : (blockedBy ??
+                (title.trim() === ""
+                  ? t("save.blocked.noTitle")
+                  : (waitingFor ?? t("save.blocked.noTitle"))))
           }
         />
       </form>
