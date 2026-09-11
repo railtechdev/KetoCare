@@ -1,3 +1,4 @@
+import { RECALC_DELAY_MS } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -164,7 +165,7 @@ describe("показатели в форме рецепта", () => {
     await user.clear(screen.getByLabelText(/Масса продукта «Масло сливочное»/));
     // Дольше задержки автопересчёта: иначе проверка пройдёт просто потому, что
     // таймер ещё не сработал.
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    await new Promise((resolve) => setTimeout(resolve, RECALC_DELAY_MS + 500));
 
     expect((api.POST as Mock).mock.calls.length).toBe(before);
   });
