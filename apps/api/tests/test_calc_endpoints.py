@@ -225,6 +225,12 @@ class TestNonFiniteNumbers:
                 ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
                 ' "targets": {"ratio": 3, "kcal": 400, "protein_min_g": Infinity}}',
             ),
+            (
+                "/api/v1/calc/verify",
+                '{"ingredients": [{"product_id": "butter", "kcal": 717, "fat": NaN,'
+                ' "protein": 0.9, "carbs": 0.1, "fiber": 0}],'
+                ' "items": [{"product_id": "butter", "grams": 50}]}',
+            ),
         ],
     )
     async def test_infinity_is_rejected(self, client, make_user, auth_headers, url, body):
@@ -237,6 +243,50 @@ class TestNonFiniteNumbers:
         )
 
         assert response.status_code == 422, response.text
+        # 422 отдаёт и «недостижимо» (`infeasible_calculation`): отказ обязан быть
+        # отказом схемы, иначе бесконечность дошла до решателя.
+        assert response.json()["error"]["code"] == "validation_error"
+
+
+class TestHugeNumbers:
+    """Конечное, но огромное число переполняло ядро: 200 с `null` в итогах."""
+
+    @pytest.mark.parametrize(
+        ("url", "body"),
+        [
+            (
+                "/api/v1/calc/verify",
+                {"ingredients": [BUTTER], "items": [{"product_id": "butter", "grams": 1e308}]},
+            ),
+            (
+                "/api/v1/calc/verify",
+                {
+                    "ingredients": [{**BUTTER, "kcal": 1e308}],
+                    "items": [{"product_id": "butter", "grams": 50}],
+                },
+            ),
+            (
+                "/api/v1/calc/solve",
+                {
+                    "ingredients": [BUTTER],
+                    "targets": {
+                        "ratio": 3,
+                        "kcal": 400,
+                        "per_ingredient_bounds": {"butter": [-5, None]},
+                    },
+                },
+            ),
+        ],
+    )
+    async def test_out_of_range_is_a_schema_refusal(
+        self, client, make_user, auth_headers, url, body
+    ):
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(url, json=body, headers=auth_headers(user))
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "validation_error"
 
 
 class TestSolve:

@@ -119,6 +119,24 @@ class TestScale:
         assert await state.get_state() == scenarios.Seizure.duration_exact.state
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("raw", ["３", "１２", "²", "1e2", "+90"])
+    async def test_what_isdigit_takes_is_asked_again(self, ready, linked_store, state, raw):
+        """«３» записалось бы тремя секундами, а на «²» `int()` бросал исключение
+        и родитель не получал ответа вовсе: `str.isdigit()` понимает не только
+        цифры, которые набирают."""
+
+        await _to_duration(ready, linked_store, state)
+        callback = FakeCallback(data=keyboards.SEIZURE_EXACT_DATA)
+        await scenarios.seizure_duration_exact_ask(callback, state)
+
+        message = FakeMessage(text=raw)
+        await scenarios.seizure_duration_exact(message, state)
+
+        assert "число" in message.last
+        assert ready.logs == []
+        assert await state.get_state() == scenarios.Seizure.duration_exact.state
+
+    @pytest.mark.asyncio
     async def test_absurd_duration_is_rejected(self, ready, linked_store, state):
         """Сутки — предел API. Бот не решает, какая длительность правдоподобна
         (раздел 7.5 ТЗ), но и не отправляет заведомо невозможное."""

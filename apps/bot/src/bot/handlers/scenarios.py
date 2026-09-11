@@ -151,6 +151,9 @@ def _format_value(value: Decimal) -> str:
 #: `\d` принимает любые цифры Юникода.
 _TYPED_NUMBER = re.compile(r"-?(?:\d+(?:\.\d*)?|\.\d+)", re.ASCII)
 
+#: Целое число секунд — только ASCII-цифры.
+_WHOLE_SECONDS = re.compile(r"\d+", re.ASCII)
+
 
 def _parse_number(raw: str) -> Decimal | None:
     """Число из текста. Запятая — тоже разделитель: её набирают чаще точки.
@@ -644,7 +647,9 @@ async def seizure_duration_exact(message: Message, state: FSMContext) -> None:
     """
 
     raw = (message.text or "").strip()
-    if not raw.isdigit() or int(raw) > MAX_DURATION_SEC:
+    # Не `str.isdigit()`: он пропускает «３» (записалось бы 3 секунды) и «²», на
+    # котором `int()` бросал исключение, и родитель не получал ответа вовсе.
+    if not _WHOLE_SECONDS.fullmatch(raw) or int(raw) > MAX_DURATION_SEC:
         await message.answer(
             texts.SEIZURE_EXACT_INVALID.format(limit=MAX_DURATION_SEC),
             reply_markup=keyboards.cancel_only(),
