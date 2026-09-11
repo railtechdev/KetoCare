@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import childRu from "../../locales/ru/child.json";
+import telegramRu from "../../locales/ru/telegram.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { ChildPage } from "./ChildPage";
 
@@ -15,6 +16,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 });
 
 i18n.addResourceBundle("ru", "child", childRu, true, true);
+i18n.addResourceBundle("ru", "telegram", telegramRu, true, true);
 
 const CHILD_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -77,5 +79,22 @@ describe("подэкраны раздела «Ребёнок» живут в а�
     renderPage({});
 
     expect(await screen.findByText("Аня Иванова")).toBeInTheDocument();
+  });
+
+  it("профиль и Telegram называют ребёнка, открытого по адресу", async () => {
+    // Переключатель в шапке выбирает ребёнка для других разделов, а эти
+    // экраны открыты на том, кого назвал адрес. Без имени «Профиль ребёнка»
+    // читался как профиль выбранного в шапке — при другом ребёнке там.
+    renderPage({ tab: "edit", item: CHILD_ID });
+    expect(
+      await screen.findByRole("heading", { name: "Профиль: Аня Иванова" }),
+    ).toBeInTheDocument();
+  });
+
+  it("экран Telegram называет ребёнка, открытого по адресу", async () => {
+    renderPage({ tab: "telegram", item: CHILD_ID });
+    expect(
+      await screen.findByRole("heading", { name: "Telegram-бот: Аня Иванова" }),
+    ).toBeInTheDocument();
   });
 });
