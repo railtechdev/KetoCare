@@ -258,6 +258,7 @@ function MedicationFormSheet({
 
   return (
     <FormSheet
+      closeLabel={t("common:actions.close")}
       open={form !== null}
       onOpenChange={(open) => {
         if (!open) onClose();

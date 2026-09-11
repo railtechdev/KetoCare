@@ -2,6 +2,7 @@ import {
   Button,
   Separator,
   Sheet,
+  SheetClose,
   SheetContent,
   SheetTitle,
   SheetTrigger,
@@ -10,7 +11,7 @@ import {
   cn,
 } from "@ketocare/ui";
 import { Outlet, useMatchRoute } from "@tanstack/react-router";
-import { Activity, Menu } from "lucide-react";
+import { Activity, Menu, X } from "lucide-react";
 import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -95,9 +96,27 @@ export function AppLayout() {
                   <Menu aria-hidden="true" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-72 p-4">
+              {/* Своя кнопка закрытия: встроенная у кита подписана по-английски
+                  («Close») и так зачитывалась в русском интерфейсе. */}
+              <SheetContent
+                side="left"
+                className="w-72 p-4"
+                showCloseButton={false}
+              >
                 <SheetTitle className="sr-only">{t("app.name")}</SheetTitle>
-                <Brand labels="always" />
+                <div className="flex items-center justify-between gap-2">
+                  <Brand labels="always" />
+                  <SheetClose asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t("nav.closeMenu")}
+                    >
+                      <X aria-hidden="true" />
+                    </Button>
+                  </SheetClose>
+                </div>
                 <Separator className="my-4" />
                 <SidebarNav
                   sections={sections}

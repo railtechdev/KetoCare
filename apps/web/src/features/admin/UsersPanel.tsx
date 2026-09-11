@@ -252,6 +252,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
           второй раз нельзя (в базе только argon2-хэш), а передать владельцу
           администратор должен успеть. */}
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={issued !== null}
         onOpenChange={(open) => {
           if (!open) setIssued(null);
@@ -286,6 +287,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
       </FormSheet>
 
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         title={t("invitations:title")}
@@ -302,6 +304,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
           таблицей и отодвигала её вниз ровно в тот момент, когда нужно было
           свериться со списком. */}
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={editing !== null}
         onOpenChange={(open) => {
           if (!open) setEditingId(null);

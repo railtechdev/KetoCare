@@ -1,8 +1,11 @@
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@ui/lib/cn";
+import { Button } from "./ui/button";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -13,6 +16,14 @@ export interface FormSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /**
+   * Подпись кнопки закрытия — из словаря экрана («Закрыть»).
+   *
+   * Обязательна, потому что кнопка кита подписана по-английски («Close») и
+   * зачитывалась так в русском интерфейсе; своя кнопка стоит в строке
+   * заголовка, а не поверх неё.
+   */
+  closeLabel: string;
   description?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -38,6 +49,7 @@ export function FormSheet({
   open,
   onOpenChange,
   title,
+  closeLabel,
   description,
   className,
   children,
@@ -45,19 +57,35 @@ export function FormSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        showCloseButton={false}
         className={cn("w-full overflow-y-auto sm:max-w-xl", className)}
       >
-        <SheetHeader className="gap-1">
-          {/* Заголовок панели несёт имя («Профиль: …») — слово без пробелов
-              не должно давать панели горизонтальную прокрутку. */}
-          <SheetTitle className="break-words text-section-title">
-            {title}
-          </SheetTitle>
-          {description && (
-            <SheetDescription className="break-words">
-              {description}
-            </SheetDescription>
-          )}
+        {/* Кнопка закрытия — в строке заголовка, а не поверх него: встроенная
+            кнопка кита стоит `absolute`, и длинный заголовок уходил под неё. */}
+        <SheetHeader className="flex-row items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {/* Заголовок панели несёт имя («Профиль: …») — слово без пробелов
+                не должно давать панели горизонтальную прокрутку. */}
+            <SheetTitle className="break-words text-section-title">
+              {title}
+            </SheetTitle>
+            {description && (
+              <SheetDescription className="break-words">
+                {description}
+              </SheetDescription>
+            )}
+          </div>
+          <SheetClose asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="-mt-1 -mr-2 shrink-0"
+              aria-label={closeLabel}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </SheetClose>
         </SheetHeader>
 
         <div className="flex flex-col gap-block px-4 pb-4">{children}</div>

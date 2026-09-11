@@ -225,6 +225,7 @@ function DictionaryEditor({
           чем правят, и раскрытая форма отодвигала список значений вниз
           ровно тогда, когда с ним надо было свериться (правило П32). */}
       <FormSheet
+        closeLabel={t("common:actions.close")}
         open={editing.kind !== "none"}
         onOpenChange={(open) => {
           if (!open) setEditing({ kind: "none" });
