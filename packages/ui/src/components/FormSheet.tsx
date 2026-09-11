@@ -48,8 +48,16 @@ export function FormSheet({
         className={cn("w-full overflow-y-auto sm:max-w-xl", className)}
       >
         <SheetHeader className="gap-1">
-          <SheetTitle className="text-section-title">{title}</SheetTitle>
-          {description && <SheetDescription>{description}</SheetDescription>}
+          {/* Заголовок панели несёт имя («Профиль: …») — слово без пробелов
+              не должно давать панели горизонтальную прокрутку. */}
+          <SheetTitle className="break-words text-section-title">
+            {title}
+          </SheetTitle>
+          {description && (
+            <SheetDescription className="break-words">
+              {description}
+            </SheetDescription>
+          )}
         </SheetHeader>
 
         <div className="flex flex-col gap-block px-4 pb-4">{children}</div>

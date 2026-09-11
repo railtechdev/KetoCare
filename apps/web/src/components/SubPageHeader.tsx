@@ -24,11 +24,15 @@ export function SubPageHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-block">
       <div className="min-w-0">
-        <h2 className="m-0 text-section-title font-semibold text-foreground">
+        {/* Как у `PageLayout`: колонка в `min-w-0` сжимается, но переносить
+            слово без пробелов сама не умеет. */}
+        <h2 className="m-0 break-words text-section-title font-semibold text-foreground">
           {title}
         </h2>
         {intro && (
-          <p className="m-0 mt-1 text-sm text-muted-foreground">{intro}</p>
+          <p className="m-0 mt-1 break-words text-sm text-muted-foreground">
+            {intro}
+          </p>
         )}
       </div>
       {actions && (

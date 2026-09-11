@@ -63,10 +63,15 @@ export function ConfirmDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent>
+        {/* `wrap-anywhere`, а не `break-words`: окно и его шапка — сетка, и
+            `break-word` не уменьшает минимальную ширину содержимого — название
+            без пробелов («Удалить блюдо …») распирало окно шире телефона. */}
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogTitle className="wrap-anywhere">{title}</AlertDialogTitle>
           {description && (
-            <AlertDialogDescription>{description}</AlertDialogDescription>
+            <AlertDialogDescription className="wrap-anywhere">
+              {description}
+            </AlertDialogDescription>
           )}
         </AlertDialogHeader>
         <AlertDialogFooter>

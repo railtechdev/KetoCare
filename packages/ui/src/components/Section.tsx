@@ -84,8 +84,12 @@ export function Section({
       )}
     >
       <CardHeader className={cn(compact && "px-block")}>
+        {/* `min-w-0 break-words`: шапка карточки — сетка (`1fr auto` при
+            действии), и без `min-w-0` заголовок с именем без пробелов не
+            сжимался, а распирал блок. */}
         <CardTitle
           className={cn(
+            "min-w-0 break-words",
             level === 2 ? "text-section-title" : "text-card-title",
             titleHidden && "sr-only",
           )}
@@ -93,7 +97,9 @@ export function Section({
           <Heading className="m-0 font-semibold">{title}</Heading>
         </CardTitle>
         {description && (
-          <CardDescription className={cn(titleHidden && "sr-only")}>
+          <CardDescription
+            className={cn("min-w-0 break-words", titleHidden && "sr-only")}
+          >
             {description}
           </CardDescription>
         )}

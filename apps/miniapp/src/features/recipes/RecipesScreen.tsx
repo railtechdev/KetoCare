@@ -145,7 +145,8 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
 
   return (
     <div className="flex flex-col gap-block">
-      <h1 className="text-page-title">{recipe.title}</h1>
+      {/* Название рецепта из базы бывает длинным словом без пробелов. */}
+      <h1 className="break-words text-page-title">{recipe.title}</h1>
 
       {/* Показатели ПОРЦИИ, а не всего выхода: у плиты считают порцию, и
           подменить одно другим — это ошибка в разы, а не в процентах. */}
