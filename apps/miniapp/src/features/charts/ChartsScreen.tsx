@@ -35,8 +35,10 @@ export function ChartsScreen({ session }: { session: Session }) {
     ketones: useTrend(session.patientId, "ketones"),
     weight: useTrend(session.patientId, "weight"),
   };
+  // Только пока показывать нечего: фоновое обновление тоже встаёт на паузу, а
+  // «нет связи» над нарисованными графиками — сообщение о том, что и так видно.
   const waitingForNetwork = KINDS.some(
-    (kind) => trends[kind].fetchStatus === "paused",
+    (kind) => trends[kind].fetchStatus === "paused" && trends[kind].isPending,
   );
 
   return (

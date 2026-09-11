@@ -155,7 +155,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
     >
       <DayNavigator date={date} onChange={setDate} />
 
-      {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+      {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанный состав дня. */}
       <AsyncSection
         loading={menu.isLoading}

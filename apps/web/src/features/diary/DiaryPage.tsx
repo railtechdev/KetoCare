@@ -372,7 +372,7 @@ function DiaryTab({
         </p>
       )}
 
-      {/* Правило четырёх состояний — в AsyncSection: там же записано, почему
+      {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанные записи. */}
       <AsyncSection
         loading={logs.isLoading}

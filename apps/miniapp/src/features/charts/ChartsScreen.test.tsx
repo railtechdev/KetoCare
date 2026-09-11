@@ -3,7 +3,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -31,7 +31,11 @@ function renderScreen() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<ChartsScreen session={SESSION} />, { wrapper: Wrapper });
+  // `client` — тестам, которым нужно тронуть сам кэш (фоновое обновление).
+  const result = render(<ChartsScreen session={SESSION} />, {
+    wrapper: Wrapper,
+  });
+  return Object.assign(result, { client });
 }
 
 beforeEach(() => {
@@ -91,6 +95,61 @@ describe("динамика в Mini App", () => {
       await screen.findByRole("heading", { name: "Кетоны" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Вес" })).toBeInTheDocument();
+  });
+
+  it("пустой ответ — это «записей нет», а не молчание блока", async () => {
+    // Блок молчит, только пока ответа нет. Если сервер ответил и записей за
+    // месяц действительно нет, это надо сказать: иначе экран одинаково молчит
+    // и когда связи нет, и когда ребёнок месяц не измерялся.
+    (api.GET as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path.includes("prescriptions")
+          ? { data: { items: [], total: 0 } }
+          : { data: { items: [], total: 0 } },
+      ),
+    );
+
+    renderScreen();
+
+    expect(
+      await screen.findAllByText("Записей за этот период нет."),
+    ).toHaveLength(2);
+  });
+
+  it("с записями рисует графики и молчит про пустоту", async () => {
+    renderScreen();
+
+    expect(await screen.findAllByRole("figure")).toHaveLength(2);
+    expect(screen.queryByText("Записей за этот период нет.")).toBeNull();
+    expect(
+      screen.queryByText("Нет связи — покажем, как только она появится."),
+    ).toBeNull();
+  });
+
+  it("над нарисованными графиками про связь не говорит", async () => {
+    // Фоновое обновление без сети тоже встаёт на паузу. Сообщать о связи там,
+    // где данные уже на экране, значит говорить о том, что и так видно, — и
+    // отнимать место у самих графиков на телефоне.
+    const { client } = renderScreen();
+    expect(await screen.findAllByRole("figure")).toHaveLength(2);
+
+    onlineManager.setOnline(false);
+    try {
+      act(() => {
+        void client.refetchQueries();
+      });
+
+      await waitFor(() => {
+        expect(
+          client.getQueryCache().findAll({ fetchStatus: "paused" }).length,
+        ).toBeGreaterThan(0);
+      });
+      expect(
+        screen.queryByText("Нет связи — покажем, как только она появится."),
+      ).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it("без истории назначений говорит, что черт нет", async () => {
