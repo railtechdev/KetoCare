@@ -19,21 +19,33 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from core.models import KetoneMethodDict, SeizureType
+from api.services.admin import create_dictionary_entry
 
 REPO = Path(__file__).resolve().parents[3]
-SOURCES = (REPO / "apps/api/src", REPO / "packages/core/src", REPO / "apps/worker/src")
+SOURCES = (
+    REPO / "apps/api/src",
+    REPO / "packages/core/src",
+    REPO / "apps/worker/src",
+    # Серверные команды тоже пишут в журнал: `create_admin.py` — `reset_password`.
+    REPO / "infra/scripts",
+)
 FILTERS = REPO / "apps/web/src/features/admin/auditFilters.ts"
 
 #: `action=` у `argparse.add_argument` — не действие журнала.
 _ARGPARSE_ACTIONS = frozenset({"store_true", "store_false", "store_const", "append", "count"})
 
 #: Справочники: сущность журнала — имя таблицы модели (`services/admin.py`).
-_DYNAMIC_ENTITIES = frozenset({SeizureType.__tablename__, KetoneMethodDict.__tablename__})
+#: Модели берутся из ограничений параметра типа, а не перечисляются здесь:
+#: новый справочник попадёт в проверку сам.
+_DYNAMIC_ENTITIES = frozenset(
+    model.__tablename__ for model in create_dictionary_entry.__type_params__[0].__constraints__
+)
 
 
 def _written(kind: str) -> set[str]:
-    pattern = re.compile(rf'\b{kind}="([a-z_]+)"')
+    # Точка в имени бывает («ai_summary.approve»), пробелы вокруг `=` — тоже
+    # (`action = "reset_password"` в серверной команде).
+    pattern = re.compile(rf'\b{kind}\s*=\s*"([a-z_.]+)"')
     found: set[str] = set()
     for root in SOURCES:
         for path in root.rglob("*.py"):
@@ -45,7 +57,7 @@ def _filter_list(name: str) -> set[str]:
     source = FILTERS.read_text(encoding="utf-8")
     match = re.search(rf"export const {name} = \[(.*?)\] as const;", source, re.S)
     assert match is not None, f"список {name} не найден в {FILTERS}"
-    return set(re.findall(r'"([a-z_]+)"', match.group(1)))
+    return set(re.findall(r'"([a-z_.]+)"', match.group(1)))
 
 
 def test_filter_knows_every_written_action() -> None:

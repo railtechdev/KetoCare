@@ -120,10 +120,28 @@ describe("подписи фильтров журнала", () => {
     // Без подписи в выпадающем списке стоит сырое имя таблицы или действия.
     // Что фильтр знает всё, что пишет API, проверяет тест на стороне API
     // (`apps/api/tests/test_audit_filter_lists.py`).
-    const entities: Record<string, string> = adminRu.audit.entities;
-    const actions: Record<string, string> = adminRu.audit.actions;
+    // Ключи с точкой («ai_summary.approve») i18next ищет вложенным объектом,
+    // поэтому подпись проверяется по пути, а не плоским ключом.
+    const labelOf = (root: unknown, key: string): unknown =>
+      key
+        .split(".")
+        .reduce<unknown>(
+          (node, part) =>
+            typeof node === "object" && node !== null
+              ? (node as Record<string, unknown>)[part]
+              : undefined,
+          root,
+        );
 
-    expect(AUDIT_ENTITIES.filter((value) => !(value in entities))).toEqual([]);
-    expect(AUDIT_ACTIONS.filter((value) => !(value in actions))).toEqual([]);
+    expect(
+      AUDIT_ENTITIES.filter(
+        (value) => typeof labelOf(adminRu.audit.entities, value) !== "string",
+      ),
+    ).toEqual([]);
+    expect(
+      AUDIT_ACTIONS.filter(
+        (value) => typeof labelOf(adminRu.audit.actions, value) !== "string",
+      ),
+    ).toEqual([]);
   });
 });
