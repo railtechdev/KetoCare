@@ -2,13 +2,21 @@ import {
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
+  canRetry,
   Section,
   Separator,
   WarningBanner,
   exceedsCalcGrams,
   mealTargetsFrom,
 } from "@ketocare/ui";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useTranslation } from "react-i18next";
@@ -188,15 +196,33 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    * Проверка идёт сама по мере правки состава и цели.
    *
    * Она ничего не перезаписывает, поэтому кнопки у неё нет: кнопка обещала бы
-   * действие, которое уже произошло (правило П3 канона).
+   * действие, которое уже произошло (правило П3 канона). Исключение — «Повторить»
+   * после сбоя: без него экран оставался тупиком, из которого выводила только
+   * фиктивная правка состава.
    */
   const debouncedRows = useDebouncedValue(rows, AUTO_CALC_DELAY_MS);
   const debouncedTargets = useDebouncedValue(targets, AUTO_CALC_DELAY_MS);
   const verifyMutate = verify.mutate;
   const verifyReset = verify.reset;
 
-  useEffect(() => {
-    if (debouncedRows.length === 0) {
+  // Вход проверки — один на автоматический запуск и на «Повторить»: разойдись
+  // они, повтор проверял бы не то, что на экране, а разрешение на сохранение
+  // сверяется именно с этим массивом состава.
+  const verifyInput = useMemo(
+    () => ({
+      rows: debouncedRows,
+      targets: debouncedTargets ?? undefined,
+      patientId,
+    }),
+    [debouncedRows, debouncedTargets, patientId],
+  );
+
+  /**
+   * Запуск проверки — один на автоматический запуск и на «Повторить»: оба не
+   * отправляют пустой состав и массу тяжелее предела.
+   */
+  const runVerify = useCallback((): void => {
+    if (verifyInput.rows.length === 0) {
       // Пустой состав не считают — но и числа прежнего блюда на экране не
       // оставляют: убрав последний продукт, человек видел его калорийность,
       // соотношение и предложение сохранить блюдо, которого больше нет.
@@ -204,7 +230,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       verifyReset();
       return;
     }
-    if (debouncedRows.some((row) => exceedsCalcGrams(row.grams))) {
+    if (verifyInput.rows.some((row) => exceedsCalcGrams(row.grams))) {
       // Массу тяжелее предела сервер не примет, и на месте показателей встал
       // бы общий отказ без слова о поле. Причина уже названа у самого поля и
       // у кнопки пересчёта; числа прежнего состава снимаются, как у пустого:
@@ -212,12 +238,12 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       verifyReset();
       return;
     }
-    verifyMutate({
-      rows: debouncedRows,
-      targets: debouncedTargets ?? undefined,
-      patientId,
-    });
-  }, [debouncedRows, debouncedTargets, patientId, verifyMutate, verifyReset]);
+    verifyMutate(verifyInput);
+  }, [verifyInput, verifyMutate, verifyReset]);
+
+  useEffect(() => {
+    runVerify();
+  }, [runVerify]);
 
   /**
    * Массы, посчитанные сервером, уезжают прямо в состав.
@@ -274,8 +300,8 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    * числом — не устаревшая выдача, а неверное утверждение: по нему готовят еду
    * ребёнку.
    */
-  const stale =
-    rows !== debouncedRows || targets !== debouncedTargets || verify.isPending;
+  const staleInput = rows !== debouncedRows || targets !== debouncedTargets;
+  const stale = staleInput || verify.isPending;
 
   const ratioWithin = stale ? undefined : verify.data?.ratio_within_tolerance;
   const kcalWithin = stale ? undefined : verify.data?.kcal_within_tolerance;
@@ -355,6 +381,33 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   // Отказ действия прячется, только если он дословно повторяет видимый отказ
   // проверки: по одному признаку «проверка в ошибке» пропала бы другая причина.
   const verifyShown = verify.isError && !stale;
+  // Отказ, показанный над действиями. На время повтора он остаётся прежним
+  // текстом: иначе на месте ошибки было бы пусто, а кнопка, по которой нажали,
+  // исчезала бы вместе с фокусом — человек с клавиатуры оказывался в начале
+  // страницы. Правка ввода снимает его сразу: он о другом составе.
+  const [retry, setRetry] = useState<{
+    input: typeof verifyInput;
+    message: string;
+  } | null>(null);
+  // Повтор идёт, пока в работе ИМЕННО его запрос — вход совпадает по ссылке.
+  // Не колбэком завершения: любой новый запуск (проверка после правки, подбор,
+  // пересчёт) стирает колбэки прежнего, и «Повторяем…» зависало навсегда
+  // рядом со свежими показателями.
+  const retryIsThisRequest = retry !== null && verify.variables === retry.input;
+  const retrying = retryIsThisRequest && verify.isPending;
+  const retryFailed = retryIsThisRequest && verify.isError;
+  const refusalMessage = staleInput
+    ? null
+    : verifyShown
+      ? (errorMessageOf(verify.error) ?? t("common:errors.unexpected"))
+      : retrying
+        ? (retry?.message ?? null)
+        : null;
+  // Повтор отказал снова ТЕМ ЖЕ текстом: область `role="alert"` не меняется и
+  // заново не объявляется — поэтому скрытая строка ниже. Отказ с другим
+  // текстом объявит сам алерт, и второе объявление было бы лишним.
+  const announceRetryFailed =
+    retryFailed && !staleInput && refusalMessage === retry?.message;
   const actionMessage = errorMessageOf(solve.error ?? scale.error);
   const duplicateOfVerify =
     verifyShown && actionMessage === errorMessageOf(verify.error);
@@ -480,11 +533,43 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
             после пересчёта порций в массы, которые расчёт уже не принимает,
             человек видел пустоту без причины. Пока правка не догнала расчёт,
             прежний отказ не показывается — он о другом составе. */}
-        {verifyShown && (
-          <FormError>
-            {errorMessageOf(verify.error) ?? t("common:errors.unexpected")}
-          </FormError>
+        {refusalMessage !== null && (
+          <div className="flex flex-col items-start gap-field">
+            <FormError>{refusalMessage}</FormError>
+            {/* Повтор — только при сбое: отказ по данным при том же составе
+                повторится слово в слово (правило в ките, общее с Mini App). */}
+            {(retrying || canRetry(errorCodeOf(verify.error))) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                // `aria-disabled`, а не `disabled`: выключенная кнопка теряет
+                // фокус, а повторное нажатие гасит сам обработчик.
+                className="aria-disabled:opacity-50"
+                aria-disabled={retrying || undefined}
+                aria-busy={retrying || undefined}
+                onClick={() => {
+                  if (retrying) return;
+                  setRetry({ input: verifyInput, message: refusalMessage });
+                  runVerify();
+                }}
+              >
+                {retrying
+                  ? t("common:actions.retrying")
+                  : t("common:actions.retry")}
+              </Button>
+            )}
+          </div>
         )}
+        {/* Постоянная область: появившаяся вместе с текстом объявляется не
+            всеми программами чтения с экрана. */}
+        <p role="status" className="sr-only">
+          {retrying
+            ? t("common:actions.retrying")
+            : announceRetryFailed
+              ? refusalMessage
+              : ""}
+        </p>
 
         <Separator />
 

@@ -10,6 +10,7 @@ import {
   Section,
   Separator,
   WarningBanner,
+  canRetry,
   cn,
   exceedsCalcGrams,
   mealTargetsFrom,
@@ -163,8 +164,8 @@ export function CalculatorScreen({ session }: { session: Session }) {
    * посчитанное при прежней граммовке, рядом с новым числом — не устаревшая
    * выдача, а неверное утверждение, и по нему готовят еду ребёнку.
    */
-  const stale =
-    rows !== debouncedRows || goal !== debouncedGoal || verify.isFetching;
+  const staleInput = rows !== debouncedRows || goal !== debouncedGoal;
+  const stale = staleInput || verify.isFetching;
 
   /**
    * Правка состава и цели обесценивает подобранное и пересчитанное.
@@ -257,6 +258,44 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // («Не удалось посчитать»). Переименуете один из них — сравнивайте и заголовок,
   // иначе начнёт прятаться баннер с другим заголовком.
   const verifyShown = verify.isError && !stale;
+  // Отказ на время повтора остаётся прежним текстом — как в кабинете: иначе на
+  // его месте было бы пусто, а нажатая кнопка исчезала бы вместе с фокусом.
+  const [retry, setRetry] = useState<{
+    rows: DishRow[];
+    goal: Targets | null;
+    message: string;
+    dataUpdatedAt: number;
+    errorUpdateCount: number;
+  } | null>(null);
+  // Повтор идёт, пока запрос идёт по тому же вводу, что при нажатии. Не по
+  // завершению `refetch`: он привязан к прежнему ключу, и после правки ввода
+  // «Повторяем…» держалось рядом со свежими показателями, пока старый запрос
+  // не доработает. И пока данные не обновились: фоновый перезапрос того же
+  // ввода (возврат сети) иначе выдавал себя за повтор — над числами успешного
+  // расчёта снова вставал и зачитывался прежний отказ.
+  const retryIsThisRequest =
+    retry !== null &&
+    retry.rows === debouncedRows &&
+    retry.goal === debouncedGoal &&
+    verify.dataUpdatedAt === retry.dataUpdatedAt;
+  const retrying = retryIsThisRequest && verify.isFetching;
+  // Отказал именно повтор: ошибок стало больше, чем было при нажатии.
+  const retryFailed =
+    retryIsThisRequest &&
+    verify.isError &&
+    !verify.isFetching &&
+    verify.errorUpdateCount > (retry?.errorUpdateCount ?? 0);
+  const refusalMessage = staleInput
+    ? null
+    : verifyShown
+      ? (errorMessageOf(verify.error) ?? t("calculator.errorHint"))
+      : retrying
+        ? (retry?.message ?? null)
+        : null;
+  // Тем же текстом — объявить заново: баннер не изменился. Другим — объявит сам
+  // баннер.
+  const announceRetryFailed =
+    retryFailed && !staleInput && refusalMessage === retry?.message;
   const duplicateOfVerify =
     verifyShown &&
     actionError !== null &&
@@ -579,11 +618,48 @@ export function CalculatorScreen({ session }: { session: Session }) {
           одинаковые). Общая подсказка скрывала её, и после пересчёта порций в
           массы, которые расчёт не принимает, семья не узнавала, что не так.
           Пока правка не догнала расчёт, прежний отказ не показывается. */}
-      {verifyShown && (
+      {refusalMessage !== null && (
         <WarningBanner level="danger" title={t("calculator.error")}>
-          {errorMessageOf(verify.error) ?? t("calculator.errorHint")}
+          {refusalMessage}
         </WarningBanner>
       )}
+      {/* Кнопка — вне баннера: внутри `role="alert"` она зачитывалась бы
+          частью сообщения. Повтор — только при сбое, тем же правилом, что в
+          кабинете: отказ по данным при том же составе повторится слово в
+          слово. */}
+      {refusalMessage !== null &&
+        (retrying || canRetry(errorCodeOf(verify.error))) && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start aria-disabled:opacity-50"
+            aria-disabled={retrying || undefined}
+            aria-busy={retrying || undefined}
+            onClick={() => {
+              if (retrying) return;
+              setRetry({
+                rows: debouncedRows,
+                goal: debouncedGoal,
+                message: refusalMessage,
+                dataUpdatedAt: verify.dataUpdatedAt,
+                errorUpdateCount: verify.errorUpdateCount,
+              });
+              void verify.refetch();
+            }}
+          >
+            {retrying ? t("actions.retrying") : t("actions.retry")}
+          </Button>
+        )}
+      {/* Постоянная область: повторный отказ с тем же текстом баннер заново
+          не объявляет. */}
+      <p role="status" className="sr-only">
+        {retrying
+          ? t("actions.retrying")
+          : announceRetryFailed
+            ? refusalMessage
+            : ""}
+      </p>
     </main>
   );
 }

@@ -1,5 +1,6 @@
 export { cn } from "./lib/cn";
 export { CALC_GRAMS_MAX, exceedsCalcGrams } from "./lib/calcLimits";
+export { RETRYABLE_ERROR_CODES, canRetry } from "./lib/retryable";
 export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
 export { formatRatio, formatOccurredAt, formatWeight } from "./lib/format";
