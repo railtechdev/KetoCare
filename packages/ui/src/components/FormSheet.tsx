@@ -30,9 +30,9 @@ export interface FormSheetProps {
 }
 
 /**
- * Кандидаты на фокус при открытии — те же, что берёт Radix: ссылки и элементы
- * с `tabindex="-1"` он при открытии пропускает. `:disabled` учитывает и
- * `<fieldset disabled>`, атрибут на самом элементе — нет.
+ * Кандидаты на фокус при открытии: поля, кнопки и элементы с неотрицательным
+ * `tabindex`. Как и Radix, пропускает ссылки и `tabindex="-1"`; `:disabled`
+ * учитывает и `<fieldset disabled>`, атрибут на самом элементе — нет.
  */
 const FOCUSABLE = [
   'input:not(:disabled):not([type="hidden"]):not([tabindex="-1"])',
@@ -81,16 +81,19 @@ export function FormSheet({
         onOpenAutoFocus={(event) => {
           // Кандидаты перебираются в порядке документа (в любом движке, и в
           // jsdom тестов тоже). Скрытый элемент (`display: none`, свёрнутый
-          // `<details>`) селектору подходит, но фокуса не берёт: успех
-          // проверяется по activeElement, и только тогда отменяется ход Radix.
-          // Выделение и `preventScroll` — как у самого Radix: панель ещё
-          // выезжает, а набор в поле правки заменяет значение, а не дописывает.
+          // `<details>`) селектору подходит, но фокуса не берёт. Успех — как у
+          // Radix: фокус ушёл с прежнего места. Иначе переход дальше отнял бы
+          // фокус у элемента, куда его увёл сам кандидат, лишним blur
+          // (валидация `onBlur`, закрытый список). Ход Radix отменяется только
+          // при успехе. Выделение и `preventScroll` — тоже как у Radix: панель
+          // ещё выезжает, а набор в поле правки заменяет значение.
+          const previous = document.activeElement;
           const candidates = Array.from(
             bodyRef.current?.querySelectorAll<HTMLElement>("*") ?? [],
           ).filter((element) => element.matches(FOCUSABLE));
           for (const candidate of candidates) {
             candidate.focus({ preventScroll: true });
-            if (document.activeElement !== candidate) continue;
+            if (document.activeElement === previous) continue;
             if (candidate instanceof HTMLInputElement) candidate.select();
             event.preventDefault();
             return;
