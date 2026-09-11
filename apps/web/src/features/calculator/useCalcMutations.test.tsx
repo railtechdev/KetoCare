@@ -53,7 +53,11 @@ describe("режим сети у мутаций калькулятора (ADR-00
     const save = renderHook(() => useSaveDishMutation("child-1"), { wrapper });
 
     act(() => {
-      save.result.current.mutate({ title: "Суп", rows: [] });
+      save.result.current.mutate({
+        title: "Суп",
+        rows: [],
+        idempotencyKey: "11111111-1111-4111-8111-111111111111",
+      });
     });
 
     await waitFor(() => expect(save.result.current.isError).toBe(true));

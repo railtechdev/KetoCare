@@ -35,3 +35,22 @@ export function toCalcIngredients(rows: DishRow[]) {
 export function toCalcItems(rows: DishRow[]) {
   return rows.map((row) => ({ product_id: row.product.id, grams: row.grams }));
 }
+
+/**
+ * Что именно записывается: ребёнок, название и состав.
+ *
+ * По ней держится ключ попытки (`useAttemptKey`, ADR-0035): пока подпись та
+ * же, повтор идёт с тем же ключом и второго блюда не создаёт; изменилась —
+ * это уже другая запись, и ключ новый.
+ */
+export function dishSignature(
+  patientId: string | null,
+  title: string,
+  rows: DishRow[],
+): string {
+  return JSON.stringify([
+    patientId,
+    title.trim(),
+    rows.map((row) => [row.product.id, row.grams]),
+  ]);
+}

@@ -178,7 +178,16 @@ describe("передача состава пациенту", () => {
       expect(api.POST).toHaveBeenCalledWith(
         "/api/v1/patients/{patient_id}/custom-dishes",
         expect.objectContaining({
-          params: { path: { patient_id: PATIENT_ID } },
+          params: {
+            path: { patient_id: PATIENT_ID },
+            // Ключ попытки: потерянный ответ и второе нажатие не создадут
+            // второго блюда (ADR-0035).
+            header: {
+              "Idempotency-Key": expect.stringMatching(
+                /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/,
+              ),
+            },
+          },
           body: expect.objectContaining({
             title: "Завтрак 4:1",
             ingredients: [{ product_id: PRODUCT_ID, grams: 30 }],
@@ -186,6 +195,43 @@ describe("передача состава пациенту", () => {
         }),
       );
     });
+  });
+
+  it("повтор после отказа идёт с тем же ключом, правка состава — с новым", async () => {
+    // Ответ мог потеряться уже после записи: по тому же ключу сервер отдаст
+    // прежний ответ, а не создаст второе такое же блюдо (ADR-0035). Правка
+    // же — это другая запись, и ключ обязан смениться, иначе сервер откажет.
+    (api.POST as Mock).mockRejectedValue(new NetworkError());
+    const user = userEvent.setup();
+    renderHandOff();
+
+    const title = await screen.findByLabelText("Название блюда");
+    await user.type(title, "Завтрак 4:1");
+    await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Иван Петров/ }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Передать" }));
+    expect(
+      await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Передать" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(2);
+    });
+
+    await user.type(title, " и творог");
+    await user.click(screen.getByRole("button", { name: "Передать" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(3);
+    });
+
+    const keys = (api.POST as Mock).mock.calls.map(
+      ([, options]) => options.params.header["Idempotency-Key"] as string,
+    );
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it("без сети передача не встаёт в очередь: отказ сразу и без второго блюда потом", async () => {

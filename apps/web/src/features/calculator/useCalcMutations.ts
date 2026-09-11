@@ -114,13 +114,22 @@ export function useSaveDishMutation(patientId: string | null) {
     // запрос уходит сразу и сразу получает отказ, который видит человек.
     networkMode: "always",
     retry: false,
-    mutationFn: async (input: { title: string; rows: DishRow[] }) => {
+    mutationFn: async (input: {
+      title: string;
+      rows: DishRow[];
+      // Ключ попытки (ADR-0035): повтор после потерянного ответа получает
+      // прежний ответ, а не создаёт второе такое же блюдо.
+      idempotencyKey: string;
+    }) => {
       if (patientId === null) throw new Error("patientId is required to save");
 
       const { data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/custom-dishes",
         {
-          params: { path: { patient_id: patientId } },
+          params: {
+            path: { patient_id: patientId },
+            header: { "Idempotency-Key": input.idempotencyKey },
+          },
           body: {
             title: input.title,
             // Сервер пересчитывает состав сам по product_id: клиентские
