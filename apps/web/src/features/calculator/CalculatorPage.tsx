@@ -219,32 +219,27 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
 
   /**
    * Запуск проверки — один на автоматический запуск и на «Повторить»: оба не
-   * отправляют пустой состав и массу тяжелее предела. Возвращает, ушёл ли
-   * запрос: при сбросе ждать его завершения нечего.
+   * отправляют пустой состав и массу тяжелее предела.
    */
-  const runVerify = useCallback(
-    (options?: { onSettled?: () => void }): boolean => {
-      if (verifyInput.rows.length === 0) {
-        // Пустой состав не считают — но и числа прежнего блюда на экране не
-        // оставляют: убрав последний продукт, человек видел его калорийность,
-        // соотношение и предложение сохранить блюдо, которого больше нет.
-        // Результат мутации сам не пропадает: он живёт, пока его не сбросят.
-        verifyReset();
-        return false;
-      }
-      if (verifyInput.rows.some((row) => exceedsCalcGrams(row.grams))) {
-        // Массу тяжелее предела сервер не примет, и на месте показателей встал
-        // бы общий отказ без слова о поле. Причина уже названа у самого поля и
-        // у кнопки пересчёта; числа прежнего состава снимаются, как у пустого:
-        // они о блюде, которого на экране больше нет.
-        verifyReset();
-        return false;
-      }
-      verifyMutate(verifyInput, options);
-      return true;
-    },
-    [verifyInput, verifyMutate, verifyReset],
-  );
+  const runVerify = useCallback((): void => {
+    if (verifyInput.rows.length === 0) {
+      // Пустой состав не считают — но и числа прежнего блюда на экране не
+      // оставляют: убрав последний продукт, человек видел его калорийность,
+      // соотношение и предложение сохранить блюдо, которого больше нет.
+      // Результат мутации сам не пропадает: он живёт, пока его не сбросят.
+      verifyReset();
+      return;
+    }
+    if (verifyInput.rows.some((row) => exceedsCalcGrams(row.grams))) {
+      // Массу тяжелее предела сервер не примет, и на месте показателей встал
+      // бы общий отказ без слова о поле. Причина уже названа у самого поля и
+      // у кнопки пересчёта; числа прежнего состава снимаются, как у пустого:
+      // они о блюде, которого на экране больше нет.
+      verifyReset();
+      return;
+    }
+    verifyMutate(verifyInput);
+  }, [verifyInput, verifyMutate, verifyReset]);
 
   useEffect(() => {
     runVerify();
@@ -390,13 +385,26 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   // текстом: иначе на месте ошибки было бы пусто, а кнопка, по которой нажали,
   // исчезала бы вместе с фокусом — человек с клавиатуры оказывался в начале
   // страницы. Правка ввода снимает его сразу: он о другом составе.
-  const [retryRefusal, setRetryRefusal] = useState<string | null>(null);
-  const retrying = retryRefusal !== null;
+  const [retry, setRetry] = useState<{
+    input: typeof verifyInput;
+    message: string;
+  } | null>(null);
+  // Повтор идёт, пока в работе ИМЕННО его запрос — вход совпадает по ссылке.
+  // Не колбэком завершения: любой новый запуск (проверка после правки, подбор,
+  // пересчёт) стирает колбэки прежнего, и «Повторяем…» зависало навсегда
+  // рядом со свежими показателями.
+  const retryIsThisRequest = retry !== null && verify.variables === retry.input;
+  const retrying = retryIsThisRequest && verify.isPending;
+  // Повтор отказал снова: текст отказа тот же, область `role="alert"` не
+  // меняется и заново не объявляется — поэтому скрытая строка ниже.
+  const retryFailed = retryIsThisRequest && verify.isError;
   const refusalMessage = staleInput
     ? null
     : verifyShown
       ? (errorMessageOf(verify.error) ?? t("common:errors.unexpected"))
-      : retryRefusal;
+      : retrying
+        ? (retry?.message ?? null)
+        : null;
   const actionMessage = errorMessageOf(solve.error ?? scale.error);
   const duplicateOfVerify =
     verifyShown && actionMessage === errorMessageOf(verify.error);
@@ -534,15 +542,13 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                 size="sm"
                 // `aria-disabled`, а не `disabled`: выключенная кнопка теряет
                 // фокус, а повторное нажатие гасит сам обработчик.
+                className="aria-disabled:opacity-50"
                 aria-disabled={retrying || undefined}
                 aria-busy={retrying || undefined}
                 onClick={() => {
                   if (retrying) return;
-                  setRetryRefusal(refusalMessage);
-                  const started = runVerify({
-                    onSettled: () => setRetryRefusal(null),
-                  });
-                  if (!started) setRetryRefusal(null);
+                  setRetry({ input: verifyInput, message: refusalMessage });
+                  runVerify();
                 }}
               >
                 {retrying
@@ -552,6 +558,15 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
             )}
           </div>
         )}
+        {/* Постоянная область: появившаяся вместе с текстом объявляется не
+            всеми программами чтения с экрана. */}
+        <p role="status" className="sr-only">
+          {retrying
+            ? t("common:actions.retrying")
+            : retryFailed && !staleInput
+              ? refusalMessage
+              : ""}
+        </p>
 
         <Separator />
 

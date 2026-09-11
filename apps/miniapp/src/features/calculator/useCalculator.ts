@@ -107,8 +107,11 @@ export function useVerify(
     // меняет. Перезапрос по фокусу снимал баннер отказа на время запроса —
     // у запроса с ошибкой нет данных, и он всегда считается устаревшим.
     refetchOnWindowFocus: false,
-    queryFn: async (): Promise<Verify> => {
+    // `signal`: при смене ввода прежний запрос отменяется, а не дорабатывает
+    // впустую, держа экран в состоянии «идёт проверка».
+    queryFn: async ({ signal }): Promise<Verify> => {
       const { data, error } = await api.POST("/api/v1/calc/verify", {
+        signal,
         body: {
           patient_id: patientId,
           ingredients: rows.map(ingredientOf),

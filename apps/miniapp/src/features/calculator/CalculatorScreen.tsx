@@ -260,13 +260,28 @@ export function CalculatorScreen({ session }: { session: Session }) {
   const verifyShown = verify.isError && !stale;
   // Отказ на время повтора остаётся прежним текстом — как в кабинете: иначе на
   // его месте было бы пусто, а нажатая кнопка исчезала бы вместе с фокусом.
-  const [retryRefusal, setRetryRefusal] = useState<string | null>(null);
-  const retrying = retryRefusal !== null;
+  const [retry, setRetry] = useState<{
+    rows: DishRow[];
+    goal: Targets | null;
+    message: string;
+  } | null>(null);
+  // Повтор идёт, пока запрос идёт по тому же вводу, что при нажатии. Не по
+  // завершению `refetch`: он привязан к прежнему ключу, и после правки ввода
+  // «Повторяем…» держалось рядом со свежими показателями, пока старый запрос
+  // не доработает.
+  const retryIsThisInput =
+    retry !== null &&
+    retry.rows === debouncedRows &&
+    retry.goal === debouncedGoal;
+  const retrying = retryIsThisInput && verify.isFetching;
+  const retryFailed = retryIsThisInput && verify.isError && !verify.isFetching;
   const refusalMessage = staleInput
     ? null
     : verifyShown
       ? (errorMessageOf(verify.error) ?? t("calculator.errorHint"))
-      : retryRefusal;
+      : retrying
+        ? (retry?.message ?? null)
+        : null;
   const duplicateOfVerify =
     verifyShown &&
     actionError !== null &&
@@ -604,18 +619,31 @@ export function CalculatorScreen({ session }: { session: Session }) {
             type="button"
             variant="outline"
             size="sm"
-            className="self-start"
+            className="self-start aria-disabled:opacity-50"
             aria-disabled={retrying || undefined}
             aria-busy={retrying || undefined}
             onClick={() => {
               if (retrying) return;
-              setRetryRefusal(refusalMessage);
-              void verify.refetch().finally(() => setRetryRefusal(null));
+              setRetry({
+                rows: debouncedRows,
+                goal: debouncedGoal,
+                message: refusalMessage,
+              });
+              void verify.refetch();
             }}
           >
             {retrying ? t("actions.retrying") : t("actions.retry")}
           </Button>
         )}
+      {/* Постоянная область: повторный отказ с тем же текстом баннер заново
+          не объявляет. */}
+      <p role="status" className="sr-only">
+        {retrying
+          ? t("actions.retrying")
+          : retryFailed && !staleInput
+            ? refusalMessage
+            : ""}
+      </p>
     </main>
   );
 }

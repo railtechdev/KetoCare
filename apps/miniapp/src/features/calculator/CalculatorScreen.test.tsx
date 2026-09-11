@@ -428,6 +428,85 @@ describe("калькулятор в Mini App", () => {
     expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
   });
 
+  it("правка ввода во время повтора не оставляет «Повторяем…» и прежний отказ", async () => {
+    let calls30 = 0;
+    let calls300 = 0;
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        const grams = options.body?.items?.[0]?.grams;
+        if (grams === 300) {
+          calls300 += 1;
+          return new Promise(() => {});
+        }
+        if (grams !== 30) return Promise.resolve({ data: verifyResponse() });
+        calls30 += 1;
+        return calls30 === 1
+          ? Promise.resolve({
+              error: {
+                error: {
+                  code: "internal",
+                  message: "Внутренняя ошибка сервера.",
+                },
+              },
+            })
+          : new Promise(() => {});
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+    await screen.findByRole("button", { name: "Повторяем…" });
+
+    await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "0");
+    await waitFor(() => expect(calls300).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(
+      screen.queryByRole("button", { name: "Повторяем…" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Внутренняя ошибка сервера."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("повторный отказ с тем же текстом объявляется заново", async () => {
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams === 30) {
+          return Promise.resolve({
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          });
+        }
+        return Promise.resolve({ data: verifyResponse() });
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole("status")
+          .some((el) => el.textContent === "Внутренняя ошибка сервера."),
+      ).toBe(true),
+    );
+  });
+
   it("отказ проверки по данным повторить не предлагает", async () => {
     respond({
       "/calc/verify": new ApiFailure({
