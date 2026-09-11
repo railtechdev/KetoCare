@@ -440,8 +440,8 @@ describe("калькулятор", () => {
   });
 
   it("«Повторить» без сети говорит о сети одним голосом", async () => {
-    // Сетевой отказ без тела даёт «Что-то пошло не так», и после нажатия без
-    // сети оно висело рядом с «Повторяем…», не называя причины.
+    // После нажатия без сети прежний отказ висел рядом с «Повторяем…» и не
+    // говорил, что повтор ждёт связи: плашка обязана назвать ожидание.
     let verifyCalls = 0;
     (api.POST as Mock).mockImplementation((path: string) => {
       if (!path.includes("verify")) {
@@ -470,7 +470,9 @@ describe("калькулятор", () => {
       const busy = await screen.findByRole("button", { name: "Повторяем…" });
       expect(busy).toHaveFocus();
       expect(await screen.findAllByText(WAITING)).toHaveLength(1);
-      expect(screen.queryByText(/Что-то пошло не так/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Нет связи с сервером/),
+      ).not.toBeInTheDocument();
       expect(
         screen
           .getAllByRole("status")
@@ -532,15 +534,18 @@ describe("калькулятор", () => {
         screen.getByRole("button", { name: "Повторяем…" }),
       ).toBeInTheDocument();
       expect(screen.getAllByText(WAITING)).toHaveLength(1);
-      expect(screen.queryByText(/Что-то пошло не так/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Нет связи с сервером/),
+      ).not.toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }
   });
 
   it("повтор, упавший после возврата сети, объявляется один раз", async () => {
-    // Отказ отличается от текста ожидания — плашка объявит его сама, а
-    // скрытая строка второй раз его не повторяет.
+    // Отказ сети («нет связи с сервером», ADR-0034) отличается от текста
+    // ожидания — плашка объявит его сама, а скрытая строка второй раз его не
+    // повторяет.
     (api.POST as Mock).mockImplementation((path: string) =>
       path.includes("verify")
         ? Promise.reject(new NetworkError())
@@ -566,11 +571,13 @@ describe("калькулятор", () => {
         onlineManager.setOnline(true);
       });
 
-      expect(await screen.findAllByText(/Что-то пошло не так/)).toHaveLength(1);
+      expect(await screen.findAllByText(/Нет связи с сервером/)).toHaveLength(
+        1,
+      );
       expect(
         screen
           .getAllByRole("status")
-          .some((el) => el.textContent?.includes("Что-то пошло не так")),
+          .some((el) => el.textContent?.includes("Нет связи с сервером")),
       ).toBe(false);
     } finally {
       onlineManager.setOnline(true);
