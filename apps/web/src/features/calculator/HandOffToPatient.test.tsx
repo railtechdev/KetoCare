@@ -182,7 +182,9 @@ describe("передача состава пациенту", () => {
             path: { patient_id: PATIENT_ID },
             // Ключ попытки: потерянный ответ и второе нажатие не создадут
             // второго блюда (ADR-0035).
-            header: { "Idempotency-Key": expect.any(String) },
+            header: {
+              "Idempotency-Key": expect.stringMatching(/^[\x21-\x7e]{1,255}$/),
+            },
           },
           body: expect.objectContaining({
             title: "Завтрак 4:1",
