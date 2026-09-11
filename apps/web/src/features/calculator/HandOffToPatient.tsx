@@ -60,7 +60,8 @@ export function HandOffToPatient({
         className="flex flex-col gap-block"
         onSubmit={(event) => {
           event.preventDefault();
-          if (patient === null) return;
+          // Та же причина, что выключает кнопку, — и для отправки в обход неё.
+          if (patient === null || blockedBy !== null) return;
 
           save.mutate(
             { title: title.trim(), rows },
