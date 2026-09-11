@@ -278,7 +278,14 @@ function EditChild({ child, onDone }: { child: Patient; onDone: () => void }) {
   const update = useUpdateChildMutation(child.id);
 
   return (
-    <PageLayout title={t("child.editTitle")} width="form" onBack={onDone}>
+    // Ребёнок назван в заголовке, как у анкеты, документов и «Кто ведёт»: переключатель
+    // в шапке выбирает ребёнка для других разделов, а этот экран открыт на том, кого
+    // назвал адрес, — и без имени «Профиль ребёнка» читался как профиль выбранного.
+    <PageLayout
+      title={t("child.editTitle", { name: child.full_name })}
+      width="form"
+      onBack={onDone}
+    >
       <ChildForm
         child={child}
         pending={update.isPending}
@@ -371,7 +378,12 @@ function ChildTelegram({
   const { t } = useTranslation("telegram");
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")} onBack={onDone}>
+    // С именем по той же причине, что профиль: выбор в шапке — о других разделах.
+    <PageLayout
+      title={t("titleFor", { name: child.full_name })}
+      intro={t("intro")}
+      onBack={onDone}
+    >
       <TelegramPanel patientId={child.id} childName={child.full_name} />
 
       {/* Напоминания — там же, где привязка: без чата им некуда приходить,
