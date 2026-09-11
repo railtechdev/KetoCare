@@ -53,6 +53,55 @@ describe("FormSheet", () => {
     expect(screen.getByRole("textbox", { name: "Название" })).toHaveFocus();
   });
 
+  it("значение поля правки выделено: набор заменяет его, а не дописывает", () => {
+    render(
+      <FormSheet
+        open
+        onOpenChange={vi.fn()}
+        title="Переименовать блюдо"
+        closeLabel="Закрыть"
+      >
+        <label>
+          Название
+          <input defaultValue="Суп" />
+        </label>
+      </FormSheet>,
+    );
+
+    const field = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Название",
+    });
+    expect(field).toHaveFocus();
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 3]);
+  });
+
+  it("пропускает недоступное поле и кнопку вне обхода Tab", () => {
+    render(
+      <FormSheet
+        open
+        onOpenChange={vi.fn()}
+        title="Новый препарат"
+        closeLabel="Закрыть"
+      >
+        <button type="button" tabIndex={-1}>
+          Подсказка
+        </button>
+        <fieldset disabled>
+          <label>
+            Старое поле
+            <input />
+          </label>
+        </fieldset>
+        <label>
+          Название
+          <input />
+        </label>
+      </FormSheet>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Название" })).toHaveFocus();
+  });
+
   it("без полей фокус остаётся на кнопке закрытия", () => {
     render(
       <FormSheet

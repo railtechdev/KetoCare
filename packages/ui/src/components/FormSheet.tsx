@@ -30,6 +30,19 @@ export interface FormSheetProps {
 }
 
 /**
+ * Кандидаты на фокус при открытии — те же, что берёт Radix: ссылки и элементы
+ * с `tabindex="-1"` он при открытии пропускает. `:disabled` учитывает и
+ * `<fieldset disabled>`, атрибут на самом элементе — нет.
+ */
+const FOCUSABLE = [
+  'input:not(:disabled):not([type="hidden"]):not([tabindex="-1"])',
+  'select:not(:disabled):not([tabindex="-1"])',
+  'textarea:not(:disabled):not([tabindex="-1"])',
+  'button:not(:disabled):not([tabindex="-1"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
+/**
  * Панель с формой добавления или правки — не уводя со списка.
  *
  * Существует потому, что одна и та же задача решалась пятью способами:
@@ -45,15 +58,6 @@ export interface FormSheetProps {
  * Отдельным экраном остаётся то, что экраном и является: объект со своим
  * адресом (рецепт, продукт, ребёнок) — правило П29.
  */
-const FOCUSABLE = [
-  'input:not([disabled]):not([type="hidden"])',
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "button:not([disabled])",
-  "a[href]",
-  '[tabindex]:not([tabindex="-1"])',
-].join(", ");
-
 export function FormSheet({
   open,
   onOpenChange,
@@ -75,10 +79,22 @@ export function FormSheet({
         // панель, в том числе с одноразовым временным паролем. Тело пустое —
         // фокус остаётся на кнопке закрытия.
         onOpenAutoFocus={(event) => {
-          const first = bodyRef.current?.querySelector<HTMLElement>(FOCUSABLE);
-          if (!first) return;
-          event.preventDefault();
-          first.focus();
+          // Кандидаты перебираются в порядке документа (в любом движке, и в
+          // jsdom тестов тоже). Скрытый элемент (`display: none`, свёрнутый
+          // `<details>`) селектору подходит, но фокуса не берёт: успех
+          // проверяется по activeElement, и только тогда отменяется ход Radix.
+          // Выделение и `preventScroll` — как у самого Radix: панель ещё
+          // выезжает, а набор в поле правки заменяет значение, а не дописывает.
+          const candidates = Array.from(
+            bodyRef.current?.querySelectorAll<HTMLElement>("*") ?? [],
+          ).filter((element) => element.matches(FOCUSABLE));
+          for (const candidate of candidates) {
+            candidate.focus({ preventScroll: true });
+            if (document.activeElement !== candidate) continue;
+            if (candidate instanceof HTMLInputElement) candidate.select();
+            event.preventDefault();
+            return;
+          }
         }}
         className={cn("w-full overflow-y-auto sm:max-w-xl", className)}
       >
