@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import adminRu from "../../locales/ru/admin.json";
 import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITIES,
   AUDIT_PAGE_SIZE,
   EMPTY_AUDIT_FILTERS,
   endOfDayIso,
@@ -109,5 +112,18 @@ describe("toAuditQuery", () => {
     expect(query.offset).toBe(AUDIT_PAGE_SIZE);
     expect(query.from).toBeDefined();
     expect(query.to).toBeDefined();
+  });
+});
+
+describe("подписи фильтров журнала", () => {
+  it("у каждого значения фильтра есть подпись", () => {
+    // Без подписи в выпадающем списке стоит сырое имя таблицы или действия.
+    // Что фильтр знает всё, что пишет API, проверяет тест на стороне API
+    // (`apps/api/tests/test_audit_filter_lists.py`).
+    const entities: Record<string, string> = adminRu.audit.entities;
+    const actions: Record<string, string> = adminRu.audit.actions;
+
+    expect(AUDIT_ENTITIES.filter((value) => !(value in entities))).toEqual([]);
+    expect(AUDIT_ACTIONS.filter((value) => !(value in actions))).toEqual([]);
   });
 });
