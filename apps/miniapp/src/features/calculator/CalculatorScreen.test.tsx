@@ -1133,6 +1133,65 @@ describe("калькулятор в Mini App", () => {
     );
   });
 
+  it("подбор без сети называет причину и доходит с возвратом связи", async () => {
+    // Мутация без сети встаёт на паузу: кнопка стояла на «Считаем…» серой, и
+    // ни слова о том, почему.
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+
+      const busy = await screen.findByRole("button", { name: "Считаем…" });
+      expect(busy).toHaveAccessibleDescription(WAITING);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      // Мутация продолжается сама после события `online` — асинхронно.
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+          "42.5",
+        ),
+      );
+      expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("о связи говорит одна строка, когда ждут и проверка, и подбор", async () => {
+    respond({ "/calc/solve": solveResponse() });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "0");
+      expect(await screen.findByText(WAITING)).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+
+      await screen.findByRole("button", { name: "Считаем…" });
+      expect(screen.getAllByText(WAITING)).toHaveLength(1);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("подбор уходит с целями назначения и пределами", async () => {
     respond({ "/calc/solve": solveResponse() });
     const user = userEvent.setup();

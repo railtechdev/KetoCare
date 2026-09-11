@@ -227,6 +227,13 @@ export function CalculatorScreen({ session }: { session: Session }) {
           carbs_max_g: parseAmount(carbsMax) > 0 ? parseAmount(carbsMax) : null,
         };
   const busy = solve.isPending || scale.isPending;
+  // Без сети подбор и пересчёт не уходят, а ждут связи, и кнопка стояла на
+  // «Считаем…» без причины. Когда о связи уже говорит проверка, второй
+  // строкой с тем же текстом это не повторяется (правило П27).
+  const actionWaitingReason =
+    (solve.isPaused || scale.isPaused) && !waitingForNetwork
+      ? t("calculator.waitingForNetwork")
+      : null;
 
   /**
    * Чего не хватает, чтобы нажать (правило П44 канона).
@@ -257,7 +264,8 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // Одна строка на блок действий, а не по одной на кнопку: при пустом составе
   // причины совпадают, и два одинаковых абзаца — второе сообщение об одном и
   // том же (правило П27), озвученное дважды.
-  const actionsBlockedBy = solveBlockedBy ?? scaleBlockedBy;
+  const actionsBlockedBy =
+    actionWaitingReason ?? solveBlockedBy ?? scaleBlockedBy;
   const reasonId = useId();
 
   const actionError = solve.error ?? scale.error;
@@ -576,7 +584,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
           className="min-h-(--spacing-touch) w-full"
           disabled={solveBlockedBy !== null || busy}
           aria-busy={solve.isPending}
-          aria-describedby={solveBlockedBy === null ? undefined : reasonId}
+          aria-describedby={
+            solveBlockedBy === null && actionWaitingReason === null
+              ? undefined
+              : reasonId
+          }
           onClick={() => {
             if (solveTargets === null) return;
             scale.reset();
@@ -604,7 +616,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
             className="min-h-(--spacing-touch) flex-1"
             disabled={scaleBlockedBy !== null || busy}
             aria-busy={scale.isPending}
-            aria-describedby={scaleBlockedBy === null ? undefined : reasonId}
+            aria-describedby={
+              scaleBlockedBy === null && actionWaitingReason === null
+                ? undefined
+                : reasonId
+            }
             onClick={() => {
               solve.reset();
               scale.mutate({ rows, factor: parseAmount(factor) });
