@@ -1,3 +1,4 @@
+import { NetworkError } from "@ketocare/api-client";
 import {
   onlineManager,
   QueryClient,
@@ -388,7 +389,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: VERIFIED, error: undefined });
     });
     const user = userEvent.setup();
@@ -447,7 +448,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: VERIFIED, error: undefined });
     });
     const user = userEvent.setup();
@@ -494,7 +495,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : new Promise(() => {});
     });
     const user = userEvent.setup();
@@ -541,7 +542,7 @@ describe("калькулятор", () => {
     // скрытая строка второй раз его не повторяет.
     (api.POST as Mock).mockImplementation((path: string) =>
       path.includes("verify")
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: SOLVED, error: undefined }),
     );
     const user = userEvent.setup();
@@ -768,7 +769,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({
             data: undefined,
             error: {
@@ -1205,7 +1206,7 @@ describe("калькулятор", () => {
     // называет строка действий.
     (api.POST as Mock).mockImplementation((path: string) =>
       path.includes("verify")
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: SOLVED, error: undefined }),
     );
     const user = userEvent.setup();
@@ -1272,7 +1273,7 @@ describe("калькулятор", () => {
     // занятая кнопка описана самой плашкой.
     (api.POST as Mock).mockImplementation((path: string) =>
       path.includes("verify")
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: SOLVED, error: undefined }),
     );
     const user = userEvent.setup();
@@ -1684,6 +1685,48 @@ describe("калькулятор без выбранного ребёнка", ()
     expect(
       await screen.findByRole("heading", { name: "Передать пациенту" }),
     ).toBeInTheDocument();
+  });
+
+  it("сохранение без сети отказывает сразу и называет причину", async () => {
+    // Запись не ждёт сети в очереди: блюдо создалось бы молча после возврата
+    // связи, а повторное нажатие дало бы второе.
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("custom-dishes")) {
+        throw new NetworkError();
+      }
+      return { data: VERIFIED, error: undefined };
+    });
+    const saves = () =>
+      (api.POST as Mock).mock.calls.filter(([path]) =>
+        String(path).includes("custom-dishes"),
+      ).length;
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+      expect(
+        await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+      ).toBeInTheDocument();
+      expect(saves()).toBe(1);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(saves()).toBe(1);
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it("в карте ребёнка сохраняет сразу ему, ничего не спрашивая", async () => {

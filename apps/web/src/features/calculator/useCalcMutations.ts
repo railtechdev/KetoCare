@@ -100,6 +100,12 @@ export function useScaleMutation() {
  */
 export function useSaveDishMutation(patientId: string | null) {
   return useMutation({
+    // Запись не ждёт сети в очереди: мутация на паузе создала бы блюдо молча
+    // после возврата связи — когда экран, может быть, уже закрыт, без тоста и
+    // перехода, — а повторное нажатие дало бы второе такое же блюдо. Без сети
+    // запрос уходит сразу и сразу получает отказ, который видит человек.
+    networkMode: "always",
+    retry: false,
     mutationFn: async (input: { title: string; rows: DishRow[] }) => {
       if (patientId === null) throw new Error("patientId is required to save");
 

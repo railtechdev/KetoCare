@@ -1,6 +1,17 @@
+import { NetworkError } from "@ketocare/api-client";
 import { Toaster } from "@ketocare/ui";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -167,6 +178,77 @@ describe("передача состава пациенту", () => {
         }),
       );
     });
+  });
+
+  it("без сети передача не встаёт в очередь: отказ сразу и без второго блюда потом", async () => {
+    // Запись на паузе создала бы блюдо молча после возврата связи — возможно,
+    // уже с закрытого экрана, — а повторное нажатие дало бы дубль.
+    (api.POST as Mock).mockRejectedValue(new NetworkError());
+    const user = userEvent.setup();
+    renderHandOff();
+
+    await user.type(
+      await screen.findByLabelText("Название блюда"),
+      "Завтрак 4:1",
+    );
+    await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Иван Петров/ }),
+    );
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(screen.getByRole("button", { name: "Передать" }));
+
+      expect(
+        await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+      ).toBeInTheDocument();
+      expect(api.POST).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("ошибка в коде не выдаётся за «нет связи», а сообщение сервера важнее", async () => {
+    // `TypeError` бросает и ошибка в коде: назвать её «нет связи» значило бы
+    // отправить человека проверять сеть при исправной сети.
+    (api.POST as Mock)
+      .mockRejectedValueOnce(new TypeError("x is not a function"))
+      .mockResolvedValueOnce({
+        error: {
+          error: { code: "conflict", message: "Такое блюдо уже есть." },
+        },
+      });
+    const user = userEvent.setup();
+    renderHandOff();
+
+    await user.type(
+      await screen.findByLabelText("Название блюда"),
+      "Завтрак 4:1",
+    );
+    await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Иван Петров/ }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Передать" }));
+    expect(
+      await screen.findByText("Что-то пошло не так. Попробуйте ещё раз."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Нет связи/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Передать" }));
+    expect(
+      await screen.findByText("Такое блюдо уже есть."),
+    ).toBeInTheDocument();
   });
 
   it("состав, который нельзя передать, не уходит и в обход кнопки", async () => {

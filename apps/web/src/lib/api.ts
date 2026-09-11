@@ -1,4 +1,4 @@
-import { createApiClient } from "@ketocare/api-client";
+import { createApiClient, NetworkError } from "@ketocare/api-client";
 
 /**
  * Единственная точка обращения к API (раздел 8.4 ТЗ): ручных fetch во фронтенде
@@ -85,6 +85,15 @@ export function errorCodeOf(body: unknown): string | null {
     return (body as ApiErrorBody).error.code;
   }
   return null;
+}
+
+/**
+ * Ответа нет вовсе: запрос не дошёл до сервера (нет сети, сервер недоступен).
+ * Клиент API отдаёт такой отказ отдельным классом — не по `TypeError`, который
+ * бросает и ошибка в коде.
+ */
+export function isNetworkFailure(error: unknown): boolean {
+  return error instanceof NetworkError;
 }
 
 /** Готовое к показу сообщение из ответа API — оно уже локализовано сервером. */

@@ -15,6 +15,27 @@ export interface ApiClientOptions {
   onSessionExpired?: () => void;
 }
 
+/**
+ * Запрос не дошёл до сервера: сети нет или сервер недоступен.
+ *
+ * Отказ самого `fetch` — отдельный класс, а не голый `TypeError`: тот же
+ * `TypeError` бросает и ошибка в коде, и назвать её «нет связи» значило бы
+ * отправить человека проверять сеть при исправной сети.
+ */
+export class NetworkError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super("Network request failed", options);
+    this.name = "NetworkError";
+  }
+}
+
+/** Отмена запроса (смена ввода, уход с экрана) — не обрыв сети. */
+function asNetworkError(error: unknown): unknown {
+  return error instanceof DOMException && error.name === "AbortError"
+    ? error
+    : new NetworkError({ cause: error });
+}
+
 /** Ручки, на которых обновляться бессмысленно: их 401 и означает «сессии нет». */
 const NO_REFRESH = ["/api/v1/auth/login", "/api/v1/auth/refresh"];
 
@@ -116,7 +137,17 @@ export function createApiClient({
       // Не `options.fetch(retry)`: вызов методом передаёт `this = options`, и
       // браузер отклоняет его («Illegal invocation») — повтор не уходил вовсе.
       const { fetch: send } = options;
-      return send(retry);
+      try {
+        return await send(retry);
+      } catch (error) {
+        throw asNetworkError(error);
+      }
+    },
+
+    // Сюда openapi-fetch передаёт только отказ самого `fetch` — ответа нет.
+    onError({ error }) {
+      const classified = asNetworkError(error);
+      return classified instanceof Error ? classified : undefined;
     },
   });
 
