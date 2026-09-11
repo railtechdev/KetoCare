@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Sequence
 
@@ -171,9 +172,12 @@ async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
     # общим «проверьте поля», а состав был уже переписан.
     heaviest = max(item.grams for item in payload.items) * payload.factor
     if heaviest > CALC_GRAMS_MAX:
+        # Вверх до десятых: `:g` оставлял шесть значащих цифр, и 5000,002 г
+        # превращались в «весила бы 5000 г — больше 5000 г».
+        shown = f"{math.ceil(heaviest * 10) / 10:g}".replace(".", ",")
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
-            f"После пересчёта позиция весила бы {heaviest:g} г — больше "
+            f"После пересчёта позиция весила бы {shown} г — больше "
             f"{CALC_GRAMS_MAX:g} г, с которыми работает расчёт. Уменьшите коэффициент порции.",
             details={"max_grams": CALC_GRAMS_MAX},
         )

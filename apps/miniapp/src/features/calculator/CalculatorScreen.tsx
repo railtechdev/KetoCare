@@ -532,9 +532,13 @@ export function CalculatorScreen({ session }: { session: Session }) {
         </WarningBanner>
       )}
 
-      {verify.isError && (
+      {/* Причина отказа — текстом сервера, как в кабинете (ADR-0028: экраны
+          одинаковые). Общая подсказка скрывала её, и после пересчёта порций в
+          массы, которые расчёт не принимает, семья не узнавала, что не так.
+          Пока правка не догнала расчёт, прежний отказ не показывается. */}
+      {verify.isError && !stale && (
         <WarningBanner level="danger" title={t("calculator.error")}>
-          {t("calculator.errorHint")}
+          {errorMessageOf(verify.error) ?? t("calculator.errorHint")}
         </WarningBanner>
       )}
     </main>

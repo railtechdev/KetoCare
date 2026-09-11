@@ -435,6 +435,26 @@ class TestScale:
         assert error["code"] == "validation_error"
         assert "коэффициент" in error["message"]
 
+    async def test_refusal_just_above_the_limit_does_not_contradict_itself(
+        self, client, make_user, auth_headers
+    ):
+        """2500,001 г × 2 — это 5000,002 г: текст не может говорить «5000 — больше 5000»."""
+
+        user = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/scale",
+            json={
+                "ingredients": [BUTTER],
+                "items": [{"product_id": "butter", "grams": 2500.001}],
+                "factor": 2.0,
+            },
+            headers=auth_headers(user),
+        )
+
+        assert response.status_code == 422, response.text
+        assert "весила бы 5000,1 г" in response.json()["error"]["message"]
+
     async def test_zero_factor_rejected(self, client, session, make_user, auth_headers):
         user = await make_user(UserRole.PARENT)
         response = await client.post(

@@ -271,6 +271,13 @@ describe("калькулятор", () => {
         { timeout: AUTO_CALC_TIMEOUT_MS },
       ),
     ).toBeInTheDocument();
+
+    // Отказ относится к прежнему составу: после правки он не висит рядом с
+    // новым числом в поле, пока пересчёт не догнал.
+    await user.type(screen.getByLabelText(/Масса продукта/), "0");
+    expect(
+      screen.queryByText("Проверьте правильность заполнения полей."),
+    ).not.toBeInTheDocument();
   });
 
   it("убранный из состава продукт не оставляет своих чисел на экране", async () => {
