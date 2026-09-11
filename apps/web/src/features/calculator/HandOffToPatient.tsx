@@ -7,10 +7,11 @@ import { useTranslation } from "react-i18next";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import { useAttemptKey } from "../../lib/useAttemptKey";
 import type { Patient } from "../doctor/types";
 import { PatientPicker } from "../patients/PatientPicker";
 import { incomingDish } from "./incomingItem";
-import type { DishRow } from "./types";
+import { dishSignature, type DishRow } from "./types";
 import { useSaveDishMutation } from "./useCalcMutations";
 
 /**
@@ -53,6 +54,10 @@ export function HandOffToPatient({
   const [title, setTitle] = useState("");
   const [patient, setPatient] = useState<Patient | null>(null);
   const save = useSaveDishMutation(patient?.id ?? null);
+  // Пока ребёнок, название и состав те же, попытка та же (ADR-0035).
+  const attemptKey = useAttemptKey(
+    dishSignature(patient?.id ?? null, title, rows),
+  );
 
   const ready =
     title.trim() !== "" &&
@@ -74,7 +79,7 @@ export function HandOffToPatient({
           if (!ready || patient === null) return;
 
           save.mutate(
-            { title: title.trim(), rows },
+            { title: title.trim(), rows, idempotencyKey: attemptKey },
             {
               onSuccess: (dish) => {
                 toast.success(t("handoff.saved", { name: patient.full_name }), {

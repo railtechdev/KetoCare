@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
-import type { DishRow } from "./types";
+import { useAttemptKey } from "../../lib/useAttemptKey";
+import { dishSignature, type DishRow } from "./types";
 import { useSaveDishMutation } from "./useCalcMutations";
 
 interface Props {
@@ -42,6 +43,9 @@ export function SaveDishForm({
   const queryClient = useQueryClient();
   const save = useSaveDishMutation(patientId);
   const [title, setTitle] = useState("");
+  // Пока название и состав те же, попытка та же: повтор после потерянного
+  // ответа не создаст второго блюда (ADR-0035).
+  const attemptKey = useAttemptKey(dishSignature(patientId, title, rows));
 
   return (
     <Section title={t("save.action")} description={t("save.description")}>
@@ -60,7 +64,7 @@ export function SaveDishForm({
           )
             return;
           save.mutate(
-            { title: title.trim(), rows },
+            { title: title.trim(), rows, idempotencyKey: attemptKey },
             {
               onSuccess: () => {
                 // Успех — тост, а не зелёная строка навсегда в потоке
