@@ -185,6 +185,30 @@ class TestSameChecksAtEveryDoor:
 
         assert response.status_code == 422, response.text
 
+    async def test_rounding_of_the_source_is_accepted(
+        self, client, session, make_user, auth_headers
+    ):
+        """Та же граница, что у импорта (вопрос 27): льняное масло из USDA с суммой
+        100,09 г заводится и руками. Иначе продукт, прошедший импорт, нельзя было
+        бы сохранить после правки названия."""
+
+        admin = await make_user(UserRole.ADMIN)
+        category = await _category(session)
+
+        response = await client.post(
+            "/api/v1/products",
+            json={
+                **_product_payload(category.id),
+                "kcal_100g": 884,
+                "fat_100g": 99.98,
+                "protein_100g": 0.11,
+                "carbs_100g": 0,
+            },
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 201, response.text
+
     async def test_fiber_over_carbs_is_rejected(self, client, session, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)
         category = await _category(session)

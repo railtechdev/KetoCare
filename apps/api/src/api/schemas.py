@@ -19,6 +19,8 @@ from pydantic import (
 from core.models.enums import Sex, UserRole
 from keto_engine import Ingredient, verify
 
+from .services.product_import import macro_sum_exceeds_limit, macro_sum_message
+
 
 def _required(max_length: int) -> Any:
     """Непустая строка с обрезкой пробелов по краям.
@@ -309,12 +311,8 @@ class ProductBase(BaseModel):
         Дверей две, данные одни, значит и проверка обязана быть одна.
         """
 
-        macro_sum = self.fat_100g + self.protein_100g + self.carbs_100g
-        if macro_sum > 100:
-            raise ValueError(
-                f"Сумма жиров, белков и углеводов ({macro_sum:g} г) "
-                "превышает 100 г на 100 г продукта."
-            )
+        if macro_sum_exceeds_limit(self.fat_100g, self.protein_100g, self.carbs_100g):
+            raise ValueError(macro_sum_message(self.fat_100g + self.protein_100g + self.carbs_100g))
 
         # `carbs_100g` — углеводы ВМЕСТЕ с клетчаткой: на этом стоит вычитание в
         # ядре (ADR-0030), и правило ниже — единственное, что эту конвенцию

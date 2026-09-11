@@ -203,6 +203,30 @@ class TestProductAnomalies:
         kinds = {check["kind"] for check in found["Невозможный продукт"]["anomalies"]}
         assert "macro_sum" in kinds
 
+    async def test_rounding_of_the_source_is_not_an_anomaly(
+        self, client, session, make_user, auth_headers
+    ):
+        """Сумма 100,09 г у льняного масла — округление USDA, а не находка.
+
+        Границы у проверки базы те же, что у импорта (вопрос 27): иначе продукт,
+        который импорт принял, администратор видел бы в списке подозрительных.
+        """
+
+        admin = await make_user(UserRole.ADMIN)
+        await _product(
+            session,
+            name_ru="Масло льняное",
+            kcal_100g=884,
+            fat_100g=99.98,
+            protein_100g=0.11,
+            carbs_100g=0.0,
+        )
+
+        response = await client.get("/api/v1/products/anomalies", headers=auth_headers(admin))
+
+        names = {item["name_ru"] for item in response.json()["items"]}
+        assert "Масло льняное" not in names
+
     async def test_kilojoules_written_as_kilocalories_are_reported(
         self, client, session, make_user, auth_headers
     ):

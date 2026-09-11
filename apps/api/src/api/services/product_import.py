@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -37,6 +38,54 @@ OPTIONAL_COLUMNS = ("name_uz", "name_en")
 # (`product_checks`), и две копии однажды разошлись бы.
 MACRO_MAX = 100.0
 KCAL_MAX = 1000.0
+
+#: Допуск на округление СУММЫ жиров, белков и углеводов, граммов на 100 г.
+#:
+#: Источник округляет каждый нутриент отдельно, и у почти чистых жиров сумма
+#: выходит за 100 на сотые доли: льняное масло в USDA (fdc 167702) — жиры
+#: 99,98 г и белки 0,11 г, в сумме 100,09. Допуск открывает только полосу от
+#: 100 до 100,5 г: ошибка того же размера ниже 100 г проходила всегда. Грубые
+#: ошибки переноса эта проверка и раньше ловила не все: переставленные жиры,
+#: белки и углеводы сумму не меняют, калорийность в колонке макронутриента
+#: отсекает граница поля, а килоджоули вместо килокалорий — `KCAL_MAX` и
+#: проверка расхождения калорийности в `product_checks`.
+#: Ответ клиники 09.09.2026 на вопрос 27: «допустимо».
+#:
+#: К отдельным полям допуск не относится: 100,3 г жира на 100 г продукта —
+#: не округление, а ошибка.
+MACRO_SUM_ROUNDING_G = 0.5
+
+
+def macro_sum_exceeds_limit(fat: float, protein: float, carbs: float) -> bool:
+    """Сумма макронутриентов на 100 г больше возможной с учётом округления.
+
+    Одно правило на три двери — импорт, ручное заведение продукта и проверку
+    уже загруженной базы: продукт, который пропускает одна из них, иначе
+    отклоняла бы другая.
+
+    **Складывает сама, а не принимает готовую сумму.** Двери складывали
+    по-разному: импорт — `sum()`, который с Python 3.12 компенсирует ошибку
+    сложения дробей, схема и проверка базы — `+`, который её копит. На 99,01 +
+    0,12 + 1,37 первый даёт ровно 100,5, второй — 100.50000000000001, и одна
+    дверь принимала бы продукт, а другая отклоняла.
+
+    Сумма округляется до микрограммов перед сравнением: иначе граница зависела
+    бы от того, какими числами набраны ровно 100,5 г.
+    """
+
+    return round(fat + protein + carbs, 6) > MACRO_MAX + MACRO_SUM_ROUNDING_G
+
+
+def macro_sum_message(macro_sum: float) -> str:
+    """Текст отказа — один на импорт и ручное заведение."""
+
+    def grams(value: float) -> str:
+        return f"{value:g}".replace(".", ",")
+
+    return (
+        f"Сумма жиров, белков и углеводов ({grams(macro_sum)} г) превышает 100 г на 100 г "
+        f"продукта. Допуск на округление источника — {grams(MACRO_SUM_ROUNDING_G)} г."
+    )
 
 
 @dataclass(slots=True)
@@ -205,6 +254,13 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
             errors.append(RowError(line_no, column, f"Ожидалось число, получено: {raw_value!r}."))
             continue
 
+        if not math.isfinite(number):
+            # `float` понимает «nan» и «inf», а NaN не проходит ни одно
+            # сравнение: ни «< 0», ни «> limit», ни проверку суммы. Без этой
+            # ветки продукт с жирами «nan» проходил импорт без единой ошибки и
+            # ломал бы каждый расчёт, где он встретится.
+            errors.append(RowError(line_no, column, f"Ожидалось число, получено: {raw_value!r}."))
+            continue
         if number < 0:
             errors.append(RowError(line_no, column, "Значение не может быть отрицательным."))
         elif number > limit:
@@ -225,17 +281,14 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
             )
         )
 
-    macros = [parsed.get(c) for c in ("fat_100g", "protein_100g", "carbs_100g")]
-    if all(isinstance(m, float) for m in macros):
-        macro_sum = sum(macros)  # type: ignore[arg-type]
-        if macro_sum > MACRO_MAX:
-            errors.append(
-                RowError(
-                    line_no,
-                    None,
-                    f"Сумма жиров, белков и углеводов ({macro_sum:g} г) превышает 100 г на 100 г продукта.",
-                )
-            )
+    fat, protein, carbs = (parsed.get(c) for c in ("fat_100g", "protein_100g", "carbs_100g"))
+    if (
+        isinstance(fat, float)
+        and isinstance(protein, float)
+        and isinstance(carbs, float)
+        and macro_sum_exceeds_limit(fat, protein, carbs)
+    ):
+        errors.append(RowError(line_no, None, macro_sum_message(fat + protein + carbs)))
 
     # `carbs_100g` — углеводы ВМЕСТЕ с клетчаткой. Ядро вычитает её из знаменателя
     # соотношения (ADR-0030), и эта проверка — единственное место, где конвенция
