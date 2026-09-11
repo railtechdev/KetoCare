@@ -389,7 +389,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: VERIFIED, error: undefined });
     });
     const user = userEvent.setup();
@@ -448,7 +448,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: VERIFIED, error: undefined });
     });
     const user = userEvent.setup();
@@ -495,7 +495,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : new Promise(() => {});
     });
     const user = userEvent.setup();
@@ -542,7 +542,7 @@ describe("калькулятор", () => {
     // скрытая строка второй раз его не повторяет.
     (api.POST as Mock).mockImplementation((path: string) =>
       path.includes("verify")
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: SOLVED, error: undefined }),
     );
     const user = userEvent.setup();
@@ -769,7 +769,7 @@ describe("калькулятор", () => {
       }
       verifyCalls += 1;
       return verifyCalls === 1
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({
             data: undefined,
             error: {
@@ -1206,7 +1206,7 @@ describe("калькулятор", () => {
     // называет строка действий.
     (api.POST as Mock).mockImplementation((path: string) =>
       path.includes("verify")
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: SOLVED, error: undefined }),
     );
     const user = userEvent.setup();
@@ -1273,7 +1273,7 @@ describe("калькулятор", () => {
     // занятая кнопка описана самой плашкой.
     (api.POST as Mock).mockImplementation((path: string) =>
       path.includes("verify")
-        ? Promise.reject(new TypeError("Failed to fetch"))
+        ? Promise.reject(new NetworkError())
         : Promise.resolve({ data: SOLVED, error: undefined }),
     );
     const user = userEvent.setup();

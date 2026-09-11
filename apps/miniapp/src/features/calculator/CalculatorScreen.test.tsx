@@ -1,3 +1,4 @@
+import { NetworkError } from "@ketocare/api-client";
 import {
   focusManager,
   onlineManager,
@@ -611,7 +612,7 @@ describe("калькулятор в Mini App", () => {
         }
         if (options.body?.items?.[0]?.grams === 30 && !failed) {
           failed = true;
-          return Promise.reject(new TypeError("Failed to fetch"));
+          return Promise.reject(new NetworkError());
         }
         return Promise.resolve({ data: verifyResponse() });
       },
@@ -771,7 +772,7 @@ describe("калькулятор в Mini App", () => {
         }
         calls30 += 1;
         return calls30 === 1
-          ? Promise.reject(new TypeError("Failed to fetch"))
+          ? Promise.reject(new NetworkError())
           : Promise.resolve({
               error: {
                 error: {
