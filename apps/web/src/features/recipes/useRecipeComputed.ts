@@ -1,8 +1,7 @@
-import { RECALC_DELAY_MS } from "@ketocare/ui";
+import { RECALC_DELAY_MS, useDebouncedValue } from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import type { DishView } from "../calculator/DishResultView";
 import { useProductDetails } from "./useRecipes";
 

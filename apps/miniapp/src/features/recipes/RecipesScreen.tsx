@@ -1,11 +1,18 @@
-import { AsyncSection, Button, Input, RatioBadge, Section } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  Input,
+  RatioBadge,
+  Section,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
+} from "@ketocare/ui";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { showBackButton } from "../../lib/telegram";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import {
   type Recipe,
   useProductNames,
@@ -37,7 +44,7 @@ export function RecipesScreen() {
 function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const debounced = useDebouncedValue(query, 400);
+  const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const recipes = useRecipeSearch(debounced);
 
   return (

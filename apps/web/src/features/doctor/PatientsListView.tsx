@@ -7,6 +7,8 @@ import {
   FilterBar,
   FormSheet,
   RatioBadge,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { SearchX, UserPlus, Users } from "lucide-react";
@@ -17,7 +19,6 @@ import { Field } from "../../components/Field";
 import { PatientViewLink } from "./PatientViewLink";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { usePatients } from "../patients/usePatients";
 import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
 import { ageInMonths } from "./dates";
@@ -48,7 +49,7 @@ export function PatientsListView() {
   const [inviteOpen, setInviteOpen] = useState(false);
 
   // Поиск уходит на сервер (см. `usePatients`), поэтому список уже отобран.
-  const debouncedQuery = useDebouncedValue(query, 300);
+  const debouncedQuery = useDebouncedValue(query, SEARCH_DELAY_MS);
   const patients = usePatients(debouncedQuery);
   const items = useMemo(() => patients.data?.items ?? [], [patients.data]);
 

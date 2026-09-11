@@ -1,4 +1,12 @@
-import { AsyncSection, Button, Tabs, TabsBar, TabsContent } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  Tabs,
+  TabsBar,
+  TabsContent,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
+} from "@ketocare/ui";
 import { Plus, Upload } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,7 +18,6 @@ import {
   useSectionTab,
 } from "../../routes/useSectionTab";
 import { errorMessageOf } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useSession } from "../auth/useSession";
 import { MyDishesPanel } from "../dishes/MyDishesPanel";
 import { useSelectedPatient } from "../patients/useSelectedPatient";
@@ -84,7 +91,7 @@ export function RecipesPage() {
   const [form, setForm] = useState<FormView | null>(null);
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
-  const debouncedQuery = useDebouncedValue(filters.q, 300);
+  const debouncedQuery = useDebouncedValue(filters.q, SEARCH_DELAY_MS);
   const rangeInvalid = isRatioRangeInvalid(filters);
   const recipes = useRecipeSearch(
     { ...filters, q: debouncedQuery },

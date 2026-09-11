@@ -6,6 +6,8 @@ import {
   FilterBar,
   RatioBadge,
   Skeleton,
+  useDebouncedValue,
+  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -17,7 +19,6 @@ import { Field, SelectField } from "../../components/Field";
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { api, errorMessageOf } from "../../lib/api";
-import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useSectionItem, useSectionQuery } from "../../routes/useSectionTab";
 import { useProductCategories } from "../admin/useAdminProducts";
 import { ProductCard } from "./ProductCard";
@@ -66,7 +67,7 @@ export function ProductsPage() {
   const categories = useProductCategories();
 
   // Запрос уходит с задержкой: иначе полнотекстовый поиск дёргается на каждой букве.
-  const debounced = useDebouncedValue(query, 300);
+  const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const trimmed = debounced.trim();
 
   const listQuery = {
