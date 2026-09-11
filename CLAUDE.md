@@ -729,6 +729,11 @@ directory`. Защита при этом выглядит настроенной
   `shadcn add <имя> --overwrite`. **Править их руками нельзя** — правка не переживёт обновления.
   Единственное отступление (`sonner.tsx`: источник темы вместо next-themes) описано в
   [ADR-0005](docs/adr/0005-ui-kit-and-react-19.md) и проверяется при каждом обновлении.
+- **Встроенные кнопки закрытия кита подписаны по-английски** («Close» у `SheetContent`,
+  `DialogContent` и `DialogFooter showCloseButton`, «Command Palette» у `CommandDialog`).
+  Форма в панели — через `FormSheet`; где кит используется напрямую, встроенная кнопка выключается
+  (`showCloseButton={false}`) и ставится своя с подписью из словаря. Держит
+  `apps/web/src/builtInClose.test.ts`.
 - **Импорт — только через `@ketocare/ui`.** У пакета один публичный вход; внутренняя раскладка
   меняется вместе с китом.
 - **Словарь токенов — как у кита**: `background`, `card`, `foreground`, `primary`,
