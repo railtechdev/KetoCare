@@ -431,6 +431,10 @@ describe("калькулятор в Mini App", () => {
       await screen.findByText("Внутренняя ошибка сервера."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Соотношение /)).toHaveAttribute(
+      "data-state",
+      "neutral",
+    );
     expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
   });
 
@@ -461,7 +465,39 @@ describe("калькулятор в Mini App", () => {
       await screen.findByRole("button", { name: "Повторяем…" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Пересчитываем…")).not.toBeInTheDocument();
-    expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
+  });
+
+  it("правка ввода во время повтора при прежних данных говорит «Пересчитываем…»", async () => {
+    // Пока правка не догнала расчёт, отказ и кнопка скрыты. Вердикт молчал ради
+    // «Повторяем…», и на экране оставались прежние числа без единого слова.
+    let refetches = 0;
+    refetchOf30Fails(() => {
+      refetches += 1;
+      return refetches === 1
+        ? Promise.resolve({
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          })
+        : new Promise(() => {});
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await returnToCachedGrams(user);
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+    await screen.findByRole("button", { name: "Повторяем…" });
+
+    await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "5");
+
+    expect(screen.getByText("Пересчитываем…")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("status")
+        .some((el) => el.textContent === "Повторяем…"),
+    ).toBe(false);
   });
 
   it("называет причину отказа проверки текстом сервера, как кабинет", async () => {

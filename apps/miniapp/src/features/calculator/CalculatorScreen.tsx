@@ -294,6 +294,10 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // Идёт — и когда запрос на паузе без сети: `isFetching` на паузе ложно, и
   // нажатая без связи кнопка пропадала вместе с фокусом и текстом отказа.
   const retrying = retryIsThisRequest && verify.fetchStatus !== "idle";
+  // Повтор, который видно. Пока правка не догнала расчёт, отказ и кнопка
+  // скрыты, и молчать ради «Повторяем…», которого на экране нет, нельзя:
+  // остались бы прежние числа без единого слова.
+  const retryingShown = retrying && !staleInput;
   // Отказал именно повтор: ошибок стало больше, чем было при нажатии. Сверка
   // счётчика — страховка на случай отмены запроса с откатом (`cancelQueries`):
   // он возвращается в прежнюю ошибку и покой, и без сверки скрытая строка
@@ -496,7 +500,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
         {/* Пустой расчёт молчит: о ненабранном составе сказано выше. Кроме
             ожидания связи — иначе набранный состав остаётся без ответа и без
             объяснения. На повторе без сети говорят отказ и «Повторяем…». */}
-        {dish === null && waitingForNetwork && !retrying && (
+        {dish === null && waitingForNetwork && !retryingShown && (
           <p role="status" className="m-0 text-sm text-muted-foreground">
             {t("calculator.waitingForNetwork")}
           </p>
@@ -526,7 +530,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
             <Verdict
               stale={stale}
               waitingForNetwork={waitingForNetwork}
-              retrying={retrying}
+              retrying={retryingShown}
               ratioOk={verdict?.ratio_within_tolerance}
               kcalOk={verdict?.kcal_within_tolerance}
             />
@@ -679,7 +683,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
       {/* Постоянная область: повторный отказ с тем же текстом баннер заново
           не объявляет. */}
       <p role="status" className="sr-only">
-        {retrying
+        {retryingShown
           ? t("actions.retrying")
           : announceRetryFailed
             ? refusalMessage
