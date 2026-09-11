@@ -316,6 +316,15 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           name: tooHeavy.product.name,
           max: CALC_GRAMS_MAX,
         });
+  // В карте ребёнка сохранение ждёт проверки: только она называет продукты,
+  // исключённые ребёнку, а сервер при сохранении их не проверяет (вопрос 29 —
+  // предупреждение, а не запрет). Форма при этом видна — иначе набранное
+  // название терялось бы на каждой перепроверке, — но состав, о котором
+  // проверка ещё ничего не сказала, отправить нельзя. В общем калькуляторе
+  // ребёнка нет и исключать нечего: передача ждёт только предела массы.
+  const saveBlockedBy =
+    tooHeavyReason ??
+    (stale || dish === null ? t("save.blocked.notChecked") : null);
   const scaleBlockedBy = noRows
     ? t("blocked.noRows")
     : tooHeavyReason !== null
@@ -602,8 +611,9 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
 
       {/* Форма стоит, пока есть состав, а не пока есть показатели: показатели
           пропадают на каждой массе тяжелее предела, и вместе с формой
-          пропадали бы набранное название и выбранный пациент. Сохранить
-          состав, который сервер не примет, форма не даёт и говорит почему. */}
+          пропадали бы набранное название и выбранный пациент. Состав тяжелее
+          предела или ещё не проверенный форма отправить не даёт и говорит
+          почему. */}
       {rows.length > 0 && (
         <>
           {/* Куда уходит собранный состав, зависит от того, чей это экран:
@@ -615,7 +625,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
             <SaveDishForm
               patientId={patientId}
               rows={rows}
-              blockedBy={tooHeavyReason}
+              blockedBy={saveBlockedBy}
             />
           )}
         </>

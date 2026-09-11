@@ -540,7 +540,31 @@ describe("калькулятор", () => {
     await user.clear(grams);
     await user.type(grams, "50");
     expect(screen.getByLabelText(/Название блюда/)).toHaveValue("Суп");
-    expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
+    await waitFor(
+      () =>
+        expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled(),
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+  });
+
+  it("в карте ребёнка сохранение ждёт проверки — она называет исключённое", async () => {
+    // Сервер при сохранении исключённые ребёнку продукты не проверяет, а
+    // предупреждение приходит только с ответом проверки. Форма видна сразу,
+    // но состав, о котором проверка ещё ничего не сказала, не отправляется.
+    (api.POST as Mock).mockImplementation((path: string) =>
+      path.includes("verify")
+        ? new Promise(() => {})
+        : Promise.resolve({ data: SOLVED, error: undefined }),
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await user.type(screen.getByLabelText(/Название блюда/), "Суп");
+
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+    const reason = await screen.findByText(/Сохранить можно после расчёта/);
+    expect(save).toHaveAttribute("aria-describedby", reason.id);
   });
 
   it("причина не говорит о назначении: экран работает и без ребёнка", async () => {
@@ -613,6 +637,23 @@ describe("калькулятор без выбранного ребёнка", ()
     );
     expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
     expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument();
+  });
+
+  it("масса тяжелее предела не передаётся пациенту, и причина названа", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+    await addButter(user);
+
+    const grams = screen.getByLabelText(/Масса продукта/);
+    await user.clear(grams);
+    await user.type(grams, "5001");
+
+    const handOff = screen.getByRole("button", { name: "Передать" });
+    expect(handOff).toBeDisabled();
+    const reasons = screen
+      .getAllByText("Масса продукта «Масло сливочное» больше 5000 г.")
+      .map((element) => element.id);
+    expect(reasons).toContain(handOff.getAttribute("aria-describedby"));
   });
 
   it("предлагает передать состав пациенту вместо «сохранить себе»", async () => {

@@ -344,11 +344,15 @@ class TestGramsLimitMirroredInKit:
         # Своё блюдо сохраняется из того же калькулятора. Предел, которого экран
         # не знает, дал бы форму сохранения для массы, которую сервер отвергнет.
         bound = next(
-            float(meta.le)
-            for meta in DishIngredientIn.model_fields["grams"].metadata
-            if getattr(meta, "le", None) is not None
+            (
+                float(meta.le)
+                for meta in DishIngredientIn.model_fields["grams"].metadata
+                if getattr(meta, "le", None) is not None
+            ),
+            None,
         )
 
+        assert bound is not None, "у граммов своего блюда пропала верхняя граница"
         assert bound == CALC_GRAMS_MAX
 
     @pytest.mark.parametrize(
