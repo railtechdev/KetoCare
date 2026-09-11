@@ -59,6 +59,38 @@ describe("AsyncSection", () => {
     expect(screen.getAllByText("данные")).toHaveLength(1);
   });
 
+  it("пауза без данных объясняется словами, а не пустотой", () => {
+    // Без сети запрос не уходит и не отказывает: он ждёт связи и продолжится
+    // сам. Скелетон обещал бы загрузку, которой нет, а сводка в Mini App
+    // показывала пустоту — ни объяснения, ни выхода.
+    renderSection({ loading: true, isEmpty: true, waiting: "Нет связи" });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Нет связи");
+    expect(screen.queryByText("скелетон")).not.toBeInTheDocument();
+  });
+
+  it("пауза не прячет уже показанные данные", () => {
+    // Прежний ответ верен: связь пропала, а не данные.
+    renderSection({ loading: false, isEmpty: false, waiting: "Нет связи" });
+
+    expect(screen.getByText("данные")).toBeInTheDocument();
+    expect(screen.queryByText("Нет связи")).not.toBeInTheDocument();
+  });
+
+  it("ошибка важнее ожидания связи", () => {
+    // Отказ уже случился: обещать, что «покажем, когда связь появится», —
+    // неправда.
+    renderSection({
+      loading: true,
+      isEmpty: true,
+      waiting: "Нет связи",
+      error: { title: "Не удалось загрузить" },
+    });
+
+    expect(screen.getByText("Не удалось загрузить")).toBeInTheDocument();
+    expect(screen.queryByText("Нет связи")).not.toBeInTheDocument();
+  });
+
   it("пустое состояние — когда данных нет и ошибки нет", () => {
     renderSection({ isEmpty: true });
     expect(screen.getByText("пусто")).toBeInTheDocument();

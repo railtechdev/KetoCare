@@ -68,6 +68,12 @@ export function AssistantScreen({ session }: { session: Session }) {
                 }
               : null
           }
+          waiting={
+            latest.fetchStatus === "paused" ||
+            conversation.fetchStatus === "paused"
+              ? t("errors.waitingForNetwork")
+              : null
+          }
           retryLabel={t("actions.retry")}
           onRetry={() => void conversation.refetch()}
           isEmpty={messages.length === 0}

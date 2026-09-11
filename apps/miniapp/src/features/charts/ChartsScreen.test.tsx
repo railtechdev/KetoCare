@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -50,6 +54,31 @@ beforeEach(() => {
 });
 
 describe("динамика в Mini App", () => {
+  it("пауза без сети объясняется словами, а не пустотой", async () => {
+    // Тот же случай, что в плане дня: запрос ждёт связи, а график выглядел
+    // так, будто записей нет вовсе.
+    (api.GET as Mock).mockImplementation(() => new Promise(() => undefined));
+    onlineManager.setOnline(false);
+
+    try {
+      renderScreen();
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+      // Один раз на экран, а не по разу на каждый график: две одинаковые
+      // фразы подряд — это тот же текст дважды (правило П27).
+      expect(
+        screen.getAllByText("Нет связи — покажем, как только она появится."),
+      ).toHaveLength(1);
+      expect(api.GET).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("показывает оба показателя", async () => {
     renderScreen();
 

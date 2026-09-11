@@ -58,6 +58,9 @@ export function MenuScreen({ session }: { session: Session }) {
               }
             : null
         }
+        waiting={
+          menu.fetchStatus === "paused" ? t("errors.waitingForNetwork") : null
+        }
         retryLabel={t("actions.retry")}
         onRetry={() => void menu.refetch()}
         isEmpty={menu.data === null}

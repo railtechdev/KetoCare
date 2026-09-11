@@ -73,6 +73,11 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
               }
             : null
         }
+        waiting={
+          recipes.fetchStatus === "paused"
+            ? t("errors.waitingForNetwork")
+            : null
+        }
         retryLabel={t("actions.retry")}
         onRetry={() => void recipes.refetch()}
         isEmpty={recipes.data?.length === 0}
@@ -138,6 +143,9 @@ function RecipeCard({
                   errorMessageOf(recipe.error) ?? t("home.loadErrorHint"),
               }
             : null
+        }
+        waiting={
+          recipe.fetchStatus === "paused" ? t("errors.waitingForNetwork") : null
         }
         retryLabel={t("actions.retry")}
         onRetry={() => void recipe.refetch()}

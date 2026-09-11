@@ -22,6 +22,16 @@ const KINDS: readonly TrendKind[] = ["ketones", "weight"];
 export function ChartsScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
   const markers = usePrescriptionMarkers(session.patientId);
+  // Оба запроса живут здесь, а не в блоках: без сети они встают на паузу
+  // одновременно, и блок сказал бы «нет связи» дважды подряд — одна и та же
+  // фраза в двух соседних строках (правило П27). Экран говорит это один раз.
+  const trends: Record<TrendKind, ReturnType<typeof useTrend>> = {
+    ketones: useTrend(session.patientId, "ketones"),
+    weight: useTrend(session.patientId, "weight"),
+  };
+  const waitingForNetwork = KINDS.some(
+    (kind) => trends[kind].fetchStatus === "paused",
+  );
 
   return (
     <main className="flex flex-col gap-block p-block">
@@ -40,10 +50,16 @@ export function ChartsScreen({ session }: { session: Session }) {
         </WarningBanner>
       )}
 
+      {waitingForNetwork && (
+        <p role="status" className="text-muted-foreground">
+          {t("errors.waitingForNetwork")}
+        </p>
+      )}
+
       {KINDS.map((kind) => (
         <Trend
           key={kind}
-          patientId={session.patientId}
+          trend={trends[kind]}
           kind={kind}
           markers={markers.data ?? []}
         />
@@ -53,16 +69,15 @@ export function ChartsScreen({ session }: { session: Session }) {
 }
 
 function Trend({
-  patientId,
+  trend,
   kind,
   markers,
 }: {
-  patientId: string;
+  trend: ReturnType<typeof useTrend>;
   kind: TrendKind;
   markers: ReturnType<typeof usePrescriptionMarkers>["data"] & object;
 }) {
   const { t } = useTranslation();
-  const trend = useTrend(patientId, kind);
 
   return (
     <Section title={t(`charts.${kind}.title`)} density="compact">
