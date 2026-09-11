@@ -39,6 +39,8 @@ function renderScreen() {
 }
 
 beforeEach(() => {
+  // Иначе будущий тест почистил бы кэш прошлого, ничего об этом не сказав.
+  screenClient = undefined;
   vi.clearAllMocks();
   (api.GET as Mock).mockImplementation((path: string) => {
     if (path.includes("prescriptions")) {
