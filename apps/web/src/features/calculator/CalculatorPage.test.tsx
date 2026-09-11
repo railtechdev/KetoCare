@@ -176,8 +176,10 @@ describe("калькулятор", () => {
 
     // «Добавляю продукты — ничего не происходит»: расчёт запускала кнопка,
     // которая на ноутбуке стояла ниже сгиба, а на телефоне — тем более.
+    // Ждём сами показатели: форма сохранения стоит, пока есть состав, и о
+    // расчёте не говорит ничего.
     expect(
-      await screen.findByText("Сохранить как моё блюдо", undefined, {
+      await screen.findByText(/374 ккал/, undefined, {
         timeout: AUTO_CALC_TIMEOUT_MS,
       }),
     ).toBeInTheDocument();
@@ -495,6 +497,8 @@ describe("калькулятор", () => {
         timeout: AUTO_CALC_TIMEOUT_MS,
       }),
     ).toBeInTheDocument();
+    const title = screen.getByLabelText(/Название блюда/);
+    await user.type(title, "Суп");
 
     const grams = screen.getByLabelText(/Масса продукта/);
     await user.clear(grams);
@@ -506,17 +510,19 @@ describe("калькулятор", () => {
 
     const scale = screen.getByRole("button", { name: /Пересчитать порции/ });
     expect(scale).toBeDisabled();
-    const reason = screen.getByText(
-      "Масса продукта «Масло сливочное» больше 5000 г.",
-    );
-    expect(scale).toHaveAttribute("aria-describedby", reason.id);
-    // Подбор граммов не берёт, он их пишет: предел ему не мешает.
+    // Причина одна и та же у пересчёта и у сохранения — две строки, по одной
+    // на каждый блок действий.
+    const reasons = screen
+      .getAllByText("Масса продукта «Масло сливочное» больше 5000 г.")
+      .map((element) => element.id);
+    expect(reasons).toContain(scale.getAttribute("aria-describedby"));
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+    expect(reasons).toContain(save.getAttribute("aria-describedby"));
+    // Подбор граммов со входа не берёт — предел его не выключает.
     expect(
       screen.getByRole("button", { name: /Подобрать граммовку/ }),
     ).toBeEnabled();
-    expect(
-      screen.queryByText("Сохранить как моё блюдо"),
-    ).not.toBeInTheDocument();
 
     // Числа прежней массы уходят — они о другом блюде, — а тяжёлая масса на
     // сервер не отправляется вовсе.
@@ -528,6 +534,13 @@ describe("калькулятор", () => {
       .filter(([path]) => String(path).includes("verify"))
       .map(([, options]) => options.body.items[0].grams);
     expect(sent).not.toContain(5001);
+
+    // Форма сохранения не исчезала вместе с показателями: набранное название
+    // на месте, и после исправления массы сохранить можно сразу.
+    await user.clear(grams);
+    await user.type(grams, "50");
+    expect(screen.getByLabelText(/Название блюда/)).toHaveValue("Суп");
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
   });
 
   it("причина не говорит о назначении: экран работает и без ребёнка", async () => {

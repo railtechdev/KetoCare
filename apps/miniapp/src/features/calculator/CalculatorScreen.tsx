@@ -198,7 +198,10 @@ export function CalculatorScreen({ session }: { session: Session }) {
   const filled =
     rows.length > 0 && rows.every((row) => parseAmount(row.grams) > 0);
   // Первая позиция тяжелее предела — её и называем: по имени семья найдёт
-  // поле. Подбора это не касается: граммов он не берёт, он их пишет.
+  // поле. Подбор граммов со входа не берёт, поэтому предел его не выключает.
+  // Но переписывает он только то, что вошло в раскладку: строка, которую он
+  // отбросил (легче 2 г или исключённая ребёнку), сохранит прежнюю массу, и
+  // ошибка у поля останется.
   const tooHeavy = rows.find((row) => exceedsCalcGrams(parseAmount(row.grams)));
   const solveTargets: Targets | null =
     goal === null

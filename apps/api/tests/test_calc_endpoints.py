@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
+from api.schemas import DishIngredientIn
 from api.schemas_calc import CALC_GRAMS_MAX
 from core.models import Product, ProductCategory
 from core.models.enums import UserRole
@@ -338,6 +339,17 @@ class TestGramsLimitMirroredInKit:
 
         assert match is not None, "в ките не нашлось объявления CALC_GRAMS_MAX"
         assert float(match.group(1)) == CALC_GRAMS_MAX
+
+    async def test_custom_dish_has_the_same_bound(self):
+        # Своё блюдо сохраняется из того же калькулятора. Предел, которого экран
+        # не знает, дал бы форму сохранения для массы, которую сервер отвергнет.
+        bound = next(
+            float(meta.le)
+            for meta in DishIngredientIn.model_fields["grams"].metadata
+            if getattr(meta, "le", None) is not None
+        )
+
+        assert bound == CALC_GRAMS_MAX
 
     @pytest.mark.parametrize(
         ("grams", "status"), [(CALC_GRAMS_MAX, 200), (CALC_GRAMS_MAX + 0.1, 422)]

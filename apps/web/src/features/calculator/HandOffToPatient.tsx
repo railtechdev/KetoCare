@@ -32,7 +32,14 @@ import { useSaveDishMutation } from "./useCalcMutations";
  * в общем калькуляторе. Проверить блюдо против цели ребёнка — второй шаг той же
  * работы, и заставлять искать его руками незачем.
  */
-export function HandOffToPatient({ rows }: { rows: DishRow[] }) {
+export function HandOffToPatient({
+  rows,
+  blockedBy = null,
+}: {
+  rows: DishRow[];
+  /** Почему набранный состав передать нельзя — например, масса тяжелее предела. */
+  blockedBy?: string | null;
+}) {
   const { t } = useTranslation("calculator");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -41,7 +48,7 @@ export function HandOffToPatient({ rows }: { rows: DishRow[] }) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const save = useSaveDishMutation(patient?.id ?? null);
 
-  const ready = title.trim() !== "" && patient !== null;
+  const ready = title.trim() !== "" && patient !== null && blockedBy === null;
 
   return (
     <Section
@@ -110,10 +117,13 @@ export function HandOffToPatient({ rows }: { rows: DishRow[] }) {
           pendingLabel={t("handoff.pending")}
           pending={save.isPending}
           disabled={!ready}
+          // Состав первым: он выше формы, и без него название и пациент
+          // ничего не дают.
           reason={
-            title.trim() === ""
+            blockedBy ??
+            (title.trim() === ""
               ? t("handoff.blocked.noTitle")
-              : t("handoff.blocked.noPatient")
+              : t("handoff.blocked.noPatient"))
           }
         />
       </form>

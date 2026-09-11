@@ -659,7 +659,7 @@ describe("калькулятор в Mini App", () => {
       "Масса продукта «Масло сливочное» больше 5000 г.",
     );
     expect(scale).toHaveAttribute("aria-describedby", reason.id);
-    // Подбор граммов не берёт, он их пишет: предел ему не мешает.
+    // Подбор граммов со входа не берёт — предел его не выключает.
     expect(
       screen.getByRole("button", { name: "Подобрать граммовку" }),
     ).toBeEnabled();

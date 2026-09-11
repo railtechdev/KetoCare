@@ -298,7 +298,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    */
   const noRows = rows.length === 0;
   // Первая позиция тяжелее предела — её и называем: по имени человек найдёт
-  // поле. Подбора это не касается: граммов он не берёт, он их пишет.
+  // поле. Подбор граммов со входа не берёт, поэтому предел его не выключает.
+  // Но переписывает он только то, что вошло в раскладку: строка, которую он
+  // отбросил (легче 2 г или исключённая ребёнку), сохранит прежнюю массу, и
+  // ошибка у поля останется.
   const tooHeavy = rows.find((row) => exceedsCalcGrams(row.grams));
   const solveBlockedBy = noRows
     ? t("blocked.noRows")
@@ -306,13 +309,17 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       ? t("blocked.noTargets")
       : null;
   // Пересчёт цели не требует: множитель применяется к тому, что уже набрано.
-  const scaleBlockedBy = noRows
-    ? t("blocked.noRows")
-    : tooHeavy !== undefined
-      ? t("blocked.tooHeavy", {
+  const tooHeavyReason =
+    tooHeavy === undefined
+      ? null
+      : t("blocked.tooHeavy", {
           name: tooHeavy.product.name,
           max: CALC_GRAMS_MAX,
-        })
+        });
+  const scaleBlockedBy = noRows
+    ? t("blocked.noRows")
+    : tooHeavyReason !== null
+      ? tooHeavyReason
       : factor > 0
         ? null
         : t("blocked.noFactor");
@@ -593,17 +600,23 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         <FormError>{actionMessage ?? t("common:errors.unexpected")}</FormError>
       )}
 
-      {/* Состав, который сервер не примет, сохранить не предлагается: пока
-          пересчёт не догнал правку, показатели прежней массы ещё на экране. */}
-      {dish && tooHeavy === undefined && (
+      {/* Форма стоит, пока есть состав, а не пока есть показатели: показатели
+          пропадают на каждой массе тяжелее предела, и вместе с формой
+          пропадали бы набранное название и выбранный пациент. Сохранить
+          состав, который сервер не примет, форма не даёт и говорит почему. */}
+      {rows.length > 0 && (
         <>
           {/* Куда уходит собранный состав, зависит от того, чей это экран:
               в карте ребёнка — сразу в его блюда, в общем калькуляторе —
               вместе с выбором ребёнка. */}
           {patientId === undefined ? (
-            <HandOffToPatient rows={rows} />
+            <HandOffToPatient rows={rows} blockedBy={tooHeavyReason} />
           ) : (
-            <SaveDishForm patientId={patientId} rows={rows} />
+            <SaveDishForm
+              patientId={patientId}
+              rows={rows}
+              blockedBy={tooHeavyReason}
+            />
           )}
         </>
       )}
