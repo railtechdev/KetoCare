@@ -601,6 +601,58 @@ describe("калькулятор в Mini App", () => {
     ).toBe(false);
   });
 
+  it("«Повторить» без сети не прячет отказ, кнопку и фокус", async () => {
+    // Без сети запрос встаёт на паузу, а `isFetching` на паузе ложно: нажатая
+    // кнопка пропадала вместе с фокусом и текстом отказа до возврата сети.
+    let calls30 = 0;
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams !== 30) {
+          return Promise.resolve({ data: verifyResponse() });
+        }
+        calls30 += 1;
+        return calls30 === 1
+          ? Promise.resolve({
+              error: {
+                error: {
+                  code: "internal",
+                  message: "Внутренняя ошибка сервера.",
+                },
+              },
+            })
+          : Promise.resolve({ data: verifyResponse() });
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const busy = screen.getByRole("button", { name: "Повторяем…" });
+      expect(busy).toHaveFocus();
+      expect(
+        screen.getByText("Внутренняя ошибка сервера."),
+      ).toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("отказ проверки по данным повторить не предлагает", async () => {
     respond({
       "/calc/verify": new ApiFailure({
