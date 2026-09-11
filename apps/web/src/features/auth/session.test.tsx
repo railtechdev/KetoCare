@@ -1,3 +1,4 @@
+import { NetworkError } from "@ketocare/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -90,7 +91,7 @@ describe("сессия и кэш запросов", () => {
     // отклонённое обещание сразу при настройке, и Node сообщает о необработанном
     // отказе ещё до того, как обработчик его поймает.
     (api.POST as unknown as Mock).mockImplementation(() =>
-      Promise.reject(new Error("сеть недоступна")),
+      Promise.reject(new NetworkError()),
     );
     const user = userEvent.setup();
     const client = renderProbe();
@@ -106,7 +107,7 @@ describe("сессия и кэш запросов", () => {
     // перехвата, и при отказе сети приложение застревало, не пуская даже на
     // экран входа.
     (api.POST as unknown as Mock).mockImplementation(() =>
-      Promise.reject(new Error("сеть недоступна")),
+      Promise.reject(new NetworkError()),
     );
 
     renderProbe();
