@@ -44,7 +44,9 @@ export function ActionReason({ children, id, className }: ActionReasonProps) {
     <p
       id={id}
       role="status"
-      className={cn("m-0 text-sm text-muted-foreground", className)}
+      // Причина называет продукт из справочника («Масса продукта «…» больше…»),
+      // а название бывает словом без пробелов.
+      className={cn("m-0 text-sm break-words text-muted-foreground", className)}
     >
       {children}
     </p>
