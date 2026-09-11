@@ -166,6 +166,39 @@ function renderScreen() {
   return Object.assign(result, { client });
 }
 
+/**
+ * Проверка 30 г сначала отвечает, а её перезапросы — как скажет `refetch`.
+ * Остальные массы отвечают всегда.
+ */
+function refetchOf30Fails(refetch: () => Promise<unknown>) {
+  let calls30 = 0;
+  (api.POST as Mock).mockImplementation(
+    (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+      if (!path.endsWith("/calc/verify")) {
+        return Promise.resolve({ data: solveResponse() });
+      }
+      if (options.body?.items?.[0]?.grams !== 30) {
+        return Promise.resolve({ data: verifyResponse() });
+      }
+      calls30 += 1;
+      return calls30 === 1
+        ? Promise.resolve({ data: verifyResponse() })
+        : refetch();
+    },
+  );
+}
+
+/** 30 г посчитано, 300 г посчитано, снова 30 г — расчёт из кэша перезапрашивается. */
+async function returnToCachedGrams(user: ReturnType<typeof userEvent.setup>) {
+  await addProduct(user);
+  expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+  const grams = screen.getByLabelText(/Масло сливочное, граммы/);
+  await user.type(grams, "0");
+  await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(2));
+  expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+  await user.type(grams, "{Backspace}");
+}
+
 async function addProduct(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Найдите продукт"), "масло");
   await user.click(
@@ -348,8 +381,9 @@ describe("калькулятор в Mini App", () => {
 
   it("вердикт из кэша без сети не выдаётся за посчитанный по этому вводу", async () => {
     // Возврат к прежней граммовке берёт её расчёт из кэша и перезапрашивает
-    // его, если он устарел. Без сети перезапрос ждёт на паузе, и прежний
-    // вердикт стоял как свежий, хотя сервер его не подтверждал.
+    // его, если он устарел (в бою — через 30 с, у тестового клиента — сразу).
+    // Без сети перезапрос ждёт на паузе, и прежний вердикт стоял как свежий,
+    // хотя сервер его не подтверждал.
     const user = userEvent.setup();
     renderScreen();
     await addProduct(user);
@@ -376,6 +410,58 @@ describe("калькулятор в Mini App", () => {
     } finally {
       onlineManager.setOnline(true);
     }
+  });
+
+  it("упавший перезапрос при прежних данных не оставляет вердикт рядом с отказом", async () => {
+    // Связь пропала без события `offline`: запрос не встаёт на паузу, а
+    // падает, и данные прежнего ответа остаются. «Цель достигнута» рядом с
+    // «Не удалось посчитать» — противоречие.
+    refetchOf30Fails(() =>
+      Promise.resolve({
+        error: {
+          error: { code: "internal", message: "Внутренняя ошибка сервера." },
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await returnToCachedGrams(user);
+
+    expect(
+      await screen.findByText("Внутренняя ошибка сервера."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+    expect(screen.getByText(/224 ккал/)).toBeInTheDocument();
+  });
+
+  it("повтор при прежних данных говорит одним голосом", async () => {
+    // Вердикт на время повтора писал «Пересчитываем…», а скрытая строка —
+    // «Повторяем…»: два разных объявления одновременно.
+    let refetches = 0;
+    refetchOf30Fails(() => {
+      refetches += 1;
+      return refetches === 1
+        ? Promise.resolve({
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          })
+        : new Promise(() => {});
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await returnToCachedGrams(user);
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Повторяем…" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Пересчитываем…")).not.toBeInTheDocument();
+    expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
   });
 
   it("называет причину отказа проверки текстом сервера, как кабинет", async () => {

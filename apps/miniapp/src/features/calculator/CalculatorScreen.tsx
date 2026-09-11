@@ -186,6 +186,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
   }
 
   const dish = verify.data?.dish ?? null;
+  // Вердикт — только по ответу, который сервер дал на этот ввод. Перезапрос,
+  // упавший при сохранённых прежних данных (связь пропала без события
+  // `offline`), оставляет числа, но не подтверждение: «Цель достигнута»
+  // рядом с «Не удалось посчитать» — противоречие, а по нему готовят еду.
+  const verdict = stale || verify.isError ? undefined : verify.data;
   const excluded = verify.data?.excluded ?? [];
   // Подбор не предупреждает об исключённом, а вычёркивает его со входа, и
   // сказать об этом больше негде: своего блока у результата подбора нет —
@@ -506,11 +511,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
                   ровно противоположное тому, что на весах. */}
               <RatioBadge
                 ratio={dish.ratio}
-                withinTolerance={
-                  stale
-                    ? undefined
-                    : (verify.data?.ratio_within_tolerance ?? undefined)
-                }
+                withinTolerance={verdict?.ratio_within_tolerance ?? undefined}
               />
               <span className="tabular-nums">
                 {t("calculator.kcalValue", { kcal: dish.kcal.toFixed(0) })}
@@ -518,15 +519,16 @@ export function CalculatorScreen({ session }: { session: Session }) {
               <KcalDelta
                 dish={dish.kcal}
                 goal={goal}
-                within={stale ? undefined : verify.data?.kcal_within_tolerance}
+                within={verdict?.kcal_within_tolerance}
               />
             </div>
 
             <Verdict
               stale={stale}
               waitingForNetwork={waitingForNetwork}
-              ratioOk={verify.data?.ratio_within_tolerance}
-              kcalOk={verify.data?.kcal_within_tolerance}
+              retrying={retrying}
+              ratioOk={verdict?.ratio_within_tolerance}
+              kcalOk={verdict?.kcal_within_tolerance}
             />
 
             <MacroBar
@@ -793,17 +795,22 @@ function KcalDelta({
 function Verdict({
   stale,
   waitingForNetwork,
+  retrying,
   ratioOk,
   kcalOk,
 }: {
   stale: boolean;
   waitingForNetwork: boolean;
+  retrying: boolean;
   ratioOk: boolean | null | undefined;
   kcalOk: boolean | null | undefined;
 }): ReactNode {
   const { t } = useTranslation();
 
   if (stale) {
+    // На повторе о ходе уже говорит строка «Повторяем…»: второй голос с
+    // другим текстом зачитывался бы вперемешку с ней.
+    if (retrying) return null;
     return (
       <p role="status" className="m-0 text-sm text-muted-foreground">
         {waitingForNetwork
