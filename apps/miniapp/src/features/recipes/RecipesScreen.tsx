@@ -83,7 +83,11 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
                   onOpen(recipe.id);
                 }}
               >
-                <span className="flex-1">{recipe.title}</span>
+                {/* Без `min-w-0` строка списка не уже самого длинного слова
+                    названия и выталкивает соотношение за край экрана. */}
+                <span className="min-w-0 flex-1 break-words">
+                  {recipe.title}
+                </span>
                 <RatioBadge ratio={recipe.per_portion?.ratio ?? null} />
               </button>
             </li>
@@ -217,7 +221,7 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
           key={ingredient.product_id}
           className="flex flex-wrap justify-between gap-field"
         >
-          <span>
+          <span className="min-w-0 break-words">
             {names.byId[ingredient.product_id] ?? t("recipes.unknownProduct")}
           </span>
           <span className="text-muted-foreground tabular-nums">

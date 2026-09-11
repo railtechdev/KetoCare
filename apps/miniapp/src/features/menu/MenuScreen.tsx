@@ -124,7 +124,7 @@ function DayPlan({
                         onToggle(item);
                       }}
                     />
-                    <span>
+                    <span className="min-w-0 break-words">
                       {item.title ?? t("menu.unknownDish")}
                       {item.changed_since_saved && (
                         // День от правки рецепта не меняется — в том и смысл
@@ -151,7 +151,9 @@ function DayPlan({
                             key={line.product_id}
                             className="flex flex-wrap justify-between gap-field"
                           >
-                            <span>{line.name_ru}</span>
+                            <span className="min-w-0 break-words">
+                              {line.name_ru}
+                            </span>
                             <span className="text-muted-foreground tabular-nums">
                               {t("menu.grams", {
                                 value: formatGrams(line.grams),

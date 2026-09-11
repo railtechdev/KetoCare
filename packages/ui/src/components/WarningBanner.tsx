@@ -92,11 +92,14 @@ export function WarningBanner({
           выходит за допуски назначения» — в приставной колонке она занимает
           три строки, и обрезка съела бы смысл. */}
       {title && (
-        <AlertTitle className="line-clamp-none font-semibold">
+        <AlertTitle className="line-clamp-none font-semibold wrap-anywhere">
           {title}
         </AlertTitle>
       )}
-      <AlertDescription className="text-foreground">
+      {/* Баннер — сетка кита, а в сетке `break-words` не уменьшает ширину по
+          самому длинному слову: список исключённых продуктов с таким словом
+          раздвигал баннер шире экрана. `wrap-anywhere` её уменьшает. */}
+      <AlertDescription className="text-foreground wrap-anywhere">
         {children}
       </AlertDescription>
     </Alert>
