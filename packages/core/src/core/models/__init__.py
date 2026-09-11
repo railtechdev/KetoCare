@@ -44,12 +44,14 @@ from .diary import (
     WeightLog,
 )
 from .files import Attachment
+from .idempotency import IdempotencyKey
 from .knowledge import KbChunk
 from .marketing import Lead
 
 __all__ = [
     "Attachment",
     "Base",
+    "IdempotencyKey",
     # accounts
     "User",
     "Patient",

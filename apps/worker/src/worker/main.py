@@ -23,7 +23,7 @@ from .ai.assistant import assistant_reply
 from .ai.content import content_draft
 from .ai.parse import parse_free_text
 from .ai.summary import doctor_summary
-from .maintenance import close_stuck_ai_jobs, purge_files
+from .maintenance import close_stuck_ai_jobs, purge_files, purge_idempotency_keys
 from .reminders.notify import notify_family
 from .reminders.task import reminders_cron
 from .reports.task import render_report
@@ -49,6 +49,10 @@ class WorkerSettingsARQ:
     # а днём том занят выдачей отчётов и вложений.
     cron_jobs: list[Any] = [
         cron(purge_files, hour=3, minute=30),
+        # Раз в час, а не ночью: в сохранённом ответе данные ребёнка, и при
+        # ночной уборке ключ, выданный после неё, пролежал бы почти двое суток
+        # вместо обещанных (ADR-0035) — не дольше 25 часов.
+        cron(purge_idempotency_keys, minute={45}),
         # Раз в час, а не ночью: пока строка висит в `RUNNING`, её бронь
         # занимает дневной бюджет — к вечеру помощник замолчал бы «по лимиту»
         # из-за вызова, оборвавшегося утром.

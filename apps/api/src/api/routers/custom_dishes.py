@@ -9,15 +9,17 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Response
+from fastapi import APIRouter, Path, Request, Response
 
 from core.models import CustomDish
 from core.repositories import custom_dishes as dishes_repo
 
 from ..deps.auth import PatientAccessDep, SessionDep
+from ..deps.idempotency import IdempotencyKeyDep
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import CustomDishRead, CustomDishWrite, Page
+from ..services import idempotency
 from ..services.dishes import compute_dish, duplicate_product_ids
 
 router = APIRouter(prefix="/patients/{patient_id}/custom-dishes", tags=["custom-dishes"])
@@ -51,9 +53,28 @@ async def create_dish(
     patient_id: Annotated[uuid.UUID, Path()],
     payload: CustomDishWrite,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
+    request: Request,
+    idempotency_key: IdempotencyKeyDep,
 ) -> CustomDishRead:
+    # Доступ проверен зависимостью, состав — до брони: отказ 403 или 422 ключ не
+    # занимает, и исправленный запрос с тем же ключом пройдёт.
     _reject_duplicates(payload)
+    reservation: uuid.UUID | None = None
+    if idempotency_key is not None:
+        outcome = await idempotency.begin(
+            session,
+            user_id=user.id,
+            key=idempotency_key,
+            fingerprint=idempotency.request_fingerprint(
+                request.method, request.url.path, await request.body()
+            ),
+            patient_id=patient_id,
+        )
+        if isinstance(outcome, idempotency.Replay):
+            return CustomDishRead.model_validate(outcome.body)
+        reservation = outcome
+
     stored, computed, engine_version = await compute_dish(session, ingredients=payload.ingredients)
 
     dish = await dishes_repo.create(
@@ -64,7 +85,12 @@ async def create_dish(
         computed=computed,
         engine_version=engine_version,
     )
-    return CustomDishRead.model_validate(dish)
+    created = CustomDishRead.model_validate(dish)
+    if reservation is not None:
+        await idempotency.finish(
+            session, key_id=reservation, status=201, body=created.model_dump(mode="json")
+        )
+    return created
 
 
 async def _owned_dish(session: SessionDep, dish_id: uuid.UUID, patient_id: uuid.UUID) -> CustomDish:
