@@ -283,6 +283,75 @@ describe("калькулятор", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("сбой проверки можно повторить — без фиктивной правки состава", async () => {
+    // Сбой сервера или сети проходит сам, а повторить проверку было нечем:
+    // показатели и сохранение ждали её, и выход был один — поменять граммы.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (!path.includes("verify")) return { data: SOLVED, error: undefined };
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? {
+            data: undefined,
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          }
+        : { data: VERIFIED, error: undefined };
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: "Повторить" },
+        {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        },
+      ),
+    );
+
+    expect(await screen.findByText(/374 ккал/)).toBeInTheDocument();
+    expect(verifyCalls).toBe(2);
+    expect(
+      screen.queryByText("Внутренняя ошибка сервера."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("отказ проверки по данным повторить не предлагает", async () => {
+    // Тот же состав откажут так же: кнопка обещала бы то, чего не будет.
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.includes("verify")
+        ? {
+            data: undefined,
+            error: {
+              error: {
+                code: "validation_error",
+                message: "Проверьте правильность заполнения полей.",
+              },
+            },
+          }
+        : { data: SOLVED, error: undefined },
+    );
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await screen.findByText(
+      "Проверьте правильность заполнения полей.",
+      undefined,
+      { timeout: AUTO_CALC_TIMEOUT_MS },
+    );
+    expect(
+      screen.queryByRole("button", { name: "Повторить" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("один и тот же отказ показывается одной строкой", async () => {
     // Больше 5000 г руками: проверка и пересчёт отказывают одним текстом, и две
     // одинаковые строки ошибки подряд нарушали правило П27.

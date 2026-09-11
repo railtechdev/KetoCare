@@ -2,6 +2,7 @@ import {
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
+  canRetry,
   Section,
   Separator,
   WarningBanner,
@@ -188,12 +189,26 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    * Проверка идёт сама по мере правки состава и цели.
    *
    * Она ничего не перезаписывает, поэтому кнопки у неё нет: кнопка обещала бы
-   * действие, которое уже произошло (правило П3 канона).
+   * действие, которое уже произошло (правило П3 канона). Исключение — «Повторить»
+   * после сбоя: без него экран оставался тупиком, из которого выводила только
+   * фиктивная правка состава.
    */
   const debouncedRows = useDebouncedValue(rows, AUTO_CALC_DELAY_MS);
   const debouncedTargets = useDebouncedValue(targets, AUTO_CALC_DELAY_MS);
   const verifyMutate = verify.mutate;
   const verifyReset = verify.reset;
+
+  // Вход проверки — один на автоматический запуск и на «Повторить»: разойдись
+  // они, повтор проверял бы не то, что на экране, а разрешение на сохранение
+  // сверяется именно с этим массивом состава.
+  const verifyInput = useMemo(
+    () => ({
+      rows: debouncedRows,
+      targets: debouncedTargets ?? undefined,
+      patientId,
+    }),
+    [debouncedRows, debouncedTargets, patientId],
+  );
 
   useEffect(() => {
     if (debouncedRows.length === 0) {
@@ -212,12 +227,8 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       verifyReset();
       return;
     }
-    verifyMutate({
-      rows: debouncedRows,
-      targets: debouncedTargets ?? undefined,
-      patientId,
-    });
-  }, [debouncedRows, debouncedTargets, patientId, verifyMutate, verifyReset]);
+    verifyMutate(verifyInput);
+  }, [debouncedRows, verifyInput, verifyMutate, verifyReset]);
 
   /**
    * Массы, посчитанные сервером, уезжают прямо в состав.
@@ -481,9 +492,23 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
             человек видел пустоту без причины. Пока правка не догнала расчёт,
             прежний отказ не показывается — он о другом составе. */}
         {verifyShown && (
-          <FormError>
-            {errorMessageOf(verify.error) ?? t("common:errors.unexpected")}
-          </FormError>
+          <div className="flex flex-col items-start gap-field">
+            <FormError>
+              {errorMessageOf(verify.error) ?? t("common:errors.unexpected")}
+            </FormError>
+            {/* Повтор — только при сбое: отказ по данным при том же составе
+                повторится слово в слово (правило в ките, общее с Mini App). */}
+            {canRetry(errorCodeOf(verify.error)) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => verifyMutate(verifyInput)}
+              >
+                {t("common:actions.retry")}
+              </Button>
+            )}
+          </div>
         )}
 
         <Separator />

@@ -10,6 +10,7 @@ import {
   Section,
   Separator,
   WarningBanner,
+  canRetry,
   cn,
   exceedsCalcGrams,
   mealTargetsFrom,
@@ -581,7 +582,24 @@ export function CalculatorScreen({ session }: { session: Session }) {
           Пока правка не догнала расчёт, прежний отказ не показывается. */}
       {verifyShown && (
         <WarningBanner level="danger" title={t("calculator.error")}>
-          {errorMessageOf(verify.error) ?? t("calculator.errorHint")}
+          <div className="flex flex-col items-start gap-field">
+            <p className="m-0">
+              {errorMessageOf(verify.error) ?? t("calculator.errorHint")}
+            </p>
+            {/* Повтор — только при сбое, тем же правилом, что в кабинете:
+                отказ по данным при том же составе повторится слово в слово.
+                Без кнопки из сбоя выводила только фиктивная правка состава. */}
+            {canRetry(errorCodeOf(verify.error)) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void verify.refetch()}
+              >
+                {t("actions.retry")}
+              </Button>
+            )}
+          </div>
         </WarningBanner>
       )}
     </main>

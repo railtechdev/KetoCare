@@ -334,6 +334,60 @@ describe("калькулятор в Mini App", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("сбой проверки можно повторить — без фиктивной правки состава", async () => {
+    // Сбой привязан к запросу с 30 г, а не к номеру вызова: промежуточное
+    // «3» при наборе иначе съело бы сбой, и повторять было бы нечего.
+    let failed = false;
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams === 30 && !failed) {
+          failed = true;
+          return Promise.resolve({
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          });
+        }
+        return Promise.resolve({ data: verifyResponse() });
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+
+    expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
+    expect(
+      screen.queryByText("Внутренняя ошибка сервера."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("отказ проверки по данным повторить не предлагает", async () => {
+    respond({
+      "/calc/verify": new ApiFailure({
+        error: {
+          code: "validation_error",
+          message: "Проверьте правильность заполнения полей.",
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    await screen.findByText("Проверьте правильность заполнения полей.");
+    expect(
+      screen.queryByRole("button", { name: "Повторить" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("отказ проверки не мигает при возврате в приложение", async () => {
     // Запрос с ошибкой всегда считается устаревшим, и перезапрос по фокусу
     // снимал баннер на время запроса — кабинет так себя не ведёт.
