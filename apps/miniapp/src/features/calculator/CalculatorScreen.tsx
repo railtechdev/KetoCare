@@ -264,17 +264,27 @@ export function CalculatorScreen({ session }: { session: Session }) {
     rows: DishRow[];
     goal: Targets | null;
     message: string;
+    dataUpdatedAt: number;
+    errorUpdateCount: number;
   } | null>(null);
   // Повтор идёт, пока запрос идёт по тому же вводу, что при нажатии. Не по
   // завершению `refetch`: он привязан к прежнему ключу, и после правки ввода
   // «Повторяем…» держалось рядом со свежими показателями, пока старый запрос
-  // не доработает.
-  const retryIsThisInput =
+  // не доработает. И пока данные не обновились: фоновый перезапрос того же
+  // ввода (возврат сети) иначе выдавал себя за повтор — над числами успешного
+  // расчёта снова вставал и зачитывался прежний отказ.
+  const retryIsThisRequest =
     retry !== null &&
     retry.rows === debouncedRows &&
-    retry.goal === debouncedGoal;
-  const retrying = retryIsThisInput && verify.isFetching;
-  const retryFailed = retryIsThisInput && verify.isError && !verify.isFetching;
+    retry.goal === debouncedGoal &&
+    verify.dataUpdatedAt === retry.dataUpdatedAt;
+  const retrying = retryIsThisRequest && verify.isFetching;
+  // Отказал именно повтор: ошибок стало больше, чем было при нажатии.
+  const retryFailed =
+    retryIsThisRequest &&
+    verify.isError &&
+    !verify.isFetching &&
+    verify.errorUpdateCount > (retry?.errorUpdateCount ?? 0);
   const refusalMessage = staleInput
     ? null
     : verifyShown
@@ -282,6 +292,10 @@ export function CalculatorScreen({ session }: { session: Session }) {
       : retrying
         ? (retry?.message ?? null)
         : null;
+  // Тем же текстом — объявить заново: баннер не изменился. Другим — объявит сам
+  // баннер.
+  const announceRetryFailed =
+    retryFailed && !staleInput && refusalMessage === retry?.message;
   const duplicateOfVerify =
     verifyShown &&
     actionError !== null &&
@@ -628,6 +642,8 @@ export function CalculatorScreen({ session }: { session: Session }) {
                 rows: debouncedRows,
                 goal: debouncedGoal,
                 message: refusalMessage,
+                dataUpdatedAt: verify.dataUpdatedAt,
+                errorUpdateCount: verify.errorUpdateCount,
               });
               void verify.refetch();
             }}
@@ -640,7 +656,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
       <p role="status" className="sr-only">
         {retrying
           ? t("actions.retrying")
-          : retryFailed && !staleInput
+          : announceRetryFailed
             ? refusalMessage
             : ""}
       </p>

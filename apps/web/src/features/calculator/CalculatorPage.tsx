@@ -395,8 +395,6 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   // рядом со свежими показателями.
   const retryIsThisRequest = retry !== null && verify.variables === retry.input;
   const retrying = retryIsThisRequest && verify.isPending;
-  // Повтор отказал снова: текст отказа тот же, область `role="alert"` не
-  // меняется и заново не объявляется — поэтому скрытая строка ниже.
   const retryFailed = retryIsThisRequest && verify.isError;
   const refusalMessage = staleInput
     ? null
@@ -405,6 +403,11 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       : retrying
         ? (retry?.message ?? null)
         : null;
+  // Повтор отказал снова ТЕМ ЖЕ текстом: область `role="alert"` не меняется и
+  // заново не объявляется — поэтому скрытая строка ниже. Отказ с другим
+  // текстом объявит сам алерт, и второе объявление было бы лишним.
+  const announceRetryFailed =
+    retryFailed && !staleInput && refusalMessage === retry?.message;
   const actionMessage = errorMessageOf(solve.error ?? scale.error);
   const duplicateOfVerify =
     verifyShown && actionMessage === errorMessageOf(verify.error);
@@ -563,7 +566,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         <p role="status" className="sr-only">
           {retrying
             ? t("common:actions.retrying")
-            : retryFailed && !staleInput
+            : announceRetryFailed
               ? refusalMessage
               : ""}
         </p>

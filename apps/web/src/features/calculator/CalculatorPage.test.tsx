@@ -523,6 +523,50 @@ describe("калькулятор", () => {
     );
   });
 
+  it("повторный отказ с другим текстом объявляет только сам отказ", async () => {
+    // Алерт с новым текстом объявляется сам; дубль в скрытой строке зачитывал
+    // бы отказ дважды подряд.
+    let verifyCalls = 0;
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (!path.includes("verify")) {
+        return Promise.resolve({ data: SOLVED, error: undefined });
+      }
+      verifyCalls += 1;
+      return verifyCalls === 1
+        ? Promise.reject(new TypeError("Failed to fetch"))
+        : Promise.resolve({
+            data: undefined,
+            error: {
+              error: {
+                code: "internal",
+                message: "Внутренняя ошибка сервера.",
+              },
+            },
+          });
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: "Повторить" },
+        {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        },
+      ),
+    );
+    await screen.findByText("Внутренняя ошибка сервера.");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(
+      screen
+        .getAllByRole("status")
+        .some((el) => el.textContent === "Внутренняя ошибка сервера."),
+    ).toBe(false);
+  });
+
   it("отказ проверки по данным повторить не предлагает", async () => {
     // Тот же состав откажут так же: кнопка обещала бы то, чего не будет.
     (api.POST as Mock).mockImplementation(async (path: string) =>
