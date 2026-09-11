@@ -157,7 +157,11 @@ function renderScreen() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<CalculatorScreen session={SESSION} />, { wrapper: Wrapper });
+  // `client` — для тестов, которым нужен сам кэш запросов (отмена повтора).
+  const result = render(<CalculatorScreen session={SESSION} />, {
+    wrapper: Wrapper,
+  });
+  return Object.assign(result, { client });
 }
 
 async function addProduct(user: ReturnType<typeof userEvent.setup>) {
@@ -599,6 +603,102 @@ describe("калькулятор в Mini App", () => {
         .getAllByRole("status")
         .some((el) => el.textContent === "Внутренняя ошибка сервера."),
     ).toBe(false);
+  });
+
+  it("«Повторить» без сети не прячет отказ, кнопку и фокус", async () => {
+    // Без сети запрос встаёт на паузу, а `isFetching` на паузе ложно: нажатая
+    // кнопка пропадала вместе с фокусом и текстом отказа до возврата сети.
+    let calls30 = 0;
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams !== 30) {
+          return Promise.resolve({ data: verifyResponse() });
+        }
+        calls30 += 1;
+        return calls30 === 1
+          ? Promise.resolve({
+              error: {
+                error: {
+                  code: "internal",
+                  message: "Внутренняя ошибка сервера.",
+                },
+              },
+            })
+          : Promise.resolve({ data: verifyResponse() });
+      },
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const busy = screen.getByRole("button", { name: "Повторяем…" });
+      expect(busy).toHaveFocus();
+      expect(
+        screen.getByText("Внутренняя ошибка сервера."),
+      ).toBeInTheDocument();
+
+      act(() => {
+        onlineManager.setOnline(true);
+      });
+      expect(await screen.findByText(/224 ккал/)).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("отменённый повтор не зачитывает прежний отказ как свой ответ", async () => {
+    // Отмена запроса с откатом возвращает его в прежнюю ошибку и покой. Без
+    // сверки счётчика ошибок скрытая строка объявила бы старый отказ ответом
+    // повтора. С экрана сегодня до такой отмены не дойти — тест держит
+    // страховку от будущего `cancelQueries` или переноса `refetch`.
+    (api.POST as Mock).mockImplementation(
+      (path: string, options: { body?: { items?: { grams: number }[] } }) => {
+        if (!path.endsWith("/calc/verify")) {
+          return Promise.resolve({ data: solveResponse() });
+        }
+        if (options.body?.items?.[0]?.grams !== 30) {
+          return Promise.resolve({ data: verifyResponse() });
+        }
+        return Promise.resolve({
+          error: {
+            error: { code: "internal", message: "Внутренняя ошибка сервера." },
+          },
+        });
+      },
+    );
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+    await addProduct(user);
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+    const status = screen
+      .getAllByRole("status")
+      .find((el) => el.classList.contains("sr-only")) as HTMLElement;
+
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+      });
+      await user.click(retry);
+      await act(() => client.cancelQueries({ queryKey: ["calc", "verify"] }));
+      // Уведомление о смене состояния приходит таймером: ждём, пока повтор
+      // перестанет считаться идущим, — и только тогда смотрим, что объявлено.
+      await waitFor(() => expect(status.textContent).not.toBe("Повторяем…"));
+
+      expect(status.textContent).toBe("");
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it("отказ проверки по данным повторить не предлагает", async () => {
