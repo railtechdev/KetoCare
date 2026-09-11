@@ -64,10 +64,33 @@ const integer = (min: number, max: number) =>
         isNumberWithin(value, min, max) && Number.isInteger(Number(value)),
     );
 
+/**
+ * На сколько момент события может опережать часы — зеркало
+ * `OCCURRED_AT_CLOCK_SKEW` в `schemas_logs.py`, как и технические границы ниже.
+ *
+ * Сервер проверяет сам и отклонит запись из будущего в любом случае. Здесь
+ * проверка нужна ради причины: сервер отвечает общим «проверьте правильность
+ * заполнения полей», и семья не узнала бы, что ошиблась именно в дате.
+ */
+export const OCCURRED_AT_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+/** Код ошибки поля «когда»: время ещё не наступило. */
+export const OCCURRED_AT_FUTURE = "future";
+
 /** Момент события: поле `datetime-local` в местном времени семьи. */
 const occurredAt = z
   .string()
-  .refine((value) => fromDateTimeLocalInput(value) !== null);
+  .refine((value) => fromDateTimeLocalInput(value) !== null)
+  .refine(
+    (value) => {
+      const iso = fromDateTimeLocalInput(value);
+      return (
+        iso === null ||
+        new Date(iso).getTime() <= Date.now() + OCCURRED_AT_CLOCK_SKEW_MS
+      );
+    },
+    { message: OCCURRED_AT_FUTURE },
+  );
 
 const requiredText = z.string().trim().min(1);
 const freeText = z.string();

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -9,6 +9,7 @@ import diaryRu from "../../locales/ru/diary.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { SessionProvider } from "../auth/session";
 import { DiaryPage } from "./DiaryPage";
+import { toDateTimeLocalInput } from "./time";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -41,7 +42,14 @@ function respond(path: string) {
     return { data: { items: [], total: 0 } };
   }
   if (path === "/api/v1/dictionaries/seizure-types") {
-    return { data: { items: [], total: 0 } };
+    // Без типов мастер приступа показывает предупреждение вместо полей, и
+    // проверить дату в нём было бы нечем.
+    return {
+      data: {
+        items: [{ id: "st-1", name_ru: "Тонико-клонический", code: "TC" }],
+        total: 1,
+      },
+    };
   }
   return { data: { items: [], total: 0 } };
 }
@@ -110,6 +118,47 @@ describe("DiaryPage", () => {
       await screen.findByRole("dialog", { name: "Новая запись" }),
     ).toBeInTheDocument();
   });
+
+  // Препаратов в списке нет: без схемы врача у семьи нет и формы (тест ниже).
+  it.each([
+    ["ketones", "Добавить"],
+    ["weight", "Добавить"],
+    ["meals", "Добавить"],
+    ["side-effects", "Добавить"],
+    // Мастер приступа проверяет дату уже на первом шаге.
+    ["seizures", "Далее"],
+  ])(
+    "на будущую дату форма «%s» называет причину, а не просит указать дату",
+    async (kind, submit) => {
+      // Будущий замер гасил пометку «нет замеров» у врача. Сервер такую запись
+      // отклонит, но общим «проверьте поля»; причину обязана назвать каждая
+      // форма — сначала её подключили только к приступу.
+      const user = userEvent.setup();
+      renderPage({ kind });
+
+      await user.click(
+        await screen.findByRole("button", { name: "Добавить запись" }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Новая запись",
+      });
+      fireEvent.change(within(dialog).getByLabelText("Дата и время"), {
+        target: {
+          value: toDateTimeLocalInput(
+            new Date(Date.now() + 24 * 60 * 60 * 1000),
+          ),
+        },
+      });
+      await user.click(within(dialog).getByRole("button", { name: submit }));
+
+      expect(
+        await within(dialog).findByText(/Это время ещё не наступило/),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).queryByText("Укажите дату и время события."),
+      ).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("вкладка «Лекарства» без схемы", () => {
