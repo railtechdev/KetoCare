@@ -429,8 +429,8 @@ def _servings(item: MenuItemWrite, recipes: dict[uuid.UUID, Recipe]) -> int:
     if recipe.servings < 1:
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
-            f"У рецепта «{recipe.title}» не указано число порций. "
-            "Его нужно исправить, прежде чем добавлять в меню.",
+            f"У рецепта «{recipe.title}» не указано число порций, и посчитать его "
+            "для меню нельзя. Выберите другое блюдо или сообщите диетологу.",
             details={"recipe_id": str(recipe.id)},
         )
     return recipe.servings
