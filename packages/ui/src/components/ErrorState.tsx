@@ -40,7 +40,11 @@ export function ErrorState({
           aria-hidden="true"
           className="mt-0.5 size-5 shrink-0 text-destructive"
         />
-        <div>
+        {/* Внешний блок выравнивает по началу, и ширина строки — по содержимому:
+            слово длиннее блока (адрес, идентификатор в тексте сервера) не
+            переносилось бы и раздвигало блок. `wrap-anywhere`, а не
+            `break-words`: только оно уменьшает ширину по самому длинному слову. */}
+        <div className="wrap-anywhere">
           <p className="m-0 font-semibold text-foreground">{title}</p>
           {description && (
             <p className="m-0 mt-1 text-sm text-muted-foreground">
