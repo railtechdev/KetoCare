@@ -30,13 +30,14 @@ import itertools
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.main import create_app
@@ -58,7 +59,14 @@ URL = "/api/v1/ai/assistant/messages"
 #: остатки прошлых. Уборки только в `finally` мало — убитый процесс до неё не
 #: доходит, а уборщика на пользователей и пациентов в продукте нет.
 EMAIL_MARK = "real-session-"
+USER_MARK = "Родитель на настоящей сессии"
 PATIENT_MARK = "Ребёнок на настоящей сессии"
+
+#: Насколько старым должен быть остаток, чтобы его сметать. Рядом может идти
+#: другой прогон — worktree в этом репозитории обычное дело, а база разработки
+#: у них одна; без отсечки по возрасту уборка на входе снесла бы живые строки
+#: соседа.
+LEFTOVER_AGE = timedelta(hours=1)
 
 
 async def _remove(
@@ -103,13 +111,44 @@ async def _remove(
 
 
 async def _sweep_leftovers(session: AsyncSession) -> None:
-    """Остатки прошлых прогонов, до которых не дошёл `finally`."""
+    """Остатки прошлых прогонов ЭТОГО файла, до которых не дошёл `finally`.
 
-    users = list(await session.scalars(select(User.id).where(User.email.like(f"{EMAIL_MARK}%"))))
-    patients = list(
-        await session.scalars(select(Patient.id).where(Patient.full_name == PATIENT_MARK))
+    Приметы нарочно узкие, и сужать их важнее, чем расширять уборку. Пациенты
+    ищутся не по имени вообще, а только через связь с найденными родителями:
+    имя здесь не заповедное, и тёзка из чужих данных иначе попал бы под
+    физическое удаление в обход `erase_patient` (правило 4) — а сославшись из
+    таблицы, которой в `_remove` нет (скажем, `doctor_patient`), он ещё и
+    красил бы весь файл навсегда. Отсечка по возрасту отделяет остаток от
+    прогона, идущего в соседнем worktree прямо сейчас.
+
+    Уборка не обязана удаться: она гигиена, а не проверяемое свойство. Отказ
+    оставляет остаток лежать — как он лежал бы и без неё, — но файл не красит.
+    """
+
+    users = list(
+        await session.scalars(
+            select(User.id).where(
+                User.email.like(f"{EMAIL_MARK}%"),
+                User.full_name == USER_MARK,
+                User.role == UserRole.PARENT,
+                User.created_at < datetime.now(UTC) - LEFTOVER_AGE,
+            )
+        )
     )
-    await _remove(session, user_ids=users, patient_ids=patients)
+    if not users:
+        return
+    patients = list(
+        await session.scalars(
+            select(Patient.id)
+            .join(ParentPatient, ParentPatient.patient_id == Patient.id)
+            .where(ParentPatient.parent_id.in_(users), Patient.full_name == PATIENT_MARK)
+        )
+    )
+    try:
+        await _remove(session, user_ids=users, patient_ids=patients)
+        await session.commit()
+    except SQLAlchemyError:
+        await session.rollback()
 
 
 #: Свой диапазон адресов: ключ ограничения частоты — адрес клиента (см. `client`
@@ -168,7 +207,7 @@ class TestAssistantIdempotencyOnRealSession:
             user = await users_repo.create(
                 session,
                 role=UserRole.PARENT,
-                full_name="Родитель на настоящей сессии",
+                full_name=USER_MARK,
                 email=f"{EMAIL_MARK}{uuid.uuid4().hex[:10]}@example.com",
                 password_hash="x",
             )
@@ -279,12 +318,15 @@ class TestAssistantIdempotencyOnRealSession:
 
         async def answer_then_fail(task: str, *args: object) -> None:
             async with get_sessionmaker()() as worker:
+                # Не `SET LOCAL`: он умирает на коммите, и правка, поставившая
+                # коммит перед захватом блокировки, молча вернула бы вечное
+                # ожидание. Сессионный предел коммит переживает.
                 # Без предела ожидания регрессия «оставим один коммит в конце»
                 # вешала бы тест, а не валила: `FOR UPDATE` встал бы на строку,
                 # которую держит незакрытая транзакция запроса, а запрос и
                 # «воркер» живут в одном цикле событий — ждали бы друг друга
                 # вечно. Зависание в CI хуже падения.
-                await worker.execute(text("SET LOCAL lock_timeout = '2s'"))
+                await worker.execute(text("SET lock_timeout = '2s'"))
                 locked = await conversations_repo.get_for_update(worker, conversation_id)
                 assert locked is not None
                 await conversations_repo.replace_message(
@@ -333,7 +375,7 @@ class TestAssistantIdempotencyOnRealSession:
             async with get_sessionmaker()() as other:
                 # См. проверку выше: без предела ожидания `DELETE` по строке,
                 # которую держит незакрытая транзакция запроса, повесил бы тест.
-                await other.execute(text("SET LOCAL lock_timeout = '2s'"))
+                await other.execute(text("SET lock_timeout = '2s'"))
                 await other.execute(
                     delete(AiConversation).where(AiConversation.id == conversation_id)
                 )
