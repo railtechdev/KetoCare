@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import i18n from "../../lib/i18n";
 import { NetworkError } from "@ketocare/api-client";
 import { api } from "../../lib/api";
+import type { ProductDetail } from "../products/useProductDetail";
 import adminRu from "../../locales/ru/admin.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { ProductsPanel } from "./ProductsPanel";
@@ -24,7 +25,7 @@ i18n.addResourceBundle("ru", "admin", adminRu, true, true);
 
 const OUTSIDE_ID = "33333333-3333-4333-8333-333333333333";
 
-const PRODUCT = {
+const PRODUCT: ProductDetail = {
   id: OUTSIDE_ID,
   name_ru: "Масло сливочное",
   category_id: "c1",
@@ -35,10 +36,12 @@ const PRODUCT = {
   fiber_100g: 0,
   source: "USDA",
   source_version: "2024",
-  verified_on: "2026-01-10",
+  verified_at: "2026-01-10",
   is_active: true,
-  created_at: "2026-01-10T10:00:00Z",
-  updated_at: "2026-01-10T10:00:00Z",
+  // Соотношение производно от макронутриентов этой же позиции: 82.5 / (0.5 +
+  // 0.8). Сервер считает его сам и копии не хранит — выдумывать здесь другое
+  // число значило бы описать продукт, которого он отдать не может.
+  ratio: 63.46,
 };
 
 function renderPanel(item?: string) {
