@@ -51,10 +51,6 @@ export function AssistantPage({ patientId }: { patientId: string }) {
   const messages = conversation.data ?? [];
   const limited = errorCodeOf(ask.error) === "rate_limited";
 
-  // Попытка держит и разговор: список переписок мог быть ещё не прочитан, и
-  // тогда вопрос уходит с пустым `conversation_id`. Повтор обязан уйти с тем
-  // же — иначе тело другое, ключ другой и в переписке появится второй такой же
-  // вопрос (ADR-0035). Освобождается сменой вопроса: это уже другая запись.
   // Разговор может быть ещё не прочитан: до отправки берётся свежайший, с
   // первой отправки — замороженный (`useFrozenAttempt`, ADR-0035).
   const attempt = useFrozenAttempt(
