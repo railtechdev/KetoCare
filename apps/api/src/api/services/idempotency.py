@@ -82,6 +82,12 @@ async def begin(
     return Replay(status=existing.response_status, body=existing.response_body)
 
 
+async def release(session: AsyncSession, *, key_id: uuid.UUID) -> None:
+    """Снять бронь, когда ответ отдать не удалось (см. ADR-0035)."""
+
+    await idempotency_repo.release(session, key_id=key_id)
+
+
 async def finish(
     session: AsyncSession, *, key_id: uuid.UUID, status: int, body: dict[str, Any]
 ) -> None:

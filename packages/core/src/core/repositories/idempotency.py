@@ -72,6 +72,16 @@ async def complete(
     )
 
 
+async def release(session: AsyncSession, *, key_id: uuid.UUID) -> None:
+    """Снять бронь: запрос не состоялся, и ключ должен снова стать свободным.
+
+    Нужна там, где ответ уже закоммичен, а довести дело не удалось: оставленная
+    бронь отвечала бы повтору прежним ответом, хотя работы за ним нет.
+    """
+
+    await session.execute(delete(IdempotencyKey).where(IdempotencyKey.id == key_id))
+
+
 async def purge_expired(session: AsyncSession, *, now: datetime) -> int:
     """Снимает ключи старше `KEY_TTL`. Возвращает число снятых строк."""
 

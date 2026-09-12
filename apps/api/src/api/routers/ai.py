@@ -20,15 +20,18 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.models import AiConversation
 from core.models.enums import AiConversationChannel, RecipeCategory, UserRole
 from core.repositories import ai_conversations as conversations_repo
 from core.repositories import products as products_repo
-from core.schemas.ai_conversations import new_message
+from core.schemas.ai_conversations import ASSISTANT_UNAVAILABLE, new_message
 
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access, require_roles
+from ..deps.idempotency import IdempotencyKeyDep
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AI_RATE_LIMIT, limiter
 from ..schemas_ai import AssistantAccepted, AssistantAsk
+from ..services import idempotency
 from ..services import queue as queue_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -152,6 +155,7 @@ async def ask_assistant(
     payload: AssistantAsk,
     session: SessionDep,
     user: CurrentUserDep,
+    idempotency_key: IdempotencyKeyDep,
 ) -> AssistantAccepted:
     """Принять вопрос и поставить ответ в очередь (раздел 10.4 ТЗ).
 
@@ -163,6 +167,10 @@ async def ask_assistant(
 
     Спрашивает только семья: врач читает переписку, но не ведёт её от имени
     родителя — иначе в карте появились бы вопросы, которых семья не задавала.
+
+    Ответ 202 может потеряться: человек спросит ещё раз, и без ключа повторной
+    отправки (ADR-0035) в переписке появится второй такой же вопрос, у воркера —
+    вторая задача, а у проекта — второй расход дневного бюджета.
     """
 
     await assert_patient_access(session, user, payload.patient_id)
@@ -174,11 +182,8 @@ async def ask_assistant(
         AiConversationChannel.MINIAPP if user.channel == "miniapp" else AiConversationChannel.WEB
     )
 
-    if payload.conversation_id is None:
-        conversation = await conversations_repo.create(
-            session, user_id=user.id, patient_id=payload.patient_id, channel=channel
-        )
-    else:
+    existing: AiConversation | None = None
+    if payload.conversation_id is not None:
         existing = await conversations_repo.get_for_update(session, payload.conversation_id)
         # Одно сообщение на три случая — нет, чужой ребёнок, чужой автор: по
         # разнице ответов иначе устанавливается, что разговор существует.
@@ -188,7 +193,29 @@ async def ask_assistant(
             or existing.user_id != user.id
         ):
             raise ApiError(ErrorCode.NOT_FOUND, "Разговор не найден.")
-        conversation = existing
+
+    # Бронь ключа — после всех проверок: доступа, роли и самого разговора
+    # (ADR-0035). Отказ 403 или 404 ключ не занимает, и исправленный запрос с
+    # тем же ключом проходит.
+    reservation: uuid.UUID | None = None
+    if idempotency_key is not None:
+        outcome = await idempotency.begin(
+            session,
+            user_id=user.id,
+            key=idempotency_key,
+            fingerprint=idempotency.request_fingerprint(
+                request.method, request.url.path, await request.body()
+            ),
+            patient_id=payload.patient_id,
+        )
+        if isinstance(outcome, idempotency.Replay):
+            # Повтор потерянного ответа: ни второго вопроса, ни второй задачи.
+            return AssistantAccepted.model_validate(outcome.body)
+        reservation = outcome
+
+    conversation = existing or await conversations_repo.create(
+        session, user_id=user.id, patient_id=payload.patient_id, channel=channel
+    )
 
     question_seq = conversations_repo.next_seq(conversation)
     reply_seq = question_seq + 1
@@ -204,20 +231,64 @@ async def ask_assistant(
         ],
     )
     conversation_id = conversation.id
-    await session.commit()
-
-    await queue_service.enqueue(
-        "assistant_reply",
-        str(conversation_id),
-        str(user.id),
-        str(payload.patient_id),
-        payload.text,
-        reply_seq,
-    )
-
-    return AssistantAccepted(
+    accepted = AssistantAccepted(
         conversation_id=conversation_id, question_seq=question_seq, reply_seq=reply_seq
     )
+    if reservation is not None:
+        # Ответ записывается ДО коммита, в той же транзакции: закоммиченная
+        # бронь без ответа отвечала бы 409 на каждый повтор, пока ключ не
+        # просрочится (ADR-0035).
+        await idempotency.finish(
+            session,
+            key_id=reservation,
+            status=202,
+            body=accepted.model_dump(mode="json"),
+        )
+    await session.commit()
+
+    try:
+        await queue_service.enqueue(
+            "assistant_reply",
+            str(conversation_id),
+            str(user.id),
+            str(payload.patient_id),
+            payload.text,
+            reply_seq,
+        )
+    except Exception:  # noqa: BLE001 — причина не важна, важно не оставить «думает» навсегда
+        # Переписка уже закоммичена, а задачи нет и не будет: без этой ветки
+        # экран показывал бы «помощник думает» вечно, а повтор с тем же ключом
+        # возвращал бы прежнее «принято» сутки (ADR-0035). Поэтому ожидание
+        # помечается неудавшимся, а бронь снимается: повтор должен спрашивать
+        # заново, как было до ключа.
+        # Разговор перечитывается под блокировкой с `populate_existing`:
+        # `replace_message` переписывает весь JSONB, а объект в памяти коммит НЕ
+        # протухает (`expire_on_commit=False`) — без явного обновления запись
+        # ушла бы по снимку и стёрла ответ, который воркер мог дописать за
+        # секунды ожидания недоступного Redis.
+        locked = await conversations_repo.get_for_update(session, conversation_id)
+        if locked is not None:
+            await conversations_repo.replace_message(
+                session,
+                conversation=locked,
+                message=new_message(
+                    seq=reply_seq,
+                    role="assistant",
+                    text=ASSISTANT_UNAVAILABLE,
+                    status="failed",
+                ),
+            )
+        # Бронь снимается в любом случае, даже если разговора уже нет: иначе
+        # `StaleDataError` при записи по исчезнувшей строке оставил бы ключ с
+        # ответом 202 на сутки — ровно тот дефект, который здесь и лечится.
+        if reservation is not None:
+            await idempotency.release(session, key_id=reservation)
+        await session.commit()
+        raise ApiError(
+            ErrorCode.INTERNAL, "Не удалось поставить задачу. Попробуйте ещё раз."
+        ) from None
+
+    return accepted
 
 
 class DraftIngredient(BaseModel):
