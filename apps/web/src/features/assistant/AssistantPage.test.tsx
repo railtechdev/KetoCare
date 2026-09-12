@@ -70,6 +70,42 @@ beforeEach(() => {
 const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
 
 describe("помощник в кабинете", () => {
+  it("вопрос уходит в найденную переписку, если список успел прийти", async () => {
+    // Заморозка начинается с ОТПРАВКИ, а не с набора: иначе достаточно
+    // набрать вопрос раньше, чем дочитался список, — и сервер заведёт вторую
+    // переписку, а первая станет для семьи недостижимой (ADR-0022).
+    let revealList: (value: unknown) => void = () => undefined;
+    const listed = new Promise((resolve) => {
+      revealList = resolve;
+    });
+    const answered = (api.GET as Mock).getMockImplementation();
+    (api.GET as Mock).mockImplementation((path: string, options?: unknown) =>
+      path.endsWith("/ai-conversations")
+        ? listed
+        : (answered?.(path, options) ??
+          Promise.resolve({ data: { id: CONVERSATION_ID, messages: [] } })),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      await screen.findByLabelText(/куда записать кетоны/i),
+      "куда записать кетоны",
+    );
+    revealList({ data: { items: [{ id: CONVERSATION_ID }], total: 1 } });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Спросить" })).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalled();
+    });
+    expect((api.POST as Mock).mock.calls[0]?.[1]?.body?.conversation_id).toBe(
+      CONVERSATION_ID,
+    );
+  });
+
   it("повтор уходит с тем же разговором, даже если список дочитался позже", async () => {
     // Список переписок мог быть ещё не прочитан: вопрос уходит с пустым
     // `conversation_id`. Повтор обязан уйти с тем же — иначе тело другое, ключ

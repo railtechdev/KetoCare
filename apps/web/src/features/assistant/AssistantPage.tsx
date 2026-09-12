@@ -55,12 +55,25 @@ export function AssistantPage({ patientId }: { patientId: string }) {
   // тогда вопрос уходит с пустым `conversation_id`. Повтор обязан уйти с тем
   // же — иначе тело другое, ключ другой и в переписке появится второй такой же
   // вопрос (ADR-0035). Освобождается сменой вопроса: это уже другая запись.
-  const attempt = useRef<{ question: string; conversationId: string | null }>({
-    question: question.trim(),
-    conversationId,
-  });
-  if (attempt.current.question !== question.trim()) {
-    attempt.current = { question: question.trim(), conversationId };
+  const attempt = useRef<{
+    question: string;
+    conversationId: string | null;
+    sent: boolean;
+  } | null>(null);
+  if (
+    attempt.current === null ||
+    attempt.current.question !== question.trim()
+  ) {
+    attempt.current = {
+      question: question.trim(),
+      conversationId,
+      sent: false,
+    };
+  } else if (!attempt.current.sent) {
+    // До первой отправки разговор ещё не выбран: список переписок мог прийти,
+    // пока человек набирал вопрос, и слать пустой `conversation_id` значило бы
+    // завести вторую переписку при живой первой.
+    attempt.current.conversationId = conversationId;
   }
   const askedConversationId = attempt.current.conversationId;
   const attemptKey = useAttemptKey(
@@ -70,6 +83,9 @@ export function AssistantPage({ patientId }: { patientId: string }) {
   function send() {
     const text = question.trim();
     if (!text) return;
+    // С этого мгновения разговор попытки заморожен: повтор обязан уйти с тем
+    // же телом и тем же ключом (ADR-0035).
+    if (attempt.current !== null) attempt.current.sent = true;
     ask.mutate(
       { text, conversationId: askedConversationId, idempotencyKey: attemptKey },
       {
