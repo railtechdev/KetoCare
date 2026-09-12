@@ -199,7 +199,7 @@ async def assistant_reply(
 
     from core.db import get_sessionmaker
     from core.repositories import ai_conversations as conversations_repo
-    from core.schemas.ai_conversations import new_message
+    from core.schemas.ai_conversations import ASSISTANT_UNAVAILABLE, new_message
 
     from .client import build_ai_client
 
@@ -227,9 +227,7 @@ async def assistant_reply(
     except AiLimitExceeded as error:
         text = str(error)
     except AiError:
-        text = (
-            "Помощник сейчас недоступен. Попробуйте позже — остальные разделы работают как обычно."
-        )
+        text = ASSISTANT_UNAVAILABLE
         status = "failed"
 
     async with sessionmaker() as session:

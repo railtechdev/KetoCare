@@ -24,7 +24,7 @@ from core.models import AiConversation
 from core.models.enums import AiConversationChannel, RecipeCategory, UserRole
 from core.repositories import ai_conversations as conversations_repo
 from core.repositories import products as products_repo
-from core.schemas.ai_conversations import new_message
+from core.schemas.ai_conversations import ASSISTANT_UNAVAILABLE, new_message
 
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access, require_roles
 from ..deps.idempotency import IdempotencyKeyDep
@@ -261,10 +261,20 @@ async def ask_assistant(
         # возвращал бы прежнее «принято» сутки (ADR-0035). Поэтому ожидание
         # помечается неудавшимся, а бронь снимается: повтор должен спрашивать
         # заново, как было до ключа.
+        # Разговор перечитывается под блокировкой: `replace_message` переписывает
+        # весь JSONB, а снимок в памяти устарел ещё на коммите — за секунды
+        # ожидания недоступного Redis воркер мог дописать ответ на прошлый
+        # вопрос, и запись по снимку стёрла бы его.
+        locked = await conversations_repo.get_for_update(session, conversation_id)
         await conversations_repo.replace_message(
             session,
-            conversation=conversation,
-            message=new_message(seq=reply_seq, role="assistant", status="failed"),
+            conversation=locked or conversation,
+            message=new_message(
+                seq=reply_seq,
+                role="assistant",
+                text=ASSISTANT_UNAVAILABLE,
+                status="failed",
+            ),
         )
         if reservation is not None:
             await idempotency.release(session, key_id=reservation)

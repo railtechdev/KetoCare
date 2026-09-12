@@ -161,12 +161,32 @@ class TestIdempotency:
             select(AiConversation).where(AiConversation.patient_id == patient.id)
         )
         assert conversation is not None
-        statuses = [message.get("status") for message in conversation.messages or []]
+        messages = conversation.messages or []
+        statuses = [message.get("status") for message in messages]
         assert "failed" in statuses and "pending" not in statuses
+        # Не пустой пузырь: в переписке, которую читает врач, реплика без текста
+        # не событие, а дисклеймер под ней — обещание ответа, которого нет.
+        refused = next(message for message in messages if message.get("status") == "failed")
+        assert refused.get("text")
         left = await session.scalar(
             select(func.count()).select_from(IdempotencyKey).where(IdempotencyKey.key == key)
         )
         assert left == 0
+
+        # И обещание самого лечения: повтор спрашивает заново, как было до ключа.
+        queued: list[tuple[str, tuple]] = []
+
+        async def record(task: str, *args) -> None:
+            queued.append((task, args))
+
+        monkeypatch.setattr(queue_service, "enqueue", record)
+        again = await self._ask_with_key(
+            client, parent, patient, auth_headers, key, "куда записать кетоны"
+        )
+
+        assert again.status_code == 202, again.text
+        assert await self._conversations(session, patient.id) == 2
+        assert len(queued) == 1
 
     async def test_forbidden_request_does_not_reserve_the_key(
         self, client, session, make_user, make_patient, auth_headers, enqueued
