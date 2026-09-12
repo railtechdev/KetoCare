@@ -324,6 +324,39 @@ describe("рецепты в Mini App", () => {
     expect(screen.getByText("120 г")).toBeInTheDocument();
   });
 
+  it("сообщение о связи стоит выше содержимого карточки", async () => {
+    // Замер на телефонной ширине 390 px: рецепт с инструкцией в 1696 символов
+    // даёт 2036 px содержимого, и строка, стоявшая последней, оказывалась на
+    // 1972 px от верха — ниже первого экрана любого телефона (667, 844, 932), и
+    // это ещё без шапки Telegram. Человек видел карточку, которая молчит, а
+    // объяснение лежало двумя экранами ниже. Держит её на виду именно порядок
+    // в разметке, поэтому он и проверяется.
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+    await screen.findByText(/Взбить/);
+    act(() => {
+      showBackButton.mock.calls.at(-1)?.[0]();
+    });
+
+    onlineManager.setOnline(false);
+    try {
+      await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+      const note = await screen.findByText(
+        "Нет связи — покажем, как только она появится.",
+      );
+      const body = screen.getByText(/Взбить/);
+      expect(
+        note.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("карточка без сети тоже говорит про связь", async () => {
     // Со второго открытия рецепт берётся из кэша: `isPending` ложен, ветка
     // кита молчит, и карточка показывала старый рецепт без единого слова — а
