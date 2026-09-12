@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import i18n from "../../lib/i18n";
+import { NetworkError } from "@ketocare/api-client";
 import { api } from "../../lib/api";
 import adminRu from "../../locales/ru/admin.json";
 import { SectionRouter } from "../../test/SectionRouter";
@@ -132,9 +133,18 @@ describe("карточка продукта вне текущей выборки
     // о справочнике не известно ничего, а администратору говорилось именно
     // это, и повторить было нечем. 404 и отказ различает сам запрос
     // (`fetchProductDetail`), панели остаётся их не смешивать.
+    //
+    // Отказ подделан `NetworkError` — именно её бросает клиент при обрыве
+    // связи, и только для неё `errorMessageOf` даёт текст про связь. С обычной
+    // `Error` проверка про отказ связи как раз путь отказа связи и не прошла бы
+    // (правило: подделка обязана повторять контракт, а не представление о нём).
+    let attempts = 0;
     (api.GET as Mock).mockImplementation((path: string) => {
       if (path === "/api/v1/products/{product_id}") {
-        return Promise.reject(new Error("сеть недоступна"));
+        attempts += 1;
+        return attempts === 1
+          ? Promise.reject(new NetworkError())
+          : Promise.resolve({ data: PRODUCT, response: { status: 200 } });
       }
       if (path === "/api/v1/products/categories") {
         return Promise.resolve({
@@ -148,15 +158,25 @@ describe("карточка продукта вне текущей выборки
       });
     });
 
+    const user = userEvent.setup();
     renderPanel(OUTSIDE_ID);
 
     expect(
       await screen.findByText(adminRu.products.cardError as string),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Позиция не найдена")).toBeNull();
     expect(
-      screen.getByRole("button", { name: /Повторить/ }),
+      screen.getByText("Нет связи с сервером. Проверьте подключение."),
     ).toBeInTheDocument();
+    expect(screen.queryByText("Позиция не найдена")).toBeNull();
+
+    // Кнопка обязана не просто быть, а повторять запрос: вся находка была в
+    // том, что повторить было нечем.
+    await user.click(screen.getByRole("button", { name: /Повторить/ }));
+
+    expect(
+      await screen.findByDisplayValue("Масло сливочное"),
+    ).toBeInTheDocument();
+    expect(attempts).toBe(2);
   });
 });
 
