@@ -11,6 +11,8 @@ export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
 export { isRefusal } from "./lib/assistantAnswer";
 export type { AssistantMessageSignals } from "./lib/assistantAnswer";
+export { productNameState } from "./lib/productName";
+export type { ProductName, ProductNameInput } from "./lib/productName";
 export { formatRatio, formatOccurredAt, formatWeight } from "./lib/format";
 
 export { RatioBadge } from "./components/RatioBadge";

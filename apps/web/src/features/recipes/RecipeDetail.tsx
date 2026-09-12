@@ -9,6 +9,7 @@ import {
   Skeleton,
   toast,
   WarningBanner,
+  type ProductName,
 } from "@ketocare/ui";
 import { Calculator, Download, Pencil, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -38,6 +39,23 @@ interface Props {
 }
 
 /** Карточка рецепта: состав, приготовление и показатели, посчитанные ядром. */
+/**
+ * Состояние имени — словами. Разбор общий с Mini App (`productNameState` в
+ * ките), а тексты свои: это i18n, а не логика.
+ */
+function productName(state: ProductName, t: (key: string) => string): string {
+  switch (state.kind) {
+    case "name":
+      return state.name;
+    case "missing":
+      return t("detail.unknownProduct");
+    case "unavailable":
+      return t("detail.nameUnavailable");
+    case "pending":
+      return t("detail.loadingName");
+  }
+}
+
 export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
   const { t } = useTranslation("recipes");
 
@@ -361,15 +379,6 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
           <p className="m-0 text-muted-foreground">
             {t("detail.compositionEmpty")}
           </p>
-        ) : productNames.isLoading ? (
-          <div className="flex flex-col gap-field">
-            <p role="status" className="sr-only">
-              {t("detail.loadingProducts")}
-            </p>
-            {data.ingredients.map((ingredient) => (
-              <Skeleton key={ingredient.product_id} className="h-6 w-full" />
-            ))}
-          </div>
         ) : (
           <ul className="m-0 flex max-w-xl list-none flex-col gap-field p-0">
             {data.ingredients.map((ingredient) => (
@@ -377,9 +386,11 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                 key={ingredient.product_id}
                 className="flex items-baseline justify-between gap-block border-b border-border pb-1"
               >
+                {/* Граммовка видна всегда, даже пока имена в пути: состав,
+                    спрятанный целиком, — это карточка без рецепта, а по ней
+                    готовят. */}
                 <span>
-                  {productNames.byId[ingredient.product_id] ??
-                    t("detail.unknownProduct")}
+                  {productName(productNames.stateOf(ingredient.product_id), t)}
                   {productNames.withdrawn[ingredient.product_id] !==
                     undefined && (
                     <span className="ml-2 text-sm text-warning">

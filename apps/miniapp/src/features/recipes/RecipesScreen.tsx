@@ -7,6 +7,7 @@ import {
   Section,
   useDebouncedValue,
   SEARCH_DELAY_MS,
+  type ProductName,
 } from "@ketocare/ui";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -17,7 +18,6 @@ import { showBackButton } from "../../lib/telegram";
 import {
   type Recipe,
   useProductNames,
-  type ProductName,
   useRecipe,
   useRecipeSearch,
 } from "./useRecipes";

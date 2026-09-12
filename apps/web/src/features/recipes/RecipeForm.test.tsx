@@ -87,10 +87,16 @@ async function addButter(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а
+  // карточка продукта различает по нему 404 и сбой связи.
   (api.GET as Mock).mockImplementation(async (path: string) =>
     path === "/api/v1/products/{product_id}"
-      ? { data: PRODUCT, error: undefined }
-      : { data: { items: [PRODUCT], total: 1 }, error: undefined },
+      ? { data: PRODUCT, error: undefined, response: { status: 200 } }
+      : {
+          data: { items: [PRODUCT], total: 1 },
+          error: undefined,
+          response: { status: 200 },
+        },
   );
   (api.POST as Mock).mockResolvedValue({ data: VERIFIED, error: undefined });
 });

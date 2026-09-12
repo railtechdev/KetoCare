@@ -58,16 +58,23 @@ function renderScreen() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а код
+  // различает по нему 404 («такого продукта нет») и сбой связи.
   (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
-    if (path.endsWith("{recipe_id}")) return Promise.resolve({ data: RECIPE });
+    if (path.endsWith("{recipe_id}"))
+      return Promise.resolve({ data: RECIPE, response: { status: 200 } });
     if (path.endsWith("{product_id}")) {
       const id = (options as { params: { path: { product_id: string } } })
         .params.path.product_id;
       return Promise.resolve({
         data: { id, name_ru: PRODUCT_NAMES[id] ?? "Продукт", is_active: true },
+        response: { status: 200 },
       });
     }
-    return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    return Promise.resolve({
+      data: { items: [RECIPE], total: 1 },
+      response: { status: 200 },
+    });
   });
 });
 
@@ -131,6 +138,7 @@ describe("рецепты в Mini App", () => {
               { product_id: "prod-2", grams: 60, position: 1 },
             ],
           },
+          response: { status: 200 },
         });
       if (path.endsWith("{product_id}")) {
         const id = (options as { params: { path: { product_id: string } } })
@@ -138,6 +146,7 @@ describe("рецепты в Mini App", () => {
         return id === "prod-1"
           ? Promise.resolve({
               data: { id, name_ru: PRODUCT_NAMES[id], is_active: true },
+              response: { status: 200 },
             })
           : Promise.resolve({
               error: {
@@ -398,6 +407,7 @@ describe("рецепты в Mini App", () => {
               { product_id: "prod-2", grams: 60, position: 1 },
             ],
           },
+          response: { status: 200 },
         });
       if (path.endsWith("{product_id}")) {
         const id = (options as { params: { path: { product_id: string } } })
@@ -408,6 +418,7 @@ describe("рецепты в Mini App", () => {
             name_ru: PRODUCT_NAMES[id] ?? "Продукт",
             is_active: true,
           },
+          response: { status: 200 },
         });
       }
       return Promise.resolve({ data: { items: [RECIPE], total: 1 } });

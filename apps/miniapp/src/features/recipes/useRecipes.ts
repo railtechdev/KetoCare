@@ -1,6 +1,8 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
+import { productNameState, type ProductName } from "@ketocare/ui";
+
 import { api } from "../../lib/api";
 
 export type Recipe = components["schemas"]["RecipeRead"];
@@ -53,19 +55,6 @@ export function useRecipe(recipeId: string | null) {
 }
 
 /**
- * Что известно об имени продукта в составе.
- *
- * Различать обязательно: «удалён из справочника» — утверждение о справочнике, а
- * «не загрузилось» — о связи. По карточке готовят, и неверно названный продукт
- * рядом с граммовкой хуже пустоты.
- */
-export type ProductName =
-  | { kind: "name"; name: string }
-  | { kind: "missing" }
-  | { kind: "unavailable" }
-  | { kind: "pending" };
-
-/**
  * Названия продуктов состава — по их карточкам.
  *
  * Рецепт хранит только `product_id`: продукт могут переименовать, и снимка имён
@@ -90,34 +79,29 @@ export function useProductNames(productIds: string[]): {
         );
         // 404 — это ответ справочника «такого продукта нет», а не сбой связи.
         // Бросить здесь значило бы смешать удаление с недоставленным ответом.
-        if (response?.status === 404) return null;
+        if (response.status === 404) return null;
         if (error || !data) throw error ?? new Error("Empty product response");
         return data;
       },
     })),
   });
 
-  // Признак построчный, а не общий на состав: общий переносил бы «название не
-  // загрузилось» на строки, где имя пришло. `isLoading` тут не годится вовсе —
-  // он равен `isPending && isFetching`, а на паузе запрос не идёт.
+  // Разбор — общий с кабинетом (`productNameState` в ките): один и тот же
+  // рецепт в двух каналах обязан различать эти случаи одинаково.
   const states = new Map<string, ProductName>();
   unique.forEach((id, index) => {
     const result = results[index];
     if (result === undefined) return;
-    if (result.data !== undefined) {
-      states.set(
-        id,
-        result.data === null
-          ? { kind: "missing" }
-          : { kind: "name", name: result.data.name_ru },
-      );
-      return;
-    }
     states.set(
       id,
-      result.isError || result.fetchStatus === "paused"
-        ? { kind: "unavailable" }
-        : { kind: "pending" },
+      productNameState({
+        name:
+          result.data === undefined
+            ? undefined
+            : (result.data?.name_ru ?? null),
+        isError: result.isError,
+        isPaused: result.fetchStatus === "paused",
+      }),
     );
   });
 
