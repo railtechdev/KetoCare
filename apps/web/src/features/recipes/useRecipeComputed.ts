@@ -1,4 +1,8 @@
-import { RECALC_DELAY_MS, useDebouncedValue } from "@ketocare/ui";
+import {
+  RECALC_DELAY_MS,
+  useDebouncedValue,
+  type ProductName,
+} from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
@@ -27,6 +31,20 @@ export interface RecipeComputed {
   /** Расчёт идёт прямо сейчас */
   pending: boolean;
   isError: boolean;
+  /**
+   * Что известно об имени продукта строки.
+   *
+   * Отдаётся отсюда, а не отдельным хуком: карточки продуктов уже запрошены
+   * ради расчёта, и второй наблюдатель на тот же ключ был бы лишним.
+   */
+  stateOf: (productId: string) => ProductName;
+  /**
+   * В составе есть продукт, удалённый из справочника.
+   *
+   * Отдельно от `isError`: это не сбой, а состояние состава, и сказать о нём
+   * надо иначе — повторять запрос бессмысленно, поправить можно только состав.
+   */
+  hasMissingProduct: boolean;
 }
 
 interface ItemContribution {
@@ -144,5 +162,7 @@ export function useRecipeComputed(rows: CompositionRow[]): RecipeComputed {
     // Карточки продуктов — часть расчёта: без них он не уйдёт вовсе, и молчать
     // об этом нельзя, иначе чисел просто не будет и никто не поймёт почему.
     isError: query.isError || details.isError,
+    stateOf: details.stateOf,
+    hasMissingProduct: details.hasMissing,
   };
 }

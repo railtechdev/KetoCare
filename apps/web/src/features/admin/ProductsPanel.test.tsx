@@ -64,15 +64,24 @@ function renderPanel(item?: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а
+  // запрос карточки различает по нему 404 («такого продукта нет») и сбой
+  // связи. Мок без `response` — форма, которой в бою не бывает.
   (api.GET as Mock).mockImplementation((path: string) => {
     if (path === "/api/v1/products/{product_id}") {
-      return Promise.resolve({ data: PRODUCT });
+      return Promise.resolve({ data: PRODUCT, response: { status: 200 } });
     }
     if (path === "/api/v1/products/categories") {
-      return Promise.resolve({ data: [{ id: "c1", name_ru: "Жиры" }] });
+      return Promise.resolve({
+        data: [{ id: "c1", name_ru: "Жиры" }],
+        response: { status: 200 },
+      });
     }
     // Выборка без искомой позиции: другая страница, другой фильтр.
-    return Promise.resolve({ data: { items: [], total: 0 } });
+    return Promise.resolve({
+      data: { items: [], total: 0 },
+      response: { status: 200 },
+    });
   });
 });
 

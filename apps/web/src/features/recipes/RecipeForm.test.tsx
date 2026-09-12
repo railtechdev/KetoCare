@@ -102,6 +102,36 @@ beforeEach(() => {
 });
 
 describe("показатели в форме рецепта", () => {
+  it("удалённый продукт останавливает расчёт и называет причину", async () => {
+    // До этого 404 бросал, и форма говорила «показатели сейчас не посчитать».
+    // Когда 404 стал ответом, расчёт перестал уходить — и форма замолчала
+    // совсем: ни чисел, ни причины, и так навсегда. Молчание тут хуже отказа:
+    // повторять запрос бессмысленно, поправить можно только состав.
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/products/{product_id}"
+        ? {
+            error: { error: { code: "not_found", message: "Не найден." } },
+            response: { status: 404 },
+          }
+        : {
+            data: { items: [PRODUCT], total: 1 },
+            error: undefined,
+            response: { status: 200 },
+          },
+    );
+    const user = userEvent.setup();
+    renderForm();
+    await addButter(user);
+
+    expect(
+      await screen.findByText(/больше нет в справочнике/),
+    ).toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalledWith(
+      "/api/v1/calc/verify",
+      expect.anything(),
+    );
+  });
+
   it("считает блюдо по мере правки состава, а не после сохранения", async () => {
     // Раньше под составом стояло «показатели пересчитываются на сервере после
     // сохранения»: подобрать граммовку в форме было нельзя в принципе.

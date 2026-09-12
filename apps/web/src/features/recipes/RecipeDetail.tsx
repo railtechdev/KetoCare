@@ -9,7 +9,6 @@ import {
   Skeleton,
   toast,
   WarningBanner,
-  type ProductName,
 } from "@ketocare/ui";
 import { Calculator, Download, Pencil, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -20,6 +19,7 @@ import { SectionLink } from "../../components/SectionLink";
 import { incomingRecipe } from "../calculator/incomingItem";
 import { errorMessageOf } from "../../lib/api";
 import { formatGrams } from "./format";
+import { productLabel } from "./productLabel";
 import { FileField } from "../../components/Field";
 import { RecipePhoto } from "./RecipePhoto";
 import {
@@ -39,23 +39,6 @@ interface Props {
 }
 
 /** Карточка рецепта: состав, приготовление и показатели, посчитанные ядром. */
-/**
- * Состояние имени — словами. Разбор общий с Mini App (`productNameState` в
- * ките), а тексты свои: это i18n, а не логика.
- */
-function productName(state: ProductName, t: (key: string) => string): string {
-  switch (state.kind) {
-    case "name":
-      return state.name;
-    case "missing":
-      return t("detail.unknownProduct");
-    case "unavailable":
-      return t("detail.nameUnavailable");
-    case "pending":
-      return t("detail.loadingName");
-  }
-}
-
 export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
   const { t } = useTranslation("recipes");
 
@@ -390,7 +373,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                     спрятанный целиком, — это карточка без рецепта, а по ней
                     готовят. */}
                 <span>
-                  {productName(productNames.stateOf(ingredient.product_id), t)}
+                  {productLabel(productNames.stateOf(ingredient.product_id), t)}
                   {productNames.withdrawn[ingredient.product_id] !==
                     undefined && (
                     <span className="ml-2 text-sm text-warning">

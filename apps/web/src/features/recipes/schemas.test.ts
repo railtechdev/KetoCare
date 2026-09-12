@@ -45,34 +45,32 @@ const VALUES: RecipeFormValues = {
   servings: 2,
   instructions: "  Смешать и запечь.  ",
   ingredients: [
-    { productId: "aaa", name: "Творог", grams: 100 },
-    { productId: "bbb", name: "Масло", grams: 20.5 },
+    { productId: "aaa", grams: 100 },
+    { productId: "bbb", grams: 20.5 },
   ],
 };
 
 describe("рецепт с сервера в значения формы", () => {
-  it("состав получает названия продуктов по идентификаторам", () => {
-    const values = toRecipeFormValues(
-      RECIPE,
-      { aaa: "Творог", bbb: "Масло" },
-      "неизвестно",
-    );
-
-    expect(values.ingredients).toEqual([
-      { productId: "aaa", name: "Творог", grams: 100 },
-      { productId: "bbb", name: "Масло", grams: 20.5 },
+  it("состав переносится идентификаторами и массами", () => {
+    expect(toRecipeFormValues(RECIPE).ingredients).toEqual([
+      { productId: "aaa", grams: 100 },
+      { productId: "bbb", grams: 20.5 },
     ]);
   });
 
-  it("продукт без названия подписывается запасным текстом, а не идентификатором", () => {
-    // Идентификатор в строке состава не говорит диетологу ничего, а сохранить
-    // рецепт с непонятной строкой он всё равно сможет.
-    const values = toRecipeFormValues(RECIPE, { aaa: "Творог" }, "неизвестно");
-    expect(values.ingredients[1]?.name).toBe("неизвестно");
+  it("имени продукта в значениях формы нет", () => {
+    // Имя — отображение, а не значение: в тело запроса оно не уходит, а
+    // `defaultValues` читаются один раз при монтировании. Снимок имени застывал
+    // на том, что было известно в тот миг, и строка состава навсегда
+    // оставалась «загружаем название…» — даже когда имя давно пришло. Подпись
+    // собирается при отрисовке, по состоянию (`productLabel` в форме).
+    expect(toRecipeFormValues(RECIPE).ingredients[0]).not.toHaveProperty(
+      "name",
+    );
   });
 
   it("отсутствующее фото становится пустым полем", () => {
-    expect(toRecipeFormValues(RECIPE, {}, "неизвестно").photoPath).toBe("");
+    expect(toRecipeFormValues(RECIPE).photoPath).toBe("");
   });
 });
 

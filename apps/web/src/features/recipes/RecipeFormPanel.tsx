@@ -13,7 +13,7 @@ import {
   useCreateRecipeMutation,
   useUpdateRecipeMutation,
 } from "./useRecipeMutations";
-import { useProductNames, useRecipe } from "./useRecipes";
+import { useRecipe } from "./useRecipes";
 
 interface Props {
   /** `null` — создание нового рецепта */
@@ -33,15 +33,22 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
   const { t } = useTranslation("recipes");
 
   const recipe = useRecipe(recipeId);
-  const productNames = useProductNames(
-    recipe.data?.ingredients.map((ingredient) => ingredient.product_id) ?? [],
-  );
 
   const create = useCreateRecipeMutation();
   const update = useUpdateRecipeMutation(recipeId);
 
   if (recipeId !== null) {
-    if (recipe.isLoading || productNames.isLoading) {
+    // Ожидание — только по самому рецепту. Ждать здесь ИМЁН нельзя, и это не
+    // вкусовщина: `isLoading` равен `isPending && isFetching`, то есть дёргается
+    // на каждый подъём запроса. Форма, спрятанная за этим флагом, монтируется
+    // и размонтируется следом за ним, её собственный наблюдатель поднимает
+    // отказавший запрос снова — и получается цикл. Замер: один продукт с
+    // отказом давал 558 запросов за 300 мс, без заслонки по именам — 1.
+    //
+    // По существу это та же ошибка, что прятать состав карточки, пока грузятся
+    // имена: имена нужны только для подписи строки, и она честно скажет
+    // «загружаем название…» сама.
+    if (recipe.isLoading) {
       return (
         <PageLayout title={t("form.editTitle")} width="form" onBack={onCancel}>
           <p role="status" className="sr-only">
@@ -81,11 +88,7 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
       defaultValues={
         editing === null
           ? EMPTY_RECIPE_FORM_VALUES
-          : toRecipeFormValues(
-              editing,
-              productNames.byId,
-              t("detail.unknownProduct"),
-            )
+          : toRecipeFormValues(editing)
       }
       pending={create.isPending || update.isPending}
       error={create.error ?? update.error}

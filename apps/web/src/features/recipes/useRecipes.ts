@@ -3,7 +3,11 @@ import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { productNameState, type ProductName } from "@ketocare/ui";
 
 import { api } from "../../lib/api";
-import type { ProductDetail } from "../products/useProductDetail";
+import {
+  fetchProductDetail,
+  productDetailKey,
+  type ProductDetail,
+} from "../products/useProductDetail";
 import { toRecipeSearchQuery, type RecipeFilters } from "./types";
 
 /**
@@ -98,6 +102,13 @@ export function useProductNames(productIds: string[]): ProductNames {
 
 export interface ProductDetails {
   byId: Record<string, ProductDetail>;
+  /**
+   * В составе есть продукт, которого больше нет в справочнике.
+   *
+   * Молчать об этом нельзя: без его карточки расчёт не уйдёт никогда, и форма
+   * показывала бы пустоту вместо чисел — без единого слова о причине.
+   */
+  hasMissing: boolean;
   /** Что известно об имени продукта: пришло, удалён, не загрузилось, ждём */
   stateOf: (productId: string) => ProductName;
   isLoading: boolean;
@@ -121,24 +132,14 @@ export function useProductDetails(productIds: string[]): ProductDetails {
 
   const results = useQueries({
     queries: unique.map((id) => ({
-      queryKey: ["products", "detail", id],
+      queryKey: productDetailKey(id),
       // Справочник продуктов меняется редко: перезапрашивать карточку при
       // каждом открытии рецепта незачем.
       staleTime: 5 * 60 * 1000,
-      queryFn: async () => {
-        const { data, error, response } = await api.GET(
-          "/api/v1/products/{product_id}",
-          { params: { path: { product_id: id } } },
-        );
-        // 404 — это ответ справочника «такого продукта нет», а не сбой связи.
-        // Бросить здесь значило бы смешать удаление с недоставленным ответом:
-        // строка состава обещала бы имя, которое никогда не придёт, а форма
-        // рецепта навсегда осталась бы в состоянии «карточки получены не все»
-        // и расчёт не ушёл бы ни разу.
-        if (response.status === 404) return null;
-        if (error || !data) throw error ?? new Error("Empty product response");
-        return data;
-      },
+      // Запрос — общий с карточкой продукта: у общего ключа обязано быть
+      // общее значение, иначе `null` («такого продукта нет») читается соседом
+      // как «данных нет вовсе».
+      queryFn: () => fetchProductDetail(id),
     })),
   });
 
@@ -167,6 +168,7 @@ export function useProductDetails(productIds: string[]): ProductDetails {
 
   return {
     byId,
+    hasMissing: results.some((result) => result.data === null),
     stateOf: (productId: string) =>
       states.get(productId) ?? { kind: "pending" as const },
     isLoading: results.some((result) => result.isLoading),
