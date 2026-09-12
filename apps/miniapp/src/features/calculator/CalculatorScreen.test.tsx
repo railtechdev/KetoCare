@@ -297,7 +297,7 @@ describe("калькулятор в Mini App", () => {
     // отвечал бы о прежних буквах, да ещё рядом со строкой про связь.
     const user = userEvent.setup();
     mockEmptySearch();
-    renderScreen();
+    const { client } = renderScreen();
 
     const field = await screen.findByLabelText("Найдите продукт");
     await user.type(field, "фуагра");
@@ -314,6 +314,7 @@ describe("калькулятор в Mini App", () => {
       ).toBeInTheDocument();
       expect(screen.queryByText("Ничего не нашлось")).toBeNull();
     } finally {
+      client.clear();
       onlineManager.setOnline(true);
     }
   });
@@ -322,7 +323,7 @@ describe("калькулятор в Mini App", () => {
     // Две фразы об одной причине — тот же текст дважды (правило П27). Когда о
     // паузе говорит расчёт, поиск молчит.
     const user = userEvent.setup();
-    renderScreen();
+    const { client } = renderScreen();
     await addProduct(user);
 
     onlineManager.setOnline(false);
@@ -341,6 +342,7 @@ describe("калькулятор в Mini App", () => {
         screen.queryByText("Нет связи — покажем, как только она появится."),
       ).toBeNull();
     } finally {
+      client.clear();
       onlineManager.setOnline(true);
     }
   });

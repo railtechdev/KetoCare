@@ -51,7 +51,9 @@ function renderScreen() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<RecipesScreen />, { wrapper: Wrapper });
+  // `client` — тестам, которым нужно очистить кэш до возврата сети (#174).
+  const result = render(<RecipesScreen />, { wrapper: Wrapper });
+  return Object.assign(result, { client });
 }
 
 beforeEach(() => {
@@ -80,7 +82,7 @@ describe("рецепты в Mini App", () => {
     // подставными данными ложен. Пустое состояние обязано сказать правду.
     const user = userEvent.setup();
     (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
-    renderScreen();
+    const { client } = renderScreen();
 
     const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
     await user.type(field, "суфле");
@@ -97,6 +99,34 @@ describe("рецепты в Mini App", () => {
       ).toBeInTheDocument();
       expect(screen.queryByText("Ничего не нашлось")).toBeNull();
     } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("пауза при непустой выдаче тоже называется словами", async () => {
+    // Прошлый ответ непуст, пустого состояния нет — и о паузе не сказал бы
+    // никто: ветка ожидания кита к этому моменту уже не работает.
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+
+    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    await user.type(field, "омлет");
+    expect(await screen.findByText(/Омлет на сливках/)).toBeInTheDocument();
+
+    onlineManager.setOnline(false);
+    try {
+      await user.type(field, " на сливках");
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+      // Прежняя выдача остаётся: связь пропала, а не рецепты.
+      expect(screen.getByText(/Омлет на сливках/)).toBeInTheDocument();
+    } finally {
+      client.clear();
       onlineManager.setOnline(true);
     }
   });

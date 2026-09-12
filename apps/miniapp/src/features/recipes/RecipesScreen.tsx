@@ -85,17 +85,14 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
         }
         retryLabel={t("actions.retry")}
         onRetry={() => void recipes.refetch()}
-        isEmpty={!settling && !recipes.isFetching && recipes.data?.length === 0}
+        isEmpty={
+          !settling &&
+          !recipes.isFetching &&
+          recipes.fetchStatus !== "paused" &&
+          recipes.data?.length === 0
+        }
         empty={
-          // На паузе прошлый пустой ответ относится к прежним буквам, а ветка
-          // ожидания в ките сюда не доходит: она требует `loading`, а он с
-          // подставными данными ложен. Сказать «ничего не нашлось» значило бы
-          // ответить о запросе, который не отправлялся.
-          recipes.fetchStatus === "paused" ? (
-            <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
-          ) : (
-            <p className="text-muted-foreground">{t("recipes.nothingFound")}</p>
-          )
+          <p className="text-muted-foreground">{t("recipes.nothingFound")}</p>
         }
       >
         <ul className="flex flex-col">
@@ -119,6 +116,14 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
           ))}
         </ul>
       </AsyncSection>
+
+      {/* Рядом со списком, а не внутри пустого состояния: при непустой прошлой
+          выдаче пустоты нет, и о паузе не сказал бы никто. Ветка ожидания кита
+          закрывает только первый поиск — дальше `loading` ложен из-за
+          подставных данных (ADR-0036). */}
+      {recipes.fetchStatus === "paused" && !recipes.isPending && (
+        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
+      )}
     </main>
   );
 }
