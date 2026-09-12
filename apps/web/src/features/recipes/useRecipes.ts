@@ -52,8 +52,6 @@ export function useRecipe(recipeId: string | null) {
 }
 
 export interface ProductNames {
-  /** Название продукта по его идентификатору; отсутствует, пока запрос не завершён */
-  byId: Record<string, string>;
   /**
    * Продукты состава, выведенные из оборота.
    *
@@ -66,9 +64,10 @@ export interface ProductNames {
   /**
    * Что известно об имени строки состава.
    *
-   * `byId` выше годится форме, где имя — подпись поля, но не карточке: там
-   * нужно отличать «продукт удалён из справочника» от «название не
-   * загрузилось», а по одному лишь отсутствию ключа это неразличимо.
+   * Словаря «идентификатор → имя» здесь намеренно нет: по отсутствию ключа
+   * неразличимы «продукт удалён из справочника» и «название не загрузилось», а
+   * разница между ними — это разница между утверждением о справочнике и
+   * утверждением о связи.
    */
   stateOf: (productId: string) => ProductName;
   isLoading: boolean;
@@ -85,15 +84,12 @@ export interface ProductNames {
 export function useProductNames(productIds: string[]): ProductNames {
   const details = useProductDetails(productIds);
 
-  const byId: Record<string, string> = {};
   const withdrawn: Record<string, string> = {};
   for (const product of Object.values(details.byId)) {
-    byId[product.id] = product.name_ru;
     if (!product.is_active) withdrawn[product.id] = product.name_ru;
   }
 
   return {
-    byId,
     withdrawn,
     stateOf: details.stateOf,
     isLoading: details.isLoading,
