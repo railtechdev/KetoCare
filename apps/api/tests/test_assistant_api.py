@@ -9,7 +9,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import func, select
 
-from core.models import AiConversation, AuditLog
+from api.services import queue as queue_service
+from core.models import AiConversation, AuditLog, IdempotencyKey
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
 
@@ -103,6 +104,69 @@ class TestIdempotency:
 
         assert await self._conversations(session, patient.id) == 2
         assert len(enqueued) == 2
+
+    async def test_someone_elses_conversation_does_not_reserve_the_key(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ) -> None:
+        """Отказ 404 ключ не занимает: иначе исправленный вопрос не пройдёт."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        stranger, stranger_patient = await _linked_parent(session, make_user, make_patient)
+        theirs = await client.post(
+            "/api/v1/ai/assistant/messages",
+            json={"patient_id": str(stranger_patient.id), "text": "их вопрос"},
+            headers=auth_headers(stranger),
+        )
+        key = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f"
+
+        refused = await client.post(
+            "/api/v1/ai/assistant/messages",
+            json={
+                "patient_id": str(patient.id),
+                "conversation_id": theirs.json()["conversation_id"],
+                "text": "куда записать кетоны",
+            },
+            headers={**auth_headers(parent), "Idempotency-Key": key},
+        )
+        accepted = await self._ask_with_key(
+            client, parent, patient, auth_headers, key, "куда записать кетоны"
+        )
+
+        assert refused.status_code == 404, refused.text
+        assert accepted.status_code == 202, accepted.text
+
+    async def test_queue_failure_does_not_promise_an_answer(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ) -> None:
+        """Очередь недоступна: ожидание не висит вечно, а ключ не выдаёт «принято».
+
+        До ключа человек лечил это сам — повтор создавал новый вопрос и новую
+        задачу. С ключом повтор вернул бы прежнее «принято» на сутки, а ответа
+        не появилось бы никогда: задачи нет и поставить её некому.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        key = "d4e5f6a7-b8c9-4d0e-8f1a-2b3c4d5e6f70"
+
+        async def refuse(task: str, *args) -> None:
+            raise RuntimeError("queue is down")
+
+        monkeypatch.setattr(queue_service, "enqueue", refuse)
+        failed = await self._ask_with_key(
+            client, parent, patient, auth_headers, key, "куда записать кетоны"
+        )
+
+        assert failed.status_code == 500, failed.text
+        conversation = await session.scalar(
+            select(AiConversation).where(AiConversation.patient_id == patient.id)
+        )
+        assert conversation is not None
+        statuses = [message.get("status") for message in conversation.messages or []]
+        assert "failed" in statuses and "pending" not in statuses
+        left = await session.scalar(
+            select(func.count()).select_from(IdempotencyKey).where(IdempotencyKey.key == key)
+        )
+        assert left == 0
 
     async def test_forbidden_request_does_not_reserve_the_key(
         self, client, session, make_user, make_patient, auth_headers, enqueued

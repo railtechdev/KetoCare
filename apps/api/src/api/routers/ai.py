@@ -20,6 +20,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.models import AiConversation
 from core.models.enums import AiConversationChannel, RecipeCategory, UserRole
 from core.repositories import ai_conversations as conversations_repo
 from core.repositories import products as products_repo
@@ -181,7 +182,21 @@ async def ask_assistant(
         AiConversationChannel.MINIAPP if user.channel == "miniapp" else AiConversationChannel.WEB
     )
 
-    # Бронь ключа — после проверок доступа и роли: отказ 403 ключ не занимает.
+    existing: AiConversation | None = None
+    if payload.conversation_id is not None:
+        existing = await conversations_repo.get_for_update(session, payload.conversation_id)
+        # Одно сообщение на три случая — нет, чужой ребёнок, чужой автор: по
+        # разнице ответов иначе устанавливается, что разговор существует.
+        if (
+            existing is None
+            or existing.patient_id != payload.patient_id
+            or existing.user_id != user.id
+        ):
+            raise ApiError(ErrorCode.NOT_FOUND, "Разговор не найден.")
+
+    # Бронь ключа — после всех проверок: доступа, роли и самого разговора
+    # (ADR-0035). Отказ 403 или 404 ключ не занимает, и исправленный запрос с
+    # тем же ключом проходит.
     reservation: uuid.UUID | None = None
     if idempotency_key is not None:
         outcome = await idempotency.begin(
@@ -198,21 +213,9 @@ async def ask_assistant(
             return AssistantAccepted.model_validate(outcome.body)
         reservation = outcome
 
-    if payload.conversation_id is None:
-        conversation = await conversations_repo.create(
-            session, user_id=user.id, patient_id=payload.patient_id, channel=channel
-        )
-    else:
-        existing = await conversations_repo.get_for_update(session, payload.conversation_id)
-        # Одно сообщение на три случая — нет, чужой ребёнок, чужой автор: по
-        # разнице ответов иначе устанавливается, что разговор существует.
-        if (
-            existing is None
-            or existing.patient_id != payload.patient_id
-            or existing.user_id != user.id
-        ):
-            raise ApiError(ErrorCode.NOT_FOUND, "Разговор не найден.")
-        conversation = existing
+    conversation = existing or await conversations_repo.create(
+        session, user_id=user.id, patient_id=payload.patient_id, channel=channel
+    )
 
     question_seq = conversations_repo.next_seq(conversation)
     reply_seq = question_seq + 1
@@ -243,14 +246,32 @@ async def ask_assistant(
         )
     await session.commit()
 
-    await queue_service.enqueue(
-        "assistant_reply",
-        str(conversation_id),
-        str(user.id),
-        str(payload.patient_id),
-        payload.text,
-        reply_seq,
-    )
+    try:
+        await queue_service.enqueue(
+            "assistant_reply",
+            str(conversation_id),
+            str(user.id),
+            str(payload.patient_id),
+            payload.text,
+            reply_seq,
+        )
+    except Exception:  # noqa: BLE001 — причина не важна, важно не оставить «думает» навсегда
+        # Переписка уже закоммичена, а задачи нет и не будет: без этой ветки
+        # экран показывал бы «помощник думает» вечно, а повтор с тем же ключом
+        # возвращал бы прежнее «принято» сутки (ADR-0035). Поэтому ожидание
+        # помечается неудавшимся, а бронь снимается: повтор должен спрашивать
+        # заново, как было до ключа.
+        await conversations_repo.replace_message(
+            session,
+            conversation=conversation,
+            message=new_message(seq=reply_seq, role="assistant", status="failed"),
+        )
+        if reservation is not None:
+            await idempotency.release(session, key_id=reservation)
+        await session.commit()
+        raise ApiError(
+            ErrorCode.INTERNAL, "Не удалось поставить задачу. Попробуйте ещё раз."
+        ) from None
 
     return accepted
 
