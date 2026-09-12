@@ -118,6 +118,61 @@ describe("рецепты в Mini App", () => {
     }
   });
 
+  it("удалённый продукт так и называется — удалённым", async () => {
+    // 404 — это ответ справочника «такого продукта нет». Назвать его сетевой
+    // заминкой значит обещать, что имя вот-вот появится.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
+          },
+        });
+      if (path.endsWith("{product_id}"))
+        return Promise.resolve({
+          error: {
+            error: { code: "not_found", message: "Продукт не найден." },
+          },
+          response: { status: 404 },
+        });
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(
+      await screen.findByText("продукт удалён из справочника"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("название не загрузилось")).toBeNull();
+    expect(screen.getByText("120 г")).toBeInTheDocument();
+  });
+
+  it("граммовка видна, пока имена ещё в пути", async () => {
+    // Состав, спрятанный целиком до прихода имён, — карточка без рецепта, а по
+    // ней готовят.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
+          },
+        });
+      if (path.endsWith("{product_id}")) return new Promise(() => undefined);
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(await screen.findByText("120 г")).toBeInTheDocument();
+    expect(screen.getByText("загружаем название…")).toBeInTheDocument();
+  });
+
   it("не дошедшее имя продукта не выдаётся за удалённый продукт", async () => {
     // «Удалён из справочника» — утверждение о справочнике. По этой карточке
     // готовят: неверно названный продукт рядом с граммовкой хуже пустоты.

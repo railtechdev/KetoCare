@@ -17,6 +17,7 @@ import { showBackButton } from "../../lib/telegram";
 import {
   type Recipe,
   useProductNames,
+  type ProductName,
   useRecipe,
   useRecipeSearch,
 } from "./useRecipes";
@@ -238,6 +239,20 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
   );
 }
 
+/** Имя продукта словами: известное, удалённое, не дошедшее или ещё в пути. */
+function productName(state: ProductName, t: (key: string) => string): string {
+  switch (state.kind) {
+    case "name":
+      return state.name;
+    case "missing":
+      return t("recipes.unknownProduct");
+    case "unavailable":
+      return t("recipes.nameUnavailable");
+    case "pending":
+      return t("recipes.loadingName");
+  }
+}
+
 function Ingredients({ recipe }: { recipe: Recipe }) {
   const { t } = useTranslation();
   const names = useProductNames(
@@ -250,12 +265,6 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
     );
   }
 
-  if (names.isPending) {
-    return (
-      <p className="text-muted-foreground">{t("recipes.loadingProducts")}</p>
-    );
-  }
-
   return (
     <ul className="flex list-none flex-col gap-1 p-0">
       {recipe.ingredients.map((ingredient) => (
@@ -263,14 +272,10 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
           key={ingredient.product_id}
           className="flex flex-wrap justify-between gap-field"
         >
+          {/* Граммовка видна всегда, даже пока имена в пути: состав, спрятанный
+              целиком, — это карточка без рецепта, а по ней готовят. */}
           <span className="min-w-0 break-words">
-            {/* «Удалён из справочника» — утверждение о справочнике, и говорить
-                его, когда имя просто не дошло, нельзя: по этой карточке готовят,
-                и граммовка осталась бы при неверно названном продукте. */}
-            {names.byId[ingredient.product_id] ??
-              (names.isUnavailable
-                ? t("recipes.nameUnavailable")
-                : t("recipes.unknownProduct"))}
+            {productName(names.stateOf(ingredient.product_id), t)}
           </span>
           <span className="text-muted-foreground tabular-nums">
             {t("recipes.grams", { value: ingredient.grams })}

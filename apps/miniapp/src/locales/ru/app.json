@@ -156,7 +156,7 @@
     "composition_few": "Состав — на весь выход ({{count}} порции)",
     "composition_many": "Состав — на весь выход ({{count}} порций)",
     "noComposition": "Состав не заполнен.",
-    "loadingProducts": "Загружаем названия продуктов…",
+    "loadingName": "загружаем название…",
     "unknownProduct": "продукт удалён из справочника",
     "nameUnavailable": "название не загрузилось",
     "grams": "{{value}} г"
