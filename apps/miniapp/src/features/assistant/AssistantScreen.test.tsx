@@ -74,6 +74,9 @@ beforeEach(() => {
   });
 });
 
+/** Тот же класс символов, что принимает сервер (ADR-0035). */
+const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
+
 describe("помощник в Mini App", () => {
   it("дисклеймер стоит под ответом, а не под вопросом семьи", async () => {
     // Раздел 10.4 ТЗ требует его под каждым ответом — и в чате тоже: помощник
@@ -103,6 +106,40 @@ describe("помощник в Mini App", () => {
         }),
       );
     });
+  });
+
+  it("повтор после отказа идёт с тем же ключом, правка вопроса — с новым", async () => {
+    // Ответ 202 мог потеряться уже после записи: по тому же ключу сервер
+    // отдаст прежний ответ, а не заведёт второй вопрос в переписке и вторую
+    // задачу воркера (ADR-0035).
+    (api.POST as Mock).mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    const field = await screen.findByLabelText(/куда записать кетоны/i);
+    await user.type(field, "куда записать кетоны");
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(2);
+    });
+
+    await user.type(field, " и вес");
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(3);
+    });
+
+    const keys = (api.POST as Mock).mock.calls.map(
+      ([, options]) => options.params.header["Idempotency-Key"] as string,
+    );
+    expect(keys[0]).toMatch(KEY_FORMAT);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it("исчерпанный предел выключает поле, а не предлагает повтор", async () => {

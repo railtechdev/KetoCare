@@ -66,7 +66,44 @@ beforeEach(() => {
   });
 });
 
+/** Тот же класс символов, что принимает сервер (ADR-0035). */
+const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
+
 describe("помощник в кабинете", () => {
+  it("повтор после отказа идёт с тем же ключом, правка вопроса — с новым", async () => {
+    // Ответ 202 мог потеряться уже после записи: по тому же ключу сервер
+    // отдаст прежний ответ, а не заведёт второй вопрос в переписке и вторую
+    // задачу воркера (ADR-0035).
+    (api.POST as Mock).mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    renderPage();
+
+    const field = await screen.findByLabelText(/куда записать кетоны/i);
+    await user.type(field, "куда записать кетоны");
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(2);
+    });
+
+    await user.type(field, " и вес");
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(3);
+    });
+
+    const keys = (api.POST as Mock).mock.calls.map(
+      ([, options]) => options.params.header["Idempotency-Key"] as string,
+    );
+    expect(keys[0]).toMatch(KEY_FORMAT);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
   it("дисклеймер стоит под каждым ответом, а не один на экран", async () => {
     // Раздел 10.4 ТЗ требует его под КАЖДЫМ ответом. Проверяется на двух
     // ответах: с одним тест проходил бы и тогда, когда дисклеймер собран на

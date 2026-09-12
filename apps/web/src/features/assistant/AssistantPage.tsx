@@ -1,4 +1,10 @@
-import { AsyncSection, ChatComposer, ChatMessage, Section } from "@ketocare/ui";
+import {
+  AsyncSection,
+  ChatComposer,
+  ChatMessage,
+  Section,
+  useAttemptKey,
+} from "@ketocare/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -45,11 +51,17 @@ export function AssistantPage({ patientId }: { patientId: string }) {
   const messages = conversation.data ?? [];
   const limited = errorCodeOf(ask.error) === "rate_limited";
 
+  // Пока вопрос и разговор те же, попытка та же: повтор после потерянного
+  // ответа не заведёт второй вопрос в переписке (ADR-0035).
+  const attemptKey = useAttemptKey(
+    JSON.stringify([patientId, conversationId, question.trim()]),
+  );
+
   function send() {
     const text = question.trim();
     if (!text) return;
     ask.mutate(
-      { text, conversationId },
+      { text, conversationId, idempotencyKey: attemptKey },
       {
         onSuccess: (accepted) => {
           setChosenId(accepted.conversation_id);
