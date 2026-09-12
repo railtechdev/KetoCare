@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from core.models import AiConversation, AuditLog
 from core.models.enums import UserRole
@@ -29,6 +29,100 @@ async def _ask(client, parent, patient, auth_headers, text="куда запис�
         json={"patient_id": str(patient.id), "text": text},
         headers=auth_headers(parent),
     )
+
+
+class TestIdempotency:
+    """Ключ повторной отправки (ADR-0035): 202 мог потеряться по дороге."""
+
+    async def _ask_with_key(self, client, parent, patient, auth_headers, key, text):
+        return await client.post(
+            "/api/v1/ai/assistant/messages",
+            json={"patient_id": str(patient.id), "text": text},
+            headers={**auth_headers(parent), "Idempotency-Key": key},
+        )
+
+    async def _conversations(self, session, patient_id) -> int:
+        total = await session.scalar(
+            select(func.count())
+            .select_from(AiConversation)
+            .where(AiConversation.patient_id == patient_id)
+        )
+        return int(total or 0)
+
+    async def test_repeat_asks_once(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ) -> None:
+        """Повтор потерянного ответа: ни второго вопроса, ни второй задачи.
+
+        Дубль здесь дороже, чем у блюда: он виден врачу в переписке и тратит
+        дневной бюджет проекта.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        key = "8e03978e-40d5-43e8-bc93-6894a57f9324"
+
+        first = await self._ask_with_key(
+            client, parent, patient, auth_headers, key, "куда записать кетоны"
+        )
+        second = await self._ask_with_key(
+            client, parent, patient, auth_headers, key, "куда записать кетоны"
+        )
+
+        assert first.status_code == 202, first.text
+        assert second.status_code == 202, second.text
+        assert second.json() == first.json()
+        assert await self._conversations(session, patient.id) == 1
+        assert len(enqueued) == 1
+
+    async def test_same_key_with_another_question_is_rejected(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ) -> None:
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        key = "3f1a1f6c-7a0e-4d0e-9a6e-2f2b0a4c9d11"
+
+        await self._ask_with_key(client, parent, patient, auth_headers, key, "куда записать кетоны")
+        other = await self._ask_with_key(
+            client, parent, patient, auth_headers, key, "а куда записать вес"
+        )
+
+        assert other.status_code == 422, other.text
+        assert other.json()["error"]["code"] == "validation_error"
+        assert await self._conversations(session, patient.id) == 1
+        assert len(enqueued) == 1
+
+    async def test_without_key_each_question_is_new(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ) -> None:
+        """Без заголовка ручка работает как раньше: старые клиенты его не шлют."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        for _ in range(2):
+            response = await _ask(client, parent, patient, auth_headers)
+            assert response.status_code == 202, response.text
+
+        assert await self._conversations(session, patient.id) == 2
+        assert len(enqueued) == 2
+
+    async def test_forbidden_request_does_not_reserve_the_key(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ) -> None:
+        """Отказ 403 ключ не занимает: иначе исправленный вопрос не пройдёт."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        stranger_patient = await make_patient()
+        key = "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"
+
+        refused = await self._ask_with_key(
+            client, parent, stranger_patient, auth_headers, key, "куда записать кетоны"
+        )
+        accepted = await self._ask_with_key(
+            client, parent, patient, auth_headers, key, "куда записать кетоны"
+        )
+
+        assert refused.status_code == 403, refused.text
+        assert accepted.status_code == 202, accepted.text
+        assert len(enqueued) == 1
 
 
 class TestAsking:

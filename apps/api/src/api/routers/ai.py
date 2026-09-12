@@ -26,9 +26,11 @@ from core.repositories import products as products_repo
 from core.schemas.ai_conversations import new_message
 
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access, require_roles
+from ..deps.idempotency import IdempotencyKeyDep
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AI_RATE_LIMIT, limiter
 from ..schemas_ai import AssistantAccepted, AssistantAsk
+from ..services import idempotency
 from ..services import queue as queue_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -152,6 +154,7 @@ async def ask_assistant(
     payload: AssistantAsk,
     session: SessionDep,
     user: CurrentUserDep,
+    idempotency_key: IdempotencyKeyDep,
 ) -> AssistantAccepted:
     """Принять вопрос и поставить ответ в очередь (раздел 10.4 ТЗ).
 
@@ -163,6 +166,10 @@ async def ask_assistant(
 
     Спрашивает только семья: врач читает переписку, но не ведёт её от имени
     родителя — иначе в карте появились бы вопросы, которых семья не задавала.
+
+    Ответ 202 может потеряться: человек спросит ещё раз, и без ключа повторной
+    отправки (ADR-0035) в переписке появится второй такой же вопрос, у воркера —
+    вторая задача, а у проекта — второй расход дневного бюджета.
     """
 
     await assert_patient_access(session, user, payload.patient_id)
@@ -173,6 +180,23 @@ async def ask_assistant(
     channel = (
         AiConversationChannel.MINIAPP if user.channel == "miniapp" else AiConversationChannel.WEB
     )
+
+    # Бронь ключа — после проверок доступа и роли: отказ 403 ключ не занимает.
+    reservation: uuid.UUID | None = None
+    if idempotency_key is not None:
+        outcome = await idempotency.begin(
+            session,
+            user_id=user.id,
+            key=idempotency_key,
+            fingerprint=idempotency.request_fingerprint(
+                request.method, request.url.path, await request.body()
+            ),
+            patient_id=payload.patient_id,
+        )
+        if isinstance(outcome, idempotency.Replay):
+            # Повтор потерянного ответа: ни второго вопроса, ни второй задачи.
+            return AssistantAccepted.model_validate(outcome.body)
+        reservation = outcome
 
     if payload.conversation_id is None:
         conversation = await conversations_repo.create(
@@ -204,6 +228,19 @@ async def ask_assistant(
         ],
     )
     conversation_id = conversation.id
+    accepted = AssistantAccepted(
+        conversation_id=conversation_id, question_seq=question_seq, reply_seq=reply_seq
+    )
+    if reservation is not None:
+        # Ответ записывается ДО коммита, в той же транзакции: закоммиченная
+        # бронь без ответа отвечала бы 409 на каждый повтор, пока ключ не
+        # просрочится (ADR-0035).
+        await idempotency.finish(
+            session,
+            key_id=reservation,
+            status=202,
+            body=accepted.model_dump(mode="json"),
+        )
     await session.commit()
 
     await queue_service.enqueue(
@@ -215,9 +252,7 @@ async def ask_assistant(
         reply_seq,
     )
 
-    return AssistantAccepted(
-        conversation_id=conversation_id, question_seq=question_seq, reply_seq=reply_seq
-    )
+    return accepted
 
 
 class DraftIngredient(BaseModel):
