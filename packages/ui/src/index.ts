@@ -4,6 +4,8 @@ export { RECALC_DELAY_MS } from "./lib/calcTiming";
 export { SEARCH_DELAY_MS } from "./lib/searchTiming";
 export { useDebouncedValue } from "./lib/useDebouncedValue";
 export { useAttemptKey } from "./lib/useAttemptKey";
+export { useFrozenAttempt } from "./lib/useFrozenAttempt";
+export type { FrozenAttempt } from "./lib/useFrozenAttempt";
 export { RETRYABLE_ERROR_CODES, canRetry } from "./lib/retryable";
 export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
