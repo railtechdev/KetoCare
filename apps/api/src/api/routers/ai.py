@@ -261,21 +261,26 @@ async def ask_assistant(
         # возвращал бы прежнее «принято» сутки (ADR-0035). Поэтому ожидание
         # помечается неудавшимся, а бронь снимается: повтор должен спрашивать
         # заново, как было до ключа.
-        # Разговор перечитывается под блокировкой: `replace_message` переписывает
-        # весь JSONB, а снимок в памяти устарел ещё на коммите — за секунды
-        # ожидания недоступного Redis воркер мог дописать ответ на прошлый
-        # вопрос, и запись по снимку стёрла бы его.
+        # Разговор перечитывается под блокировкой с `populate_existing`:
+        # `replace_message` переписывает весь JSONB, а объект в памяти коммит НЕ
+        # протухает (`expire_on_commit=False`) — без явного обновления запись
+        # ушла бы по снимку и стёрла ответ, который воркер мог дописать за
+        # секунды ожидания недоступного Redis.
         locked = await conversations_repo.get_for_update(session, conversation_id)
-        await conversations_repo.replace_message(
-            session,
-            conversation=locked or conversation,
-            message=new_message(
-                seq=reply_seq,
-                role="assistant",
-                text=ASSISTANT_UNAVAILABLE,
-                status="failed",
-            ),
-        )
+        if locked is not None:
+            await conversations_repo.replace_message(
+                session,
+                conversation=locked,
+                message=new_message(
+                    seq=reply_seq,
+                    role="assistant",
+                    text=ASSISTANT_UNAVAILABLE,
+                    status="failed",
+                ),
+            )
+        # Бронь снимается в любом случае, даже если разговора уже нет: иначе
+        # `StaleDataError` при записи по исчезнувшей строке оставил бы ключ с
+        # ответом 202 на сутки — ровно тот дефект, который здесь и лечится.
         if reservation is not None:
             await idempotency.release(session, key_id=reservation)
         await session.commit()

@@ -53,7 +53,10 @@ async def get_for_update(
     """Взять разговор под блокировку строки — для дописывания."""
 
     found: AiConversation | None = await session.scalar(
-        select(AiConversation).where(AiConversation.id == conversation_id).with_for_update()
+        select(AiConversation)
+        .where(AiConversation.id == conversation_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     return found
 
