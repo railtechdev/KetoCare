@@ -206,6 +206,10 @@ describe("рецепты в Mini App", () => {
       await screen.findByText("продукт удалён из справочника"),
     ).toBeInTheDocument();
     expect(screen.queryByText("название не загрузилось")).toBeNull();
+    // И не «выведен из оборота»: это разные события. Вывод говорит, что числа
+    // продукта признаны неверными; удаление — что продукта в справочнике нет
+    // вовсе. Сказать первое про второе значит выдумать про него утверждение.
+    expect(screen.queryByText("выведен из оборота")).toBeNull();
     expect(screen.getByText("120 г")).toBeInTheDocument();
   });
 

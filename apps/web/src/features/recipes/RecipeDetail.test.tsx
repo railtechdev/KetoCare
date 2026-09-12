@@ -179,6 +179,9 @@ describe("карточка рецепта", () => {
     expect(
       screen.getByText("продукт удалён из справочника"),
     ).toBeInTheDocument();
+    // И не «выведен из оборота»: удаление и вывод — разные события, и второе
+    // утверждает о продукте то, чего про удалённый мы не знаем.
+    expect(screen.queryByText("выведен из оборота")).toBeNull();
     expect(screen.getByText("30 г")).toBeInTheDocument();
     expect(screen.getByText("20 г")).toBeInTheDocument();
   });
