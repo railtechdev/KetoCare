@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -47,7 +51,9 @@ function renderScreen() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<RecipesScreen />, { wrapper: Wrapper });
+  // `client` — тестам, которым нужно очистить кэш до возврата сети (#174).
+  const result = render(<RecipesScreen />, { wrapper: Wrapper });
+  return Object.assign(result, { client });
 }
 
 beforeEach(() => {
@@ -71,6 +77,271 @@ const PRODUCT_NAMES: Record<string, string> = {
 };
 
 describe("рецепты в Mini App", () => {
+  it("первый поиск без сети говорит о связи один раз", async () => {
+    // На первом поиске о паузе говорит ветка ожидания кита, на следующих —
+    // своя строка. Если условия разойдутся, обе скажут одно и то же подряд
+    // (правило П27).
+    onlineManager.setOnline(false);
+    const { client } = renderScreen();
+
+    try {
+      expect(
+        await screen.findAllByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("первая карточка без сети говорит о связи один раз", async () => {
+    // На первом открытии о паузе говорит ветка ожидания кита, со второго —
+    // своя строка. Разойдутся условия — обе скажут одно и то же подряд (П27).
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+    await screen.findByRole("button", { name: /Омлет/ });
+
+    onlineManager.setOnline(false);
+    try {
+      await user.click(screen.getByRole("button", { name: /Омлет/ }));
+
+      expect(
+        await screen.findAllByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("имена в составе живут построчно, а не одним ответом на всех", async () => {
+    // Ради этого случая признак и сделан построчным: общий флаг переносил бы
+    // ответ одной строки на другую.
+    (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [
+              { product_id: "prod-1", grams: 120, position: 0 },
+              { product_id: "prod-2", grams: 60, position: 1 },
+            ],
+          },
+        });
+      if (path.endsWith("{product_id}")) {
+        const id = (options as { params: { path: { product_id: string } } })
+          .params.path.product_id;
+        return id === "prod-1"
+          ? Promise.resolve({
+              data: { id, name_ru: PRODUCT_NAMES[id], is_active: true },
+            })
+          : Promise.resolve({
+              error: {
+                error: { code: "not_found", message: "Продукт не найден." },
+              },
+              response: { status: 404 },
+            });
+      }
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(await screen.findByText("Яйцо куриное")).toBeInTheDocument();
+    expect(
+      screen.getByText("продукт удалён из справочника"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("120 г")).toBeInTheDocument();
+    expect(screen.getByText("60 г")).toBeInTheDocument();
+  });
+
+  it("удалённый продукт так и называется — удалённым", async () => {
+    // 404 — это ответ справочника «такого продукта нет». Назвать его сетевой
+    // заминкой значит обещать, что имя вот-вот появится.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
+          },
+        });
+      if (path.endsWith("{product_id}"))
+        return Promise.resolve({
+          error: {
+            error: { code: "not_found", message: "Продукт не найден." },
+          },
+          response: { status: 404 },
+        });
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(
+      await screen.findByText("продукт удалён из справочника"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("название не загрузилось")).toBeNull();
+    expect(screen.getByText("120 г")).toBeInTheDocument();
+  });
+
+  it("граммовка видна, пока имена ещё в пути", async () => {
+    // Состав, спрятанный целиком до прихода имён, — карточка без рецепта, а по
+    // ней готовят.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
+          },
+        });
+      if (path.endsWith("{product_id}")) return new Promise(() => undefined);
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(await screen.findByText("120 г")).toBeInTheDocument();
+    expect(screen.getByText("загружаем название…")).toBeInTheDocument();
+  });
+
+  it("не дошедшее имя продукта не выдаётся за удалённый продукт", async () => {
+    // «Удалён из справочника» — утверждение о справочнике. По этой карточке
+    // готовят: неверно названный продукт рядом с граммовкой хуже пустоты.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
+          },
+        });
+      if (path.endsWith("{product_id}"))
+        return Promise.reject(new Error("no network"));
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(
+      await screen.findByText("название не загрузилось"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("продукт удалён из справочника")).toBeNull();
+    expect(screen.getByText("120 г")).toBeInTheDocument();
+  });
+
+  it("карточка без сети тоже говорит про связь", async () => {
+    // Со второго открытия рецепт берётся из кэша: `isPending` ложен, ветка
+    // кита молчит, и карточка показывала старый рецепт без единого слова — а
+    // его могли поправить, и по нему готовят.
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+    await screen.findByText(/Взбить/);
+    act(() => {
+      showBackButton.mock.calls.at(-1)?.[0]();
+    });
+
+    onlineManager.setOnline(false);
+    try {
+      await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("без сети говорит про связь, а не «ничего не нашлось»", async () => {
+    // Ветка ожидания в ките сюда не доходит: она требует `loading`, а он со
+    // второго поиска ложен. Строка о связи стоит рядом со списком, а пустое
+    // состояние на паузе подавлено — иначе оно ответило бы о прежних буквах.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    const { client } = renderScreen();
+
+    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    await user.type(field, "суфле");
+    expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
+
+    onlineManager.setOnline(false);
+    try {
+      await user.type(field, " творожное");
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("пауза при непустой выдаче тоже называется словами", async () => {
+    // Прошлый ответ непуст, пустого состояния нет — и о паузе не сказал бы
+    // никто: ветка ожидания кита к этому моменту уже не работает.
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+
+    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    await user.type(field, "омлет");
+    expect(await screen.findByText(/Омлет на сливках/)).toBeInTheDocument();
+
+    onlineManager.setOnline(false);
+    try {
+      await user.type(field, " на сливках");
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+      // Прежняя выдача остаётся: связь пропала, а не рецепты.
+      expect(screen.getByText(/Омлет на сливках/)).toBeInTheDocument();
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("в паузу перед запросом не говорит «ничего не нашлось»", async () => {
+    // Прошлая выдача держится намеренно, и ответ в паузу был бы о прежних
+    // буквах — тот же дрейф, что закрыт в поиске продукта.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    renderScreen();
+
+    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    await user.type(field, "суфле");
+    expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
+
+    await user.type(field, " творожное");
+
+    expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+  });
+
   it("открывает карточку из списка", async () => {
     const user = userEvent.setup();
     renderScreen();

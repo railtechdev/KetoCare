@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  StatusNote,
   Button,
   Input,
   RatioBadge,
@@ -16,6 +17,7 @@ import { showBackButton } from "../../lib/telegram";
 import {
   type Recipe,
   useProductNames,
+  type ProductName,
   useRecipe,
   useRecipeSearch,
 } from "./useRecipes";
@@ -46,6 +48,10 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const recipes = useRecipeSearch(debounced);
+  // Пока набор не устоялся, выдача относится к прежним буквам: `debounced`
+  // отстаёт на задержку. «Ничего не нашлось» в эту паузу — ответ не о том, что
+  // человек набрал (та же правка, что в поиске продукта).
+  const settling = query.trim() !== debounced.trim();
 
   return (
     <main className="flex flex-col gap-block p-block">
@@ -80,7 +86,12 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
         }
         retryLabel={t("actions.retry")}
         onRetry={() => void recipes.refetch()}
-        isEmpty={recipes.data?.length === 0}
+        isEmpty={
+          !settling &&
+          !recipes.isFetching &&
+          recipes.fetchStatus !== "paused" &&
+          recipes.data?.length === 0
+        }
         empty={
           <p className="text-muted-foreground">{t("recipes.nothingFound")}</p>
         }
@@ -106,6 +117,15 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
           ))}
         </ul>
       </AsyncSection>
+
+      {/* Рядом со списком, а не внутри пустого состояния: при непустой прошлой
+          выдаче пустоты нет, и о паузе не сказал бы никто. Ветка ожидания кита
+          закрывает только первый поиск — дальше `loading` ложен, потому что
+          прошлая выдача держится намеренно (`useRecipes.ts`). Что значит сама
+          пауза — в ADR-0036. */}
+      {recipes.fetchStatus === "paused" && !recipes.isPending && (
+        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
+      )}
     </main>
   );
 }
@@ -154,6 +174,14 @@ function RecipeCard({
       >
         {recipe.data !== undefined && <RecipeBody recipe={recipe.data} />}
       </AsyncSection>
+
+      {/* Та же немота, что была у списка: со второго открытия рецепт уже в
+          кэше, `isPending` ложен, и ветка ожидания кита не срабатывает. А
+          рецепт могли поправить с тех пор, как список загрузился, и по нему
+          готовят (`useRecipes.ts`). */}
+      {recipe.fetchStatus === "paused" && !recipe.isPending && (
+        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
+      )}
     </main>
   );
 }
@@ -211,6 +239,20 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
   );
 }
 
+/** Имя продукта словами: известное, удалённое, не дошедшее или ещё в пути. */
+function productName(state: ProductName, t: (key: string) => string): string {
+  switch (state.kind) {
+    case "name":
+      return state.name;
+    case "missing":
+      return t("recipes.unknownProduct");
+    case "unavailable":
+      return t("recipes.nameUnavailable");
+    case "pending":
+      return t("recipes.loadingName");
+  }
+}
+
 function Ingredients({ recipe }: { recipe: Recipe }) {
   const { t } = useTranslation();
   const names = useProductNames(
@@ -223,12 +265,6 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
     );
   }
 
-  if (names.isLoading) {
-    return (
-      <p className="text-muted-foreground">{t("recipes.loadingProducts")}</p>
-    );
-  }
-
   return (
     <ul className="flex list-none flex-col gap-1 p-0">
       {recipe.ingredients.map((ingredient) => (
@@ -236,8 +272,10 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
           key={ingredient.product_id}
           className="flex flex-wrap justify-between gap-field"
         >
+          {/* Граммовка видна всегда, даже пока имена в пути: состав, спрятанный
+              целиком, — это карточка без рецепта, а по ней готовят. */}
           <span className="min-w-0 break-words">
-            {names.byId[ingredient.product_id] ?? t("recipes.unknownProduct")}
+            {productName(names.stateOf(ingredient.product_id), t)}
           </span>
           <span className="text-muted-foreground tabular-nums">
             {t("recipes.grams", { value: ingredient.grams })}
