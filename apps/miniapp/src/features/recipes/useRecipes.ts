@@ -63,6 +63,19 @@ export function useRecipe(recipeId: string | null) {
  */
 export function useProductNames(productIds: string[]): {
   stateOf: (productId: string) => ProductName;
+  /**
+   * Продукты состава, выведенные из оборота: идентификатор → имя.
+   *
+   * Вывод убирает продукт из поиска, но не из уже сохранённых рецептов — и
+   * правильно: рецепт, по которому кормили, задним числом не подменяется. Но
+   * молчать об этом нельзя, и по карточке Mini App готовят так же, как по
+   * карточке кабинета: выводят продукт обычно потому, что его числа оказались
+   * неверными, а по ним посчитаны показатели рецепта.
+   *
+   * Собирается только из ПРИШЕДШИХ карточек, поэтому удалённый продукт (404,
+   * `null`) сюда не попадает и «выведенным» не назовётся.
+   */
+  withdrawn: Record<string, string>;
 } {
   const unique = Array.from(new Set(productIds));
 
@@ -108,7 +121,16 @@ export function useProductNames(productIds: string[]): {
     );
   });
 
+  // Карточка продукта приходит целиком ради имени — `is_active` в том же
+  // ответе, и второго запроса для пометки не нужно.
+  const withdrawn: Record<string, string> = {};
+  for (const result of results) {
+    const product = result.data;
+    if (product && !product.is_active) withdrawn[product.id] = product.name_ru;
+  }
+
   return {
     stateOf: (productId) => states.get(productId) ?? { kind: "pending" },
+    withdrawn,
   };
 }

@@ -209,6 +209,59 @@ describe("рецепты в Mini App", () => {
     expect(screen.getByText("120 г")).toBeInTheDocument();
   });
 
+  it("выведенный из оборота продукт помечен в составе", async () => {
+    // Вывод убирает продукт из поиска, но не из уже сохранённых рецептов — и
+    // правильно: рецепт, по которому кормили, задним числом не подменяется. Но
+    // выводят продукт обычно потому, что его числа оказались неверными, а по
+    // ним посчитаны показатели рецепта. В кабинете это сказано, в Mini App до
+    // сих пор не было — при том что по обеим карточкам готовят.
+    (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [
+              { product_id: "prod-1", grams: 120, position: 0 },
+              { product_id: "prod-2", grams: 60, position: 1 },
+            ],
+          },
+          response: { status: 200 },
+        });
+      if (path.endsWith("{product_id}")) {
+        const id = (options as { params: { path: { product_id: string } } })
+          .params.path.product_id;
+        return Promise.resolve({
+          data: {
+            id,
+            name_ru: PRODUCT_NAMES[id] ?? "Продукт",
+            is_active: id !== "prod-2",
+          },
+          response: { status: 200 },
+        });
+      }
+      return Promise.resolve({
+        data: { items: [RECIPE], total: 1 },
+        response: { status: 200 },
+      });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    // Пометка стоит у той строки, к которой относится.
+    const marks = await screen.findAllByText("выведен из оборота");
+    expect(marks).toHaveLength(1);
+    expect(marks[0]?.parentElement).toHaveTextContent("Сливки 33%");
+    // И предупреждение над составом — чтобы это увидели до готовки.
+    expect(
+      screen.getByText(/В составе есть выведенный продукт/),
+    ).toBeInTheDocument();
+    // Имя названо и в строке состава, и в самом предупреждении — обе ссылки на
+    // один продукт, поэтому ищем все вхождения, а не одно.
+    expect(screen.getAllByText(/Сливки 33%/).length).toBeGreaterThan(1);
+  });
+
   it("граммовка видна, пока имена ещё в пути", async () => {
     // Состав, спрятанный целиком до прихода имён, — карточка без рецепта, а по
     // ней готовят.

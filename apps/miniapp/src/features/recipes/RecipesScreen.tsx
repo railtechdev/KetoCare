@@ -6,6 +6,7 @@ import {
   RatioBadge,
   Section,
   useDebouncedValue,
+  WarningBanner,
   SEARCH_DELAY_MS,
   type ProductName,
 } from "@ketocare/ui";
@@ -266,22 +267,41 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
   }
 
   return (
-    <ul className="flex list-none flex-col gap-1 p-0">
-      {recipe.ingredients.map((ingredient) => (
-        <li
-          key={ingredient.product_id}
-          className="flex flex-wrap justify-between gap-field"
-        >
-          {/* Граммовка видна всегда, даже пока имена в пути: состав, спрятанный
-              целиком, — это карточка без рецепта, а по ней готовят. */}
-          <span className="min-w-0 break-words">
-            {productName(names.stateOf(ingredient.product_id), t)}
-          </span>
-          <span className="text-muted-foreground tabular-nums">
-            {t("recipes.grams", { value: ingredient.grams })}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-field">
+      {/* Показатели рецепта посчитаны в том числе по выведенному продукту —
+          знать об этом нужно до того, как по рецепту приготовят. Та же
+          оговорка, что в кабинете: по обеим карточкам готовят одинаково. */}
+      {Object.keys(names.withdrawn).length > 0 && (
+        <WarningBanner level="warning" title={t("recipes.withdrawnTitle")}>
+          {t("recipes.withdrawnBody", {
+            list: Object.values(names.withdrawn).join(", "),
+          })}
+        </WarningBanner>
+      )}
+
+      <ul className="flex list-none flex-col gap-1 p-0">
+        {recipe.ingredients.map((ingredient) => (
+          <li
+            key={ingredient.product_id}
+            className="flex flex-wrap justify-between gap-field"
+          >
+            {/* Граммовка видна всегда, даже пока имена в пути: состав,
+                спрятанный целиком, — это карточка без рецепта, а по ней
+                готовят. */}
+            <span className="min-w-0 break-words">
+              {productName(names.stateOf(ingredient.product_id), t)}
+              {names.withdrawn[ingredient.product_id] !== undefined && (
+                <span className="ml-2 text-sm text-warning">
+                  {t("recipes.withdrawn")}
+                </span>
+              )}
+            </span>
+            <span className="text-muted-foreground tabular-nums">
+              {t("recipes.grams", { value: ingredient.grams })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
