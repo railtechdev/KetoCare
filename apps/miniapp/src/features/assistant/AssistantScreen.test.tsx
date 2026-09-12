@@ -199,6 +199,41 @@ describe("помощник в Mini App", () => {
     expect(notes).toHaveLength(1);
   });
 
+  it("под отказом дисклеймера нет", async () => {
+    // Тот же помощник и то же правило, что в кабинете: под отказом подпись о
+    // происхождении ответа ложна (ADR-0022).
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        id: CONVERSATION_ID,
+        messages: [
+          message({
+            seq: 0,
+            role: "user",
+            text: "что нам принимать",
+            sources: [],
+          }),
+          message({
+            seq: 1,
+            text: "Этот вопрос нужно обсудить с лечащим врачом.",
+            sources: [],
+            blocked: true,
+          }),
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await ask(user);
+
+    expect(
+      await screen.findByText(/обсудить с лечащим врачом/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/не заменяет консультацию врача/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("вопрос уходит с идентификатором ребёнка", async () => {
     // Без него переписку не удалит `erase_patient` (ADR-0019), а врач не
     // увидит переписку своего пациента.

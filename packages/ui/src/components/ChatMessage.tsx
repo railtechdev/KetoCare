@@ -10,6 +10,8 @@ export interface ChatMessageProps {
   pending?: boolean;
   /** Строка под ответом: дисклеймер, список статей. Только у помощника */
   note?: ReactNode;
+  /** Ответа не было: отказ, шаблон или недоступность — подпись не ставится */
+  refusal?: boolean;
   className?: string;
 }
 
@@ -22,12 +24,18 @@ export interface ChatMessageProps {
  * `note` живёт здесь, а не в экране, по одной причине: дисклеймер обязан стоять
  * под КАЖДЫМ ответом помощника (раздел 10.4 ТЗ), а собранный на экране он
  * однажды окажется не под всеми.
+ *
+ * По той же причине здесь решается и когда подписи НЕ быть: под ожиданием (она
+ * стояла бы под пустым местом) и под отказом (она утверждает «ответ по
+ * материалам приложения», а ответа не было). Отдай это решение экранам — и
+ * кабинет с Mini App однажды разойдутся в том, что считать ответом.
  */
 export function ChatMessage({
   role,
   children,
   pending = false,
   note,
+  refusal = false,
   className,
 }: ChatMessageProps) {
   const own = role === "user";
@@ -53,7 +61,7 @@ export function ChatMessage({
           <span className="whitespace-pre-wrap break-words">{children}</span>
         )}
 
-        {!own && note !== undefined && !pending && (
+        {!own && note !== undefined && !pending && !refusal && (
           <span className="text-xs opacity-80">{note}</span>
         )}
       </div>

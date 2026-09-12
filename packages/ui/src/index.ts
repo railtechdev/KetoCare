@@ -9,6 +9,8 @@ export type { FrozenAttempt } from "./lib/useFrozenAttempt";
 export { RETRYABLE_ERROR_CODES, canRetry } from "./lib/retryable";
 export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
+export { isRefusal } from "./lib/assistantAnswer";
+export type { AssistantMessageSignals } from "./lib/assistantAnswer";
 export { formatRatio, formatOccurredAt, formatWeight } from "./lib/format";
 
 export { RatioBadge } from "./components/RatioBadge";

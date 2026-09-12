@@ -361,6 +361,15 @@ class TestAssistantIdempotencyOnRealSession:
         assert sorted(messages) == [0, 1, 2, 3]
         assert (messages[1].text, messages[1].status) == (answer, "done")
         assert (messages[3].text, messages[3].status) == (ASSISTANT_UNAVAILABLE, "failed")
+        # Пометки `blocked` здесь нет, и это не мелочь: на ней стоит второе
+        # условие в `isRefusal` (`packages/ui/src/lib/assistantAnswer.ts`).
+        # Компенсация ручки — единственный путь, где недоступность приходит
+        # только со статусом; снимут это условие как избыточное — и под
+        # «помощник недоступен» вернётся подпись «ответ по материалам
+        # приложения», которой там взяться неоткуда (ADR-0022). Обратное тоже
+        # верно: проставите `blocked` здесь — второе условие в `isRefusal`
+        # станет избыточным, и менять их придётся вместе.
+        assert messages[3].blocked is False
 
     async def test_key_is_released_when_the_conversation_is_gone(self, parent, monkeypatch) -> None:
         """Бронь снимается и тогда, когда переписывать уже нечего.
