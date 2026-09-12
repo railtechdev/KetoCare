@@ -6,10 +6,14 @@
 задачи, перечитка разговора под блокировкой (чужая запись видна и без неё) и
 снятие брони при исчезнувшем разговоре. Тест, который проходит и с
 исправлением, и без него, — ложное ручательство; три таких были написаны и
-удалены, вместо них этот.
+выброшены до коммита (в git они не попадали), вместо них этот.
 
-Здесь приложение ходит в базу своим `sessionmaker`, тест и «воркер» — своими.
-Внешней транзакции с откатом нет, поэтому всё записанное убирается в `finally`.
+Здесь приложение, тест и «воркер» ходят в базу СВОИМИ СЕССИЯМИ. Фабрика у них
+одна (`core.db.get_sessionmaker` кэширована на процесс) — разные именно сессии
+и транзакции, и в этом весь смысл. Внешней транзакции с откатом нет, поэтому
+записанное убирается в `finally`, а остатки прошлых прогонов — на входе
+фикстуры: `finally` не отрабатывает, если процесс убили, и один такой комплект
+уже остался в базе разработки от зависшего варианта проверки.
 
 Про первое свойство важно знать, что именно наблюдаемо. Сам порядок «`finish`
 до `commit`» на успешном пути не проверяется ничем: зависимость `get_session`
@@ -24,7 +28,7 @@ from __future__ import annotations
 
 import itertools
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any
@@ -32,7 +36,8 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.main import create_app
 from api.security import create_token
@@ -48,6 +53,64 @@ from core.schemas.ai_conversations import ASSISTANT_UNAVAILABLE, AssistantMessag
 pytestmark = pytest.mark.asyncio
 
 URL = "/api/v1/ai/assistant/messages"
+
+#: Приметы, по которым фикстура узнаёт своё: и то, что записал этот прогон, и
+#: остатки прошлых. Уборки только в `finally` мало — убитый процесс до неё не
+#: доходит, а уборщика на пользователей и пациентов в продукте нет.
+EMAIL_MARK = "real-session-"
+PATIENT_MARK = "Ребёнок на настоящей сессии"
+
+
+async def _remove(
+    session: AsyncSession,
+    *,
+    user_ids: Sequence[uuid.UUID],
+    patient_ids: Sequence[uuid.UUID],
+) -> None:
+    """Снять всё, что оставляет прогон. Порядок — дети раньше родителей."""
+
+    if not user_ids and not patient_ids:
+        return
+    await session.execute(
+        delete(AiConversation).where(
+            or_(
+                AiConversation.patient_id.in_(patient_ids),
+                AiConversation.user_id.in_(user_ids),
+            )
+        )
+    )
+    await session.execute(
+        delete(IdempotencyKey).where(
+            or_(
+                IdempotencyKey.user_id.in_(user_ids),
+                IdempotencyKey.patient_id.in_(patient_ids),
+            )
+        )
+    )
+    # Аудит ссылается на пользователя внешним ключом: строка, записанная
+    # когда-нибудь позже, роняла бы уборку, а не тест.
+    await session.execute(delete(AuditLog).where(AuditLog.user_id.in_(user_ids)))
+    await session.execute(
+        delete(ParentPatient).where(
+            or_(
+                ParentPatient.patient_id.in_(patient_ids),
+                ParentPatient.parent_id.in_(user_ids),
+            )
+        )
+    )
+    await session.execute(delete(Patient).where(Patient.id.in_(patient_ids)))
+    await session.execute(delete(User).where(User.id.in_(user_ids)))
+
+
+async def _sweep_leftovers(session: AsyncSession) -> None:
+    """Остатки прошлых прогонов, до которых не дошёл `finally`."""
+
+    users = list(await session.scalars(select(User.id).where(User.email.like(f"{EMAIL_MARK}%"))))
+    patients = list(
+        await session.scalars(select(Patient.id).where(Patient.full_name == PATIENT_MARK))
+    )
+    await _remove(session, user_ids=users, patient_ids=patients)
+
 
 #: Свой диапазон адресов: ключ ограничения частоты — адрес клиента (см. `client`
 #: в conftest), и делить окно с тестами на общей фикстуре незачем.
@@ -101,16 +164,17 @@ class TestAssistantIdempotencyOnRealSession:
     @pytest_asyncio.fixture
     async def parent(self, _fresh_engine: None) -> AsyncIterator[tuple[uuid.UUID, uuid.UUID]]:
         async with get_sessionmaker()() as session:
+            await _sweep_leftovers(session)
             user = await users_repo.create(
                 session,
                 role=UserRole.PARENT,
                 full_name="Родитель на настоящей сессии",
-                email=f"real-session-{uuid.uuid4().hex[:10]}@example.com",
+                email=f"{EMAIL_MARK}{uuid.uuid4().hex[:10]}@example.com",
                 password_hash="x",
             )
             patient = await patients_repo.create(
                 session,
-                full_name="Ребёнок на настоящей сессии",
+                full_name=PATIENT_MARK,
                 birth_date=date(2018, 5, 1),
                 sex=Sex.M,
             )
@@ -122,20 +186,7 @@ class TestAssistantIdempotencyOnRealSession:
             yield user_id, patient_id
         finally:
             async with get_sessionmaker()() as session:
-                await session.execute(
-                    delete(AiConversation).where(AiConversation.patient_id == patient_id)
-                )
-                await session.execute(
-                    delete(IdempotencyKey).where(IdempotencyKey.user_id == user_id)
-                )
-                # Аудит ссылается на пользователя внешним ключом: строка, записанная
-                # когда-нибудь позже, роняла бы уборку, а не тест.
-                await session.execute(delete(AuditLog).where(AuditLog.user_id == user_id))
-                await session.execute(
-                    delete(ParentPatient).where(ParentPatient.patient_id == patient_id)
-                )
-                await session.execute(delete(Patient).where(Patient.id == patient_id))
-                await session.execute(delete(User).where(User.id == user_id))
+                await _remove(session, user_ids=[user_id], patient_ids=[patient_id])
                 await session.commit()
 
     async def _key_row(self, key: str) -> IdempotencyKey | None:
@@ -228,6 +279,12 @@ class TestAssistantIdempotencyOnRealSession:
 
         async def answer_then_fail(task: str, *args: object) -> None:
             async with get_sessionmaker()() as worker:
+                # Без предела ожидания регрессия «оставим один коммит в конце»
+                # вешала бы тест, а не валила: `FOR UPDATE` встал бы на строку,
+                # которую держит незакрытая транзакция запроса, а запрос и
+                # «воркер» живут в одном цикле событий — ждали бы друг друга
+                # вечно. Зависание в CI хуже падения.
+                await worker.execute(text("SET LOCAL lock_timeout = '2s'"))
                 locked = await conversations_repo.get_for_update(worker, conversation_id)
                 assert locked is not None
                 await conversations_repo.replace_message(
@@ -274,6 +331,9 @@ class TestAssistantIdempotencyOnRealSession:
             conversation_id = uuid.UUID(str(args[0]))
             erased.append(conversation_id)
             async with get_sessionmaker()() as other:
+                # См. проверку выше: без предела ожидания `DELETE` по строке,
+                # которую держит незакрытая транзакция запроса, повесил бы тест.
+                await other.execute(text("SET LOCAL lock_timeout = '2s'"))
                 await other.execute(
                     delete(AiConversation).where(AiConversation.id == conversation_id)
                 )
