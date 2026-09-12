@@ -126,6 +126,38 @@ describe("карточка продукта вне текущей выборки
       screen.getByRole("button", { name: "К списку продуктов" }),
     ).toBeInTheDocument();
   });
+
+  it("отказ связи говорит про связь, а не про отсутствие позиции", async () => {
+    // «Позиция не найдена» — утверждение о справочнике. Когда ответ не доехал,
+    // о справочнике не известно ничего, а администратору говорилось именно
+    // это, и повторить было нечем. 404 и отказ различает сам запрос
+    // (`fetchProductDetail`), панели остаётся их не смешивать.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/products/{product_id}") {
+        return Promise.reject(new Error("сеть недоступна"));
+      }
+      if (path === "/api/v1/products/categories") {
+        return Promise.resolve({
+          data: [{ id: "c1", name_ru: "Жиры" }],
+          response: { status: 200 },
+        });
+      }
+      return Promise.resolve({
+        data: { items: [], total: 0 },
+        response: { status: 200 },
+      });
+    });
+
+    renderPanel(OUTSIDE_ID);
+
+    expect(
+      await screen.findByText(adminRu.products.cardError as string),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Позиция не найдена")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Повторить/ }),
+    ).toBeInTheDocument();
+  });
 });
 
 /**
