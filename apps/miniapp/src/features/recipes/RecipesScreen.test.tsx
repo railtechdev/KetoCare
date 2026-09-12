@@ -118,6 +118,49 @@ describe("рецепты в Mini App", () => {
     }
   });
 
+  it("имена в составе живут построчно, а не одним ответом на всех", async () => {
+    // Ради этого случая признак и сделан построчным: общий флаг переносил бы
+    // ответ одной строки на другую.
+    (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [
+              { product_id: "prod-1", grams: 120, position: 0 },
+              { product_id: "prod-2", grams: 60, position: 1 },
+            ],
+          },
+        });
+      if (path.endsWith("{product_id}")) {
+        const id = (options as { params: { path: { product_id: string } } })
+          .params.path.product_id;
+        return id === "prod-1"
+          ? Promise.resolve({
+              data: { id, name_ru: PRODUCT_NAMES[id], is_active: true },
+            })
+          : Promise.resolve({
+              error: {
+                error: { code: "not_found", message: "Продукт не найден." },
+              },
+              response: { status: 404 },
+            });
+      }
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(await screen.findByText("Яйцо куриное")).toBeInTheDocument();
+    expect(
+      screen.getByText("продукт удалён из справочника"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("120 г")).toBeInTheDocument();
+    expect(screen.getByText("60 г")).toBeInTheDocument();
+  });
+
   it("удалённый продукт так и называется — удалённым", async () => {
     // 404 — это ответ справочника «такого продукта нет». Назвать его сетевой
     // заминкой значит обещать, что имя вот-вот появится.
