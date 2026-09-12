@@ -3,6 +3,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  ErrorState,
   RatioBadge,
   Section,
   toast,
@@ -239,6 +240,24 @@ export function ProductsPanel({
 
     if (item !== NEW_ITEM && editing === null && fetched.isPending) {
       return <TableSkeleton label={t("products.loading")} rows={4} />;
+    }
+
+    // Отказ связи — утверждение о сети, а не о справочнике. До этой ветки
+    // панель говорила «Позиция не найдена» и на 404, и на недоехавший ответ:
+    // администратору сообщалось о справочнике то, чего никто не проверял, и
+    // повторить было нечем. `null` от 404 и отказ различает сам запрос
+    // (`fetchProductDetail`), здесь остаётся их не смешивать.
+    if (item !== NEW_ITEM && editing === null && fetched.isError) {
+      return (
+        <ErrorState
+          title={t("products.cardError")}
+          description={
+            errorMessageOf(fetched.error) ?? t("common:errors.unexpected")
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void fetched.refetch()}
+        />
+      );
     }
 
     if (item !== NEW_ITEM && editing === null) {

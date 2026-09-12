@@ -5,7 +5,9 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import i18n from "../../lib/i18n";
+import { NetworkError } from "@ketocare/api-client";
 import { api } from "../../lib/api";
+import type { ProductDetail } from "../products/useProductDetail";
 import adminRu from "../../locales/ru/admin.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { ProductsPanel } from "./ProductsPanel";
@@ -21,12 +23,17 @@ vi.mock("../auth/useSession", () => ({
 
 i18n.addResourceBundle("ru", "admin", adminRu, true, true);
 
+// Категория — UUID: схема требует именно его, а аннотация типом формат не
+// ловит (uuid, дата, диапазоны в тип не попадают).
+const CATEGORY_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OUTSIDE_ID = "33333333-3333-4333-8333-333333333333";
 
-const PRODUCT = {
+const PRODUCT: ProductDetail = {
   id: OUTSIDE_ID,
   name_ru: "Масло сливочное",
-  category_id: "c1",
+  name_uz: null,
+  name_en: null,
+  category_id: CATEGORY_ID,
   kcal_100g: 748,
   fat_100g: 82.5,
   protein_100g: 0.5,
@@ -34,10 +41,13 @@ const PRODUCT = {
   fiber_100g: 0,
   source: "USDA",
   source_version: "2024",
-  verified_on: "2026-01-10",
+  verified_at: "2026-01-10",
   is_active: true,
-  created_at: "2026-01-10T10:00:00Z",
-  updated_at: "2026-01-10T10:00:00Z",
+  // Соотношение производно от макронутриентов этой же позиции, и ядро его НЕ
+  // округляет. Поэтому здесь выражение, а не число: записанное числом, оно
+  // разошлось бы и с сервером, и с собственным пояснением, стоило бы поправить
+  // граммовку.
+  ratio: 82.5 / (0.5 + 0.8),
 };
 
 function renderPanel(item?: string) {
@@ -73,7 +83,7 @@ beforeEach(() => {
     }
     if (path === "/api/v1/products/categories") {
       return Promise.resolve({
-        data: [{ id: "c1", name_ru: "Жиры" }],
+        data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
         response: { status: 200 },
       });
     }
@@ -109,7 +119,7 @@ describe("карточка продукта вне текущей выборки
       }
       if (path === "/api/v1/products/categories") {
         return Promise.resolve({
-          data: [{ id: "c1", name_ru: "Жиры" }],
+          data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
           response: { status: 200 },
         });
       }
@@ -125,6 +135,57 @@ describe("карточка продукта вне текущей выборки
     expect(
       screen.getByRole("button", { name: "К списку продуктов" }),
     ).toBeInTheDocument();
+  });
+
+  it("отказ связи говорит про связь, а не про отсутствие позиции", async () => {
+    // «Позиция не найдена» — утверждение о справочнике. Когда ответ не доехал,
+    // о справочнике не известно ничего, а администратору говорилось именно
+    // это, и повторить было нечем. 404 и отказ различает сам запрос
+    // (`fetchProductDetail`), панели остаётся их не смешивать.
+    //
+    // Отказ подделан `NetworkError` — именно её бросает клиент при обрыве
+    // связи, и только для неё `errorMessageOf` даёт текст про связь. С обычной
+    // `Error` проверка про отказ связи как раз путь отказа связи и не прошла бы
+    // (правило: подделка обязана повторять контракт, а не представление о нём).
+    let attempts = 0;
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/products/{product_id}") {
+        attempts += 1;
+        return attempts === 1
+          ? Promise.reject(new NetworkError())
+          : Promise.resolve({ data: PRODUCT, response: { status: 200 } });
+      }
+      if (path === "/api/v1/products/categories") {
+        return Promise.resolve({
+          data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
+          response: { status: 200 },
+        });
+      }
+      return Promise.resolve({
+        data: { items: [], total: 0 },
+        response: { status: 200 },
+      });
+    });
+
+    const user = userEvent.setup();
+    renderPanel(OUTSIDE_ID);
+
+    expect(
+      await screen.findByText(adminRu.products.cardError as string),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Нет связи с сервером. Проверьте подключение."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Позиция не найдена")).toBeNull();
+
+    // Кнопка обязана не просто быть, а повторять запрос: вся находка была в
+    // том, что повторить было нечем.
+    await user.click(screen.getByRole("button", { name: /Повторить/ }));
+
+    expect(
+      await screen.findByDisplayValue("Масло сливочное"),
+    ).toBeInTheDocument();
+    expect(attempts).toBe(2);
   });
 });
 
