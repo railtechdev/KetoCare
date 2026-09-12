@@ -19,6 +19,7 @@ import { SectionLink } from "../../components/SectionLink";
 import { incomingRecipe } from "../calculator/incomingItem";
 import { errorMessageOf } from "../../lib/api";
 import { formatGrams } from "./format";
+import { productLabel } from "./productLabel";
 import { FileField } from "../../components/Field";
 import { RecipePhoto } from "./RecipePhoto";
 import {
@@ -361,15 +362,6 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
           <p className="m-0 text-muted-foreground">
             {t("detail.compositionEmpty")}
           </p>
-        ) : productNames.isLoading ? (
-          <div className="flex flex-col gap-field">
-            <p role="status" className="sr-only">
-              {t("detail.loadingProducts")}
-            </p>
-            {data.ingredients.map((ingredient) => (
-              <Skeleton key={ingredient.product_id} className="h-6 w-full" />
-            ))}
-          </div>
         ) : (
           <ul className="m-0 flex max-w-xl list-none flex-col gap-field p-0">
             {data.ingredients.map((ingredient) => (
@@ -377,9 +369,11 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                 key={ingredient.product_id}
                 className="flex items-baseline justify-between gap-block border-b border-border pb-1"
               >
+                {/* Граммовка видна всегда, даже пока имена в пути: состав,
+                    спрятанный целиком, — это карточка без рецепта, а по ней
+                    готовят. */}
                 <span>
-                  {productNames.byId[ingredient.product_id] ??
-                    t("detail.unknownProduct")}
+                  {productLabel(productNames.stateOf(ingredient.product_id), t)}
                   {productNames.withdrawn[ingredient.product_id] !==
                     undefined && (
                     <span className="ml-2 text-sm text-warning">

@@ -6,6 +6,40 @@ import { api } from "../../lib/api";
 export type ProductDetail = components["schemas"]["ProductRead"];
 
 /**
+ * Ключ карточки продукта — общий у справочника, карточки рецепта и формы.
+ *
+ * Общий ключ обязывает к общему значению: пока у каждого потребителя был свой
+ * `queryFn`, один и тот же кэш означал для них разное, и положенный туда
+ * `null` (ответ «такого продукта нет») читался соседом как «данных нет вовсе»
+ * — карточка продукта рисовалась пустой, без ошибки и без «не найден».
+ */
+export function productDetailKey(productId: string) {
+  return ["products", "detail", productId] as const;
+}
+
+/**
+ * Запрос карточки. `null` — справочник ответил «такого продукта нет» (404).
+ *
+ * 404 здесь ОТВЕТ, а не сбой связи: смешать их значит либо обещать имя,
+ * которое никогда не придёт, либо назвать удалённым то, что просто не доехало.
+ *
+ * У Mini App свой такой же запрос (`apps/miniapp/src/features/recipes/useRecipes.ts`):
+ * кэш у приложений разный, общим этот код быть не может, но правило обязано
+ * совпадать — разбор состояний для обоих лежит в ките (`productNameState`).
+ */
+export async function fetchProductDetail(
+  productId: string,
+): Promise<ProductDetail | null> {
+  const { data, error, response } = await api.GET(
+    "/api/v1/products/{product_id}",
+    { params: { path: { product_id: productId } } },
+  );
+  if (response.status === 404) return null;
+  if (error || !data) throw error ?? new Error("Empty product response");
+  return data;
+}
+
+/**
  * Продукт целиком по идентификатору.
  *
  * Нужен там, где позиция открыта ссылкой, а не выбором из показанного списка:
@@ -18,15 +52,9 @@ export type ProductDetail = components["schemas"]["ProductRead"];
  */
 export function useProductDetail(productId: string | null) {
   return useQuery({
-    queryKey: ["products", "detail", productId],
+    queryKey: productDetailKey(productId as string),
     enabled: productId !== null,
     retry: false,
-    queryFn: async (): Promise<ProductDetail> => {
-      const { data, error } = await api.GET("/api/v1/products/{product_id}", {
-        params: { path: { product_id: productId as string } },
-      });
-      if (error || !data) throw error ?? new Error("Empty product response");
-      return data;
-    },
+    queryFn: () => fetchProductDetail(productId as string),
   });
 }

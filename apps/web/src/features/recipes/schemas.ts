@@ -22,8 +22,6 @@ export const recipeFormSchema = z.object({
     .array(
       z.object({
         productId: z.string().min(1),
-        /** Название хранится в форме только для показа строки состава */
-        name: z.string(),
         grams: z.number().positive(),
       }),
     )
@@ -46,11 +44,7 @@ export const EMPTY_RECIPE_FORM_VALUES: DefaultValues<RecipeFormValues> = {
 };
 
 /** Рецепт с сервера — в значения формы. Названия продуктов приходят отдельно. */
-export function toRecipeFormValues(
-  recipe: Recipe,
-  productNames: Record<string, string>,
-  unknownProductLabel: string,
-): RecipeFormValues {
+export function toRecipeFormValues(recipe: Recipe): RecipeFormValues {
   return {
     title: recipe.title,
     category: recipe.category,
@@ -60,7 +54,6 @@ export function toRecipeFormValues(
     instructions: recipe.instructions,
     ingredients: recipe.ingredients.map((ingredient) => ({
       productId: ingredient.product_id,
-      name: productNames[ingredient.product_id] ?? unknownProductLabel,
       grams: ingredient.grams,
     })),
   };

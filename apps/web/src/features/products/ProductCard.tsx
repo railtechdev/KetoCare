@@ -2,6 +2,7 @@ import {
   AsyncSection,
   Badge,
   Button,
+  EmptyState,
   FactList,
   MacroBar,
   Section,
@@ -14,9 +15,10 @@ import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
-import { api, errorMessageOf } from "../../lib/api";
+import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { ProductRevisions } from "./ProductRevisions";
+import { fetchProductDetail, productDetailKey } from "./useProductDetail";
 import { canSeeProductHistory } from "./types";
 
 /**
@@ -44,20 +46,18 @@ export function ProductCard({
   const { session } = useSession();
 
   const product = useQuery({
-    queryKey: ["products", "detail", productId],
+    queryKey: productDetailKey(productId),
     // `retry: false` — несуществующий идентификатор из чужой или устаревшей
     // ссылки повтором не оживёт.
     retry: false,
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/products/{product_id}", {
-        params: { path: { product_id: productId } },
-      });
-      if (error || !data) throw error ?? new Error("Empty product response");
-      return data;
-    },
+    // Запрос — общий с карточкой рецепта и формой: у общего ключа обязано быть
+    // общее значение. Пока тело было своим у каждого, положенный соседом
+    // `null` («такого продукта нет») читался здесь как «данных нет вовсе», и
+    // карточка рисовалась пустой — без ошибки и без «не найден».
+    queryFn: () => fetchProductDetail(productId),
   });
 
-  const data = product.data;
+  const data = product.data ?? undefined;
 
   return (
     <PageLayout
@@ -98,8 +98,10 @@ export function ProductCard({
         }
         retryLabel={t("common:actions.retry")}
         onRetry={() => void product.refetch()}
-        isEmpty={data === undefined}
-        empty={null}
+        // `null` — справочник ответил «такого продукта нет»: ссылка устарела
+        // или продукт стёрт. Это ответ, и сказать его надо словами.
+        isEmpty={product.data === null}
+        empty={<EmptyState title={t("card.notFound")} />}
       >
         {data && (
           <>

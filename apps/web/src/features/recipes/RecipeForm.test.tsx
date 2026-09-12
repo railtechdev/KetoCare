@@ -87,15 +87,80 @@ async function addButter(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а
+  // карточка продукта различает по нему 404 и сбой связи.
   (api.GET as Mock).mockImplementation(async (path: string) =>
     path === "/api/v1/products/{product_id}"
-      ? { data: PRODUCT, error: undefined }
-      : { data: { items: [PRODUCT], total: 1 }, error: undefined },
+      ? { data: PRODUCT, error: undefined, response: { status: 200 } }
+      : {
+          data: { items: [PRODUCT], total: 1 },
+          error: undefined,
+          response: { status: 200 },
+        },
   );
   (api.POST as Mock).mockResolvedValue({ data: VERIFIED, error: undefined });
 });
 
 describe("показатели в форме рецепта", () => {
+  it("медленная карточка продукта не оставляет числа ненайденными навсегда", async () => {
+    // Расчёт ждёт карточек ВСЕХ строк. Если снять условие «карточка получена»,
+    // запрос уйдёт раньше неё: обращение к карточке бросит внутри `queryFn`, а
+    // ключ собран только из `productId:grams` — с приходом карточки он не
+    // меняется, перезапроса нет, и числа не появятся уже никогда.
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/products/{product_id}") {
+        // Дольше задержки пересчёта (RECALC_DELAY_MS): запрос успел бы уйти.
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        return { data: PRODUCT, error: undefined, response: { status: 200 } };
+      }
+      return {
+        data: { items: [PRODUCT], total: 1 },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    const user = userEvent.setup();
+    renderForm();
+    await addButter(user);
+
+    expect(
+      await screen.findByText(/374 ккал/, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Показатели сейчас не посчитать/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("удалённый продукт останавливает расчёт и называет причину", async () => {
+    // До этого 404 бросал, и форма говорила «показатели сейчас не посчитать».
+    // Когда 404 стал ответом, расчёт перестал уходить — и форма замолчала
+    // совсем: ни чисел, ни причины, и так навсегда. Молчание тут хуже отказа:
+    // повторять запрос бессмысленно, поправить можно только состав.
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/products/{product_id}"
+        ? {
+            error: { error: { code: "not_found", message: "Не найден." } },
+            response: { status: 404 },
+          }
+        : {
+            data: { items: [PRODUCT], total: 1 },
+            error: undefined,
+            response: { status: 200 },
+          },
+    );
+    const user = userEvent.setup();
+    renderForm();
+    await addButter(user);
+
+    expect(
+      await screen.findByText(/больше нет в справочнике/),
+    ).toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalledWith(
+      "/api/v1/calc/verify",
+      expect.anything(),
+    );
+  });
+
   it("считает блюдо по мере правки состава, а не после сохранения", async () => {
     // Раньше под составом стояло «показатели пересчитываются на сервере после
     // сохранения»: подобрать граммовку в форме было нельзя в принципе.

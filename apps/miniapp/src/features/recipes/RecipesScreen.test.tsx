@@ -58,16 +58,23 @@ function renderScreen() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а код
+  // различает по нему 404 («такого продукта нет») и сбой связи.
   (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
-    if (path.endsWith("{recipe_id}")) return Promise.resolve({ data: RECIPE });
+    if (path.endsWith("{recipe_id}"))
+      return Promise.resolve({ data: RECIPE, response: { status: 200 } });
     if (path.endsWith("{product_id}")) {
       const id = (options as { params: { path: { product_id: string } } })
         .params.path.product_id;
       return Promise.resolve({
         data: { id, name_ru: PRODUCT_NAMES[id] ?? "Продукт", is_active: true },
+        response: { status: 200 },
       });
     }
-    return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    return Promise.resolve({
+      data: { items: [RECIPE], total: 1 },
+      response: { status: 200 },
+    });
   });
 });
 
@@ -131,6 +138,7 @@ describe("рецепты в Mini App", () => {
               { product_id: "prod-2", grams: 60, position: 1 },
             ],
           },
+          response: { status: 200 },
         });
       if (path.endsWith("{product_id}")) {
         const id = (options as { params: { path: { product_id: string } } })
@@ -138,6 +146,7 @@ describe("рецепты в Mini App", () => {
         return id === "prod-1"
           ? Promise.resolve({
               data: { id, name_ru: PRODUCT_NAMES[id], is_active: true },
+              response: { status: 200 },
             })
           : Promise.resolve({
               error: {
@@ -146,7 +155,10 @@ describe("рецепты в Mini App", () => {
               response: { status: 404 },
             });
       }
-      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+      return Promise.resolve({
+        data: { items: [RECIPE], total: 1 },
+        response: { status: 200 },
+      });
     });
     const user = userEvent.setup();
     renderScreen();
@@ -167,6 +179,7 @@ describe("рецепты в Mini App", () => {
     (api.GET as Mock).mockImplementation((path: string) => {
       if (path.endsWith("{recipe_id}"))
         return Promise.resolve({
+          response: { status: 200 },
           data: {
             ...RECIPE,
             ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
@@ -179,7 +192,10 @@ describe("рецепты в Mini App", () => {
           },
           response: { status: 404 },
         });
-      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+      return Promise.resolve({
+        data: { items: [RECIPE], total: 1 },
+        response: { status: 200 },
+      });
     });
     const user = userEvent.setup();
     renderScreen();
@@ -199,13 +215,17 @@ describe("рецепты в Mini App", () => {
     (api.GET as Mock).mockImplementation((path: string) => {
       if (path.endsWith("{recipe_id}"))
         return Promise.resolve({
+          response: { status: 200 },
           data: {
             ...RECIPE,
             ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
           },
         });
       if (path.endsWith("{product_id}")) return new Promise(() => undefined);
-      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+      return Promise.resolve({
+        data: { items: [RECIPE], total: 1 },
+        response: { status: 200 },
+      });
     });
     const user = userEvent.setup();
     renderScreen();
@@ -222,6 +242,7 @@ describe("рецепты в Mini App", () => {
     (api.GET as Mock).mockImplementation((path: string) => {
       if (path.endsWith("{recipe_id}"))
         return Promise.resolve({
+          response: { status: 200 },
           data: {
             ...RECIPE,
             ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
@@ -229,7 +250,10 @@ describe("рецепты в Mini App", () => {
         });
       if (path.endsWith("{product_id}"))
         return Promise.reject(new Error("no network"));
-      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+      return Promise.resolve({
+        data: { items: [RECIPE], total: 1 },
+        response: { status: 200 },
+      });
     });
     const user = userEvent.setup();
     renderScreen();
@@ -398,6 +422,7 @@ describe("рецепты в Mini App", () => {
               { product_id: "prod-2", grams: 60, position: 1 },
             ],
           },
+          response: { status: 200 },
         });
       if (path.endsWith("{product_id}")) {
         const id = (options as { params: { path: { product_id: string } } })
@@ -408,9 +433,13 @@ describe("рецепты в Mini App", () => {
             name_ru: PRODUCT_NAMES[id] ?? "Продукт",
             is_active: true,
           },
+          response: { status: 200 },
         });
       }
-      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+      return Promise.resolve({
+        data: { items: [RECIPE], total: 1 },
+        response: { status: 200 },
+      });
     });
     const user = userEvent.setup();
     renderScreen();

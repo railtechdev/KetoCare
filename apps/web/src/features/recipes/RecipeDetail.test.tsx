@@ -93,6 +93,10 @@ function renderDetail(canEdit = false) {
 describe("карточка рецепта", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а
+    // код различает 404 («такого продукта нет») и сбой связи именно по нему.
+    // Мок без `response` — это форма, которой в бою не бывает; тест на ней
+    // проходит, а продукт ломается.
     (api.GET as Mock).mockImplementation(
       async (_path: string, init: unknown) => {
         const options = init as {
@@ -100,12 +104,18 @@ describe("карточка рецепта", () => {
         };
         const id = options?.params?.path?.product_id;
         if (id === BUTTER) {
-          return { data: product(BUTTER, "Масло сливочное", true) };
+          return {
+            data: product(BUTTER, "Масло сливочное", true),
+            response: { status: 200 },
+          };
         }
         if (id === FLAX) {
-          return { data: product(FLAX, "Масло льняное", false) };
+          return {
+            data: product(FLAX, "Масло льняное", false),
+            response: { status: 200 },
+          };
         }
-        return { data: RECIPE };
+        return { data: RECIPE, response: { status: 200 } };
       },
     );
   });
@@ -139,5 +149,84 @@ describe("карточка рецепта", () => {
     const marks = screen.getAllByText(recipesRu.detail.withdrawn as string);
     expect(marks).toHaveLength(1);
     expect(marks[0]?.parentElement).toHaveTextContent("Масло льняное");
+  });
+
+  it("удалённый продукт так и называется — удалённым", async () => {
+    // 404 — это ответ справочника «такого продукта нет», а не сбой связи.
+    // Смешать их значило бы обещать имя, которое никогда не придёт.
+    (api.GET as Mock).mockImplementation(
+      async (_path: string, init: unknown) => {
+        const options = init as { params?: { path?: { product_id?: string } } };
+        const id = options?.params?.path?.product_id;
+        if (id === BUTTER) {
+          return {
+            data: product(BUTTER, "Масло сливочное", true),
+            response: { status: 200 },
+          };
+        }
+        if (id === FLAX) {
+          return {
+            error: { error: { code: "not_found", message: "Не найден." } },
+            response: { status: 404 },
+          };
+        }
+        return { data: RECIPE, response: { status: 200 } };
+      },
+    );
+    renderDetail();
+
+    expect(await screen.findByText("Масло сливочное")).toBeInTheDocument();
+    expect(
+      screen.getByText("продукт удалён из справочника"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("30 г")).toBeInTheDocument();
+    expect(screen.getByText("20 г")).toBeInTheDocument();
+  });
+
+  it("не дошедшее имя не выдаётся за удалённый продукт", async () => {
+    // Отказ связи — утверждение о сети, а не о справочнике. Сказать здесь
+    // «удалён» значит соврать о данных, по которым готовят.
+    (api.GET as Mock).mockImplementation(
+      async (_path: string, init: unknown) => {
+        const options = init as { params?: { path?: { product_id?: string } } };
+        const id = options?.params?.path?.product_id;
+        if (id === BUTTER) {
+          return {
+            data: product(BUTTER, "Масло сливочное", true),
+            response: { status: 200 },
+          };
+        }
+        if (id === FLAX) throw new Error("сеть недоступна");
+        return { data: RECIPE, response: { status: 200 } };
+      },
+    );
+    renderDetail();
+
+    expect(await screen.findByText("Масло сливочное")).toBeInTheDocument();
+    expect(
+      await screen.findByText("название не загрузилось"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("продукт удалён из справочника"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("граммовка видна, пока имена ещё в пути", async () => {
+    // Состав, спрятанный целиком, — это карточка без рецепта, а по ней готовят.
+    // Раньше на его месте стояли скелетоны, и вместе с именами исчезали граммы.
+    (api.GET as Mock).mockImplementation(
+      async (_path: string, init: unknown) => {
+        const options = init as { params?: { path?: { product_id?: string } } };
+        if (options?.params?.path?.product_id !== undefined) {
+          return new Promise(() => {});
+        }
+        return { data: RECIPE, response: { status: 200 } };
+      },
+    );
+    renderDetail();
+
+    expect(await screen.findByText("30 г")).toBeInTheDocument();
+    expect(screen.getByText("20 г")).toBeInTheDocument();
+    expect(screen.getAllByText("загружаем название…")).toHaveLength(2);
   });
 });

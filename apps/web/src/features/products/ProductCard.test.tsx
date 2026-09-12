@@ -92,11 +92,32 @@ describe("карточка продукта", () => {
         ? { data: { access_token: token(role) }, error: undefined }
         : { data: undefined, error: undefined },
     );
+    // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а
+    // запрос карточки различает по нему 404 («такого продукта нет») и сбой
+    // связи. Мок без `response` — форма, которой в бою не бывает.
     (api.GET as Mock).mockImplementation(async (path: string) =>
       path.includes("revisions")
-        ? { data: REVISIONS, error: undefined }
-        : { data: PRODUCT, error: undefined },
+        ? { data: REVISIONS, error: undefined, response: { status: 200 } }
+        : { data: PRODUCT, error: undefined, response: { status: 200 } },
     );
+  });
+
+  it("отсутствующий продукт называется отсутствующим, а не пустой карточкой", async () => {
+    // 404 — ответ справочника «такого продукта нет»: ссылка устарела или
+    // продукт стёрли. Ключ карточки общий с рецептом и формой, и пока у
+    // каждого потребителя было своё тело запроса, положенный соседом `null`
+    // читался здесь как «данных нет вовсе» — карточка рисовалась пустой, без
+    // ошибки и без объяснения.
+    (api.GET as Mock).mockImplementation(async () => ({
+      error: { error: { code: "not_found", message: "Не найден." } },
+      response: { status: 404 },
+    }));
+    renderCard();
+
+    expect(
+      await screen.findByText(productsRu.card.notFound as string),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/717 ккал/)).not.toBeInTheDocument();
   });
 
   it("показывает происхождение значений, а не только числа", async () => {

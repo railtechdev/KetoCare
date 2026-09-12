@@ -57,10 +57,17 @@ function renderPage(search: Record<string, string>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `response` в подмене обязателен: настоящий клиент отдаёт его всегда, а
+  // карточка продукта различает по нему 404 и сбой связи. Здесь у рецепта
+  // пустой состав, но подмена без `response` — это форма, которой в бою не
+  // бывает, и первый же добавленный ингредиент ронял бы тест на пустом месте.
   (api.GET as Mock).mockImplementation((path: string) =>
     path === "/api/v1/recipes/{recipe_id}"
-      ? Promise.resolve({ data: RECIPE })
-      : Promise.resolve({ data: { items: [RECIPE], total: 1 } }),
+      ? Promise.resolve({ data: RECIPE, response: { status: 200 } })
+      : Promise.resolve({
+          data: { items: [RECIPE], total: 1 },
+          response: { status: 200 },
+        }),
   );
 });
 

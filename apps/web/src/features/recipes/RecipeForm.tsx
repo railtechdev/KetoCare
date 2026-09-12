@@ -25,6 +25,7 @@ import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { ProductPicker } from "../calculator/ProductPicker";
+import { productLabel } from "./productLabel";
 import { useRecipeComputed } from "./useRecipeComputed";
 import { recipeFormSchema, type RecipeFormValues } from "./schemas";
 import { useRecipeDraftMutation, type DraftCheck } from "./useRecipeDraft";
@@ -232,12 +233,19 @@ export function RecipeForm({
               if (event.key === "Enter") event.preventDefault();
             }}
           >
+            {/* Имя из подсказки в строку не сохраняется: до ответа справочника
+                она скажет «загружаем название…», хотя человек только что видел
+                имя в списке. Это размен на единый источник подписи — у всех
+                строк он один, живое состояние карточки. Хранить имя в значениях
+                формы нельзя: `defaultValues` читаются один раз при
+                монтировании, и у строк, восстановленных из них, подпись
+                застывала навсегда. Отдельного запроса ради имени не возникает:
+                карточка нужна расчёту в любом случае. */}
             <ProductPicker
               excludeIds={ingredients.fields.map((field) => field.productId)}
               onPick={(product) =>
                 ingredients.append({
                   productId: product.id,
-                  name: product.name,
                   grams: 50,
                 })
               }
@@ -259,18 +267,24 @@ export function RecipeForm({
                 const contribution = computed.contributions.get(
                   field.productId,
                 );
+                // Подпись — отображение, а не значение формы: `defaultValues`
+                // читаются один раз при монтировании, и снимок имени застыл бы
+                // на том, что было известно в тот миг («загружаем название…»
+                // навсегда). Здесь она берётся из состояния на каждый рендер.
+                const label = productLabel(
+                  computed.stateOf(field.productId),
+                  t,
+                );
 
                 return (
                   <li
                     key={field.id}
                     className="flex flex-wrap items-center gap-block"
                   >
-                    <span className="min-w-0 flex-1 break-words">
-                      {field.name}
-                    </span>
+                    <span className="min-w-0 flex-1 break-words">{label}</span>
 
                     <label className="sr-only" htmlFor={gramsId}>
-                      {t("form.grams", { name: field.name })}
+                      {t("form.grams", { name: label })}
                     </label>
                     <Input
                       id={gramsId}
@@ -297,7 +311,7 @@ export function RecipeForm({
                       size="icon"
                       className="min-h-touch min-w-touch"
                       aria-label={t("form.removeIngredient", {
-                        name: field.name,
+                        name: label,
                       })}
                       onClick={() => ingredients.remove(index)}
                     >
@@ -321,7 +335,7 @@ export function RecipeForm({
                     {contribution && (
                       <MacroFacts
                         className="w-full"
-                        label={t("form.contribution", { name: field.name })}
+                        label={t("form.contribution", { name: label })}
                         kcal={contribution.kcal}
                         fatG={contribution.fat_g}
                         proteinG={contribution.protein_g}
@@ -395,7 +409,17 @@ export function RecipeForm({
             </div>
           )}
 
-          {computed.isError && (
+          {/* Удалённый продукт — не сбой, а состояние состава: повтор
+              бессмысленен, поправить можно только состав. Молчать нельзя —
+              без карточки расчёт не уйдёт никогда, и форма показывала бы
+              пустоту вместо чисел, не назвав причины. */}
+          {computed.hasMissingProduct && (
+            <p role="status" className="mt-field mb-0 text-sm text-warning">
+              {t("form.missingProduct")}
+            </p>
+          )}
+
+          {computed.isError && !computed.hasMissingProduct && (
             <p role="status" className="mt-field mb-0 text-sm text-warning">
               {t("form.computedFailed")}
             </p>

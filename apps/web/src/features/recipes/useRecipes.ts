@@ -1,7 +1,13 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 
+import { productNameState, type ProductName } from "@ketocare/ui";
+
 import { api } from "../../lib/api";
-import type { ProductDetail } from "../products/useProductDetail";
+import {
+  fetchProductDetail,
+  productDetailKey,
+  type ProductDetail,
+} from "../products/useProductDetail";
 import { toRecipeSearchQuery, type RecipeFilters } from "./types";
 
 /**
@@ -46,8 +52,6 @@ export function useRecipe(recipeId: string | null) {
 }
 
 export interface ProductNames {
-  /** Название продукта по его идентификатору; отсутствует, пока запрос не завершён */
-  byId: Record<string, string>;
   /**
    * Продукты состава, выведенные из оборота.
    *
@@ -57,6 +61,15 @@ export interface ProductNames {
    * оказались неверными, а по ним посчитаны показатели рецепта.
    */
   withdrawn: Record<string, string>;
+  /**
+   * Что известно об имени строки состава.
+   *
+   * Словаря «идентификатор → имя» здесь намеренно нет: по отсутствию ключа
+   * неразличимы «продукт удалён из справочника» и «название не загрузилось», а
+   * разница между ними — это разница между утверждением о справочнике и
+   * утверждением о связи.
+   */
+  stateOf: (productId: string) => ProductName;
   isLoading: boolean;
 }
 
@@ -71,18 +84,29 @@ export interface ProductNames {
 export function useProductNames(productIds: string[]): ProductNames {
   const details = useProductDetails(productIds);
 
-  const byId: Record<string, string> = {};
   const withdrawn: Record<string, string> = {};
   for (const product of Object.values(details.byId)) {
-    byId[product.id] = product.name_ru;
     if (!product.is_active) withdrawn[product.id] = product.name_ru;
   }
 
-  return { byId, withdrawn, isLoading: details.isLoading };
+  return {
+    withdrawn,
+    stateOf: details.stateOf,
+    isLoading: details.isLoading,
+  };
 }
 
 export interface ProductDetails {
   byId: Record<string, ProductDetail>;
+  /**
+   * В составе есть продукт, которого больше нет в справочнике.
+   *
+   * Молчать об этом нельзя: без его карточки расчёт не уйдёт никогда, и форма
+   * показывала бы пустоту вместо чисел — без единого слова о причине.
+   */
+  hasMissing: boolean;
+  /** Что известно об имени продукта: пришло, удалён, не загрузилось, ждём */
+  stateOf: (productId: string) => ProductName;
   isLoading: boolean;
   /** Хотя бы одну карточку получить не удалось */
   isError: boolean;
@@ -104,17 +128,14 @@ export function useProductDetails(productIds: string[]): ProductDetails {
 
   const results = useQueries({
     queries: unique.map((id) => ({
-      queryKey: ["products", "detail", id],
+      queryKey: productDetailKey(id),
       // Справочник продуктов меняется редко: перезапрашивать карточку при
       // каждом открытии рецепта незачем.
       staleTime: 5 * 60 * 1000,
-      queryFn: async () => {
-        const { data, error } = await api.GET("/api/v1/products/{product_id}", {
-          params: { path: { product_id: id } },
-        });
-        if (error || !data) throw error ?? new Error("Empty product response");
-        return data;
-      },
+      // Запрос — общий с карточкой продукта: у общего ключа обязано быть
+      // общее значение, иначе `null` («такого продукта нет») читается соседом
+      // как «данных нет вовсе».
+      queryFn: () => fetchProductDetail(id),
     })),
   });
 
@@ -123,8 +144,29 @@ export function useProductDetails(productIds: string[]): ProductDetails {
     if (result.data) byId[result.data.id] = result.data;
   }
 
+  // Состояние имени — построчное, по тому же правилу, что в Mini App.
+  const states = new Map<string, ProductName>();
+  unique.forEach((id, index) => {
+    const result = results[index];
+    if (result === undefined) return;
+    states.set(
+      id,
+      productNameState({
+        name:
+          result.data === undefined
+            ? undefined
+            : (result.data?.name_ru ?? null),
+        isError: result.isError,
+        isPaused: result.fetchStatus === "paused",
+      }),
+    );
+  });
+
   return {
     byId,
+    hasMissing: results.some((result) => result.data === null),
+    stateOf: (productId: string) =>
+      states.get(productId) ?? { kind: "pending" as const },
     isLoading: results.some((result) => result.isLoading),
     isError: results.some((result) => result.isError),
   };
