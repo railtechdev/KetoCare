@@ -89,8 +89,12 @@ export function useAskAssistant(patientId: string) {
     mutationFn: async (input: {
       text: string;
       conversationId: string | null;
+      // Ключ попытки (ADR-0035): потерянный ответ 202 иначе даёт второй вопрос
+      // в переписке, вторую задачу воркера и второй расход бюджета.
+      idempotencyKey: string;
     }) => {
       const { data, error } = await api.POST("/api/v1/ai/assistant/messages", {
+        params: { header: { "Idempotency-Key": input.idempotencyKey } },
         body: {
           patient_id: patientId,
           conversation_id: input.conversationId,

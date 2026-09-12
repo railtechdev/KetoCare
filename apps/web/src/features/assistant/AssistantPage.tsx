@@ -1,4 +1,10 @@
-import { AsyncSection, ChatComposer, ChatMessage, Section } from "@ketocare/ui";
+import {
+  AsyncSection,
+  ChatComposer,
+  ChatMessage,
+  Section,
+  useFrozenAttempt,
+} from "@ketocare/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -45,11 +51,19 @@ export function AssistantPage({ patientId }: { patientId: string }) {
   const messages = conversation.data ?? [];
   const limited = errorCodeOf(ask.error) === "rate_limited";
 
+  // Разговор может быть ещё не прочитан: до отправки берётся свежайший, с
+  // первой отправки — замороженный (`useFrozenAttempt`, ADR-0035).
+  const attempt = useFrozenAttempt(
+    JSON.stringify([patientId, question.trim()]),
+    conversationId,
+  );
+
   function send() {
     const text = question.trim();
     if (!text) return;
+    attempt.freeze();
     ask.mutate(
-      { text, conversationId },
+      { text, conversationId: attempt.value, idempotencyKey: attempt.key },
       {
         onSuccess: (accepted) => {
           setChosenId(accepted.conversation_id);

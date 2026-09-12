@@ -1,4 +1,4 @@
-import { FormFooter, Section, toast } from "@ketocare/ui";
+import { FormFooter, Section, toast, useAttemptKey } from "@ketocare/ui";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
-import { useAttemptKey } from "../../lib/useAttemptKey";
 import type { Patient } from "../doctor/types";
 import { PatientPicker } from "../patients/PatientPicker";
 import { incomingDish } from "./incomingItem";
