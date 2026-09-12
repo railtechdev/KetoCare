@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -70,6 +74,35 @@ beforeEach(() => {
 const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
 
 describe("помощник в кабинете", () => {
+  it("без сети поле остаётся живым, а не запирается ожиданием", async () => {
+    // На паузе запрос не идёт и ждать нечего: `isPending` при этом истинен,
+    // поэтому страж смотрит на `fetchStatus`. Иначе без связи нельзя было бы
+    // даже набрать вопрос, хотя запись уходит и честно отказывает (ADR-0034).
+    onlineManager.setOnline(false);
+    try {
+      renderPage();
+
+      const field = await screen.findByLabelText(/куда записать кетоны/i);
+      await waitFor(() => {
+        expect(field).toBeEnabled();
+      });
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("отказ списка переписок не запирает поле", async () => {
+    // Ждать нечего: запертый экран хуже редкого дубля, и это названо границей
+    // в ADR-0035.
+    (api.GET as Mock).mockRejectedValue(new Error("boom"));
+    renderPage();
+
+    const field = await screen.findByLabelText(/куда записать кетоны/i);
+    await waitFor(() => {
+      expect(field).toBeEnabled();
+    });
+  });
+
   it("пока список переписок в полёте, спросить нельзя", async () => {
     // Иначе вопрос уйдёт с `conversation_id: null`, а повтор после потерянного
     // ответа — с найденным разговором: другое тело, другой ключ, второй вопрос.
