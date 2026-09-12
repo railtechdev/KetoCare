@@ -153,6 +153,19 @@ function RecipeCard({
         {t("recipes.back")}
       </Button>
 
+      {/* Строка о связи стоит НАВЕРХУ, а не под содержимым. Замер на ширине
+          390 px: рецепт с инструкцией в 1696 символов даёт 2036 px содержимого,
+          и строка, стоявшая последней, оказывалась на 1972 px — ниже первого
+          экрана любого телефона (667, 844, 932), да ещё и под шапкой Telegram.
+          Человек видел карточку, которая молчит, а объяснение лежало в двух
+          экранах ниже. Та же немота, что была у списка: со второго открытия
+          рецепт уже в кэше, `isPending` ложен, и ветка ожидания кита не
+          срабатывает, а рецепт могли поправить с тех пор, как список
+          загрузился, и по нему готовят (`useRecipes.ts`). */}
+      {recipe.fetchStatus === "paused" && !recipe.isPending && (
+        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
+      )}
+
       <AsyncSection
         loading={recipe.isPending}
         skeleton={null}
@@ -175,14 +188,6 @@ function RecipeCard({
       >
         {recipe.data !== undefined && <RecipeBody recipe={recipe.data} />}
       </AsyncSection>
-
-      {/* Та же немота, что была у списка: со второго открытия рецепт уже в
-          кэше, `isPending` ложен, и ветка ожидания кита не срабатывает. А
-          рецепт могли поправить с тех пор, как список загрузился, и по нему
-          готовят (`useRecipes.ts`). */}
-      {recipe.fetchStatus === "paused" && !recipe.isPending && (
-        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
-      )}
     </main>
   );
 }
