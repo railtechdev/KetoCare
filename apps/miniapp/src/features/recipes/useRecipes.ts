@@ -61,7 +61,8 @@ export function useRecipe(recipeId: string | null) {
  */
 export function useProductNames(productIds: string[]): {
   byId: Record<string, string>;
-  isLoading: boolean;
+  isPending: boolean;
+  isUnavailable: boolean;
 } {
   const unique = Array.from(new Set(productIds));
 
@@ -86,5 +87,15 @@ export function useProductNames(productIds: string[]): {
     if (result.data) byId[result.data.id] = result.data.name_ru;
   }
 
-  return { byId, isLoading: results.some((result) => result.isLoading) };
+  // `isLoading` здесь не годится: он равен `isPending && isFetching`, а на
+  // паузе запрос не идёт — флаг ложен, и экран подставлял бы вместо имени
+  // «продукт удалён из справочника». Различаем три вещи: имени ещё нет, имя не
+  // дошло (пауза или отказ) и продукта действительно нет в справочнике.
+  return {
+    byId,
+    isPending: results.some((result) => result.isPending),
+    isUnavailable: results.some(
+      (result) => result.isError || result.fetchStatus === "paused",
+    ),
+  };
 }

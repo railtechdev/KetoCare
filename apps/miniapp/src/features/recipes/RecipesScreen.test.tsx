@@ -96,6 +96,55 @@ describe("рецепты в Mini App", () => {
     }
   });
 
+  it("первая карточка без сети говорит о связи один раз", async () => {
+    // На первом открытии о паузе говорит ветка ожидания кита, со второго —
+    // своя строка. Разойдутся условия — обе скажут одно и то же подряд (П27).
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+    await screen.findByRole("button", { name: /Омлет/ });
+
+    onlineManager.setOnline(false);
+    try {
+      await user.click(screen.getByRole("button", { name: /Омлет/ }));
+
+      expect(
+        await screen.findAllByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("не дошедшее имя продукта не выдаётся за удалённый продукт", async () => {
+    // «Удалён из справочника» — утверждение о справочнике. По этой карточке
+    // готовят: неверно названный продукт рядом с граммовкой хуже пустоты.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("{recipe_id}"))
+        return Promise.resolve({
+          data: {
+            ...RECIPE,
+            ingredients: [{ product_id: "prod-1", grams: 120, position: 0 }],
+          },
+        });
+      if (path.endsWith("{product_id}"))
+        return Promise.reject(new Error("no network"));
+      return Promise.resolve({ data: { items: [RECIPE], total: 1 } });
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+    expect(
+      await screen.findByText("название не загрузилось"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("продукт удалён из справочника")).toBeNull();
+    expect(screen.getByText("120 г")).toBeInTheDocument();
+  });
+
   it("карточка без сети тоже говорит про связь", async () => {
     // Со второго открытия рецепт берётся из кэша: `isPending` ложен, ветка
     // кита молчит, и карточка показывала старый рецепт без единого слова — а

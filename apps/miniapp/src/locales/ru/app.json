@@ -158,6 +158,7 @@
     "noComposition": "Состав не заполнен.",
     "loadingProducts": "Загружаем названия продуктов…",
     "unknownProduct": "продукт удалён из справочника",
+    "nameUnavailable": "название не загрузилось",
     "grams": "{{value}} г"
   },
   "assistant": {

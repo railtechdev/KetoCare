@@ -250,7 +250,7 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
     );
   }
 
-  if (names.isLoading) {
+  if (names.isPending) {
     return (
       <p className="text-muted-foreground">{t("recipes.loadingProducts")}</p>
     );
@@ -264,7 +264,13 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
           className="flex flex-wrap justify-between gap-field"
         >
           <span className="min-w-0 break-words">
-            {names.byId[ingredient.product_id] ?? t("recipes.unknownProduct")}
+            {/* «Удалён из справочника» — утверждение о справочнике, и говорить
+                его, когда имя просто не дошло, нельзя: по этой карточке готовят,
+                и граммовка осталась бы при неверно названном продукте. */}
+            {names.byId[ingredient.product_id] ??
+              (names.isUnavailable
+                ? t("recipes.nameUnavailable")
+                : t("recipes.unknownProduct"))}
           </span>
           <span className="text-muted-foreground tabular-nums">
             {t("recipes.grams", { value: ingredient.grams })}
