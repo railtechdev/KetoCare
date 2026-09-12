@@ -130,7 +130,11 @@ export function AssistantPage({ patientId }: { patientId: string }) {
           sendingLabel={t("sending")}
           hint={t("hint")}
           pending={ask.isPending}
-          disabled={limited}
+          // Пока список переписок в полёте, неизвестно, есть ли уже открытый
+          // разговор: вопрос ушёл бы с `conversation_id: null`, а повтор после
+          // потерянного ответа — уже с найденным, то есть другим телом и другим
+          // ключом. Это второй такой же вопрос в переписке (ADR-0035).
+          disabled={limited || latest.isPending}
         />
         {limited && (
           <p className="m-0 text-sm text-warning">

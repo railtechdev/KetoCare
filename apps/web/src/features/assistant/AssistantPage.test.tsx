@@ -70,6 +70,19 @@ beforeEach(() => {
 const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
 
 describe("помощник в кабинете", () => {
+  it("пока список переписок в полёте, спросить нельзя", async () => {
+    // Иначе вопрос уйдёт с `conversation_id: null`, а повтор после потерянного
+    // ответа — с найденным разговором: другое тело, другой ключ, второй вопрос.
+    // Проверяется поле, а не кнопка: кнопку выключает и сама отправка.
+    const pending = new Promise<never>(() => undefined);
+    (api.GET as Mock).mockReturnValue(pending);
+    renderPage();
+
+    expect(
+      await screen.findByLabelText(/куда записать кетоны/i),
+    ).toBeDisabled();
+  });
+
   it("повтор после отказа идёт с тем же ключом, правка вопроса — с новым", async () => {
     // Ответ 202 мог потеряться уже после записи: по тому же ключу сервер
     // отдаст прежний ответ, а не заведёт второй вопрос в переписке и вторую
@@ -79,6 +92,9 @@ describe("помощник в кабинете", () => {
     renderPage();
 
     const field = await screen.findByLabelText(/куда записать кетоны/i);
+    await waitFor(() => {
+      expect(field).toBeEnabled();
+    });
     await user.type(field, "куда записать кетоны");
     await user.click(screen.getByRole("button", { name: "Спросить" }));
     await waitFor(() => {
@@ -122,7 +138,11 @@ describe("помощник в кабинете", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(screen.getByLabelText(/куда записать кетоны/i), "вопрос");
+    const composer = await screen.findByLabelText(/куда записать кетоны/i);
+    await waitFor(() => {
+      expect(composer).toBeEnabled();
+    });
+    await user.type(composer, "вопрос");
     await user.click(screen.getByRole("button", { name: "Спросить" }));
 
     const notes = await screen.findAllByText(/не заменяет консультацию врача/i);
@@ -133,7 +153,11 @@ describe("помощник в кабинете", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(screen.getByLabelText(/куда записать кетоны/i), "вопрос");
+    const composer = await screen.findByLabelText(/куда записать кетоны/i);
+    await waitFor(() => {
+      expect(composer).toBeEnabled();
+    });
+    await user.type(composer, "вопрос");
     await user.click(screen.getByRole("button", { name: "Спросить" }));
 
     expect(
@@ -151,7 +175,11 @@ describe("помощник в кабинете", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(screen.getByLabelText(/куда записать кетоны/i), "вопрос");
+    const composer = await screen.findByLabelText(/куда записать кетоны/i);
+    await waitFor(() => {
+      expect(composer).toBeEnabled();
+    });
+    await user.type(composer, "вопрос");
     await user.click(screen.getByRole("button", { name: "Спросить" }));
 
     await waitFor(() => {
@@ -173,7 +201,11 @@ describe("помощник в кабинете", () => {
     const user = userEvent.setup();
     const { container } = renderPage();
 
-    await user.type(screen.getByLabelText(/куда записать кетоны/i), "вопрос");
+    const composer = await screen.findByLabelText(/куда записать кетоны/i);
+    await waitFor(() => {
+      expect(composer).toBeEnabled();
+    });
+    await user.type(composer, "вопрос");
     await user.click(screen.getByRole("button", { name: "Спросить" }));
 
     await waitFor(() => {

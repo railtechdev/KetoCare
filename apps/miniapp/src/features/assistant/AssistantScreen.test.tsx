@@ -49,7 +49,13 @@ async function ask(
   user: ReturnType<typeof userEvent.setup>,
   text = "куда записать кетоны",
 ) {
-  await user.type(screen.getByLabelText(/куда записать кетоны/i), text);
+  // Поле включается, когда список переписок разрешился: до этого неизвестно,
+  // есть ли открытый разговор, и вопрос ушёл бы с `conversation_id: null`.
+  const field = await screen.findByLabelText(/куда записать кетоны/i);
+  await waitFor(() => {
+    expect(field).toBeEnabled();
+  });
+  await user.type(field, text);
   await user.click(screen.getByRole("button", { name: "Спросить" }));
 }
 
@@ -78,6 +84,19 @@ beforeEach(() => {
 const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
 
 describe("помощник в Mini App", () => {
+  it("пока список переписок в полёте, спросить нельзя", async () => {
+    // Иначе вопрос уйдёт с `conversation_id: null`, а повтор после потерянного
+    // ответа — с найденным разговором: другое тело, другой ключ, второй вопрос.
+    // Проверяется поле, а не кнопка: кнопку выключает и сама отправка.
+    const pending = new Promise<never>(() => undefined);
+    (api.GET as Mock).mockReturnValue(pending);
+    renderScreen();
+
+    expect(
+      await screen.findByLabelText(/куда записать кетоны/i),
+    ).toBeDisabled();
+  });
+
   it("дисклеймер стоит под ответом, а не под вопросом семьи", async () => {
     // Раздел 10.4 ТЗ требует его под каждым ответом — и в чате тоже: помощник
     // здесь тот же, и вести себя иначе он не должен.
@@ -117,6 +136,9 @@ describe("помощник в Mini App", () => {
     renderScreen();
 
     const field = await screen.findByLabelText(/куда записать кетоны/i);
+    await waitFor(() => {
+      expect(field).toBeEnabled();
+    });
     await user.type(field, "куда записать кетоны");
     await user.click(screen.getByRole("button", { name: "Спросить" }));
     await waitFor(() => {
