@@ -50,7 +50,17 @@ async def get(session: AsyncSession, conversation_id: uuid.UUID) -> AiConversati
 async def get_for_update(
     session: AsyncSession, conversation_id: uuid.UUID
 ) -> AiConversation | None:
-    """Взять разговор под блокировку строки — для дописывания."""
+    """Разговор под блокировкой строки — для дописывания сообщений.
+
+    `populate_existing` здесь не украшение: объект мог уже лежать в identity map
+    сессии, а `expire_on_commit=False` (см. `core.db`) означает, что коммит его
+    не протухает. Без обновления SQLAlchemy вернула бы прежние атрибуты, и
+    запись пошла бы по снимку — `messages` переписывается целиком, так что
+    чужой ответ, дописанный тем временем, был бы стёрт.
+
+    Обратная сторона: незасброшенные правки объекта флаг молча отбрасывает.
+    Поэтому блокировку берут ДО правки, а не после.
+    """
 
     found: AiConversation | None = await session.scalar(
         select(AiConversation)
