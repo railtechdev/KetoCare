@@ -237,6 +237,78 @@ beforeEach(() => {
 });
 
 describe("калькулятор в Mini App", () => {
+  it("за набранное слово уходит один запрос, а не запрос на букву", async () => {
+    // Без задержки каждая буква после второй уходила бы полнотекстовым
+    // запросом к базе: «масло» — четыре запроса вместо одного.
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.type(await screen.findByLabelText("Найдите продукт"), "масло");
+    expect(
+      await screen.findByRole("button", { name: "Масло сливочное" }),
+    ).toBeInTheDocument();
+
+    const searches = (api.GET as Mock).mock.calls.filter(([path]) =>
+      String(path).includes("/products"),
+    );
+    expect(searches).toHaveLength(1);
+  });
+
+  it("в паузу перед запросом не говорит «ничего не нашлось»", async () => {
+    // Проверяется второй поиск: при первом списка ещё нет вовсе. После него
+    // прошлая выдача держится намеренно (`keepPreviousData`), и «ничего не
+    // нашлось» в паузу — ответ о прежних буквах, а у плиты он читается как
+    // приговор продукту.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.includes("overview")
+        ? Promise.resolve({
+            data: {
+              patient_id: SESSION.patientId,
+              date: "2026-08-31",
+              prescription: PRESCRIPTION,
+              day: null,
+              last_ketone: null,
+              last_weight: null,
+              seizures_today: { entries: 0, count: 0 },
+            },
+          })
+        : Promise.resolve({ data: { items: [], total: 0 } }),
+    );
+    renderScreen();
+
+    const field = await screen.findByLabelText("Найдите продукт");
+    await user.type(field, "фуагра");
+    expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
+
+    await user.type(field, " по-русски");
+
+    expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+  });
+
+  it("без сети поиск говорит, что ждёт связи, а не молчит", async () => {
+    // Запрос не уходит и не отказывает: он ждёт связи и продолжится сам
+    // (ADR-0036). Список при этом оставался пустым — как будто по запросу
+    // ничего нет.
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByLabelText("Найдите продукт");
+
+    onlineManager.setOnline(false);
+    try {
+      await user.type(screen.getByLabelText("Найдите продукт"), "масло");
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("живёт одним экраном: режимов-вкладок нет", async () => {
     // Вкладки разрезали одно непрерывное действие на три экрана, и решатель
     // граммовки лежал за второй из них (ADR-0028). Кабинет устроен так же.

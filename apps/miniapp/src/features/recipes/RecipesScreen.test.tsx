@@ -71,6 +71,22 @@ const PRODUCT_NAMES: Record<string, string> = {
 };
 
 describe("рецепты в Mini App", () => {
+  it("в паузу перед запросом не говорит «ничего не нашлось»", async () => {
+    // Прошлая выдача держится намеренно, и ответ в паузу был бы о прежних
+    // буквах — тот же дрейф, что закрыт в поиске продукта.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    renderScreen();
+
+    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    await user.type(field, "суфле");
+    expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
+
+    await user.type(field, " творожное");
+
+    expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+  });
+
   it("открывает карточку из списка", async () => {
     const user = userEvent.setup();
     renderScreen();

@@ -46,6 +46,10 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const recipes = useRecipeSearch(debounced);
+  // Пока набор не устоялся, выдача относится к прежним буквам: `debounced`
+  // отстаёт на задержку. «Ничего не нашлось» в эту паузу — ответ не о том, что
+  // человек набрал (та же правка, что в поиске продукта).
+  const settling = query.trim() !== debounced.trim();
 
   return (
     <main className="flex flex-col gap-block p-block">
@@ -80,7 +84,7 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
         }
         retryLabel={t("actions.retry")}
         onRetry={() => void recipes.refetch()}
-        isEmpty={recipes.data?.length === 0}
+        isEmpty={!settling && !recipes.isFetching && recipes.data?.length === 0}
         empty={
           <p className="text-muted-foreground">{t("recipes.nothingFound")}</p>
         }

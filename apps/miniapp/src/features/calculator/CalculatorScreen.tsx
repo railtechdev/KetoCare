@@ -9,6 +9,7 @@ import {
   MacroFacts,
   RatioBadge,
   Section,
+  StatusNote,
   Separator,
   WarningBanner,
   canRetry,
@@ -895,6 +896,11 @@ function ProductPicker({
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const found = useProductSearch(debounced);
+  // Пока набор не устоялся, выдача относится к прежним буквам: `debounced`
+  // отстаёт на задержку, а прошлый ответ держится на экране намеренно
+  // (`keepPreviousData`). Сказать в эту паузу «ничего не нашлось» значит
+  // вынести приговор продукту, которого ещё не искали.
+  const settling = query.trim() !== debounced.trim();
 
   return (
     <div className="flex flex-col gap-field">
@@ -923,9 +929,18 @@ function ProductPicker({
               </button>
             </li>
           ))}
-          {found.data?.length === 0 && (
+          {!settling && !found.isFetching && found.data?.length === 0 && (
             <li className="text-muted-foreground">
               {t("calculator.nothingFound")}
+            </li>
+          )}
+
+          {/* Без сети запрос не уходит и не отказывает: он ждёт связи
+              (ADR-0036). Здесь не `AsyncSection`, и список просто оставался
+              пустым — как будто по запросу ничего нет. */}
+          {found.fetchStatus === "paused" && (
+            <li>
+              <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
             </li>
           )}
         </ul>
