@@ -326,6 +326,13 @@ class TestAssistantIdempotencyOnRealSession:
                 # которую держит незакрытая транзакция запроса, а запрос и
                 # «воркер» живут в одном цикле событий — ждали бы друг друга
                 # вечно. Зависание в CI хуже падения.
+                #
+                # Обратная сторона сессионного предела: он остаётся на
+                # соединении пула до `dispose` движка, и его наследуют более
+                # поздние сессии этого же теста. Здесь это безвредно
+                # (`_fresh_engine` диспозит движок после каждого) и скорее к
+                # лучшему: под чужой затянувшейся блокировкой они упадут, а не
+                # повиснут.
                 await worker.execute(text("SET lock_timeout = '2s'"))
                 locked = await conversations_repo.get_for_update(worker, conversation_id)
                 assert locked is not None
