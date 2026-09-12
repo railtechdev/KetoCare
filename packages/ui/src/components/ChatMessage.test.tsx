@@ -39,4 +39,30 @@ describe("ChatMessage", () => {
 
     expect(screen.queryByText("Не заменяет врача")).not.toBeInTheDocument();
   });
+
+  it("под отказом подписи нет", () => {
+    // Подпись утверждает происхождение: «ответ по материалам приложения». Под
+    // отказом ответа по материалам не было, и утверждение ложно.
+    render(
+      <ChatMessage role="assistant" refusal note="Не заменяет врача">
+        Этот вопрос нужно обсудить с лечащим врачом.
+      </ChatMessage>,
+    );
+
+    expect(screen.getByText(/обсудить с лечащим врачом/)).toBeInTheDocument();
+    expect(screen.queryByText("Не заменяет врача")).not.toBeInTheDocument();
+  });
+
+  it("сам текст отказа остаётся обычным сообщением", () => {
+    // Отказ показывается репликой, а не ошибкой (ADR-0022): прячется подпись,
+    // а не сообщение.
+    const { container } = render(
+      <ChatMessage role="assistant" refusal>
+        Помощник сейчас недоступен.
+      </ChatMessage>,
+    );
+
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+    expect(screen.getByText("Помощник сейчас недоступен.")).toBeInTheDocument();
+  });
 });

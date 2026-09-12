@@ -2,6 +2,7 @@ import {
   AsyncSection,
   ChatComposer,
   ChatMessage,
+  isRefusal,
   Section,
   useFrozenAttempt,
 } from "@ketocare/ui";
@@ -101,6 +102,7 @@ export function AssistantScreen({ session }: { session: Session }) {
                 key={message.id}
                 role={message.role}
                 pending={message.status === "pending"}
+                refusal={isRefusal(message)}
                 note={
                   message.role === "assistant" ? (
                     <>

@@ -243,6 +243,46 @@ describe("помощник в кабинете", () => {
     expect(notes).toHaveLength(2);
   });
 
+  it("под отказом дисклеймера нет", async () => {
+    // Подпись утверждает происхождение: «ответ по материалам приложения». Под
+    // шаблоном врача ответа по материалам не было, и утверждение ложно
+    // (ADR-0022). Сам текст отказа остаётся обычной репликой.
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        id: CONVERSATION_ID,
+        messages: [
+          message({
+            seq: 0,
+            role: "user",
+            text: "что нам принимать",
+            sources: [],
+          }),
+          message({
+            seq: 1,
+            text: "Этот вопрос нужно обсудить с лечащим врачом.",
+            sources: [],
+            blocked: true,
+          }),
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      await screen.findByLabelText(/куда записать кетоны/i),
+      "вопрос",
+    );
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+
+    expect(
+      await screen.findByText(/обсудить с лечащим врачом/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/не заменяет консультацию врача/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("показывает статью, на которую опирается ответ", async () => {
     const user = userEvent.setup();
     renderPage();
