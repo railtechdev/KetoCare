@@ -1,15 +1,13 @@
-import {
-  onlineManager,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
+import { onlineManager, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import "../../lib/i18n";
+import { NetworkError } from "@ketocare/api-client";
 import { api } from "../../lib/api";
+import { createQueryClient } from "../../lib/queryClient";
 import { AssistantScreen } from "./AssistantScreen";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -38,9 +36,7 @@ function message(overrides: Record<string, unknown> = {}) {
 }
 
 function renderScreen() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = createQueryClient();
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -53,12 +49,7 @@ async function ask(
   user: ReturnType<typeof userEvent.setup>,
   text = "куда записать кетоны",
 ) {
-  // Поле включается, когда список переписок разрешился: до этого неизвестно,
-  // есть ли открытый разговор, и вопрос ушёл бы с `conversation_id: null`.
   const field = await screen.findByLabelText(/куда записать кетоны/i);
-  await waitFor(() => {
-    expect(field).toBeEnabled();
-  });
   await user.type(field, text);
   await user.click(screen.getByRole("button", { name: "Спросить" }));
 }
@@ -88,46 +79,76 @@ beforeEach(() => {
 const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
 
 describe("помощник в Mini App", () => {
-  it("без сети поле остаётся живым, а не запирается ожиданием", async () => {
-    // На паузе запрос не идёт и ждать нечего: `isPending` при этом истинен,
-    // поэтому страж смотрит на `fetchStatus`. Иначе без связи нельзя было бы
-    // даже набрать вопрос, хотя запись уходит и честно отказывает (ADR-0034).
+  it("повтор уходит с тем же разговором, даже если список дочитался позже", async () => {
+    // Список переписок мог быть ещё не прочитан: вопрос уходит с пустым
+    // `conversation_id`. Повтор обязан уйти с тем же — иначе тело другое, ключ
+    // другой и в переписке появится второй такой же вопрос (ADR-0035).
+    // Список переписок отвечает не сразу: `staleTime: Infinity` не даст
+    // перезапросить его позже, поэтому первый же запрос держим открытым и
+    // разрешаем вручную — ровно между отправками.
+    let revealList: (value: unknown) => void = () => undefined;
+    const listed = new Promise((resolve) => {
+      revealList = resolve;
+    });
+    const answered = (api.GET as Mock).getMockImplementation();
+    (api.GET as Mock).mockImplementation((path: string, options?: unknown) =>
+      path.endsWith("/ai-conversations")
+        ? listed
+        : (answered?.(path, options) ??
+          Promise.resolve({ data: { id: CONVERSATION_ID, messages: [] } })),
+    );
+    (api.POST as Mock).mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    const field = await screen.findByLabelText(/куда записать кетоны/i);
+    await user.type(field, "куда записать кетоны");
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    });
+
+    // Список дочитался, пока человек смотрел на отказ: повтор всё равно
+    // обязан уйти с тем разговором, с которым ушла первая попытка.
+    revealList({ data: { items: [{ id: CONVERSATION_ID }], total: 1 } });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Спросить" })).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Спросить" }));
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(2);
+    });
+
+    const sent = (api.POST as Mock).mock.calls.map(([, options]) => ({
+      conversation: options.body.conversation_id,
+      key: options.params.header["Idempotency-Key"] as string,
+    }));
+    expect(sent[0]?.conversation).toBeNull();
+    expect(sent[1]?.conversation).toBeNull();
+    expect(sent[1]?.key).toBe(sent[0]?.key);
+  });
+
+  it("без сети вопрос уходит и сразу отказывает словами", async () => {
+    // Поле живое всегда: без связи запись не ждёт очереди, а отказывает —
+    // ADR-0034. Замок вместо ответа был бы хуже дубля.
+    const user = userEvent.setup();
+    (api.POST as Mock).mockRejectedValue(new NetworkError());
     onlineManager.setOnline(false);
     try {
       renderScreen();
 
-      const field = await screen.findByLabelText(/куда записать кетоны/i);
-      await waitFor(() => {
-        expect(field).toBeEnabled();
-      });
+      await user.type(
+        await screen.findByLabelText(/куда записать кетоны/i),
+        "куда записать кетоны",
+      );
+      await user.click(screen.getByRole("button", { name: "Спросить" }));
+
+      expect(
+        await screen.findByText(/Нет связи с сервером/),
+      ).toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }
-  });
-
-  it("отказ списка переписок не запирает поле", async () => {
-    // Ждать нечего: запертый экран хуже редкого дубля, и это названо границей
-    // в ADR-0035.
-    (api.GET as Mock).mockRejectedValue(new Error("boom"));
-    renderScreen();
-
-    const field = await screen.findByLabelText(/куда записать кетоны/i);
-    await waitFor(() => {
-      expect(field).toBeEnabled();
-    });
-  });
-
-  it("пока список переписок в полёте, спросить нельзя", async () => {
-    // Иначе вопрос уйдёт с `conversation_id: null`, а повтор после потерянного
-    // ответа — с найденным разговором: другое тело, другой ключ, второй вопрос.
-    // Проверяется поле, а не кнопка: кнопку выключает и сама отправка.
-    const pending = new Promise<never>(() => undefined);
-    (api.GET as Mock).mockReturnValue(pending);
-    renderScreen();
-
-    expect(
-      await screen.findByLabelText(/куда записать кетоны/i),
-    ).toBeDisabled();
   });
 
   it("дисклеймер стоит под ответом, а не под вопросом семьи", async () => {

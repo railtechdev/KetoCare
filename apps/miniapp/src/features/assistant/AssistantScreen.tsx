@@ -5,7 +5,7 @@ import {
   Section,
   useAttemptKey,
 } from "@ketocare/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
@@ -41,17 +41,27 @@ export function AssistantScreen({ session }: { session: Session }) {
   const messages = conversation.data ?? [];
   const limited = errorCodeOf(ask.error) === "rate_limited";
 
-  // Пока вопрос и разговор те же, попытка та же: повтор после потерянного
-  // ответа не заведёт второй вопрос в переписке (ADR-0035).
+  // Попытка держит и разговор: список переписок мог быть ещё не прочитан, и
+  // тогда вопрос уходит с пустым `conversation_id`. Повтор обязан уйти с тем
+  // же — иначе тело другое, ключ другой и в переписке появится второй такой же
+  // вопрос (ADR-0035). Освобождается сменой вопроса: это уже другая запись.
+  const attempt = useRef<{ question: string; conversationId: string | null }>({
+    question: question.trim(),
+    conversationId,
+  });
+  if (attempt.current.question !== question.trim()) {
+    attempt.current = { question: question.trim(), conversationId };
+  }
+  const askedConversationId = attempt.current.conversationId;
   const attemptKey = useAttemptKey(
-    JSON.stringify([session.patientId, conversationId, question.trim()]),
+    JSON.stringify([session.patientId, askedConversationId, question.trim()]),
   );
 
   function send() {
     const text = question.trim();
     if (!text) return;
     ask.mutate(
-      { text, conversationId, idempotencyKey: attemptKey },
+      { text, conversationId: askedConversationId, idempotencyKey: attemptKey },
       {
         onSuccess: (accepted) => {
           setChosenId(accepted.conversation_id);
@@ -132,17 +142,7 @@ export function AssistantScreen({ session }: { session: Session }) {
           sendingLabel={t("assistant.sending")}
           hint={t("assistant.hint")}
           pending={ask.isPending}
-          // Пока запрос списка переписок ИДЁТ, неизвестно, есть ли уже
-          // открытый разговор: вопрос ушёл бы с `conversation_id: null`, а
-          // повтор после потерянного ответа — уже с найденным, то есть другим
-          // телом и другим ключом. Это второй такой же вопрос (ADR-0035).
-          //
-          // Отказ списка и пауза без сети поле НЕ выключают: там ждать нечего,
-          // а запертое поле хуже редкого дубля — без сети запись уходит и сразу
-          // получает отказ словами (ADR-0034).
-          disabled={
-            limited || (latest.isPending && latest.fetchStatus === "fetching")
-          }
+          disabled={limited}
         />
         {limited && (
           <p className="text-warning">
