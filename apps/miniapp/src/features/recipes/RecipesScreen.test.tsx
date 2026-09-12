@@ -77,9 +77,57 @@ const PRODUCT_NAMES: Record<string, string> = {
 };
 
 describe("рецепты в Mini App", () => {
+  it("первый поиск без сети говорит о связи один раз", async () => {
+    // На первом поиске о паузе говорит ветка ожидания кита, на следующих —
+    // своя строка. Если условия разойдутся, обе скажут одно и то же подряд
+    // (правило П27).
+    onlineManager.setOnline(false);
+    const { client } = renderScreen();
+
+    try {
+      expect(
+        await screen.findAllByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("карточка без сети тоже говорит про связь", async () => {
+    // Со второго открытия рецепт берётся из кэша: `isPending` ложен, ветка
+    // кита молчит, и карточка показывала старый рецепт без единого слова — а
+    // его могли поправить, и по нему готовят.
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+    await screen.findByText(/Взбить/);
+    act(() => {
+      showBackButton.mock.calls.at(-1)?.[0]();
+    });
+
+    onlineManager.setOnline(false);
+    try {
+      await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("без сети говорит про связь, а не «ничего не нашлось»", async () => {
-    // Ветка ожидания в ките сюда не доходит: она требует `loading`, а он с
-    // подставными данными ложен. Пустое состояние обязано сказать правду.
+    // Ветка ожидания в ките сюда не доходит: она требует `loading`, а он со
+    // второго поиска ложен. Строка о связи стоит рядом со списком, а пустое
+    // состояние на паузе подавлено — иначе оно ответило бы о прежних буквах.
     const user = userEvent.setup();
     (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
     const { client } = renderScreen();

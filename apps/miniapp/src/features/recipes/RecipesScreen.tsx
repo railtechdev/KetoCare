@@ -119,8 +119,9 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
 
       {/* Рядом со списком, а не внутри пустого состояния: при непустой прошлой
           выдаче пустоты нет, и о паузе не сказал бы никто. Ветка ожидания кита
-          закрывает только первый поиск — дальше `loading` ложен из-за
-          подставных данных (ADR-0036). */}
+          закрывает только первый поиск — дальше `loading` ложен, потому что
+          прошлая выдача держится намеренно (`useRecipes.ts`). Что значит сама
+          пауза — в ADR-0036. */}
       {recipes.fetchStatus === "paused" && !recipes.isPending && (
         <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
       )}
@@ -172,6 +173,14 @@ function RecipeCard({
       >
         {recipe.data !== undefined && <RecipeBody recipe={recipe.data} />}
       </AsyncSection>
+
+      {/* Та же немота, что была у списка: со второго открытия рецепт уже в
+          кэше, `isPending` ложен, и ветка ожидания кита не срабатывает. А
+          рецепт могли поправить с тех пор, как список загрузился, и по нему
+          готовят (`useRecipes.ts`). */}
+      {recipe.fetchStatus === "paused" && !recipe.isPending && (
+        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
+      )}
     </main>
   );
 }
