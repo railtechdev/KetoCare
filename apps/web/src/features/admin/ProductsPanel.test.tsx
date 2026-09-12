@@ -23,12 +23,17 @@ vi.mock("../auth/useSession", () => ({
 
 i18n.addResourceBundle("ru", "admin", adminRu, true, true);
 
+// Категория — UUID: схема требует именно его, а аннотация типом формат не
+// ловит (uuid, дата, диапазоны в тип не попадают).
+const CATEGORY_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OUTSIDE_ID = "33333333-3333-4333-8333-333333333333";
 
 const PRODUCT: ProductDetail = {
   id: OUTSIDE_ID,
   name_ru: "Масло сливочное",
-  category_id: "c1",
+  name_uz: null,
+  name_en: null,
+  category_id: CATEGORY_ID,
   kcal_100g: 748,
   fat_100g: 82.5,
   protein_100g: 0.5,
@@ -38,10 +43,11 @@ const PRODUCT: ProductDetail = {
   source_version: "2024",
   verified_at: "2026-01-10",
   is_active: true,
-  // Соотношение производно от макронутриентов этой же позиции: 82.5 / (0.5 +
-  // 0.8). Сервер считает его сам и копии не хранит — выдумывать здесь другое
-  // число значило бы описать продукт, которого он отдать не может.
-  ratio: 63.46,
+  // Соотношение производно от макронутриентов этой же позиции, и ядро его НЕ
+  // округляет. Поэтому здесь выражение, а не число: записанное числом, оно
+  // разошлось бы и с сервером, и с собственным пояснением, стоило бы поправить
+  // граммовку.
+  ratio: 82.5 / (0.5 + 0.8),
 };
 
 function renderPanel(item?: string) {
@@ -77,7 +83,7 @@ beforeEach(() => {
     }
     if (path === "/api/v1/products/categories") {
       return Promise.resolve({
-        data: [{ id: "c1", name_ru: "Жиры" }],
+        data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
         response: { status: 200 },
       });
     }
@@ -113,7 +119,7 @@ describe("карточка продукта вне текущей выборки
       }
       if (path === "/api/v1/products/categories") {
         return Promise.resolve({
-          data: [{ id: "c1", name_ru: "Жиры" }],
+          data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
           response: { status: 200 },
         });
       }
@@ -151,7 +157,7 @@ describe("карточка продукта вне текущей выборки
       }
       if (path === "/api/v1/products/categories") {
         return Promise.resolve({
-          data: [{ id: "c1", name_ru: "Жиры" }],
+          data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
           response: { status: 200 },
         });
       }
