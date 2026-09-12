@@ -97,14 +97,26 @@ describe("карточка продукта вне текущей выборки
   });
 
   it("несуществующая позиция объясняет себя и даёт выход", async () => {
+    // `response` обязателен и здесь: без него проверка проходила только
+    // потому, что запрос карточки спотыкался на `response.status` и падал —
+    // то есть про 404 она ничего не проверяла, хотя так и называется.
     (api.GET as Mock).mockImplementation((path: string) => {
       if (path === "/api/v1/products/{product_id}") {
-        return Promise.resolve({ error: { detail: "нет" } });
+        return Promise.resolve({
+          error: { error: { code: "not_found", message: "Нет." } },
+          response: { status: 404 },
+        });
       }
       if (path === "/api/v1/products/categories") {
-        return Promise.resolve({ data: [{ id: "c1", name_ru: "Жиры" }] });
+        return Promise.resolve({
+          data: [{ id: "c1", name_ru: "Жиры" }],
+          response: { status: 200 },
+        });
       }
-      return Promise.resolve({ data: { items: [], total: 0 } });
+      return Promise.resolve({
+        data: { items: [], total: 0 },
+        response: { status: 200 },
+      });
     });
 
     renderPanel(OUTSIDE_ID);

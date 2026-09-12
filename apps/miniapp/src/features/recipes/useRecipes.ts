@@ -79,6 +79,9 @@ export function useProductNames(productIds: string[]): {
         );
         // 404 — это ответ справочника «такого продукта нет», а не сбой связи.
         // Бросить здесь значило бы смешать удаление с недоставленным ответом.
+        // Тот же запрос есть в кабинете (`apps/web/src/features/products/
+        // useProductDetail.ts`): кэш у приложений разный, но правило одно, и
+        // разбор состояний для обоих лежит в ките (`productNameState`).
         if (response.status === 404) return null;
         if (error || !data) throw error ?? new Error("Empty product response");
         return data;

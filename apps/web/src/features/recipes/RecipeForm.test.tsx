@@ -102,6 +102,35 @@ beforeEach(() => {
 });
 
 describe("показатели в форме рецепта", () => {
+  it("медленная карточка продукта не оставляет числа ненайденными навсегда", async () => {
+    // Расчёт ждёт карточек ВСЕХ строк. Если снять условие «карточка получена»,
+    // запрос уйдёт раньше неё: обращение к карточке бросит внутри `queryFn`, а
+    // ключ собран только из `productId:grams` — с приходом карточки он не
+    // меняется, перезапроса нет, и числа не появятся уже никогда.
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/products/{product_id}") {
+        // Дольше задержки пересчёта (RECALC_DELAY_MS): запрос успел бы уйти.
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        return { data: PRODUCT, error: undefined, response: { status: 200 } };
+      }
+      return {
+        data: { items: [PRODUCT], total: 1 },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    const user = userEvent.setup();
+    renderForm();
+    await addButter(user);
+
+    expect(
+      await screen.findByText(/374 ккал/, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Показатели сейчас не посчитать/),
+    ).not.toBeInTheDocument();
+  });
+
   it("удалённый продукт останавливает расчёт и называет причину", async () => {
     // До этого 404 бросал, и форма говорила «показатели сейчас не посчитать».
     // Когда 404 стал ответом, расчёт перестал уходить — и форма замолчала

@@ -22,6 +22,10 @@ export function productDetailKey(productId: string) {
  *
  * 404 здесь ОТВЕТ, а не сбой связи: смешать их значит либо обещать имя,
  * которое никогда не придёт, либо назвать удалённым то, что просто не доехало.
+ *
+ * У Mini App свой такой же запрос (`apps/miniapp/src/features/recipes/useRecipes.ts`):
+ * кэш у приложений разный, общим этот код быть не может, но правило обязано
+ * совпадать — разбор состояний для обоих лежит в ките (`productNameState`).
  */
 export async function fetchProductDetail(
   productId: string,
