@@ -211,6 +211,25 @@ async function addProduct(user: ReturnType<typeof userEvent.setup>) {
   );
 }
 
+/** Сводка как обычно, а поиск продукта ничего не находит. */
+function mockEmptySearch() {
+  (api.GET as Mock).mockImplementation((path: string) =>
+    path.includes("overview")
+      ? Promise.resolve({
+          data: {
+            patient_id: SESSION.patientId,
+            date: "2026-08-31",
+            prescription: PRESCRIPTION,
+            day: null,
+            last_ketone: null,
+            last_weight: null,
+            seizures_today: { entries: 0, count: 0 },
+          },
+        })
+      : Promise.resolve({ data: { items: [], total: 0 } }),
+  );
+}
+
 function mockOverview(prescription: unknown = PRESCRIPTION) {
   (api.GET as Mock).mockImplementation((path: string) => {
     if (path.includes("overview")) {
@@ -260,21 +279,7 @@ describe("калькулятор в Mini App", () => {
     // нашлось» в паузу — ответ о прежних буквах, а у плиты он читается как
     // приговор продукту.
     const user = userEvent.setup();
-    (api.GET as Mock).mockImplementation((path: string) =>
-      path.includes("overview")
-        ? Promise.resolve({
-            data: {
-              patient_id: SESSION.patientId,
-              date: "2026-08-31",
-              prescription: PRESCRIPTION,
-              day: null,
-              last_ketone: null,
-              last_weight: null,
-              seizures_today: { entries: 0, count: 0 },
-            },
-          })
-        : Promise.resolve({ data: { items: [], total: 0 } }),
-    );
+    mockEmptySearch();
     renderScreen();
 
     const field = await screen.findByLabelText("Найдите продукт");
@@ -286,17 +291,21 @@ describe("калькулятор в Mini App", () => {
     expect(screen.queryByText("Ничего не нашлось")).toBeNull();
   });
 
-  it("без сети поиск говорит, что ждёт связи, а не молчит", async () => {
-    // Запрос не уходит и не отказывает: он ждёт связи и продолжится сам
-    // (ADR-0036). Список при этом оставался пустым — как будто по запросу
-    // ничего нет.
+  it("без сети поиск говорит про связь, а не «ничего не нашлось»", async () => {
+    // На паузе `isFetching` ложен, а прошлый пустой ответ `keepPreviousData`
+    // отдаёт и запросу, который ещё не уходил: без проверки паузы экран снова
+    // отвечал бы о прежних буквах, да ещё рядом со строкой про связь.
     const user = userEvent.setup();
+    mockEmptySearch();
     renderScreen();
-    await screen.findByLabelText("Найдите продукт");
+
+    const field = await screen.findByLabelText("Найдите продукт");
+    await user.type(field, "фуагра");
+    expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
 
     onlineManager.setOnline(false);
     try {
-      await user.type(screen.getByLabelText("Найдите продукт"), "масло");
+      await user.type(field, " по-русски");
 
       expect(
         await screen.findByText(
@@ -304,6 +313,33 @@ describe("калькулятор в Mini App", () => {
         ),
       ).toBeInTheDocument();
       expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("о связи говорит один голос: расчёт, а не ещё и поиск", async () => {
+    // Две фразы об одной причине — тот же текст дважды (правило П27). Когда о
+    // паузе говорит расчёт, поиск молчит.
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    onlineManager.setOnline(false);
+    try {
+      // На паузе обязаны оказаться оба запроса: правка граммовки ставит на
+      // паузу проверку, набор в поиске — поиск. Иначе молчание поиска ничего
+      // не доказывает: выключенный запрос молчит и без правила.
+      await user.type(
+        await screen.findByLabelText(/Масло сливочное, граммы/),
+        "5",
+      );
+      await user.type(screen.getByLabelText("Найдите продукт"), "сыр");
+
+      expect(await screen.findByText(WAITING)).toBeInTheDocument();
+      expect(
+        screen.queryByText("Нет связи — покажем, как только она появится."),
+      ).toBeNull();
     } finally {
       onlineManager.setOnline(true);
     }

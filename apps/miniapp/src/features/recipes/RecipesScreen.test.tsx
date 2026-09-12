@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -71,6 +75,32 @@ const PRODUCT_NAMES: Record<string, string> = {
 };
 
 describe("рецепты в Mini App", () => {
+  it("без сети говорит про связь, а не «ничего не нашлось»", async () => {
+    // Ветка ожидания в ките сюда не доходит: она требует `loading`, а он с
+    // подставными данными ложен. Пустое состояние обязано сказать правду.
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    renderScreen();
+
+    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    await user.type(field, "суфле");
+    expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
+
+    onlineManager.setOnline(false);
+    try {
+      await user.type(field, " творожное");
+
+      expect(
+        await screen.findByText(
+          "Нет связи — покажем, как только она появится.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("в паузу перед запросом не говорит «ничего не нашлось»", async () => {
     // Прошлая выдача держится намеренно, и ответ в паузу был бы о прежних
     // буквах — тот же дрейф, что закрыт в поиске продукта.

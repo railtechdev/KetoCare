@@ -350,6 +350,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
       <Section title={t("calculator.composition")} density="compact">
         <ProductPicker
+          announceWaiting={!verifyWaitingShown}
           onPick={(product) => {
             setRows((current) =>
               current.some((row) => row.product.id === product.id)
@@ -889,8 +890,11 @@ function Verdict({
 
 function ProductPicker({
   onPick,
+  announceWaiting,
 }: {
   onPick: (product: ProductOption) => void;
+  /** Говорить ли о паузе: на экране о связи высказывается кто-то один. */
+  announceWaiting: boolean;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -929,21 +933,24 @@ function ProductPicker({
               </button>
             </li>
           ))}
-          {!settling && !found.isFetching && found.data?.length === 0 && (
-            <li className="text-muted-foreground">
-              {t("calculator.nothingFound")}
-            </li>
-          )}
-
-          {/* Без сети запрос не уходит и не отказывает: он ждёт связи
-              (ADR-0036). Здесь не `AsyncSection`, и список просто оставался
-              пустым — как будто по запросу ничего нет. */}
-          {found.fetchStatus === "paused" && (
-            <li>
-              <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
-            </li>
-          )}
+          {!settling &&
+            !found.isFetching &&
+            found.fetchStatus !== "paused" &&
+            found.data?.length === 0 && (
+              <li className="text-muted-foreground">
+                {t("calculator.nothingFound")}
+              </li>
+            )}
         </ul>
+      )}
+
+      {/* Без сети запрос не уходит и не отказывает: он ждёт связи (ADR-0036).
+          Здесь не `AsyncSection`, и список просто оставался пустым — как будто
+          по запросу ничего нет. Строка стоит ПОД списком: внутри него
+          скринридер читал бы её как найденный продукт. Молчит, когда о связи
+          уже говорит расчёт: одна причина — одна строка (правило П27). */}
+      {announceWaiting && found.fetchStatus === "paused" && (
+        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
       )}
     </div>
   );

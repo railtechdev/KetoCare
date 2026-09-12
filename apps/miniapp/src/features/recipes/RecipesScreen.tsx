@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  StatusNote,
   Button,
   Input,
   RatioBadge,
@@ -86,7 +87,15 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
         onRetry={() => void recipes.refetch()}
         isEmpty={!settling && !recipes.isFetching && recipes.data?.length === 0}
         empty={
-          <p className="text-muted-foreground">{t("recipes.nothingFound")}</p>
+          // На паузе прошлый пустой ответ относится к прежним буквам, а ветка
+          // ожидания в ките сюда не доходит: она требует `loading`, а он с
+          // подставными данными ложен. Сказать «ничего не нашлось» значило бы
+          // ответить о запросе, который не отправлялся.
+          recipes.fetchStatus === "paused" ? (
+            <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
+          ) : (
+            <p className="text-muted-foreground">{t("recipes.nothingFound")}</p>
+          )
         }
       >
         <ul className="flex flex-col">
