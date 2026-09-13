@@ -90,7 +90,7 @@ export async function loginAsDoctor(page: Page): Promise<void> {
     data: { email: DOCTOR_EMAIL, password: PASSWORD },
   });
   if (!first.ok()) {
-    throw new Error(`Врач не вошёл: ${first.status()} ${await first.text()}`);
+    throw new Error(`Врач не вошёл: ${first.status()}`);
   }
 
   const body = await first.json();
@@ -112,7 +112,7 @@ export async function loginAsDoctor(page: Page): Promise<void> {
       },
     });
     if (!again.ok()) {
-      throw new Error(`Врач не вошёл по коду: ${await again.text()}`);
+      throw new Error(`Врач не вошёл по коду: ${again.status()}`);
     }
     // 200 сам по себе ничего не обещает: вход отвечает состояниями, и
     // `password_change_required` — тоже успешный ответ, но сессии не даёт.
@@ -120,13 +120,13 @@ export async function loginAsDoctor(page: Page): Promise<void> {
     // другом месте, обвиняя не то.
     const done = await again.json();
     if (done.status !== "ok") {
-      throw new Error(`Вход по коду не дал сессию: ${JSON.stringify(done)}`);
+      throw new Error(`Вход по коду не дал сессию: ${String(done.status)}`);
     }
     return;
   }
 
   if (body.status !== "totp_setup_required") {
-    throw new Error(`Неожиданный ответ входа: ${JSON.stringify(body)}`);
+    throw new Error(`Неожиданный статус входа: ${String(body.status)}`);
   }
 
   const setup = await page.request.post("/api/v1/auth/totp/setup", {
@@ -141,15 +141,19 @@ export async function loginAsDoctor(page: Page): Promise<void> {
     data: { code: totp(secret) },
   });
   if (!verify.ok()) {
-    throw new Error(`Второй фактор не включился: ${await verify.text()}`);
+    throw new Error(`Второй фактор не включился: ${verify.status()}`);
   }
-  // Та же придирка, что и к повторному входу: код ответа сессии не обещает.
-  // Сессия приходит именно отсюда — `/auth/totp/verify` ставит куки.
+  // Та же придирка, что и к повторному входу, но по СВОЕМУ контракту: у
+  // `/auth/totp/verify` поля `status` нет вовсе — она отдаёт пару токенов и
+  // резервные коды. Первая версия этой проверки сравнивала `status` с «ok» по
+  // аналогии со входом, срабатывала всегда и роняла первую попытку прогона;
+  // зелёным он был только потому, что повтор идёт другой веткой.
+  //
+  // Тело ответа наружу не выводится ни при каком исходе: в нём токены и
+  // резервные коды, а журнал прогона выгружается артефактом.
   const enabled = await verify.json();
-  if (enabled.status !== "ok") {
-    throw new Error(
-      `Настройка второго фактора не дала сессию: ${JSON.stringify(enabled)}`,
-    );
+  if (typeof enabled?.tokens?.access_token !== "string") {
+    throw new Error("Настройка второго фактора не дала токенов");
   }
 }
 
