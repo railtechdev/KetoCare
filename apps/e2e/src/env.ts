@@ -28,8 +28,12 @@ function dotenv(): Record<string, string> {
     if (trimmed === "" || trimmed.startsWith("#")) continue;
     const separator = trimmed.indexOf("=");
     if (separator < 0) continue;
+    // Хвостовой комментарий срезается, как это делает shell в `. ./.env`:
+    // иначе `SECRET=ABC # заметка` дал бы тестам «ABC # заметка», а сиду —
+    // «ABC», и значения разошлись бы там, где человек этого не ждёт.
     values[trimmed.slice(0, separator).trim()] = trimmed
       .slice(separator + 1)
+      .split(" #")[0]!
       .trim()
       .replace(/^["']|["']$/g, "");
   }
@@ -84,3 +88,28 @@ export const PASSWORD = value(
 );
 export const DOCTOR_EMAIL = "e2e-doctor@example.com";
 export const PARENT_EMAIL = "e2e-parent@example.com";
+
+/**
+ * Второй фактор врача прогона — заданный, а не настроенный на ходу.
+ *
+ * Секрет один и тот же у сида и у прогона, поэтому состояние живёт ТОЛЬКО в
+ * базе. Прежде тест настраивал второй фактор сам и запоминал секрет в файле:
+ * состояние оказывалось в двух местах, и рассинхрон давал «врач не вошёл по
+ * коду» без объяснимой причины.
+ *
+ * Значение фиктивное и годится только для локальной базы — тот же довод, что у
+ * пароля выше. Формат — base32 (`A-Z2-7`), как у `pyotp.random_base32()`.
+ */
+export const DOCTOR_TOTP_SECRET = value(
+  "E2E_TOTP_SECRET",
+  "KETOCAREE2ETOTPSECRET234567ABCDE",
+);
+
+/**
+ * Врач, которому второй фактор ещё предстоит настроить.
+ *
+ * Отдельная учётка, потому что первичная настройка — одноразовое событие: у
+ * основного врача она случилась бы один раз, а дальше проверяла бы уже другой
+ * путь. Здесь она проверяется осознанно, тестом в `login.spec.ts`.
+ */
+export const DOCTOR_SETUP_EMAIL = "e2e-doctor-setup@example.com";

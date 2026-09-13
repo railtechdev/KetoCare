@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { PARENT_EMAIL, PASSWORD } from "../src/env";
+import { DOCTOR_SETUP_EMAIL, PARENT_EMAIL, PASSWORD } from "../src/env";
+import { totp } from "../src/totp";
 import { flushRateLimits } from "../src/redis";
 
 /**
@@ -14,7 +15,10 @@ import { flushRateLimits } from "../src/redis";
 // Счётчики ограничителя обнуляются перед файлом: пять запросов к `/auth/*` в
 // минуту — настоящее ограничение раздела 11 ТЗ, и без обнуления файл падал бы на
 // защите, работающей как задумано.
-test.beforeAll(flushRateLimits);
+// Перед КАЖДЫМ тестом, а не перед файлом: входов в файле пять, а лимит —
+// пять в минуту на ручку. Прежнего запаса не осталось, и любой новый тест
+// ронял бы прогон на защите, работающей как задумано (раздел 11 ТЗ).
+test.beforeEach(flushRateLimits);
 
 test("родитель входит с формы и попадает на главную", async ({ page }) => {
   await page.goto("/login");
@@ -55,4 +59,59 @@ test("после перезагрузки родитель остаётся в �
   await page.reload();
 
   await expect(page).toHaveURL(/\/app\/home/);
+});
+
+/**
+ * Первый вход приглашённого специалиста.
+ *
+ * Врачу второй фактор обязателен, но до первого входа настроить его негде:
+ * сервер отвечает состоянием `totp_setup_required` и выдаёт токен, годный
+ * только для настройки. Раньше этот путь проходил каждый вход врача в сквозном
+ * сценарии — то есть проверялся побочно и ровно один раз за прогон, а секрет
+ * приходилось хранить между попытками. Теперь у него своя учётка и свой тест.
+ */
+// Обёртка нужна ради `configure`: на верхнем уровне он снимает повторы со
+// ВСЕГО файла, включая тесты выше, — а им устойчивость к сетевым сбоям нужна.
+test.describe("первичная настройка второго фактора", () => {
+  // Без повторов: событие одноразовое. После успешного подтверждения учётка
+  // отвечает уже `totp_required`, и повтор проверял бы не тот путь, падая на
+  // первом же ожидании и пряча настоящую причину. Сид возвращает учётку в
+  // исходное состояние раз за прогон, не чаще.
+  test.describe.configure({ retries: 0 });
+
+  test("врач настраивает второй фактор при первом входе", async ({ page }) => {
+    const first = await page.request.post("/api/v1/auth/login", {
+      data: { email: DOCTOR_SETUP_EMAIL, password: PASSWORD },
+    });
+    expect(first.ok()).toBe(true);
+
+    const body = await first.json();
+    expect(body.status).toBe("totp_setup_required");
+    expect(typeof body.totp_setup_token).toBe("string");
+
+    const setup = await page.request.post("/api/v1/auth/totp/setup", {
+      headers: { Authorization: `Bearer ${body.totp_setup_token}` },
+      data: {},
+    });
+    expect(setup.ok()).toBe(true);
+    const { secret } = await setup.json();
+
+    const verify = await page.request.post("/api/v1/auth/totp/verify", {
+      headers: { Authorization: `Bearer ${body.totp_setup_token}` },
+      data: { code: totp(secret) },
+    });
+    expect(verify.ok()).toBe(true);
+
+    // Ручка обещает пару токенов и резервные коды — их и проверяем, а не
+    // выдуманный `status`: у этого ответа его нет.
+    const enabled = await verify.json();
+    expect(typeof enabled.tokens?.access_token).toBe("string");
+    expect(Array.isArray(enabled.backup_codes)).toBe(true);
+
+    // Со второго входа сервер просит код, а не настройку: фактор включён.
+    const again = await page.request.post("/api/v1/auth/login", {
+      data: { email: DOCTOR_SETUP_EMAIL, password: PASSWORD },
+    });
+    expect((await again.json()).status).toBe("totp_required");
+  });
 });

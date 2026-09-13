@@ -246,7 +246,11 @@ miniapp-link: check-env ## Ссылка для локального запуск
 	set -a && . ./$(ENV_FILE) && set +a && uv run python infra/scripts/miniapp_dev_link.py $(ARGS)
 
 .PHONY: seed-e2e
-seed-e2e: ## Данные для сквозного прогона Playwright (учётки, ребёнок, продукты)
+seed-e2e: check-env ## Данные для сквозного прогона Playwright (учётки, ребёнок, продукты)
+	@# Значения берутся из окружения. При прогоне их подставляет сама
+	@# конфигурация Playwright (`global-setup.ts` читает корневой `.env` тем же
+	@# парсером, что и тесты), поэтому здесь ничего исполнять не нужно: `. ./.env`
+	@# исполняет файл как скрипт, и значение со словами через пробел его ломает.
 	uv run python infra/scripts/seed_e2e.py
 
 .PHONY: migrate
@@ -289,6 +293,10 @@ e2e-install: ## Поставить браузер для Playwright (нужно 
 .PHONY: load
 load: check-env ## Нагрузочный прогон (locust, 100 одновременных) — требует поднятый API
 	@# Раздел 15 п. 22 ТЗ. Профиль и пороги — в infra/load/README.md.
+	@# Учётные данные профиль берёт ТОЛЬКО из окружения процесса: значение,
+	@# лежащее в `.env`, до него не доедет (в отличие от сквозного прогона, где
+	@# их подставляет `global-setup.ts`). Меняли пароль прогона в `.env` —
+	@# задайте его и здесь: `E2E_PASSWORD=… make load`.
 	uv run --with locust locust -f infra/load/locustfile.py \
 		--headless --users 100 --spawn-rate 10 --run-time 2m \
 		--host $${LOAD_HOST:-http://127.0.0.1:$(API_PORT)}
