@@ -7,6 +7,7 @@ import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
 import { SummaryTab } from "./SummaryTab";
+import type { Patient, PatientOverview } from "./types";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -23,7 +24,15 @@ vi.mock("../../lib/api", async (importOriginal) => {
             last_ketone: null,
             last_weight: null,
             seizures_today: { entries: 0, count: 0 },
-          },
+            seizure_trend: {
+              recent: 0,
+              previous: 0,
+              grew: null,
+              appeared: false,
+            },
+            last_reading_on: null,
+            monitoring_phase: "routine",
+          } satisfies PatientOverview,
         }),
       ),
     },
@@ -32,13 +41,15 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
 
-const PATIENT = {
+const PATIENT: Patient = {
   id: "11111111-1111-4111-8111-111111111111",
   full_name: "Аня Иванова",
   birth_date: "2019-04-12",
   sex: "f",
   height_cm: 104,
   allergies: [],
+  allergy_labels: [],
+  excluded_products: [],
   notes: null,
 };
 
@@ -57,7 +68,7 @@ function renderSummary() {
     );
   }
 
-  return render(<SummaryTab patient={PATIENT as never} />, {
+  return render(<SummaryTab patient={PATIENT} />, {
     wrapper: Wrapper,
   });
 }
