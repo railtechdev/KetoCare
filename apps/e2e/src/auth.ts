@@ -96,6 +96,14 @@ export async function loginAsDoctor(page: Page): Promise<void> {
     if (!again.ok()) {
       throw new Error(`Врач не вошёл по коду: ${await again.text()}`);
     }
+    // 200 сам по себе ничего не обещает: вход отвечает состояниями, и
+    // `password_change_required` — тоже успешный ответ, но сессии не даёт.
+    // Без этой проверки сценарий шёл бы дальше без токенов и падал позже, в
+    // другом месте, обвиняя не то.
+    const done = await again.json();
+    if (done.status !== "ok") {
+      throw new Error(`Вход по коду не дал сессию: ${JSON.stringify(done)}`);
+    }
     return;
   }
 
