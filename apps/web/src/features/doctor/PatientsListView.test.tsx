@@ -10,6 +10,7 @@ import doctorRu from "../../locales/ru/doctor.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { SessionProvider } from "../auth/session";
 import { PatientsListView } from "./PatientsListView";
+import type { Patient, PatientOverview } from "./types";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -29,7 +30,7 @@ const ACCESS_TOKEN = `header.${btoa(
   JSON.stringify({ sub: DOCTOR_ID, role: "doctor" }),
 )}.signature`;
 
-const PATIENTS = [
+const PATIENTS: Patient[] = [
   {
     id: SILENT_ID,
     full_name: "Иван Петров",
@@ -37,6 +38,8 @@ const PATIENTS = [
     sex: "m",
     height_cm: 108,
     allergies: [],
+    allergy_labels: [],
+    excluded_products: [],
     notes: null,
   },
   {
@@ -46,11 +49,13 @@ const PATIENTS = [
     sex: "f",
     height_cm: 124,
     allergies: ["орехи"],
+    allergy_labels: ["орехи"],
+    excluded_products: [],
     notes: null,
   },
 ];
 
-const TOTALS = {
+const TOTALS: NonNullable<PatientOverview["day"]>["totals"] = {
   kcal: 1180,
   fat: 110,
   protein: 25,
@@ -59,7 +64,7 @@ const TOTALS = {
   ratio: 3.2,
 };
 
-const PRESCRIPTION = {
+const PRESCRIPTION: NonNullable<PatientOverview["prescription"]> = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   patient_id: SILENT_ID,
   ratio: 4,
@@ -73,7 +78,16 @@ const PRESCRIPTION = {
   created_at: "2026-08-01T09:00:00Z",
 };
 
-/** Молчащий пациент: последний замер за десять суток до даты сводки. */
+/**
+ * Молчащий пациент: последний замер за десять суток до даты сводки.
+ *
+ * Фаза наблюдения `routine`, хотя назначение здесь от 01.08, а сводка — от
+ * 28.08: сервер считает фазу от ПЕРВОГО назначения ребёнка, а сводка показывает
+ * АКТИВНОЕ, и у пациента с более ранним началом терапии это обычное сочетание.
+ * Значение выбрано не «любое нейтральное»: при `strict` подпись пометки уходит
+ * на «первый месяц терапии», и первый тест падает — то есть фикстура
+ * воспроизводит поведение до аннотации, а не какое-то другое.
+ */
 const SILENT_OVERVIEW = {
   patient_id: SILENT_ID,
   date: "2026-08-28",
@@ -93,7 +107,8 @@ const SILENT_OVERVIEW = {
   seizures_today: { entries: 0, count: 0 },
   seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
   last_reading_on: "2026-08-18",
-};
+  monitoring_phase: "routine",
+} satisfies PatientOverview;
 
 const FRESH_OVERVIEW = {
   patient_id: FRESH_ID,
@@ -113,7 +128,8 @@ const FRESH_OVERVIEW = {
   seizures_today: { entries: 0, count: 0 },
   seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
   last_reading_on: "2026-08-28",
-};
+  monitoring_phase: "routine",
+} satisfies PatientOverview;
 
 function renderList() {
   const queryClient = new QueryClient({
