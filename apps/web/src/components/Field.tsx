@@ -99,7 +99,7 @@ function FieldShell({
           по-прежнему распирал подпись — прогон это и показал, те же 131→134.
 
           Кит править нельзя, классы передаются отсюда. */}
-      <Label htmlFor={id} className="flex-wrap [overflow-wrap:anywhere]">
+      <Label htmlFor={id} className="flex-wrap wrap-anywhere">
         {label}
         {optional && (
           <span className="font-normal text-muted-foreground">
