@@ -86,7 +86,12 @@ function FieldShell({
     // низу, и соседние кнопки равняются на нижний край ОТСТУПА, а не поля —
     // ровно отсюда разъезд в 16 px между полем даты и стрелками.
     <div data-slot="field" className="mb-block flex flex-col gap-field">
-      <Label htmlFor={id}>
+      {/* `flex-wrap`: подпись кита — flex-контейнер, и её содержимое в одну
+          строку. В узкой колонке (пара полей цели калькулятора на 360 px)
+          длинная подпись не помещалась и выталкивала блок за край экрана — в
+          ночном прогоне это +3 px у подписи и у обоих её родителей. Кит
+          править нельзя, класс передаётся отсюда. */}
+      <Label htmlFor={id} className="flex-wrap">
         {label}
         {optional && (
           <span className="font-normal text-muted-foreground">

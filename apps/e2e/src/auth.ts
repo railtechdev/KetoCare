@@ -34,7 +34,16 @@ export async function loginAsParent(page: Page): Promise<void> {
  * проходит настоящую первичную настройку — получает секрет-кандидат, считает по
  * нему код и подтверждает. Заодно это проверка сценария, который иначе не
  * проверяет никто: первый вход приглашённого специалиста.
+ *
+ * Настроенный секрет запоминается на время прогона. Сид отрабатывает ОДИН раз
+ * перед всеми файлами, а входов за прогон много: повтор упавшего сценария,
+ * второй файл тестов. Со второго входа сервер отвечает уже `totp_required` —
+ * это не ошибка, а тот самый шаг входа, — и без запомненного секрета сценарий
+ * не переживал собственный повтор: в ночном прогоне с 08.09 первая попытка
+ * падала по делу, а повтор — «Неожиданный ответ входа», пряча настоящую
+ * причину.
  */
+let doctorSecret: string | null = null;
 export async function loginAsDoctor(page: Page): Promise<void> {
   const first = await page.request.post("/api/v1/auth/login", {
     data: { email: DOCTOR_EMAIL, password: PASSWORD },
@@ -45,6 +54,27 @@ export async function loginAsDoctor(page: Page): Promise<void> {
 
   const body = await first.json();
   if (body.status === "ok") return;
+
+  if (body.status === "totp_required") {
+    if (doctorSecret === null) {
+      throw new Error(
+        "Второй фактор врача уже настроен, а секрет прогону неизвестен: " +
+          "сид не отработал перед прогоном (infra/scripts/seed_e2e.py)",
+      );
+    }
+    const again = await page.request.post("/api/v1/auth/login", {
+      data: {
+        email: DOCTOR_EMAIL,
+        password: PASSWORD,
+        totp_code: totp(doctorSecret),
+      },
+    });
+    if (!again.ok()) {
+      throw new Error(`Врач не вошёл по коду: ${await again.text()}`);
+    }
+    return;
+  }
+
   if (body.status !== "totp_setup_required") {
     throw new Error(`Неожиданный ответ входа: ${JSON.stringify(body)}`);
   }
@@ -54,6 +84,7 @@ export async function loginAsDoctor(page: Page): Promise<void> {
     data: {},
   });
   const { secret } = await setup.json();
+  doctorSecret = secret;
 
   const verify = await page.request.post("/api/v1/auth/totp/verify", {
     headers: { Authorization: `Bearer ${body.totp_setup_token}` },
