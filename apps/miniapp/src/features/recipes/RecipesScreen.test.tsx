@@ -440,6 +440,37 @@ describe("рецепты в Mini App", () => {
     }
   });
 
+  it("сообщение о связи стоит выше выдачи списка", async () => {
+    // Замер при ширине потока 390 px и списке из двадцати рецептов: строка,
+    // стоявшая последней, оказывалась на 1142 px, тогда как под липкой полосой
+    // вкладок видно 787 px — полтора экрана прокрутки до объяснения, почему
+    // выдача не обновилась. У клиники рецептов десятки, и список только растёт,
+    // а сверху высота сообщения от их числа не зависит. Держит его на виду
+    // именно порядок в разметке — он и проверяется (как в карточке).
+    const user = userEvent.setup();
+    const { client } = renderScreen();
+
+    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    await user.type(field, "омлет");
+    expect(await screen.findByText(/Омлет на сливках/)).toBeInTheDocument();
+
+    onlineManager.setOnline(false);
+    try {
+      await user.type(field, " на сливках");
+
+      const note = await screen.findByText(
+        "Нет связи — покажем, как только она появится.",
+      );
+      const row = screen.getByText(/Омлет на сливках/);
+      expect(
+        note.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    } finally {
+      client.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("в паузу перед запросом не говорит «ничего не нашлось»", async () => {
     // Прошлая выдача держится намеренно, и ответ в паузу был бы о прежних
     // буквах — тот же дрейф, что закрыт в поиске продукта.
