@@ -47,6 +47,8 @@ def _no_permissions(monkeypatch: pytest.MonkeyPatch) -> None:
     # соседним, сделало бы отказ непроверяемым.
     monkeypatch.delenv(DEMO._ALLOW_HOST, raising=False)
     monkeypatch.delenv(E2E._ALLOW_HOST, raising=False)
+    # И пароль: заданное снаружи значение сделало бы проверку ниже неправдой.
+    monkeypatch.delenv(DEMO._PASSWORD_VAR, raising=False)
 
 
 def test_local_database_passes() -> None:
@@ -155,3 +157,142 @@ def test_guard_runs_before_the_engine_is_created(monkeypatch: pytest.MonkeyPatch
         asyncio.run(DEMO.main())
 
     assert calls == ["guard", "engine"]
+
+
+def test_password_is_required_when_the_host_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Разрешение открывает нелокальную базу — значит пароль из репозитория там
+    # недопустим. Это правило жило только во фразе документа.
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    with pytest.raises(SystemExit) as refusal:
+        DEMO._require_password_on_allowed_host()
+    assert DEMO._PASSWORD_VAR in str(refusal.value)
+
+
+def test_password_given_satisfies_the_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "свой пароль")
+    DEMO._require_password_on_allowed_host()
+
+
+def test_local_run_does_not_require_a_password() -> None:
+    # На локальной базе умолчание — удобство: `make seed-demo` ломать незачем.
+    DEMO._require_password_on_allowed_host()
+
+
+def test_blank_password_does_not_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Пустое значение — это незаданное значение, а не «задал пустой пароль».
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "   ")
+    with pytest.raises(SystemExit):
+        DEMO._require_password_on_allowed_host()
+
+
+def test_password_requirement_is_wired_into_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Требование обязано быть ВЫЗВАНО, а не просто написано.
+
+    Тот же урок, что с проверкой адреса: сама по себе функция ничего не стоит,
+    пока её не зовут, и снятие вызова не ловилось бы ничем.
+    """
+    calls: list[str] = []
+
+    class _Stop(Exception):
+        pass
+
+    def _settings() -> SimpleNamespace:
+        return SimpleNamespace(database_url=LOCAL)
+
+    def _engine(database_url: str) -> None:
+        calls.append("engine")
+        raise _Stop
+
+    monkeypatch.setattr(DEMO, "get_settings", _settings)
+    monkeypatch.setattr(DEMO, "_refuse_production", lambda url: calls.append("guard"))
+    monkeypatch.setattr(DEMO, "_require_password_on_allowed_host", lambda: calls.append("password"))
+    monkeypatch.setattr(DEMO, "create_async_engine", _engine)
+
+    with pytest.raises(_Stop):
+        asyncio.run(DEMO.main())
+
+    assert calls == ["guard", "password", "engine"]
+
+
+def test_given_password_is_not_printed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Обещание безопасности из docs/DEPLOY.md обязано быть проверяемым: на
+    # стенде вывод уходит в консоль и журнал команды.
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "очень свой пароль")
+    line = DEMO._password_line()
+    assert "очень свой пароль" not in line
+    assert DEMO._PASSWORD_VAR in line
+
+
+def test_default_password_is_printed_locally() -> None:
+    # На своей машине пароль печатать нужно: иначе войти в демо-кабинет нечем.
+    assert DEMO._PASSWORD_DEFAULT in DEMO._password_line()
+
+
+def test_password_used_is_the_one_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Значение читается в момент обращения, а не снимается при импорте: иначе
+    # проверка удостоверяет одно, а хешируется другое.
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "  заданный  ")
+    assert DEMO._demo_password() == "заданный"
+    monkeypatch.delenv(DEMO._PASSWORD_VAR, raising=False)
+    assert DEMO._demo_password() == DEMO._PASSWORD_DEFAULT
+
+
+def test_main_refuses_without_password_on_allowed_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Сквозной отказ настоящими функциями, без подмен проверок.
+
+    Остальные тесты зовут проверку напрямую, а связочный её подменяет — то есть
+    ни один не показывает, что `main()` ДЕЙСТВИТЕЛЬНО прерывается до базы.
+    Замечание ревью PR #195.
+    """
+
+    class _Stop(Exception):
+        pass
+
+    def _engine(database_url: str) -> None:
+        raise _Stop
+
+    monkeypatch.setattr(DEMO, "get_settings", lambda: SimpleNamespace(database_url=LOCAL))
+    monkeypatch.setattr(DEMO, "create_async_engine", _engine)
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+
+    with pytest.raises(SystemExit) as refusal:
+        asyncio.run(DEMO.main())
+    assert DEMO._PASSWORD_VAR in str(refusal.value)
+
+
+def test_checked_password_is_the_one_hashed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Проверенное значение обязано быть тем самым, которое хешируется.
+
+    Мутация из разбора: заменить `_demo_password()` на зашитое умолчание в
+    месте применения. Тест значения её не ловил — он проверял функцию, а не
+    связь функции с местом, где пароль превращается в хеш. Ровно тот же класс,
+    что «правило написано, но не вызвано».
+    """
+    written: dict[str, str] = {}
+
+    class _Users:
+        @staticmethod
+        async def get_by_email(session: object, email: str) -> None:
+            return None
+
+        @staticmethod
+        async def create(session: object, **fields: str) -> object:
+            written.update(fields)
+            return object()
+
+    monkeypatch.setattr(DEMO, "users_repo", _Users)
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "пароль со стенда")
+
+    asyncio.run(
+        DEMO._user(
+            None,
+            DEMO.UserRole.ADMIN,
+            "Админ Демо",
+            "admin@example.com",
+            lambda value: f"hash:{value}",
+        )
+    )
+
+    assert written["password_hash"] == "hash:пароль со стенда"
