@@ -96,8 +96,9 @@ function overview(id: string, calm: boolean): PatientOverview {
     seizures_today: { entries: calm ? 1 : 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
     last_reading_on: calm ? TODAY : null,
-    // Фаза наблюдения — обязательное поле сводки; без него ветка строгого
-    // наблюдения в признаках не проверялась ни разу.
+    // Фаза наблюдения — обязательное поле сводки; в этих фикстурах его не
+    // было, и tsc об этом молчал. Саму ветку строгого наблюдения проверяет
+    // flags.test.ts.
     monitoring_phase: "routine",
   };
 }
