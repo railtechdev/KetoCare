@@ -45,13 +45,19 @@ function overview(patientId: string, ratio: number) {
       author_id: "u1",
       effective_from: "2026-08-01",
       created_at: "2026-08-01T10:00:00Z",
-    } satisfies NonNullable<PatientOverview["prescription"]>,
+    },
     day: null,
     last_ketone: null,
     last_weight: null,
     seizures_today: { entries: 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
-  };
+    // Оба поля клинические и обязательные: по `last_reading_on` считается
+    // признак «семья молчит», по `monitoring_phase` — ветка строгого
+    // наблюдения. Без них внешний литерал контракту не соответствовал, а
+    // аннотация стояла только на вложенном назначении и этого не видела.
+    last_reading_on: null,
+    monitoring_phase: "routine",
+  } satisfies PatientOverview;
 }
 
 /** Переключатель пациента: как в шапке карты — адрес меняется, раздел остаётся. */

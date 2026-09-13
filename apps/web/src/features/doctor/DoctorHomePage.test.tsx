@@ -63,7 +63,7 @@ const PRESCRIPTION: NonNullable<PatientOverview["prescription"]> = {
 const NOW = new Date();
 const TODAY = NOW.toISOString().slice(0, 10);
 
-function overview(id: string, calm: boolean) {
+function overview(id: string, calm: boolean): PatientOverview {
   return {
     patient_id: id,
     // «Сегодня» берётся из самой сводки, а не с часов браузера: сервер собирает
@@ -87,11 +87,18 @@ function overview(id: string, calm: boolean) {
         }
       : null,
     // Спокойный пациент: замер сегодня. Молчащий: замеров не было вовсе.
-    last_ketone: calm ? { value: 3, occurred_at: NOW.toISOString() } : null,
+    // `method` обязателен у замера кетонов — это вскрыла аннотация сводки:
+    // фикстура описывала запись, которой сервер не отдаёт.
+    last_ketone: calm
+      ? { value: 3, method: "blood", occurred_at: NOW.toISOString() }
+      : null,
     last_weight: null,
     seizures_today: { entries: calm ? 1 : 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
     last_reading_on: calm ? TODAY : null,
+    // Фаза наблюдения — обязательное поле сводки; без него ветка строгого
+    // наблюдения в признаках не проверялась ни разу.
+    monitoring_phase: "routine",
   };
 }
 

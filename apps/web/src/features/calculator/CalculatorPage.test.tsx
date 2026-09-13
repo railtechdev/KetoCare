@@ -58,13 +58,16 @@ const OVERVIEW = {
     author_id: "u1",
     effective_from: "2026-08-01",
     created_at: "2026-08-01T10:00:00Z",
-  } satisfies NonNullable<PatientOverview["prescription"]>,
+  },
   day: null,
   last_ketone: null,
   last_weight: null,
   seizures_today: { entries: 0, count: 0 },
   seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
-};
+  // Клинические и обязательные — см. те же поля в маршрутных фикстурах.
+  last_reading_on: null,
+  monitoring_phase: "routine",
+} satisfies PatientOverview;
 
 const PRODUCTS = {
   items: [

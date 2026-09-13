@@ -118,7 +118,7 @@ const PATIENT: Patient = {
 };
 
 function renderProfile(
-  patient: Record<string, unknown> = {},
+  patient: Partial<Patient> = {},
   {
     clinicalAllowed = true,
     clinicalEditable = clinicalAllowed,
@@ -140,7 +140,7 @@ function renderProfile(
 
   return render(
     <PatientProfileView
-      patient={{ ...PATIENT, ...patient } as never}
+      patient={{ ...PATIENT, ...patient }}
       clinicalAllowed={clinicalAllowed}
       clinicalEditable={clinicalEditable}
     />,
