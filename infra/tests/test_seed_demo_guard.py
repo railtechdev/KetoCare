@@ -214,3 +214,85 @@ def test_password_requirement_is_wired_into_main(monkeypatch: pytest.MonkeyPatch
         asyncio.run(DEMO.main())
 
     assert calls == ["guard", "password", "engine"]
+
+
+def test_given_password_is_not_printed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Обещание безопасности из docs/DEPLOY.md обязано быть проверяемым: на
+    # стенде вывод уходит в консоль и журнал команды.
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "очень свой пароль")
+    line = DEMO._password_line()
+    assert "очень свой пароль" not in line
+    assert DEMO._PASSWORD_VAR in line
+
+
+def test_default_password_is_printed_locally() -> None:
+    # На своей машине пароль печатать нужно: иначе войти в демо-кабинет нечем.
+    assert DEMO._PASSWORD_DEFAULT in DEMO._password_line()
+
+
+def test_password_used_is_the_one_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Значение читается в момент обращения, а не снимается при импорте: иначе
+    # проверка удостоверяет одно, а хешируется другое.
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "  заданный  ")
+    assert DEMO._demo_password() == "заданный"
+    monkeypatch.delenv(DEMO._PASSWORD_VAR, raising=False)
+    assert DEMO._demo_password() == DEMO._PASSWORD_DEFAULT
+
+
+def test_main_refuses_without_password_on_allowed_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Сквозной отказ настоящими функциями, без подмен проверок.
+
+    Остальные тесты зовут проверку напрямую, а связочный её подменяет — то есть
+    ни один не показывает, что `main()` ДЕЙСТВИТЕЛЬНО прерывается до базы.
+    Замечание ревью PR #195.
+    """
+
+    class _Stop(Exception):
+        pass
+
+    def _engine(database_url: str) -> None:
+        raise _Stop
+
+    monkeypatch.setattr(DEMO, "get_settings", lambda: SimpleNamespace(database_url=LOCAL))
+    monkeypatch.setattr(DEMO, "create_async_engine", _engine)
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+
+    with pytest.raises(SystemExit) as refusal:
+        asyncio.run(DEMO.main())
+    assert DEMO._PASSWORD_VAR in str(refusal.value)
+
+
+def test_checked_password_is_the_one_hashed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Проверенное значение обязано быть тем самым, которое хешируется.
+
+    Мутация из разбора: заменить `_demo_password()` на зашитое умолчание в
+    месте применения. Тест значения её не ловил — он проверял функцию, а не
+    связь функции с местом, где пароль превращается в хеш. Ровно тот же класс,
+    что «правило написано, но не вызвано».
+    """
+    written: dict[str, str] = {}
+
+    class _Users:
+        @staticmethod
+        async def get_by_email(session: object, email: str) -> None:
+            return None
+
+        @staticmethod
+        async def create(session: object, **fields: str) -> object:
+            written.update(fields)
+            return object()
+
+    monkeypatch.setattr(DEMO, "users_repo", _Users)
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "пароль со стенда")
+
+    asyncio.run(
+        DEMO._user(
+            None,
+            DEMO.UserRole.ADMIN,
+            "Админ Демо",
+            "admin@example.com",
+            lambda value: f"hash:{value}",
+        )
+    )
+
+    assert written["password_hash"] == "hash:пароль со стенда"

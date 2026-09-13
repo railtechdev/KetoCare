@@ -34,7 +34,31 @@ from core.tools.db_guard import refuse_foreign_database
 # репозитория — это открытая админка, поэтому там его обязательно перекрывает
 # переменная окружения (docs/DEPLOY.md, «Демо-данные и фокус-группа»).
 _PASSWORD_VAR = "DEMO_PASSWORD"
-DEMO_PASSWORD = os.environ.get(_PASSWORD_VAR, "correct horse battery staple")
+_PASSWORD_DEFAULT = "correct horse battery staple"
+
+
+def _demo_password() -> str:
+    """Пароль демо-учёток — ОДНИМ источником, читаемым в момент обращения.
+
+    Раньше значение снималось при импорте, а проверка и печать читали
+    окружение при вызове: проверка удостоверяла не то значение, которое потом
+    хешируется. В командной строке разойтись они не могли, но утверждение
+    «проверено» держалось на порядке загрузки модуля, а не на коде.
+    """
+    return os.environ.get(_PASSWORD_VAR, "").strip() or _PASSWORD_DEFAULT
+
+
+def _password_line() -> str:
+    """Строка о пароле для итогового вывода.
+
+    Отдельной функцией, потому что обещание «заданный пароль не печатается» —
+    это обещание безопасности, и оно обязано быть проверяемым тестом, а не
+    словами в документе. Ровно тот класс, ради которого затеяны #194 и #195.
+    """
+    if os.environ.get(_PASSWORD_VAR, "").strip() != "":
+        return f"  пароль: задан переменной {_PASSWORD_VAR}"
+    return f"  пароль: {_PASSWORD_DEFAULT}"
+
 
 #: Явное разрешение на нелокальную базу. Значением задаётся САМ хост, а не «1»:
 #: подтверждение должно быть конкретным. Переменная СВОЯ, не общая с сидом
@@ -175,10 +199,7 @@ async def main() -> int:
     print("  parent@example.com  — родитель")
     # Заданный человеком пароль в журнал не печатается: на стенде этот вывод
     # уходит в консоль команды и в её журнал, а знает его и так тот, кто задал.
-    if os.environ.get(_PASSWORD_VAR, "").strip() != "":
-        print(f"  пароль: задан переменной {_PASSWORD_VAR}")
-    else:
-        print(f"  пароль: {DEMO_PASSWORD}")
+    print(_password_line())
     return 0
 
 
@@ -191,7 +212,7 @@ async def _user(session, role: UserRole, full_name: str, email: str, hash_passwo
         role=role,
         full_name=full_name,
         email=email,
-        password_hash=hash_password(DEMO_PASSWORD),
+        password_hash=hash_password(_demo_password()),
     )
 
 
