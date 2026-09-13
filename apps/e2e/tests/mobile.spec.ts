@@ -103,10 +103,12 @@ test("экраны семьи помещаются в 360 px", async ({ page }) 
       };
     });
 
-    expect(overflow.offenders, `раздел ${section}`).toEqual([]);
-    expect(
-      overflow.page,
-      `раздел ${section}: страница уезжает вбок`,
-    ).toBeLessThanOrEqual(1);
+    // Мягкие: жёсткая проверка обрывает цикл на первом сломанном разделе, а
+    // прогон ночной — за сутки узнаёшь про одну поломку из десяти возможных.
+    // Мягкие собирают все и валят тест в конце, со списком целиком.
+    expect.soft(overflow.offenders, `раздел ${section}`).toEqual([]);
+    expect
+      .soft(overflow.page, `раздел ${section}: страница уезжает вбок`)
+      .toBeLessThanOrEqual(1);
   }
 });
