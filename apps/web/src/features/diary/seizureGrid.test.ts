@@ -9,6 +9,11 @@ const TYPES = [
   { id: "t-atonic", name: "Атонический", code: null },
 ];
 
+// Запись приступа целиком по схеме, без приведения: `duration_sec` и
+// `duration_option_id` — РАЗНЫЕ поля (ADR-0020: измеренное секундомером число и
+// выбранный врачом интервал со слов нельзя смешивать), и приведение скрывало
+// отсутствие второго. Фикстура, которой сервер не отдаёт, однажды разойдётся с
+// экраном молча.
 function seizure(occurredAt: string, typeId: string, count = 1): DiaryLog {
   return {
     kind: "seizures",
@@ -17,14 +22,14 @@ function seizure(occurredAt: string, typeId: string, count = 1): DiaryLog {
     occurred_at: occurredAt,
     seizure_type_id: typeId,
     duration_sec: null,
+    duration_option_id: null,
     count,
     description: null,
     triggers: null,
     source: "web",
     created_by: "u1",
     created_at: occurredAt,
-    updated_at: occurredAt,
-  } as unknown as DiaryLog;
+  };
 }
 
 describe("buildSeizureGrid", () => {
@@ -117,12 +122,20 @@ describe("buildSeizureGrid", () => {
   });
 
   it("записи других видов дневника в сетку не попадают", () => {
-    const ketone = {
+    // Тоже по схеме: проверка «чужой вид записи в сетку не попадает» обязана
+    // получать запись, которую сервер и правда отдаёт, иначе она проверяет
+    // выдуманную форму.
+    const ketone: DiaryLog = {
       kind: "ketones",
       id: "k1",
+      patient_id: "p1",
       occurred_at: "2026-08-10T07:00:00",
       value: 3.2,
-    } as unknown as DiaryLog;
+      method: "blood",
+      source: "web",
+      created_by: "u1",
+      created_at: "2026-08-10T07:00:00",
+    };
 
     expect(buildSeizureGrid([ketone], TYPES).rows).toEqual([]);
   });
