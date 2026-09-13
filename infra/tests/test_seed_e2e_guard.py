@@ -8,9 +8,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -224,3 +226,37 @@ def test_allow_does_not_open_production_by_name(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv(GUARD._ALLOW_HOST, "localhost")
     with pytest.raises(SystemExit):
         GUARD._refuse_production("postgresql+asyncpg://ketocare:pass@localhost:5432/ketocare_prod")
+
+
+def test_guard_runs_before_the_engine_is_created(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Защита обязана быть ВЫЗВАНА, а не просто написана.
+
+    Остальные тесты зовут проверку напрямую и снятия вызова из `main()` не
+    поймают. Дыра нашлась ревью PR #194 мутацией: удаление одной строки из
+    `main()` не роняло ни одного из тридцати пяти тестов — при том что цена
+    ошибки здесь выше, чем у демо-сида (известен не только пароль, но и секрет
+    второго фактора), и запускается сид в CI.
+    """
+    calls: list[str] = []
+
+    class _Stop(Exception):
+        pass
+
+    def _settings() -> SimpleNamespace:
+        return SimpleNamespace(database_url=LOCAL)
+
+    def _guard(database_url: str) -> None:
+        calls.append("guard")
+
+    def _engine(database_url: str) -> None:
+        calls.append("engine")
+        raise _Stop
+
+    monkeypatch.setattr(GUARD, "get_settings", _settings)
+    monkeypatch.setattr(GUARD, "_refuse_production", _guard)
+    monkeypatch.setattr(GUARD, "create_async_engine", _engine)
+
+    with pytest.raises(_Stop):
+        asyncio.run(GUARD.main())
+
+    assert calls == ["guard", "engine"]

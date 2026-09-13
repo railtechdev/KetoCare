@@ -28,11 +28,53 @@ from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
+from core.tools.db_guard import refuse_foreign_database
 
 # Дефолт годится только для локальной БД. На публичном стенде пароль из
 # репозитория — это открытая админка, поэтому там его обязательно перекрывает
 # переменная окружения (docs/DEPLOY.md, «Демо-данные и фокус-группа»).
 DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "correct horse battery staple")
+
+#: Явное разрешение на нелокальную базу. Значением задаётся САМ хост, а не «1»:
+#: подтверждение должно быть конкретным. Переменная СВОЯ, не общая с сидом
+#: прогонов: одно разрешение не должно открывать сразу два скрипта.
+_ALLOW_HOST = "DEMO_SEED_ALLOW"
+
+#: Чем опасен ИМЕННО этот сид на чужой базе. До этой проверки его удерживала
+#: фраза в комментарии «в бою этот скрипт не запускается» — правило, жившее в
+#: тексте и ни в одном исполняемом виде, при том что docs/DEPLOY.md запуск на
+#: стенде прямо предписывает.
+_DANGER = (
+    "Демо-сид заводит администратора и врача с паролем по умолчанию из\n"
+    "репозитория — на чужой базе это открытая админка. Ещё он снимает\n"
+    "второй фактор учёткам с теми же адресами и пишет ребёнку НАЗНАЧЕНИЕ:\n"
+    "его не отменить, prescriptions append-only, а убрать запись можно\n"
+    "только через `core.tools.erase_patient`. На стенде запуск законен, но\n"
+    "команда там другая — docs/DEPLOY.md, «Демо-данные и фокус-группа»."
+)
+
+
+def _refuse_production(database_url: str) -> None:
+    """Проверка адреса общая с сидом прогонов (`core.tools.db_guard`).
+
+    Своё здесь только описание опасности и имя переменной.
+
+    Имя службы боевого compose (`postgres`) разрешением открывается — и надо
+    называть вещи своими именами: это открывает ИМЕННО боевую базу. Признаки
+    боевой строки её не ловят, в ней их нет вовсе (`@postgres:5432/ketocare`).
+    После `DEMO_SEED_ALLOW=postgres` от боевой базы отделяет только то, что
+    человек набрал это слово сам. Плата осознанная: демо-данные на стенд
+    ставят по документу (docs/DEPLOY.md, «Демо-данные и фокус-группа»), и
+    глухой запрет сломал бы законный путь, а не чужой.
+    """
+    refuse_foreign_database(
+        database_url,
+        allow_var=_ALLOW_HOST,
+        danger=_DANGER,
+        command="make seed-demo",
+        allow_compose_names=True,
+    )
+
 
 # Значения на 100 г. Источник указан честно: это данные USDA, а не выдуманные
 # цифры — база продуктов кормит расчёт, и происхождение должно быть прослеживаемо.
@@ -58,7 +100,9 @@ HISTORY_DAYS = 14
 async def main() -> int:
     from api.security import hash_password
 
-    engine = create_async_engine(get_settings().database_url)
+    database_url = get_settings().database_url
+    _refuse_production(database_url)
+    engine = create_async_engine(database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
 
     async with maker() as session:
@@ -76,8 +120,8 @@ async def main() -> int:
         # делает сид прогонов (`seed_e2e`). Иначе демо-стенд одноразовый: врач и
         # администратор настраивают 2FA на чей-то телефон при первом входе, и
         # любой следующий человек — или та же машина через месяц — упирается в
-        # запрос кода, которого никто не знает. Учётки демонстрационные, база
-        # локальная; в бою этот скрипт не запускается.
+        # запрос кода, которого никто не знает. Учётки демонстрационные, а
+        # чужую базу отводит проверка адреса выше — не обещание в комментарии.
         for staff in (admin, doctor):
             staff.totp_secret = None
             staff.totp_pending_secret = None
