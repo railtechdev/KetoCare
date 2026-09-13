@@ -99,6 +99,60 @@ def test_unix_socket_is_local(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def test_host_list_with_network_fallback_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `host=/var/run,evil.com` — список отказоустойчивости asyncpg: не найдя
+    # сокета, драйвер идёт на второй адрес. Признавать такую строку локальной
+    # значит открыть чужую базу под видом сокета.
+    # БЕЗ `port=`: со списком портов строку отвергала бы соседняя проверка, и
+    # тест был бы зелёным не по своей причине — проверено мутацией.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    with pytest.raises(SystemExit):
+        GUARD._refuse_production(
+            "postgresql+asyncpg://ketocare:pass@localhost:5432/ketocare?host=/var/run,evil.com"
+        )
+
+
+def test_socket_list_is_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Список из одних сокетов — по-прежнему локальное подключение.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    GUARD._refuse_production("postgresql+asyncpg://ketocare:pass@/ketocare?host=/var/run,/tmp")
+
+
+def test_port_list_with_socket_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Список портов имеет смысл только со списком адресов — значит адрес
+    # неоднозначен, даже если все его элементы выглядят сокетами.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    with pytest.raises(SystemExit):
+        GUARD._refuse_production(
+            "postgresql+asyncpg://ketocare:pass@/ketocare?host=/var/run,/tmp&port=5432,5433"
+        )
+
+
+def test_host_key_in_other_case_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Диалект различает регистр: `HOST=` он не разбирает как адрес, соединение
+    # уйдёт на хост из адреса. Вердикт «локально» по такому ключу — неправда.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    with pytest.raises(SystemExit):
+        GUARD._refuse_production(
+            "postgresql+asyncpg://ketocare:pass@db.internal:5432/ketocare?HOST=/var/run"
+        )
+
+
+def test_socket_beats_non_local_host_in_the_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Сегодня диалект отдаёт соединению путь из параметра, а не хост из адреса
+    # (проверено на `create_connect_args`). Если это когда-нибудь поменяется,
+    # сокет станет отмычкой для любого хоста — тест зафиксирует нынешнюю
+    # семантику, чтобы смена была видимой.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    GUARD._refuse_production(
+        "postgresql+asyncpg://ketocare:pass@db.internal:5432/ketocare?host=/var/run/postgresql"
+    )
+
+
 def test_trailing_dot_does_not_bypass_the_ban(monkeypatch: pytest.MonkeyPatch) -> None:
     # «postgres.» — тот же хост для DNS; без нормализации запрет обходится точкой.
     monkeypatch.setenv(GUARD._ALLOW_HOST, "postgres.")
