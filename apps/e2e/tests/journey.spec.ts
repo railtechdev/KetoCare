@@ -42,7 +42,10 @@ test("врач назначает, семья ведёт день, отчёт с
   // --- 1. врач создаёт назначение -----------------------------------------
   await doctor.goto(`/app/patients?patient=${patient}&tab=prescription`);
 
-  await doctor.getByLabel("Кетосоотношение").fill("3.5");
+  // Соотношение выбирается из списка (5:1 … 1:1 шагом 0,5): врач мыслит
+  // «4 : 1», а поле показывало «4». `fill` по `<select>` невозможен —
+  // именно на нём сценарий и падал каждую ночь с 08.09.
+  await doctor.getByLabel("Кетосоотношение").selectOption("3.5");
   await doctor.getByLabel("Калорийность").fill("1200");
   await doctor.getByLabel("Белок").fill("22");
   await doctor.getByLabel("Углеводы не более").fill("10");
@@ -113,7 +116,13 @@ test("врач назначает, семья ведёт день, отчёт с
   await parent.locator("#weight-value").fill(WEIGHT);
   await parent.getByRole("button", { name: "Добавить", exact: true }).click();
   await expect(
-    parent.getByRole("heading", { name: `${WEIGHT} кг` }).first(),
+    // Вес печатается через `formatWeight` (Intl, ru-RU) — «15,4 кг», с
+    // ЗАПЯТОЙ, в отличие от кетонов выше: там значение подставляется сырым и
+    // точка сохраняется. Ждать надо то, что печатает продукт, а не то, что мы
+    // ввели в поле, — иначе проверка ищет текст, которого не бывает.
+    parent
+      .getByRole("heading", { name: `${WEIGHT.replace(".", ",")} кг` })
+      .first(),
   ).toBeVisible();
 
   // --- 4. врач открывает отчёт --------------------------------------------

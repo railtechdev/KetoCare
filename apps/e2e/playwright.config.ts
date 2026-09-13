@@ -17,6 +17,7 @@ import { API_PORT, API_URL, ROOT, WEB_URL } from "./src/env";
 export default defineConfig({
   testDir: "./tests",
   globalSetup: "./global-setup.ts",
+  globalTeardown: "./global-teardown.ts",
   fullyParallel: false,
   // Сценарий пишет в общую базу: назначение, меню и дневник у одного ребёнка.
   // Параллельные воркеры мешали бы друг другу, и падение читалось бы как
