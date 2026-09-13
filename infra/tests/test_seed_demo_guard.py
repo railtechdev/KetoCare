@@ -47,6 +47,8 @@ def _no_permissions(monkeypatch: pytest.MonkeyPatch) -> None:
     # соседним, сделало бы отказ непроверяемым.
     monkeypatch.delenv(DEMO._ALLOW_HOST, raising=False)
     monkeypatch.delenv(E2E._ALLOW_HOST, raising=False)
+    # И пароль: заданное снаружи значение сделало бы проверку ниже неправдой.
+    monkeypatch.delenv(DEMO._PASSWORD_VAR, raising=False)
 
 
 def test_local_database_passes() -> None:
@@ -155,3 +157,60 @@ def test_guard_runs_before_the_engine_is_created(monkeypatch: pytest.MonkeyPatch
         asyncio.run(DEMO.main())
 
     assert calls == ["guard", "engine"]
+
+
+def test_password_is_required_when_the_host_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Разрешение открывает нелокальную базу — значит пароль из репозитория там
+    # недопустим. Это правило жило только во фразе документа.
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    with pytest.raises(SystemExit) as refusal:
+        DEMO._require_password_on_allowed_host()
+    assert DEMO._PASSWORD_VAR in str(refusal.value)
+
+
+def test_password_given_satisfies_the_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "свой пароль")
+    DEMO._require_password_on_allowed_host()
+
+
+def test_local_run_does_not_require_a_password() -> None:
+    # На локальной базе умолчание — удобство: `make seed-demo` ломать незачем.
+    DEMO._require_password_on_allowed_host()
+
+
+def test_blank_password_does_not_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Пустое значение — это незаданное значение, а не «задал пустой пароль».
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "   ")
+    with pytest.raises(SystemExit):
+        DEMO._require_password_on_allowed_host()
+
+
+def test_password_requirement_is_wired_into_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Требование обязано быть ВЫЗВАНО, а не просто написано.
+
+    Тот же урок, что с проверкой адреса: сама по себе функция ничего не стоит,
+    пока её не зовут, и снятие вызова не ловилось бы ничем.
+    """
+    calls: list[str] = []
+
+    class _Stop(Exception):
+        pass
+
+    def _settings() -> SimpleNamespace:
+        return SimpleNamespace(database_url=LOCAL)
+
+    def _engine(database_url: str) -> None:
+        calls.append("engine")
+        raise _Stop
+
+    monkeypatch.setattr(DEMO, "get_settings", _settings)
+    monkeypatch.setattr(DEMO, "_refuse_production", lambda url: calls.append("guard"))
+    monkeypatch.setattr(DEMO, "_require_password_on_allowed_host", lambda: calls.append("password"))
+    monkeypatch.setattr(DEMO, "create_async_engine", _engine)
+
+    with pytest.raises(_Stop):
+        asyncio.run(DEMO.main())
+
+    assert calls == ["guard", "password", "engine"]

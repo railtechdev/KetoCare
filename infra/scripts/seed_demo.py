@@ -33,7 +33,8 @@ from core.tools.db_guard import refuse_foreign_database
 # Дефолт годится только для локальной БД. На публичном стенде пароль из
 # репозитория — это открытая админка, поэтому там его обязательно перекрывает
 # переменная окружения (docs/DEPLOY.md, «Демо-данные и фокус-группа»).
-DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "correct horse battery staple")
+_PASSWORD_VAR = "DEMO_PASSWORD"
+DEMO_PASSWORD = os.environ.get(_PASSWORD_VAR, "correct horse battery staple")
 
 #: Явное разрешение на нелокальную базу. Значением задаётся САМ хост, а не «1»:
 #: подтверждение должно быть конкретным. Переменная СВОЯ, не общая с сидом
@@ -76,6 +77,33 @@ def _refuse_production(database_url: str) -> None:
     )
 
 
+def _require_password_on_allowed_host() -> None:
+    """Разрешил нелокальную базу — задай пароль.
+
+    Обязательность `DEMO_PASSWORD` жила только во фразе docs/DEPLOY.md — то
+    есть была последним в этой команде правилом без исполняемого вида, ровно
+    того класса, что закрыт для адреса базы. Без переменной команда со стенда
+    заводит `admin@example.com` с паролем из ОТКРЫТОГО репозитория и печатает
+    его в журнал.
+
+    Требование привязано к разрешению, а не ко всем запускам: на локальной
+    базе умолчание — удобство, и ломать `make seed-demo` незачем. Окружение
+    читается в момент вызова, а не при импорте: иначе проверка зависела бы от
+    того, когда модуль загрузили.
+    """
+    if os.environ.get(_ALLOW_HOST, "").strip() == "":
+        return
+    if os.environ.get(_PASSWORD_VAR, "").strip() != "":
+        return
+    raise SystemExit(
+        f"База разрешена переменной {_ALLOW_HOST}, а {_PASSWORD_VAR} не задан.\n"
+        "Тогда демо-админка (`admin@example.com`) получит пароль по умолчанию\n"
+        "из открытого репозитория, и он же будет напечатан в журнал команды.\n"
+        f"Задайте {_PASSWORD_VAR} той же командой — docs/DEPLOY.md,\n"
+        "«Демо-данные и фокус-группа»."
+    )
+
+
 # Значения на 100 г. Источник указан честно: это данные USDA, а не выдуманные
 # цифры — база продуктов кормит расчёт, и происхождение должно быть прослеживаемо.
 DEMO_PRODUCTS = [
@@ -102,6 +130,7 @@ async def main() -> int:
 
     database_url = get_settings().database_url
     _refuse_production(database_url)
+    _require_password_on_allowed_host()
     engine = create_async_engine(database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -144,7 +173,12 @@ async def main() -> int:
     print("  admin@example.com   — администратор (второй фактор сброшен)")
     print("  doctor@example.com  — врач (второй фактор сброшен)")
     print("  parent@example.com  — родитель")
-    print(f"  пароль: {DEMO_PASSWORD}")
+    # Заданный человеком пароль в журнал не печатается: на стенде этот вывод
+    # уходит в консоль команды и в её журнал, а знает его и так тот, кто задал.
+    if os.environ.get(_PASSWORD_VAR, "").strip() != "":
+        print(f"  пароль: задан переменной {_PASSWORD_VAR}")
+    else:
+        print(f"  пароль: {DEMO_PASSWORD}")
     return 0
 
 
