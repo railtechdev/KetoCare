@@ -260,3 +260,192 @@ def test_guard_runs_before_the_engine_is_created(monkeypatch: pytest.MonkeyPatch
         asyncio.run(GUARD.main())
 
     assert calls == ["guard", "engine"]
+
+
+def test_credentials_are_required_when_the_host_is_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Разрешение открывает нелокальную базу — умолчания из репозитория там
+    # недопустимы. Отказ обязан назвать обе переменные.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._TOTP_VAR in str(refusal.value)
+    assert GUARD._PASSWORD_VAR in str(refusal.value)
+
+
+def test_password_alone_is_not_enough(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Секрет второго фактора опаснее пароля: с известным секретом второго
+    # фактора у врача нет вовсе. Пароль без секрета проходить не должен.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "свой пароль")
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._TOTP_VAR in str(refusal.value)
+
+
+def test_secret_alone_is_not_enough(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._TOTP_VAR, "SVOYSEKRET234567ABCDEFGHIJKLMNOP")
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._PASSWORD_VAR in str(refusal.value)
+
+
+def test_both_given_satisfy_the_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "свой пароль")
+    monkeypatch.setenv(GUARD._TOTP_VAR, "SVOYSEKRET234567ABCDEFGHIJKLMNOP")
+    GUARD._require_credentials_on_allowed_host()
+
+
+def test_nightly_run_does_not_require_anything(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ночной прогон переменных не задаёт — и не должен ломаться.
+
+    `.github/workflows/e2e.yml` не объявляет ни пароля, ни секрета, а
+    `global-setup.ts` передаёт сиду то же, что взял прогон: обе стороны сходятся
+    на умолчаниях осознанно. Глухое требование убило бы сторожа целиком.
+    """
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    monkeypatch.delenv(GUARD._PASSWORD_VAR, raising=False)
+    monkeypatch.delenv(GUARD._TOTP_VAR, raising=False)
+    GUARD._require_credentials_on_allowed_host()
+
+
+def test_blank_values_do_not_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "   ")
+    monkeypatch.setenv(GUARD._TOTP_VAR, "  ")
+    with pytest.raises(SystemExit):
+        GUARD._require_credentials_on_allowed_host()
+
+
+def test_checked_values_are_the_ones_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Значения читаются при обращении, а не снимаются при импорте: иначе
+    # проверка удостоверяет одно, а в базу уходит другое.
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "  заданный  ")
+    monkeypatch.setenv(GUARD._TOTP_VAR, "  SEKRET234567ABCDEFGHIJKLMNOPQRS  ")
+    assert GUARD._password() == "заданный"
+    assert GUARD._totp_secret() == "SEKRET234567ABCDEFGHIJKLMNOPQRS"
+    monkeypatch.delenv(GUARD._PASSWORD_VAR, raising=False)
+    monkeypatch.delenv(GUARD._TOTP_VAR, raising=False)
+    assert GUARD._password() == GUARD._PASSWORD_DEFAULT
+    assert GUARD._totp_secret() == GUARD._TOTP_DEFAULT
+
+
+def test_main_refuses_without_credentials_on_allowed_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Сквозной отказ настоящими функциями, без подмен проверок."""
+
+    class _Stop(Exception):
+        pass
+
+    def _engine(database_url: str) -> None:
+        raise _Stop
+
+    monkeypatch.setattr(GUARD, "get_settings", lambda: SimpleNamespace(database_url=LOCAL))
+    monkeypatch.setattr(GUARD, "create_async_engine", _engine)
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.delenv(GUARD._PASSWORD_VAR, raising=False)
+    monkeypatch.delenv(GUARD._TOTP_VAR, raising=False)
+
+    with pytest.raises(SystemExit) as refusal:
+        asyncio.run(GUARD.main())
+    assert GUARD._TOTP_VAR in str(refusal.value)
+
+
+def test_checked_password_is_the_one_hashed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Проверенное значение обязано быть тем самым, которое хешируется.
+
+    Тест значения этого не ловит: он проверяет функцию, а не её связь с местом
+    применения — мутация «хешировать зашитое умолчание» выживала.
+    """
+    written: dict[str, str] = {}
+
+    class _Users:
+        @staticmethod
+        async def get_by_email(session: object, email: str) -> None:
+            return None
+
+        @staticmethod
+        async def create(session: object, **fields: str) -> object:
+            written.update(fields)
+            return object()
+
+    monkeypatch.setattr(GUARD, "users_repo", _Users)
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "пароль со стенда")
+
+    asyncio.run(
+        GUARD._user(
+            None,
+            GUARD.UserRole.DOCTOR,
+            "Врач Прогонов",
+            GUARD.DOCTOR_EMAIL,
+            lambda value: f"hash:{value}",
+        )
+    )
+
+    assert written["password_hash"] == "hash:пароль со стенда"
+
+
+def test_checked_secret_is_the_one_written_to_the_doctor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """То же про секрет второго фактора — он опаснее пароля.
+
+    Присваивание живёт внутри `main()`, поэтому проверяется выполнением: учётки
+    подменены заглушками, а работа обрывается сразу после присваивания.
+    """
+
+    class _Stop(Exception):
+        pass
+
+    class _Account:
+        def __init__(self, email: str) -> None:
+            self.email = email
+            self.id = f"id-{email}"
+            self.totp_secret: str | None = None
+            self.totp_pending_secret: str | None = "прежнее"
+
+    # Учётки РАЗНЫЕ: одним объектом на обоих врачей тест позеленел бы по ложной
+    # причине — строкой ниже сид обнуляет фактор ВТОРОМУ врачу, и проверяемое
+    # значение затёрлось бы.
+    accounts: dict[str, _Account] = {}
+
+    class _Session:
+        async def __aenter__(self) -> _Session:
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def execute(self, *args: object) -> None:
+            return None
+
+    class _Engine:
+        async def dispose(self) -> None:
+            return None
+
+    async def _user(session, role, full_name, email, hash_password):  # type: ignore[no-untyped-def]
+        return accounts.setdefault(email, _Account(email))
+
+    def _category(session: object) -> None:
+        raise _Stop
+
+    monkeypatch.setattr(GUARD, "get_settings", lambda: SimpleNamespace(database_url=LOCAL))
+    monkeypatch.setattr(GUARD, "create_async_engine", lambda url: _Engine())
+    monkeypatch.setattr(GUARD, "async_sessionmaker", lambda engine, **kw: lambda: _Session())
+    monkeypatch.setattr(GUARD, "_user", _user)
+    monkeypatch.setattr(GUARD, "_category", _category)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "SEKRETSOSTENDA234567ABCDEFGHIJK")
+
+    with pytest.raises(_Stop):
+        asyncio.run(GUARD.main())
+
+    doctor = accounts[GUARD.DOCTOR_EMAIL]
+    assert doctor.totp_secret == "SEKRETSOSTENDA234567ABCDEFGHIJK"
+    assert doctor.totp_pending_secret is None
+    # А врачу первичной настройки фактор обязан быть снят — иначе тест
+    # утверждал бы про того, у кого секрет и так задаётся.
+    assert accounts[GUARD.DOCTOR_SETUP_EMAIL].totp_secret is None
