@@ -60,6 +60,9 @@ def test_foreign_database_is_refused() -> None:
     # сервере читает сообщение, а не исходник.
     assert "второй фактор" in str(refusal.value)
     assert "админка" in str(refusal.value)
+    # Необратимое называется отдельно: пароль и второй фактор поправимы, а
+    # назначение — нет (append-only, снимается только `erase_patient`).
+    assert "append-only" in str(refusal.value)
 
 
 def test_refusal_names_its_own_variable() -> None:
