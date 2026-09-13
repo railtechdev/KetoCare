@@ -133,11 +133,15 @@ def test_port_list_with_socket_is_refused(monkeypatch: pytest.MonkeyPatch) -> No
 def test_host_key_in_other_case_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     # Диалект различает регистр: `HOST=` он не разбирает как адрес, соединение
     # уйдёт на хост из адреса. Вердикт «локально» по такому ключу — неправда.
+    # Хост в адресе ЛОКАЛЬНЫЙ, и текст отказа проверяется: иначе тест зелен и
+    # без проверяемой ветки — отказ придёт от финальной проверки хоста, с
+    # другим сообщением. Ровно та ошибка, которую я уже допускал сегодня.
     monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as refusal:
         GUARD._refuse_production(
-            "postgresql+asyncpg://ketocare:pass@db.internal:5432/ketocare?HOST=/var/run"
+            "postgresql+asyncpg://ketocare:pass@localhost:5432/ketocare?HOST=/var/run"
         )
+    assert "HOST" in str(refusal.value)
 
 
 def test_socket_beats_non_local_host_in_the_address(
