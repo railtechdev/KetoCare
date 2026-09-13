@@ -9,11 +9,14 @@
 
 - заводит две учётные записи (врач и родитель) и одного ребёнка, связанного с
   обоими;
-- **сбрасывает второй фактор врача.** Секрет не лежит в репозитории и не сеется:
-  сброшенный второй фактор означает, что вход ответит «настройте 2FA», и тест
-  пройдёт настоящую первичную настройку — получит секрет-кандидат и подтвердит
-  его кодом. Заодно это единственная проверка первого входа приглашённого
-  специалиста;
+- **задаёт второй фактор врача** известным секретом (`E2E_TOTP_SECRET`, то же
+  значение читает прогон). Так состояние живёт только в базе: прежде сид
+  обнулял секрет, тест настраивал его сам и хранил у себя, и расхождение этих
+  двух мест давало отказ входа без объяснимой причины;
+- **заводит второго врача, которому второй фактор ещё предстоит настроить.**
+  Первичный вход приглашённого специалиста — одноразовое событие, и на основном
+  враче его можно было бы проверить лишь однажды; здесь он проверяется каждым
+  прогоном, отдельным тестом (`tests/login.spec.ts`);
 - проверяет, что в справочнике есть продукты, которыми можно собрать день.
 
 Клинических данных не создаёт и не удаляет: назначение, меню и записи дневника
@@ -28,11 +31,12 @@ import asyncio
 import os
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import get_settings
 from core.models import Product, ProductCategory, User
+from core.models.accounts import UserBackupCode
 from core.models.enums import Sex, UserRole
 from core.repositories import access as access_repo
 from core.repositories import patients as patients_repo
@@ -84,8 +88,9 @@ def _refuse_production(database_url: str) -> None:
         return
     raise SystemExit(
         f"Адрес базы похож на боевой (в строке подключения есть «{hit}»).\n"
-        "Сид прогонов заводит учётную запись врача с известным паролем и сбрасывает\n"
-        "второй фактор, а сквозной тест пишет назначение. Укажите локальную базу."
+        "Сид прогонов заводит учётную запись врача с известным паролем И ИЗВЕСТНЫМ\n"
+        "секретом второго фактора, а сквозной тест пишет назначение. Укажите\n"
+        "локальную базу."
     )
 
 
@@ -116,6 +121,12 @@ async def main() -> int:
         )
         doctor_setup.totp_secret = None
         doctor_setup.totp_pending_secret = None
+        # И резервные коды: тест получает их при настройке, а учётка обязана
+        # возвращаться в исходное состояние целиком, а не наполовину. Именно
+        # удаление: `replace_for_user` набор ВЫДАЁТ, а не стирает.
+        await session.execute(
+            delete(UserBackupCode).where(UserBackupCode.user_id == doctor_setup.id)
+        )
 
         category = await _category(session)
         added = await _products(session, category_id=category.id, changed_by=doctor.id)
