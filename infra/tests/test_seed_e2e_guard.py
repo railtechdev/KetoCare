@@ -405,7 +405,9 @@ def test_checked_secret_is_the_one_written_to_the_doctor(
         def __init__(self, email: str) -> None:
             self.email = email
             self.id = f"id-{email}"
-            self.totp_secret: str | None = None
+            # Оба поля НЕ пусты изначально: с `None` утверждение «фактор снят»
+            # было бы верно и без кода сида — проверка впустую.
+            self.totp_secret: str | None = "прежний секрет"
             self.totp_pending_secret: str | None = "прежнее"
 
     # Учётки РАЗНЫЕ: одним объектом на обоих врачей тест позеленел бы по ложной
@@ -449,3 +451,49 @@ def test_checked_secret_is_the_one_written_to_the_doctor(
     # А врачу первичной настройки фактор обязан быть снят — иначе тест
     # утверждал бы про того, у кого секрет и так задаётся.
     assert accounts[GUARD.DOCTOR_SETUP_EMAIL].totp_secret is None
+
+
+def test_default_value_does_not_count_as_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Умолчание из репозитория — это НЕ заданное значение.
+
+    `apps/e2e/global-setup.ts` передаёт сиду ровно то, что взял у себя, а при
+    пустом окружении там берётся то же умолчание. Проверка «переменная
+    объявлена» такой запуск пропустила бы, и отказ обещал бы больше, чем делает.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, GUARD._PASSWORD_DEFAULT)
+    monkeypatch.setenv(GUARD._TOTP_VAR, GUARD._TOTP_DEFAULT)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._TOTP_VAR in str(refusal.value)
+    assert GUARD._PASSWORD_VAR in str(refusal.value)
+
+
+def test_existing_account_gets_the_checked_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ветка ПОВТОРНОГО запуска — не менее важная, чем создание.
+
+    Сид повторяемый: со второго прогона работает именно она. Мутация «хешировать
+    умолчание» здесь выживала — тест создания её не видит.
+    """
+    existing = SimpleNamespace(password_hash="прежний хеш", is_active=False)
+
+    class _Users:
+        @staticmethod
+        async def get_by_email(session: object, email: str) -> object:
+            return existing
+
+    monkeypatch.setattr(GUARD, "users_repo", _Users)
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "пароль со стенда")
+
+    asyncio.run(
+        GUARD._user(
+            None,
+            GUARD.UserRole.DOCTOR,
+            "Врач Прогонов",
+            GUARD.DOCTOR_EMAIL,
+            lambda value: f"hash:{value}",
+        )
+    )
+
+    assert existing.password_hash == "hash:пароль со стенда"
+    assert existing.is_active is True

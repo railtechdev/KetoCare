@@ -140,17 +140,28 @@ def _require_credentials_on_allowed_host() -> None:
     """
     if os.environ.get(_ALLOW_HOST, "").strip() == "":
         return
+    # Сверяются ЗНАЧЕНИЯ, а не факт объявления: `apps/e2e/global-setup.ts`
+    # передаёт сиду то, что взял у себя, а там при пустом окружении берётся то
+    # же умолчание из репозитория. Проверка «переменная задана» такой запуск
+    # пропустила бы, и текст отказа обещал бы больше, чем делает.
     missing = [
-        name for name in (_TOTP_VAR, _PASSWORD_VAR) if os.environ.get(name, "").strip() == ""
+        name
+        for name, value, default in (
+            (_TOTP_VAR, _totp_secret(), _TOTP_DEFAULT),
+            (_PASSWORD_VAR, _password(), _PASSWORD_DEFAULT),
+        )
+        if value == default
     ]
     if not missing:
         return
     raise SystemExit(
-        f"База разрешена переменной {_ALLOW_HOST}, а не задано: " + ", ".join(missing) + ".\n"
+        f"База разрешена переменной {_ALLOW_HOST}, а осталось умолчание из\n"
+        "репозитория: " + ", ".join(missing) + ".\n"
         f"Умолчания лежат в открытом репозитории. {_TOTP_VAR} важнее пароля:\n"
         "с известным секретом второго фактора у врача его попросту нет —\n"
         "код к нему посчитает кто угодно.\n"
-        "Задайте обе переменные той же командой."
+        "Задайте обе переменные ТОЙ ЖЕ КОМАНДОЙ: сид читает окружение\n"
+        "процесса, и запись в файле окружения он не увидит."
     )
 
 

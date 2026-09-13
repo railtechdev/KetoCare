@@ -38,9 +38,12 @@ function fromSeed(name: string): string | undefined {
     join(ROOT, "infra", "scripts", "seed_e2e.py"),
     "utf8",
   );
-  return new RegExp(`os\\.environ\\.get\\("${name}", "([^"]+)"\\)`).exec(
-    source,
-  )?.[1];
+  // Умолчание лежит в константе рядом с именем переменной: `E2E_PASSWORD` →
+  // `_PASSWORD_DEFAULT`, `E2E_TOTP_SECRET` → `_TOTP_DEFAULT`. Имя выводится из
+  // имени переменной, а не зашито вторым списком: второй список — это ещё одна
+  // копия, которая разойдётся молча, ровно от чего и защищает этот тест.
+  const constant = `_${name.replace(/^E2E_/, "").replace(/_SECRET$/, "")}_DEFAULT`;
+  return new RegExp(`${constant} = "([^"]+)"`).exec(source)?.[1];
 }
 
 function fromRun(name: string): string | undefined {
