@@ -35,8 +35,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import get_settings
-from core.models import Product, ProductCategory, User
-from core.models.accounts import UserBackupCode
+from core.models import Product, ProductCategory, User, UserBackupCode
 from core.models.enums import Sex, UserRole
 from core.repositories import access as access_repo
 from core.repositories import patients as patients_repo
@@ -74,8 +73,9 @@ PRODUCTS = [
 ]
 
 
-#: Признаки боевой базы: сид заводит врача с известным паролем и сброшенным
-#: вторым фактором, а сквозной тест пишет назначение — отменить его нельзя,
+#: Признаки боевой базы: сид заводит врача с известным паролем и ИЗВЕСТНЫМ
+#: секретом второго фактора (это опаснее прежнего сброса: код к учётке считается
+#: по значению из репозитория), а сквозной тест пишет назначение — отменить его нельзя,
 #: `prescriptions` append-only. Ошибиться адресом здесь стоит дороже, чем
 #: перестраховаться.
 _PRODUCTION_HINTS = ("railtech", "prod", "ketocare.uz")

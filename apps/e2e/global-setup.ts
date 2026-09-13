@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { ROOT } from "./src/env";
+import { DOCTOR_TOTP_SECRET, PASSWORD, ROOT } from "./src/env";
 
 /**
  * Данные прогона — перед каждым запуском, а не отдельным шагом в памяти
@@ -12,8 +12,21 @@ import { ROOT } from "./src/env";
  * не найти.
  */
 export default function globalSetup(): void {
+  // Учётные данные передаются сиду ЯВНО, из того же парсера, которым их читают
+  // тесты (`src/env.ts`: окружение, затем корневой `.env`, затем дефолт). Иначе
+  // значения расходятся: тест берёт их из файла, сид — из своего окружения, и
+  // вход падает «Неверный код подтверждения» без объяснимой причины.
+  //
+  // Именно здесь, а не в Makefile: прямой вызов `pnpm run e2e` — путь CI, и
+  // подстановка в make его бы не покрыла. Плюс `. ./.env` исполняет файл как
+  // скрипт, а значение со словами через пробел его ломает.
   execFileSync("uv", ["run", "python", "infra/scripts/seed_e2e.py"], {
     cwd: ROOT,
     stdio: "inherit",
+    env: {
+      ...process.env,
+      E2E_PASSWORD: PASSWORD,
+      E2E_TOTP_SECRET: DOCTOR_TOTP_SECRET,
+    },
   });
 }

@@ -70,44 +70,48 @@ test("после перезагрузки родитель остаётся в �
  * сценарии — то есть проверялся побочно и ровно один раз за прогон, а секрет
  * приходилось хранить между попытками. Теперь у него своя учётка и свой тест.
  */
-// Без повторов: первичная настройка — событие одноразовое. После успешного
-// подтверждения учётка отвечает уже `totp_required`, и повтор проверял бы не
-// тот путь, падая на первом же ожидании и пряча настоящую причину. Сид
-// возвращает учётку в исходное состояние раз за прогон, не чаще.
-test.describe.configure({ retries: 0 });
+// Обёртка нужна ради `configure`: на верхнем уровне он снимает повторы со
+// ВСЕГО файла, включая тесты выше, — а им устойчивость к сетевым сбоям нужна.
+test.describe("первичная настройка второго фактора", () => {
+  // Без повторов: событие одноразовое. После успешного подтверждения учётка
+  // отвечает уже `totp_required`, и повтор проверял бы не тот путь, падая на
+  // первом же ожидании и пряча настоящую причину. Сид возвращает учётку в
+  // исходное состояние раз за прогон, не чаще.
+  test.describe.configure({ retries: 0 });
 
-test("врач настраивает второй фактор при первом входе", async ({ page }) => {
-  const first = await page.request.post("/api/v1/auth/login", {
-    data: { email: DOCTOR_SETUP_EMAIL, password: PASSWORD },
+  test("врач настраивает второй фактор при первом входе", async ({ page }) => {
+    const first = await page.request.post("/api/v1/auth/login", {
+      data: { email: DOCTOR_SETUP_EMAIL, password: PASSWORD },
+    });
+    expect(first.ok()).toBe(true);
+
+    const body = await first.json();
+    expect(body.status).toBe("totp_setup_required");
+    expect(typeof body.totp_setup_token).toBe("string");
+
+    const setup = await page.request.post("/api/v1/auth/totp/setup", {
+      headers: { Authorization: `Bearer ${body.totp_setup_token}` },
+      data: {},
+    });
+    expect(setup.ok()).toBe(true);
+    const { secret } = await setup.json();
+
+    const verify = await page.request.post("/api/v1/auth/totp/verify", {
+      headers: { Authorization: `Bearer ${body.totp_setup_token}` },
+      data: { code: totp(secret) },
+    });
+    expect(verify.ok()).toBe(true);
+
+    // Ручка обещает пару токенов и резервные коды — их и проверяем, а не
+    // выдуманный `status`: у этого ответа его нет.
+    const enabled = await verify.json();
+    expect(typeof enabled.tokens?.access_token).toBe("string");
+    expect(Array.isArray(enabled.backup_codes)).toBe(true);
+
+    // Со второго входа сервер просит код, а не настройку: фактор включён.
+    const again = await page.request.post("/api/v1/auth/login", {
+      data: { email: DOCTOR_SETUP_EMAIL, password: PASSWORD },
+    });
+    expect((await again.json()).status).toBe("totp_required");
   });
-  expect(first.ok()).toBe(true);
-
-  const body = await first.json();
-  expect(body.status).toBe("totp_setup_required");
-  expect(typeof body.totp_setup_token).toBe("string");
-
-  const setup = await page.request.post("/api/v1/auth/totp/setup", {
-    headers: { Authorization: `Bearer ${body.totp_setup_token}` },
-    data: {},
-  });
-  expect(setup.ok()).toBe(true);
-  const { secret } = await setup.json();
-
-  const verify = await page.request.post("/api/v1/auth/totp/verify", {
-    headers: { Authorization: `Bearer ${body.totp_setup_token}` },
-    data: { code: totp(secret) },
-  });
-  expect(verify.ok()).toBe(true);
-
-  // Ручка обещает пару токенов и резервные коды — их и проверяем, а не
-  // выдуманный `status`: у этого ответа его нет.
-  const enabled = await verify.json();
-  expect(typeof enabled.tokens?.access_token).toBe("string");
-  expect(Array.isArray(enabled.backup_codes)).toBe(true);
-
-  // Со второго входа сервер просит код, а не настройку: фактор включён.
-  const again = await page.request.post("/api/v1/auth/login", {
-    data: { email: DOCTOR_SETUP_EMAIL, password: PASSWORD },
-  });
-  expect((await again.json()).status).toBe("totp_required");
 });

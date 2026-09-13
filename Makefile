@@ -246,12 +246,12 @@ miniapp-link: check-env ## Ссылка для локального запуск
 	set -a && . ./$(ENV_FILE) && set +a && uv run python infra/scripts/miniapp_dev_link.py $(ARGS)
 
 .PHONY: seed-e2e
-seed-e2e: ## Данные для сквозного прогона Playwright (учётки, ребёнок, продукты)
-	@# `.env` экспортируется так же, как в `miniapp-link`: сид читает окружение
-	@# процесса, а прогон — корневой `.env`. Без экспорта секрет второго фактора
-	@# расходился бы: в базе дефолт, в тесте значение из файла, и вход падал бы
-	@# «Врач не вошёл: 401» без объяснимой причины.
-	set -a && . ./$(ENV_FILE) && set +a && uv run python infra/scripts/seed_e2e.py
+seed-e2e: check-env ## Данные для сквозного прогона Playwright (учётки, ребёнок, продукты)
+	@# Значения берутся из окружения. При прогоне их подставляет сама
+	@# конфигурация Playwright (`global-setup.ts` читает корневой `.env` тем же
+	@# парсером, что и тесты), поэтому здесь ничего исполнять не нужно: `. ./.env`
+	@# исполняет файл как скрипт, и значение со словами через пробел его ломает.
+	uv run python infra/scripts/seed_e2e.py
 
 .PHONY: migrate
 migrate: ## Применить миграции (alembic upgrade head)
@@ -284,7 +284,7 @@ e2e: check-env ## Сквозные тесты Playwright (требует make de
 	@# Сид запускает сама конфигурация Playwright (globalSetup): так он
 	@# отработает и при прямом вызове `playwright test`, а забытый сид виден
 	@# как «Неверный код подтверждения» — сообщение, по которому причину не найти.
-	set -a && . ./$(ENV_FILE) && set +a && pnpm --filter @ketocare/e2e run e2e
+	pnpm --filter @ketocare/e2e run e2e
 
 .PHONY: e2e-install
 e2e-install: ## Поставить браузер для Playwright (нужно один раз)

@@ -23,7 +23,14 @@ function fromEnvExample(name: string): string | undefined {
   const line = source
     .split("\n")
     .find((candidate) => candidate.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim();
+  // Кавычки снимаются: значение со словами через пробел обязано быть в них,
+  // иначе ломает `. ./.env` (так делает цель `miniapp-link`). Хвостовой
+  // комментарий — тоже обычное дело в этом файле, см. BOT_TOKEN.
+  return line
+    ?.slice(name.length + 1)
+    .split(" #")[0]!
+    .trim()
+    .replace(/^["']|["']$/g, "");
 }
 
 function fromSeed(name: string): string | undefined {
