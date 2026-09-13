@@ -11,6 +11,7 @@ import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
 import { todayIso } from "../menu/dates";
 import { PatientProfileView } from "./PatientProfileView";
+import type { Patient } from "./types";
 
 /** Последний замер веса из сводки; `null` — замеров не было. */
 let lastWeight: { weight_kg: number; occurred_at: string } | null = null;
@@ -95,7 +96,7 @@ i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
 // ключами, и тест проверял бы не то.
 i18n.addResourceBundle("ru", "child", childRu, true, true);
 
-const PATIENT = {
+const PATIENT: Patient = {
   id: "11111111-1111-4111-8111-111111111111",
   full_name: "Аня Иванова",
   birth_date: "2019-04-12",
@@ -103,19 +104,21 @@ const PATIENT = {
   height_cm: 104,
   // Как хранит сервер: идентификаторы продуктов вперемешку со свободными метками.
   allergies: ["dcf7df2c-349b-42f8-bfb4-886ebc6ea111", "цитрусовые"],
+  // Ссылка на продукт зовётся `id`, а не `product_id`: именно это поле читает
+  // `ExcludedProductsField`, и фикстура с выдуманным именем дала бы там
+  // `undefined`, ничего не заметив. `created_at` у `PatientRead` нет вовсе.
   excluded_products: [
     {
-      product_id: "dcf7df2c-349b-42f8-bfb4-886ebc6ea111",
+      id: "dcf7df2c-349b-42f8-bfb4-886ebc6ea111",
       name_ru: "Кокосовое масло",
     },
   ],
   allergy_labels: ["цитрусовые"],
   notes: "Плохо переносит жару, кормить дробно.",
-  created_at: "2026-08-01T10:00:00Z",
 };
 
 function renderProfile(
-  patient: Record<string, unknown> = {},
+  patient: Partial<Patient> = {},
   {
     clinicalAllowed = true,
     clinicalEditable = clinicalAllowed,
@@ -137,7 +140,7 @@ function renderProfile(
 
   return render(
     <PatientProfileView
-      patient={{ ...PATIENT, ...patient } as never}
+      patient={{ ...PATIENT, ...patient }}
       clinicalAllowed={clinicalAllowed}
       clinicalEditable={clinicalEditable}
     />,

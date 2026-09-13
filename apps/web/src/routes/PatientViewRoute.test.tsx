@@ -11,6 +11,7 @@ import doctorRu from "../locales/ru/doctor.json";
 import { patientKey } from "../features/patients/usePatient";
 import { PatientRouter } from "../test/PatientRouter";
 import { PatientViewRoute } from "./PatientViewRoute";
+import type { PatientOverview } from "../features/patients/overview";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
@@ -36,10 +37,13 @@ function overview(patientId: string, ratio: number) {
       patient_id: patientId,
       ratio,
       kcal_per_day: 1200,
-      protein_min_g: 12,
-      carbs_max_g: 35,
+      // Имена полей НАЗНАЧЕНИЯ, а не целей запроса расчёта.
+      protein_g: 12,
+      carbs_limit_g: 35,
       meals_per_day: 3,
-      starts_on: "2026-08-01",
+      restrictions: null,
+      author_id: "u1",
+      effective_from: "2026-08-01",
       created_at: "2026-08-01T10:00:00Z",
     },
     day: null,
@@ -47,7 +51,13 @@ function overview(patientId: string, ratio: number) {
     last_weight: null,
     seizures_today: { entries: 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
-  };
+    // Оба поля клинические и обязательные: по `last_reading_on` считается
+    // признак «семья молчит», по `monitoring_phase` — ветка строгого
+    // наблюдения. Без них внешний литерал контракту не соответствовал, а
+    // аннотация стояла только на вложенном назначении и этого не видела.
+    last_reading_on: null,
+    monitoring_phase: "routine",
+  } satisfies PatientOverview;
 }
 
 /** Переключатель пациента: как в шапке карты — адрес меняется, раздел остаётся. */

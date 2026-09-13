@@ -8,6 +8,7 @@ import { api } from "../../lib/api";
 import doctorRu from "../../locales/ru/doctor.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { DoctorHomePage } from "./DoctorHomePage";
+import type { PatientOverview } from "./types";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -44,7 +45,7 @@ const PATIENTS = {
 };
 
 /** Назначение: молчание и вердикт о допуске существуют только при нём. */
-const PRESCRIPTION = {
+const PRESCRIPTION: NonNullable<PatientOverview["prescription"]> = {
   id: "rx1",
   patient_id: SILENT,
   ratio: 3.5,
@@ -52,14 +53,17 @@ const PRESCRIPTION = {
   protein_g: 12,
   carbs_limit_g: 35,
   meals_per_day: 4,
-  starts_on: "2026-08-01",
+  restrictions: null,
+  author_id: "u1",
+  // `effective_from`: поля `starts_on` у ответа нет вовсе.
+  effective_from: "2026-08-01",
   created_at: "2026-08-01T10:00:00Z",
 };
 
 const NOW = new Date();
 const TODAY = NOW.toISOString().slice(0, 10);
 
-function overview(id: string, calm: boolean) {
+function overview(id: string, calm: boolean): PatientOverview {
   return {
     patient_id: id,
     // «Сегодня» берётся из самой сводки, а не с часов браузера: сервер собирает
@@ -83,11 +87,19 @@ function overview(id: string, calm: boolean) {
         }
       : null,
     // Спокойный пациент: замер сегодня. Молчащий: замеров не было вовсе.
-    last_ketone: calm ? { value: 3, occurred_at: NOW.toISOString() } : null,
+    // `method` обязателен у замера кетонов — это вскрыла аннотация сводки:
+    // фикстура описывала запись, которой сервер не отдаёт.
+    last_ketone: calm
+      ? { value: 3, method: "blood", occurred_at: NOW.toISOString() }
+      : null,
     last_weight: null,
     seizures_today: { entries: calm ? 1 : 0, count: 0 },
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
     last_reading_on: calm ? TODAY : null,
+    // Фаза наблюдения — обязательное поле сводки; в этих фикстурах его не
+    // было, и tsc об этом молчал. Саму ветку строгого наблюдения проверяет
+    // flags.test.ts.
+    monitoring_phase: "routine",
   };
 }
 

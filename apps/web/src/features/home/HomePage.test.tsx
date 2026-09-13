@@ -10,6 +10,7 @@ import homeRu from "../../locales/ru/home.json";
 import { primaryActions } from "../../test/primaryActions";
 import { SectionRouter } from "../../test/SectionRouter";
 import { HomePage } from "./HomePage";
+import type { PatientOverview } from "./types";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -20,7 +21,10 @@ i18n.addResourceBundle("ru", "home", homeRu, true, true);
 
 const PATIENT_ID = "11111111-1111-4111-8111-111111111111";
 
-const PRESCRIPTION = {
+// Аннотация обязательна: без неё выдуманное поле (`starts_on` вместо
+// `effective_from`) вернулось бы молча — типы на объектном литерале без
+// типа ничего не проверяют.
+const PRESCRIPTION: NonNullable<PatientOverview["prescription"]> = {
   id: "rx1",
   patient_id: PATIENT_ID,
   ratio: 3.5,
@@ -28,7 +32,10 @@ const PRESCRIPTION = {
   protein_g: 12,
   carbs_limit_g: 35,
   meals_per_day: 4,
-  starts_on: "2026-08-01",
+  restrictions: null,
+  author_id: "u1",
+  // `effective_from`: поля `starts_on` у ответа нет вовсе.
+  effective_from: "2026-08-01",
   created_at: "2026-08-01T10:00:00Z",
 };
 
