@@ -48,6 +48,14 @@ PASSWORD = os.environ.get("E2E_PASSWORD", "e2e correct horse battery staple")
 #: адреса отвергает служебные домены верхнего уровня (`.test`, `.invalid`,
 #: `.localhost`) — вход просто не примет такой адрес.
 DOCTOR_EMAIL = "e2e-doctor@example.com"
+# Врач, которому второй фактор ещё предстоит настроить: первичная настройка —
+# одноразовое событие, и на основном враче её можно было бы проверить лишь
+# однажды. Здесь она проверяется каждым прогоном, отдельным тестом.
+DOCTOR_SETUP_EMAIL = "e2e-doctor-setup@example.com"
+# Второй фактор врача прогона задан, а не настраивается на ходу: тот же секрет
+# читает прогон (`E2E_TOTP_SECRET`), поэтому состояние живёт только в базе.
+# Значение фиктивное и годится лишь для локальной базы — как и пароль выше.
+TOTP_SECRET = os.environ.get("E2E_TOTP_SECRET", "KETOCAREE2ETOTPSECRET234567ABCDE")
 PARENT_EMAIL = "e2e-parent@example.com"
 
 PATIENT_NAME = "Тест Тестова"
@@ -95,9 +103,19 @@ async def main() -> int:
             session, UserRole.PARENT, "Родитель Прогонов", PARENT_EMAIL, hash_password
         )
 
-        # Сброс второго фактора — каждый раз, а не только при создании: иначе
-        # второй прогон получил бы запрос кода, которого тест не знает.
-        doctor.totp_secret = None
+        # Секрет задаётся каждый раз, а не только при создании: он мог
+        # смениться в прошлом прогоне или прийти другим из окружения, и тогда
+        # вход упал бы без объяснения — тот же довод, что у пароля.
+        doctor.totp_secret = TOTP_SECRET
+        doctor.totp_pending_secret = None
+
+        # А этому врачу второй фактор настраивает сам тест: проверка первичного
+        # входа приглашённого специалиста иначе не делается нигде.
+        doctor_setup = await _user(
+            session, UserRole.DOCTOR, "Врач Настройки", DOCTOR_SETUP_EMAIL, hash_password
+        )
+        doctor_setup.totp_secret = None
+        doctor_setup.totp_pending_secret = None
 
         category = await _category(session)
         added = await _products(session, category_id=category.id, changed_by=doctor.id)
@@ -110,7 +128,8 @@ async def main() -> int:
 
     print(f"Пациент: {PATIENT_NAME} ({patient_id})")
     print(f"Продуктов добавлено: {added}")
-    print(f"Врач:     {DOCTOR_EMAIL} (второй фактор сброшен)")
+    print(f"Врач:     {DOCTOR_EMAIL} (второй фактор задан)")
+    print(f"Врач:     {DOCTOR_SETUP_EMAIL} (второй фактор не настроен)")
     print(f"Родитель: {PARENT_EMAIL}")
     return 0
 
