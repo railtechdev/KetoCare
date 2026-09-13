@@ -50,7 +50,7 @@ const PRODUCT: ProductDetail = {
   ratio: 82.5 / (0.5 + 0.8),
 };
 
-function renderPanel(item?: string) {
+function renderPanel(item?: string, canImport = true) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -69,7 +69,7 @@ function renderPanel(item?: string) {
       </QueryClientProvider>
     );
   }
-  return render(<ProductsPanel />, { wrapper: Wrapper });
+  return render(<ProductsPanel canImport={canImport} />, { wrapper: Wrapper });
 }
 
 beforeEach(() => {
@@ -134,6 +134,38 @@ describe("карточка продукта вне текущей выборки
     expect(await screen.findByText("Позиция не найдена")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "К списку продуктов" }),
+    ).toBeInTheDocument();
+  });
+
+  it("выключенный импорт по адресу импорта не оставляет экран в ожидании", async () => {
+    // Каталог продуктов (`CatalogPage`) отдаёт панель с `canImport={false}` —
+    // это экран диетолога. Адрес `?item=import` туда попадает легко:
+    // пересланная ссылка, закладка, возврат по истории. Ветка импорта при
+    // выключенной возможности не срабатывает, а дальше `item` уже задан:
+    // запрос карточки выключен, `isPending` у выключенного запроса истинен, и
+    // экран остаётся скелетоном навсегда — без объяснения и без выхода.
+    //
+    // Для такого пользователя `import` — не идентификатор позиции, а
+    // неизвестный адрес, и отвечать на него надо как на неизвестный.
+    renderPanel("import", false);
+
+    expect(
+      await screen.findByText(adminRu.products.notFound),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: adminRu.products.backToList }),
+    ).toBeInTheDocument();
+  });
+
+  it("тот же адрес с правом импорта открывает панель импорта", async () => {
+    // Обратная половина того же обещания. «Импорт — только администратору»
+    // держалось чтением кода на стыке: `CatalogPage` передаёт `canImport`,
+    // а панель решает сама. Ни один тест не падал бы, откройся импорт не тому
+    // или перестань открываться тому, кому положен.
+    renderPanel("import", true);
+
+    expect(
+      await screen.findByText(adminRu.products.import.title),
     ).toBeInTheDocument();
   });
 

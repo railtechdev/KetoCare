@@ -36,9 +36,11 @@ import {
 
 interface Props {
   /**
-   * Импорт CSV и история правок доступны только администратору: обе ручки
-   * закрыты `require_roles(ADMIN)` на сервере. Диетолог видит тот же список и
-   * ту же форму, но без этих двух дверей — иначе он упирался бы в 403.
+   * Импорт CSV доступен только администратору: `POST /products/import` закрыт
+   * `require_roles(ADMIN)`, тогда как править каталог вправе и диетолог. Он
+   * видит тот же список и ту же форму, но без этой двери — иначе упирался бы
+   * в 403. История правок сюда НЕ относится: она открыта администратору,
+   * диетологу и врачу (`_HISTORY_ROLES`) и потому включена безусловно.
    */
   canImport?: boolean;
   /**
@@ -238,7 +240,14 @@ export function ProductsPanel({
     const editing =
       loaded ?? (item === NEW_ITEM ? null : (fetched.data ?? null));
 
-    if (item !== NEW_ITEM && editing === null && fetched.isPending) {
+    // Ждать можно только того, что действительно запрошено. Условие раньше
+    // смотрело лишь на `isPending`, а у ВЫКЛЮЧЕННОГО запроса он истинен — и
+    // адрес `?item=import` у того, кому импорт не положен (каталог продуктов
+    // отдаёт панель с `canImport={false}` диетологу), оставлял экран
+    // скелетоном навсегда: без объяснения и без выхода. Для такого
+    // пользователя `import` — не идентификатор позиции, а неизвестный адрес, и
+    // ниже он честно попадает в «Позиция не найдена» с кнопкой к списку.
+    if (missingFromRows && editing === null && fetched.isPending) {
       return <TableSkeleton label={t("products.loading")} rows={4} />;
     }
 
@@ -247,7 +256,7 @@ export function ProductsPanel({
     // администратору сообщалось о справочнике то, чего никто не проверял, и
     // повторить было нечем. `null` от 404 и отказ различает сам запрос
     // (`fetchProductDetail`), здесь остаётся их не смешивать.
-    if (item !== NEW_ITEM && editing === null && fetched.isError) {
+    if (missingFromRows && editing === null && fetched.isError) {
       return (
         <ErrorState
           title={t("products.cardError")}
