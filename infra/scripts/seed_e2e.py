@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import date
+from typing import NoReturn
 
 from sqlalchemy import delete, select
 from sqlalchemy.engine import make_url
@@ -100,8 +101,14 @@ _PRODUCTION_HINTS = ("railtech", "prod", "ketocare.uz")
 #: для любой базы.
 _ALLOW_HOST = "E2E_SEED_ALLOW"
 
+#: Имена, которыми боевой compose зовёт свою базу. Разрешением они не
+#: принимаются: отказ называет хост, и человек на сервере подставил бы в
+#: переменную ровно «postgres» — блокер вернулся бы через ту самую подсказку,
+#: которую даёт сообщение об отказе.
+_NEVER_ALLOWED = frozenset({"postgres", "db"})
 
-def _refuse(reason: str) -> None:
+
+def _refuse(reason: str) -> NoReturn:
     raise SystemExit(
         f"{reason}\n"
         "Сид прогонов заводит врача с известным паролем и ИЗВЕСТНЫМ секретом\n"
@@ -113,23 +120,42 @@ def _refuse(reason: str) -> None:
 
 
 def _refuse_production(database_url: str) -> None:
-    lowered = database_url.lower()
+    try:
+        url = make_url(database_url)
+    except Exception:
+        # Сюда прилетает что угодно: ArgumentError на мусоре, ValueError на
+        # нечисловом порте. Голый traceback причину не объясняет.
+        _refuse("Строку подключения не удалось разобрать.")
+
+    # Подсказки ищутся в строке БЕЗ ПАРОЛЯ: пароль со слогом «prod» — совпадение,
+    # а не признак боевой базы, и запрещать из-за него свою же базу незачем.
+    # Имя базы, пользователь и хост в строке остаются.
+    lowered = url.render_as_string(hide_password=True).lower()
     hit = next((hint for hint in _PRODUCTION_HINTS if hint in lowered), None)
     if hit is not None:
         # Первой и без права на разрешение: имя базы «ketocare_prod» на
         # локальном хосте — это туннель к бою, а не своя база.
         _refuse(f"В строке подключения есть «{hit}» — похоже на боевую базу.")
 
-    try:
-        host = (make_url(database_url).host or "").lower()
-    except Exception:  # noqa: BLE001 — из строки подключения прилетает что угодно
-        _refuse("Строку подключения не удалось разобрать.")
-        return
+    # Соединение уходит не обязательно туда, что разобрано как хост: драйвер
+    # уважает `?host=` из строки запроса, и `@localhost/ketocare?host=чужой`
+    # выглядел бы локальным. Проверять надо то, чем соединяются, поэтому такая
+    # подмена отвергается целиком.
+    if any(key.lower() == "host" for key in url.query):
+        _refuse("В строке подключения есть параметр «host» — адрес подменяется.")
 
+    host = (url.host or "").lower()
     if host in _LOCAL_HOSTS:
         return
 
-    if host != "" and os.environ.get(_ALLOW_HOST, "").lower() == host:
+    allowed = os.environ.get(_ALLOW_HOST, "").lower()
+    if host in _NEVER_ALLOWED and allowed == host:
+        _refuse(
+            f"Хост «{host}» — имя базы в compose, и разрешением он не "
+            "открывается: именно так объявлена боевая база."
+        )
+
+    if host != "" and allowed == host:
         return
 
     _refuse(f"Адрес базы не похож на локальный (хост «{host or 'не указан'}»).")

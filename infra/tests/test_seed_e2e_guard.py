@@ -95,6 +95,38 @@ def test_explicit_allow_names_the_host(monkeypatch: pytest.MonkeyPatch) -> None:
     GUARD._refuse_production(url)
 
 
+@pytest.mark.parametrize("service", ["postgres", "db"])
+def test_allow_does_not_accept_compose_service_names(
+    service: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Боевая строка подключения подсказок не содержит вовсе, а отказ называет
+    # хост «postgres» — человек на сервере подставил бы его в переменную, и
+    # блокер вернулся бы через ту самую подсказку.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, service)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._refuse_production(f"postgresql+asyncpg://ketocare:pass@{service}:5432/ketocare")
+    assert "compose" in str(refusal.value)
+
+
+def test_host_parameter_cannot_redirect_the_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Драйвер уважает `?host=`: разобранный хост локальный, а соединение уходит
+    # на чужой. Проверять надо то, чем соединяются.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._refuse_production(
+            "postgresql+asyncpg://ketocare:pass@localhost:5432/ketocare?host=other"
+        )
+    assert "host" in str(refusal.value)
+
+
+def test_password_is_not_searched_for_hints(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Пароль со слогом «prod» — совпадение, а не признак боевой базы.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    GUARD._refuse_production("postgresql+asyncpg://ketocare:myprodigy@localhost:5432/ketocare")
+
+
 def test_allow_does_not_open_production_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
     # Признак в строке подключения сильнее разрешения: подтверждать туннель к
     # бою переменной окружения нельзя.
