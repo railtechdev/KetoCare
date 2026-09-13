@@ -293,6 +293,10 @@ e2e-install: ## Поставить браузер для Playwright (нужно 
 .PHONY: load
 load: check-env ## Нагрузочный прогон (locust, 100 одновременных) — требует поднятый API
 	@# Раздел 15 п. 22 ТЗ. Профиль и пороги — в infra/load/README.md.
+	@# Учётные данные профиль берёт ТОЛЬКО из окружения процесса: значение,
+	@# лежащее в `.env`, до него не доедет (в отличие от сквозного прогона, где
+	@# их подставляет `global-setup.ts`). Меняли пароль прогона в `.env` —
+	@# задайте его и здесь: `E2E_PASSWORD=… make load`.
 	uv run --with locust locust -f infra/load/locustfile.py \
 		--headless --users 100 --spawn-rate 10 --run-time 2m \
 		--host $${LOAD_HOST:-http://127.0.0.1:$(API_PORT)}

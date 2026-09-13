@@ -28,8 +28,12 @@ function dotenv(): Record<string, string> {
     if (trimmed === "" || trimmed.startsWith("#")) continue;
     const separator = trimmed.indexOf("=");
     if (separator < 0) continue;
+    // Хвостовой комментарий срезается, как это делает shell в `. ./.env`:
+    // иначе `SECRET=ABC # заметка` дал бы тестам «ABC # заметка», а сиду —
+    // «ABC», и значения разошлись бы там, где человек этого не ждёт.
     values[trimmed.slice(0, separator).trim()] = trimmed
       .slice(separator + 1)
+      .split(" #")[0]!
       .trim()
       .replace(/^["']|["']$/g, "");
   }
