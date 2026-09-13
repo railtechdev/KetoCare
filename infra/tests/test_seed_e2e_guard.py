@@ -1,0 +1,103 @@
+"""Защита сида прогонов от чужой базы.
+
+Сид заводит врача с известным паролем И известным секретом второго фактора: на
+чужой базе это означает, что второго фактора там больше нет. До этого теста
+защиту не проверял никто — `infra/` не покрыт вовсе, — и ошибка в ней
+обнаружилась бы ровно один раз, на боевой базе.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+import pytest
+
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "seed_e2e.py"
+
+
+def _guard():
+    spec = importlib.util.spec_from_file_location("seed_e2e_guard", _SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+GUARD = _guard()
+
+LOCAL = "postgresql+asyncpg://ketocare:ketocare@localhost:5432/ketocare"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        LOCAL,
+        "postgresql+asyncpg://ketocare:ketocare@127.0.0.1:5434/ketocare",
+        # IPv6 пишется в скобках — иначе строка невалидна и разбор падает
+        # (такая запись проверяется ниже, среди отвергаемых).
+        "postgresql+asyncpg://ketocare:ketocare@[::1]:5432/ketocare",
+    ],
+)
+def test_local_addresses_pass(url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    GUARD._refuse_production(url)
+
+
+@pytest.mark.parametrize(
+    ("url", "why"),
+    [
+        (
+            "postgresql+asyncpg://ketocare:pass@postgres:5432/ketocare",
+            "имя сервиса боевого compose — именно так объявлена боевая база",
+        ),
+        (
+            "postgresql+asyncpg://ketocare:pass@db.internal:5432/ketocare_stage",
+            "чужой хост",
+        ),
+        (
+            "postgresql+asyncpg://ketocare:pass@localhost:5432/ketocare_prod",
+            "локальный хост, но имя базы боевое — так выглядит туннель",
+        ),
+        (
+            "postgresql+asyncpg://ketocare:pass@app.railtech.uz:5432/ketocare",
+            "боевой домен",
+        ),
+        ("не строка подключения вовсе", "разобрать нельзя"),
+        (
+            "postgresql+asyncpg://ketocare:pass@::1:5432/ketocare",
+            "IPv6 без скобок — строка невалидна, и молча пропускать её нельзя",
+        ),
+    ],
+)
+def test_foreign_addresses_are_refused(url: str, why: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._refuse_production(url)
+    assert "второго фактора" in str(refusal.value), why
+
+
+def test_explicit_allow_names_the_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "postgresql+asyncpg://ketocare:pass@db.internal:5432/ketocare"
+
+    # Разрешение — на КОНКРЕТНЫЙ хост: «1» или чужое имя не открывает ничего.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "1")
+    with pytest.raises(SystemExit):
+        GUARD._refuse_production(url)
+
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "other.host")
+    with pytest.raises(SystemExit):
+        GUARD._refuse_production(url)
+
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    GUARD._refuse_production(url)
+
+
+def test_allow_does_not_open_production_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Признак в строке подключения сильнее разрешения: подтверждать туннель к
+    # бою переменной окружения нельзя.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "localhost")
+    with pytest.raises(SystemExit):
+        GUARD._refuse_production("postgresql+asyncpg://ketocare:pass@localhost:5432/ketocare_prod")
