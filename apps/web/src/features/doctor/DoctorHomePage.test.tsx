@@ -8,6 +8,7 @@ import { api } from "../../lib/api";
 import doctorRu from "../../locales/ru/doctor.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { DoctorHomePage } from "./DoctorHomePage";
+import type { PatientOverview } from "./types";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -44,7 +45,7 @@ const PATIENTS = {
 };
 
 /** Назначение: молчание и вердикт о допуске существуют только при нём. */
-const PRESCRIPTION = {
+const PRESCRIPTION: NonNullable<PatientOverview["prescription"]> = {
   id: "rx1",
   patient_id: SILENT,
   ratio: 3.5,
@@ -52,7 +53,10 @@ const PRESCRIPTION = {
   protein_g: 12,
   carbs_limit_g: 35,
   meals_per_day: 4,
-  starts_on: "2026-08-01",
+  restrictions: null,
+  author_id: "u1",
+  // `effective_from`: поля `starts_on` у ответа нет вовсе.
+  effective_from: "2026-08-01",
   created_at: "2026-08-01T10:00:00Z",
 };
 

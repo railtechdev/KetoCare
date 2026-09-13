@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import { allergyNames } from "./allergies";
+import type { Patient } from "./useChildren";
+
+// Ровно то, что читает `allergyNames`: без аннотации выдуманное поле
+// (`product_id` вместо `id`) вернулось бы молча.
+type Allergies = Pick<Patient, "excluded_products" | "allergy_labels">;
 
 describe("строка аллергий", () => {
   it("склеивает названия продуктов и свободные метки", () => {
     expect(
       allergyNames(
         {
-          excluded_products: [{ product_id: "p1", name_ru: "Кокосовое масло" }],
+          excluded_products: [{ id: "p1", name_ru: "Кокосовое масло" }],
           allergy_labels: ["цитрусовые"],
-        } as never,
+        } satisfies Allergies,
         "неизвестный продукт",
       ),
     ).toEqual(["Кокосовое масло", "цитрусовые"]);
@@ -25,9 +30,9 @@ describe("строка аллергий", () => {
     expect(
       allergyNames(
         {
-          excluded_products: [{ product_id: "p1", name_ru: null }],
+          excluded_products: [{ id: "p1", name_ru: null }],
           allergy_labels: [],
-        } as never,
+        } satisfies Allergies,
         "продукт удалён из справочника",
       ),
     ).toEqual(["продукт удалён из справочника"]);

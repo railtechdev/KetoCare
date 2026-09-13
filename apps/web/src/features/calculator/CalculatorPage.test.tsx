@@ -21,6 +21,7 @@ import calculatorRu from "../../locales/ru/calculator.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { RECALC_DELAY_MS } from "@ketocare/ui";
 import { CalculatorPage, CalculatorView } from "./CalculatorPage";
+import type { PatientOverview } from "../patients/overview";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -48,12 +49,16 @@ const OVERVIEW = {
     patient_id: PATIENT_ID,
     ratio: PRESCRIBED_RATIO,
     kcal_per_day: 1200,
-    protein_min_g: 12,
-    carbs_max_g: 35,
+    // Имена полей НАЗНАЧЕНИЯ. `protein_min_g`/`carbs_max_g` — цели запроса
+    // расчёта (`/calc/*`), и здесь они описывали объект, которого не бывает.
+    protein_g: 12,
+    carbs_limit_g: 35,
     meals_per_day: 3,
-    starts_on: "2026-08-01",
+    restrictions: null,
+    author_id: "u1",
+    effective_from: "2026-08-01",
     created_at: "2026-08-01T10:00:00Z",
-  },
+  } satisfies NonNullable<PatientOverview["prescription"]>,
   day: null,
   last_ketone: null,
   last_weight: null,

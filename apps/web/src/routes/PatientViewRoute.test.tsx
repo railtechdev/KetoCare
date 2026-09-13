@@ -11,6 +11,7 @@ import doctorRu from "../locales/ru/doctor.json";
 import { patientKey } from "../features/patients/usePatient";
 import { PatientRouter } from "../test/PatientRouter";
 import { PatientViewRoute } from "./PatientViewRoute";
+import type { PatientOverview } from "../features/patients/overview";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
@@ -36,12 +37,15 @@ function overview(patientId: string, ratio: number) {
       patient_id: patientId,
       ratio,
       kcal_per_day: 1200,
-      protein_min_g: 12,
-      carbs_max_g: 35,
+      // Имена полей НАЗНАЧЕНИЯ, а не целей запроса расчёта.
+      protein_g: 12,
+      carbs_limit_g: 35,
       meals_per_day: 3,
-      starts_on: "2026-08-01",
+      restrictions: null,
+      author_id: "u1",
+      effective_from: "2026-08-01",
       created_at: "2026-08-01T10:00:00Z",
-    },
+    } satisfies NonNullable<PatientOverview["prescription"]>,
     day: null,
     last_ketone: null,
     last_weight: null,
