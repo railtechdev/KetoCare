@@ -12,15 +12,19 @@ i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
 
 const PATIENT_ID = "11111111-1111-4111-8111-111111111111";
 
-const PATIENT = {
+const PATIENT: Patient = {
   id: PATIENT_ID,
   full_name: "Иванов Пётр",
   birth_date: "2016-05-01",
   sex: "m",
   height_cm: 120,
   allergies: [],
+  // Исключённые продукты и подписи аллергий сервер отдаёт всегда: без них
+  // фикстура описывала пациента, которого не бывает.
+  excluded_products: [],
+  allergy_labels: [],
   notes: null,
-} as unknown as Patient;
+};
 
 function renderNav({
   role = "doctor" as const,

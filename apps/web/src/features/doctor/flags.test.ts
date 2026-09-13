@@ -8,7 +8,7 @@ import type { PatientOverview } from "./types";
  * смысл только у ребёнка, которому уже назначена терапия. Случай «назначения
  * нет» проверяется отдельно и явно.
  */
-const PRESCRIPTION = {
+const PRESCRIPTION: NonNullable<PatientOverview["prescription"]> = {
   id: "rx1",
   patient_id: "p1",
   ratio: 3.5,
@@ -16,9 +16,13 @@ const PRESCRIPTION = {
   protein_g: 12,
   carbs_limit_g: 35,
   meals_per_day: 4,
-  starts_on: "2026-08-01",
+  restrictions: null,
+  author_id: "u1",
+  // `effective_from`, а не `starts_on`: в приведённой фикстуре стояло поле,
+  // которого у ответа нет вовсе, и приведение это скрывало.
+  effective_from: "2026-08-01",
   created_at: "2026-08-01T10:00:00Z",
-} as unknown as NonNullable<PatientOverview["prescription"]>;
+};
 
 function overview(patch: Partial<PatientOverview> = {}): PatientOverview {
   return {
