@@ -116,7 +116,13 @@ test("врач назначает, семья ведёт день, отчёт с
   await parent.locator("#weight-value").fill(WEIGHT);
   await parent.getByRole("button", { name: "Добавить", exact: true }).click();
   await expect(
-    parent.getByRole("heading", { name: `${WEIGHT} кг` }).first(),
+    // Вес печатается через `formatWeight` (Intl, ru-RU) — «15,4 кг», с
+    // ЗАПЯТОЙ, в отличие от кетонов выше: там значение подставляется сырым и
+    // точка сохраняется. Ждать надо то, что печатает продукт, а не то, что мы
+    // ввели в поле, — иначе проверка ищет текст, которого не бывает.
+    parent
+      .getByRole("heading", { name: `${WEIGHT.replace(".", ",")} кг` })
+      .first(),
   ).toBeVisible();
 
   // --- 4. врач открывает отчёт --------------------------------------------
