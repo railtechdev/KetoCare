@@ -149,9 +149,23 @@ describe("карточка продукта вне текущей выборки
     // неизвестный адрес, и отвечать на него надо как на неизвестный.
     renderPanel("import", false);
 
-    expect(await screen.findByText("Позиция не найдена")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "К списку продуктов" }),
+      await screen.findByText(adminRu.products.notFound),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: adminRu.products.backToList }),
+    ).toBeInTheDocument();
+  });
+
+  it("тот же адрес с правом импорта открывает панель импорта", async () => {
+    // Обратная половина того же обещания. «Импорт — только администратору»
+    // держалось чтением кода на стыке: `CatalogPage` передаёт `canImport`,
+    // а панель решает сама. Ни один тест не падал бы, откройся импорт не тому
+    // или перестань открываться тому, кому положен.
+    renderPanel("import", true);
+
+    expect(
+      await screen.findByText(adminRu.products.import.title),
     ).toBeInTheDocument();
   });
 
