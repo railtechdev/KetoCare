@@ -79,6 +79,39 @@ def test_foreign_addresses_are_refused(url: str, why: str, monkeypatch: pytest.M
     assert "второго фактора" in str(refusal.value), why
 
 
+@pytest.mark.parametrize(
+    "query",
+    ["sslmode=require", "application_name=ketocare", "options=-c%20timezone%3DUTC"],
+)
+def test_legitimate_query_parameters_pass(query: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Отвергается подмена адреса, а не параметры вообще: ужесточение «любой
+    # параметр — отказ» сломало бы локальные строки подключения молча.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    GUARD._refuse_production(f"{LOCAL}?{query}")
+
+
+def test_unix_socket_is_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Путь в `host=` — сокет, а он локален по определению; подменить им адрес
+    # нельзя, и отказ с причиной «адрес подменяется» был бы неправдой.
+    monkeypatch.delenv(GUARD._ALLOW_HOST, raising=False)
+    GUARD._refuse_production(
+        "postgresql+asyncpg://ketocare:pass@/ketocare?host=/var/run/postgresql"
+    )
+
+
+def test_trailing_dot_does_not_bypass_the_ban(monkeypatch: pytest.MonkeyPatch) -> None:
+    # «postgres.» — тот же хост для DNS; без нормализации запрет обходится точкой.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "postgres.")
+    with pytest.raises(SystemExit):
+        GUARD._refuse_production("postgresql+asyncpg://ketocare:pass@postgres.:5432/ketocare")
+
+
+def test_spaces_around_allow_value_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Пробел вокруг значения — опечатка, а не отказ от разрешения.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "  db.internal  ")
+    GUARD._refuse_production("postgresql+asyncpg://ketocare:pass@db.internal:5432/ketocare")
+
+
 def test_explicit_allow_names_the_host(monkeypatch: pytest.MonkeyPatch) -> None:
     url = "postgresql+asyncpg://ketocare:pass@db.internal:5432/ketocare"
 
