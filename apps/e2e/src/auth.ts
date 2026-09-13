@@ -1,3 +1,7 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import type { APIRequestContext, Page } from "@playwright/test";
 
 import { DOCTOR_EMAIL, PARENT_EMAIL, PASSWORD } from "./env";
@@ -43,7 +47,26 @@ export async function loginAsParent(page: Page): Promise<void> {
  * падала по делу, а повтор — «Неожиданный ответ входа», пряча настоящую
  * причину.
  */
-let doctorSecret: string | null = null;
+const SECRET_FILE = join(tmpdir(), "ketocare-e2e-doctor-totp");
+
+/**
+ * Секрет живёт в файле, а не в памяти модуля: Playwright перезапускает воркер
+ * после упавшего теста, и переменная процесса до повтора не доживает — первая
+ * попытка этой правки именно на этом и споткнулась. Файл во временном
+ * каталоге: в репозиторий он не попадает, в артефакты прогона тоже.
+ */
+function rememberDoctorSecret(secret: string): void {
+  writeFileSync(SECRET_FILE, secret, "utf8");
+}
+
+function recallDoctorSecret(): string | null {
+  try {
+    const stored = readFileSync(SECRET_FILE, "utf8").trim();
+    return stored === "" ? null : stored;
+  } catch {
+    return null;
+  }
+}
 export async function loginAsDoctor(page: Page): Promise<void> {
   const first = await page.request.post("/api/v1/auth/login", {
     data: { email: DOCTOR_EMAIL, password: PASSWORD },
@@ -56,7 +79,8 @@ export async function loginAsDoctor(page: Page): Promise<void> {
   if (body.status === "ok") return;
 
   if (body.status === "totp_required") {
-    if (doctorSecret === null) {
+    const secret = recallDoctorSecret();
+    if (secret === null) {
       throw new Error(
         "Второй фактор врача уже настроен, а секрет прогону неизвестен: " +
           "сид не отработал перед прогоном (infra/scripts/seed_e2e.py)",
@@ -66,7 +90,7 @@ export async function loginAsDoctor(page: Page): Promise<void> {
       data: {
         email: DOCTOR_EMAIL,
         password: PASSWORD,
-        totp_code: totp(doctorSecret),
+        totp_code: totp(secret),
       },
     });
     if (!again.ok()) {
@@ -84,7 +108,7 @@ export async function loginAsDoctor(page: Page): Promise<void> {
     data: {},
   });
   const { secret } = await setup.json();
-  doctorSecret = secret;
+  rememberDoctorSecret(secret);
 
   const verify = await page.request.post("/api/v1/auth/totp/verify", {
     headers: { Authorization: `Bearer ${body.totp_setup_token}` },

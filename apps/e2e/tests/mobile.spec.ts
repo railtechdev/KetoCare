@@ -68,9 +68,14 @@ test("экраны семьи помещаются в 360 px", async ({ page }) 
         // способ спрятать текст от глаза, оставив его скринридеру.
         if (element.clientWidth < 8) continue;
         if (element.scrollWidth > element.clientWidth + 1) {
+          // Текст и обе ширины — иначе сообщение называет тег и класс, но не
+          // говорит, ЧТО переполнено: по «LABEL.flex items-center +3px» я уже
+          // однажды починил не то место.
           offenders.push(
             `${element.tagName}.${element.className.toString().slice(0, 40)} ` +
-              `+${element.scrollWidth - element.clientWidth}px`,
+              `+${element.scrollWidth - element.clientWidth}px ` +
+              `(${element.clientWidth}→${element.scrollWidth}) ` +
+              `«${(element.textContent ?? "").trim().slice(0, 40)}»`,
           );
         }
       }
