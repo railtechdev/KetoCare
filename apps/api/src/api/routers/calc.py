@@ -117,6 +117,9 @@ async def verify_dish(
         ratio_ok, kcal_ok = within_tolerance(dish, calc_service.to_targets(payload.targets))
         response.ratio_within_tolerance = ratio_ok
         response.kcal_within_tolerance = kcal_ok
+        # Цели переданы; сравнимо ли соотношение — решает наличие самого
+        # соотношения у блюда (#216).
+        response.ratio_comparable = ratio_ok is not None
 
     return response
 
