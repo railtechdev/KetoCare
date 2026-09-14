@@ -330,12 +330,21 @@ def test_repeated_run_changes_nothing(
     assert "уже есть" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    "role",
+    [role for role in ADMIN.UserRole if role is not ADMIN.UserRole.ADMIN],
+    ids=lambda role: str(role.value),
+)
 def test_reset_refuses_a_user_who_is_not_an_admin(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    role: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Сброс пароля не превращает врача в администратора и не трогает его вход."""
+    """Сброс пароля не превращает в администратора и не трогает чужой вход.
+
+    Роли перебираются все: с одной ролью в тесте мутация `is not ADMIN` →
+    `is DOCTOR` выживала, и родителю по тому же адресу пароль сбросило бы.
+    """
     existing = SimpleNamespace(
-        role=ADMIN.UserRole.DOCTOR,
+        role=role,
         full_name="Врач Клиники",
         email="admin@clinic.example",
         password_hash="хеш-врача",
@@ -346,7 +355,7 @@ def test_reset_refuses_a_user_who_is_not_an_admin(
 
     assert ADMIN.main([*ARGV, "--reset-password"]) == 1
     assert existing.password_hash == "хеш-врача"
-    assert existing.role is ADMIN.UserRole.DOCTOR
+    assert existing.role is role
     assert _audit(recorder) == []
     assert recorder.commits == 0
     assert "не администратор" in capsys.readouterr().out
@@ -467,45 +476,106 @@ def test_generated_password_comes_from_the_cryptographic_source() -> None:
     Отличить `secrets` от `random.Random(1234)` по двум паролям невозможно —
     оба «разные каждый раз». Ревью #201 показало это мутациями: счётчик,
     зерно, метка времени и pid проходили поведенческую проверку насквозь.
-    Поэтому здесь проверяется, ЧЕМ порождён пароль.
+
+    Правило намеренно не привязано ни к имени функции, ни к числу вызовов:
+    переименование, `token_bytes(...).hex()` и постобработка вроде
+    `.replace("-", "_")` — законные правки, и падать на них тест не должен
+    (четвёртый заход ревью #201). Держится другое: пароль рождается ровно
+    одним вызовом `secrets.token_*` с длиной из константы модуля, имя
+    `secrets` в скрипте не переприсвоено, а `random` не используется вовсе.
     """
     tree = ast.parse(_SCRIPT.read_text(encoding="utf8"))
-    imported = {
+    modules = {
         alias.asname or alias.name
         for node in ast.walk(tree)
         if isinstance(node, ast.Import)
         for alias in node.names
     }
-    assert "secrets" in imported
+    from_secrets = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "secrets"
+        for alias in node.names
+    }
+    assert "secrets" in modules or from_secrets, "модуль secrets в скрипте не импортирован"
 
-    bodies = [
+    sources = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr.startswith("token_")
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "secrets"
+        ) or (isinstance(func, ast.Name) and func.id in from_secrets):
+            sources.append(node)
+
+    assert len(sources) == 1, (
+        "пароль должен рождаться ровно одним вызовом secrets.token_* — "
+        "иначе источник неочевиден, а слабый по выходам неотличим"
+    )
+    arguments = sources[0].args
+    assert len(arguments) == 1 and isinstance(arguments[0], ast.Name), (
+        "длина берётся не из константы модуля: вызов без аргумента оставляет "
+        "TEMP_PASSWORD_BYTES сиротой, и обещание комментария ничем не держится"
+    )
+
+    assigned = {
+        target.id
+        for node in ast.walk(tree)
+        for target in (
+            node.targets
+            if isinstance(node, ast.Assign)
+            else [node.target]
+            if isinstance(node, ast.AnnAssign)
+            else []
+        )
+        if isinstance(target, ast.Name)
+    }
+    # Та же асимметрия, что закрыта для минимума длины: имя можно переприсвоить
+    # после импорта, и вызов остался бы на вид тем же самым.
+    assert "secrets" not in assigned
+    assert arguments[0].id in assigned, "длина пароля задана не константой модуля"
+
+    weak = [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "_generate_password"
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "random"
     ]
-    assert len(bodies) == 1
-    calls = [node for node in ast.walk(bodies[0]) if isinstance(node, ast.Call)]
-    assert len(calls) == 1, "пароль собирается из нескольких вызовов — источник неочевиден"
-    source = calls[0].func
-    assert isinstance(source, ast.Attribute) and source.attr.startswith("token_"), (
-        "пароль порождён не `secrets.token_*` — слабый источник неотличим по выходам"
-    )
-    assert isinstance(source.value, ast.Name) and source.value.id == "secrets"
+    assert not weak and "random" not in modules, "в скрипте используется random — это не CSPRNG"
 
 
 def test_password_variable_name_is_the_one_the_deploy_passes() -> None:
-    """Имя переменной — контракт с выкатом, а не внутреннее дело скрипта.
+    """Пароль обязан ДОЙТИ до скрипта, а не просто где-то упоминаться.
 
-    Разойдись оно с `deploy.yml` и `remote-deploy.sh` — скрипт молча уйдёт в
-    ветку «пароль не задан», сгенерирует свой и НАПЕЧАТАЕТ его в журнал
-    публичного прогона. Ровно то, ради чего переменная и заведена.
+    Сценарий, ради которого это написано: переменная молча не доехала до
+    контейнера, скрипт счёл, что пароль не задан, сгенерировал свой и
+    напечатал его в журнал публичного прогона. Проверка «имя встречается в
+    файле» его не ловила (ревью #201, четвёртый заход): упоминания остаются в
+    ветке-предупреждении, даже когда передачи уже нет. Поэтому закреплены сами
+    места передачи — и отдельно литерал, иначе `PASSWORD_ENV = "ADMIN_EMAIL"`
+    проходило бы, читая пароль из адреса.
     """
-    for relative in (".github/workflows/deploy.yml", "infra/scripts/remote-deploy.sh"):
-        text = (_ROOT / relative).read_text(encoding="utf8")
-        # По границе слова, а не подстрокой: `ADMIN_PASS` нашлось бы ВНУТРИ
-        # `ADMIN_PASSWORD`, и переименование переменной прошло бы незамеченным.
-        found = re.search(rf"\b{re.escape(ADMIN.PASSWORD_ENV)}\b", text)
-        assert found is not None, f"{relative} не передаёт {ADMIN.PASSWORD_ENV}"
+    assert ADMIN.PASSWORD_ENV == "ADMIN_PASSWORD"
+    name = re.escape(ADMIN.PASSWORD_ENV)
+
+    runner = (_ROOT / "infra/scripts/remote-deploy.sh").read_text(encoding="utf8")
+    assert re.search(rf"-e\s+{name}=", runner), (
+        "remote-deploy.sh не передаёт переменную в контейнер — пароль не дойдёт"
+    )
+
+    workflow = (_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf8")
+    assert re.search(rf"^\s*{name}:\s*\$\{{\{{\s*secrets\.{name}\s*\}}\}}", workflow, re.M), (
+        "deploy.yml не берёт пароль из секрета репозитория"
+    )
+    assert re.search(rf'"{name}"', workflow), (
+        "deploy.yml не переносит переменную на сервер: её нет в списке имён"
+    )
 
 
 def test_exit_code_reaches_the_shell() -> None:
