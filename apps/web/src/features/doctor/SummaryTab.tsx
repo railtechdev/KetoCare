@@ -167,7 +167,7 @@ function OverviewPanels({
                   расчётного ядра, на клиенте их копии нет (правило 2 CLAUDE.md). */}
               <RatioBadge
                 ratio={day.totals.ratio}
-                withinTolerance={tolerance?.ratio_within_tolerance}
+                withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
               />
               <span className="tabular-nums">
                 {t("units.kcal", { value: day.totals.kcal.toFixed(0) })}

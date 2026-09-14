@@ -26,7 +26,10 @@ class DayTolerance(BaseModel):
     константы ядра (правило 2 CLAUDE.md), API их не знает и не дублирует.
     """
 
-    ratio_within_tolerance: bool
+    #: `null` — соотношения у дня нет вовсе, и сказать о соответствии нечего.
+    #: Это НЕ то же самое, что «не соответствует»: экраны показывают такой день
+    #: нейтрально, а не нарушением (ADR-0037).
+    ratio_within_tolerance: bool | None
     kcal_within_tolerance: bool
 
 

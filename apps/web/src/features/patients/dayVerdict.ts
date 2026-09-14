@@ -98,7 +98,9 @@ export function dayVerdict(
   }
 
   return {
-    ratioOffTolerance: !tolerance.ratio_within_tolerance,
+    // Только явное «не соответствует»: `null` означает, что соотношения у дня
+    // нет, и предупреждать не о чем (ADR-0037).
+    ratioOffTolerance: tolerance.ratio_within_tolerance === false,
     kcalBelowTarget: !tolerance.kcal_within_tolerance,
     unavailable: false,
     unavailableReason: null,

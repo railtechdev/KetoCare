@@ -257,6 +257,36 @@ class TestOverview:
             "kcal_within_tolerance": False,
         }
 
+    async def test_day_without_ratio_has_no_verdict(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """День без соотношения — «не определено», а не «вне допуска».
+
+        Соотношения у дня может не быть: пустой знаменатель или незначимые
+        чистые углеводы (ADR-0037). Прежде ядро схлопывало этот случай в
+        `False`, и врач получал в списке красную пометку «питание вне допуска»
+        за день, про который сказать нечего (issue #204).
+        """
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await _prescription(session, patient=patient, author=doctor)
+        await _menu(
+            session,
+            patient=patient,
+            day=_local_today(),
+            totals={**TOTALS_ON_TARGET, "ratio": None},
+        )
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        tolerance = response.json()["day"]["tolerance"]
+        assert tolerance["ratio_within_tolerance"] is None, (
+            "отсутствующее соотношение выдано как нарушение"
+        )
+        # Калорийность есть у любого дня, её вердикт остаётся.
+        assert tolerance["kcal_within_tolerance"] is not None
+
     async def test_no_prescription_leaves_tolerance_unknown(
         self, client, session, make_user, make_patient, auth_headers
     ):

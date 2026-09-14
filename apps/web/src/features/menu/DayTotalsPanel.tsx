@@ -74,7 +74,7 @@ export function DayTotalsPanel({
       <div className="flex flex-wrap items-center gap-block">
         <RatioBadge
           ratio={totals.ratio}
-          withinTolerance={tolerance?.ratio_within_tolerance}
+          withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
         />
         <span className="tabular-nums">
           {targets === null

@@ -556,7 +556,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
               waitingForNetwork={waitingForNetwork}
               waitingId={waitingId}
               retrying={retryingShown}
-              ratioOk={verdict?.ratio_within_tolerance}
+              ratioOk={verdict?.ratio_within_tolerance ?? undefined}
               kcalOk={verdict?.kcal_within_tolerance}
             />
 

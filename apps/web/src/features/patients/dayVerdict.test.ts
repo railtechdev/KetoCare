@@ -116,4 +116,16 @@ describe("словари объясняют каждую причину серв
       TOLERANCE_GAP_KEY.engine_changed,
     );
   });
+
+  it("без соотношения предупреждения нет", () => {
+    // `null` — соотношения у дня нет (ADR-0037), и это не отклонение: прежде
+    // оно схлопывалось в «вне допуска» и попадало в предупреждения семье.
+    const verdict = dayVerdict({
+      ratio_within_tolerance: null,
+      kcal_within_tolerance: true,
+    });
+
+    expect(verdict.ratioOffTolerance).toBe(false);
+    expect(verdict.unavailable).toBe(false);
+  });
 });
