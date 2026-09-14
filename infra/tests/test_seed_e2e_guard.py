@@ -531,6 +531,27 @@ def test_password_of_exactly_the_minimum_passes(monkeypatch: pytest.MonkeyPatch)
     GUARD._require_credentials_on_allowed_host()
 
 
+def test_password_one_short_of_the_minimum_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Точка вплотную к границе: без неё сравнение можно ослабить до `< 11`,
+    # оставив константу и текст отказа нетронутыми (ревью #202).
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "x" * (GUARD.MIN_PASSWORD_LENGTH - 1))
+    monkeypatch.setenv(GUARD._TOTP_VAR, STRONG_SECRET)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._PASSWORD_VAR in str(refusal.value)
+
+
+def test_secret_one_short_of_the_minimum_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    # То же у секрета: окно 17-25 символов не проверял никто.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "A" * (GUARD.MIN_TOTP_CHARS - 1))
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._TOTP_VAR in str(refusal.value)
+
+
 def test_password_minimum_comes_from_the_shared_module() -> None:
     """Минимум один на все сиды, а не объявлен здесь заново.
 
@@ -587,6 +608,37 @@ def test_secret_of_exactly_the_minimum_passes(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
     monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
     monkeypatch.setenv(GUARD._TOTP_VAR, "A" * GUARD.MIN_TOTP_CHARS)
+    GUARD._require_credentials_on_allowed_host()
+
+
+@pytest.mark.parametrize("secret", ["0" + "A" * 31, "A" * 31 + "9", "A" * 31 + "="])
+def test_single_character_outside_base32_is_refused(
+    secret: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Каждый класс нарушения — отдельным знаком, а не одним грубым примером.
+
+    Прежний случай нарушал алфавит сразу тремя способами, поэтому подмена
+    алфавита на `A-Z0-9` его переживала — а `0`, `1`, `8` и `9` это ровно те
+    знаки, на которых разбор секрета отказывает.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, secret)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert "base32" in str(refusal.value)
+
+
+def test_lowercase_secret_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Строчный секрет рабочий, и отвергать его нельзя.
+
+    `pyotp` декодирует с `casefold=True`, а `apps/e2e/src/totp.ts` сам
+    приводит к верхнему регистру: код сходится. Отказ здесь был бы отказом
+    годному значению с неверной причиной в сообщении.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, STRONG_SECRET.lower())
     GUARD._require_credentials_on_allowed_host()
 
 
