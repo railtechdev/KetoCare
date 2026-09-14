@@ -262,5 +262,27 @@ def verify_totp(secret: str | None, code: str, *, user_id: uuid.UUID | None = No
         return False
 
 
+def totp_secret_usable(secret: str | None) -> bool:
+    """Секрет разбирается как base32 и годится для проверки кода.
+
+    Вопрос нельзя задать модели: «непустой» — не то же самое, что «пригодный».
+    `'A' * 27` непуст и выглядит настроенным фактором, а `pyotp` на нём бросает
+    `binascii.Error` — человек вводит верный код и получает отказ навсегда.
+    Разбор base32 знает только этот слой, поэтому предикат здесь, а в модели
+    остались вопросы о хранении: включён (`totp_enrolled`) и есть что сбрасывать
+    (`totp_resettable`).
+    """
+
+    if not secret:
+        return False
+
+    try:
+        pyotp.TOTP(secret).now()
+    except ValueError:
+        # binascii.Error — подкласс; неASCII даёт голый ValueError.
+        return False
+    return True
+
+
 def totp_provisioning_uri(secret: str, *, email: str) -> str:
     return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="KetoCare")

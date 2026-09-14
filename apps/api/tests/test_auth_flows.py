@@ -8,6 +8,7 @@ import pyotp
 import pytest
 
 from core.models.enums import UserRole
+from core.repositories import backup_codes as backup_codes_repo
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,13 +54,14 @@ class TestBrokenTotpSecret:
         assert response.status_code == 401, response.text
         assert response.json()["error"]["code"] == "unauthorized"
 
-    async def test_empty_secret_means_not_configured(self, client, make_user):
-        """Пустой секрет — это «не настроен», а не тупик.
+    async def test_empty_secret_means_broken_not_unconfigured(self, client, make_user):
+        """Пустой секрет — это «фактор сломан», а не «фактора нет».
 
-        Вход считал второй фактор настроенным по «поле не NULL», поэтому врач с
-        пустой строкой получал `totp_required`, вводил верный код и получал
-        отказ — войти было нельзя никогда. Рядом всё это время стояла нужная
-        ветка: `totp_setup_required`.
+        Промежуточная редакция отвечала здесь `totp_setup_required`, и это был
+        обход второго фактора: токен настройки выдавался после проверки ОДНОГО
+        пароля, а /auth/totp/verify завершал вход полной парой токенов. Теперь
+        спрашивается резервный код — ключ, который у владельца есть, а у
+        знающего пароль нет (#227).
         """
         doctor = await make_user(UserRole.DOCTOR, totp_secret="")
 
@@ -70,8 +72,9 @@ class TestBrokenTotpSecret:
 
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["status"] == "totp_setup_required"
-        assert body["totp_setup_token"]
+        assert body["status"] == "totp_recovery_required"
+        assert body["totp_setup_token"] is None, "один пароль не открывает перенастройку"
+        assert body["tokens"] is None
 
     async def test_parent_with_broken_secret_is_not_let_in_by_password_alone(
         self, client, make_user
@@ -79,9 +82,9 @@ class TestBrokenTotpSecret:
         """Пустой секрет у родителя — не «второго фактора нет», а «он сломан».
 
         Первая редакция считала пустую строку ненастроенным фактором, и
-        родитель, включавший 2FA, входил одним паролем — второй фактор снимался
-        испорченной записью в базе. Правильный исход — принудительная
-        перенастройка, а не пропуск.
+        родитель, включавший 2FA, входил одним паролем. Вторая выдавала ему
+        токен настройки — то есть тот же вход одним паролем, только в два шага.
+        Правильный исход — резервный код.
         """
         parent = await make_user(UserRole.PARENT, totp_secret="")
 
@@ -91,20 +94,71 @@ class TestBrokenTotpSecret:
 
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["status"] == "totp_setup_required"
+        assert body["status"] == "totp_recovery_required"
         assert body["tokens"] is None
+        assert body["totp_setup_token"] is None
 
-    async def test_setup_with_broken_secret_does_not_demand_a_code(self, client, make_user):
-        """Стена не должна переехать с входа на экран настройки.
+    async def test_backup_code_is_the_way_back_in(self, client, session, make_user):
+        """Резервный код открывает вход и снимает стену на перенастройке.
 
-        Кабинет зовёт `/auth/totp/setup` сразу после `totp_setup_required`; с
-        `is not None` там требовался текущий код, который у испорченного
-        секрета никогда не сойдётся.
+        Ради этого состояние и заведено: у владельца ключ есть, у знающего
+        пароль — нет. Дальше он перенастраивает фактор без текущего кода,
+        которого взять неоткуда (#227).
         """
-        doctor = await make_user(UserRole.DOCTOR, totp_secret="")
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=self.UNPARSEABLE)
+        codes = await backup_codes_repo.replace_for_user(session, user_id=doctor.id)
+        await session.flush()
+
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": doctor.email, "password": PASSWORD, "backup_code": codes[0]},
+        )
+
+        assert login.status_code == 200, login.text
+        assert login.json()["status"] == "ok"
+        access = login.json()["tokens"]["access_token"]
+
+        setup = await client.post(
+            "/api/v1/auth/totp/setup", json={}, headers={"Authorization": f"Bearer {access}"}
+        )
+
+        assert setup.status_code == 200, setup.text
+        secret = setup.json()["secret"]
+        assert secret != self.UNPARSEABLE, "непригодный секрет не переиспользуется"
+
+        verify = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": pyotp.TOTP(secret).now()},
+            headers={"Authorization": f"Bearer {access}"},
+        )
+
+        assert verify.status_code == 200, verify.text
+        assert verify.json()["tokens"]["access_token"]
+
+    async def test_broken_secret_plus_password_gives_nothing(self, client, make_user):
+        """Код из приложения на сломанном секрете — по-прежнему отказ."""
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=self.UNPARSEABLE)
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": doctor.email, "password": PASSWORD, "totp_code": "000000"},
+        )
+
+        assert response.status_code == 401, response.text
+
+    async def test_first_setup_still_asks_for_nothing_but_the_password(self, client, make_user):
+        """Где секрета НЕТ вовсе — путь прежний: настройка после пароля.
+
+        Обратная сторона #227: ужесточение не должно задеть приглашённого врача,
+        которому фактор ещё негде было настроить. Резервных кодов у него тоже
+        нет, и требовать их значило бы запереть первый вход.
+        """
+        doctor = await make_user(UserRole.DOCTOR)
         login = await client.post(
             "/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD}
         )
+
+        assert login.json()["status"] == "totp_setup_required"
         token = login.json()["totp_setup_token"]
 
         setup = await client.post(
@@ -160,20 +214,90 @@ class TestBrokenSecretOnOtherEndpoints:
         assert response.status_code == 401, response.text
         assert response.json()["error"]["code"] == "unauthorized"
 
-    async def test_totp_setup_refuses(self, client, make_user, auth_headers):
-        """Смена фактора: действующий секрет испорчен, код не сойдётся."""
+    async def test_setup_discards_an_unusable_candidate(
+        self, client, session, make_user, auth_headers
+    ):
+        """Непригодный кандидат не переиспользуется (#228).
+
+        Идемпотентность настройки возвращала ТОТ ЖЕ секрет-кандидат, и если он
+        непригоден, QR честно кодировал секрет, которым подтвердиться нельзя:
+        настройка становилась тупиком без выхода из интерфейса.
+        """
+        doctor = await make_user(UserRole.DOCTOR)
+        doctor.totp_pending_secret = self.BROKEN
+        await session.flush()
+
+        setup = await client.post("/api/v1/auth/totp/setup", json={}, headers=auth_headers(doctor))
+
+        assert setup.status_code == 200, setup.text
+        secret = setup.json()["secret"]
+        assert secret != self.BROKEN
+
+        verify = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": pyotp.TOTP(secret).now()},
+            headers=auth_headers(doctor),
+        )
+        assert verify.status_code == 200, verify.text
+
+    async def test_setup_keeps_a_usable_candidate(self, client, make_user, auth_headers):
+        """Обратная сторона: пригодный кандидат возвращается прежним.
+
+        Иначе перезагрузка страницы после сканирования QR выдавала бы новый
+        секрет, и код из приложения перестал бы подходить к тому, что в базе.
+        """
+        doctor = await make_user(UserRole.DOCTOR)
+
+        first = await client.post("/api/v1/auth/totp/setup", json={}, headers=auth_headers(doctor))
+        second = await client.post("/api/v1/auth/totp/setup", json={}, headers=auth_headers(doctor))
+
+        assert first.json()["secret"] == second.json()["secret"]
+
+    async def test_totp_setup_lets_a_broken_factor_be_replaced(
+        self, client, make_user, auth_headers
+    ):
+        """Смена фактора: испорченный секрет не требует текущего кода.
+
+        Прежде здесь стоял 401 — верный ответ на вопрос «500 или отказ», но
+        тупик по существу: код у непригодного секрета не сойдётся никогда, и
+        человек, вошедший резервным кодом, починить фактор не мог (#227).
+        """
         doctor = await make_user(UserRole.DOCTOR, totp_secret=self.BROKEN)
 
         response = await client.post(
             "/api/v1/auth/totp/setup",
-            json={"current_code": "000000"},
+            json={},
             headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["secret"] != self.BROKEN
+
+    async def test_totp_setup_still_demands_the_code_on_a_working_factor(
+        self, client, make_user, auth_headers
+    ):
+        """Обратная сторона: пригодный фактор без кода не меняется.
+
+        Иначе угнанный access-токен позволил бы молча заменить второй фактор и
+        вытеснить владельца.
+        """
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=pyotp.random_base32())
+
+        response = await client.post(
+            "/api/v1/auth/totp/setup", json={}, headers=auth_headers(doctor)
         )
 
         assert response.status_code == 401, response.text
 
-    async def test_backup_codes_regenerate_refuses(self, client, make_user, auth_headers):
-        """Перевыпуск резервных кодов."""
+    async def test_backup_codes_regenerate_names_the_breakage(
+        self, client, make_user, auth_headers
+    ):
+        """Перевыпуск резервных кодов: «повреждён», а не «не настроен».
+
+        Ответы различаются, потому что различаются действия человека: в одном
+        случае фактор надо настроить, в другом — перенастроить. Прежде оба
+        случая отвечали одинаково, и мутация предиката проходила молча (#229).
+        """
         doctor = await make_user(UserRole.DOCTOR, totp_secret=self.BROKEN)
 
         response = await client.post(
@@ -182,22 +306,55 @@ class TestBrokenSecretOnOtherEndpoints:
             headers=auth_headers(doctor),
         )
 
-        assert response.status_code == 401, response.text
+        assert response.status_code == 409, response.text
+        assert "повреждён" in response.json()["error"]["message"]
+
+    async def test_backup_codes_regenerate_says_not_configured_when_it_is_not(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/auth/backup-codes",
+            json={"totp_code": "000000"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["message"] == "Второй фактор не настроен."
 
 
 class TestTotpPredicate:
-    """«Включён» и «пригоден» — два предиката, и оба живут в модели (#219).
+    """Три вопроса о втором факторе — и каждый задаётся своему слою (#219).
 
-    Их было три, и на испорченном секрете карточка администратора говорила
-    «настроен», а вход — «не настроен»; по этой же карточке администратор
-    решает, сбрасывать ли фактор.
+    Хранение знает модель: включён (`totp_enrolled`), есть что сбрасывать
+    (`totp_resettable`). Пригодность знает слой, где живёт `pyotp`
+    (`totp_secret_usable`) — из базы её не видно. Прежде на все три вопроса
+    отвечали случайные выражения, разбросанные по роутеру и сервису, и на
+    испорченном секрете карточка администратора говорила одно, а вход — другое.
     """
 
     async def test_broken_secret_is_enrolled_but_not_usable(self, session, make_user):
+        from api.security import totp_secret_usable
+
         user = await make_user(UserRole.DOCTOR, totp_secret="")
 
         assert user.totp_enrolled is True, "секрет записан — фактор включался"
-        assert user.has_totp is False, "но подтвердить им код нельзя"
+        assert totp_secret_usable(user.totp_secret) is False, "но подтвердить им код нельзя"
+
+    async def test_usability_is_not_emptiness(self):
+        """Почему пригодность не живёт в модели: «непустой» ≠ «пригодный».
+
+        `'A' * 27` непуст и выглядел настроенным фактором, а `pyotp` на нём
+        бросает `binascii.Error`: человек вводил верный код и получал отказ
+        навсегда. Разбор base32 знает только слой API.
+        """
+        from api.security import totp_secret_usable
+
+        assert bool("A" * 27) is True
+        assert totp_secret_usable("A" * 27) is False
+        assert totp_secret_usable(pyotp.random_base32()) is True
+        assert totp_secret_usable(None) is False
 
     async def test_broken_secret_stays_resettable(self, session, make_user):
         user = await make_user(UserRole.DOCTOR, totp_secret="")

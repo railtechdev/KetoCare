@@ -65,6 +65,7 @@ from ..security import (
     hash_password_async,
     token_predates_password_change,
     totp_provisioning_uri,
+    totp_secret_usable,
     verify_password_async,
     verify_totp,
     waste_password_verification_async,
@@ -131,15 +132,21 @@ async def login(
     # войти было нельзя никогда, вместо честного «второй фактор не настроен»
     # (issue #206). Значение попадает в базу мимо приложения: сид, ручная
     # правка, миграция.
-    # «Включён» и «пригоден» — разные вещи, и оба предиката живут в модели
-    # (`User.totp_enrolled`, `User.has_totp`): здесь их копий быть не должно,
+    # «Включён» (`User.totp_enrolled`) и «пригоден» (`totp_secret_usable`) —
+    # разные вещи, и порядок вопросов важен; своих копий здесь быть не должно,
     # иначе карточка администратора и вход снова разойдутся (#219).
     needs_totp = user.role in ROLES_REQUIRING_TOTP or user.totp_enrolled
 
-    if needs_totp and not user.has_totp:
-        # Приглашённому врачу/диетологу/админу 2FA обязательна, но настроить её
-        # до первого входа негде. Пароль уже проверен, поэтому выдаём токен,
-        # действующий только для /auth/totp/setup и /auth/totp/verify.
+    if needs_totp and not user.totp_enrolled:
+        # ПЕРВАЯ настройка: приглашённому врачу/диетологу/админу 2FA обязательна,
+        # но настроить её до первого входа негде. Пароль уже проверен, поэтому
+        # выдаём токен, действующий только для /auth/totp/setup и /auth/totp/verify.
+        #
+        # Ветка спрашивает включённость, а не пригодность. Прежде она ловила и
+        # сломанный секрет — и тогда ОДИН пароль открывал настройку, а
+        # /auth/totp/verify выдавал полную пару токенов и затирал резервные коды:
+        # испорченная запись в базе превращала учётку врача в однофакторную для
+        # всякого, кто знает пароль (#227).
         return LoginResponse(
             status="totp_setup_required",
             totp_setup_token=create_token(user_id=user.id, role=user.role, token_type="totp_setup"),
@@ -157,6 +164,12 @@ async def login(
         # Журнал, существующий чтобы заметить перебор кодов, содержал
         # фальшивый провал на каждый вход.
         if not payload.totp_code and not payload.backup_code:
+            # Сломанный фактор — тоже шаг входа, но другой: код из приложения не
+            # сойдётся никогда, и просить его значит водить человека по кругу.
+            # Ключ здесь один — резервный код; если и его нет, остаётся сброс
+            # администратором, и кнопка сброса у него на карточке есть.
+            if not totp_secret_usable(user.totp_secret):
+                return LoginResponse(status="totp_recovery_required")
             return LoginResponse(status="totp_required")
 
         # Резервный код — второй фактор для случая «телефона с приложением нет»
@@ -352,11 +365,13 @@ async def totp_setup(
     if db_user is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
 
-    # Смена уже настроенной 2FA требует текущего кода: иначе угнанный access-токен
-    # позволил бы молча заменить второй фактор и вытеснить владельца.
-    # Испорченный (пустой) секрет кода не требует: он никогда не сойдётся, и
-    # человек упирался бы в стену на экране настройки.
-    if db_user.has_totp and not (
+    # Смена ПРИГОДНОГО второго фактора требует текущего кода: иначе угнанный
+    # access-токен позволил бы молча заменить второй фактор и вытеснить
+    # владельца. Непригодный секрет кода не требует: он не сойдётся никогда, и
+    # человек упирался бы в стену — вошёл резервным кодом, а перенастроить
+    # фактор не может. Прежде стена снималась только для ПУСТОГО секрета, а
+    # `'A' * 27` оставлял её на месте (#227).
+    if totp_secret_usable(db_user.totp_secret) and not (
         payload.current_code
         and verify_totp(db_user.totp_secret, payload.current_code, user_id=db_user.id)
     ):
@@ -370,8 +385,11 @@ async def totp_setup(
     # клик, повторный запуск эффекта в React) выдал бы новый секрет, и код из
     # приложения перестал бы подходить к тому, что лежит в базе.
     # Кандидат не активен, пока не подтверждён на /totp/verify, поэтому
-    # переиспользовать его безопасно.
-    secret = db_user.totp_pending_secret or generate_totp_secret()
+    # переиспользовать его безопасно — но только пригодный. Непригодный (записан
+    # мимо приложения) возвращался вечно, и QR честно кодировал секрет, которым
+    # подтвердиться нельзя: настройка становилась тупиком без выхода (#228).
+    candidate = db_user.totp_pending_secret
+    secret = candidate if candidate and totp_secret_usable(candidate) else generate_totp_secret()
     db_user.totp_pending_secret = secret
     await session.flush()
 
@@ -769,8 +787,17 @@ async def regenerate_backup_codes(
     """
 
     db_user = await users_repo.get(session, user.id)
-    if db_user is None or not db_user.has_totp:
+    if db_user is None or not db_user.totp_enrolled:
         raise ApiError(ErrorCode.CONFLICT, "Второй фактор не настроен.")
+
+    # Сломанный секрет — не «не настроен»: человеку надо перенастроить фактор, а
+    # не гадать, почему система забыла его второй фактор (#229). Новый набор
+    # кодов выдаст /auth/totp/verify.
+    if not totp_secret_usable(db_user.totp_secret):
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Второй фактор повреждён — настройте его заново, и коды будут выданы снова.",
+        )
 
     if not verify_totp(db_user.totp_secret, payload.totp_code, user_id=db_user.id):
         raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")

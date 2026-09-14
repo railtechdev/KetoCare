@@ -85,6 +85,39 @@ describe("вход со вторым фактором", () => {
     );
   });
 
+  it("сломанный фактор просит резервный код и не предлагает код из приложения", async () => {
+    // Состояние `totp_recovery_required`: секрет записан мимо приложения и не
+    // разбирается. Поле кода здесь было бы приглашением в круг — код не
+    // сойдётся никогда, сколько ни вводи.
+    post.mockResolvedValue({
+      data: {
+        status: "totp_recovery_required",
+        tokens: null,
+        totp_setup_token: null,
+      },
+    });
+
+    renderPage();
+    await submitCredentials();
+
+    expect(await screen.findByLabelText(/Резервный код/)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Код из приложения-аутентификатора/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Ввести код из приложения/ }),
+    ).not.toBeInTheDocument();
+    // Человеку сказано, ЧТО случилось и что делать: без этого экран выглядит
+    // как «система забыла мой второй фактор».
+    expect(
+      screen.getByText(/Вход по коду из приложения сломан/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/сбросит администратор клиники/),
+    ).toBeInTheDocument();
+    expect(signIn).not.toHaveBeenCalled();
+  });
+
   it("вход без второго фактора открывает кабинет сразу", async () => {
     post.mockResolvedValue({
       data: { status: "ok", tokens: { access_token: "a", refresh_token: "r" } },

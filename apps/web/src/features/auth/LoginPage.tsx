@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
   FormFooter,
+  WarningBanner,
 } from "@ketocare/ui";
 import { Activity } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
@@ -55,6 +56,13 @@ export function LoginPage() {
    * код уже спрошен — до этого он был бы вопросом без повода.
    */
   const [useBackupCode, setUseBackupCode] = useState(false);
+  /**
+   * Второй фактор настраивался, но его секрет непригоден (записан мимо
+   * приложения). Код из приложения не сойдётся никогда, поэтому предлагать его
+   * нельзя: это отправляло бы человека по кругу. Ключ здесь один — резервный
+   * код, и переключателя обратно нет.
+   */
+  const [factorBroken, setFactorBroken] = useState(false);
 
   const {
     register,
@@ -89,6 +97,15 @@ export function LoginPage() {
         data.password_reset_token
       ) {
         setResetToken(data.password_reset_token);
+        return;
+      }
+      if (data.status === "totp_recovery_required") {
+        // Отдельное состояние, а не разновидность `totp_required`: спрашивать
+        // код из приложения здесь бессмысленно. Токена настройки сервер не даёт
+        // намеренно — один пароль не должен открывать перенастройку фактора.
+        setTotpRequired(true);
+        setUseBackupCode(true);
+        setFactorBroken(true);
         return;
       }
       if (data.status === "totp_required") {
@@ -170,6 +187,12 @@ export function LoginPage() {
                 {...register("password")}
               />
 
+              {factorBroken && (
+                <WarningBanner level="warning" title={t("login.brokenTitle")}>
+                  {t("login.broken")}
+                </WarningBanner>
+              )}
+
               {totpRequired &&
                 (useBackupCode ? (
                   <Field
@@ -192,7 +215,7 @@ export function LoginPage() {
                   />
                 ))}
 
-              {totpRequired && (
+              {totpRequired && !factorBroken && (
                 <Button
                   type="button"
                   variant="link"
