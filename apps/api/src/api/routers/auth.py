@@ -9,6 +9,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
+import structlog
 from fastapi import APIRouter, Depends, Path, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +72,8 @@ from ..security import (
     waste_password_verification_async,
 )
 from ..services import telegram as telegram_service
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -169,6 +172,12 @@ async def login(
             # Ключ здесь один — резервный код; если и его нет, остаётся сброс
             # администратором, и кнопка сброса у него на карточке есть.
             if not totp_secret_usable(user.totp_secret):
+                # Записью, а не молча: до этой ветки поломка всплывала в журнале
+                # сама — вход доходил до `verify_totp`, и тот писал
+                # `totp_secret_unparseable` с учёткой (#220). Теперь типичный
+                # путь (человек кода не вводит) до него не доходит, и без записи
+                # администратор узнавал бы о поломке только звонком.
+                logger.warning("totp_recovery_required", user_id=str(user.id))
                 return LoginResponse(status="totp_recovery_required")
             return LoginResponse(status="totp_required")
 

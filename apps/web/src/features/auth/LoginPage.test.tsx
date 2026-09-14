@@ -118,6 +118,34 @@ describe("вход со вторым фактором", () => {
     expect(signIn).not.toHaveBeenCalled();
   });
 
+  it("исправленный адрес снимает сообщение о поломке", async () => {
+    // Состояние принадлежит учётной записи, а не вкладке. Пока оно переживало
+    // смену адреса, здоровому врачу предлагали сжечь одноразовый резервный код.
+    post.mockResolvedValueOnce({
+      data: {
+        status: "totp_recovery_required",
+        tokens: null,
+        totp_setup_token: null,
+      },
+    });
+    post.mockResolvedValueOnce({
+      data: { status: "totp_required", tokens: null, totp_setup_token: null },
+    });
+
+    renderPage();
+    const user = await submitCredentials();
+    expect(await screen.findByLabelText(/Резервный код/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Войти" }));
+
+    expect(
+      await screen.findByLabelText(/Код из приложения-аутентификатора/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Вход по коду из приложения сломан/),
+    ).not.toBeInTheDocument();
+  });
+
   it("вход без второго фактора открывает кабинет сразу", async () => {
     post.mockResolvedValue({
       data: { status: "ok", tokens: { access_token: "a", refresh_token: "r" } },

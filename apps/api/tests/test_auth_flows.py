@@ -135,6 +135,27 @@ class TestBrokenTotpSecret:
         assert verify.status_code == 200, verify.text
         assert verify.json()["tokens"]["access_token"]
 
+    async def test_recovery_state_is_written_to_the_log(self, client, make_user):
+        """Поломка обязана быть видна администратору без звонка.
+
+        Прежде она всплывала сама: вход доходил до `verify_totp`, и тот писал
+        `totp_secret_unparseable` с учёткой (#220). Типичный путь — человек
+        кода не вводит — до него больше не доходит.
+        """
+        import structlog
+
+        doctor = await make_user(UserRole.DOCTOR, totp_secret="")
+
+        with structlog.testing.capture_logs() as entries:
+            response = await client.post(
+                "/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD}
+            )
+
+        assert response.json()["status"] == "totp_recovery_required"
+        broken = [entry for entry in entries if entry["event"] == "totp_recovery_required"]
+        assert broken, "поломка второго фактора обязана быть видна в журнале"
+        assert broken[0]["user_id"] == str(doctor.id)
+
     async def test_broken_secret_plus_password_gives_nothing(self, client, make_user):
         """Код из приложения на сломанном секрете — по-прежнему отказ."""
         doctor = await make_user(UserRole.DOCTOR, totp_secret=self.UNPARSEABLE)
@@ -355,6 +376,32 @@ class TestTotpPredicate:
         assert totp_secret_usable("A" * 27) is False
         assert totp_secret_usable(pyotp.random_base32()) is True
         assert totp_secret_usable(None) is False
+
+    @pytest.mark.parametrize(
+        ("secret", "usable"),
+        [
+            ("ключ", False),
+            ("A" * 31 + "1", False),
+            ("A" * 26, True),
+            ("a" * 32, True),
+            ("MFRGGZDFMZTWQ2LK", True),
+        ],
+        ids=["неASCII", "чужой знак", "26 знаков", "строчные", "обычный"],
+    )
+    async def test_usability_matches_what_verify_can_ever_confirm(self, secret, usable):
+        """Предикат обязан совпадать с «может ли код когда-нибудь сойтись».
+
+        Строчные знаки здесь не мелочь: `pyotp` разбирает их (`casefold`), и
+        считать такой секрет сломанным значило бы отправить в восстановление
+        того, кто прекрасно входит.
+        """
+        from api.security import totp_secret_usable, verify_totp
+
+        assert totp_secret_usable(secret) is usable
+        if usable:
+            assert verify_totp(secret, pyotp.TOTP(secret).now()) is True
+        else:
+            assert verify_totp(secret, "000000") is False
 
     async def test_broken_secret_stays_resettable(self, session, make_user):
         user = await make_user(UserRole.DOCTOR, totp_secret="")
