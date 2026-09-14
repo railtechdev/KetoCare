@@ -1,10 +1,8 @@
 import {
   Button,
   ErrorState,
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
   SEARCH_DELAY_MS,
+  SuggestField,
   useDebouncedValue,
 } from "@ketocare/ui";
 import { PackageSearch } from "lucide-react";
@@ -91,7 +89,6 @@ export function ProductPicker({
   // и закрыться не может: пока в поле те же две буквы, условие снова истинно.
   const [dismissed, setDismissed] = useState(false);
 
-  const listId = useId();
   const inputId = useId();
   // Запрос уходит, когда набор стоит спокойно, — как у всех поисков: без
   // задержки каждая буква после второй шла полнотекстовым запросом к базе.
@@ -137,112 +134,62 @@ export function ProductPicker({
 
   return (
     <div>
-      <Popover open={isOpen} onOpenChange={(open) => setDismissed(!open)}>
-        <PopoverAnchor asChild>
-          <div>
-            <Field
-              id={inputId}
-              label={t("addProduct")}
-              width="wide"
-              role="combobox"
-              aria-expanded={isOpen}
-              aria-controls={listId}
-              aria-autocomplete="list"
-              aria-activedescendant={
-                isOpen ? `${listId}-${activeIndex}` : undefined
-              }
-              placeholder={t("searchPlaceholder")}
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setActiveIndex(0);
-                setDismissed(false);
-              }}
-              onKeyDown={(event) => {
-                if (!isOpen) return;
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setActiveIndex((i) => (i + 1) % options.length);
-                } else if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setActiveIndex(
-                    (i) => (i - 1 + options.length) % options.length,
-                  );
-                } else if (event.key === "Enter") {
-                  event.preventDefault();
-                  pick(options[activeIndex]);
-                } else if (event.key === "Escape") {
-                  setQuery("");
-                }
-              }}
-            />
-          </div>
-        </PopoverAnchor>
-
-        {/* Ширину берём у поля (`--radix-popover-trigger-width` Radix
-            выставляет по якорю), фокус оставляем в поле: combobox тем и
-            отличается от меню, что человек продолжает печатать. */}
-        <PopoverContent
-          align="start"
-          sideOffset={4}
-          // Ширина повторяет поле, а не задаётся заново: на телефоне — во всю
-          // ширину якоря (Radix отдаёт её в `--radix-popover-trigger-width`), с
-          // `sm` — тот же предел `field-wide`, что у самого поля.
-          className="max-h-72 w-[var(--radix-popover-trigger-width)] overflow-auto p-0 sm:max-w-field-wide"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-          onCloseAutoFocus={(event) => event.preventDefault()}
-        >
-          <ul id={listId} role="listbox" className="m-0 list-none p-0">
-            {options.map((product, index) => (
-              <li
-                key={product.id}
-                id={`${listId}-${index}`}
-                role="option"
-                aria-selected={index === activeIndex}
-                /* Название строкой, состав — строкой под ним, всегда. Раньше
-                   строка была свободной (`flex-wrap`), и раскладка зависела от
-                   длины названия: «Кокосовое масло» умещалось с числами в одну
-                   строку, «Масло оливковое» переносило их на вторую. Соседние
-                   подсказки получались разной высоты, а числа — без общей
-                   левой линии, то есть несравнимыми: именно их человек и
-                   сравнивает, выбирая продукт. */
-                className={`flex min-h-touch cursor-pointer flex-col gap-field px-3 py-2 ${
-                  index === activeIndex
-                    ? "bg-accent text-accent-foreground"
-                    : ""
-                }`}
-                onMouseDown={(event) => {
-                  // mouseDown, а не click: click срабатывает после blur поля,
-                  // и список успевает закрыться раньше выбора.
-                  event.preventDefault();
-                  pick(product);
-                }}
-                onMouseEnter={() => setActiveIndex(index)}
-              >
-                <span className="min-w-0 break-words">{product.name}</span>
-                <span className="text-sm text-muted-foreground tabular-nums">
-                  {t("per100g", {
-                    kcal: product.kcal.toFixed(0),
-                    fat: product.fat.toFixed(1),
-                    protein: product.protein.toFixed(1),
-                    carbs: product.carbs.toFixed(1),
-                  })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </PopoverContent>
-      </Popover>
-
-      {/* Состояние поиска объявляется отдельно: скринридер иначе не узнает,
-        что список обновился. */}
-      <span className="sr-only" role="status">
-        {isFetching
-          ? t("searching")
-          : isOpen
-            ? t("optionsFound", { count: options.length })
-            : ""}
-      </span>
+      <SuggestField
+        options={options}
+        open={!dismissed && query.trim().length >= 2}
+        onOpenChange={(next) => setDismissed(!next)}
+        activeIndex={activeIndex}
+        onActiveIndexChange={setActiveIndex}
+        onPick={pick}
+        // Состояние поиска объявляется отдельно: скринридер иначе не узнает,
+        // что список обновился.
+        announcement={
+          isFetching
+            ? t("searching")
+            : isOpen
+              ? t("optionsFound", { count: options.length })
+              : ""
+        }
+        // На телефоне список во всю ширину якоря, с `sm` — тот же предел
+        // `field-wide`, что у самого поля.
+        contentClassName="sm:max-w-field-wide"
+        optionKey={(product) => product.id}
+        /* Название строкой, состав — строкой под ним, всегда. Раньше строка
+           была свободной (`flex-wrap`), и раскладка зависела от длины
+           названия: «Кокосовое масло» умещалось с числами в одну строку,
+           «Масло оливковое» переносило их на вторую. Соседние подсказки
+           получались разной высоты, а числа — без общей левой линии, то есть
+           несравнимыми: именно их человек и сравнивает, выбирая продукт. */
+        renderOption={(product) => (
+          <>
+            <span className="min-w-0 break-words">{product.name}</span>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {t("per100g", {
+                kcal: product.kcal.toFixed(0),
+                fat: product.fat.toFixed(1),
+                protein: product.protein.toFixed(1),
+                carbs: product.carbs.toFixed(1),
+              })}
+            </span>
+          </>
+        )}
+      >
+        {(aria) => (
+          <Field
+            id={inputId}
+            label={t("addProduct")}
+            width="wide"
+            {...aria}
+            placeholder={t("searchPlaceholder")}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+              setDismissed(false);
+            }}
+          />
+        )}
+      </SuggestField>
 
       {/* Два выхода, а не один. Заказчица набрала здесь «суп из говядины» —
           название БЛЮДА в поиске ПРОДУКТОВ, — получила «ничего не нашлось» и
