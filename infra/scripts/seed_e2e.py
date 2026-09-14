@@ -45,7 +45,8 @@ from core.tools.db_guard import refuse_foreign_database
 
 # Пароль по умолчанию годится только для локальной базы: на публичном стенде его
 # обязательно перекрывает переменная окружения — тот же довод, что в `seed_demo`.
-PASSWORD = os.environ.get("E2E_PASSWORD", "e2e correct horse battery staple")
+_PASSWORD_VAR = "E2E_PASSWORD"
+_PASSWORD_DEFAULT = "e2e correct horse battery staple"
 
 #: Домен `example.com` зарезервирован RFC 2606: письмо на такой адрес не уйдёт
 #: даже случайно. Именно он, а не более говорящий `example.test`: проверка
@@ -59,7 +60,26 @@ DOCTOR_SETUP_EMAIL = "e2e-doctor-setup@example.com"
 # Второй фактор врача прогона задан, а не настраивается на ходу: тот же секрет
 # читает прогон (`E2E_TOTP_SECRET`), поэтому состояние живёт только в базе.
 # Значение фиктивное и годится лишь для локальной базы — как и пароль выше.
-TOTP_SECRET = os.environ.get("E2E_TOTP_SECRET", "KETOCAREE2ETOTPSECRET234567ABCDE")
+_TOTP_VAR = "E2E_TOTP_SECRET"
+_TOTP_DEFAULT = "KETOCAREE2ETOTPSECRET234567ABCDE"
+
+
+def _password() -> str:
+    """Пароль учёток прогона — одним источником, читаемым при обращении.
+
+    Снимок при импорте означал бы, что проверка ниже удостоверяет не то
+    значение, которое потом хешируется: разойтись они могли бы только по
+    порядку загрузки модуля, но утверждение «проверено» держалось бы на нём, а
+    не на коде (замечание ревью PR #195 — там это уже исправлено у демо-сида).
+    """
+    return os.environ.get(_PASSWORD_VAR, "").strip() or _PASSWORD_DEFAULT
+
+
+def _totp_secret() -> str:
+    """Секрет второго фактора врача — тем же правилом, что и пароль."""
+    return os.environ.get(_TOTP_VAR, "").strip() or _TOTP_DEFAULT
+
+
 PARENT_EMAIL = "e2e-parent@example.com"
 
 PATIENT_NAME = "Тест Тестова"
@@ -104,11 +124,53 @@ def _refuse_production(database_url: str) -> None:
     )
 
 
+def _require_credentials_on_allowed_host() -> None:
+    """Разрешил нелокальную базу — задай и пароль, и секрет второго фактора.
+
+    Умолчания лежат в открытом репозитории. Опаснее здесь НЕ пароль: секрет
+    второго фактора из репозитория означает, что второго фактора у врача нет
+    вовсе — код к нему посчитает кто угодно.
+
+    Требование привязано к разрешению, а не ко всем запускам, и это не
+    послабление, а условие работоспособности сторожа: ночной прогон
+    (`.github/workflows/e2e.yml`) переменных не задаёт ВОВСЕ, а
+    `apps/e2e/global-setup.ts` передаёт сиду ровно те значения, которые прогон
+    взял у себя, — обе стороны сознательно сходятся на умолчаниях. Глухое
+    требование убило бы единственную сквозную проверку кабинета.
+    """
+    if os.environ.get(_ALLOW_HOST, "").strip() == "":
+        return
+    # Сверяются ЗНАЧЕНИЯ, а не факт объявления: `apps/e2e/global-setup.ts`
+    # передаёт сиду то, что взял у себя, а там при пустом окружении берётся то
+    # же умолчание из репозитория. Проверка «переменная задана» такой запуск
+    # пропустила бы, и текст отказа обещал бы больше, чем делает.
+    missing = [
+        name
+        for name, value, default in (
+            (_TOTP_VAR, _totp_secret(), _TOTP_DEFAULT),
+            (_PASSWORD_VAR, _password(), _PASSWORD_DEFAULT),
+        )
+        if value == default
+    ]
+    if not missing:
+        return
+    raise SystemExit(
+        f"База разрешена переменной {_ALLOW_HOST}, а осталось умолчание из\n"
+        "репозитория: " + ", ".join(missing) + ".\n"
+        f"Умолчания лежат в открытом репозитории. {_TOTP_VAR} важнее пароля:\n"
+        "с известным секретом второго фактора у врача его попросту нет —\n"
+        "код к нему посчитает кто угодно.\n"
+        "Задайте обе переменные ТОЙ ЖЕ КОМАНДОЙ: сид читает окружение\n"
+        "процесса, и запись в файле окружения он не увидит."
+    )
+
+
 async def main() -> int:
     from api.security import hash_password
 
     database_url = get_settings().database_url
     _refuse_production(database_url)
+    _require_credentials_on_allowed_host()
     engine = create_async_engine(database_url)
     maker = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -121,7 +183,7 @@ async def main() -> int:
         # Секрет задаётся каждый раз, а не только при создании: он мог
         # смениться в прошлом прогоне или прийти другим из окружения, и тогда
         # вход упал бы без объяснения — тот же довод, что у пароля.
-        doctor.totp_secret = TOTP_SECRET
+        doctor.totp_secret = _totp_secret()
         doctor.totp_pending_secret = None
 
         # А этому врачу второй фактор настраивает сам тест: проверка первичного
@@ -160,7 +222,7 @@ async def _user(session, role: UserRole, full_name: str, email: str, hash_passwo
     if existing is not None:
         # Пароль переустанавливается: он мог смениться в прошлом прогоне или
         # прийти другим из окружения, и тогда вход упал бы без объяснения.
-        existing.password_hash = hash_password(PASSWORD)
+        existing.password_hash = hash_password(_password())
         existing.is_active = True
         return existing
 
@@ -169,7 +231,7 @@ async def _user(session, role: UserRole, full_name: str, email: str, hash_passwo
         role=role,
         full_name=full_name,
         email=email,
-        password_hash=hash_password(PASSWORD),
+        password_hash=hash_password(_password()),
     )
     return user
 
