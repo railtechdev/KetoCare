@@ -59,7 +59,7 @@ beforeEach(() => {
               email: "admin@example.com",
               role: "admin",
               is_active: true,
-              has_totp: true,
+              totp_resettable: true,
               sole_patients: 0,
               created_at: "2026-08-01T10:00:00Z",
             },
