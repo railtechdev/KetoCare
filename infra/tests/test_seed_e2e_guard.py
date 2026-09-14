@@ -13,14 +13,14 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "seed_e2e.py"
 
 
-def _guard():
+def _guard() -> ModuleType:
     spec = importlib.util.spec_from_file_location("seed_e2e_guard", _SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

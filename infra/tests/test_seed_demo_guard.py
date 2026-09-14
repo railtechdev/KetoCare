@@ -17,14 +17,14 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 
-def _load(name: str):
+def _load(name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(f"{name}_guard", _SCRIPTS / f"{name}.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -319,3 +319,57 @@ def test_copied_default_is_not_called_given_in_the_output(
     # человек решил бы, что пароль в журнал не попал.
     monkeypatch.setenv(DEMO._PASSWORD_VAR, DEMO._PASSWORD_DEFAULT)
     assert DEMO._PASSWORD_DEFAULT in DEMO._password_line()
+
+
+def test_patient_without_a_row_is_recreated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Привязка без строки пациента — не повод падать.
+
+    `patients_repo.get` по типу отдаёт `Patient | None`. Сегодня пусто здесь не
+    бывает: внешний ключ не даёт привязке пережить пациента, а `erase_patient`
+    чистит привязки раньше. Но ветки не было вовсе, и значение уходило прямо в
+    `patient.id` — проверка типов (`union-attr`) на это и указала, когда каталог
+    заводили под `mypy`. Ветка защитная, и тест держит именно её поведение:
+    пусто значит «заводим нового и привязываем к родителю».
+    """
+    created: list[str] = []
+    linked_parents: list[tuple[str, str]] = []
+
+    class _Access:
+        @staticmethod
+        async def list_accessible_patient_ids(session: object, **kw: object) -> list[str]:
+            return ["id-удалённого"]
+
+    class _Patients:
+        @staticmethod
+        async def get(session: object, patient_id: str) -> None:
+            return None
+
+        @staticmethod
+        async def create(session: object, **fields: object) -> SimpleNamespace:
+            created.append(str(fields.get("full_name")))
+            return SimpleNamespace(id="id-нового")
+
+        @staticmethod
+        async def link_parent(session: object, **kw: object) -> None:
+            linked_parents.append((str(kw.get("parent_id")), str(kw.get("patient_id"))))
+
+        @staticmethod
+        async def link_doctor(session: object, **kw: object) -> None:
+            return None
+
+    monkeypatch.setattr(DEMO, "access_repo", _Access)
+    monkeypatch.setattr(DEMO, "patients_repo", _Patients)
+
+    patient = asyncio.run(
+        DEMO._patient(
+            None,
+            parent=SimpleNamespace(id="id-родителя"),
+            doctor=SimpleNamespace(id="id-врача"),
+        )
+    )
+
+    assert patient.id == "id-нового"
+    assert created == ["Аня Иванова"]
+    # Нового ребёнка мало: без привязки к родителю демо-сид бесполезен ровно так
+    # же, как при падении. Мутация «снять `link_parent`» иначе выживает.
+    assert linked_parents == [("id-родителя", "id-нового")]

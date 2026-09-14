@@ -14,13 +14,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.config import get_settings
-from core.models import Product, ProductCategory
+from core.models import Patient, Product, ProductCategory, User
 from core.models.enums import DiarySource, KetoneMethod, Sex, UserRole
 from core.repositories import access as access_repo
 from core.repositories import diary as diary_repo
@@ -210,7 +212,13 @@ async def main() -> int:
     return 0
 
 
-async def _user(session, role: UserRole, full_name: str, email: str, hash_password) -> object:
+async def _user(
+    session: AsyncSession,
+    role: UserRole,
+    full_name: str,
+    email: str,
+    hash_password: Callable[[str], str],
+) -> User:
     existing = await users_repo.get_by_email(session, email)
     if existing is not None:
         return existing
@@ -223,7 +231,7 @@ async def _user(session, role: UserRole, full_name: str, email: str, hash_passwo
     )
 
 
-async def _category(session) -> ProductCategory:
+async def _category(session: AsyncSession) -> ProductCategory:
     category = await session.scalar(
         select(ProductCategory).where(ProductCategory.name_ru == "Демонстрационные")
     )
@@ -234,7 +242,7 @@ async def _category(session) -> ProductCategory:
     return category
 
 
-async def _products(session, *, category_id, changed_by) -> int:
+async def _products(session: AsyncSession, *, category_id: uuid.UUID, changed_by: uuid.UUID) -> int:
     added = 0
     for name, kcal, fat, protein, carbs, fiber in DEMO_PRODUCTS:
         exists = await session.scalar(select(Product).where(Product.name_ru == name))
@@ -258,13 +266,18 @@ async def _products(session, *, category_id, changed_by) -> int:
     return added
 
 
-async def _patient(session, *, parent, doctor):
+async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Patient:
     linked = await access_repo.list_accessible_patient_ids(
         session, user_id=parent.id, role=UserRole.PARENT
     )
-    if linked:
-        patient = await patients_repo.get(session, linked[0])
-    else:
+    # `get` возвращает `Patient | None`. Внешний ключ `parent_patient` не даёт
+    # привязке пережить пациента (а `erase_patient` чистит привязки раньше
+    # самого пациента), так что сегодня пусто здесь не бывает — ветка защитная,
+    # как и в сиде прогонов. Прежде её не было вовсе, и значение уходило прямо в
+    # `patient.id`: проверка типов на это и указала.
+    patient = await patients_repo.get(session, linked[0]) if linked else None
+
+    if patient is None:
         patient = await patients_repo.create(
             session,
             full_name="Аня Иванова",
@@ -283,7 +296,9 @@ async def _patient(session, *, parent, doctor):
     return patient
 
 
-async def _prescription(session, *, patient_id, author_id) -> None:
+async def _prescription(
+    session: AsyncSession, *, patient_id: uuid.UUID, author_id: uuid.UUID
+) -> None:
     if await prescriptions_repo.get_active(session, patient_id=patient_id) is not None:
         return
     await prescriptions_repo.create(
@@ -299,7 +314,7 @@ async def _prescription(session, *, patient_id, author_id) -> None:
     )
 
 
-async def _diary(session, *, patient_id, author_id) -> int:
+async def _diary(session: AsyncSession, *, patient_id: uuid.UUID, author_id: uuid.UUID) -> int:
     """Две недели кетонов и веса. Значения правдоподобные, но вымышленные:
     это демонстрация интерфейса, а не клинические данные."""
 

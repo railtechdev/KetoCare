@@ -41,7 +41,7 @@ jobs:
       - name: ruff format --check
         run: uv run ruff format --check apps packages infra
       - name: mypy
-        run: uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api
+        run: uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api apps/bot/src/bot apps/worker/src/worker infra
       - name: Сгенерировать api-client
         # packages/api-client/src/generated/ в .gitignore, поэтому на чистом
         # checkout его нет, и tsc не нашёл бы типов схемы.

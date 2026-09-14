@@ -158,9 +158,11 @@ def _note_for(case: dict[str, Any], *, recomputed: bool) -> str:
 
     replacement = _STALE_NOTES.get(case["name"])
     if replacement is not None:
-        return replacement
+        return str(replacement)
 
-    note = case.get("note", "")
+    # `case` — разобранный YAML, то есть словарь без типов: значения оттуда
+    # приходят как `Any`. Приводим явно, а не глушим проверку.
+    note = str(case.get("note", ""))
     if not recomputed:
         return note
     mark = f"пересчитано под ENGINE_VERSION {ENGINE_VERSION}: соотношение по чистым углеводам"
