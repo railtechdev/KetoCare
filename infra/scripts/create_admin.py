@@ -36,6 +36,7 @@ from core.config import get_settings
 from core.models import AuditLog
 from core.models.enums import UserRole
 from core.repositories import users as users_repo
+from core.tools.db_guard import MIN_PASSWORD_LENGTH
 
 # Длина временного пароля. 24 байта url-safe — это ~32 символа: вводится один
 # раз копированием, а подбирать нечего.
@@ -45,10 +46,8 @@ TEMP_PASSWORD_BYTES = 24
 #: пароль приходит из секретов GitHub, и печатать его в журнал прогона нельзя.
 PASSWORD_ENV = "ADMIN_PASSWORD"
 
-# Минимальная длина заданного человеком пароля. Не «политика паролей» (её место
-# в приложении), а защита от очевидной ошибки: пустой или трёхсимвольный секрет
-# в GitHub означал бы открытую админку на публичном домене.
-MIN_PASSWORD_LENGTH = 12
+# Минимальная длина — из `core.tools.db_guard`: то же правило действует у
+# демо-сида, а два объявления одного числа однажды разъехались бы.
 
 
 def _generate_password() -> str:

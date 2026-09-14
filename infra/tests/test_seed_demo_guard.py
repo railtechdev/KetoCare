@@ -170,7 +170,9 @@ def test_password_is_required_when_the_host_is_allowed(monkeypatch: pytest.Monke
 
 def test_password_given_satisfies_the_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
-    monkeypatch.setenv(DEMO._PASSWORD_VAR, "свой пароль")
+    # Длиннее минимума: «свой пароль» — одиннадцать символов, и после появления
+    # правила длины этот случай проверял бы уже не то, что заявляет.
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "свой длинный пароль")
     DEMO._require_password_on_allowed_host()
 
 
@@ -373,3 +375,56 @@ def test_patient_without_a_row_is_recreated(monkeypatch: pytest.MonkeyPatch) -> 
     # Нового ребёнка мало: без привязки к родителю демо-сид бесполезен ровно так
     # же, как при падении. Мутация «снять `link_parent`» иначе выживает.
     assert linked_parents == [("id-родителя", "id-нового")]
+
+
+def test_short_password_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Короткий пароль на разрешённой базе — та же открытая админка.
+
+    `create_admin.py` требует двенадцать символов при точно такой же экспозиции
+    (`admin@example.com` на публичном домене), а сторож демо-сида пропускал
+    любой — замечание ревью PR #197.
+    """
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "коротко")
+    with pytest.raises(SystemExit) as refusal:
+        DEMO._require_password_on_allowed_host()
+    assert str(DEMO.MIN_PASSWORD_LENGTH) in str(refusal.value)
+    assert "админка" in str(refusal.value)
+
+
+def test_password_of_minimum_length_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Граница: ровно минимум проходит. Со строгим `<=` вместо `<` этот случай
+    # упал бы — мутация на нём и проверяется.
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "x" * DEMO.MIN_PASSWORD_LENGTH)
+    DEMO._require_password_on_allowed_host()
+
+
+def test_local_run_does_not_check_length() -> None:
+    # На локальной базе длина не проверяется вовсе: там умолчание — удобство, и
+    # ломать `make seed-demo` незачем.
+    DEMO._require_password_on_allowed_host()
+
+
+def test_length_comes_from_one_place() -> None:
+    """Число одно на оба скрипта, а не объявлено дважды.
+
+    Сравнивать значения бесполезно: `12 is 12` истинно и у независимых
+    объявлений — малые целые в Python кэшируются, и первая редакция этого теста
+    переживала мутацию «объявить своё число». Поэтому проверяется ИСХОДНИК: ни в
+    одном из двух скриптов не должно быть собственного присваивания, только
+    импорт из общего модуля.
+    """
+    from core.tools.db_guard import MIN_PASSWORD_LENGTH as shared
+
+    admin = _load("create_admin")
+    assert shared == DEMO.MIN_PASSWORD_LENGTH
+    assert shared == admin.MIN_PASSWORD_LENGTH
+
+    for script in ("seed_demo.py", "create_admin.py"):
+        source = (_SCRIPTS / script).read_text(encoding="utf8")
+        assert "MIN_PASSWORD_LENGTH =" not in source, (
+            f"{script} объявляет минимум длины сам — копия разойдётся молча, "
+            "как уже расходилась проверка адреса базы"
+        )
+        assert "import MIN_PASSWORD_LENGTH" in source or "MIN_PASSWORD_LENGTH," in source
