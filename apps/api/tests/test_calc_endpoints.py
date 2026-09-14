@@ -186,6 +186,7 @@ class TestVerify:
         body = response.json()
         assert body["ratio_within_tolerance"] is not None
         assert body["kcal_within_tolerance"] is not None
+        assert body["ratio_comparable"] is True
 
     async def test_dish_without_ratio_has_no_ratio_verdict(
         self, client, session, make_user, auth_headers
@@ -221,6 +222,33 @@ class TestVerify:
         assert body["dish"]["ratio"] is None
         assert body["ratio_within_tolerance"] is None
         assert body["kcal_within_tolerance"] is not None
+        # Цели переданы, но сравнивать нечего — это НЕ «мы не спрашивали» (#216).
+        assert body["ratio_comparable"] is False
+
+    async def test_without_targets_nothing_is_comparable(
+        self, client, session, make_user, auth_headers
+    ):
+        """Цели не переданы — это третий случай, и он отличим от двух других.
+
+        Прежде `null` значил и «не спрашивали», и «нечего сравнивать»; клиенты
+        различали их по наличию цели у себя, то есть по догадке (#216).
+        """
+        user = await make_user(UserRole.PARENT)
+        response = await client.post(
+            "/api/v1/calc/verify",
+            json={
+                "ingredients": [BUTTER, CHICKEN],
+                "items": [
+                    {"product_id": "butter", "grams": 50},
+                    {"product_id": "chicken", "grams": 40},
+                ],
+            },
+            headers=auth_headers(user),
+        )
+        body = response.json()
+        assert body["ratio_within_tolerance"] is None
+        assert body["ratio_comparable"] is False
+        assert body["dish"]["ratio"] is not None, "соотношение у блюда есть, цели нет"
 
     async def test_item_referencing_unknown_product_rejected(
         self, client, session, make_user, auth_headers
