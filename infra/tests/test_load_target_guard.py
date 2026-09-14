@@ -54,6 +54,11 @@ def _no_permission(monkeypatch: pytest.MonkeyPatch) -> None:
         # Прежняя проверка регистра стояла на ЧУЖОЙ цели и ничего не ловила:
         # та отвергается и так (замечание по мутации, PR #198).
         "HTTP://LOCALHOST:5175",
+        # Локальная цель БЕЗ схемы: ради неё и сделана подстановка `http://`
+        # в разборе. Без подстановки `urlsplit` не даёт хоста вовсе, и локальная
+        # цель получила бы ложный отказ (чужая отвергается и так — замечание
+        # ревью, моё прежнее обоснование было перевёрнуто).
+        "localhost:8001",
         # Пустая цель — «не задана»: locust и так никуда не пойдёт, а отказ был
         # бы про не тот предмет.
         "",
@@ -189,6 +194,9 @@ def test_allowed_target_reaches_the_login(monkeypatch: pytest.MonkeyPatch) -> No
     Без этого случая «отказывать всегда» выглядело бы исправной защитой.
     """
     module, events, stop_test = _load_profile(monkeypatch)
+    # Цикл по пустому списку проходит молча: без этой строки тест был бы
+    # вакуумным и при снятом декораторе остался бы зелёным.
+    assert events.test_start.listeners, "подготовка прогона не подписана на старт"
     monkeypatch.setenv(PROFILE.ALLOW_TARGET, STAND)
 
     for handler in events.test_start.listeners:
@@ -198,6 +206,7 @@ def test_allowed_target_reaches_the_login(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_local_target_reaches_the_login(monkeypatch: pytest.MonkeyPatch) -> None:
     module, events, stop_test = _load_profile(monkeypatch)
+    assert events.test_start.listeners, "подготовка прогона не подписана на старт"
 
     for handler in events.test_start.listeners:
         with pytest.raises(NetworkTouched):
