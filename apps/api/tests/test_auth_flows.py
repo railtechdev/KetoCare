@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pyotp
 import pytest
 
@@ -133,6 +135,117 @@ class TestBrokenTotpSecret:
         assert response.json()["status"] == "ok"
 
 
+class TestBrokenSecretOnOtherEndpoints:
+    """Испорченный секрет: 401, а не 500 — на всех путях, а не только на входе.
+
+    `verify_totp` зовётся из четырёх мест; до #218 каждое падало в 500, а
+    тестом был закрыт только вход — сужение `except` обратно поймало бы лишь
+    его (#221).
+    """
+
+    BROKEN = "секрет-администратора"
+
+    async def test_totp_verify_refuses(self, client, session, make_user, auth_headers):
+        """Подтверждение настройки: секрет-кандидат испорчен."""
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=pyotp.random_base32())
+        doctor.totp_pending_secret = self.BROKEN
+        await session.flush()
+
+        response = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": "000000"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 401, response.text
+        assert response.json()["error"]["code"] == "unauthorized"
+
+    async def test_totp_setup_refuses(self, client, make_user, auth_headers):
+        """Смена фактора: действующий секрет испорчен, код не сойдётся."""
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=self.BROKEN)
+
+        response = await client.post(
+            "/api/v1/auth/totp/setup",
+            json={"current_code": "000000"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 401, response.text
+
+    async def test_backup_codes_regenerate_refuses(self, client, make_user, auth_headers):
+        """Перевыпуск резервных кодов."""
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=self.BROKEN)
+
+        response = await client.post(
+            "/api/v1/auth/backup-codes",
+            json={"totp_code": "000000"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 401, response.text
+
+
+class TestTotpPredicate:
+    """«Включён» и «пригоден» — два предиката, и оба живут в модели (#219).
+
+    Их было три, и на испорченном секрете карточка администратора говорила
+    «настроен», а вход — «не настроен»; по этой же карточке администратор
+    решает, сбрасывать ли фактор.
+    """
+
+    async def test_broken_secret_is_enrolled_but_not_usable(self, session, make_user):
+        user = await make_user(UserRole.DOCTOR, totp_secret="")
+
+        assert user.totp_enrolled is True, "секрет записан — фактор включался"
+        assert user.has_totp is False, "но подтвердить им код нельзя"
+
+    async def test_broken_secret_stays_resettable(self, session, make_user):
+        user = await make_user(UserRole.DOCTOR, totp_secret="")
+
+        assert user.totp_resettable is True, "сбрасывать есть что — секрет записан"
+
+    async def test_admin_card_promises_exactly_what_the_reset_does(
+        self, client, session, make_user, auth_headers
+    ):
+        """Кнопка сброса стоит ровно там, где сброс срабатывает.
+
+        Карточка отвечает на вопрос кнопки, а не на вопрос входа. Признак
+        пригодности здесь скрыл бы кнопку у испорченного секрета — то есть у
+        того единственного, кому сброс и нужен: войти таким секретом нельзя.
+        Сервер такой сброс принимает, и карточка обязана это показывать.
+        """
+        admin = await make_user(UserRole.ADMIN, totp_secret=pyotp.random_base32())
+        doctor = await make_user(UserRole.DOCTOR, totp_secret="")
+
+        listing = await client.get("/api/v1/admin/users", headers=auth_headers(admin))
+        assert listing.status_code == 200, listing.text
+        card = next(row for row in listing.json()["items"] if row["id"] == str(doctor.id))
+
+        assert card["totp_resettable"] is True, "кнопка сброса обязана остаться"
+        assert "has_totp" not in card, "наружу уходит вопрос кнопки, а не вопрос входа"
+
+        reset = await client.post(
+            f"/api/v1/admin/users/{doctor.id}/reset-totp", headers=auth_headers(admin)
+        )
+        assert reset.status_code == 200, reset.text
+
+    async def test_card_is_silent_when_there_is_nothing_to_reset(
+        self, client, session, make_user, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN, totp_secret=pyotp.random_base32())
+        parent = await make_user(UserRole.PARENT)
+
+        listing = await client.get("/api/v1/admin/users", headers=auth_headers(admin))
+        card = next(row for row in listing.json()["items"] if row["id"] == str(parent.id))
+
+        assert card["totp_resettable"] is False
+
+        reset = await client.post(
+            f"/api/v1/admin/users/{parent.id}/reset-totp", headers=auth_headers(admin)
+        )
+        assert reset.status_code == 409, "кнопки нет именно потому, что здесь 409"
+
+
 class TestVerifyTotp:
     """Сама проверка кода: хвост блока, чужой знак, неASCII — и два рабочих."""
 
@@ -145,6 +258,52 @@ class TestVerifyTotp:
         from api.security import verify_totp
 
         assert verify_totp(secret, "123456") is False
+
+    async def test_missing_secret_answers_false(self):
+        """Отсутствующий секрет — тоже «код не подтверждён», а не исключение.
+
+        `verify_totp` тотальна по секрету намеренно: `pyotp` на `None` падает
+        «object of type NoneType has no len()», и без этой ветки сужение типа
+        расползлось бы по четырём вызовам в роутере.
+        """
+        from api.security import verify_totp
+
+        assert verify_totp(None, "123456") is False
+        assert verify_totp("", "123456") is False
+
+    async def test_unparseable_secret_names_the_account_in_the_log(self):
+        """Запись о поломке называет учётку и не выносит секрет (#220).
+
+        Без идентификатора администратор знает, что где-то сломан секрет, но не
+        знает у кого — а человек тем временем вводит верный код и получает
+        «неверный код подтверждения» бесконечно. Сам секрет в запись не уходит:
+        тексты исключений родовые.
+        """
+        import structlog
+
+        from api.security import verify_totp
+
+        user_id = uuid.uuid4()
+        secret = "секрет-администратора"
+
+        with structlog.testing.capture_logs() as entries:
+            assert verify_totp(secret, "123456", user_id=user_id) is False
+
+        broken = [entry for entry in entries if entry["event"] == "totp_secret_unparseable"]
+        assert broken, "поломка секрета обязана быть видна в журнале"
+        assert broken[0]["user_id"] == str(user_id), "без учётки починить нечего"
+        assert secret not in repr(broken[0]), "секрет в журнал не уходит"
+
+    async def test_log_stays_silent_when_the_secret_is_merely_wrong(self):
+        """Обычный неверный код записи не порождает — иначе она ничего не значит."""
+        import structlog
+
+        from api.security import verify_totp
+
+        with structlog.testing.capture_logs() as entries:
+            assert verify_totp(pyotp.random_base32(), "123456") is False
+
+        assert [entry for entry in entries if entry["event"] == "totp_secret_unparseable"] == []
 
     async def test_working_secret_answers_true(self):
         from api.security import verify_totp

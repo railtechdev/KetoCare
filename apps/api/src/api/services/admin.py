@@ -197,7 +197,7 @@ async def reset_totp(
     if user is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Пользователь не найден.")
 
-    if user.totp_secret is None and user.totp_pending_secret is None:
+    if not user.totp_resettable:
         raise ApiError(ErrorCode.CONFLICT, "У этой учётной записи второй фактор не настроен.")
 
     user.totp_secret = None
