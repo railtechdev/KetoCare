@@ -41,18 +41,6 @@ async def list_prescriptions(
     return Page(items=[PrescriptionRead.model_validate(p) for p in items], total=total)
 
 
-@router.get("/active", response_model=PrescriptionRead, summary="Активное назначение")
-async def get_active_prescription(
-    patient_id: Annotated[uuid.UUID, Path()],
-    session: SessionDep,
-    _: PatientAccessDep,
-) -> PrescriptionRead:
-    prescription = await prescriptions_repo.get_active(session, patient_id=patient_id)
-    if prescription is None:
-        raise ApiError(ErrorCode.NOT_FOUND, "Назначение ещё не создано.")
-    return PrescriptionRead.model_validate(prescription)
-
-
 @router.post(
     "",
     response_model=PrescriptionRead,
