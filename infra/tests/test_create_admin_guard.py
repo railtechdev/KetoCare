@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -23,6 +25,7 @@ from typing import Any
 import pytest
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "create_admin.py"
+_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load() -> ModuleType:
@@ -70,7 +73,9 @@ def test_email_without_at_sign_is_refused(capsys: pytest.CaptureFixture[str]) ->
     with pytest.raises(SystemExit) as refusal:
         ADMIN.main(["--email", "admin.clinic.example", "--name", "Админ Клиники"])
     assert refusal.value.code == 2
-    assert "--email" in capsys.readouterr().err
+    # Не `"--email" in ...`: argparse печатает usage, а там этот ключ есть
+    # всегда — утверждение выполнялось бы при любом тексте ошибки.
+    assert "адресом почты" in capsys.readouterr().err
 
 
 def _without_real_work(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -377,13 +382,16 @@ def test_reset_writes_a_new_password_and_keeps_the_second_factor(
 def test_generated_password_is_long_and_different_every_time(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Сгенерированный пароль не должен быть предсказуемым или коротким.
+    """Сгенерированный пароль не постоянен и не короче обещанного.
 
-    Ревью #201: `return "12345678"` вместо `secrets.token_urlsafe(...)`
-    проходило незамеченным, и первый администратор клиники на публичном домене
-    получал бы предсказуемый пароль. Длина меряется тем же общим минимумом,
-    которым скрипт меряет человеческий: сгенерированный не может быть слабее
-    того, что он принимает от человека.
+    Утверждать по двум выходам «непредсказуем» нельзя: счётчик и
+    `random.Random(1234)` эту проверку проходят (ревью #201, третий заход).
+    Стойкость источника закреплена отдельно — разбором дерева, потому что из
+    наблюдения выходов её не вывести.
+
+    Длина меряется дважды: общим минимумом (сгенерированный не может быть
+    слабее того, что скрипт принимает от человека) и обещанием комментария у
+    `TEMP_PASSWORD_BYTES` — иначе уменьшение числа байт проходит молча.
     """
 
     def _run() -> str:
@@ -399,6 +407,8 @@ def test_generated_password_is_long_and_different_every_time(
 
     first, second = _run(), _run()
     assert len(first) >= ADMIN.MIN_PASSWORD_LENGTH
+    # 24 байта url-safe — это 32 символа, как и обещает комментарий скрипта.
+    assert len(first) >= 32
     assert first != second
 
 
@@ -449,3 +459,106 @@ def test_engine_takes_the_configured_url_and_session_keeps_objects(
     assert ADMIN.main(ARGV) == 0
     assert recorder.engine_url == DB_URL
     assert recorder.session_kwargs["expire_on_commit"] is False
+
+
+def test_generated_password_comes_from_the_cryptographic_source() -> None:
+    """Источник случайности закреплён кодом, а не наблюдением выходов.
+
+    Отличить `secrets` от `random.Random(1234)` по двум паролям невозможно —
+    оба «разные каждый раз». Ревью #201 показало это мутациями: счётчик,
+    зерно, метка времени и pid проходили поведенческую проверку насквозь.
+    Поэтому здесь проверяется, ЧЕМ порождён пароль.
+    """
+    tree = ast.parse(_SCRIPT.read_text(encoding="utf8"))
+    imported = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    assert "secrets" in imported
+
+    bodies = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_generate_password"
+    ]
+    assert len(bodies) == 1
+    calls = [node for node in ast.walk(bodies[0]) if isinstance(node, ast.Call)]
+    assert len(calls) == 1, "пароль собирается из нескольких вызовов — источник неочевиден"
+    source = calls[0].func
+    assert isinstance(source, ast.Attribute) and source.attr.startswith("token_"), (
+        "пароль порождён не `secrets.token_*` — слабый источник неотличим по выходам"
+    )
+    assert isinstance(source.value, ast.Name) and source.value.id == "secrets"
+
+
+def test_password_variable_name_is_the_one_the_deploy_passes() -> None:
+    """Имя переменной — контракт с выкатом, а не внутреннее дело скрипта.
+
+    Разойдись оно с `deploy.yml` и `remote-deploy.sh` — скрипт молча уйдёт в
+    ветку «пароль не задан», сгенерирует свой и НАПЕЧАТАЕТ его в журнал
+    публичного прогона. Ровно то, ради чего переменная и заведена.
+    """
+    for relative in (".github/workflows/deploy.yml", "infra/scripts/remote-deploy.sh"):
+        text = (_ROOT / relative).read_text(encoding="utf8")
+        # По границе слова, а не подстрокой: `ADMIN_PASS` нашлось бы ВНУТРИ
+        # `ADMIN_PASSWORD`, и переименование переменной прошло бы незамеченным.
+        found = re.search(rf"\b{re.escape(ADMIN.PASSWORD_ENV)}\b", text)
+        assert found is not None, f"{relative} не передаёт {ADMIN.PASSWORD_ENV}"
+
+
+def test_exit_code_reaches_the_shell() -> None:
+    """Код возврата обязан дойти до вызывающего.
+
+    `remote-deploy.sh` судит по нему об успехе. Без `sys.exit(main())` отказы
+    (чужая роль, занятый адрес) стали бы «успехом» — блок `__main__` не
+    исполняется ни одним тестом внутри процесса, поэтому здесь подпроцесс.
+    """
+    # Отказ argparse для этого не годится: `parser.error` выходит сам, и код 2
+    # приходит даже без `sys.exit(main())`. Нужен код, который main ВЕРНУЛ.
+    code = f"""
+import asyncio, runpy, sys
+
+sys.argv = ["create_admin.py", "--email", "admin@clinic.example", "--name", "Админ"]
+
+
+def _stop(coro):
+    coro.close()
+    return 7
+
+
+asyncio.run = _stop
+runpy.run_path({str(_SCRIPT)!r}, run_name="__main__")
+"""
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert done.returncode == 7, "возвращённый код не дошёл до оболочки"
+
+    # И заодно: скрипт запускается как программа, а отказ доходит текстом.
+    refused = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--email", "без-собаки", "--name", "Админ Клиники"],
+        capture_output=True,
+        text=True,
+    )
+    assert refused.returncode == 2
+    assert "адресом почты" in refused.stderr
+
+
+def test_both_arguments_are_required(capsys: pytest.CaptureFixture[str]) -> None:
+    for argv in (["--email", "admin@clinic.example"], ["--name", "Админ Клиники"]):
+        with pytest.raises(SystemExit) as refusal:
+            ADMIN.main(argv)
+        assert refusal.value.code == 2
+        capsys.readouterr()
+
+
+def test_empty_variable_counts_as_no_password(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Пустое значение — это «не задан», а не «пароль нулевой длины»: иначе
+    # выкат без секрета падал бы отказом по длине вместо генерации.
+    _fake_db(monkeypatch)
+    monkeypatch.setenv(ADMIN.PASSWORD_ENV, "")
+
+    assert ADMIN.main(ARGV) == 0
+    assert "Временный пароль:" in capsys.readouterr().out
