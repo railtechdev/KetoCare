@@ -169,8 +169,15 @@ class TestPrescriptionAuthorization:
         history = await client.get(url, headers=headers)
         assert history.json()["total"] == 2
 
-        active = await client.get(f"{url}/active", headers=headers)
-        assert active.json()["ratio"] == 3.0, "активное назначение — последнее созданное"
+        # Активное назначение кабинет берёт из сводки одним запросом — там же
+        # проверяется и инвариант append-only: «активное» это последнее
+        # созданное, а не последнее изменённое (отдельной ручки нет, см.
+        # CLAUDE.md, «Открыто и ждёт продуктового решения»).
+        overview = await client.get(f"/api/v1/patients/{patient.id}/overview", headers=headers)
+        assert overview.status_code == 200, overview.text
+        assert overview.json()["prescription"]["ratio"] == 3.0, (
+            "активное назначение — последнее созданное"
+        )
 
 
 class TestPrescriptionValidation:
