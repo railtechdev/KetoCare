@@ -20,7 +20,7 @@ _GUARD = _LOAD / "target_guard.py"
 _PROFILE = _LOAD / "locustfile.py"
 
 
-def _load():  # type: ignore[no-untyped-def]
+def _load() -> ModuleType:
     spec = importlib.util.spec_from_file_location("load_target_guard", _GUARD)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -189,7 +189,7 @@ def _load_profile(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-d
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module, locust.events, _StopTest  # type: ignore[attr-defined]
+    return module, locust.events, _StopTest
 
 
 def test_foreign_target_stops_the_run_before_any_request(

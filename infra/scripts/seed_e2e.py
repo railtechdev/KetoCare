@@ -29,13 +29,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
+from collections.abc import Callable
 from datetime import date
 
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.config import get_settings
-from core.models import Product, ProductCategory, User, UserBackupCode
+from core.models import Patient, Product, ProductCategory, User, UserBackupCode
 from core.models.enums import Sex, UserRole
 from core.repositories import access as access_repo
 from core.repositories import patients as patients_repo
@@ -217,7 +219,13 @@ async def main() -> int:
     return 0
 
 
-async def _user(session, role: UserRole, full_name: str, email: str, hash_password) -> User:
+async def _user(
+    session: AsyncSession,
+    role: UserRole,
+    full_name: str,
+    email: str,
+    hash_password: Callable[[str], str],
+) -> User:
     existing = await users_repo.get_by_email(session, email)
     if existing is not None:
         # Пароль переустанавливается: он мог смениться в прошлом прогоне или
@@ -236,7 +244,7 @@ async def _user(session, role: UserRole, full_name: str, email: str, hash_passwo
     return user
 
 
-async def _category(session) -> ProductCategory:
+async def _category(session: AsyncSession) -> ProductCategory:
     category = await session.scalar(
         select(ProductCategory).where(ProductCategory.name_ru == "Прогонные")
     )
@@ -247,7 +255,7 @@ async def _category(session) -> ProductCategory:
     return category
 
 
-async def _products(session, *, category_id, changed_by) -> int:
+async def _products(session: AsyncSession, *, category_id: uuid.UUID, changed_by: uuid.UUID) -> int:
     added = 0
     for name, kcal, fat, protein, carbs, fiber in PRODUCTS:
         if await session.scalar(select(Product).where(Product.name_ru == name)) is not None:
@@ -270,7 +278,7 @@ async def _products(session, *, category_id, changed_by) -> int:
     return added
 
 
-async def _patient(session, *, parent, doctor):
+async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Patient:
     """Один ребёнок на обе учётные записи.
 
     Именно один: `PatientGate` у семьи с двумя детьми спрашивает, о ком речь, и
