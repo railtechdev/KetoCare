@@ -183,10 +183,10 @@ test-engine: ## Только эталонные тесты keto_engine
 
 .PHONY: lint
 lint: openapi ## Линтеры и проверка типов (сначала генерирует api-client)
-	@# `infra` тоже под линтом: там живут сиды с защитой от чужой базы и
+	@# `infra` тоже под проверками: там живут сиды с защитой от чужой базы и
 	@# нагрузочный профиль, а формат в нём годами расходился незамеченным —
-	@# каталог просто не входил ни в цель, ни в задачу CI. Проверки типов по
-	@# `infra` пока нет: там десятки ошибок, это отдельная работа.
+	@# каталог просто не входил ни в цель, ни в задачу CI. Проверка типов
+	@# добавлена следом (PR #199) и сразу указала на непокрытую ветку в сиде.
 	uv run ruff check apps packages infra
 	uv run ruff format --check apps packages infra
 	uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api apps/bot/src/bot apps/worker/src/worker infra

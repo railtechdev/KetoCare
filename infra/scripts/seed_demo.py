@@ -270,11 +270,11 @@ async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Pati
     linked = await access_repo.list_accessible_patient_ids(
         session, user_id=parent.id, role=UserRole.PARENT
     )
-    # `get` возвращает `Patient | None`, и пусто бывает не гипотетически:
-    # привязка остаётся, когда самого ребёнка мягко удалили (клинические данные
-    # физически не удаляются). Прежде такой случай уходил прямо в `patient.id` и
-    # ронял сид невнятным `AttributeError` — при том что в сиде прогонов та же
-    # ветка написана верно. Пусто здесь значит «заводим нового».
+    # `get` возвращает `Patient | None`. Внешний ключ `parent_patient` не даёт
+    # привязке пережить пациента (а `erase_patient` чистит привязки раньше
+    # самого пациента), так что сегодня пусто здесь не бывает — ветка защитная,
+    # как и в сиде прогонов. Прежде её не было вовсе, и значение уходило прямо в
+    # `patient.id`: проверка типов на это и указала.
     patient = await patients_repo.get(session, linked[0]) if linked else None
 
     if patient is None:

@@ -62,7 +62,9 @@ check_untyped_defs = true
 # именно поэтому — она проверяется наравне со всем остальным.
 [[tool.mypy.overrides]]
 module = ["infra.load.locustfile", "locustfile"]
-ignore_errors = true
+# Глушатся КОДЫ, а не модуль целиком: `ignore_errors` спрятал бы и будущую
+# настоящую ошибку в телах задач, хотя исключение обещано «про декораторы».
+disable_error_code = ["untyped-decorator", "misc", "no-untyped-def"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

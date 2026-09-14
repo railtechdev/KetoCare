@@ -321,17 +321,18 @@ def test_copied_default_is_not_called_given_in_the_output(
     assert DEMO._PASSWORD_DEFAULT in DEMO._password_line()
 
 
-def test_linked_but_deleted_patient_is_recreated(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Привязка на мягко удалённого ребёнка — не повод падать.
+def test_patient_without_a_row_is_recreated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Привязка без строки пациента — не повод падать.
 
-    Клинические данные удаляются только мягко, поэтому связь родителя с
-    пациентом переживает удаление самого пациента: `patients_repo.get` отдаёт
-    `None`, а привязка остаётся. Прежде это значение уходило прямо в
-    `patient.id`, и сид падал невнятным `AttributeError` — при том что в сиде
-    прогонов та же ветка написана верно. Найдено проверкой типов (`union-attr`),
-    когда каталог заводили под `mypy`.
+    `patients_repo.get` по типу отдаёт `Patient | None`. Сегодня пусто здесь не
+    бывает: внешний ключ не даёт привязке пережить пациента, а `erase_patient`
+    чистит привязки раньше. Но ветки не было вовсе, и значение уходило прямо в
+    `patient.id` — проверка типов (`union-attr`) на это и указала, когда каталог
+    заводили под `mypy`. Ветка защитная, и тест держит именно её поведение:
+    пусто значит «заводим нового и привязываем к родителю».
     """
     created: list[str] = []
+    linked_parents: list[tuple[str, str]] = []
 
     class _Access:
         @staticmethod
@@ -350,7 +351,7 @@ def test_linked_but_deleted_patient_is_recreated(monkeypatch: pytest.MonkeyPatch
 
         @staticmethod
         async def link_parent(session: object, **kw: object) -> None:
-            return None
+            linked_parents.append((str(kw.get("parent_id")), str(kw.get("patient_id"))))
 
         @staticmethod
         async def link_doctor(session: object, **kw: object) -> None:
@@ -369,3 +370,6 @@ def test_linked_but_deleted_patient_is_recreated(monkeypatch: pytest.MonkeyPatch
 
     assert patient.id == "id-нового"
     assert created == ["Аня Иванова"]
+    # Нового ребёнка мало: без привязки к родителю демо-сид бесполезен ровно так
+    # же, как при падении. Мутация «снять `link_parent`» иначе выживает.
+    assert linked_parents == [("id-родителя", "id-нового")]
