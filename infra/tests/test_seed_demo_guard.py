@@ -26,7 +26,12 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 
 def _load(name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(f"{name}_guard", _SCRIPTS / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        # Ключ свой у каждого файла тестов: под общим два разных объекта
+        # модуля жили бы в `sys.modules` под одним именем.
+        f"{name}_for_demo_tests",
+        _SCRIPTS / f"{name}.py",
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -413,21 +418,20 @@ def test_local_run_does_not_check_length(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_length_comes_from_one_place() -> None:
-    """Число одно на оба скрипта, а не объявлено дважды.
+    """Число у сида берётся из общего модуля, а не объявлено заново.
 
     Сравнивать значения бесполезно: `12 is 12` истинно и у независимых
     объявлений — малые целые в Python кэшируются, и первая редакция этого теста
-    переживала мутацию «объявить своё число». Поэтому проверяется ИСХОДНИК: ни в
-    одном из двух скриптов не должно быть собственного присваивания, только
-    импорт из общего модуля.
+    переживала мутацию «объявить своё число». Поэтому проверяется ИСХОДНИК:
+    собственного присваивания у сида быть не должно, только импорт из общего
+    модуля. То же свойство `create_admin.py` проверяет его собственный тест — и
+    по дереву разбора: копия под другим именем регулярку проходит (ревью #201).
     """
     from core.tools.db_guard import MIN_PASSWORD_LENGTH as shared
 
-    admin = _load("create_admin")
     assert shared == DEMO.MIN_PASSWORD_LENGTH
-    assert shared == admin.MIN_PASSWORD_LENGTH
 
-    for script in ("seed_demo.py", "create_admin.py"):
+    for script in ("seed_demo.py",):
         source = (_SCRIPTS / script).read_text(encoding="utf8")
         # Регулярка, а не подстрока: `MIN_PASSWORD_LENGTH: int = 12` мимо
         # подстроки проходил, и аннотированная копия оставалась незамеченной —
