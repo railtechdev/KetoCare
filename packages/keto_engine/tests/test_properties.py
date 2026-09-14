@@ -2,6 +2,11 @@
 - verify(solve(x)) всегда в допусках
 - scale(r, 1.0) == r
 - монотонность kcal по массам
+
+Число примеров задаёт профиль из `conftest.py`, а не декоратор на функции:
+настройка на тесте сильнее профиля, и с зашитой сотней глубокий перебор в CI не
+включался вовсе. Измерено на дефекте из PR #203 (соотношение зависело от массы
+навески): 500, 5000 и 20000 примеров его не находят, 50000 — находит.
 """
 
 from __future__ import annotations
@@ -50,7 +55,6 @@ def ingredients(draw, min_size: int = 1, max_size: int = 5):
     ings=ingredients(min_size=1, max_size=4),
     factor=st.floats(min_value=0.01, max_value=10.0, allow_nan=False),
 )
-@settings(max_examples=100)
 def test_verify_scale_linear_in_mass(ings: list[Ingredient], factor: float) -> None:
     """verify() линейна по массам: удвоение всех масс удваивает kcal/fat/protein/carbs."""
     base_items = [(ing, 10.0) for ing in ings]
@@ -70,7 +74,6 @@ def test_verify_scale_linear_in_mass(ings: list[Ingredient], factor: float) -> N
 
 
 @given(ings=ingredients(min_size=1, max_size=4), grams=st.lists(_grams, min_size=1, max_size=4))
-@settings(max_examples=100)
 def test_kcal_monotonic_in_mass(ings: list[Ingredient], grams: list[float]) -> None:
     """Увеличение массы любого ингредиента не уменьшает суммарную калорийность."""
     n = min(len(ings), len(grams))
@@ -85,7 +88,6 @@ def test_kcal_monotonic_in_mass(ings: list[Ingredient], grams: list[float]) -> N
 
 
 @given(ings=ingredients(min_size=1, max_size=5), grams=st.lists(_grams, min_size=5, max_size=5))
-@settings(max_examples=100)
 def test_item_contributions_sum_to_totals(ings: list[Ingredient], grams: list[float]) -> None:
     """Сумма вкладов позиций равна итогам блюда — итоги и есть эта сумма."""
     items = list(zip(ings, grams[: len(ings)], strict=True))
@@ -101,7 +103,6 @@ def test_item_contributions_sum_to_totals(ings: list[Ingredient], grams: list[fl
 
 
 @given(ings=ingredients(min_size=1, max_size=4))
-@settings(max_examples=50)
 def test_scale_identity(ings: list[Ingredient]) -> None:
     """scale(r, 1.0) == r"""
     items = [(ing, 10.0 + i) for i, ing in enumerate(ings)]
@@ -116,6 +117,8 @@ def test_scale_identity(ings: list[Ingredient]) -> None:
     ratio=st.sampled_from([2.0, 2.5, 3.0, 3.5, 4.0]),
     kcal_target=st.floats(min_value=200.0, max_value=1200.0, allow_nan=False),
 )
+# Потолок остаётся только здесь: каждый пример решает задачу линейного
+# программирования, и глубокий перебор сделал бы задачу ядра в CI минутной.
 @settings(max_examples=60)
 def test_solve_result_within_tolerance_when_feasible(
     fat: float, protein: float, carbs: float, ratio: float, kcal_target: float
