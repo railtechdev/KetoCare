@@ -296,3 +296,26 @@ def test_checked_password_is_the_one_hashed(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     assert written["password_hash"] == "hash:пароль со стенда"
+
+
+def test_default_value_does_not_count_as_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Умолчание из репозитория — это НЕ заданный пароль.
+
+    Скопированное в команду, оно защищает ровно так же, как незаданная
+    переменная, то есть никак. У сида прогонов закрыто в #196.
+    """
+    monkeypatch.setenv(DEMO._ALLOW_HOST, "postgres")
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, DEMO._PASSWORD_DEFAULT)
+    with pytest.raises(SystemExit) as refusal:
+        DEMO._require_password_on_allowed_host()
+    assert DEMO._PASSWORD_VAR in str(refusal.value)
+
+
+def test_copied_default_is_not_called_given_in_the_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Обещание «заданный пароль не печатается» не должно превращаться в
+    # «умолчание объявлено переменной, значит его не видно»: это неправда, и
+    # человек решил бы, что пароль в журнал не попал.
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, DEMO._PASSWORD_DEFAULT)
+    assert DEMO._PASSWORD_DEFAULT in DEMO._password_line()
