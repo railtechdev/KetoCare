@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import re
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -263,6 +264,12 @@ def test_guard_runs_before_the_engine_is_created(monkeypatch: pytest.MonkeyPatch
     assert calls == ["guard", "engine"]
 
 
+#: Значения, которые обязаны проходить: не умолчание, не короче общего
+#: минимума, секрет — base32 нужной длины.
+STRONG_PASSWORD = "пароль со стенда прогонов"
+STRONG_SECRET = "SVOYSEKRET234567ABCDEFGHIJKLMNOP"
+
+
 def test_credentials_are_required_when_the_host_is_allowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -279,7 +286,7 @@ def test_password_alone_is_not_enough(monkeypatch: pytest.MonkeyPatch) -> None:
     # Секрет второго фактора опаснее пароля: с известным секретом второго
     # фактора у врача нет вовсе. Пароль без секрета проходить не должен.
     monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
-    monkeypatch.setenv(GUARD._PASSWORD_VAR, "свой пароль")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
     with pytest.raises(SystemExit) as refusal:
         GUARD._require_credentials_on_allowed_host()
     assert GUARD._TOTP_VAR in str(refusal.value)
@@ -295,7 +302,7 @@ def test_secret_alone_is_not_enough(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_both_given_satisfy_the_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
-    monkeypatch.setenv(GUARD._PASSWORD_VAR, "свой пароль")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
     monkeypatch.setenv(GUARD._TOTP_VAR, "SVOYSEKRET234567ABCDEFGHIJKLMNOP")
     GUARD._require_credentials_on_allowed_host()
 
@@ -498,3 +505,119 @@ def test_existing_account_gets_the_checked_password(monkeypatch: pytest.MonkeyPa
 
     assert existing.password_hash == "hash:пароль со стенда"
     assert existing.is_active is True
+
+
+def test_short_password_is_refused_on_allowed_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Не умолчание — ещё не стойкое.
+
+    `E2E_PASSWORD=x` проходило сторожа насквозь: значение не равно умолчанию,
+    значит «задано». При этом сид заводит врача, которому тем же запуском
+    выдаётся известный секрет второго фактора.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "x")
+    monkeypatch.setenv(GUARD._TOTP_VAR, STRONG_SECRET)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._PASSWORD_VAR in str(refusal.value)
+    assert str(GUARD.MIN_PASSWORD_LENGTH) in str(refusal.value)
+
+
+def test_password_of_exactly_the_minimum_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Граница: с нестрогим сравнением этот пароль отвергался бы.
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, "x" * GUARD.MIN_PASSWORD_LENGTH)
+    monkeypatch.setenv(GUARD._TOTP_VAR, STRONG_SECRET)
+    GUARD._require_credentials_on_allowed_host()
+
+
+def test_password_minimum_comes_from_the_shared_module() -> None:
+    """Минимум один на все сиды, а не объявлен здесь заново.
+
+    Сравнивать значения бесполезно — малые целые кэшируются. Проверяется
+    исходник: своего присваивания быть не должно, только импорт.
+    """
+    from core.tools.db_guard import MIN_PASSWORD_LENGTH as shared
+
+    assert shared == GUARD.MIN_PASSWORD_LENGTH
+    source = _SCRIPT.read_text(encoding="utf8")
+    assert re.search(r"^MIN_PASSWORD_LENGTH\s*(:[^=]+)?=", source, re.M) is None
+
+
+def test_short_secret_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Короткий секрет второго фактора не лучше известного.
+
+    RFC 4226 §4: общий секрет не короче 128 бит. В base32 это 26 символов;
+    парольная мерка тут не годится — двенадцать символов base32 дают 60 бит.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "SHORT234")
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._TOTP_VAR in str(refusal.value)
+    assert str(GUARD.MIN_TOTP_CHARS) in str(refusal.value)
+
+
+def test_secret_minimum_is_not_the_password_measure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Мера секрета задана СТАНДАРТОМ, а не значением константы.
+
+    Тесты, выраженные через `MIN_TOTP_CHARS`, уезжают вместе с ней: подмена
+    `MIN_TOTP_CHARS = 12` (парольная мерка) не роняла ничего, хотя двенадцать
+    символов base32 — это 60 бит, вдвое меньше нижней границы RFC 4226 §4.
+    Поэтому здесь стоит само число из стандарта и длина, которая обязана быть
+    отвергнута при любой константе.
+    """
+    # 128 бит / 5 бит на символ base32 = 26 символов, вверх до целого.
+    assert GUARD.MIN_TOTP_CHARS >= 26, (
+        "минимум ниже 128 бит RFC 4226 §4 — парольная мерка секрету не годится"
+    )
+
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    # 16 символов base32 — 80 бит: слабый секрет, который парольная мерка
+    # пропускает, а стандарт нет.
+    monkeypatch.setenv(GUARD._TOTP_VAR, "ABCDEFGH23456789")
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert GUARD._TOTP_VAR in str(refusal.value)
+
+
+def test_secret_of_exactly_the_minimum_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "A" * GUARD.MIN_TOTP_CHARS)
+    GUARD._require_credentials_on_allowed_host()
+
+
+def test_secret_outside_base32_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Секрет с чужими знаками не усилит второй фактор, а сломает вход.
+
+    `pyotp.random_base32()` и разбор в `apps/e2e/src/totp.ts` знают только
+    A-Z и 2-7: код просто не сойдётся, и падение будет выглядеть как «неверный
+    код подтверждения» без объяснимой причины.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "svoy-sekret-234567-abcdefghijk!!")
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert "base32" in str(refusal.value)
+
+
+def test_strength_is_checked_for_the_values_actually_used(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Проверяется то самое значение, которое уходит врачу и в хеш.
+
+    Иначе повторилась бы ошибка «правило написано, но не вызвано»: сторож мог
+    бы мерить умолчание, пока в базу уходит значение из окружения.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "SHORT234")
+    with pytest.raises(SystemExit):
+        GUARD._require_credentials_on_allowed_host()
+    # И наоборот: слабое значение в окружении, сильное умолчание — тоже отказ.
+    assert GUARD._totp_secret() == "SHORT234"
+    assert len(GUARD._TOTP_DEFAULT) >= GUARD.MIN_TOTP_CHARS

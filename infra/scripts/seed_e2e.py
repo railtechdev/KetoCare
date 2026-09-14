@@ -43,7 +43,7 @@ from core.repositories import access as access_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
-from core.tools.db_guard import refuse_foreign_database
+from core.tools.db_guard import MIN_PASSWORD_LENGTH, refuse_foreign_database
 
 # Пароль по умолчанию годится только для локальной базы: на публичном стенде его
 # обязательно перекрывает переменная окружения — тот же довод, что в `seed_demo`.
@@ -64,6 +64,18 @@ DOCTOR_SETUP_EMAIL = "e2e-doctor-setup@example.com"
 # Значение фиктивное и годится лишь для локальной базы — как и пароль выше.
 _TOTP_VAR = "E2E_TOTP_SECRET"
 _TOTP_DEFAULT = "KETOCAREE2ETOTPSECRET234567ABCDE"
+
+#: Секрет второго фактора нельзя мерить парольной меркой: двенадцать символов
+#: base32 — это 60 бит, вдвое меньше нижней границы RFC 4226 §4 («shared secret
+#: … at least 128 bits, 160 bits RECOMMENDED»). 128 бит — это 26 символов
+#: base32, а умолчание выше длиной 32 символа и есть рекомендованные 160 бит.
+#: Решение техническое, принято по стандарту; медицинского вопроса здесь нет.
+MIN_TOTP_CHARS = 26
+
+#: Алфавит base32 (RFC 4648). `pyotp.random_base32()` и разбор в
+#: `apps/e2e/src/totp.ts` знают только эти знаки: секрет с другими не усилит
+#: второй фактор, а сломает подсчёт кода — вход упадёт без объяснимой причины.
+_TOTP_ALPHABET = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
 
 
 def _password() -> str:
@@ -133,6 +145,9 @@ def _require_credentials_on_allowed_host() -> None:
     второго фактора из репозитория означает, что второго фактора у врача нет
     вовсе — код к нему посчитает кто угодно.
 
+    Проверяется не только «не умолчание», но и сила значения: `E2E_PASSWORD=x`
+    прежде проходило насквозь, заводя врача с односимвольным паролем.
+
     Требование привязано к разрешению, а не ко всем запускам, и это не
     послабление, а условие работоспособности сторожа: ночной прогон
     (`.github/workflows/e2e.yml`) переменных не задаёт ВОВСЕ, а
@@ -154,17 +169,41 @@ def _require_credentials_on_allowed_host() -> None:
         )
         if value == default
     ]
-    if not missing:
-        return
-    raise SystemExit(
-        f"База разрешена переменной {_ALLOW_HOST}, а осталось умолчание из\n"
-        "репозитория: " + ", ".join(missing) + ".\n"
-        f"Умолчания лежат в открытом репозитории. {_TOTP_VAR} важнее пароля:\n"
-        "с известным секретом второго фактора у врача его попросту нет —\n"
-        "код к нему посчитает кто угодно.\n"
-        "Задайте обе переменные ТОЙ ЖЕ КОМАНДОЙ: сид читает окружение\n"
-        "процесса, и запись в файле окружения он не увидит."
-    )
+    if missing:
+        raise SystemExit(
+            f"База разрешена переменной {_ALLOW_HOST}, а осталось умолчание из\n"
+            "репозитория: " + ", ".join(missing) + ".\n"
+            f"Умолчания лежат в открытом репозитории. {_TOTP_VAR} важнее пароля:\n"
+            "с известным секретом второго фактора у врача его попросту нет —\n"
+            "код к нему посчитает кто угодно.\n"
+            "Задайте обе переменные ТОЙ ЖЕ КОМАНДОЙ: сид читает окружение\n"
+            "процесса, и запись в файле окружения он не увидит."
+        )
+
+    # Значение, отличное от умолчания, ещё не значит стойкое: `E2E_PASSWORD=x`
+    # проходило проверку выше и заводило врача с известным секретом. Меры две, и
+    # они РАЗНОЙ природы — пароль меряется общим минимумом проекта, секрет
+    # второго фактора стандартом (см. MIN_TOTP_CHARS).
+    if len(_password()) < MIN_PASSWORD_LENGTH:
+        raise SystemExit(
+            f"{_PASSWORD_VAR} короче {MIN_PASSWORD_LENGTH} символов — на базе,\n"
+            "которую видит не только ваша машина, это открытый кабинет врача.\n"
+            "Минимум общий с демо-сидом: core.tools.db_guard."
+        )
+
+    secret = _totp_secret()
+    if len(secret) < MIN_TOTP_CHARS:
+        raise SystemExit(
+            f"{_TOTP_VAR} короче {MIN_TOTP_CHARS} символов base32 — это меньше\n"
+            "128 бит, нижней границы RFC 4226 §4. Короткий секрет второго\n"
+            "фактора не лучше известного: код подбирается."
+        )
+    if set(secret) - _TOTP_ALPHABET:
+        raise SystemExit(
+            f"{_TOTP_VAR} содержит знаки вне base32 (A-Z, 2-7). Такой секрет не\n"
+            "усилит второй фактор, а сломает подсчёт кода: вход упадёт\n"
+            "«Неверный код подтверждения» без объяснимой причины."
+        )
 
 
 async def main() -> int:
