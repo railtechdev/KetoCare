@@ -8,10 +8,10 @@
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -107,85 +107,101 @@ def test_trailing_slash_does_not_bypass_the_ban(monkeypatch: pytest.MonkeyPatch)
     PROFILE.refuse_foreign_target(STAND + "/")
 
 
-def _prepare_node() -> ast.FunctionDef:
-    tree = ast.parse(_PROFILE.read_text(encoding="utf8"))
-    return next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "_prepare"
-    )
+class NetworkTouched(Exception):
+    """Профиль полез в сеть. Для чужой цели это провал, а не деталь."""
 
 
-def test_guard_is_wired_as_a_start_listener() -> None:
-    """Подготовка прогона обязана быть ПОДПИСАНА на старт.
+def _load_profile(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+    """Загрузить профиль с поддельными зависимостями.
 
-    Без декоратора функция просто не вызывается — прогон идёт на чужую цель без
-    единого слова отказа, и прежний тест этого не ловил: он искал подстроку
-    вызова, а она остаётся на месте (замечание ревью PR #198, доказано живым
-    прогоном locust).
+    Косвенные проверки по исходнику (подстрока, а потом дамп дерева) раз за
+    разом оказывались слабее, чем обещали: мимо них проходили `if False:`,
+    подменённый аргумент и смена типа исключения в обработчике. Довод «locust и
+    requests нет в окружении» стоит двух десятков строк подделки — а взамен
+    проверяется настоящая цепочка: подписан → отказал → `StopTest` → сети не
+    было (замечание ревью PR #198).
     """
-    decorators = [ast.dump(node) for node in _prepare_node().decorator_list]
-    assert any("test_start" in node and "add_listener" in node for node in decorators)
+
+    class _Event:
+        def __init__(self) -> None:
+            self.listeners: list[object] = []
+
+        def add_listener(self, handler):  # type: ignore[no-untyped-def]
+            self.listeners.append(handler)
+            return handler
+
+    class _Events:
+        def __init__(self) -> None:
+            self.test_start = _Event()
+
+    class _StopTest(Exception):
+        pass
+
+    def _network(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        raise NetworkTouched(args[0] if args else "")
+
+    locust = ModuleType("locust")
+    locust.HttpUser = type("HttpUser", (), {})  # type: ignore[attr-defined]
+    locust.between = lambda *a, **k: None  # type: ignore[attr-defined]
+    locust.task = lambda *a, **k: a[0] if a and callable(a[0]) else (lambda fn: fn)  # type: ignore[attr-defined]
+    locust.events = _Events()  # type: ignore[attr-defined]
+    exception = ModuleType("locust.exception")
+    exception.StopTest = _StopTest  # type: ignore[attr-defined]
+    locust.exception = exception  # type: ignore[attr-defined]
+    requests = ModuleType("requests")
+    requests.post = _network  # type: ignore[attr-defined]
+    requests.get = _network  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "locust", locust)
+    monkeypatch.setitem(sys.modules, "locust.exception", exception)
+    monkeypatch.setitem(sys.modules, "requests", requests)
+    monkeypatch.syspath_prepend(str(_LOAD))
+
+    spec = importlib.util.spec_from_file_location("locustfile_under_test", _PROFILE)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module, locust.events, _StopTest  # type: ignore[attr-defined]
 
 
-def test_guard_runs_before_any_network_call() -> None:
-    """Отказ обязан случиться ДО входа, а не после.
+def test_foreign_target_stops_the_run_before_any_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Настоящая цепочка: подписка, отказ, остановка, сеть не тронута.
 
-    Перенос блока за `requests.post` оставлял тесты зелёными, но профиль успевал
-    сходить на стенд: запись в его `audit_log` и трата лимита `5/мин`.
+    Одна проверка вместо четырёх косвенных. Она ловит и снятый декоратор
+    (список слушателей пуст), и подменённый аргумент, и `if False:`, и смену
+    типа исключения в обработчике, и перенос защиты за вход — тогда вместо
+    остановки случилась бы `NetworkTouched`.
     """
-    body = _prepare_node().body
-    host_names = {
-        target.id
-        for statement in body
-        if isinstance(statement, ast.Assign)
-        for target in statement.targets
-        if isinstance(target, ast.Name)
-    }
+    module, events, stop_test = _load_profile(monkeypatch)
+    assert events.test_start.listeners, "подготовка прогона не подписана на старт"
 
-    guard_at: int | None = None
-    network_at: int | None = None
-    for index, statement in enumerate(body):
-        dumped = ast.dump(statement)
-        if guard_at is None and "refuse_foreign_target" in dumped:
-            guard_at = index
-            # Аргумент — то самое имя, в которое положен `environment.host`:
-            # `refuse_foreign_target("")` выключал бы защиту, оставляя вызов.
-            call = next(
-                node
-                for node in ast.walk(statement)
-                if isinstance(node, ast.Call)
-                and getattr(node.func, "id", "") == "refuse_foreign_target"
-            )
-            assert len(call.args) == 1
-            assert isinstance(call.args[0], ast.Name)
-            assert call.args[0].id in host_names
-        if network_at is None and "requests" in dumped:
-            network_at = index
-
-    assert guard_at is not None, "вызов защиты не найден в теле `_prepare`"
-    if network_at is not None:
-        assert guard_at < network_at, "защита стоит после обращения к сети"
+    for handler in events.test_start.listeners:
+        with pytest.raises(stop_test):
+            handler(environment=SimpleNamespace(host=STAND))
 
 
-def test_refusal_is_reraised_as_stop_test() -> None:
-    """Отказ обязан перевыбрасываться как `StopTest`.
+def test_allowed_target_reaches_the_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Обратная сторона: с подтверждением прогон идёт дальше.
 
-    locust ловит исключения обработчиков и продолжает прогон; `StopTest` он
-    пропускает наружу специально. Прежняя проверка искала подстроку — и
-    оставалась зелёной, если отказ проглотить (тот же класс, что PR и лечит).
+    Без этого случая «отказывать всегда» выглядело бы исправной защитой.
     """
-    raises = [
-        node
-        for statement in _prepare_node().body
-        if isinstance(statement, ast.Try)
-        for handler in statement.handlers
-        for node in ast.walk(handler)
-        if isinstance(node, ast.Raise)
-        and isinstance(node.exc, ast.Call)
-        and getattr(node.exc.func, "id", "") == "StopTest"
-    ]
-    assert raises, "отказ не перевыбрасывается как StopTest"
+    module, events, stop_test = _load_profile(monkeypatch)
+    monkeypatch.setenv(PROFILE.ALLOW_TARGET, STAND)
+
+    for handler in events.test_start.listeners:
+        with pytest.raises(NetworkTouched):
+            handler(environment=SimpleNamespace(host=STAND))
+
+
+def test_local_target_reaches_the_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    module, events, stop_test = _load_profile(monkeypatch)
+
+    for handler in events.test_start.listeners:
+        with pytest.raises(NetworkTouched):
+            handler(environment=SimpleNamespace(host=LOCAL))
 
 
 def test_permission_must_equal_the_target(monkeypatch: pytest.MonkeyPatch) -> None:
