@@ -13,6 +13,7 @@ from keto_engine import (
     scale,
     solve,
     verify,
+    within_tolerance,
 )
 from keto_engine.constants import RATIO_TOLERANCE
 from keto_engine.engine import (
@@ -426,6 +427,71 @@ class TestNetCarbsRatio:
         # …и далеко от неё по общим: правило именно то, а не другое.
         by_total_carbs = dish.fat_g / (dish.protein_g + dish.carbs_g)
         assert by_total_carbs < 2.0
+
+
+class TestVerdictHasThreeStates:
+    """«Не определено» — не то же самое, что «не соответствует».
+
+    Прежде `within_tolerance` схлопывала отсутствующее соотношение в `False`, и
+    день без вердикта доезжал до врача красной пометкой «питание вне допуска»
+    (issue #204).
+    """
+
+    TARGETS = Targets(ratio=4.0, kcal=400)
+
+    def test_missing_ratio_answers_none(self) -> None:
+        oil = Ingredient(product_id="oil", kcal=884, fat=100.0, protein=0.0, carbs=0.0)
+        dish = verify([(oil, 44.0)])
+        assert dish.ratio is None
+
+        ratio_within, kcal_within = within_tolerance(dish, self.TARGETS)
+        assert ratio_within is None, "отсутствующее соотношение выдано как нарушение"
+        # Калорийность считается всегда: она есть у любого блюда.
+        assert kcal_within is True
+
+    def test_ratio_off_target_still_answers_false(self) -> None:
+        """Настоящее нарушение обязано остаться `False`, а не стать `None`."""
+        lean = Ingredient(product_id="lean", kcal=400, fat=0.0, protein=100.0, carbs=0.0)
+        dish = verify([(lean, 100.0)])
+        assert dish.ratio == pytest.approx(0.0)
+
+        ratio_within, _ = within_tolerance(dish, self.TARGETS)
+        assert ratio_within is False
+
+    def test_ratio_on_target_answers_true(self) -> None:
+        fat = Ingredient(product_id="fat", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        protein = Ingredient(product_id="protein", kcal=400, fat=0.0, protein=100.0, carbs=0.0)
+        dish = verify([(fat, 40.0), (protein, 10.0)])
+
+        ratio_within, _ = within_tolerance(dish, self.TARGETS)
+        assert ratio_within is True
+
+
+class TestSolveWithoutRatio:
+    """Решатель не выдаёт результат, о котором нечего сказать.
+
+    У `verify()` соотношения может не быть — пустой знаменатель или незначимые
+    чистые углеводы (ADR-0037). У решателя третьего состояния нет: равенство
+    соотношения и есть ограничение задачи. Поэтому такой набор — неразрешимая
+    задача с человекочитаемой причиной, а не результат с вердиктом «не
+    соответствует» (issue #204).
+    """
+
+    def test_set_without_denominator_is_infeasible(self) -> None:
+        oil = Ingredient(product_id="oil", kcal=900, fat=100.0, protein=0.0, carbs=0.0)
+        # Клетчатка съедает все углеводы: чистых углеводов нет, белка нет тоже.
+        fibrous = Ingredient(
+            product_id="fibrous", kcal=40, fat=0.0, protein=0.0, carbs=10.0, fiber=10.0
+        )
+
+        with pytest.raises(InfeasibleError) as refusal:
+            solve([oil, fibrous], Targets(ratio=4.0, kcal=400))
+
+        # Текст проверяется по существу: он обязан назвать ПРИЧИНУ, а не просто
+        # объявить задачу неразрешимой — человек читает его в баннере.
+        message = str(refusal.value)
+        assert "кетосоотношение не определяется" in message
+        assert "клетчатк" in message
 
 
 class TestDegenerateNetCarbs:

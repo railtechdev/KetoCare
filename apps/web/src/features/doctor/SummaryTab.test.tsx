@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
+import { api } from "../../lib/api";
 import { PatientRouter } from "../../test/PatientRouter";
 import { SummaryTab } from "./SummaryTab";
 import type { Patient, PatientOverview } from "./types";
@@ -96,5 +97,66 @@ describe("сводка пациента", () => {
     await screen.findByRole("link", { name: "Задать назначение" });
     expect(screen.queryByText("Анкета")).not.toBeInTheDocument();
     expect(screen.queryByText("Данные пациента")).not.toBeInTheDocument();
+  });
+
+  it("день без соотношения не выдаётся врачу за соответствие назначению", () => {
+    // Ревью #214: убрав красную пометку, я едва не поставил на её место зелёное
+    // утверждение — `null` падал в утвердительную ветку, и врач читал бы
+    // «соответствует назначению» про день, о котором ядро молчит.
+    vi.mocked(api.GET).mockResolvedValueOnce({
+      data: {
+        patient_id: PATIENT.id,
+        date: "2026-09-01",
+        prescription: {
+          id: "rx1",
+          patient_id: PATIENT.id,
+          ratio: 3.5,
+          kcal_per_day: 1200,
+          protein_g: 12,
+          carbs_limit_g: 35,
+          meals_per_day: 4,
+          restrictions: null,
+          author_id: "u1",
+          effective_from: "2026-08-01",
+          created_at: "2026-08-01T10:00:00Z",
+        },
+        day: {
+          totals: {
+            kcal: 1200,
+            fat: 100,
+            protein: 24,
+            carbs: 10,
+            fiber: 10,
+            ratio: null,
+          },
+          tolerance: {
+            ratio_within_tolerance: null,
+            kcal_within_tolerance: true,
+          },
+          tolerance_gap: null,
+          engine_version: "1.2.0",
+        },
+        last_ketone: null,
+        last_weight: null,
+        seizures_today: { entries: 0, count: 0 },
+        seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
+        last_reading_on: null,
+        monitoring_phase: "routine",
+      } satisfies PatientOverview,
+    } as never);
+
+    renderSummary();
+
+    return screen
+      .findByText(doctorRu.summary.day.ratioUnknown)
+      .then((neutral) => {
+        expect(neutral).toBeInTheDocument();
+        expect(
+          screen.queryByText(doctorRu.summary.day.within),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(doctorRu.summary.day.offRatio),
+        ).not.toBeInTheDocument();
+      });
   });
 });

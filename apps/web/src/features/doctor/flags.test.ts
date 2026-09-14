@@ -222,6 +222,27 @@ describe("computePatientFlags", () => {
     expect(flags?.nutritionOff).toBe(false);
   });
 
+  it("день без соотношения — не отклонение питания", () => {
+    // У соотношения три состояния: `null` значит «сказать нечего» — соотношения
+    // у дня нет вовсе (ADR-0037). Прежде ядро схлопывало этот случай в «не
+    // соответствует», и врач получал красную пометку за день, про который
+    // ничего не известно, а пациент поднимался в списке внимания (issue #204).
+    const flags = computePatientFlags(
+      overview({
+        day: {
+          totals: { ...TOTALS, ratio: null },
+          tolerance: {
+            ratio_within_tolerance: null,
+            kcal_within_tolerance: true,
+          },
+          engine_version: "1.0.0",
+        },
+      }),
+    );
+
+    expect(flags?.nutritionOff).toBe(false);
+  });
+
   it("без вердикта сервера флага отклонения нет", () => {
     const flags = computePatientFlags(
       overview({ day: { totals: TOTALS, tolerance: null } }),

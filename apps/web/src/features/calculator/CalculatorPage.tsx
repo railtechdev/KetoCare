@@ -310,7 +310,11 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   const staleInput = rows !== debouncedRows || targets !== debouncedTargets;
   const stale = staleInput || verify.isPending;
 
-  const ratioWithin = stale ? undefined : verify.data?.ratio_within_tolerance;
+  // `null` от сервера означает «соотношения нет», и это НЕ «не соответствует»:
+  // дальше значение читается как нейтральное, наравне с отсутствующей целью.
+  const ratioWithin = stale
+    ? undefined
+    : (verify.data?.ratio_within_tolerance ?? undefined);
   const kcalWithin = stale ? undefined : verify.data?.kcal_within_tolerance;
 
   /**

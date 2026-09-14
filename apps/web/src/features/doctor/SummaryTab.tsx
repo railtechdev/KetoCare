@@ -167,7 +167,7 @@ function OverviewPanels({
                   расчётного ядра, на клиенте их копии нет (правило 2 CLAUDE.md). */}
               <RatioBadge
                 ratio={day.totals.ratio}
-                withinTolerance={tolerance?.ratio_within_tolerance}
+                withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
               />
               <span className="tabular-nums">
                 {t("units.kcal", { value: day.totals.kcal.toFixed(0) })}
@@ -188,6 +188,10 @@ function OverviewPanels({
               <WarningBanner level="warning" title={t("summary.day.offTitle")}>
                 {t("summary.day.offRatio")}
               </WarningBanner>
+            ) : verdict.ratioUnknown ? (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                {t("summary.day.ratioUnknown")}
+              </p>
             ) : (
               <p role="status" className="m-0 text-sm text-success">
                 {t("summary.day.within")}

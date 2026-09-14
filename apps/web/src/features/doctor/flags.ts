@@ -186,7 +186,10 @@ export function computePatientFlags(
       !noPrescription &&
       (daysSinceLastReading === null ||
         daysSinceLastReading >= silenceThreshold),
-    nutritionOff: tolerance !== null && !tolerance.ratio_within_tolerance,
+    // Строго `=== false`: у соотношения три состояния, и «не определено»
+    // (`null`) — не нарушение. Прежде день без вердикта давал врачу красную
+    // пометку «питание вне допуска» и поднимал пациента в списке.
+    nutritionOff: tolerance?.ratio_within_tolerance === false,
     // Вердикт приходит от сервера целиком: порог «более 50 %» — медицинское
     // правило, и считать его на клиенте значило бы завести вторую копию.
     //

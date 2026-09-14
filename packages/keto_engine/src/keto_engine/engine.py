@@ -151,11 +151,21 @@ def scale(recipe: DishResult, factor: float) -> DishResult:
     return verify(scaled_items)
 
 
-def within_tolerance(dish: DishResult, targets: Targets) -> tuple[bool, bool]:
-    """Соответствие показателей блюда целям — (ratio_within, kcal_within)."""
+def within_tolerance(dish: DishResult, targets: Targets) -> tuple[bool | None, bool]:
+    """Соответствие показателей блюда целям — (ratio_within, kcal_within).
+
+    По соотношению ответов ТРИ, а не два: `None` — «сказать нечего», когда
+    соотношения у блюда нет вовсе (пустой знаменатель или незначимые чистые
+    углеводы, ADR-0037). Прежде этот случай схлопывался в `False`, и «не
+    определено» становилось неотличимо от «не соответствует назначению»: врач
+    получал в списке пациентов красную пометку «питание вне допуска» за день,
+    про который ядро ничего не говорило.
+
+    Калорийность считается всегда: она есть у любого блюда.
+    """
 
     ratio_within = (
-        dish.ratio is not None and abs(dish.ratio - targets.ratio) <= constants.RATIO_TOLERANCE
+        None if dish.ratio is None else abs(dish.ratio - targets.ratio) <= constants.RATIO_TOLERANCE
     )
     kcal_within = abs(dish.kcal - targets.kcal) <= targets.kcal * constants.KCAL_TOLERANCE_FRACTION
     return ratio_within, kcal_within
@@ -523,6 +533,17 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
 
     dish = verify(items)
     ratio_within, kcal_within = within_tolerance(dish, targets)
+    if ratio_within is None:
+        # У решателя третьего состояния нет: равенство соотношения — само
+        # ограничение задачи. Сюда приходит обычный вход, а не поломка: набор
+        # «жир плюс овощ, где клетчатка равна углеводам» LP решает, а починка
+        # округления валидного кандидата не находит и возвращает исходный.
+        # Выдать по такому набору вердикт «не соответствует» значило бы судить о
+        # соотношении, которого нет.
+        raise InfeasibleError(
+            "С выбранными продуктами кетосоотношение не определяется: считать "
+            "его не от чего — белка нет, а углеводы целиком уходят в клетчатку."
+        )
     return SolveResult(
         dish=dish, ratio_within_tolerance=ratio_within, kcal_within_tolerance=kcal_within
     )
