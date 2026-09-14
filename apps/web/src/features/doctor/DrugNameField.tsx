@@ -1,5 +1,5 @@
-import { Popover, PopoverAnchor, PopoverContent } from "@ketocare/ui";
-import { useId, useMemo, useState, type Ref } from "react";
+import { SuggestField } from "@ketocare/ui";
+import { useMemo, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
@@ -72,28 +72,18 @@ export function matchDrugs(
  * препарата в одной карте ломают подсчёт приверженности (вопрос 37) и делают
  * несравнимыми записи о приёме.
  *
- * Устроено так же, как поиск продукта в калькуляторе (`ProductPicker`), и по
- * тем же причинам: список в китовом `Popover` (правило П39), а не своя рамка на
- * `absolute` — рукописное позиционирование не умеет ни упираться в край экрана,
- * ни выходить за пределы прокручиваемого родителя, а форма препарата открывается
- * панелью. Разметка и клавиатура combobox свои: `cmdk` перехватывает стрелки
- * только когда фокус внутри него, а фокус здесь обязан оставаться в поле —
- * человек продолжает печатать.
+ * Механика списка — у примитива кита `SuggestField` (список в `Popover`,
+ * правило П39; стрелки, Escape, выбор по `mousedown`, разметка и живая
+ * область). `cmdk` для этого не годится: он перехватывает стрелки только когда
+ * фокус внутри него, а фокус здесь обязан оставаться в поле — человек
+ * продолжает печатать.
  *
- * **Это ТРЕТИЙ рукописный выпадающий список в кабинете, и общая часть у них
- * скопирована** (`activeIndex`, `dismissed`, `onMouseDown` вместо `click`,
- * `PopoverAnchor` с шириной по якорю, разметка `ul[role=listbox]`). Сливать их
- * сегодня не стали, и вот почему: одинаковая на вид механика ведёт себя
- * по-разному в главном. У `ProductPicker` поле — строка ПОИСКА, выбор её
- * очищает, и Enter берёт первый вариант; здесь поле И ЕСТЬ значение, выбор его
- * заменяет, а Enter без явного выбора стрелкой не делает ничего — иначе врач,
- * открывший форму и нажавший Enter, получал бы в схеме лечения препарат,
- * которого не набирал. Спрятать это различие в параметр общего хука значит
- * сделать его невидимым — ровно там, где оно клинически значимо.
- *
- * Долг записан в `docs/AUDIT_UX.md`: общую часть надо унести в кит примитивом,
- * и вместе с ней — живую область, которой при копировании здесь сначала не
- * оказалось.
+ * **Что осталось здесь и почему.** `activeIndex` начинается с −1: поле И ЕСТЬ
+ * значение, и Enter без явного выбора стрелкой не делает ничего — иначе врач,
+ * открывший форму и нажавший Enter, получит в схеме лечения препарат, которого
+ * не набирал. У поиска продукта то же поле — строка запроса, и там ноль: первый
+ * вариант предложен. Различие видно в одной строке состояния и не спрятано в
+ * параметр примитива.
  */
 export function DrugNameField({
   id,
@@ -124,7 +114,6 @@ export function DrugNameField({
   inputRef?: Ref<HTMLInputElement>;
 }) {
   const { t } = useTranslation("doctor");
-  const listId = useId();
   // Список закрыли щелчком мимо или Escape. Само по себе условие открытия
   // производное и закрыться не может: в поле те же буквы, совпадения те же.
   const [dismissed, setDismissed] = useState(true);
@@ -160,108 +149,52 @@ export function DrugNameField({
   }
 
   return (
-    <Popover open={isOpen} onOpenChange={(open) => setDismissed(!open)}>
-      <PopoverAnchor asChild>
-        <div className="min-w-0">
-          {/* Что произошло — словами, для того, кто экрана не видит.
-              Появление подсказки скринридер сам не объявляет, а подстановку
-              канонического названия («Кеппра» заменилась «Леветирацетамом») —
-              тем более: программная смена значения поля проходит молча. Это
-              худшее место, где такое может случиться незамеченным. */}
-          <span role="status" aria-live="polite" className="sr-only">
-            {announcement}
-          </span>
-          <Field
-            id={id}
-            name={name}
-            ref={inputRef}
-            label={label}
-            error={error}
-            hint={t("medications.drugNameHint")}
-            role="combobox"
-            aria-expanded={isOpen}
-            aria-controls={listId}
-            aria-autocomplete="list"
-            aria-activedescendant={
-              isOpen ? `${listId}-${activeIndex}` : undefined
-            }
-            // Браузерная автоподстановка поверх своей подсказки — две разные
-            // рамки в одном месте.
-            autoComplete="off"
-            value={value}
-            onChange={(event) => {
-              onChange(event.target.value);
-              setActiveIndex(-1);
-              setSubstituted(null);
-              setDismissed(false);
-            }}
-            onFocus={() => setDismissed(false)}
-            onBlur={onBlur}
-            onKeyDown={(event) => {
-              if (!isOpen) return;
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setActiveIndex((i) => (i + 1) % matches.length);
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setActiveIndex((i) =>
-                  i <= 0 ? matches.length - 1 : (i - 1) % matches.length,
-                );
-              } else if (event.key === "Enter" && activeIndex >= 0) {
-                // Вариант выбран стрелкой — Enter подставляет его, а не
-                // отправляет форму: иначе назначение уходило бы с недонабранным
-                // названием. Ничего не выбрано — Enter обычный.
-                event.preventDefault();
-                pick(matches[activeIndex]);
-              } else if (event.key === "Escape") {
-                setDismissed(true);
-              }
-            }}
-          />
-        </div>
-      </PopoverAnchor>
-
-      <PopoverContent
-        align="start"
-        sideOffset={4}
-        // Ширина повторяет поле, а не задаётся заново.
-        className="max-h-72 w-[var(--radix-popover-trigger-width)] overflow-auto p-0"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-      >
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label={t("medications.drugNameSuggestions")}
-          className="m-0 list-none p-0"
-        >
-          {matches.map((match, index) => (
-            <li
-              key={match.drug.id}
-              id={`${listId}-${index}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              className={`flex min-h-touch cursor-pointer flex-col gap-field px-3 py-2 ${
-                index === activeIndex ? "bg-accent text-accent-foreground" : ""
-              }`}
-              onMouseDown={(event) => {
-                // mouseDown, а не click: click срабатывает после blur поля, и
-                // список успевает закрыться раньше выбора.
-                event.preventDefault();
-                pick(match);
-              }}
-              onMouseEnter={() => setActiveIndex(index)}
-            >
-              <span className="min-w-0 break-words">{match.drug.name_ru}</span>
-              {match.via !== null && (
-                <span className="text-sm text-muted-foreground">
-                  {t("medications.drugNameVia", { synonym: match.via })}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
+    <SuggestField
+      options={matches}
+      open={isOpen}
+      onOpenChange={(next) => setDismissed(!next)}
+      activeIndex={activeIndex}
+      onActiveIndexChange={setActiveIndex}
+      onPick={pick}
+      // Подстановка важнее числа найденного: она меняет то, что человек
+      // набрал, и программная смена значения поля проходит молча.
+      announcement={announcement}
+      listLabel={t("medications.drugNameSuggestions")}
+      optionKey={(match) => match.drug.id}
+      renderOption={(match) => (
+        <>
+          <span className="min-w-0 break-words">{match.drug.name_ru}</span>
+          {match.via !== null && (
+            <span className="text-sm text-muted-foreground">
+              {t("medications.drugNameVia", { synonym: match.via })}
+            </span>
+          )}
+        </>
+      )}
+    >
+      {(aria) => (
+        <Field
+          id={id}
+          name={name}
+          ref={inputRef}
+          label={label}
+          error={error}
+          hint={t("medications.drugNameHint")}
+          {...aria}
+          // Браузерная автоподстановка поверх своей подсказки — две разные
+          // рамки в одном месте.
+          autoComplete="off"
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setActiveIndex(-1);
+            setSubstituted(null);
+            setDismissed(false);
+          }}
+          onFocus={() => setDismissed(false)}
+          onBlur={onBlur}
+        />
+      )}
+    </SuggestField>
   );
 }

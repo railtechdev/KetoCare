@@ -24,6 +24,9 @@ export type { MacroBarProps } from "./components/MacroBar";
 export { MacroFacts } from "./components/MacroFacts";
 export type { MacroFactsProps } from "./components/MacroFacts";
 
+export { SuggestField } from "./components/SuggestField";
+export type { SuggestAria, SuggestFieldProps } from "./components/SuggestField";
+
 export { WarningBanner } from "./components/WarningBanner";
 export type {
   WarningBannerProps,
