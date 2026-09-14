@@ -31,6 +31,7 @@ import random
 
 import requests
 from locust import HttpUser, between, events, task
+from locust.exception import StopTest
 from target_guard import refuse_foreign_target
 
 PARENT_EMAIL = os.environ.get("LOAD_PARENT_EMAIL", "e2e-parent@example.com")
@@ -44,7 +45,14 @@ _SESSION: dict[str, str] = {}
 @events.test_start.add_listener
 def _prepare(environment, **_: object) -> None:
     host = environment.host or ""
-    refuse_foreign_target(host)
+    try:
+        refuse_foreign_target(host)
+    except RuntimeError as refusal:
+        # locust ЛОВИТ исключения обработчиков событий и продолжает прогон
+        # («Uncaught exception in event handler»), кроме StopTest и
+        # родственных. Без перевыброса отказ остался бы строкой в журнале —
+        # то есть тем же предупреждением, которое и заменяется.
+        raise StopTest(str(refusal)) from refusal
 
     # Один вход на весь прогон. Сто входов подряд — это не нагрузка на базу, а
     # проверка ограничителя частоты: он их и остановит на пятом.

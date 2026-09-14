@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 from pathlib import Path
@@ -39,23 +40,51 @@ def _no_permission(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(PROFILE.ALLOW_TARGET, raising=False)
 
 
-def test_local_target_passes() -> None:
-    PROFILE.refuse_foreign_target(LOCAL)
+@pytest.mark.parametrize(
+    "target",
+    [
+        LOCAL,
+        "http://127.0.0.1:8001",
+        # Локальный TLS: прежняя редакция отвергала его ложно — она смотрела на
+        # схему, а не на хост.
+        "https://localhost:8443",
+        "http://[::1]:8001",
+        # Верхний регистр В ЛОКАЛЬНОЙ цели: без приведения хоста к нижнему
+        # регистру она не совпала бы с белым списком и была бы отвергнута.
+        # Прежняя проверка регистра стояла на ЧУЖОЙ цели и ничего не ловила:
+        # та отвергается и так (замечание по мутации, PR #198).
+        "HTTP://LOCALHOST:5175",
+        # Пустая цель — «не задана»: locust и так никуда не пойдёт, а отказ был
+        # бы про не тот предмет.
+        "",
+    ],
+)
+def test_local_targets_pass(target: str) -> None:
+    PROFILE.refuse_foreign_target(target)
 
 
-def test_stand_like_target_is_refused() -> None:
+@pytest.mark.parametrize(
+    ("target", "why"),
+    [
+        (STAND, "домен стенда"),
+        # Эти три проходили мимо прежней редакции: она искала «railtech» и
+        # `https://`, а стенд бывает и по http, и по имени, и по адресу.
+        ("http://prod-api.internal:8001", "чужое имя без TLS"),
+        ("http://89.23.117.4:8001", "адрес вместо имени"),
+        ("http://app.ketocare.railtech.uz", "домен стенда по http"),
+        # Регистр: `startswith` и `in` его различали, хост — нет.
+        ("HTTPS://APP.EXAMPLE.COM", "верхний регистр"),
+        # Без схемы `urlsplit` разбирает строку как «схема:путь» и хоста не даёт
+        # вовсе — без подстановки схемы чужая цель выглядела бы локальной.
+        ("app.example.com:8001", "адрес без схемы"),
+    ],
+)
+def test_foreign_targets_are_refused(target: str, why: str) -> None:
     with pytest.raises(RuntimeError) as refusal:
-        PROFILE.refuse_foreign_target(STAND)
+        PROFILE.refuse_foreign_target(target)
     # Отказ обязан называть цену: записи в дневнике живой семьи.
-    assert "дневник" in str(refusal.value)
-    assert PROFILE.ALLOW_TARGET in str(refusal.value)
-
-
-def test_https_target_is_refused_even_without_the_domain() -> None:
-    # Своего домена у стенда может и не быть; `https://` — сам по себе признак
-    # чужой цели: локально профиль ходит по http.
-    with pytest.raises(RuntimeError):
-        PROFILE.refuse_foreign_target("https://demo.example.com")
+    assert "дневник" in str(refusal.value), why
+    assert PROFILE.ALLOW_TARGET in str(refusal.value), why
 
 
 def test_permission_names_the_target(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,10 +111,44 @@ def test_guard_is_called_by_the_profile() -> None:
     """Защита обязана быть ВЫЗВАНА профилем, а не просто объявлена.
 
     Проверка по исходнику, а не выполнением: `locustfile.py` импортирует
-    `locust` и `requests`, которых нет в общем окружении, и тест на выполнении
-    проверял бы наличие зависимости. Слабее, чем прогон, и об этом сказано
-    прямо — но снятие вызова ловит.
+    `locust` и `requests`, которых нет в общем окружении. Но искать ПОДСТРОКУ
+    мало — так тест оставался зелёным при закомментированном вызове и при
+    `if False:` (замечание ревью PR #198). Поэтому разбирается дерево: вызов
+    обязан стоять выражением прямо в теле `_prepare` или в его `try`.
+    """
+    tree = ast.parse(_PROFILE.read_text(encoding="utf8"))
+    prepare = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_prepare"
+    )
+
+    def reachable(body: list[ast.stmt]) -> list[ast.stmt]:
+        out: list[ast.stmt] = []
+        for statement in body:
+            out.append(statement)
+            if isinstance(statement, ast.Try):
+                out.extend(statement.body)
+        return out
+
+    calls = [
+        statement
+        for statement in reachable(prepare.body)
+        if isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Call)
+        and getattr(statement.value.func, "id", "") == "refuse_foreign_target"
+    ]
+    assert calls, "вызов защиты не стоит в теле `_prepare`"
+
+
+def test_refusal_stops_the_run() -> None:
+    """Отказ обязан ОСТАНАВЛИВАТЬ прогон, а не печататься в журнал.
+
+    locust ловит исключения обработчиков событий и продолжает работу, кроме
+    `StopTest` и родственных: ревью PR #198 показало настоящим прогоном, что
+    пользователи поднимались и после отказа. Поэтому профиль обязан
+    перевыбрасывать отказ как `StopTest`.
     """
     source = _PROFILE.read_text(encoding="utf8")
-    assert "refuse_foreign_target(host)" in source
-    assert "from target_guard import refuse_foreign_target" in source
+    assert "from locust.exception import StopTest" in source
+    assert "raise StopTest(" in source

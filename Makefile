@@ -202,7 +202,7 @@ lint: openapi ## Линтеры и проверка типов (сначала �
 .PHONY: fix
 fix: ## Автоисправление форматирования
 	uv run ruff check --fix apps packages infra
-	uv run ruff format apps packages
+	uv run ruff format apps packages infra
 	@# Через скрипты пакетов (`format`), а не `exec prettier --write src`:
 	@# пути должен знать сам пакет. С зашитым `src` лендинг форматировался не
 	@# целиком — его `format:check` смотрит ещё и `scripts/`, и файл оттуда
