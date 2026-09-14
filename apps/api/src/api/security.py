@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import binascii
 import uuid
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -225,7 +224,8 @@ def verify_totp(secret: str, code: str) -> bool:
 
     Испорченный секрет — это `False`, а не падение. `pyotp` разбирает его как
     base32 и бросает `binascii.Error` на неразбираемой длине («Incorrect
-    padding») или чужом знаке («Non-base32 digit found»). Исключение уходило в
+    padding») или чужом знаке («Non-base32 digit found»), а на неASCII —
+    голый `ValueError`, которого `binascii.Error` НЕ ловит. Исключение уходило в
     middleware необработанным, и человек получал 500 «Внутренняя ошибка
     сервера» вместо отказа по коду — на входе врача, при смене второго фактора,
     при подтверждении настройки и при перевыпуске резервных кодов.
@@ -238,12 +238,12 @@ def verify_totp(secret: str, code: str) -> bool:
     Отказ пишется в журнал приложения: человек не виноват, он будет вводить
     верный код и получать «неверный код подтверждения» бесконечно, а без записи
     поломка останется невидимой до звонка администратору. Сам секрет в журнал
-    не уходит — только идентификатор учётки, который подставляет вызывающий.
+    не уходит.
     """
 
     try:
         return pyotp.TOTP(secret).verify(code, valid_window=1)
-    except binascii.Error as exc:
+    except ValueError as exc:  # binascii.Error — его подкласс; неASCII даёт голый ValueError
         # Значение в базе не разбирается как base32: записано мимо приложения
         # (сид, ручная правка, миграция). `generate_totp_secret()` такого не даёт.
         logger.warning("totp_secret_unparseable", reason=str(exc))

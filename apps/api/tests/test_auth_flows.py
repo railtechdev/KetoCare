@@ -37,8 +37,8 @@ class TestBrokenTotpSecret:
     # другой.
     @pytest.mark.parametrize(
         "secret",
-        [UNPARSEABLE, FOREIGN_CHARACTER],
-        ids=["неразбираемая длина", "чужой знак"],
+        [UNPARSEABLE, FOREIGN_CHARACTER, "секрет-администратора"],
+        ids=["неразбираемая длина", "чужой знак", "неASCII"],
     )
     async def test_login_refuses_instead_of_failing(self, client, make_user, secret):
         doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
@@ -71,6 +71,47 @@ class TestBrokenTotpSecret:
         assert body["status"] == "totp_setup_required"
         assert body["totp_setup_token"]
 
+    async def test_parent_with_broken_secret_is_not_let_in_by_password_alone(
+        self, client, make_user
+    ):
+        """Пустой секрет у родителя — не «второго фактора нет», а «он сломан».
+
+        Первая редакция считала пустую строку ненастроенным фактором, и
+        родитель, включавший 2FA, входил одним паролем — второй фактор снимался
+        испорченной записью в базе. Правильный исход — принудительная
+        перенастройка, а не пропуск.
+        """
+        parent = await make_user(UserRole.PARENT, totp_secret="")
+
+        response = await client.post(
+            "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] == "totp_setup_required"
+        assert body["tokens"] is None
+
+    async def test_setup_with_broken_secret_does_not_demand_a_code(self, client, make_user):
+        """Стена не должна переехать с входа на экран настройки.
+
+        Кабинет зовёт `/auth/totp/setup` сразу после `totp_setup_required`; с
+        `is not None` там требовался текущий код, который у испорченного
+        секрета никогда не сойдётся.
+        """
+        doctor = await make_user(UserRole.DOCTOR, totp_secret="")
+        login = await client.post(
+            "/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD}
+        )
+        token = login.json()["totp_setup_token"]
+
+        setup = await client.post(
+            "/api/v1/auth/totp/setup", json={}, headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert setup.status_code == 200, setup.text
+        assert setup.json()["secret"]
+
     async def test_working_secret_still_lets_the_doctor_in(self, client, make_user):
         """Обратная сторона: рабочий секрет обязан пускать.
 
@@ -93,12 +134,12 @@ class TestBrokenTotpSecret:
 
 
 class TestVerifyTotp:
-    """Сама проверка кода: три класса испорченных значений и два рабочих."""
+    """Сама проверка кода: хвост блока, чужой знак, неASCII — и два рабочих."""
 
     @pytest.mark.parametrize(
         "secret",
-        ["A" * 27, "A" * 30, "A" * 31 + "1", "A" * 31 + "=", ""],
-        ids=["остаток 3", "остаток 6", "цифра 1", "знак равенства", "пустой"],
+        ["A" * 27, "A" * 30, "A" * 31 + "1", "секрет-администратора"],
+        ids=["остаток 3", "остаток 6", "цифра 1", "неASCII"],
     )
     async def test_broken_secret_answers_false(self, secret):
         from api.security import verify_totp
