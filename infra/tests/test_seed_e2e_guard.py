@@ -619,7 +619,7 @@ def test_secret_of_exactly_the_minimum_passes(monkeypatch: pytest.MonkeyPatch) -
         "A" * 31 + "8",
         "A" * 31 + "9",
         "A" * 15 + "-" + "A" * 16,
-        "A" * 31 + "=",
+        "A" * 25 + "=",
     ],
 )
 def test_single_character_outside_base32_is_refused(
@@ -633,10 +633,11 @@ def test_single_character_outside_base32_is_refused(
     называет докстринг сида: с тремя из них подмены `+= "1"`, `+= "8"` и
     `+= "-"` проходили насквозь (ревью #202).
 
-    Знак равенства стоит здесь по другой причине, и она названа в сиде:
-    прогон его срезает и код считает, а сервер на нём падает `Incorrect
-    padding`. Секрет, с которым одна сторона входит, а другая не пускает, хуже
-    отсутствующего.
+    Знак равенства стоит здесь по другой причине, и она названа в сиде. Пример
+    выбран тот, на котором расхождение ИЗМЕРЕНО: `"A" * 25 + "="` прогон
+    срезает и код считает, а сервер падает `Incorrect padding`. Канонически
+    дополненную строку приняли бы обе стороны — на ней этот довод не стоит
+    проверять, и прежняя редакция теста ошибалась именно так.
     """
     monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
     monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
@@ -723,3 +724,39 @@ def test_default_secret_satisfies_its_own_rules() -> None:
     assert len(default) % 8 in GUARD._BASE32_BLOCK_TAILS
     assert not set(default.upper()) - GUARD._TOTP_ALPHABET
     assert len(GUARD._PASSWORD_DEFAULT) >= GUARD.MIN_PASSWORD_LENGTH
+
+
+def test_secret_below_the_minimum_names_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Граница минимума проверяется длиной, которая до неё ДОХОДИТ.
+
+    Прежняя точка (`MIN_TOTP_CHARS - 1` = 25 знаков) имеет остаток 1 и потому
+    перехватывается проверкой разбираемости — ослабление минимума до 17 снова
+    перестало ронять тесты (ревью #202, четвёртый заход). Двадцать четыре
+    знака разбираемы (остаток 0) и до минимума доходят, а сообщение обязано
+    называть само число: иначе отказ неотличим от соседнего.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "A" * 24)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert str(GUARD.MIN_TOTP_CHARS) in str(refusal.value)
+
+
+@pytest.mark.parametrize("extra", [0, 2, 3, 6, 14])
+def test_parseable_lengths_pass(extra: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Рабочие длины обязаны проходить, иначе сторож начнёт врать в свою пользу.
+
+    Набор остатков можно сузить до `{0, 2, 7}`, не уронив ни одного теста:
+    отвергаемые 27, 30 и 33 закрыты, а принимаемые — только 0 и 2. Тогда сторож
+    молча отверг бы секрет, который сервер разбирает (28 и 29 знаков проверены
+    исполнением на настоящем `pyotp`).
+
+    Длины отсчитываются ОТ минимума, а не задаются числами: иначе законное
+    ужесточение `MIN_TOTP_CHARS` роняло бы этот тест — проверяются остатки
+    блока base32, а не конкретные значения.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "A" * (GUARD.MIN_TOTP_CHARS + extra))
+    GUARD._require_credentials_on_allowed_host()
