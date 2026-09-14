@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import re
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -400,9 +401,14 @@ def test_password_of_minimum_length_passes(monkeypatch: pytest.MonkeyPatch) -> N
     DEMO._require_password_on_allowed_host()
 
 
-def test_local_run_does_not_check_length() -> None:
+def test_local_run_does_not_check_length(monkeypatch: pytest.MonkeyPatch) -> None:
     # На локальной базе длина не проверяется вовсе: там умолчание — удобство, и
     # ломать `make seed-demo` незачем.
+    #
+    # Пароль задаётся КОРОТКИЙ намеренно: без него тест был вакуумным —
+    # умолчание длиной в двадцать восемь символов проходит любую проверку, и
+    # мутация «требовать длину и локально» оставляла его зелёным.
+    monkeypatch.setenv(DEMO._PASSWORD_VAR, "abc")
     DEMO._require_password_on_allowed_host()
 
 
@@ -423,8 +429,10 @@ def test_length_comes_from_one_place() -> None:
 
     for script in ("seed_demo.py", "create_admin.py"):
         source = (_SCRIPTS / script).read_text(encoding="utf8")
-        assert "MIN_PASSWORD_LENGTH =" not in source, (
+        # Регулярка, а не подстрока: `MIN_PASSWORD_LENGTH: int = 12` мимо
+        # подстроки проходил, и аннотированная копия оставалась незамеченной —
+        # то есть заготовка будущего расхождения.
+        assert re.search(r"^MIN_PASSWORD_LENGTH\s*(:[^=]+)?=", source, re.M) is None, (
             f"{script} объявляет минимум длины сам — копия разойдётся молча, "
             "как уже расходилась проверка адреса базы"
         )
-        assert "import MIN_PASSWORD_LENGTH" in source or "MIN_PASSWORD_LENGTH," in source
