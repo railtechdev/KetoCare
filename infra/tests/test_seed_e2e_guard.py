@@ -633,9 +633,10 @@ def test_single_character_outside_base32_is_refused(
     называет докстринг сида: с тремя из них подмены `+= "1"`, `+= "8"` и
     `+= "-"` проходили насквозь (ревью #202).
 
-    Знак равенства стоит здесь по другой причине, и она названа в сиде: разбор
-    его принимает, но он считается в длину, и `"A" * 25 + "="` прошло бы как
-    двадцать шесть символов, неся 125 бит.
+    Знак равенства стоит здесь по другой причине, и она названа в сиде:
+    прогон его срезает и код считает, а сервер на нём падает `Incorrect
+    padding`. Секрет, с которым одна сторона входит, а другая не пускает, хуже
+    отсутствующего.
     """
     monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
     monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
@@ -689,3 +690,36 @@ def test_strength_is_checked_for_the_values_actually_used(
     # И наоборот: слабое значение в окружении, сильное умолчание — тоже отказ.
     assert GUARD._totp_secret() == "SHORT234"
     assert len(GUARD._TOTP_DEFAULT) >= GUARD.MIN_TOTP_CHARS
+
+
+@pytest.mark.parametrize("length", [27, 30, 33])
+def test_secret_of_unparseable_length_is_refused(
+    length: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Длина, которую сервер не разбирает, — тоже неисправный секрет.
+
+    Такой секрет состоит только из разрешённых букв и длиннее минимума, но
+    `pyotp` падает на нём `Incorrect padding`, а прогон код считает. Сторож
+    пропускал их насквозь (ревью #202, третий заход): граница снизу не была
+    связана с разбираемой длиной.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "A" * length)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    assert "base32" in str(refusal.value)
+
+
+def test_default_secret_satisfies_its_own_rules() -> None:
+    """Умолчание обязано проходить те же проверки, что и заданное значение.
+
+    Именно им живёт ночной прогон: переменных он не задаёт. Испорченное
+    умолчание (знак вне алфавита, неразбираемая длина) дало бы тот же
+    безымянный отказ входа, а правила к нему не применялись вовсе.
+    """
+    default = GUARD._TOTP_DEFAULT
+    assert len(default) >= GUARD.MIN_TOTP_CHARS
+    assert len(default) % 8 in GUARD._BASE32_BLOCK_TAILS
+    assert not set(default.upper()) - GUARD._TOTP_ALPHABET
+    assert len(GUARD._PASSWORD_DEFAULT) >= GUARD.MIN_PASSWORD_LENGTH
