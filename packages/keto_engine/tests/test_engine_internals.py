@@ -426,3 +426,120 @@ class TestNetCarbsRatio:
         # …и далеко от неё по общим: правило именно то, а не другое.
         by_total_carbs = dish.fat_g / (dish.protein_g + dish.carbs_g)
         assert by_total_carbs < 2.0
+
+
+class TestDegenerateNetCarbs:
+    """Чистые углеводы, неотличимые от ошибки вычитания, считаются нулём.
+
+    Нашёл это property-тест `test_verify_scale_linear_in_mass`: у продукта, где
+    клетчатка составляет почти все углеводы, `carbs - fiber` вырождается в
+    мусор округления, и соотношение начинало зависеть от масштаба масс —
+    2.25e14 на десяти граммах против 3.38e14 на тридцати.
+
+    Все входы ниже — физичные (углеводы от 0.01 г на сто граммов, массы от
+    0.1 г): каждая проверка стоит на значении, где мутация правила измеримо
+    меняет ответ, а не на подобранном умозрительно.
+    """
+
+    DEGENERATE = Ingredient(
+        product_id="degenerate",
+        kcal=89.22043054338337,
+        fat=1.0,
+        protein=0.0,
+        carbs=20.055107635845843,
+        fiber=20.05510763584584,
+    )
+
+    def test_ratio_is_not_reported(self) -> None:
+        assert verify([(self.DEGENERATE, 10.0)]).ratio is None
+
+    def test_answer_does_not_depend_on_scale(self) -> None:
+        light = verify([(self.DEGENERATE, 10.0)])
+        heavy = verify([(self.DEGENERATE, 30.0)])
+        assert light.ratio == heavy.ratio is None
+
+    def test_insignificant_remainder_is_zeroed_not_refused(self) -> None:
+        """Незначимый остаток обнуляется, а блюдо считается по белку.
+
+        Первая редакция отвергала такие блюда целиком, и одно и то же блюдо на
+        разных массах давало то число, то «не определено» — то есть
+        воспроизводила дефект, который чинила.
+        """
+        with_protein = Ingredient(
+            product_id="with_protein",
+            kcal=100.0,
+            fat=0.0,
+            protein=1.0,
+            carbs=5.689777411623246,
+            fiber=5.689777411623245,
+        )
+        light = verify([(with_protein, 10.0)])
+        heavy = verify([(with_protein, 10.0 * 0.01171875)])
+        assert light.ratio == pytest.approx(0.0)
+        assert heavy.ratio == pytest.approx(0.0)
+
+    def test_significant_remainder_still_counts(self) -> None:
+        """Порог относительный, и нормальная еда через него проходит.
+
+        Углеводы 0.01 г на сто граммов при массе 0.1 г — исчезающе мало для
+        клиники и вполне различимо для арифметики.
+        """
+        real_food = Ingredient(
+            product_id="real_food", kcal=100.0, fat=10.0, protein=0.0, carbs=0.01, fiber=0.009
+        )
+        dish = verify([(real_food, 0.1)])
+        assert dish.ratio is not None
+        assert dish.ratio == pytest.approx(10.0 / 0.001, rel=1e-6)
+
+    def test_threshold_is_measured_against_both_terms(self) -> None:
+        """Мерой служит сумма углеводов и клетчатки, а не одни углеводы.
+
+        Свидетель найден перебором: при `carbs = 0.01`, `fiber = 0.00999999999`
+        и массе 0.1 г ответы двух версий расходятся.
+        """
+        borderline = Ingredient(
+            product_id="borderline",
+            kcal=100.0,
+            fat=10.0,
+            protein=0.0,
+            carbs=0.01,
+            fiber=0.00999999999,
+        )
+        assert verify([(borderline, 0.1)]).ratio is None
+
+    def test_exact_cancellation_is_not_an_error(self) -> None:
+        """Клетчатка ровно равна углеводам — ошибки нет, знаменатель это белок."""
+        tiny = 2.104906845937254e-13
+        exact = Ingredient(
+            product_id="exact", kcal=1.0, fat=tiny, protein=tiny, carbs=tiny, fiber=tiny
+        )
+        for grams in (10.0, 0.1, 0.001):
+            assert verify([(exact, grams)]).ratio == pytest.approx(1.0), f"на {grams} г"
+
+    def test_verdict_does_not_depend_on_a_cancelled_column(self) -> None:
+        """Столбец, сократившийся начисто, на вердикт не влияет."""
+        for carbs in (1.5, 50.0, 500.0):
+            same = Ingredient(
+                product_id=f"c{carbs}", kcal=1.0, fat=10.0, protein=1.0, carbs=carbs, fiber=carbs
+            )
+            assert verify([(same, 100.0)]).ratio == pytest.approx(10.0), f"carbs={carbs}"
+
+    def test_infinite_ratio_is_not_a_number(self) -> None:
+        """Бесконечность наружу не уходит: 52 случая на 29 тысяч в прогоне."""
+        denormal = Ingredient(
+            product_id="denormal",
+            kcal=234.0,
+            fat=26.00299225719645,
+            protein=2.225073858507e-311,
+            carbs=2.225073858507e-311,
+            fiber=2.225073858507e-311,
+        )
+        assert verify([(denormal, 10.0)]).ratio is None
+
+    def test_zero_denominator_answers_the_same_way(self) -> None:
+        oil = Ingredient(product_id="oil", kcal=884, fat=100.0, protein=0.0, carbs=0.0)
+        assert verify([(oil, 50.0)]).ratio is None
+
+    def test_solver_does_not_offer_such_a_dish(self) -> None:
+        with pytest.raises(InfeasibleError):
+            solve([self.DEGENERATE], Targets(ratio=4.0, kcal=400))
