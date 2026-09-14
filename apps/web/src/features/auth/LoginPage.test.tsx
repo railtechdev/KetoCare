@@ -85,6 +85,67 @@ describe("вход со вторым фактором", () => {
     );
   });
 
+  it("сломанный фактор просит резервный код и не предлагает код из приложения", async () => {
+    // Состояние `totp_recovery_required`: секрет записан мимо приложения и не
+    // разбирается. Поле кода здесь было бы приглашением в круг — код не
+    // сойдётся никогда, сколько ни вводи.
+    post.mockResolvedValue({
+      data: {
+        status: "totp_recovery_required",
+        tokens: null,
+        totp_setup_token: null,
+      },
+    });
+
+    renderPage();
+    await submitCredentials();
+
+    expect(await screen.findByLabelText(/Резервный код/)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Код из приложения-аутентификатора/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Ввести код из приложения/ }),
+    ).not.toBeInTheDocument();
+    // Человеку сказано, ЧТО случилось и что делать: без этого экран выглядит
+    // как «система забыла мой второй фактор».
+    expect(
+      screen.getByText(/Вход по коду из приложения сломан/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/сбросит администратор клиники/),
+    ).toBeInTheDocument();
+    expect(signIn).not.toHaveBeenCalled();
+  });
+
+  it("исправленный адрес снимает сообщение о поломке", async () => {
+    // Состояние принадлежит учётной записи, а не вкладке. Пока оно переживало
+    // смену адреса, здоровому врачу предлагали сжечь одноразовый резервный код.
+    post.mockResolvedValueOnce({
+      data: {
+        status: "totp_recovery_required",
+        tokens: null,
+        totp_setup_token: null,
+      },
+    });
+    post.mockResolvedValueOnce({
+      data: { status: "totp_required", tokens: null, totp_setup_token: null },
+    });
+
+    renderPage();
+    const user = await submitCredentials();
+    expect(await screen.findByLabelText(/Резервный код/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Войти" }));
+
+    expect(
+      await screen.findByLabelText(/Код из приложения-аутентификатора/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Вход по коду из приложения сломан/),
+    ).not.toBeInTheDocument();
+  });
+
   it("вход без второго фактора открывает кабинет сразу", async () => {
     post.mockResolvedValue({
       data: { status: "ok", tokens: { access_token: "a", refresh_token: "r" } },

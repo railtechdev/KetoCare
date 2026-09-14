@@ -112,8 +112,13 @@ class LoginResponse(BaseModel):
     * `totp_required` — пароль верен, нужен код второго фактора. Кода ещё не
       спрашивали, и пользователь пока ничего не сделал неправильно.
     * `totp_setup_required` — 2FA обязательна по роли (раздел 5.2 ТЗ), но
-      настроить её до первого входа негде. `totp_setup_token` даёт доступ
-      только к /auth/totp/setup и /auth/totp/verify.
+      настроить её до первого входа негде. Состояние ПЕРВОЙ настройки: секрета
+      в базе нет вовсе. `totp_setup_token` даёт доступ только к
+      /auth/totp/setup и /auth/totp/verify.
+    * `totp_recovery_required` — фактор настраивался, но секрет непригоден
+      (записан мимо приложения). Код из приложения не сойдётся никогда, поэтому
+      спрашивается резервный код. Токена настройки здесь нет намеренно: один
+      пароль не должен открывать перенастройку фактора (#227).
     * `password_change_required` — пароль выдал администратор, и работать он
       должен ровно до того, как владелец задаст свой.
 
@@ -129,6 +134,7 @@ class LoginResponse(BaseModel):
     status: Literal[
         "ok",
         "totp_required",
+        "totp_recovery_required",
         "totp_setup_required",
         "password_change_required",
     ]
