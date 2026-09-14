@@ -32,9 +32,8 @@ from urllib.parse import urlsplit
 #: снимает защиту навсегда и для любой цели.
 ALLOW_TARGET = "LOAD_ALLOW_TARGET"
 
-#: Разрешённые адреса: только петля. Пустая строка — «цель не задана»: locust в
-#: этом случае и так никуда не пойдёт, а отказ был бы про не тот предмет.
-LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", ""})
+#: Разрешённые адреса: только петля.
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def _hostname(target: str) -> str:
@@ -55,7 +54,14 @@ def _hostname(target: str) -> str:
 def refuse_foreign_target(host: str) -> None:
     """Прервать прогон, если цель не локальная и не подтверждена поимённо."""
     target = (host or "").strip().rstrip("/")
-    if _hostname(target) in LOCAL_HOSTS:
+    if target == "":
+        # Цель не задана: locust и так никуда не пойдёт, а отказ был бы про не
+        # тот предмет.
+        return
+    hostname = _hostname(target)
+    # Пустой хост у НЕпустой цели — строку разобрать не удалось (`//evil.com`).
+    # Пропускать такое нельзя: это fail-open, и именно им обходилась защита.
+    if hostname != "" and hostname in LOCAL_HOSTS:
         return
     allowed = os.environ.get(ALLOW_TARGET, "").strip().rstrip("/")
     if allowed != "" and allowed.lower() == target.lower():

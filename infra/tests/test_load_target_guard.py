@@ -107,48 +107,97 @@ def test_trailing_slash_does_not_bypass_the_ban(monkeypatch: pytest.MonkeyPatch)
     PROFILE.refuse_foreign_target(STAND + "/")
 
 
-def test_guard_is_called_by_the_profile() -> None:
-    """Защита обязана быть ВЫЗВАНА профилем, а не просто объявлена.
-
-    Проверка по исходнику, а не выполнением: `locustfile.py` импортирует
-    `locust` и `requests`, которых нет в общем окружении. Но искать ПОДСТРОКУ
-    мало — так тест оставался зелёным при закомментированном вызове и при
-    `if False:` (замечание ревью PR #198). Поэтому разбирается дерево: вызов
-    обязан стоять выражением прямо в теле `_prepare` или в его `try`.
-    """
+def _prepare_node() -> ast.FunctionDef:
     tree = ast.parse(_PROFILE.read_text(encoding="utf8"))
-    prepare = next(
+    return next(
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.FunctionDef) and node.name == "_prepare"
     )
 
-    def reachable(body: list[ast.stmt]) -> list[ast.stmt]:
-        out: list[ast.stmt] = []
-        for statement in body:
-            out.append(statement)
-            if isinstance(statement, ast.Try):
-                out.extend(statement.body)
-        return out
 
-    calls = [
-        statement
-        for statement in reachable(prepare.body)
-        if isinstance(statement, ast.Expr)
-        and isinstance(statement.value, ast.Call)
-        and getattr(statement.value.func, "id", "") == "refuse_foreign_target"
-    ]
-    assert calls, "вызов защиты не стоит в теле `_prepare`"
+def test_guard_is_wired_as_a_start_listener() -> None:
+    """Подготовка прогона обязана быть ПОДПИСАНА на старт.
 
-
-def test_refusal_stops_the_run() -> None:
-    """Отказ обязан ОСТАНАВЛИВАТЬ прогон, а не печататься в журнал.
-
-    locust ловит исключения обработчиков событий и продолжает работу, кроме
-    `StopTest` и родственных: ревью PR #198 показало настоящим прогоном, что
-    пользователи поднимались и после отказа. Поэтому профиль обязан
-    перевыбрасывать отказ как `StopTest`.
+    Без декоратора функция просто не вызывается — прогон идёт на чужую цель без
+    единого слова отказа, и прежний тест этого не ловил: он искал подстроку
+    вызова, а она остаётся на месте (замечание ревью PR #198, доказано живым
+    прогоном locust).
     """
-    source = _PROFILE.read_text(encoding="utf8")
-    assert "from locust.exception import StopTest" in source
-    assert "raise StopTest(" in source
+    decorators = [ast.dump(node) for node in _prepare_node().decorator_list]
+    assert any("test_start" in node and "add_listener" in node for node in decorators)
+
+
+def test_guard_runs_before_any_network_call() -> None:
+    """Отказ обязан случиться ДО входа, а не после.
+
+    Перенос блока за `requests.post` оставлял тесты зелёными, но профиль успевал
+    сходить на стенд: запись в его `audit_log` и трата лимита `5/мин`.
+    """
+    body = _prepare_node().body
+    host_names = {
+        target.id
+        for statement in body
+        if isinstance(statement, ast.Assign)
+        for target in statement.targets
+        if isinstance(target, ast.Name)
+    }
+
+    guard_at: int | None = None
+    network_at: int | None = None
+    for index, statement in enumerate(body):
+        dumped = ast.dump(statement)
+        if guard_at is None and "refuse_foreign_target" in dumped:
+            guard_at = index
+            # Аргумент — то самое имя, в которое положен `environment.host`:
+            # `refuse_foreign_target("")` выключал бы защиту, оставляя вызов.
+            call = next(
+                node
+                for node in ast.walk(statement)
+                if isinstance(node, ast.Call)
+                and getattr(node.func, "id", "") == "refuse_foreign_target"
+            )
+            assert len(call.args) == 1
+            assert isinstance(call.args[0], ast.Name)
+            assert call.args[0].id in host_names
+        if network_at is None and "requests" in dumped:
+            network_at = index
+
+    assert guard_at is not None, "вызов защиты не найден в теле `_prepare`"
+    if network_at is not None:
+        assert guard_at < network_at, "защита стоит после обращения к сети"
+
+
+def test_refusal_is_reraised_as_stop_test() -> None:
+    """Отказ обязан перевыбрасываться как `StopTest`.
+
+    locust ловит исключения обработчиков и продолжает прогон; `StopTest` он
+    пропускает наружу специально. Прежняя проверка искала подстроку — и
+    оставалась зелёной, если отказ проглотить (тот же класс, что PR и лечит).
+    """
+    raises = [
+        node
+        for statement in _prepare_node().body
+        if isinstance(statement, ast.Try)
+        for handler in statement.handlers
+        for node in ast.walk(handler)
+        if isinstance(node, ast.Raise)
+        and isinstance(node.exc, ast.Call)
+        and getattr(node.exc.func, "id", "") == "StopTest"
+    ]
+    assert raises, "отказ не перевыбрасывается как StopTest"
+
+
+def test_permission_must_equal_the_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Разрешение сравнивается ЦЕЛИКОМ: при сравнении по вхождению
+    # `LOAD_ALLOW_TARGET=uz` открыл бы любой адрес в этой зоне.
+    monkeypatch.setenv(PROFILE.ALLOW_TARGET, "uz")
+    with pytest.raises(RuntimeError):
+        PROFILE.refuse_foreign_target(STAND)
+
+
+def test_unparsable_target_is_refused() -> None:
+    # Пустой хост разрешён только для буквально пустой цели: `//evil.com` хоста
+    # не даёт, и прежняя редакция пропускала такую строку — fail-open.
+    with pytest.raises(RuntimeError):
+        PROFILE.refuse_foreign_target("//evil.com")
