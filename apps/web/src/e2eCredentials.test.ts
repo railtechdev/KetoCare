@@ -46,6 +46,18 @@ function fromSeed(name: string): string | undefined {
   return new RegExp(`${constant} = "([^"]+)"`).exec(source)?.[1];
 }
 
+function fromLoad(name: string): string | undefined {
+  // Четвёртое объявление того же пароля: нагрузочный профиль. Тест его не
+  // видел, а расхождение проявляется непонятным отказом входа в прогоне.
+  const source = readFileSync(
+    join(ROOT, "infra", "load", "locustfile.py"),
+    "utf8",
+  );
+  return new RegExp(`os\\.environ\\.get\\("${name}", "([^"]+)"\\)`).exec(
+    source,
+  )?.[1];
+}
+
 function fromRun(name: string): string | undefined {
   const source = readFileSync(
     join(ROOT, "apps", "e2e", "src", "env.ts"),
@@ -67,6 +79,14 @@ describe("учётные данные сквозного прогона", () => 
       expect(run, `${name} пропал из прогона`).toBeDefined();
       expect(seed).toBe(example);
       expect(run).toBe(example);
+
+      // Пароль объявлен ещё и в нагрузочном профиле; секрета второго фактора
+      // там нет — он ходит обычным входом, без второго фактора.
+      if (name === "E2E_PASSWORD") {
+        const load = fromLoad(name);
+        expect(load, `${name} пропал из нагрузочного профиля`).toBeDefined();
+        expect(load).toBe(example);
+      }
     },
   );
 

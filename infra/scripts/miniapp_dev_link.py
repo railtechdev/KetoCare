@@ -102,7 +102,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--email", default="parent@example.com")
     parser.add_argument("--chat-id", type=int, default=DEV_CHAT_ID)
-    parser.add_argument("--origin", default=os.environ.get("MINIAPP_ORIGIN", "http://localhost:5174"))
+    parser.add_argument(
+        "--origin", default=os.environ.get("MINIAPP_ORIGIN", "http://localhost:5174")
+    )
     args = parser.parse_args()
 
     bot_token = os.environ.get("BOT_TOKEN", "")

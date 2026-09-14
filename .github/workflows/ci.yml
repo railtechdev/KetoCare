@@ -37,9 +37,9 @@ jobs:
       - run: uv sync --all-packages
       - run: pnpm install --frozen-lockfile
       - name: ruff check
-        run: uv run ruff check apps packages
+        run: uv run ruff check apps packages infra
       - name: ruff format --check
-        run: uv run ruff format --check apps packages
+        run: uv run ruff format --check apps packages infra
       - name: mypy
         run: uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api
       - name: Сгенерировать api-client

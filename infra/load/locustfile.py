@@ -31,6 +31,8 @@ import random
 
 import requests
 from locust import HttpUser, between, events, task
+from locust.exception import StopTest
+from target_guard import refuse_foreign_target
 
 PARENT_EMAIL = os.environ.get("LOAD_PARENT_EMAIL", "e2e-parent@example.com")
 PASSWORD = os.environ.get("E2E_PASSWORD", "e2e correct horse battery staple")
@@ -43,11 +45,14 @@ _SESSION: dict[str, str] = {}
 @events.test_start.add_listener
 def _prepare(environment, **_: object) -> None:
     host = environment.host or ""
-    if "railtech" in host or host.startswith("https://"):
-        print(
-            "ВНИМАНИЕ: цель похожа на настоящий стенд. Нагрузочный прогон "
-            "пишет записи в дневник — гоняйте его по локальной базе."
-        )
+    try:
+        refuse_foreign_target(host)
+    except RuntimeError as refusal:
+        # locust ЛОВИТ исключения обработчиков событий и продолжает прогон
+        # («Uncaught exception in event handler»), кроме StopTest и
+        # родственных. Без перевыброса отказ остался бы строкой в журнале —
+        # то есть тем же предупреждением, которое и заменяется.
+        raise StopTest(str(refusal)) from refusal
 
     # Один вход на весь прогон. Сто входов подряд — это не нагрузка на базу, а
     # проверка ограничителя частоты: он их и остановит на пятом.
@@ -161,9 +166,7 @@ class Doctor(HttpUser):
         ФОРМУ обращения; величину надо мерить на стенде с настоящим числом
         пациентов у врача — см. README, «Веер сводок».
         """
-        listing = self.client.get(
-            "/api/v1/patients?limit=50&offset=0", name="/patients"
-        )
+        listing = self.client.get("/api/v1/patients?limit=50&offset=0", name="/patients")
         if listing.status_code != 200:
             return
 

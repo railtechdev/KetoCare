@@ -183,8 +183,12 @@ test-engine: ## Только эталонные тесты keto_engine
 
 .PHONY: lint
 lint: openapi ## Линтеры и проверка типов (сначала генерирует api-client)
-	uv run ruff check apps packages
-	uv run ruff format --check apps packages
+	@# `infra` тоже под линтом: там живут сиды с защитой от чужой базы и
+	@# нагрузочный профиль, а формат в нём годами расходился незамеченным —
+	@# каталог просто не входил ни в цель, ни в задачу CI. Проверки типов по
+	@# `infra` пока нет: там десятки ошибок, это отдельная работа.
+	uv run ruff check apps packages infra
+	uv run ruff format --check apps packages infra
 	uv run mypy packages/keto_engine/src/keto_engine packages/core/src/core apps/api/src/api apps/bot/src/bot apps/worker/src/worker
 	@# Шаги соединены через `&&`, а не `;`: при `;` код выхода блока — это код
 	@# последней команды, и падение prettier или eslint терялось. `make lint`
@@ -197,8 +201,8 @@ lint: openapi ## Линтеры и проверка типов (сначала �
 
 .PHONY: fix
 fix: ## Автоисправление форматирования
-	uv run ruff check --fix apps packages
-	uv run ruff format apps packages
+	uv run ruff check --fix apps packages infra
+	uv run ruff format apps packages infra
 	@# Через скрипты пакетов (`format`), а не `exec prettier --write src`:
 	@# пути должен знать сам пакет. С зашитым `src` лендинг форматировался не
 	@# целиком — его `format:check` смотрит ещё и `scripts/`, и файл оттуда
