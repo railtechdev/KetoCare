@@ -187,6 +187,41 @@ class TestVerify:
         assert body["ratio_within_tolerance"] is not None
         assert body["kcal_within_tolerance"] is not None
 
+    async def test_dish_without_ratio_has_no_ratio_verdict(
+        self, client, session, make_user, auth_headers
+    ):
+        """Цели заданы, а соотношения у блюда нет — вердикт `null`, не `false`.
+
+        Ручку читает Mini App: третье состояние «не определено» (ADR-0038)
+        обязано доезжать по контракту, а не схлопываться в «не соответствует».
+        Стык проверяется на стороне поставщика.
+        """
+        user = await make_user(UserRole.PARENT)
+        response = await client.post(
+            "/api/v1/calc/verify",
+            json={
+                # Чистый жир: ни белка, ни углеводов — знаменатель пуст. У
+                # `BUTTER` есть 0,9 г белка, и соотношение у него считается.
+                "ingredients": [
+                    {
+                        "product_id": "oil",
+                        "kcal": 884,
+                        "fat": 100,
+                        "protein": 0,
+                        "carbs": 0,
+                        "fiber": 0,
+                    }
+                ],
+                "items": [{"product_id": "oil", "grams": 50}],
+                "targets": {"ratio": 3.0, "kcal": 430},
+            },
+            headers=auth_headers(user),
+        )
+        body = response.json()
+        assert body["dish"]["ratio"] is None
+        assert body["ratio_within_tolerance"] is None
+        assert body["kcal_within_tolerance"] is not None
+
     async def test_item_referencing_unknown_product_rejected(
         self, client, session, make_user, auth_headers
     ):
