@@ -743,7 +743,7 @@ def test_secret_below_the_minimum_names_it(monkeypatch: pytest.MonkeyPatch) -> N
     assert str(GUARD.MIN_TOTP_CHARS) in str(refusal.value)
 
 
-@pytest.mark.parametrize("extra", [0, 2, 3, 6, 14])
+@pytest.mark.parametrize("extra", [0, 2, 3, 5, 6, 14])
 def test_parseable_lengths_pass(extra: int, monkeypatch: pytest.MonkeyPatch) -> None:
     """Рабочие длины обязаны проходить, иначе сторож начнёт врать в свою пользу.
 
@@ -752,11 +752,47 @@ def test_parseable_lengths_pass(extra: int, monkeypatch: pytest.MonkeyPatch) -> 
     молча отверг бы секрет, который сервер разбирает (28 и 29 знаков проверены
     исполнением на настоящем `pyotp`).
 
-    Длины отсчитываются ОТ минимума, а не задаются числами: иначе законное
-    ужесточение `MIN_TOTP_CHARS` роняло бы этот тест — проверяются остатки
-    блока base32, а не конкретные значения.
+    Длины отсчитываются ОТ минимума, чтобы читалось «минимум и сколько-то
+    сверх», а не набор магических чисел. Защиты от ужесточения это НЕ даёт, и
+    обещать её нельзя (ревью #202, пятый заход): набор остатков сохраняется,
+    только пока новый минимум сравним с нынешним по модулю восемь. Подъём до
+    рекомендованных RFC 4226 тридцати двух знаков уронит этот тест, и менять
+    минимум придётся вместе со смещениями.
     """
     monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
     monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
     monkeypatch.setenv(GUARD._TOTP_VAR, "A" * (GUARD.MIN_TOTP_CHARS + extra))
     GUARD._require_credentials_on_allowed_host()
+
+
+def test_whole_alphabet_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Секрет из ВСЕХ знаков алфавита обязан проходить.
+
+    Ни одна фикстура не содержала `Q`, `U`, `W`, `X` и `Z`, поэтому из
+    `_TOTP_ALPHABET` можно было выбросить букву, не уронив ни одного теста —
+    и сторож начал бы отвергать нормальный секрет `pyotp.random_base32()`
+    (ревью #202, пятый заход). Здесь ровно тридцать два знака base32, то есть
+    и длина рекомендованных RFC 4226 ста шестидесяти бит.
+    """
+    whole = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    assert set(whole) == set(GUARD._TOTP_ALPHABET)
+
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, whole)
+    GUARD._require_credentials_on_allowed_host()
+
+
+def test_refusal_lists_the_same_tails_as_the_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Сообщение перечисляет те же остатки, что и проверка.
+
+    Перечень стоял в тексте прописью, и сужение множества оставляло сообщение
+    врущим. Теперь текст строится из множества; тест держит эту связь.
+    """
+    monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
+    monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
+    monkeypatch.setenv(GUARD._TOTP_VAR, "A" * 27)
+    with pytest.raises(SystemExit) as refusal:
+        GUARD._require_credentials_on_allowed_host()
+    listed = ", ".join(str(tail) for tail in sorted(GUARD._BASE32_BLOCK_TAILS))
+    assert listed in str(refusal.value)
