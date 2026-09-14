@@ -30,7 +30,11 @@
 
 set -euo pipefail
 
-REPO=/srv/ketocare
+# Путь берётся из окружения только ради проверяемости: по умолчанию тот же
+# `/srv/ketocare`, что и раньше, а на прогоне подставляется временный каталог.
+# Без этого цепочку доставки пароля администратора проверить нечем — она
+# держалась разбором текста, и шесть форм её обхода проходили молча (#208).
+REPO="${KETOCARE_REPO:-/srv/ketocare}"
 cd "$REPO"
 
 # Права по умолчанию задаются здесь, а не наследуются от ssh-сессии: от них
@@ -135,7 +139,7 @@ git log --oneline -1
 # Через временный файл и переименование: rename атомарен и даёт новый inode,
 # поэтому bash, выполняющий сейчас старую копию, продолжает читать её же.
 # Прямая перезапись сломала бы текущий запуск на середине.
-SELF=/srv/ketocare-deploy.sh
+SELF="${KETOCARE_SELF:-/srv/ketocare-deploy.sh}"
 if [ -f "$REPO/infra/scripts/remote-deploy.sh" ] \
    && ! cmp -s "$REPO/infra/scripts/remote-deploy.sh" "$SELF"; then
     cp "$REPO/infra/scripts/remote-deploy.sh" "$SELF.next" \
