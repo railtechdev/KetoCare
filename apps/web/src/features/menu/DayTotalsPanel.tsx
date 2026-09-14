@@ -5,6 +5,7 @@ import {
   Section,
   TargetBar,
   WarningBanner,
+  formatKcal,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
@@ -78,10 +79,10 @@ export function DayTotalsPanel({
         />
         <span className="tabular-nums">
           {targets === null
-            ? t("totals.kcal", { value: totals.kcal.toFixed(0) })
+            ? t("totals.kcal", { value: formatKcal(totals.kcal) })
             : t("totals.kcalOfTarget", {
-                value: totals.kcal.toFixed(0),
-                target: targets.kcalPerDay.toFixed(0),
+                value: formatKcal(totals.kcal),
+                target: formatKcal(targets.kcalPerDay),
               })}
         </span>
       </div>

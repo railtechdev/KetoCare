@@ -3,6 +3,8 @@ import {
   ErrorState,
   SEARCH_DELAY_MS,
   SuggestField,
+  formatGrams,
+  formatKcal,
   useDebouncedValue,
 } from "@ketocare/ui";
 import { PackageSearch } from "lucide-react";
@@ -165,10 +167,10 @@ export function ProductPicker({
             <span className="min-w-0 break-words">{product.name}</span>
             <span className="text-sm text-muted-foreground tabular-nums">
               {t("per100g", {
-                kcal: product.kcal.toFixed(0),
-                fat: product.fat.toFixed(1),
-                protein: product.protein.toFixed(1),
-                carbs: product.carbs.toFixed(1),
+                kcal: formatKcal(product.kcal),
+                fat: formatGrams(product.fat),
+                protein: formatGrams(product.protein),
+                carbs: formatGrams(product.carbs),
               })}
             </span>
           </>

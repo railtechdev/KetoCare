@@ -234,7 +234,7 @@ describe("калькулятор", () => {
       { timeout: AUTO_CALC_TIMEOUT_MS },
     );
     expect(contribution).toHaveTextContent("374");
-    expect(contribution).toHaveTextContent("41.3");
+    expect(contribution).toHaveTextContent("41,3");
     expect(contribution).toHaveTextContent("Жиры, г");
     expect(contribution).not.toHaveAttribute("aria-busy", "true");
 

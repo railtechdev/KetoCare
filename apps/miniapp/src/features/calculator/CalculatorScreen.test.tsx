@@ -419,7 +419,7 @@ describe("калькулятор в Mini App", () => {
       name: /Вклад продукта «Масло сливочное»/,
     });
     expect(contribution).toHaveTextContent("224");
-    expect(contribution).toHaveTextContent("24.8");
+    expect(contribution).toHaveTextContent("24,8");
   });
 
   it("расхождение с целью — строка рядом с числами, а не тревога", async () => {

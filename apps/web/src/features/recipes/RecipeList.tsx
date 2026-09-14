@@ -6,6 +6,7 @@ import {
   RatioBadge,
   Skeleton,
   Tiles,
+  formatKcal,
 } from "@ketocare/ui";
 import { CookingPot, Plus, SearchX } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -169,7 +170,7 @@ export function RecipeList({
                   <span className="text-sm text-muted-foreground tabular-nums">
                     {recipe.computed
                       ? t("card.kcal", {
-                          value: recipe.computed.kcal.toFixed(0),
+                          value: formatKcal(recipe.computed.kcal),
                         })
                       : t("card.noComputed")}
                   </span>

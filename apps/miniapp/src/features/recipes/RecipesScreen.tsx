@@ -1,14 +1,16 @@
 import {
   AsyncSection,
-  StatusNote,
   Button,
   Input,
   RatioBadge,
-  Section,
-  useDebouncedValue,
-  WarningBanner,
   SEARCH_DELAY_MS,
+  Section,
+  StatusNote,
+  WarningBanner,
+  formatGrams,
+  formatKcal,
   type ProductName,
+  useDebouncedValue,
 } from "@ketocare/ui";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -216,12 +218,12 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
         ) : (
           <div className="flex flex-wrap items-center gap-field">
             <RatioBadge ratio={portion.ratio} />
-            <span>{t("recipes.kcal", { kcal: portion.kcal.toFixed(0) })}</span>
+            <span>{t("recipes.kcal", { kcal: formatKcal(portion.kcal) })}</span>
             <span className="text-muted-foreground">
               {t("recipes.macros", {
-                fat: portion.fat.toFixed(1),
-                protein: portion.protein.toFixed(1),
-                carbs: portion.carbs.toFixed(1),
+                fat: formatGrams(portion.fat),
+                protein: formatGrams(portion.protein),
+                carbs: formatGrams(portion.carbs),
               })}
             </span>
           </div>

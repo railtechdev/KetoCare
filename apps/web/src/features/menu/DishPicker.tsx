@@ -1,10 +1,11 @@
 import {
-  formatRatio,
   Input,
   Label,
-  SuggestField,
-  useDebouncedValue,
   SEARCH_DELAY_MS,
+  SuggestField,
+  formatKcal,
+  formatRatio,
+  useDebouncedValue,
 } from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -99,7 +100,7 @@ export function DishPicker({
               {option.kcal === null
                 ? t("picker.noTotals")
                 : t("picker.totals", {
-                    kcal: option.kcal.toFixed(0),
+                    kcal: formatKcal(option.kcal),
                     ratio:
                       option.ratio === null ? "—" : formatRatio(option.ratio),
                   })}

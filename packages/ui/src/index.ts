@@ -13,7 +13,15 @@ export { isRefusal } from "./lib/assistantAnswer";
 export type { AssistantMessageSignals } from "./lib/assistantAnswer";
 export { productNameState } from "./lib/productName";
 export type { ProductName, ProductNameInput } from "./lib/productName";
-export { formatRatio, formatOccurredAt, formatWeight } from "./lib/format";
+export {
+  formatGrams,
+  formatKcal,
+  formatMass,
+  formatNumber,
+  formatOccurredAt,
+  formatRatio,
+  formatWeight,
+} from "./lib/format";
 
 export { RatioBadge } from "./components/RatioBadge";
 export type { RatioBadgeProps } from "./components/RatioBadge";

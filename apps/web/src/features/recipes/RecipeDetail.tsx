@@ -7,8 +7,11 @@ import {
   RatioBadge,
   Section,
   Skeleton,
-  toast,
   WarningBanner,
+  formatGrams,
+  formatKcal,
+  formatMass,
+  toast,
 } from "@ketocare/ui";
 import { Calculator, Download, Pencil, Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -18,7 +21,6 @@ import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { incomingRecipe } from "../calculator/incomingItem";
 import { errorMessageOf } from "../../lib/api";
-import { formatGrams } from "./format";
 import { productLabel } from "./productLabel";
 import { FileField } from "../../components/Field";
 import { RecipePhoto } from "./RecipePhoto";
@@ -299,7 +301,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                       блюда, а не соответствие назначению конкретного ребёнка. */}
               <RatioBadge ratio={computed.ratio} />
               <span className="tabular-nums">
-                {t("detail.kcal", { value: computed.kcal.toFixed(0) })}
+                {t("detail.kcal", { value: formatKcal(computed.kcal) })}
               </span>
               <span className="text-muted-foreground tabular-nums">
                 {t("detail.fiber", { value: formatGrams(computed.fiber) })}
@@ -321,7 +323,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
           <p className="m-0 flex flex-wrap items-center gap-block tabular-nums">
             <span className="font-medium">{t("detail.perPortion")}</span>
             <span>
-              {t("detail.kcal", { value: perPortion.kcal.toFixed(0) })}
+              {t("detail.kcal", { value: formatKcal(perPortion.kcal) })}
             </span>
             <span className="text-muted-foreground">
               {t("detail.macros", {
@@ -334,7 +336,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
         )}
 
         <p className="m-0 flex flex-wrap gap-block text-sm text-muted-foreground tabular-nums">
-          <span>{t("detail.yield", { grams: formatGrams(data.yield_g) })}</span>
+          <span>{t("detail.yield", { grams: formatMass(data.yield_g) })}</span>
           <span>{t("detail.servings", { value: data.servings })}</span>
         </p>
 
@@ -383,7 +385,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                 </span>
                 <span className="text-muted-foreground tabular-nums">
                   {t("detail.grams", {
-                    value: formatGrams(ingredient.grams),
+                    value: formatMass(ingredient.grams),
                   })}
                 </span>
               </li>

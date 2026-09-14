@@ -1,4 +1,11 @@
-import { Button, DataTable, Section, WarningBanner, toast } from "@ketocare/ui";
+import {
+  Button,
+  DataTable,
+  Section,
+  WarningBanner,
+  formatRatio,
+  toast,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { FileUp } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -101,9 +108,7 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
         header: t("import.preview.ratio"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.ratio == null
-              ? "—"
-              : `${row.original.ratio.toFixed(1)} : 1`}
+            {row.original.ratio == null ? "—" : formatRatio(row.original.ratio)}
           </span>
         ),
       },

@@ -8,6 +8,7 @@ import {
   Section,
   Skeleton,
   WarningBanner,
+  formatKcal,
 } from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Calculator } from "lucide-react";
@@ -113,7 +114,7 @@ export function ProductCard({
 
             <Section title={t("card.nutrition")} description={t("card.per100")}>
               <p className="m-0 text-page-title font-semibold tabular-nums">
-                {t("card.kcal", { value: data.kcal_100g.toFixed(0) })}
+                {t("card.kcal", { value: formatKcal(data.kcal_100g) })}
               </p>
               <MacroBar
                 fatG={data.fat_100g}

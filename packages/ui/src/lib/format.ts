@@ -26,6 +26,54 @@ export function formatWeight(kg: number): string {
   );
 }
 
+/**
+ * Число в русской записи с заданным знаком после запятой.
+ *
+ * Основание для всех остальных: `toFixed` возвращает английскую запись, и
+ * «4.0 г» оказывалось рядом с «4,0 г» из соседнего блока — про одно и то же
+ * (правило П45 канона).
+ */
+export function formatNumber(value: number, digits: number): string {
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+/**
+ * Граммы, которые СРАВНИВАЮТ: жиры, белки, углеводы в строке, итоги рядом с
+ * целью.
+ *
+ * Знак после запятой всегда, даже нулевой: «50,0» рядом с «4,5» читается как
+ * пара чисел, «50» рядом с «4,5» — как разнобой.
+ */
+export function formatGrams(value: number): string {
+  return formatNumber(value, 1);
+}
+
+/**
+ * Граммы, которые ЧИТАЮТ: масса продукта в составе, граммовка в плане дня.
+ *
+ * Целые остаются целыми — «50 г масла» не нуждается в нуле после запятой, а
+ * список того, что взвесить, читают по одной строке, а не столбцом.
+ */
+export function formatMass(value: number): string {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(
+    value,
+  );
+}
+
+/**
+ * Калорийность: целое число с русским разделителем разрядов.
+ *
+ * Суточная норма — четырёхзначная, и «1200 ккал» читается хуже, чем «1 200».
+ */
+export function formatKcal(value: number): string {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(
+    value,
+  );
+}
+
 /** Дата и время записи дневника в локали пациента. */
 export function formatOccurredAt(value: Date): string {
   return new Intl.DateTimeFormat("ru-RU", {

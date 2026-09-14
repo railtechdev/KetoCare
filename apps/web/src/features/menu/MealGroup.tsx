@@ -1,12 +1,10 @@
-import { Button, ConfirmDialog, cn } from "@ketocare/ui";
+import { Button, ConfirmDialog, cn, formatMass } from "@ketocare/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatPortionFactor } from "./dates";
-// Округление граммов одно на приложение: в рецепте и в меню одно и то же
-// число обязано выглядеть одинаково.
-import { formatGrams } from "../recipes/format";
+
 import { itemDishKey } from "./useDishCatalog";
 import type { MenuItemRead } from "./useMenu";
 
@@ -169,7 +167,7 @@ export function MealGroup({
                           <span>{line.name_ru}</span>
                           <span className="text-muted-foreground tabular-nums">
                             {t("item.grams", {
-                              value: formatGrams(line.grams),
+                              value: formatMass(line.grams),
                             })}
                           </span>
                         </li>

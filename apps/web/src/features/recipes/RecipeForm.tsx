@@ -8,6 +8,7 @@ import {
   MacroFacts,
   RatioBadge,
   cn,
+  formatKcal,
   toast,
 } from "@ketocare/ui";
 import { CookingPot, Sparkles, X } from "lucide-react";
@@ -381,7 +382,7 @@ export function RecipeForm({
                 <RatioBadge ratio={computed.dish.ratio} />
                 <span className="tabular-nums">
                   {t("form.computedKcal", {
-                    value: computed.dish.kcal.toFixed(0),
+                    value: formatKcal(computed.dish.kcal),
                   })}
                 </span>
               </div>
