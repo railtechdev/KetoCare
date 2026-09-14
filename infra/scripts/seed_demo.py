@@ -30,7 +30,7 @@ from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
-from core.tools.db_guard import refuse_foreign_database
+from core.tools.db_guard import MIN_PASSWORD_LENGTH, refuse_foreign_database
 
 # Дефолт годится только для локальной БД. На публичном стенде пароль из
 # репозитория — это открытая админка, поэтому там его обязательно перекрывает
@@ -125,16 +125,26 @@ def _require_password_on_allowed_host() -> None:
     # репозитории, и скопированное в команду оно защищает ровно так же, как
     # незаданная переменная, то есть никак. У сида прогонов это уже закрыто
     # (#196), здесь оставалась та же дыра.
-    if _demo_password() != _PASSWORD_DEFAULT:
-        return
-    raise SystemExit(
-        f"База разрешена переменной {_ALLOW_HOST}, а у {_PASSWORD_VAR} осталось\n"
-        "умолчание из открытого репозитория.\n"
-        "Тогда демо-админка (`admin@example.com`) доступна кому угодно, и\n"
-        "пароль будет напечатан в журнал команды.\n"
-        f"Задайте {_PASSWORD_VAR} той же командой — docs/DEPLOY.md,\n"
-        "«Демо-данные и фокус-группа»."
-    )
+    password = _demo_password()
+    if password == _PASSWORD_DEFAULT:
+        raise SystemExit(
+            f"База разрешена переменной {_ALLOW_HOST}, а у {_PASSWORD_VAR} осталось\n"
+            "умолчание из открытого репозитория.\n"
+            "Тогда демо-админка (`admin@example.com`) доступна кому угодно, и\n"
+            "пароль будет напечатан в журнал команды.\n"
+            f"Задайте {_PASSWORD_VAR} той же командой — docs/DEPLOY.md,\n"
+            "«Демо-данные и фокус-группа»."
+        )
+    # Длина — то же правило и то же число, что у `create_admin.py`: учётка одна и
+    # та же (`admin@example.com`), домен тот же, и требовать от неё двенадцать
+    # символов в одном скрипте, принимая односимвольный в другом, значит держать
+    # защиту только на словах.
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise SystemExit(
+            f"{_PASSWORD_VAR} короче {MIN_PASSWORD_LENGTH} символов — на публичном\n"
+            "домене это открытая админка (`admin@example.com`).\n"
+            "Тот же минимум проверяет infra/scripts/create_admin.py."
+        )
 
 
 # Значения на 100 г. Источник указан честно: это данные USDA, а не выдуманные
