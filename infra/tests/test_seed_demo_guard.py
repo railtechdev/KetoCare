@@ -413,21 +413,20 @@ def test_local_run_does_not_check_length(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_length_comes_from_one_place() -> None:
-    """Число одно на оба скрипта, а не объявлено дважды.
+    """Число у сида берётся из общего модуля, а не объявлено заново.
 
     Сравнивать значения бесполезно: `12 is 12` истинно и у независимых
     объявлений — малые целые в Python кэшируются, и первая редакция этого теста
-    переживала мутацию «объявить своё число». Поэтому проверяется ИСХОДНИК: ни в
-    одном из двух скриптов не должно быть собственного присваивания, только
-    импорт из общего модуля.
+    переживала мутацию «объявить своё число». Поэтому проверяется ИСХОДНИК:
+    собственного присваивания у сида быть не должно, только импорт из общего
+    модуля. То же свойство `create_admin.py` проверяет его собственный тест — и
+    по дереву разбора: копия под другим именем регулярку проходит (ревью #201).
     """
     from core.tools.db_guard import MIN_PASSWORD_LENGTH as shared
 
-    admin = _load("create_admin")
     assert shared == DEMO.MIN_PASSWORD_LENGTH
-    assert shared == admin.MIN_PASSWORD_LENGTH
 
-    for script in ("seed_demo.py", "create_admin.py"):
+    for script in ("seed_demo.py",):
         source = (_SCRIPTS / script).read_text(encoding="utf8")
         # Регулярка, а не подстрока: `MIN_PASSWORD_LENGTH: int = 12` мимо
         # подстроки проходил, и аннотированная копия оставалась незамеченной —
