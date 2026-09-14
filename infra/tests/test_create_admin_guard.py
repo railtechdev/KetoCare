@@ -197,6 +197,7 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) ->
         session_kwargs={},
         looked_up=None,
         maker_engine=None,
+        engines=[],
     )
 
     class _Session:
@@ -231,7 +232,9 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) ->
 
     def _engine(url: str) -> _Engine:
         recorder.engine_url = url
-        return _Engine()
+        engine = _Engine()
+        recorder.engines.append(engine)
+        return engine
 
     def _maker(engine: object, **kw: object) -> type[_Session]:
         recorder.maker_engine = engine
@@ -264,8 +267,11 @@ def test_password_from_environment_is_not_printed(
 
     assert ADMIN.main(ARGV) == 0
 
-    out = capsys.readouterr().out
+    printed = capsys.readouterr()
+    out = printed.out
     assert LONG_ENOUGH not in out
+    # stderr идёт в тот же журнал прогона — `remote-deploy.sh` пишет туда же.
+    assert LONG_ENOUGH not in printed.err
     assert "в вывод не попадает" in out
     # И проверенное значение — то самое, которое хешируется.
     assert recorder.created["password_hash"] == f"hash:{LONG_ENOUGH}"
@@ -283,12 +289,16 @@ def test_generated_password_is_shown_once(
 
     assert ADMIN.main(ARGV) == 0
 
+    shown = capsys.readouterr()
     printed = [
         line.split(":", 1)[1].strip()
-        for line in capsys.readouterr().out.splitlines()
+        for line in shown.out.splitlines()
         if "Временный пароль:" in line
     ]
     assert len(printed) == 1
+    # «Показан один раз» — обещание самого скрипта. Дубль в stderr его нарушает:
+    # в выкате stderr уходит в тот же журнал публичного прогона.
+    assert (shown.out + shown.err).count(printed[0]) == 1
     # Напечатано ровно то, что ушло в хеш: печать другого значения означала бы
     # пароль, которым нельзя войти.
     assert recorder.created["password_hash"] == f"hash:{printed[0]}"
@@ -480,7 +490,11 @@ def test_engine_takes_the_configured_url_and_session_keeps_objects(
 
     assert ADMIN.main(ARGV) == 0
     assert recorder.engine_url == DB_URL
-    assert recorder.maker_engine is not None, "фабрика сессий собрана не на этом движке"
+    # Движок один: второй остался бы неосвобождённым, а `finally` закрывает
+    # только первый. Сверять «фабрика собрана на каком-нибудь движке» нельзя —
+    # с двумя вызовами тождество выполняется на втором (ревью #201).
+    assert len(recorder.engines) == 1, "движок создан не один раз — лишний никто не закроет"
+    assert recorder.maker_engine is recorder.engines[0], "фабрика собрана на другом движке"
     assert recorder.session_kwargs["expire_on_commit"] is False
 
 
@@ -491,12 +505,12 @@ def test_generated_password_comes_from_the_cryptographic_source() -> None:
     оба «разные каждый раз». Ревью #201 показало это мутациями: счётчик,
     зерно, метка времени и pid проходили поведенческую проверку насквозь.
 
-    Правило намеренно не привязано ни к имени функции, ни к числу вызовов:
-    переименование, `token_bytes(...).hex()` и постобработка вроде
-    `.replace("-", "_")` — законные правки, и падать на них тест не должен
-    (четвёртый заход ревью #201). Держится другое: пароль рождается ровно
-    одним вызовом `secrets.token_*` с длиной из константы модуля, имя
-    `secrets` в скрипте не переприсвоено, а `random` не используется вовсе.
+    Правило не привязано ни к имени функции, ни к числу вызовов:
+    переименование, `token_bytes(...).hex()`, `os.urandom(...)` и
+    постобработка вроде `.replace("-", "_")` — законные правки, и падать на
+    них тест не должен. Держится другое: функция, ЧЕЙ результат становится
+    паролем, берёт его у `secrets`/`os.urandom` с длиной из константы модуля,
+    имя `secrets` в скрипте не переприсвоено, а `random` не используется.
     """
     tree = ast.parse(_SCRIPT.read_text(encoding="utf8"))
     modules = {
@@ -513,20 +527,49 @@ def test_generated_password_comes_from_the_cryptographic_source() -> None:
     }
     assert "secrets" in modules or from_secrets, "модуль secrets в скрипте не импортирован"
 
-    sources = []
+    # Какая функция даёт пароль — берётся из МЕСТА УПОТРЕБЛЕНИЯ, а не по имени.
+    # Иначе декоративный `secrets.token_urlsafe` в неиспользуемой функции
+    # прикрывает счётчик в настоящей (ревью #201, шестой заход), а привязка к
+    # имени ронялась бы обычным переименованием.
+    holder = None
     for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "password" for target in node.targets
+            )
+            and isinstance(node.value, ast.BoolOp)
+            and isinstance(node.value.op, ast.Or)
+        ):
+            for value in node.value.values:
+                if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+                    holder = value.func.id
+    assert holder is not None, "в скрипте не найдено место, где пароль получают генерацией"
+    bodies = [
+        node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == holder
+    ]
+    assert len(bodies) == 1, f"функция {holder}, дающая пароль, определена не один раз"
+
+    sources = []
+    for node in ast.walk(bodies[0]):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         if (
             isinstance(func, ast.Attribute)
-            and func.attr.startswith("token_")
             and isinstance(func.value, ast.Name)
-            and func.value.id == "secrets"
+            and (
+                (func.attr.startswith("token_") and func.value.id == "secrets")
+                # os.urandom — тоже CSPRNG, и падать на нём было ложной строгостью.
+                or (func.attr == "urandom" and func.value.id == "os")
+            )
         ) or (isinstance(func, ast.Name) and func.id in from_secrets):
             sources.append(node)
 
-    assert sources, "пароль рождается не из secrets.token_* — слабый источник по выходам неотличим"
+    assert sources, (
+        f"{holder} рождает пароль не из secrets.token_*/os.urandom — "
+        "слабый источник по выходам неотличим"
+    )
     # Число вызовов не ограничивается: посторонний `token_hex(4)` где-то рядом
     # — законная правка (ревью #201, пятый заход). Держится другое: хотя бы у
     # одного вызова длина приходит именем, а не литералом и не умолчанием.
@@ -619,7 +662,7 @@ def test_password_variable_name_is_the_one_the_deploy_passes() -> None:
 
     # Звено 4: значение приходит из секрета, и объявление лежит В ТОМ ЖЕ шаге,
     # где собирается окружение. В соседнем шаге оно до рендера не доедет.
-    workflow = (_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf8")
+    workflow = _uncommented((_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf8"))
     head = workflow.index("- name: Собрать окружение из секретов")
     rest = workflow[head + 1 :]
     stop = rest.find("\n      - name:")
@@ -632,10 +675,14 @@ def test_password_variable_name_is_the_one_the_deploy_passes() -> None:
     # Python, а не ищется регуляркой: имя, вынесенное в хвостовой комментарий
     # («временно отключим»), текстовую проверку переживало — та же ошибка
     # «упоминание вместо содержимого», за которую переписано звено 1.
-    opened = step.index("NAMES = [")
-    bracket = step.index("[", opened)
-    carried = ast.literal_eval(step[bracket : step.index("]", bracket) + 1])
-    assert name in carried, "deploy.yml не переносит переменную на сервер: её нет в списке имён"
+    listed = re.search(r"^\s*NAMES\s*=\s*\[", step, re.M)
+    assert listed is not None, (
+        "в шаге сборки окружения нет списка NAMES — проверка перестала смотреть туда, "
+        "куда обещает: похожее имя рядом (REQUIRED_NAMES) ей не годится"
+    )
+    bracket = step.index("[", listed.start())
+    transferred = ast.literal_eval(step[bracket : step.index("]", bracket) + 1])
+    assert name in transferred, "deploy.yml не переносит переменную на сервер: её нет в списке имён"
 
 
 def test_exit_code_reaches_the_shell() -> None:
