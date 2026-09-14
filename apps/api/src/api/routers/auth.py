@@ -125,9 +125,21 @@ async def login(
         )
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
-    needs_totp = user.role in ROLES_REQUIRING_TOTP or user.totp_secret is not None
+    # Настроенным второй фактор считается по НЕПУСТОМУ секрету, а не по
+    # «поле не NULL». Пустая строка проходила как настроенный: врач получал
+    # `totp_required`, вводил верный код, а `verify_totp` отвечал отказом —
+    # войти было нельзя никогда, вместо честного «второй фактор не настроен»
+    # (issue #206). Значение попадает в базу мимо приложения: сид, ручная
+    # правка, миграция.
+    # «Включён» и «пригоден» — разные вещи. Пустая строка означает, что второй
+    # фактор ВКЛЮЧАЛСЯ, но секрет испорчен: такого пользователя нельзя пускать
+    # одним паролем (это снятие второго фактора), но и требовать код нельзя —
+    # он никогда не сойдётся. Честный выход — принудительная перенастройка.
+    enrolled = user.totp_secret is not None
+    usable = bool(user.totp_secret)
+    needs_totp = user.role in ROLES_REQUIRING_TOTP or enrolled
 
-    if needs_totp and user.totp_secret is None:
+    if needs_totp and not usable:
         # Приглашённому врачу/диетологу/админу 2FA обязательна, но настроить её
         # до первого входа негде. Пароль уже проверен, поэтому выдаём токен,
         # действующий только для /auth/totp/setup и /auth/totp/verify.
@@ -137,7 +149,7 @@ async def login(
         )
 
     if needs_totp:
-        assert user.totp_secret is not None
+        assert user.totp_secret
 
         # Кода ещё не спрашивали — это ШАГ входа, а не ошибка. Пароль уже
         # проверен, пользователь пока не сделал ничего неправильного, и говорить
@@ -346,7 +358,9 @@ async def totp_setup(
 
     # Смена уже настроенной 2FA требует текущего кода: иначе угнанный access-токен
     # позволил бы молча заменить второй фактор и вытеснить владельца.
-    if db_user.totp_secret is not None and not (
+    # Испорченный (пустой) секрет кода не требует: он никогда не сойдётся, и
+    # человек упирался бы в стену на экране настройки.
+    if db_user.totp_secret and not (
         payload.current_code and verify_totp(db_user.totp_secret, payload.current_code)
     ):
         raise ApiError(
@@ -758,7 +772,7 @@ async def regenerate_backup_codes(
     """
 
     db_user = await users_repo.get(session, user.id)
-    if db_user is None or db_user.totp_secret is None:
+    if db_user is None or not db_user.totp_secret:
         raise ApiError(ErrorCode.CONFLICT, "Второй фактор не настроен.")
 
     if not verify_totp(db_user.totp_secret, payload.totp_code):

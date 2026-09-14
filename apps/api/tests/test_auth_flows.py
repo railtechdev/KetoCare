@@ -12,6 +12,158 @@ pytestmark = pytest.mark.asyncio
 PASSWORD = "correct horse battery staple"
 
 
+class TestBrokenTotpSecret:
+    """Испорченный секрет второго фактора — отказ, а не поломка сервера.
+
+    `pyotp` разбирает секрет как base32 и бросает `binascii.Error` на
+    неразбираемой длине и на чужом знаке. Исключение уходило в middleware
+    необработанным, и человек получал 500 «Внутренняя ошибка сервера» вместо
+    отказа по коду — на входе врача, при смене второго фактора, при
+    подтверждении настройки и при перевыпуске резервных кодов (issue #206).
+
+    Секрет попадает в базу мимо приложения: `generate_totp_secret()` такого не
+    даёт, а вот сид, ручная правка или миграция — могут.
+    """
+
+    #: Длина 27 знаков не разбирается как base32: восемь знаков кодируют пять
+    #: байт, и остаток бывает только 0, 2, 4, 5 или 7.
+    UNPARSEABLE = "A" * 27
+    #: Цифры 0, 1, 8 и 9 в алфавит base32 не входят.
+    FOREIGN_CHARACTER = "A" * 31 + "1"
+
+    # Пустая строка сюда НЕ входит: это не испорченный секрет, а незаданный, и
+    # вход отвечает на него «второй фактор не настроен» — см. отдельный тест
+    # ниже. Держать её здесь значило бы требовать 401 там, где правильный ответ
+    # другой.
+    @pytest.mark.parametrize(
+        "secret",
+        [UNPARSEABLE, FOREIGN_CHARACTER, "секрет-администратора"],
+        ids=["неразбираемая длина", "чужой знак", "неASCII"],
+    )
+    async def test_login_refuses_instead_of_failing(self, client, make_user, secret):
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": doctor.email, "password": PASSWORD, "totp_code": "000000"},
+        )
+
+        assert response.status_code == 401, response.text
+        assert response.json()["error"]["code"] == "unauthorized"
+
+    async def test_empty_secret_means_not_configured(self, client, make_user):
+        """Пустой секрет — это «не настроен», а не тупик.
+
+        Вход считал второй фактор настроенным по «поле не NULL», поэтому врач с
+        пустой строкой получал `totp_required`, вводил верный код и получал
+        отказ — войти было нельзя никогда. Рядом всё это время стояла нужная
+        ветка: `totp_setup_required`.
+        """
+        doctor = await make_user(UserRole.DOCTOR, totp_secret="")
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": doctor.email, "password": PASSWORD},
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] == "totp_setup_required"
+        assert body["totp_setup_token"]
+
+    async def test_parent_with_broken_secret_is_not_let_in_by_password_alone(
+        self, client, make_user
+    ):
+        """Пустой секрет у родителя — не «второго фактора нет», а «он сломан».
+
+        Первая редакция считала пустую строку ненастроенным фактором, и
+        родитель, включавший 2FA, входил одним паролем — второй фактор снимался
+        испорченной записью в базе. Правильный исход — принудительная
+        перенастройка, а не пропуск.
+        """
+        parent = await make_user(UserRole.PARENT, totp_secret="")
+
+        response = await client.post(
+            "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] == "totp_setup_required"
+        assert body["tokens"] is None
+
+    async def test_setup_with_broken_secret_does_not_demand_a_code(self, client, make_user):
+        """Стена не должна переехать с входа на экран настройки.
+
+        Кабинет зовёт `/auth/totp/setup` сразу после `totp_setup_required`; с
+        `is not None` там требовался текущий код, который у испорченного
+        секрета никогда не сойдётся.
+        """
+        doctor = await make_user(UserRole.DOCTOR, totp_secret="")
+        login = await client.post(
+            "/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD}
+        )
+        token = login.json()["totp_setup_token"]
+
+        setup = await client.post(
+            "/api/v1/auth/totp/setup", json={}, headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert setup.status_code == 200, setup.text
+        assert setup.json()["secret"]
+
+    async def test_working_secret_still_lets_the_doctor_in(self, client, make_user):
+        """Обратная сторона: рабочий секрет обязан пускать.
+
+        Иначе «отказывать всегда» выглядело бы как починка.
+        """
+        secret = pyotp.random_base32()
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": doctor.email,
+                "password": PASSWORD,
+                "totp_code": pyotp.TOTP(secret).now(),
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "ok"
+
+
+class TestVerifyTotp:
+    """Сама проверка кода: хвост блока, чужой знак, неASCII — и два рабочих."""
+
+    @pytest.mark.parametrize(
+        "secret",
+        ["A" * 27, "A" * 30, "A" * 31 + "1", "секрет-администратора"],
+        ids=["остаток 3", "остаток 6", "цифра 1", "неASCII"],
+    )
+    async def test_broken_secret_answers_false(self, secret):
+        from api.security import verify_totp
+
+        assert verify_totp(secret, "123456") is False
+
+    async def test_working_secret_answers_true(self):
+        from api.security import verify_totp
+
+        secret = pyotp.random_base32()
+        assert verify_totp(secret, pyotp.TOTP(secret).now()) is True
+
+    async def test_lowercase_secret_still_works(self):
+        """Регистр не портит секрет: `pyotp` декодирует с `casefold=True`.
+
+        Отвергать строчный значило бы отказывать рабочему значению — этот же
+        довод разбирался в #202.
+        """
+        from api.security import verify_totp
+
+        secret = pyotp.random_base32()
+        assert verify_totp(secret.lower(), pyotp.TOTP(secret).now()) is True
+
+
 class TestLogin:
     async def test_parent_logs_in_without_totp(self, client, session, make_user):
         parent = await make_user(UserRole.PARENT)

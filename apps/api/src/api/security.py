@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 import jwt
 import pyotp
+import structlog
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
 from starlette.concurrency import run_in_threadpool
@@ -21,6 +22,8 @@ from core.config import get_settings
 from core.models.enums import UserRole
 
 from .errors import ApiError, ErrorCode
+
+logger = structlog.get_logger(__name__)
 
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
 REFRESH_TOKEN_TTL = timedelta(days=30)
@@ -217,9 +220,34 @@ def generate_totp_secret() -> str:
 
 
 def verify_totp(secret: str, code: str) -> bool:
-    """valid_window=1 — допускает соседний 30-секундный интервал (рассинхрон часов)."""
+    """valid_window=1 — допускает соседний 30-секундный интервал (рассинхрон часов).
 
-    return pyotp.TOTP(secret).verify(code, valid_window=1)
+    Испорченный секрет — это `False`, а не падение. `pyotp` разбирает его как
+    base32 и бросает `binascii.Error` на неразбираемой длине («Incorrect
+    padding») или чужом знаке («Non-base32 digit found»), а на неASCII —
+    голый `ValueError`, которого `binascii.Error` НЕ ловит. Исключение уходило в
+    middleware необработанным, и человек получал 500 «Внутренняя ошибка
+    сервера» вместо отказа по коду — на входе врача, при смене второго фактора,
+    при подтверждении настройки и при перевыпуске резервных кодов.
+
+    Пустой секрет отдельной ветки НЕ требует: `pyotp` на нём и так отвечает
+    `False` (измерено). Опасен он в другом месте — вход считает второй фактор
+    настроенным по `totp_secret is not None`, и пустая строка проходит как
+    настроенный; это проверяется там, где ветвление и живёт.
+
+    Отказ пишется в журнал приложения: человек не виноват, он будет вводить
+    верный код и получать «неверный код подтверждения» бесконечно, а без записи
+    поломка останется невидимой до звонка администратору. Сам секрет в журнал
+    не уходит.
+    """
+
+    try:
+        return pyotp.TOTP(secret).verify(code, valid_window=1)
+    except ValueError as exc:  # binascii.Error — его подкласс; неASCII даёт голый ValueError
+        # Значение в базе не разбирается как base32: записано мимо приложения
+        # (сид, ручная правка, миграция). `generate_totp_secret()` такого не даёт.
+        logger.warning("totp_secret_unparseable", reason=str(exc))
+        return False
 
 
 def totp_provisioning_uri(secret: str, *, email: str) -> str:
