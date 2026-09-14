@@ -40,6 +40,7 @@ def _load() -> ModuleType:
 ADMIN = _load()
 ARGV = ["--email", "admin@clinic.example", "--name", "Админ Клиники"]
 LONG_ENOUGH = "пароль-со-стенда-длинный"
+DB_URL = "postgresql+asyncpg://ketocare:ketocare@postgres:5432/из-настроек"
 
 
 @pytest.fixture(autouse=True)
@@ -124,8 +125,13 @@ def test_length_comes_from_the_shared_module() -> None:
     Сравнивать значения бесполезно: малые целые в Python кэшируются, и `12 is
     12` истинно у независимых объявлений — на этом уже попадался тест демо-сида
     (PR #200). Поиск по тексту тоже слаб: копия под ДРУГИМ именем регулярку
-    проходит, что показало ревью #201. Поэтому проверяется дерево разбора: с
-    чем сравнивается длина и откуда это имя взялось.
+    проходит (ревью #201). Проверяется дерево разбора, и трёх утверждений
+    нужно ровно три, потому что обойти можно каждое поодиночке: сравнение одно,
+    имя пришло из общего модуля, и в самом скрипте оно не присвоено — копия
+    рядом с импортом сегодня совпадает значением, а разойдётся молча.
+
+    Считаются только сравнения с именем из общего модуля: иначе невинное
+    `len(args.name) < 1` роняло бы этот тест с сообщением про пароль.
     """
     from core.tools.db_guard import MIN_PASSWORD_LENGTH as shared
 
@@ -138,7 +144,7 @@ def test_length_comes_from_the_shared_module() -> None:
         if isinstance(node, ast.ImportFrom) and node.module == "core.tools.db_guard"
         for alias in node.names
     }
-    compared = [
+    limits = [
         right
         for node in ast.walk(tree)
         if isinstance(node, ast.Compare)
@@ -146,14 +152,28 @@ def test_length_comes_from_the_shared_module() -> None:
         and isinstance(node.left.func, ast.Name)
         and node.left.func.id == "len"
         for right in node.comparators
+        if isinstance(right, ast.Name) and right.id in from_shared
     ]
+    assert len(limits) == 1, (
+        "длина пароля должна сравниваться ровно один раз и с именем из "
+        "core.tools.db_guard: число на месте или своё имя разойдутся молча"
+    )
 
-    assert len(compared) == 1, "проверка длины пароля в скрипте должна быть одна"
-    limit = compared[0]
-    assert isinstance(limit, ast.Name), "длина сравнивается с числом на месте, а не с общим именем"
-    assert limit.id in from_shared, (
-        f"{limit.id} не импортировано из core.tools.db_guard — своя копия разойдётся молча, "
-        "как уже расходилась проверка адреса базы"
+    targets = [
+        target
+        for node in ast.walk(tree)
+        for target in (
+            node.targets
+            if isinstance(node, ast.Assign)
+            else [node.target]
+            if isinstance(node, ast.AnnAssign)
+            else []
+        )
+        if isinstance(target, ast.Name)
+    ]
+    assert limits[0].id not in {target.id for target in targets}, (
+        f"{limits[0].id} присвоено в самом скрипте — копия рядом с импортом сегодня "
+        "совпадает со значением, а разойдётся молча"
     )
 
 
@@ -162,7 +182,9 @@ def test_length_comes_from_the_shared_module() -> None:
 
 def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) -> SimpleNamespace:
     """Подменить всё, что ходит наружу, и записывать, что скрипт сделал."""
-    recorder = SimpleNamespace(created={}, added=[], commits=0, disposed=0, user=None)
+    recorder = SimpleNamespace(
+        created={}, added=[], commits=0, disposed=0, user=None, engine_url=None, session_kwargs={}
+    )
 
     class _Session:
         async def __aenter__(self) -> _Session:
@@ -193,9 +215,17 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) ->
             recorder.user = user
             return user
 
-    monkeypatch.setattr(ADMIN, "get_settings", lambda: SimpleNamespace(database_url="—"))
-    monkeypatch.setattr(ADMIN, "create_async_engine", lambda url: _Engine())
-    monkeypatch.setattr(ADMIN, "async_sessionmaker", lambda engine, **kw: _Session)
+    def _engine(url: str) -> _Engine:
+        recorder.engine_url = url
+        return _Engine()
+
+    def _maker(engine: object, **kw: object) -> type[_Session]:
+        recorder.session_kwargs.update(kw)
+        return _Session
+
+    monkeypatch.setattr(ADMIN, "get_settings", lambda: SimpleNamespace(database_url=DB_URL))
+    monkeypatch.setattr(ADMIN, "create_async_engine", _engine)
+    monkeypatch.setattr(ADMIN, "async_sessionmaker", _maker)
     monkeypatch.setattr(ADMIN, "users_repo", _Users)
     monkeypatch.setattr("api.security.hash_password", lambda value: f"hash:{value}")
     return recorder
@@ -342,3 +372,80 @@ def test_reset_writes_a_new_password_and_keeps_the_second_factor(
     assert len(rows) == 1
     assert rows[0].action == "reset_password"
     assert recorder.commits == 1
+
+
+def test_generated_password_is_long_and_different_every_time(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Сгенерированный пароль не должен быть предсказуемым или коротким.
+
+    Ревью #201: `return "12345678"` вместо `secrets.token_urlsafe(...)`
+    проходило незамеченным, и первый администратор клиники на публичном домене
+    получал бы предсказуемый пароль. Длина меряется тем же общим минимумом,
+    которым скрипт меряет человеческий: сгенерированный не может быть слабее
+    того, что он принимает от человека.
+    """
+
+    def _run() -> str:
+        _fake_db(monkeypatch)
+        assert ADMIN.main(ARGV) == 0
+        shown = [
+            line.split(":", 1)[1].strip()
+            for line in capsys.readouterr().out.splitlines()
+            if "Временный пароль:" in line
+        ]
+        assert len(shown) == 1
+        return shown[0]
+
+    first, second = _run(), _run()
+    assert len(first) >= ADMIN.MIN_PASSWORD_LENGTH
+    assert first != second
+
+
+def test_account_is_created_for_the_given_email_and_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Учётка на чужом адресе — это администратор, которым нельзя войти.
+    recorder = _fake_db(monkeypatch)
+    monkeypatch.setenv(ADMIN.PASSWORD_ENV, LONG_ENOUGH)
+
+    assert ADMIN.main(ARGV) == 0
+    assert recorder.created["email"] == "admin@clinic.example"
+    assert recorder.created["full_name"] == "Админ Клиники"
+
+
+def test_audit_row_names_the_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Правило 7 — это содержание записи, а не сам факт её наличия.
+
+    Запись с чужим адресом или без идентификатора в журнале бесполезна, а
+    выглядит как выполненное правило.
+    """
+    recorder = _fake_db(monkeypatch)
+    monkeypatch.setenv(ADMIN.PASSWORD_ENV, LONG_ENOUGH)
+
+    assert ADMIN.main(ARGV) == 0
+
+    row = _audit(recorder)[0]
+    # Автора нет намеренно: команду запускает человек с доступом к серверу.
+    assert row.user_id is None
+    assert row.entity_id == recorder.user.id
+    assert row.after["email"] == "admin@clinic.example"
+    assert row.after["role"] == ADMIN.UserRole.ADMIN.value
+
+
+def test_engine_takes_the_configured_url_and_session_keeps_objects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Единственное место, где подделка могла бы скрыть поведение.
+
+    Ревью #201: зашитый адрес базы и `expire_on_commit=True` проходили мимо
+    теста, потому что подделка принимала любые аргументы. Теперь она их
+    запоминает: адрес обязан прийти из настроек, а объекты — пережить commit,
+    иначе `user.id` после него читать нельзя.
+    """
+    recorder = _fake_db(monkeypatch)
+    monkeypatch.setenv(ADMIN.PASSWORD_ENV, LONG_ENOUGH)
+
+    assert ADMIN.main(ARGV) == 0
+    assert recorder.engine_url == DB_URL
+    assert recorder.session_kwargs["expire_on_commit"] is False

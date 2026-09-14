@@ -26,7 +26,12 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 
 def _load(name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(f"{name}_guard", _SCRIPTS / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        # Ключ свой у каждого файла тестов: под общим два разных объекта
+        # модуля жили бы в `sys.modules` под одним именем.
+        f"{name}_for_demo_tests",
+        _SCRIPTS / f"{name}.py",
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module

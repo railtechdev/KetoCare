@@ -21,7 +21,7 @@ _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "seed_e2e.py"
 
 
 def _guard() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("seed_e2e_guard", _SCRIPT)
+    spec = importlib.util.spec_from_file_location("seed_e2e_under_test", _SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
