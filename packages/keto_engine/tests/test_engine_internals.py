@@ -426,3 +426,132 @@ class TestNetCarbsRatio:
         # …и далеко от неё по общим: правило именно то, а не другое.
         by_total_carbs = dish.fat_g / (dish.protein_g + dish.carbs_g)
         assert by_total_carbs < 2.0
+
+
+class TestDegenerateNetCarbs:
+    """Соотношение не выдаётся, когда знаменатель потерял значимость.
+
+    Нашёл это property-тест `test_verify_scale_linear_in_mass` на входе, где
+    клетчатка составляет почти все углеводы: `carbs - fiber` вырождается в
+    мусор округления, и соотношение начинает зависеть от масштаба масс. Здесь
+    тот же случай закреплён прямо — без него защита держалась бы на удаче
+    генератора: база примеров hypothesis у каждого дерева своя.
+    """
+
+    #: Углеводы и клетчатка различаются в пятнадцатом знаке: на сто граммов
+    #: чистых углеводов остаётся 3.6e-15 г, то есть ни одного значащего разряда.
+    DEGENERATE = Ingredient(
+        product_id="degenerate",
+        kcal=89.22043054338337,
+        fat=1.0,
+        protein=0.0,
+        carbs=20.055107635845843,
+        fiber=20.05510763584584,
+    )
+
+    def test_ratio_is_not_reported(self) -> None:
+        assert verify([(self.DEGENERATE, 10.0)]).ratio is None
+
+    def test_answer_does_not_depend_on_scale(self) -> None:
+        """Прежде на десяти граммах выходило 2.25e14, на тридцати — 3.38e14.
+
+        Полтора раза разницы на одном и том же блюде: соотношение переставало
+        быть свойством состава. Теперь ответ один и тот же — «не определено».
+        """
+        light = verify([(self.DEGENERATE, 10.0)])
+        heavy = verify([(self.DEGENERATE, 30.0)])
+        assert light.ratio == heavy.ratio is None
+
+    def test_meaningful_denominator_still_counts(self) -> None:
+        """Порог не должен съедать нормальные блюда: он на пятнадцать порядков ниже.
+
+        Миллиграмм чистых углеводов — величина, немыслимая в клинике, но для
+        арифметики это уже полноценное число, и соотношение обязано считаться.
+        """
+        almost_fiber = Ingredient(
+            product_id="almost_fiber",
+            kcal=100.0,
+            fat=10.0,
+            protein=0.0,
+            carbs=1.001,
+            fiber=1.0,
+        )
+        dish = verify([(almost_fiber, 100.0)])
+        assert dish.ratio is not None
+        assert dish.ratio == pytest.approx(10.0 / 0.001, rel=1e-6)
+
+    def test_zero_denominator_answers_the_same_way(self) -> None:
+        """Чистый жир и вырожденный знаменатель отвечают одинаково.
+
+        Ответ «не определено» один на оба случая: если бы он различался, экранам
+        пришлось бы объяснять разницу, которой в предметной области нет.
+        """
+        oil = Ingredient(product_id="oil", kcal=884, fat=100.0, protein=0.0, carbs=0.0)
+        assert verify([(oil, 50.0)]).ratio is None
+
+    def test_denominator_equal_to_the_noise_is_refused(self) -> None:
+        """Граница: знаменатель, РАВНЫЙ оценке шума, соотношения не даёт.
+
+        Без этой точки сравнение можно ослабить до нестрогого, не уронив
+        ничего: между вырожденным входом и миллиграммом чистых углеводов лежали
+        девять порядков без единой проверки.
+        """
+        # 4 * ulp(20.0) = 1.4210854715202004e-14 — ровно оценка шума.
+        on_the_edge = Ingredient(
+            product_id="on_the_edge",
+            kcal=100.0,
+            fat=10.0,
+            protein=0.0,
+            carbs=20.0,
+            fiber=19.999999999999986,
+        )
+        dish = verify([(on_the_edge, 100.0)])
+        assert dish.net_carbs_g == pytest.approx(1.4210854715202004e-14, rel=1e-12)
+        assert dish.ratio is None
+
+    def test_denominator_just_above_the_noise_counts(self) -> None:
+        """А двойная мера шума — уже число, и соотношение обязано считаться.
+
+        Иначе порог можно поднять на порядки, объявив «неразличимым» что угодно.
+        """
+        just_above = Ingredient(
+            product_id="just_above",
+            kcal=100.0,
+            fat=10.0,
+            protein=0.0,
+            carbs=20.0,
+            fiber=19.99999999999997,
+        )
+        dish = verify([(just_above, 100.0)])
+        assert dish.ratio is not None
+        assert dish.ratio > 1e14
+
+    def test_noise_is_measured_by_the_terms_not_by_one(self) -> None:
+        """Оценка шума берётся от САМИХ слагаемых, а не от единицы.
+
+        На крупном блюде `ulp(5000) = 9.1e-13`, тогда как `ulp(1.0) = 2.2e-16`:
+        разность в три порядка. Знаменатель между ними — это ещё мусор
+        округления, и выдавать по нему соотношение нельзя, хотя «по единице» он
+        выглядел бы значимым.
+        """
+        bulk = Ingredient(
+            product_id="bulk",
+            kcal=100.0,
+            fat=10.0,
+            protein=0.0,
+            carbs=5000.0,
+            fiber=4999.999999999999,
+        )
+        dish = verify([(bulk, 100.0)])
+        assert 0.0 < dish.net_carbs_g < 4.0 * 9.094947017729282e-13
+        assert dish.ratio is None
+
+    def test_solver_does_not_offer_such_a_dish(self) -> None:
+        """Решатель такой состав решением не считает.
+
+        `solve` пропускает кандидатов без соотношения (это было и раньше), и
+        новый случай обязан попадать туда же: иначе семье предложили бы блюдо,
+        про которое ядро не может сказать ничего.
+        """
+        with pytest.raises(InfeasibleError):
+            solve([self.DEGENERATE], Targets(ratio=4.0, kcal=400))

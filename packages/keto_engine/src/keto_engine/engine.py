@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from itertools import product
 
@@ -37,6 +38,38 @@ def _dish_kcal(fat_g: float, protein_g: float, carbs_g: float) -> float:
         + protein_g * constants.KCAL_PER_G_PROTEIN
         + carbs_g * constants.KCAL_PER_G_CARBS
     )
+
+
+def _denominator_is_meaningful(
+    denom: float, protein_g: float, carbs_g: float, fiber_g: float
+) -> bool:
+    """Остался ли в знаменателе соотношения хоть один значащий разряд.
+
+    `Cnet = carbs - fiber` — разность почти равных чисел там, где клетчатка
+    составляет почти все углеводы. При `carbs = 20.055107635845843` и
+    `fiber = 20.05510763584584` она равна 3.6e-15 г на сто граммов: в этом
+    числе не осталось ни одного разряда исходных данных, только мусор
+    округления. Деление жира на него давало соотношение, ЗАВИСЯЩЕЕ ОТ МАСШТАБА
+    масс: 2.25e14 на десяти граммах и 3.38e14 на тридцати — property-тест
+    `test_verify_scale_linear_in_mass` ловит это прямо.
+
+    Здесь не порог в граммах: такую величину пришлось бы выдумать, а
+    медицинские константы не выдумываются (правило 1). Проверяется
+    арифметическая значимость — знаменатель должен превышать ошибку
+    собственного вычисления, оценённую сверху по величине слагаемых.
+
+    Ниже этой границы соотношение не выдаётся вовсе — тот же ответ, что при
+    пустом знаменателе, и потребители к нему готовы (`RatioBadge`, `solve`).
+    С какой массы чистых углеводов соотношение теряет КЛИНИЧЕСКИЙ смысл —
+    вопрос 51 медицинской команде: их порог может оказаться куда выше
+    арифметического, но называет его врач, а не ядро.
+    """
+    # Ошибка суммы и разности не превосходит ulp самого крупного из слагаемых,
+    # помноженного на их число; берём с запасом. Отдельной ветки для нулевого
+    # знаменателя не нужно: `0 > noise` ложно и так, а ветка была бы мёртвым
+    # кодом, который нечем уронить.
+    noise = 4.0 * math.ulp(max(protein_g, carbs_g, fiber_g, 1.0))
+    return denom > noise
 
 
 def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
@@ -83,7 +116,8 @@ def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
     # выбор. Прежде здесь стоял TODO и общие углеводы, а `verify()` не принимал
     # `Targets` — то есть переключить учёт для проверки было нечем.
     denom = protein_g + net_carbs_g
-    ratio = fat_g / denom if denom > 0 else None
+    meaningful = _denominator_is_meaningful(denom, protein_g, carbs_g, fiber_g)
+    ratio = fat_g / denom if meaningful else None
 
     return DishResult(
         items=tuple(positions),
