@@ -125,9 +125,16 @@ async def login(
         )
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
-    needs_totp = user.role in ROLES_REQUIRING_TOTP or user.totp_secret is not None
+    # Настроенным второй фактор считается по НЕПУСТОМУ секрету, а не по
+    # «поле не NULL». Пустая строка проходила как настроенный: врач получал
+    # `totp_required`, вводил верный код, а `verify_totp` отвечал отказом —
+    # войти было нельзя никогда, вместо честного «второй фактор не настроен»
+    # (issue #206). Значение попадает в базу мимо приложения: сид, ручная
+    # правка, миграция.
+    has_totp = bool(user.totp_secret)
+    needs_totp = user.role in ROLES_REQUIRING_TOTP or has_totp
 
-    if needs_totp and user.totp_secret is None:
+    if needs_totp and not has_totp:
         # Приглашённому врачу/диетологу/админу 2FA обязательна, но настроить её
         # до первого входа негде. Пароль уже проверен, поэтому выдаём токен,
         # действующий только для /auth/totp/setup и /auth/totp/verify.
@@ -137,7 +144,7 @@ async def login(
         )
 
     if needs_totp:
-        assert user.totp_secret is not None
+        assert user.totp_secret
 
         # Кода ещё не спрашивали — это ШАГ входа, а не ошибка. Пароль уже
         # проверен, пользователь пока не сделал ничего неправильного, и говорить
