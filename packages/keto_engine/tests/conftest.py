@@ -3,12 +3,18 @@ import sys
 from pathlib import Path
 
 import pytest
-from hypothesis import HealthCheck, settings
+from hypothesis import is_hypothesis_test, settings
 from hypothesis.database import DirectoryBasedExampleDatabase
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from reference_cases_path import REFERENCE_CASES_DIR  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def reference_cases_dir() -> Path:
+    return REFERENCE_CASES_DIR
+
 
 #: База найденных property-тестами примеров лежит В РЕПОЗИТОРИИ, а не в рабочем
 #: `.hypothesis/` каждой машины.
@@ -29,35 +35,58 @@ EXAMPLE_DATABASE_DIR = Path(__file__).parent / "example-database"
 #: не гарантирует — это измерено на дефекте из PR #203 (соотношение зависело от
 #: массы навески) повторными прогонами с разными сидами: 1000 примеров не нашли
 #: его ни разу из пяти, 5000 — один раз, 20000 — дважды, 50000 — дважды из трёх.
-#: Порога, за которым «находится всегда», у случайного поиска не существует.
 #:
-#: Отсюда умеренная глубина на каждый прогон: 50000 примеров стоят на раннере
-#: почти двенадцать минут (и ещё столько же в общей задаче pytest, которая
-#: гоняет те же тесты), покупая две трети шанса. Глубокий поиск уместен ночным
-#: прогоном, а не на каждом пуше.
+#: Три режима: быстрый локальный, умеренный на каждый пуш и глубокий ночной —
+#: 50000 примеров стоят на раннере почти двенадцать минут, и платить их на
+#: каждом пуше ради двух третей шанса не стоит (#210).
 #:
 #: Постоянную защиту даёт не перебор, а явный тест на найденный вход: для #203
 #: это `TestDegenerateNetCarbs` в `test_engine_internals.py`.
-_LOCAL_EXAMPLES = 1000
-_CI_EXAMPLES = 5000
-
-settings.register_profile(
-    "keto-engine",
-    database=DirectoryBasedExampleDatabase(EXAMPLE_DATABASE_DIR),
-    max_examples=_LOCAL_EXAMPLES,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-settings.register_profile(
-    "keto-engine-ci",
-    database=DirectoryBasedExampleDatabase(EXAMPLE_DATABASE_DIR),
-    max_examples=_CI_EXAMPLES,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-settings.load_profile("keto-engine-ci" if os.environ.get("CI") else "keto-engine")
+_EXAMPLES = {
+    "local": 1000,
+    "ci": 5000,
+    "deep": 50000,
+}
 
 
-@pytest.fixture(scope="session")
-def reference_cases_dir() -> Path:
-    return REFERENCE_CASES_DIR
+def _profile_name() -> str:
+    if os.environ.get("KETO_ENGINE_DEEP"):
+        return "deep"
+    return "ci" if os.environ.get("CI") else "local"
+
+
+for _name, _examples in _EXAMPLES.items():
+    settings.register_profile(
+        f"keto-engine-{_name}",
+        database=DirectoryBasedExampleDatabase(EXAMPLE_DATABASE_DIR),
+        max_examples=_examples,
+    )
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Профиль вешается на тесты ЯДРА, а не на весь процесс.
+
+    `settings.load_profile` действовал бы на любой hypothesis-тест в прогоне —
+    в том числе на будущие тесты других пакетов, которым глубина ядра ни к чему
+    (#212). Поэтому профиль применяется точечно: к собранным здесь тестам, у
+    которых нет собственных `@settings` (у теста решателя они есть, и они
+    сильнее).
+
+    Штатные проверки на медленный пример (`deadline`, `HealthCheck.too_slow`)
+    НЕ снимаются (#213): при глубоком переборе они срабатывали, но это сигнал о
+    входе, который считается неприлично долго, а не помеха.
+    """
+    profile = settings.get_profile(f"keto-engine-{_profile_name()}")
+    tests_dir = Path(__file__).parent
+    for item in items:
+        if not str(item.fspath).startswith(str(tests_dir)):
+            continue
+        test = getattr(item, "obj", None)
+        if test is None or not is_hypothesis_test(test):
+            continue
+        # Явный `@settings` помечает функцию `_hypothesis_internal_settings_applied`;
+        # у голого `@given` атрибута нет, хотя настройки по умолчанию он тоже
+        # вешает — по ним явное от неявного не отличить.
+        if getattr(test, "_hypothesis_internal_settings_applied", False):
+            continue
+        item.obj = settings(profile)(test)

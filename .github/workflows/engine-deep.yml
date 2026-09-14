@@ -1,0 +1,27 @@
+name: Engine deep
+
+# Ночью и по кнопке: глубокий перебор property-тестов ядра. Глубина повышает
+# вероятность находки и ничего не гарантирует (см. conftest ядра), поэтому
+# платить 50000 примеров на каждом пуше не стоит, а раз в сутки — стоит: тот же
+# случайный поиск, повторяемый каждую ночь, накапливает вероятность, не удлиняя
+# ожидание на PR (#210).
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  deep:
+    name: Глубокий перебор keto_engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - name: property-тесты, 50000 примеров
+        env:
+          KETO_ENGINE_DEEP: "1"
+        run: uv run pytest packages/keto_engine -q

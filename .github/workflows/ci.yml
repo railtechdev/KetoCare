@@ -139,7 +139,10 @@ jobs:
           uv run --project ../.. alembic downgrade base
           uv run --project ../.. alembic upgrade head
       - name: pytest
-        run: uv run pytest
+        # Ядро гоняется отдельной задачей выше — с покрытием и глубоким перебором
+        # property-тестов. Здесь его исключаем: иначе та же глубина оплачивается
+        # дважды, и критический путь конвейера растягивается на минуты (#211).
+        run: uv run pytest --ignore=packages/keto_engine/tests
 
   openapi:
     name: OpenAPI и api-client
