@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { SetPasswordPanel } from "./SetPasswordPanel";
 import { BackupCodesPanel } from "./BackupCodesPanel";
 import { FormError } from "../../components/FormError";
 import { api, errorMessageOf } from "../../lib/api";
@@ -82,13 +83,28 @@ export function TotpSetupPanel({ setupToken }: Props) {
    */
   const [issuedCodes, setIssuedCodes] = useState<string[] | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  /**
+   * Пароль выдал администратор: вместо пары токенов сервер прислал токен
+   * задания пароля. Сессии здесь нет намеренно — иначе настройка второго
+   * фактора была бы обходом временного пароля (#232).
+   */
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  /** Коды переписаны: с этого момента экран можно менять. */
+  const [codesSaved, setCodesSaved] = useState(false);
 
   const onSubmit = handleSubmit(async (values) => {
     const data = await verify.mutateAsync(values.code).catch(() => null);
     if (!data) return;
-    setAccessToken(data.tokens.access_token);
+    setAccessToken(data.tokens?.access_token ?? null);
+    setResetToken(data.password_reset_token ?? null);
     setIssuedCodes(data.backup_codes);
   });
+
+  // Сначала коды, потом пароль: коды показываются один раз в жизни, и экран
+  // задания пароля стёр бы их безвозвратно.
+  if (codesSaved && resetToken !== null) {
+    return <SetPasswordPanel resetToken={resetToken} />;
+  }
 
   if (issuedCodes !== null) {
     return (
@@ -105,6 +121,12 @@ export function TotpSetupPanel({ setupToken }: Props) {
               codes={issuedCodes}
               doneLabel={t("backupCodes.saved")}
               onDone={() => {
+                if (resetToken !== null) {
+                  // Временный пароль знает администратор: кабинет откроется
+                  // после того, как владелец задаст свой.
+                  setCodesSaved(true);
+                  return;
+                }
                 // Переход в кабинет делает guard маршрута: App перевычисляет
                 // его, как только в контексте появляется сессия.
                 if (accessToken !== null) signIn(accessToken);

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import pyotp
 import pytest
 
 from core.models.enums import UserRole
@@ -53,6 +54,73 @@ class TestAdminPasswordReset:
         assert body["status"] == "password_change_required"
         assert body["tokens"] is None
         assert body["password_reset_token"]
+
+    async def test_first_totp_setup_is_not_a_way_around_the_temporary_password(
+        self, client, make_user, auth_headers
+    ):
+        """Настройка второго фактора не выдаёт сессию при живом временном пароле.
+
+        Признак проверяется на входе, но у врача без второго фактора вход до
+        этой проверки не доходит: ветка первичной настройки стоит раньше и
+        завершает вход сама. Получалась дыра ровно того размера, который признак
+        и закрывает: вход одним паролем, который знает администратор (#232).
+        """
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+
+        temporary = await _reset(client, admin, doctor, auth_headers)
+
+        login = await client.post(
+            "/api/v1/auth/login", json={"email": doctor.email, "password": temporary}
+        )
+        assert login.json()["status"] == "totp_setup_required", login.text
+        headers = {"Authorization": f"Bearer {login.json()['totp_setup_token']}"}
+
+        setup = await client.post("/api/v1/auth/totp/setup", json={}, headers=headers)
+        secret = setup.json()["secret"]
+
+        verify = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": pyotp.TOTP(secret).now()},
+            headers=headers,
+        )
+
+        assert verify.status_code == 200, verify.text
+        body = verify.json()
+        assert body["tokens"] is None, "сессия при живом временном пароле — это обход"
+        assert body["password_reset_token"], "но и тупика быть не должно: пароль задаётся"
+        # Коды показываются всё равно: другого момента нет.
+        assert len(body["backup_codes"]) > 0
+        assert "set-cookie" not in {name.lower() for name in verify.headers}
+
+        # Путь до кабинета остаётся: задать пароль — и сессия выдана.
+        done = await client.post(
+            "/api/v1/auth/password/set",
+            json={"new_password": NEW_PASSWORD},
+            headers={"Authorization": f"Bearer {body['password_reset_token']}"},
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["access_token"]
+
+    async def test_totp_setup_without_temporary_password_still_signs_in(self, client, make_user):
+        """Обратная сторона: обычному приглашённому врачу вход выдаётся сразу."""
+        doctor = await make_user(UserRole.DOCTOR)
+
+        login = await client.post(
+            "/api/v1/auth/login", json={"email": doctor.email, "password": PASSWORD}
+        )
+        headers = {"Authorization": f"Bearer {login.json()['totp_setup_token']}"}
+        setup = await client.post("/api/v1/auth/totp/setup", json={}, headers=headers)
+
+        verify = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": pyotp.TOTP(setup.json()["secret"]).now()},
+            headers=headers,
+        )
+
+        assert verify.status_code == 200, verify.text
+        assert verify.json()["tokens"]["access_token"]
+        assert verify.json()["password_reset_token"] is None
 
     async def test_old_password_stops_working(self, client, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)
@@ -158,8 +226,6 @@ class TestAdminPasswordReset:
         assert response.status_code == 401
 
     async def test_second_factor_still_required(self, client, make_user, auth_headers):
-        import pyotp
-
         admin = await make_user(UserRole.ADMIN)
         secret = pyotp.random_base32()
         doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
