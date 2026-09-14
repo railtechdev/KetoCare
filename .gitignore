@@ -9,6 +9,11 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Рабочая база примеров hypothesis. Найденные примеры ядра переносимы и лежат
+# в `packages/keto_engine/tests/example-database` (см. conftest ядра); этот
+# каталог — временный кеш конкретной машины.
+.hypothesis/
+
 # Node
 node_modules/
 dist/
