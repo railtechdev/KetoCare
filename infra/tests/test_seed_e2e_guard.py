@@ -611,7 +611,17 @@ def test_secret_of_exactly_the_minimum_passes(monkeypatch: pytest.MonkeyPatch) -
     GUARD._require_credentials_on_allowed_host()
 
 
-@pytest.mark.parametrize("secret", ["0" + "A" * 31, "A" * 31 + "9", "A" * 31 + "="])
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "0" + "A" * 31,
+        "1" + "A" * 31,
+        "A" * 31 + "8",
+        "A" * 31 + "9",
+        "A" * 15 + "-" + "A" * 16,
+        "A" * 31 + "=",
+    ],
+)
 def test_single_character_outside_base32_is_refused(
     secret: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -619,7 +629,13 @@ def test_single_character_outside_base32_is_refused(
 
     Прежний случай нарушал алфавит сразу тремя способами, поэтому подмена
     алфавита на `A-Z0-9` его переживала — а `0`, `1`, `8` и `9` это ровно те
-    знаки, на которых разбор секрета отказывает.
+    знаки, на которых разбор секрета отказывает. Перечислены все шесть, что
+    называет докстринг сида: с тремя из них подмены `+= "1"`, `+= "8"` и
+    `+= "-"` проходили насквозь (ревью #202).
+
+    Знак равенства стоит здесь по другой причине, и она названа в сиде: разбор
+    его принимает, но он считается в длину, и `"A" * 25 + "="` прошло бы как
+    двадцать шесть символов, неся 125 бит.
     """
     monkeypatch.setenv(GUARD._ALLOW_HOST, "db.internal")
     monkeypatch.setenv(GUARD._PASSWORD_VAR, STRONG_PASSWORD)
