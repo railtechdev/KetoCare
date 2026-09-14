@@ -1,4 +1,4 @@
-import { MacroBar, RatioBadge, cn } from "@ketocare/ui";
+import { MacroBar, RatioBadge, cn, formatKcal } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import type { TargetsInput } from "./useCalcMutations";
@@ -69,7 +69,7 @@ export function DishResultView({
       <div className="flex flex-wrap items-center gap-block">
         <RatioBadge ratio={dish.ratio} withinTolerance={ratioWithinTolerance} />
         <span className="tabular-nums">
-          {t("kcalValue", { value: dish.kcal.toFixed(0) })}
+          {t("kcalValue", { value: formatKcal(dish.kcal) })}
         </span>
         {delta !== null && delta !== 0 && (
           <span

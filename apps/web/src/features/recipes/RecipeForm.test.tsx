@@ -184,7 +184,7 @@ describe("показатели в форме рецепта", () => {
       name: /Вклад продукта «Масло сливочное»/,
     });
     expect(contribution).toHaveTextContent("374");
-    expect(contribution).toHaveTextContent("41.3");
+    expect(contribution).toHaveTextContent("41,3");
   });
 
   it("не считает в браузере: числа берутся из ответа сервера", async () => {

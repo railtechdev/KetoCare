@@ -3,11 +3,12 @@ import {
   Button,
   EmptyState,
   FactList,
-  formatOccurredAt,
   MacroBar,
   RatioBadge,
   Section,
   WarningBanner,
+  formatKcal,
+  formatOccurredAt,
   formatWeight,
 } from "@ketocare/ui";
 import { CalendarOff, ClipboardList } from "lucide-react";
@@ -170,7 +171,7 @@ function OverviewPanels({
                 withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
               />
               <span className="tabular-nums">
-                {t("units.kcal", { value: day.totals.kcal.toFixed(0) })}
+                {t("units.kcal", { value: formatKcal(day.totals.kcal) })}
               </span>
             </div>
 
@@ -201,7 +202,7 @@ function OverviewPanels({
             {verdict.kcalBelowTarget && (
               <p className="m-0 text-sm text-muted-foreground">
                 {t("summary.day.kcalBelowTarget", {
-                  value: day.totals.kcal.toFixed(0),
+                  value: formatKcal(day.totals.kcal),
                   target: prescription?.kcal_per_day ?? 0,
                 })}
               </p>

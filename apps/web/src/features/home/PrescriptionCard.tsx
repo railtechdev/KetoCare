@@ -1,4 +1,10 @@
-import { EmptyState, Metric, MetricRow, RatioBadge } from "@ketocare/ui";
+import {
+  EmptyState,
+  Metric,
+  MetricRow,
+  RatioBadge,
+  formatKcal,
+} from "@ketocare/ui";
 import { ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -44,7 +50,7 @@ export function PrescriptionCard({
         <Metric
           label={t("prescription.kcal")}
           value={t("prescription.kcalValue", {
-            value: prescription.kcal_per_day.toFixed(0),
+            value: formatKcal(prescription.kcal_per_day),
           })}
         />
         <Metric

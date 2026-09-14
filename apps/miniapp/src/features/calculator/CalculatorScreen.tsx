@@ -2,22 +2,23 @@ import {
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
-  RECALC_DELAY_MS,
   EmptyState,
   Input,
   MacroBar,
   MacroFacts,
+  RECALC_DELAY_MS,
   RatioBadge,
+  SEARCH_DELAY_MS,
   Section,
-  StatusNote,
   Separator,
+  StatusNote,
   WarningBanner,
   canRetry,
   cn,
   exceedsCalcGrams,
+  formatKcal,
   mealTargetsFrom,
   useDebouncedValue,
-  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import { Trash2 } from "lucide-react";
 import {
@@ -542,7 +543,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
                 withinTolerance={verdict?.ratio_within_tolerance ?? undefined}
               />
               <span className="tabular-nums">
-                {t("calculator.kcalValue", { kcal: dish.kcal.toFixed(0) })}
+                {t("calculator.kcalValue", { kcal: formatKcal(dish.kcal) })}
               </span>
               <KcalDelta
                 dish={dish.kcal}

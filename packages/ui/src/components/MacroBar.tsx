@@ -1,3 +1,4 @@
+import { formatGrams } from "../lib/format";
 import { cn } from "../lib/cn";
 
 export interface MacroBarProps {
@@ -80,7 +81,7 @@ export function MacroBar({
         className="flex h-3 overflow-hidden rounded-full bg-border"
         role="img"
         aria-label={segments
-          .map((s) => `${s.label} ${s.grams.toFixed(1)} г`)
+          .map((s) => `${s.label} ${formatGrams(s.grams)} г`)
           .join(", ")}
       >
         {total > 0 &&
@@ -108,7 +109,7 @@ export function MacroBar({
             <span>{segment.label}</span>
             {showGrams && (
               <span className="text-muted-foreground tabular-nums">
-                {segment.grams.toFixed(1)} г
+                {formatGrams(segment.grams)} г
               </span>
             )}
           </li>
@@ -120,7 +121,7 @@ export function MacroBar({
       {netCarbs !== undefined && (
         <p className="mt-1 mb-0 text-sm text-muted-foreground">
           {netCarbs.label}{" "}
-          <span className="tabular-nums">{netCarbs.grams.toFixed(1)} г</span>
+          <span className="tabular-nums">{formatGrams(netCarbs.grams)} г</span>
           {netCarbs.note !== undefined && ` — ${netCarbs.note}`}
         </p>
       )}

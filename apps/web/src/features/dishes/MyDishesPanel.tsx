@@ -7,6 +7,7 @@ import {
   FormSheet,
   RatioBadge,
   Section,
+  formatKcal,
   toast,
 } from "@ketocare/ui";
 import { Calculator, CookingPot, Pencil, Trash2 } from "lucide-react";
@@ -100,7 +101,7 @@ export function MyDishesPanel({
                   <RatioBadge ratio={dish.computed.ratio} />
                   <span className="text-muted-foreground tabular-nums">
                     {t("myDishes.kcal", {
-                      value: dish.computed.kcal.toFixed(0),
+                      value: formatKcal(dish.computed.kcal),
                     })}
                   </span>
                 </>

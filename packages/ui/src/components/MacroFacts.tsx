@@ -1,3 +1,4 @@
+import { formatGrams, formatKcal } from "../lib/format";
 import { cn } from "../lib/cn";
 
 export interface MacroFactsProps {
@@ -59,12 +60,12 @@ export function MacroFacts({
       <Cell
         full="Калорийность, ккал"
         short="ккал"
-        value={kcal.toFixed(0)}
+        value={formatKcal(kcal)}
         after
       />
-      <Cell full="Жиры, г" short="Ж" value={fatG.toFixed(1)} />
-      <Cell full="Белки, г" short="Б" value={proteinG.toFixed(1)} />
-      <Cell full="Углеводы, г" short="У" value={carbsG.toFixed(1)} />
+      <Cell full="Жиры, г" short="Ж" value={formatGrams(fatG)} />
+      <Cell full="Белки, г" short="Б" value={formatGrams(proteinG)} />
+      <Cell full="Углеводы, г" short="У" value={formatGrams(carbsG)} />
     </div>
   );
 }

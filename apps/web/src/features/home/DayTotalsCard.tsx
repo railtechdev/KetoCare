@@ -1,4 +1,4 @@
-import { MacroBar, RatioBadge, WarningBanner } from "@ketocare/ui";
+import { MacroBar, RatioBadge, WarningBanner, formatKcal } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { dayVerdict, toleranceGapKey } from "../patients/dayVerdict";
@@ -50,10 +50,10 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
           />
           <span className="tabular-nums">
             {targetKcal === null
-              ? t("day.kcal", { value: totals.kcal.toFixed(0) })
+              ? t("day.kcal", { value: formatKcal(totals.kcal) })
               : t("day.kcalOfTarget", {
-                  value: totals.kcal.toFixed(0),
-                  target: targetKcal.toFixed(0),
+                  value: formatKcal(totals.kcal),
+                  target: formatKcal(targetKcal),
                 })}
           </span>
         </div>
@@ -95,8 +95,8 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
         {verdict.kcalBelowTarget && targetKcal !== null && (
           <p className="m-0 text-sm text-muted-foreground">
             {t("day.kcalBelowTarget", {
-              value: totals.kcal.toFixed(0),
-              target: targetKcal.toFixed(0),
+              value: formatKcal(totals.kcal),
+              target: formatKcal(targetKcal),
             })}
           </p>
         )}

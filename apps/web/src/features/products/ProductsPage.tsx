@@ -5,9 +5,10 @@ import {
   EmptyState,
   FilterBar,
   RatioBadge,
-  Skeleton,
-  useDebouncedValue,
   SEARCH_DELAY_MS,
+  Skeleton,
+  formatNumber,
+  useDebouncedValue,
 } from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -315,7 +316,7 @@ function numeric(digits: number) {
     const value = getValue();
     return (
       <span className="tabular-nums">
-        {typeof value === "number" ? value.toFixed(digits) : "—"}
+        {typeof value === "number" ? formatNumber(value, digits) : "—"}
       </span>
     );
   };

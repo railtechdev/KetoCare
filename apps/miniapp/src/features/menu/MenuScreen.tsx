@@ -1,4 +1,10 @@
-import { AsyncSection, MacroBar, Section, WarningBanner } from "@ketocare/ui";
+import {
+  AsyncSection,
+  MacroBar,
+  Section,
+  WarningBanner,
+  formatMass,
+} from "@ketocare/ui";
 
 import { useTranslation } from "react-i18next";
 
@@ -23,10 +29,8 @@ function markFailedId(itemId: string): string {
   return `mark-failed-${itemId}`;
 }
 
-/** Целые граммы — целыми: «50 г», а не «50.0 г». Дробные — с одним знаком. */
-function formatGrams(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
+// Граммовку плана читают по строке, а не сравнивают столбцом: целые остаются
+// целыми (правило П45 канона — `formatMass` кита).
 
 /**
  * План питания на сегодня с отметками «съедено» (раздел 9 ТЗ).
@@ -189,7 +193,7 @@ function DayPlan({
                             </span>
                             <span className="text-muted-foreground tabular-nums">
                               {t("menu.grams", {
-                                value: formatGrams(line.grams),
+                                value: formatMass(line.grams),
                               })}
                             </span>
                           </li>

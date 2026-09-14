@@ -52,7 +52,7 @@ describe("MacroBar", () => {
     render(<MacroBar fatG={50.5} proteinG={12.25} carbsG={3} />);
     expect(
       screen.getByRole("img", {
-        name: "Жиры 50.5 г, Белки 12.3 г, Углеводы 3.0 г",
+        name: "Жиры 50,5 г, Белки 12,3 г, Углеводы 3,0 г",
       }),
     ).toBeInTheDocument();
   });
@@ -72,7 +72,7 @@ describe("чистые углеводы", () => {
     );
 
     const line = screen.getByText(/Из них чистых:/);
-    expect(line).toHaveTextContent("4.1 г");
+    expect(line).toHaveTextContent("4,1 г");
   });
 
   it("число стоит внутри фразы, а не в её конце", () => {
@@ -96,7 +96,7 @@ describe("чистые углеводы", () => {
     // поэтому сверяется её текст целиком, а не поиск по подстроке.
     const line = screen.getByText(/Из них чистых углеводов/);
     expect(line.textContent).toMatch(
-      /^Из них чистых углеводов 4\.1 г — по ним считается кетосоотношение$/,
+      /^Из них чистых углеводов 4,1 г — по ним считается кетосоотношение$/,
     );
   });
 

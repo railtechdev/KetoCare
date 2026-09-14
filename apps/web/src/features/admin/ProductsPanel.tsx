@@ -5,10 +5,11 @@ import {
   EmptyState,
   ErrorState,
   RatioBadge,
+  SEARCH_DELAY_MS,
   Section,
+  formatNumber,
   toast,
   useDebouncedValue,
-  SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Apple, PackageSearch, Plus, Upload, X } from "lucide-react";
@@ -520,7 +521,7 @@ function numeric(digits: number) {
     const value = getValue();
     return (
       <span className="tabular-nums">
-        {typeof value === "number" ? value.toFixed(digits) : "—"}
+        {typeof value === "number" ? formatNumber(value, digits) : "—"}
       </span>
     );
   };
