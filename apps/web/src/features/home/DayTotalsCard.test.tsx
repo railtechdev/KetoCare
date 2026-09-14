@@ -81,4 +81,37 @@ describe("почему у дня нет вердикта", () => {
       screen.queryByText(homeRu.day.noPrescription),
     ).not.toBeInTheDocument();
   });
+
+  it("день без соотношения не выдаётся за соответствие назначению", () => {
+    // Ревью #214: убрав ложную тревогу, я едва не поставил на её место ложное
+    // спокойствие — `null` падал в утвердительную ветку, и родитель читал
+    // «соответствует назначению» про день, о котором ядро молчит.
+    render(
+      <DayTotalsCard
+        day={day({
+          totals: {
+            kcal: 1200,
+            fat: 100,
+            protein: 24,
+            carbs: 10,
+            fiber: 10,
+            ratio: null,
+          },
+          tolerance: {
+            ratio_within_tolerance: null,
+            kcal_within_tolerance: true,
+          },
+        })}
+        targetKcal={1200}
+      />,
+    );
+
+    expect(
+      screen.queryByText(homeRu.day.withinTolerance),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(homeRu.day.offTolerance.title),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(homeRu.day.ratioUnknown)).toBeInTheDocument();
+  });
 });

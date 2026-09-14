@@ -79,6 +79,11 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
               ))}
             </ul>
           </WarningBanner>
+        ) : verdict.ratioUnknown ? (
+          // Соотношения у дня нет — ни тревоги, ни похвалы: сказать нечего.
+          <p role="status" className="m-0 text-sm text-muted-foreground">
+            {t("day.ratioUnknown")}
+          </p>
         ) : (
           // Не тост: соответствие дня назначению — состояние, которое родитель
           // перечитывает, а не подтверждение действия (правило П16 канона).

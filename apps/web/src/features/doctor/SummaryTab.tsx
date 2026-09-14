@@ -188,6 +188,10 @@ function OverviewPanels({
               <WarningBanner level="warning" title={t("summary.day.offTitle")}>
                 {t("summary.day.offRatio")}
               </WarningBanner>
+            ) : verdict.ratioUnknown ? (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                {t("summary.day.ratioUnknown")}
+              </p>
             ) : (
               <p role="status" className="m-0 text-sm text-success">
                 {t("summary.day.within")}

@@ -6,6 +6,8 @@ export type ToleranceGap = components["schemas"]["ToleranceGap"];
 export interface DayVerdict {
   /** Кетосоотношение вышло за допуск назначения. */
   ratioOffTolerance: boolean;
+  /** Соотношения у дня нет — сказать о соответствии нечего. */
+  ratioUnknown: boolean;
   /** Набранная калорийность не дотягивает до суточной нормы назначения. */
   kcalBelowTarget: boolean;
   /** Вердикта нет — сравнивать не с чем либо не с сегодняшним правилом. */
@@ -91,6 +93,7 @@ export function dayVerdict(
   if (tolerance === null || tolerance === undefined) {
     return {
       ratioOffTolerance: false,
+      ratioUnknown: false,
       kcalBelowTarget: false,
       unavailable: true,
       unavailableReason: gap ?? null,
@@ -99,8 +102,13 @@ export function dayVerdict(
 
   return {
     // Только явное «не соответствует»: `null` означает, что соотношения у дня
-    // нет, и предупреждать не о чем (ADR-0037).
+    // нет вовсе (ADR-0037), и предупреждать не о чем.
     ratioOffTolerance: tolerance.ratio_within_tolerance === false,
+    // …но и хвалить не за что. Без этого признака экран падал в утвердительную
+    // ветку и говорил «соответствует назначению» про день, о котором ядро
+    // молчит: убрать ложную тревогу и поставить на её место ложное спокойствие
+    // — обмен не в пользу ребёнка.
+    ratioUnknown: tolerance.ratio_within_tolerance === null,
     kcalBelowTarget: !tolerance.kcal_within_tolerance,
     unavailable: false,
     unavailableReason: null,

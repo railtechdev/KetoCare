@@ -14,6 +14,7 @@ describe("dayVerdict", () => {
   it("без вердикта сервера сравнивать не с чем", () => {
     expect(dayVerdict(null)).toEqual({
       ratioOffTolerance: false,
+      ratioUnknown: false,
       kcalBelowTarget: false,
       unavailable: true,
       unavailableReason: null,
@@ -75,6 +76,7 @@ describe("dayVerdict", () => {
       dayVerdict({ ratio_within_tolerance: true, kcal_within_tolerance: true }),
     ).toEqual({
       ratioOffTolerance: false,
+      ratioUnknown: false,
       kcalBelowTarget: false,
       unavailable: false,
       unavailableReason: null,
@@ -127,5 +129,21 @@ describe("словари объясняют каждую причину серв
 
     expect(verdict.ratioOffTolerance).toBe(false);
     expect(verdict.unavailable).toBe(false);
+    // И отдельным признаком: «сказать нечего» — не то же, что «всё хорошо».
+    expect(verdict.ratioUnknown).toBe(true);
+  });
+
+  it("живой вердикт не считается неизвестным", () => {
+    const within = dayVerdict({
+      ratio_within_tolerance: true,
+      kcal_within_tolerance: true,
+    });
+    const off = dayVerdict({
+      ratio_within_tolerance: false,
+      kcal_within_tolerance: true,
+    });
+
+    expect(within.ratioUnknown).toBe(false);
+    expect(off.ratioUnknown).toBe(false);
   });
 });

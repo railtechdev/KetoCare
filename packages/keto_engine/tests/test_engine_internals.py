@@ -487,7 +487,11 @@ class TestSolveWithoutRatio:
         with pytest.raises(InfeasibleError) as refusal:
             solve([oil, fibrous], Targets(ratio=4.0, kcal=400))
 
-        assert "соотношение не определяется" in str(refusal.value)
+        # Текст проверяется по существу: он обязан назвать ПРИЧИНУ, а не просто
+        # объявить задачу неразрешимой — человек читает его в баннере.
+        message = str(refusal.value)
+        assert "кетосоотношение не определяется" in message
+        assert "клетчатк" in message
 
 
 class TestDegenerateNetCarbs:
