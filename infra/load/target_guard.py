@@ -67,8 +67,12 @@ def refuse_foreign_target(host: str) -> None:
     # из списка ещё раньше, так что срабатывать ей было не на чем.
     if _hostname(target) in LOCAL_HOSTS:
         return
+    # Пустое разрешение сравнивать с целью не нужно: цель здесь заведомо
+    # непустая (пустая ушла выше), и равной пустой строке она не будет. Такой
+    # конъюнкт в этом же файле уже дважды оказывался мёртвым кодом — третий
+    # оставлять незачем.
     allowed = os.environ.get(ALLOW_TARGET, "").strip().rstrip("/")
-    if allowed != "" and allowed.lower() == target.lower():
+    if allowed.lower() == target.lower():
         return
     raise RuntimeError(
         f"Цель «{target}» не похожа на локальную, а {ALLOW_TARGET} её не "
