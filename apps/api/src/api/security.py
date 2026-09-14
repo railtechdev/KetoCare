@@ -219,7 +219,7 @@ def generate_totp_secret() -> str:
     return pyotp.random_base32()
 
 
-def verify_totp(secret: str, code: str) -> bool:
+def verify_totp(secret: str | None, code: str, *, user_id: uuid.UUID | None = None) -> bool:
     """valid_window=1 — допускает соседний 30-секундный интервал (рассинхрон часов).
 
     Испорченный секрет — это `False`, а не падение. `pyotp` разбирает его как
@@ -237,16 +237,26 @@ def verify_totp(secret: str, code: str) -> bool:
 
     Отказ пишется в журнал приложения: человек не виноват, он будет вводить
     верный код и получать «неверный код подтверждения» бесконечно, а без записи
-    поломка останется невидимой до звонка администратору. Сам секрет в журнал
-    не уходит.
+    поломка останется невидимой до звонка администратору. В записи стоит
+    идентификатор учётки — без него администратор знает, что где-то сломан
+    секрет, но не знает у кого, и починить не может (#220). Сам секрет в журнал
+    не уходит: тексты исключений родовые, значения в них нет.
     """
+
+    if not secret:
+        # Ни None, ни пустая строка код не подтверждают. Проверка здесь, а не у
+        # каждого вызывающего: иначе `pyotp` падает на None «object of type
+        # NoneType has no len()», и сужение типа расползается по роутеру.
+        return False
 
     try:
         return pyotp.TOTP(secret).verify(code, valid_window=1)
     except ValueError as exc:  # binascii.Error — его подкласс; неASCII даёт голый ValueError
         # Значение в базе не разбирается как base32: записано мимо приложения
         # (сид, ручная правка, миграция). `generate_totp_secret()` такого не даёт.
-        logger.warning("totp_secret_unparseable", reason=str(exc))
+        logger.warning(
+            "totp_secret_unparseable", reason=str(exc), user_id=str(user_id) if user_id else None
+        )
         return False
 
 

@@ -133,6 +133,87 @@ class TestBrokenTotpSecret:
         assert response.json()["status"] == "ok"
 
 
+class TestBrokenSecretOnOtherEndpoints:
+    """Испорченный секрет: 401, а не 500 — на всех путях, а не только на входе.
+
+    `verify_totp` зовётся из четырёх мест; до #218 каждое падало в 500, а
+    тестом был закрыт только вход — сужение `except` обратно поймало бы лишь
+    его (#221).
+    """
+
+    BROKEN = "секрет-администратора"
+
+    async def test_totp_verify_refuses(self, client, session, make_user, auth_headers):
+        """Подтверждение настройки: секрет-кандидат испорчен."""
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=pyotp.random_base32())
+        doctor.totp_pending_secret = self.BROKEN
+        await session.flush()
+
+        response = await client.post(
+            "/api/v1/auth/totp/verify",
+            json={"code": "000000"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 401, response.text
+        assert response.json()["error"]["code"] == "unauthorized"
+
+    async def test_totp_setup_refuses(self, client, make_user, auth_headers):
+        """Смена фактора: действующий секрет испорчен, код не сойдётся."""
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=self.BROKEN)
+
+        response = await client.post(
+            "/api/v1/auth/totp/setup",
+            json={"current_code": "000000"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 401, response.text
+
+    async def test_backup_codes_regenerate_refuses(self, client, make_user, auth_headers):
+        """Перевыпуск резервных кодов."""
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=self.BROKEN)
+
+        response = await client.post(
+            "/api/v1/auth/backup-codes",
+            json={"totp_code": "000000"},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 401, response.text
+
+
+class TestTotpPredicate:
+    """«Включён» и «пригоден» — два предиката, и оба живут в модели (#219).
+
+    Их было три, и на испорченном секрете карточка администратора говорила
+    «настроен», а вход — «не настроен»; по этой же карточке администратор
+    решает, сбрасывать ли фактор.
+    """
+
+    async def test_broken_secret_is_enrolled_but_not_usable(self, session, make_user):
+        user = await make_user(UserRole.DOCTOR, totp_secret="")
+
+        assert user.totp_enrolled is True, "секрет записан — фактор включался"
+        assert user.has_totp is False, "но подтвердить им код нельзя"
+
+    async def test_admin_card_agrees_with_login(self, client, session, make_user, auth_headers):
+        """Карточка администратора и вход отвечают одинаково.
+
+        Прежде карточка брала `is not None`, а вход — `bool`: на пустом секрете
+        админ видел «настроен» и не сбрасывал фактор человеку, который войти не
+        мог.
+        """
+        admin = await make_user(UserRole.ADMIN, totp_secret=pyotp.random_base32())
+        doctor = await make_user(UserRole.DOCTOR, totp_secret="")
+
+        listing = await client.get("/api/v1/admin/users", headers=auth_headers(admin))
+        assert listing.status_code == 200, listing.text
+        card = next(row for row in listing.json()["items"] if row["id"] == str(doctor.id))
+
+        assert card["has_totp"] is False
+
+
 class TestVerifyTotp:
     """Сама проверка кода: хвост блока, чужой знак, неASCII — и два рабочих."""
 
@@ -145,6 +226,18 @@ class TestVerifyTotp:
         from api.security import verify_totp
 
         assert verify_totp(secret, "123456") is False
+
+    async def test_missing_secret_answers_false(self):
+        """Отсутствующий секрет — тоже «код не подтверждён», а не исключение.
+
+        `verify_totp` тотальна по секрету намеренно: `pyotp` на `None` падает
+        «object of type NoneType has no len()», и без этой ветки сужение типа
+        расползлось бы по четырём вызовам в роутере.
+        """
+        from api.security import verify_totp
+
+        assert verify_totp(None, "123456") is False
+        assert verify_totp("", "123456") is False
 
     async def test_working_secret_answers_true(self):
         from api.security import verify_totp

@@ -131,15 +131,12 @@ async def login(
     # войти было нельзя никогда, вместо честного «второй фактор не настроен»
     # (issue #206). Значение попадает в базу мимо приложения: сид, ручная
     # правка, миграция.
-    # «Включён» и «пригоден» — разные вещи. Пустая строка означает, что второй
-    # фактор ВКЛЮЧАЛСЯ, но секрет испорчен: такого пользователя нельзя пускать
-    # одним паролем (это снятие второго фактора), но и требовать код нельзя —
-    # он никогда не сойдётся. Честный выход — принудительная перенастройка.
-    enrolled = user.totp_secret is not None
-    usable = bool(user.totp_secret)
-    needs_totp = user.role in ROLES_REQUIRING_TOTP or enrolled
+    # «Включён» и «пригоден» — разные вещи, и оба предиката живут в модели
+    # (`User.totp_enrolled`, `User.has_totp`): здесь их копий быть не должно,
+    # иначе карточка администратора и вход снова разойдутся (#219).
+    needs_totp = user.role in ROLES_REQUIRING_TOTP or user.totp_enrolled
 
-    if needs_totp and not usable:
+    if needs_totp and not user.has_totp:
         # Приглашённому врачу/диетологу/админу 2FA обязательна, но настроить её
         # до первого входа негде. Пароль уже проверен, поэтому выдаём токен,
         # действующий только для /auth/totp/setup и /auth/totp/verify.
@@ -175,7 +172,8 @@ async def login(
             )
 
         if not by_backup and (
-            not payload.totp_code or not verify_totp(user.totp_secret, payload.totp_code)
+            not payload.totp_code
+            or not verify_totp(user.totp_secret, payload.totp_code, user_id=user.id)
         ):
             await audit_repo.write_audit_log_independent(
                 user_id=user.id,
@@ -360,8 +358,9 @@ async def totp_setup(
     # позволил бы молча заменить второй фактор и вытеснить владельца.
     # Испорченный (пустой) секрет кода не требует: он никогда не сойдётся, и
     # человек упирался бы в стену на экране настройки.
-    if db_user.totp_secret and not (
-        payload.current_code and verify_totp(db_user.totp_secret, payload.current_code)
+    if db_user.has_totp and not (
+        payload.current_code
+        and verify_totp(db_user.totp_secret, payload.current_code, user_id=db_user.id)
     ):
         raise ApiError(
             ErrorCode.UNAUTHORIZED,
@@ -423,7 +422,7 @@ async def totp_verify(
     if db_user.totp_pending_secret is None:
         raise ApiError(ErrorCode.CONFLICT, "Сначала запросите настройку через /auth/totp/setup.")
 
-    if not verify_totp(db_user.totp_pending_secret, payload.code):
+    if not verify_totp(db_user.totp_pending_secret, payload.code, user_id=db_user.id):
         raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
 
     db_user.totp_secret = db_user.totp_pending_secret
@@ -772,10 +771,10 @@ async def regenerate_backup_codes(
     """
 
     db_user = await users_repo.get(session, user.id)
-    if db_user is None or not db_user.totp_secret:
+    if db_user is None or not db_user.has_totp:
         raise ApiError(ErrorCode.CONFLICT, "Второй фактор не настроен.")
 
-    if not verify_totp(db_user.totp_secret, payload.totp_code):
+    if not verify_totp(db_user.totp_secret, payload.totp_code, user_id=db_user.id):
         raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
 
     codes = await backup_codes_repo.replace_for_user(session, user_id=user.id)
