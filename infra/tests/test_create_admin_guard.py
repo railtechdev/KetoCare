@@ -188,7 +188,15 @@ def test_length_comes_from_the_shared_module() -> None:
 def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) -> SimpleNamespace:
     """Подменить всё, что ходит наружу, и записывать, что скрипт сделал."""
     recorder = SimpleNamespace(
-        created={}, added=[], commits=0, disposed=0, user=None, engine_url=None, session_kwargs={}
+        created={},
+        added=[],
+        commits=0,
+        disposed=0,
+        user=None,
+        engine_url=None,
+        session_kwargs={},
+        looked_up=None,
+        maker_engine=None,
     )
 
     class _Session:
@@ -211,6 +219,7 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) ->
     class _Users:
         @staticmethod
         async def get_by_email(session: object, email: str) -> object | None:
+            recorder.looked_up = email
             return existing
 
         @staticmethod
@@ -225,6 +234,7 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) ->
         return _Engine()
 
     def _maker(engine: object, **kw: object) -> type[_Session]:
+        recorder.maker_engine = engine
         recorder.session_kwargs.update(kw)
         return _Session
 
@@ -330,11 +340,11 @@ def test_repeated_run_changes_nothing(
     assert "уже есть" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize(
-    "role",
-    [role for role in ADMIN.UserRole if role is not ADMIN.UserRole.ADMIN],
-    ids=lambda role: str(role.value),
-)
+_OTHER_ROLES = [role for role in ADMIN.UserRole if role is not ADMIN.UserRole.ADMIN]
+assert _OTHER_ROLES, "перебор ролей пуст — тест превратился бы в молчаливый пропуск"
+
+
+@pytest.mark.parametrize("role", _OTHER_ROLES, ids=lambda role: str(role.value))
 def test_reset_refuses_a_user_who_is_not_an_admin(
     role: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -431,6 +441,7 @@ def test_account_is_created_for_the_given_email_and_name(
     assert ADMIN.main(ARGV) == 0
     assert recorder.created["email"] == "admin@clinic.example"
     assert recorder.created["full_name"] == "Админ Клиники"
+    assert recorder.looked_up == "admin@clinic.example"
 
 
 def test_audit_row_names_the_account(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -465,8 +476,11 @@ def test_engine_takes_the_configured_url_and_session_keeps_objects(
     recorder = _fake_db(monkeypatch)
     monkeypatch.setenv(ADMIN.PASSWORD_ENV, LONG_ENOUGH)
 
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://localhost/из-окружения")
+
     assert ADMIN.main(ARGV) == 0
     assert recorder.engine_url == DB_URL
+    assert recorder.maker_engine is not None, "фабрика сессий собрана не на этом движке"
     assert recorder.session_kwargs["expire_on_commit"] is False
 
 
@@ -512,12 +526,17 @@ def test_generated_password_comes_from_the_cryptographic_source() -> None:
         ) or (isinstance(func, ast.Name) and func.id in from_secrets):
             sources.append(node)
 
-    assert len(sources) == 1, (
-        "пароль должен рождаться ровно одним вызовом secrets.token_* — "
-        "иначе источник неочевиден, а слабый по выходам неотличим"
-    )
-    arguments = sources[0].args
-    assert len(arguments) == 1 and isinstance(arguments[0], ast.Name), (
+    assert sources, "пароль рождается не из secrets.token_* — слабый источник по выходам неотличим"
+    # Число вызовов не ограничивается: посторонний `token_hex(4)` где-то рядом
+    # — законная правка (ревью #201, пятый заход). Держится другое: хотя бы у
+    # одного вызова длина приходит именем, а не литералом и не умолчанием.
+    sized = [
+        (call, argument)
+        for call in sources
+        for argument in [*call.args, *(keyword.value for keyword in call.keywords)]
+        if isinstance(argument, ast.Name)
+    ]
+    assert sized, (
         "длина берётся не из константы модуля: вызов без аргумента оставляет "
         "TEMP_PASSWORD_BYTES сиротой, и обещание комментария ничем не держится"
     )
@@ -537,7 +556,9 @@ def test_generated_password_comes_from_the_cryptographic_source() -> None:
     # Та же асимметрия, что закрыта для минимума длины: имя можно переприсвоить
     # после импорта, и вызов остался бы на вид тем же самым.
     assert "secrets" not in assigned
-    assert arguments[0].id in assigned, "длина пароля задана не константой модуля"
+    assert {argument.id for _, argument in sized} & assigned, (
+        "длина пароля задана не константой модуля"
+    )
 
     weak = [
         node
@@ -550,32 +571,71 @@ def test_generated_password_comes_from_the_cryptographic_source() -> None:
     assert not weak and "random" not in modules, "в скрипте используется random — это не CSPRNG"
 
 
-def test_password_variable_name_is_the_one_the_deploy_passes() -> None:
-    """Пароль обязан ДОЙТИ до скрипта, а не просто где-то упоминаться.
+def _uncommented(text: str) -> str:
+    """Строки-комментарии выкинуть: упоминание — это не передача."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
-    Сценарий, ради которого это написано: переменная молча не доехала до
-    контейнера, скрипт счёл, что пароль не задан, сгенерировал свой и
-    напечатал его в журнал публичного прогона. Проверка «имя встречается в
-    файле» его не ловила (ревью #201, четвёртый заход): упоминания остаются в
-    ветке-предупреждении, даже когда передачи уже нет. Поэтому закреплены сами
-    места передачи — и отдельно литерал, иначе `PASSWORD_ENV = "ADMIN_EMAIL"`
-    проходило бы, читая пароль из адреса.
+
+def test_password_variable_name_is_the_one_the_deploy_passes() -> None:
+    """Цепочка передачи пароля закреплена по значению, а не по упоминанию.
+
+    Сценарий, ради которого это написано: пароль молча не доехал до
+    контейнера, скрипт счёл его незаданным, сгенерировал свой и напечатал в
+    журнал публичного прогона. Проверка «имя встречается в файле» его не
+    ловила (ревью #201, четвёртый и пятый заходы): упоминания остаются в
+    ветке-предупреждении и в комментариях, когда передачи уже нет, а
+    `-e ADMIN_PASSWORD=""` и `-e ADMIN_PASSWORD="$ДРУГАЯ"` проходили насквозь
+    — при том что первое и есть утечка целиком.
+
+    Это по-прежнему разбор текста, а не прогон выката: `remote-deploy.sh`
+    исполняется на сервере и требует docker. Поэтому закреплены все звенья,
+    какие видны из файлов, и каждое — вместе со значением.
     """
     assert ADMIN.PASSWORD_ENV == "ADMIN_PASSWORD"
-    name = re.escape(ADMIN.PASSWORD_ENV)
+    name = ADMIN.PASSWORD_ENV
 
-    runner = (_ROOT / "infra/scripts/remote-deploy.sh").read_text(encoding="utf8")
-    assert re.search(rf"-e\s+{name}=", runner), (
-        "remote-deploy.sh не передаёт переменную в контейнер — пароль не дойдёт"
+    runner = _uncommented((_ROOT / "infra/scripts/remote-deploy.sh").read_text(encoding="utf8"))
+
+    # Звено 1: в контейнер уходит ТА ЖЕ переменная. Пустой литерал здесь —
+    # худший случай: страж выше видит заданную переменную оболочки и пропускает.
+    assert re.search(rf'(?:-e|--env)\s+{name}="\$\{{{name}\b', runner), (
+        f"remote-deploy.sh не передаёт {name} в контейнер её собственным значением"
     )
 
+    # Звено 2: переменные администратора вообще попадают в окружение процесса.
+    carried = re.search(r"([A-Z_]+)=\"\$\(grep\s+'\^ADMIN_'", runner)
+    assert carried is not None, "remote-deploy.sh не забирает переменные ADMIN_* из окружения"
+    assert re.search(rf'eval\s+"\${carried.group(1)}"', runner), (
+        "прочитанные строки ADMIN_* не применяются — пароля в процессе не будет"
+    )
+
+    # Звено 3: страж. Адрес без пароля обязан останавливать создание учётки —
+    # иначе сгенерированный пароль уедет в публичный журнал.
+    assert [
+        line
+        for line in runner.splitlines()
+        if line.lstrip().startswith("if ") and "ADMIN_EMAIL" in line and f'-z "${{{name}' in line
+    ], "в remote-deploy.sh нет ветки «адрес задан, пароль — нет»"
+
+    # Звено 4: значение приходит из секрета, и объявление лежит В ТОМ ЖЕ шаге,
+    # где собирается окружение. В соседнем шаге оно до рендера не доедет.
     workflow = (_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf8")
-    assert re.search(rf"^\s*{name}:\s*\$\{{\{{\s*secrets\.{name}\s*\}}\}}", workflow, re.M), (
-        "deploy.yml не берёт пароль из секрета репозитория"
+    head = workflow.index("- name: Собрать окружение из секретов")
+    rest = workflow[head + 1 :]
+    stop = rest.find("\n      - name:")
+    step = rest if stop == -1 else rest[:stop]
+    assert re.search(rf"^\s*{name}:\s*\$\{{\{{\s*secrets\.{name}\b", step, re.M), (
+        "deploy.yml не берёт пароль из секрета в шаге сборки окружения"
     )
-    assert re.search(rf'"{name}"', workflow), (
-        "deploy.yml не переносит переменную на сервер: её нет в списке имён"
-    )
+
+    # Звено 5: имя в САМОМ списке переносимых. Список разбирается как список
+    # Python, а не ищется регуляркой: имя, вынесенное в хвостовой комментарий
+    # («временно отключим»), текстовую проверку переживало — та же ошибка
+    # «упоминание вместо содержимого», за которую переписано звено 1.
+    opened = step.index("NAMES = [")
+    bracket = step.index("[", opened)
+    carried = ast.literal_eval(step[bracket : step.index("]", bracket) + 1])
+    assert name in carried, "deploy.yml не переносит переменную на сервер: её нет в списке имён"
 
 
 def test_exit_code_reaches_the_shell() -> None:
