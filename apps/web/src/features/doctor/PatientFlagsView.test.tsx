@@ -18,6 +18,9 @@ i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
 /** Пациент, у которого горит всё сразу: так видно порядок и полный набор. */
 const EVERYTHING: PatientFlags = {
   noPrescription: true,
+  // Состояние «семья ещё не вошла» тоже входит в набор: оно показывается
+  // плашкой и объясняется легендой наравне с остальными (ADR-0040).
+  familyNotActivated: true,
   daysSinceLastReading: 5,
   strictMonitoring: false,
   staleData: true,
@@ -41,7 +44,13 @@ function toneOf(element: Element, from: "badge" | "legendIcon"): string {
     from === "badge" ? element : (element.querySelector("svg") ?? element);
   return (
     Array.from(target.classList).find(
-      (name) => name.endsWith("destructive") || name.endsWith("warning"),
+      (name) =>
+        name.endsWith("destructive") ||
+        name.endsWith("warning") ||
+        // Спокойная пометка состояния: цвета тревоги у неё нет намеренно
+        // (ADR-0040), но пара «плашка ↔ значок легенды» проверяется так же.
+        name.endsWith("muted") ||
+        name.endsWith("muted-foreground"),
     ) ?? ""
   );
 }
@@ -49,6 +58,7 @@ function toneOf(element: Element, from: "badge" | "legendIcon"): string {
 const TONE_PAIRS: Record<string, string> = {
   "bg-destructive": "text-destructive",
   "bg-warning": "text-warning",
+  "bg-muted": "text-muted-foreground",
 };
 
 /**
@@ -64,6 +74,7 @@ const EXPECTED_LABEL: Record<string, string> = {
   "seizures-appeared": doctorRu.flags.seizuresAppeared,
   stale: doctorRu.flags.legend.noReadingsTerm,
   nutrition: doctorRu.flags.nutritionOff,
+  "family-not-activated": doctorRu.flags.familyNotActivated,
 };
 
 describe("пометки строки и легенда говорят одно и то же", () => {
@@ -153,6 +164,7 @@ describe("пометки строки и легенда говорят одно 
     // любую перестановку.
     const QUIET: PatientFlags = {
       noPrescription: false,
+      familyNotActivated: false,
       daysSinceLastReading: 0,
       strictMonitoring: false,
       staleData: false,
@@ -166,6 +178,7 @@ describe("пометки строки и легенда говорят одно 
       "seizures-appeared": { ...QUIET, seizuresAppeared: true },
       stale: { ...QUIET, staleData: true },
       nutrition: { ...QUIET, nutritionOff: true },
+      "family-not-activated": { ...QUIET, familyNotActivated: true },
     };
     const weights = shown.map((key) => attentionRank(ONLY[key] ?? QUIET));
 
@@ -180,6 +193,7 @@ describe("пометки строки и легенда говорят одно 
       <PatientFlagsView
         flags={{
           noPrescription: false,
+          familyNotActivated: false,
           daysSinceLastReading: 2,
           strictMonitoring: true,
           staleData: true,
@@ -215,6 +229,7 @@ describe("пометки строки и легенда говорят одно 
       <PatientFlagsView
         flags={{
           noPrescription: false,
+          familyNotActivated: false,
           daysSinceLastReading: 0,
           strictMonitoring: false,
           staleData: false,

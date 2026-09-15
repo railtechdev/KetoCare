@@ -13,6 +13,7 @@ import {
   CircleCheck,
   CircleHelp,
   ClipboardList,
+  KeyRound,
   TriangleAlert,
 } from "lucide-react";
 import { Fragment } from "react";
@@ -53,12 +54,15 @@ export const FLAG_KEYS = [
   "seizures-appeared",
   "stale",
   "nutrition",
+  // Последним: это состояние, а не сигнал, и порядок в строке обязан совпадать
+  // с порядком по вниманию (`attentionRank`).
+  "family-not-activated",
 ] as const;
 
 export type FlagKey = (typeof FLAG_KEYS)[number];
 
 /** Цвет пометки. Пара «фон + текст» проверяется на контраст в `packages/ui`. */
-type FlagTone = "danger" | "warning";
+type FlagTone = "danger" | "warning" | "muted";
 
 const LOOK: Record<
   FlagKey,
@@ -76,6 +80,14 @@ const LOOK: Record<
     tone: "danger",
     label: "flags.noPrescription",
     description: "flags.legend.noPrescription",
+  },
+  // Не тревога, а состояние: карта заведена, семья кодом ещё не вошла
+  // (ADR-0040). Красным оно быть не должно — врач ничего не пропустил.
+  "family-not-activated": {
+    icon: KeyRound,
+    tone: "muted",
+    label: "flags.familyNotActivated",
+    description: "flags.legend.familyNotActivated",
   },
   "seizures-grew": {
     icon: Activity,
@@ -109,12 +121,16 @@ const LOOK: Record<
 const BADGE_TONE: Record<FlagTone, string> = {
   danger: "bg-destructive text-destructive-foreground",
   warning: "bg-warning text-on-warning",
+  // Спокойная плашка: это состояние, а не сигнал. Цветом оно спорило бы с
+  // настоящими пометками за внимание врача.
+  muted: "bg-muted text-muted-foreground",
 };
 
 /** В легенде значок стоит без плашки, поэтому цвет несёт он сам. */
 const LEGEND_TONE: Record<FlagTone, string> = {
   danger: "text-destructive",
   warning: "text-warning",
+  muted: "text-muted-foreground",
 };
 
 /**
@@ -165,6 +181,7 @@ export function PatientFlagsView({
   const shown: Record<FlagKey, boolean> = {
     // Первой: это не отклонение в наблюдении, а отсутствие самого наблюдения.
     "no-prescription": flags.noPrescription,
+    "family-not-activated": flags.familyNotActivated,
     // Приступы — выше молчания семьи и питания: ухудшение течения болезни
     // важнее отсутствия записей и отклонения рациона за день. Тот же порядок
     // задан весами в `attentionRank`.
