@@ -29,7 +29,6 @@ from core.repositories import users as users_repo
 from ..errors import ApiError, ErrorCode
 from ..schemas_access import AccessCodeCreated, AccessCodeRead, AccessCodeStatus
 from ..security import hash_password_async
-from . import telegram as telegram_service
 
 
 class Actor(Protocol):
@@ -100,7 +99,12 @@ async def issue(
     return AccessCodeCreated(
         code=code.code,
         expires_at=code.expires_at,
-        deep_link=telegram_service.build_deep_link(code.code),
+        # Ссылки в бота здесь НЕТ намеренно, хотя `build_deep_link` рядом:
+        # `/auth/link-codes/verify` гасит только `link_codes`, и код доступа
+        # семьи он не понимает — `/start <код>` ответил бы «код недействителен»
+        # на главном экране новой функции. Бот переводится на общий код этапом Б
+        # плана; до тех пор QR ведёт на веб-активацию, которая работает.
+        deep_link=None,
         join_url=_join_url(code.code),
     )
 
@@ -277,7 +281,10 @@ async def activate_new_account(
         entity="users",
         entity_id=parent.id,
         ip=ip,
-        after={"email": parent.email, "role": parent.role.value, "code": claimed.code},
+        # Кода здесь нет намеренно: сущность `users` показывается администратору
+        # с нагрузкой, а сам код уже записан в `access_code_issued`, который
+        # скрыт. Держать строку-доступ в видимом журнале незачем.
+        after={"email": parent.email, "role": parent.role.value},
     )
 
     patient = await _attach_parent(session, code=claimed, parent=parent, ip=ip)

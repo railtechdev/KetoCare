@@ -10,12 +10,12 @@ import {
   Skeleton,
 } from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
-import QRCode from "qrcode";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { QrCode } from "../../components/QrCode";
 import { SetPasswordPanel } from "./SetPasswordPanel";
 import { BackupCodesPanel } from "./BackupCodesPanel";
 import { FormError } from "../../components/FormError";
@@ -54,17 +54,10 @@ export function TotpSetupPanel({ setupToken }: Props) {
       });
       if (error || !data) throw error ?? new Error("Empty setup response");
 
-      // QR рисуется из provisioning_uri: ключ в 32 символа вводят с ошибками,
-      // а в моноширинном шрифте 0 и O почти неотличимы.
-      const qrSvg = data.provisioning_uri
-        ? await QRCode.toString(data.provisioning_uri, {
-            type: "svg",
-            margin: 1,
-            errorCorrectionLevel: "M",
-          }).catch(() => null)
-        : null;
-
-      return { secret: data.secret, qrSvg };
+      // QR рисует общий компонент кита (`components/QrCode`): картинка нужна
+      // здесь и при выдаче доступа семье, а размер, поле вокруг и подпись для
+      // скринридера видны только глазами — разъехались бы молча.
+      return { secret: data.secret, provisioningUri: data.provisioning_uri };
     },
   });
 
@@ -180,14 +173,10 @@ export function TotpSetupPanel({ setupToken }: Props) {
             empty={null}
           >
             <>
-              {setup.data?.qrSvg && (
-                <div
-                  className="flex justify-center [&_svg]:size-44 [&_svg]:rounded-md [&_svg]:bg-white [&_svg]:p-2"
-                  role="img"
-                  aria-label={t("totpSetup.qrAlt")}
-                  // Разметка построена локально библиотекой qrcode из строки, полученной
-                  // от нашего API, — это не пользовательский ввод.
-                  dangerouslySetInnerHTML={{ __html: setup.data.qrSvg }}
+              {setup.data?.provisioningUri && (
+                <QrCode
+                  value={setup.data.provisioningUri}
+                  alt={t("totpSetup.qrAlt")}
                 />
               )}
 

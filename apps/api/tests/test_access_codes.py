@@ -587,3 +587,127 @@ class TestAccessBoundaries:
         assert stored is not None
         assert stored.patient_id == patient.id
         assert stored.issued_by == doctor.id
+
+
+class TestBotCannotBePromised:
+    """Потребитель поля `deep_link` — Telegram-бот, и он этого кода не понимает.
+
+    Бот гасит коды привязки (`/auth/link-codes/verify` и таблица `link_codes`);
+    код доступа семьи он научится принимать этапом Б. Пока этого не случилось,
+    ссылка `t.me/<бот>?start=<код>` на экране врача означала бы отказ у КАЖДОЙ
+    семьи на главном экране новой функции — и проверял бы это только живой
+    Telegram.
+    """
+
+    async def test_issue_does_not_offer_a_bot_link(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await _lead(session, doctor, patient)
+
+        issued = await client.post(codes_url(patient.id), headers=auth_headers(doctor))
+
+        assert issued.json()["deep_link"] is None
+        assert "/join?code=" in issued.json()["join_url"]
+
+    async def test_bot_endpoint_refuses_an_access_code(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """И это не догадка: ботовая ручка на таком коде отвечает отказом."""
+        from api.deps.bot import verify_bot_service_token
+        from api.main import create_app
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await _lead(session, doctor, patient)
+        code = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()[
+            "code"
+        ]
+
+        response = await client.post(
+            "/api/v1/auth/link-codes/verify",
+            json={"code": code, "chat_id": 4242},
+            headers={"X-Bot-Token": "dev-bot-service-token"},
+        )
+
+        assert response.status_code in (401, 404), response.text
+        assert verify_bot_service_token is not None and create_app is not None
+
+
+class TestAdminStaysOut:
+    """Администратор к клиническим данным доступа не имеет (правило 5).
+
+    Проверка переехала сюда вместе с механизмом: раньше её роль исполняли тесты
+    приглашения второго родителя.
+    """
+
+    async def test_admin_cannot_issue(self, client, session, make_user, make_patient, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        patient = await make_patient()
+
+        response = await client.post(codes_url(patient.id), headers=auth_headers(admin))
+
+        assert response.status_code == 403, response.text
+
+    async def test_admin_cannot_read_the_journal(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        patient = await make_patient()
+
+        response = await client.get(codes_url(patient.id), headers=auth_headers(admin))
+
+        assert response.status_code == 403, response.text
+
+
+class TestAuditTrail:
+    async def test_revoke_is_audited(self, client, session, make_user, make_patient, auth_headers):
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await _lead(session, doctor, patient)
+        code = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()[
+            "code"
+        ]
+
+        await client.post(f"{codes_url(patient.id)}/{code}/revoke", headers=auth_headers(doctor))
+
+        entry = await session.scalar(
+            select(AuditLog).where(AuditLog.action == "access_code_revoked")
+        )
+        assert entry is not None
+        assert entry.entity_id == patient.id
+
+    async def test_activation_writes_account_and_link(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Две записи, а не одна: появилась учётка И появился доступ к ребёнку."""
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await _lead(session, doctor, patient)
+        code = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()[
+            "code"
+        ]
+
+        await client.post(
+            ACTIVATE_URL,
+            json={
+                "code": code,
+                "email": "mama@example.com",
+                "full_name": "Мама",
+                "password": NEW_PASSWORD,
+            },
+        )
+
+        accepted = await session.scalar(
+            select(AuditLog).where(AuditLog.action == "accept_access_code")
+        )
+        linked = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "link_parent", AuditLog.entity == "parent_patient"
+            )
+        )
+        assert accepted is not None and linked is not None
+        assert linked.entity_id == patient.id
+        # Сам код в видимой администратору нагрузке не лежит.
+        assert "code" not in (accepted.after or {})

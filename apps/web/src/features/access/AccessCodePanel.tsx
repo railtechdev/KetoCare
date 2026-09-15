@@ -77,17 +77,16 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
 
         {issued !== null && (
           <div className="flex flex-col items-center gap-field">
-            {/* QR ведёт в бота, если он настроен, иначе — на страницу входа:
-                показывать ссылку на несуществующего бота хуже, чем не
-                показывать её вовсе. */}
+            {/* QR ведёт на веб-активацию, а не в бота: код доступа бот пока не
+                понимает — он гасит только коды привязки, и `/start <код>`
+                ответил бы отказом. Поле `deep_link` сервер сейчас не заполняет
+                вовсе; когда заполнит (этап Б), здесь появится выбор. */}
             <QrCode
               value={issued.deep_link ?? issued.join_url}
               alt={t("panel.qrAlt", { code: issued.code })}
             />
             <p className="m-0 text-center text-sm text-muted-foreground">
-              {issued.deep_link
-                ? t("panel.qrHintTelegram")
-                : t("panel.qrHintWeb")}
+              {t("panel.qrHintTelegram")}
             </p>
 
             <span className="text-sm font-medium">{t("panel.codeLabel")}</span>
