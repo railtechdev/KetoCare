@@ -36,6 +36,7 @@ function overview(patch: Partial<PatientOverview> = {}): PatientOverview {
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
     last_reading_on: null,
     monitoring_phase: "routine",
+    family_activated: true,
     ...patch,
   };
 }
@@ -257,6 +258,7 @@ describe("attentionRank", () => {
     expect(
       attentionRank({
         noPrescription: false,
+        familyNotActivated: false,
         daysSinceLastReading: 5,
         strictMonitoring: false,
         staleData: true,
@@ -267,6 +269,7 @@ describe("attentionRank", () => {
     ).toBeGreaterThan(
       attentionRank({
         noPrescription: false,
+        familyNotActivated: false,
         daysSinceLastReading: 0,
         strictMonitoring: false,
         staleData: false,
@@ -423,5 +426,60 @@ describe("строгое наблюдение в первый месяц тер�
 
     expect(flags?.strictMonitoring).toBe(false);
     expect(flags?.staleData).toBe(false);
+  });
+});
+
+describe("доступ семьи не активирован (ADR-0040)", () => {
+  /** Флаги «ничего не горит» — основа для проверки порядка показа. */
+  const CALM = {
+    noPrescription: false,
+    familyNotActivated: false,
+    daysSinceLastReading: 1,
+    strictMonitoring: false,
+    staleData: false,
+    nutritionOff: false,
+    seizuresGrew: false,
+    seizuresAppeared: false,
+  };
+
+  it("молчание не считается, пока семья не вошла", () => {
+    // Карту заводит врач на приёме, и до активации кода записей не будет ни
+    // одной. Без этой ветки «Замеров ещё не было» загоралось бы у каждого
+    // только что заведённого пациента — красным был бы весь список.
+    const flags = computePatientFlags(
+      overview({ family_activated: false, last_reading_on: null }),
+    );
+
+    expect(flags?.familyNotActivated).toBe(true);
+    expect(flags?.staleData).toBe(false);
+  });
+
+  it("после активации молчание считается как прежде", () => {
+    const flags = computePatientFlags(
+      overview({ family_activated: true, last_reading_on: null }),
+    );
+
+    expect(flags?.familyNotActivated).toBe(false);
+    expect(flags?.staleData).toBe(true);
+  });
+
+  it("отсутствие поля читается как «семья есть»", () => {
+    // Между выкатом кабинета и перезапуском API есть секунды, когда новая
+    // страница разговаривает со старым ответом. Ложная пометка хуже пропущенной.
+    const stale = overview({ last_reading_on: null });
+    delete (stale as { family_activated?: boolean }).family_activated;
+
+    const flags = computePatientFlags(stale);
+
+    expect(flags?.familyNotActivated).toBe(false);
+    expect(flags?.staleData).toBe(true);
+  });
+
+  it("в порядке показа стоит ниже молчания", () => {
+    // Это состояние, а не сигнал: врач ничего не пропустил.
+    const notActivated = attentionRank({ ...CALM, familyNotActivated: true });
+    const silent = attentionRank({ ...CALM, staleData: true });
+
+    expect(notActivated).toBeLessThan(silent);
   });
 });

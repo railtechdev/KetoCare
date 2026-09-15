@@ -61,6 +61,11 @@ async def _read_many(session: SessionDep, patients: Sequence[Patient]) -> list[P
         wanted |= exclusions.excluded_ids(patient.allergies)
 
     products = await products_repo.get_by_ids(session, product_ids=list(wanted))
+    # Одним запросом на весь список: главная врача и без того стоит `1 + N`
+    # обращений за сводками.
+    activated = await patients_repo.activated_ids(
+        session, patient_ids=[patient.id for patient in patients]
+    )
 
     result: list[PatientRead] = []
     for patient in patients:
@@ -82,6 +87,7 @@ async def _read_many(session: SessionDep, patients: Sequence[Patient]) -> list[P
                         if pid in ids
                     ],
                     "allergy_labels": labels,
+                    "family_activated": patient.id in activated,
                 }
             )
         )
@@ -121,18 +127,30 @@ async def list_patients(
 async def create_patient(
     payload: PatientCreate, user: CurrentUserDep, session: SessionDep
 ) -> PatientRead:
-    """Создаёт родитель (при регистрации ребёнка). Автор сразу привязывается к пациенту,
-    иначе он не смог бы прочитать только что созданный профиль."""
+    """Заводит карту специалист — врач или диетолог (ADR-0040).
 
-    if user.role is not UserRole.PARENT:
-        raise ApiError(ErrorCode.FORBIDDEN, "Профиль ребёнка создаёт родитель.")
+    Карточка ребёнка это клиническая запись, а не профиль в приложении: её
+    заводят на приёме, до того как у семьи появится учётная запись. Прежде её
+    создавал родитель, и врач не мог сделать ничего, пока семья не дойдёт до
+    компьютера; вдобавок каждая заведённая семьёй карта была потенциальным
+    двойником карты врача.
 
-    # Scope-токен ограничен одним уже привязанным пациентом; создание нового
-    # ребёнка вышло бы за его пределы.
+    Автор сразу становится ведущим (`link_doctor`) — по происхождению записи, а
+    не захватом: ручки «взять чужого пациента» по-прежнему нет.
+    """
+
+    if user.role not in CARE_ROLES:
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Профиль ребёнка заводит лечащий врач — попросите у него код доступа.",
+        )
+
+    # Scope-токен сужен до одного уже привязанного ребёнка; заведение нового
+    # вышло бы за его пределы.
     if user.patient_scope is not None:
         raise ApiError(
             ErrorCode.FORBIDDEN,
-            "Добавить ребёнка можно только в веб-кабинете.",
+            "Завести пациента можно только в веб-кабинете.",
         )
 
     patient = await patients_repo.create(
@@ -144,29 +162,24 @@ async def create_patient(
         allergies=payload.allergies,
         notes=payload.notes,
     )
-    await patients_repo.link_parent(session, parent_id=user.id, patient_id=patient.id)
+    # Ведение возникает из происхождения записи: карту завёл этот специалист,
+    # значит он её и ведёт. Иначе он не прошёл бы `require_patient_access` и не
+    # смог бы прочитать только что заведённую карту.
+    await patients_repo.link_doctor(session, doctor_id=user.id, patient_id=patient.id)
 
-    # Ведущий специалист — тот, кто пригласил эту семью (ADR-0003). Врач не может
-    # «взять» пациента сам: он не проходит require_patient_access, пока не связан.
-    # Поэтому связь возникает из происхождения учётной записи родителя, а не из
-    # захвата, и появляется ровно у того, кто выдал приглашение лично.
-    await _link_inviting_specialist(session, parent_id=user.id, patient_id=patient.id)
+    # Заведение карты — появление клинической записи о ребёнке, и правило 7
+    # требует следа: кто и когда завёл. Прежде запись создавала семья, и след
+    # оставался в самой учётной записи родителя.
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="create",
+        entity="patients",
+        entity_id=patient.id,
+        after={"full_name": patient.full_name, "birth_date": patient.birth_date.isoformat()},
+    )
 
     return await _read(session, patient)
-
-
-async def _link_inviting_specialist(
-    session: SessionDep, *, parent_id: uuid.UUID, patient_id: uuid.UUID
-) -> None:
-    parent = await users_repo.get(session, parent_id)
-    if parent is None or parent.invited_by is None:
-        return
-
-    inviter = await users_repo.get(session, parent.invited_by)
-    if inviter is None or inviter.role not in CARE_ROLES or not inviter.is_active:
-        return
-
-    await patients_repo.link_doctor(session, doctor_id=inviter.id, patient_id=patient_id)
 
 
 @router.get("/{patient_id}", response_model=PatientRead, summary="Профиль пациента")

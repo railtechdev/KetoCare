@@ -67,6 +67,7 @@ const OVERVIEW = {
   // Клинические и обязательные — см. те же поля в маршрутных фикстурах.
   last_reading_on: null,
   monitoring_phase: "routine",
+  family_activated: true,
 } satisfies PatientOverview;
 
 const PRODUCTS = {
@@ -1727,6 +1728,7 @@ describe("калькулятор без выбранного ребёнка", ()
                   height_cm: 108,
                   allergies: [],
                   notes: null,
+                  family_activated: true,
                 },
               ],
               total: 1,

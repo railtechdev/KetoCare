@@ -56,6 +56,10 @@ class TestScopeDiscovery:
         # стирается вместе с ребёнком — по той же колонке patient_id.
         assert "invitations" in tables
 
+        # Коды доступа семьи (ADR-0040) — тоже по patient_id: код открывает
+        # карту ребёнка, и пережить её удаление он не должен.
+        assert "access_codes" in tables
+
         # Дети идут раньше родителей, иначе внешние ключи не дадут удалить.
         assert tables.index("menu_items") < tables.index("menus")
 

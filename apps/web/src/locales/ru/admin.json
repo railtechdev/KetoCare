@@ -82,7 +82,10 @@
       "totp_reset": "Сброс второго фактора администратором",
       "totp_setup_requested": "Запрос настройки второго фактора",
       "unpublish": "Снятие с публикации",
-      "update": "Изменение"
+      "update": "Изменение",
+      "access_code_issued": "Выдан код доступа",
+      "access_code_revoked": "Отозван код доступа",
+      "accept_access_code": "Активация кода доступа"
     },
     "entities": {
       "ai_conversations": "Переписки с помощником",
@@ -104,7 +107,8 @@
       "reports": "Отчёты",
       "seizure_types": "Типы приступов",
       "telegram_accounts": "Привязки Telegram",
-      "users": "Учётные записи"
+      "users": "Учётные записи",
+      "access_codes": "Коды доступа семьи"
     },
     "error": "Не удалось загрузить журнал"
   },

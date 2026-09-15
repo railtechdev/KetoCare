@@ -17,6 +17,7 @@ from core.config import get_settings
 from core.models import KetoneLog, Menu, Prescription, WeightLog
 from core.repositories import menus as menus_repo
 from core.repositories import overview as overview_repo
+from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import therapy as therapy_repo
 from core.repositories.overview import SeizureTotals
@@ -234,6 +235,8 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
     # идёт, пока он не истёк хотя бы от одного (`monitoring_phase`).
     therapy_starts = await therapy_repo.start_sources(session, patient_id=patient_id)
 
+    activated = await patients_repo.activated_ids(session, patient_ids=[patient_id])
+
     return PatientOverview(
         patient_id=patient_id,
         date=today,
@@ -247,4 +250,5 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
             ketone=ketone, weight=weight, seizures_today=seizures.entries, today=today
         ),
         monitoring_phase=monitoring_phase(starts=therapy_starts, today=today),
+        family_activated=patient_id in activated,
     )

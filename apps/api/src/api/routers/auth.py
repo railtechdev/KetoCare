@@ -57,6 +57,7 @@ from ..schemas import (
     TotpVerifyRequest,
     UserRead,
 )
+from ..schemas_access import AccessCodeActivate
 from ..schemas_telegram import MiniAppInitRequest, MiniAppSession
 from ..security import (
     Channel,
@@ -71,6 +72,7 @@ from ..security import (
     verify_totp,
     waste_password_verification_async,
 )
+from ..services import access_codes as access_codes_service
 from ..services import telegram as telegram_service
 
 logger = structlog.get_logger(__name__)
@@ -506,10 +508,14 @@ STAFF_ROLES = (UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIETITIAN)
 async def create_invitation(
     payload: InvitationCreate, user: CurrentUserDep, session: SessionDep
 ) -> InvitationCreated:
-    if user.role is UserRole.ADMIN and payload.role is UserRole.PARENT:
+    if payload.role is UserRole.PARENT:
+        # Семья больше не приглашается почтой: доступ выдаётся кодом из карты
+        # ребёнка (ADR-0040). Врач не набирает чужую почту, а семья активирует
+        # код дома — в боте или на /join. 422, а не 403: роль вообще перестала
+        # быть допустимым значением для этой ручки, дело не в правах вызвавшего.
         raise ApiError(
-            ErrorCode.FORBIDDEN,
-            "Семью приглашает её врач или диетолог: он же становится ведущим специалистом.",
+            ErrorCode.VALIDATION_ERROR,
+            "Семье выдаётся код доступа в карте ребёнка, а не приглашение по почте.",
         )
     if user.role is not UserRole.ADMIN and payload.role in STAFF_ROLES:
         raise ApiError(ErrorCode.FORBIDDEN, "Сотрудников приглашает администратор.")
@@ -683,6 +689,35 @@ def _invitation_status(
     if invitation.expires_at <= datetime.now(UTC):
         return "expired"
     return "pending"
+
+
+@router.post(
+    "/access-codes/activate",
+    response_model=UserRead,
+    status_code=201,
+    summary="Активировать код доступа и создать учётную запись семьи",
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def activate_access_code(
+    payload: AccessCodeActivate, request: Request, session: SessionDep
+) -> UserRead:
+    """Путь семьи, которая пришла в веб по ссылке `/join?code=…` (ADR-0040).
+
+    Публичная, как и принятие приглашения: сессии у человека ещё нет, а код —
+    это и есть его право. Ограничение частоты — общее для `/auth`: код
+    восьмизначный, и перебирать его через эту ручку должно быть незачем.
+    """
+
+    parent, _patient = await access_codes_service.activate_new_account(
+        session,
+        code=payload.code,
+        email=payload.email,
+        full_name=payload.full_name,
+        password=payload.password,
+        phone=payload.phone,
+        ip=client_address(request),
+    )
+    return UserRead.model_validate(parent)
 
 
 @router.post(

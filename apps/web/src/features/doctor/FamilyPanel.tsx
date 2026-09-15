@@ -11,13 +11,10 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
-import { InviteForm } from "../invitations/InvitePanel";
-import type { Role } from "../invitations/useInvitations";
+import { AccessCodePanel } from "../access/AccessCodePanel";
 import { useFamily } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import { isCareRole } from "./types";
-
-const PARENT_ONLY: readonly Role[] = ["parent"];
 
 /**
  * Кто ведёт ребёнка дома (ADR-0011).
@@ -35,12 +32,14 @@ const PARENT_ONLY: readonly Role[] = ["parent"];
  * же устройства, на котором смотрит карту, и переписывание номера — лишний шаг
  * и лишняя опечатка.
  *
- * **Второго родителя приглашают отсюда** (ответ клиники на вопрос 33,
- * ADR-0032). Приглашение из списка пациентов зовёт первого родителя, который
- * сам заводит ребёнка; позванный так второй родитель заводил двойника. Здесь
- * приглашение несёт ребёнка, и принявший его сразу видит того же. Кнопка —
- * только у специалиста: семья приглашать не может, и сервер ответил бы 403
- * (правило П3 канона).
+ * **Доступ семье выдаётся отсюда** (ADR-0040): кнопка открывает панель с кодом
+ * и QR. Прежде здесь стояло приглашение по почте — врачу приходилось набирать
+ * чужой адрес при семье, а семья на приёме не всегда готова разбираться. Код
+ * несёт ребёнка, поэтому двойник карты невозможен, а второй взрослый получает
+ * такой же код, а не отдельный механизм.
+ *
+ * Кнопка — только у специалиста: семья доступа не раздаёт, и сервер ответил бы
+ * 403 (правило П3 канона).
  */
 export function FamilyPanel({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
@@ -61,7 +60,7 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
         canInvite && (
           <Button type="button" onClick={() => setInviteOpen(true)}>
             <UserPlus aria-hidden="true" />
-            {t("family.invite")}
+            {t("family.grantAccess")}
           </Button>
         )
       }
@@ -129,10 +128,10 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
           closeLabel={t("common:actions.close")}
           open={inviteOpen}
           onOpenChange={setInviteOpen}
-          title={t("family.inviteTitle")}
-          description={t("family.inviteIntro")}
+          title={t("family.grantAccessTitle")}
+          description={t("family.grantAccessIntro")}
         >
-          <InviteForm roles={PARENT_ONLY} patientId={patientId} />
+          <AccessCodePanel patientId={patientId} />
         </FormSheet>
       )}
     </Section>

@@ -8,6 +8,7 @@ import {
 
 import { LoginPage } from "./features/auth/LoginPage";
 import { AcceptInvitePage } from "./features/invitations/AcceptInvitePage";
+import { JoinPage } from "./features/access/JoinPage";
 import { SECTIONS_BY_ROLE, type Role } from "./features/auth/roles";
 import type { Session } from "./features/auth/claims";
 import {
@@ -68,6 +69,20 @@ const inviteRoute = createRoute({
     return typeof token === "string" && token !== "" ? { token } : {};
   },
   component: AcceptInvitePage,
+});
+
+/**
+ * Активация кода доступа семьёй — публичный маршрут по той же причине, что и
+ * принятие приглашения: пользователя ещё не существует (ADR-0040).
+ */
+const joinRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/join",
+  validateSearch: (search: Record<string, unknown>): { code?: string } => {
+    const code = search.code;
+    return typeof code === "string" && code !== "" ? { code } : {};
+  },
+  component: JoinPage,
 });
 
 const appRoute = createRoute({
@@ -324,6 +339,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   inviteRoute,
+  joinRoute,
   ...devRoutes,
   appRoute.addChildren([
     appIndexRoute,

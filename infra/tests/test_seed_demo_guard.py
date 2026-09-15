@@ -22,6 +22,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+from core.models.enums import UserRole
+
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 
@@ -365,14 +367,34 @@ def test_patient_without_a_row_is_recreated(monkeypatch: pytest.MonkeyPatch) -> 
         async def link_doctor(session: object, **kw: object) -> None:
             return None
 
+    codes: list[str] = []
+
+    class _Codes:
+        """Сид повторяет продукт: доступ семье выдаётся кодом (ADR-0040)."""
+
+        @staticmethod
+        async def create(session: object, **kw: object) -> SimpleNamespace:
+            codes.append(f"выдан:{kw.get('patient_id')}")
+            return SimpleNamespace(code="CODE1234")
+
+        @staticmethod
+        async def claim(session: object, code: str) -> SimpleNamespace:
+            codes.append(f"погашен:{code}")
+            return SimpleNamespace(code=code)
+
+        @staticmethod
+        async def mark_used_by(session: object, **kw: object) -> None:
+            codes.append(f"кому:{kw.get('user_id')}")
+
     monkeypatch.setattr(DEMO, "access_repo", _Access)
     monkeypatch.setattr(DEMO, "patients_repo", _Patients)
+    monkeypatch.setattr(DEMO, "access_codes_repo", _Codes)
 
     patient = asyncio.run(
         DEMO._patient(
             None,
             parent=SimpleNamespace(id="id-родителя"),
-            doctor=SimpleNamespace(id="id-врача"),
+            doctor=SimpleNamespace(id="id-врача", role=UserRole.DOCTOR),
         )
     )
 
@@ -381,6 +403,9 @@ def test_patient_without_a_row_is_recreated(monkeypatch: pytest.MonkeyPatch) -> 
     # Нового ребёнка мало: без привязки к родителю демо-сид бесполезен ровно так
     # же, как при падении. Мутация «снять `link_parent`» иначе выживает.
     assert linked_parents == [("id-родителя", "id-нового")]
+    # И код пройден целиком: выдан, погашен, записан на родителя. Сид, который
+    # обходит этот путь, перестаёт отвечать на вопрос «а так вообще бывает?».
+    assert codes == ["выдан:id-нового", "погашен:CODE1234", "кому:id-родителя"]
 
 
 def test_short_password_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -40,6 +40,7 @@ from core.config import get_settings
 from core.models import Patient, Product, ProductCategory, User, UserBackupCode
 from core.models.enums import Sex, UserRole
 from core.repositories import access as access_repo
+from core.repositories import access_codes as access_codes_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
@@ -374,7 +375,17 @@ async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Pati
             height_cm=104.0,
             allergies=[],
         )
+        # Как в продукте (ADR-0040): карту завёл врач, семья вошла по коду.
+        # Сценарий начинается с уже открытого кабинета, поэтому код гасится
+        # здесь же — сам путь выдачи проверяет `journey.spec.ts`.
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        code = await access_codes_repo.create(
+            session, patient_id=patient.id, issued_by=doctor.id, role=doctor.role
+        )
+        claimed = await access_codes_repo.claim(session, code.code)
+        assert claimed is not None, "только что выпущенный код обязан гаситься"
         await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        await access_codes_repo.mark_used_by(session, code=code.code, user_id=parent.id)
 
     doctors = await access_repo.list_accessible_patient_ids(
         session, user_id=doctor.id, role=UserRole.DOCTOR

@@ -31,6 +31,7 @@ function patient(id: string, name: string) {
     height_cm: 120,
     allergies: [],
     notes: null,
+    family_activated: true,
   };
 }
 
@@ -100,6 +101,7 @@ function overview(id: string, calm: boolean): PatientOverview {
     // было, и tsc об этом молчал. Саму ветку строгого наблюдения проверяет
     // flags.test.ts.
     monitoring_phase: "routine",
+    family_activated: true,
   };
 }
 

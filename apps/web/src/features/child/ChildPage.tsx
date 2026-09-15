@@ -4,6 +4,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  FormFooter,
   Skeleton,
   toast,
 } from "@ketocare/ui";
@@ -15,6 +16,8 @@ import {
   Plus,
   Stethoscope,
 } from "lucide-react";
+import { useState } from "react";
+
 import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
 import { useTranslation } from "react-i18next";
 
@@ -26,12 +29,11 @@ import { IntakeForm } from "../intake/IntakeForm";
 import { RemindersPanel } from "../telegram/RemindersPanel";
 import { TelegramPanel } from "../telegram/TelegramPanel";
 import { ChildForm } from "./ChildForm";
-import { toChildBody, toChildUpdateBody } from "./childSchemas";
-import {
-  useCreateChildMutation,
-  useUpdateChildMutation,
-  type Patient,
-} from "../patients/useChildren";
+import { Field } from "../../components/Field";
+import { FormError } from "../../components/FormError";
+import { useClaimAccessCode } from "../access/useAccessCodes";
+import { toChildUpdateBody } from "./childSchemas";
+import { useUpdateChildMutation, type Patient } from "../patients/useChildren";
 import { allergyNames } from "../patients/allergies";
 import { usePatients } from "../patients/usePatients";
 
@@ -249,26 +251,63 @@ export function ChildPage() {
   );
 }
 
+/**
+ * Добавление ребёнка по коду от врача (ADR-0040).
+ *
+ * Формы заведения ребёнка у семьи больше нет: карточка — клиническая запись, её
+ * заводит специалист, а семья получает доступ кодом. Один экран закрывает оба
+ * случая: второй ребёнок на терапии и второй родитель, у которого учётная
+ * запись уже есть.
+ */
 function AddChild({ onDone }: { onDone: () => void }) {
-  const { t } = useTranslation("child");
-  const create = useCreateChildMutation();
+  const { t } = useTranslation("access");
+  const claim = useClaimAccessCode();
+  const [code, setCode] = useState("");
 
   return (
-    <PageLayout title={t("child.addTitle")} width="form" onBack={onDone}>
-      <ChildForm
-        child={null}
-        pending={create.isPending}
-        error={create.error}
-        onCancel={onDone}
-        onSubmit={(values) => {
-          create.mutate(toChildBody(values), {
-            onSuccess: (child) => {
-              toast.success(t("child.added", { name: child.full_name }));
+    <PageLayout title={t("claim.title")} width="form" onBack={onDone}>
+      <form
+        className="flex flex-col gap-block"
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          claim.mutate(code.trim(), {
+            onSuccess: (added) => {
+              toast.success(t("claim.done", { name: added.patient_name }));
               onDone();
             },
           });
         }}
-      />
+      >
+        <p className="m-0 text-sm text-muted-foreground">{t("claim.intro")}</p>
+
+        <Field
+          id="claim-code"
+          width="medium"
+          autoComplete="one-time-code"
+          label={t("join.code")}
+          hint={t("join.codeHint")}
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+        />
+
+        {claim.error !== null && (
+          <FormError>
+            {errorMessageOf(claim.error) ?? t("claim.failed")}
+          </FormError>
+        )}
+
+        <FormFooter
+          submitLabel={t("claim.submit")}
+          pendingLabel={t("claim.submitting")}
+          pending={claim.isPending}
+          // Пустое поле — причина, а не серый прямоугольник (правило П44).
+          disabled={code.trim() === ""}
+          reason={t("join.codeRequired")}
+          onCancel={onDone}
+          cancelLabel={t("common:actions.cancel")}
+        />
+      </form>
     </PageLayout>
   );
 }

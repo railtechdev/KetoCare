@@ -41,6 +41,7 @@ const PATIENTS: Patient[] = [
     allergy_labels: [],
     excluded_products: [],
     notes: null,
+    family_activated: true,
   },
   {
     id: FRESH_ID,
@@ -52,6 +53,7 @@ const PATIENTS: Patient[] = [
     allergy_labels: ["орехи"],
     excluded_products: [],
     notes: null,
+    family_activated: true,
   },
 ];
 
@@ -108,6 +110,7 @@ const SILENT_OVERVIEW = {
   seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
   last_reading_on: "2026-08-18",
   monitoring_phase: "routine",
+  family_activated: true,
 } satisfies PatientOverview;
 
 const FRESH_OVERVIEW = {
@@ -129,6 +132,7 @@ const FRESH_OVERVIEW = {
   seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
   last_reading_on: "2026-08-28",
   monitoring_phase: "routine",
+  family_activated: true,
 } satisfies PatientOverview;
 
 function renderList() {
