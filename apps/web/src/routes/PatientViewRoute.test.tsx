@@ -57,6 +57,7 @@ function overview(patientId: string, ratio: number) {
     // аннотация стояла только на вложенном назначении и этого не видела.
     last_reading_on: null,
     monitoring_phase: "routine",
+    family_activated: false,
   } satisfies PatientOverview;
 }
 

@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
+import accessRu from "../locales/ru/access.json";
 import adminRu from "../locales/ru/admin.json";
 import assistantRu from "../locales/ru/assistant.json";
 import authRu from "../locales/ru/auth.json";
@@ -31,6 +32,7 @@ export const defaultNS = "common";
 export const resources = {
   ru: {
     common: commonRu,
+    access: accessRu,
     admin: adminRu,
     assistant: assistantRu,
     auth: authRu,

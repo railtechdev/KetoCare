@@ -46,6 +46,7 @@ export const AUDIT_ENTITIES = [
   "ai_conversations",
   "telegram_accounts",
   "link_codes",
+  "access_codes",
   "attachments",
   "leads",
 ] as const;
@@ -62,6 +63,11 @@ export const AUDIT_ACTIONS = [
   "invite",
   "revoke",
   "accept_invitation",
+  // Выдача доступа семье кодом из карты ребёнка (ADR-0040) — то же событие,
+  // что приглашение, только без почты.
+  "access_code_issued",
+  "access_code_revoked",
+  "accept_access_code",
   "login",
   "login_miniapp",
   "login_failed",

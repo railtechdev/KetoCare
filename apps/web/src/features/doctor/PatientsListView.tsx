@@ -17,6 +17,8 @@ import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { PatientViewLink } from "./PatientViewLink";
+import { useNavigate } from "@tanstack/react-router";
+
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { usePatients } from "../patients/usePatients";
@@ -26,9 +28,9 @@ import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import { TableSkeleton } from "./skeletons";
 import type { Patient } from "./types";
-import { InvitationsList } from "../invitations/InvitationsList";
-import { InviteForm } from "../invitations/InvitePanel";
-import type { Role } from "../invitations/useInvitations";
+import { ChildForm } from "../child/ChildForm";
+import { toChildBody } from "../child/childSchemas";
+import { useCreateChildMutation } from "../patients/useChildren";
 
 interface PatientRow {
   patient: Patient;
@@ -41,12 +43,13 @@ interface PatientRow {
 }
 
 /** Список пациентов врача с флагами (раздел 8.3 ТЗ, «Врач / Пациенты»). */
-const FAMILY_ROLES: readonly Role[] = ["parent"];
 
 export function PatientsListView() {
   const { t } = useTranslation("doctor");
   const [query, setQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const navigate = useNavigate();
+  const createChild = useCreateChildMutation();
 
   // Поиск уходит на сервер (см. `usePatients`), поэтому список уже отобран.
   const debouncedQuery = useDebouncedValue(query, SEARCH_DELAY_MS);
@@ -167,7 +170,7 @@ export function PatientsListView() {
       actions={
         <Button type="button" onClick={() => setInviteOpen(true)}>
           <UserPlus aria-hidden="true" />
-          {t("list.inviteAction")}
+          {t("list.createAction")}
         </Button>
       }
     >
@@ -275,14 +278,31 @@ export function PatientsListView() {
         closeLabel={t("common:actions.close")}
         open={inviteOpen}
         onOpenChange={setInviteOpen}
-        title={t("invitations:title")}
-        description={t("invitations:intro")}
+        title={t("list.createTitle")}
+        description={t("list.createIntro")}
       >
-        <InviteForm roles={FAMILY_ROLES} />
-
-        {/* Список выданных под формой: ссылка показывается один раз, и вопрос
-            «я уже приглашал эту семью?» оставался без ответа. */}
-        <InvitationsList />
+        {/* Форма та же, что у правки профиля: поля ребёнка одни и те же, и
+            вторая их копия разошлась бы с первой (ADR-0040). */}
+        <ChildForm
+          child={null}
+          pending={createChild.isPending}
+          error={createChild.error}
+          onCancel={() => setInviteOpen(false)}
+          onSubmit={(values) => {
+            void createChild
+              .mutateAsync(toChildBody(values))
+              .then((patient) => {
+                setInviteOpen(false);
+                // Сразу в карту: врач завёл её, чтобы записать назначение, а не
+                // чтобы вернуться в список.
+                void navigate({
+                  to: "/app/patients/$patientId/$view",
+                  params: { patientId: patient.id, view: "profile" },
+                });
+              })
+              .catch(() => null);
+          }}
+        />
       </FormSheet>
     </PageLayout>
   );

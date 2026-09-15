@@ -33,6 +33,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
             },
             last_reading_on: null,
             monitoring_phase: "routine",
+            family_activated: false,
           } satisfies PatientOverview,
         }),
       ),
@@ -52,6 +53,7 @@ const PATIENT: Patient = {
   allergy_labels: [],
   excluded_products: [],
   notes: null,
+  family_activated: false,
 };
 
 function renderSummary() {
@@ -142,6 +144,7 @@ describe("сводка пациента", () => {
         seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
         last_reading_on: null,
         monitoring_phase: "routine",
+        family_activated: false,
       } satisfies PatientOverview,
     } as never);
 

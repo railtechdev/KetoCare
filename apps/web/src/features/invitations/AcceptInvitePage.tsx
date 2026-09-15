@@ -14,25 +14,19 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import {
+  AccountFields,
+  accountShape,
+  withPasswordMatch,
+} from "../auth/accountFields";
 import { useAcceptInvitationMutation } from "./useInvitations";
 
-/** Минимум пароля повторяет серверную схему (`InvitationAccept`). */
-export const PASSWORD_MIN_LENGTH = 12;
-
-const acceptSchema = z
-  .object({
-    fullName: z.string().trim().min(1).max(255),
-    password: z.string().min(PASSWORD_MIN_LENGTH).max(128),
-    passwordRepeat: z.string(),
-    phone: z.string(),
-  })
-  .refine((values) => values.password === values.passwordRepeat, {
-    path: ["passwordRepeat"],
-    message: "mismatch",
-  });
+// Поля и правила — общие с активацией кода доступа (`features/auth/accountFields`):
+// оба пути заводят одну и ту же учётную запись, и разные требования к паролю на
+// них были бы разницей без причины.
+const acceptSchema = withPasswordMatch(z.object({ ...accountShape }));
 
 type AcceptValues = z.infer<typeof acceptSchema>;
 
@@ -107,46 +101,7 @@ export function AcceptInvitePage() {
         noValidate
         className="flex flex-col gap-block"
       >
-        <Field
-          id="invite-name"
-          autoComplete="name"
-          label={t("accept.fields.fullName")}
-          error={errors.fullName && t("accept.errors.fullName")}
-          {...register("fullName")}
-        />
-        <Field
-          id="invite-phone"
-          width="medium"
-          type="tel"
-          autoComplete="tel"
-          optional
-          label={t("accept.fields.phone")}
-          {...register("phone")}
-        />
-        <Field
-          id="invite-password"
-          width="medium"
-          type="password"
-          // new-password: менеджер паролей предложит сгенерировать и вставить
-          // пароль, вставка ничем не ограничивается (правило П21 канона).
-          autoComplete="new-password"
-          label={t("accept.fields.password")}
-          hint={t("accept.hints.password", { min: PASSWORD_MIN_LENGTH })}
-          error={
-            errors.password &&
-            t("accept.errors.password", { min: PASSWORD_MIN_LENGTH })
-          }
-          {...register("password")}
-        />
-        <Field
-          id="invite-password-repeat"
-          width="medium"
-          type="password"
-          autoComplete="new-password"
-          label={t("accept.fields.passwordRepeat")}
-          error={errors.passwordRepeat && t("accept.errors.passwordRepeat")}
-          {...register("passwordRepeat")}
-        />
+        <AccountFields register={register} errors={errors} idPrefix="invite" />
 
         {accept.error !== null && (
           <FormError>

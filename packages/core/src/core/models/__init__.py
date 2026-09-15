@@ -1,6 +1,7 @@
 """SQLAlchemy-модели KetoCare (раздел 4 ТЗ)."""
 
 from .accounts import (
+    AccessCode,
     DoctorPatient,
     Invitation,
     LinkCode,
@@ -62,6 +63,7 @@ __all__ = [
     "ReminderSettings",
     "TelegramAccount",
     "UserBackupCode",
+    "AccessCode",
     "LinkCode",
     # clinical
     "AedDrug",

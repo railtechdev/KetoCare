@@ -115,6 +115,7 @@ const PATIENT: Patient = {
   ],
   allergy_labels: ["цитрусовые"],
   notes: "Плохо переносит жару, кормить дробно.",
+  family_activated: false,
 };
 
 function renderProfile(

@@ -25,6 +25,7 @@ from core.config import get_settings
 from core.models import Patient, Product, ProductCategory, User
 from core.models.enums import DiarySource, KetoneMethod, Sex, UserRole
 from core.repositories import access as access_repo
+from core.repositories import access_codes as access_codes_repo
 from core.repositories import diary as diary_repo
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
@@ -277,6 +278,13 @@ async def _products(session: AsyncSession, *, category_id: uuid.UUID, changed_by
 
 
 async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Patient:
+    """Карту заводит врач, доступ семье выдаётся кодом (ADR-0040).
+
+    Порядок сида повторяет продукт, а не обходит его: сначала специалист и
+    карта, потом код и его погашение родителем. Сид, идущий другим путём,
+    однажды перестаёт отвечать на вопрос «а так вообще бывает?».
+    """
+
     linked = await access_repo.list_accessible_patient_ids(
         session, user_id=parent.id, role=UserRole.PARENT
     )
@@ -296,7 +304,19 @@ async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Pati
             height_cm=104.0,
             allergies=["Орехи"],
         )
+        # Ведение возникает из происхождения записи: карту завёл врач.
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        # Семья получает доступ так же, как в продукте: кодом из карты. Код
+        # тут же гасится — демо-стенд должен открываться, а не ждать, пока
+        # кто-то введёт восемь знаков.
+        code = await access_codes_repo.create(
+            session, patient_id=patient.id, issued_by=doctor.id, role=doctor.role
+        )
+        claimed = await access_codes_repo.claim(session, code.code)
+        assert claimed is not None, "только что выпущенный код обязан гаситься"
         await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        await access_codes_repo.mark_used_by(session, code=code.code, user_id=parent.id)
 
     doctors_patients = await access_repo.list_accessible_patient_ids(
         session, user_id=doctor.id, role=UserRole.DOCTOR

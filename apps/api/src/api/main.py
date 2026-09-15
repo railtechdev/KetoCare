@@ -11,6 +11,7 @@ from core.observability import init_sentry
 from .errors import register_exception_handlers, register_unhandled_error_middleware
 from .ratelimit import register_rate_limiting
 from .routers import (
+    access_codes,
     admin,
     ai,
     ai_conversations,
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     v1.include_router(ai.router)
     v1.include_router(ai_conversations.router)
     v1.include_router(patients.router)
+    v1.include_router(access_codes.router)
     v1.include_router(attachments.router)
     v1.include_router(prescriptions.router)
     v1.include_router(products.router)

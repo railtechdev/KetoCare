@@ -22,7 +22,9 @@ from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, limiter
 from ..schemas import ColleagueRead, MeUpdate, PasswordChange, TokenPair, UserRead
+from ..schemas_access import AccessCodeClaim, AccessCodeClaimed
 from ..security import create_token, hash_password_async, verify_password_async
+from ..services import access_codes as access_codes_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -38,6 +40,40 @@ CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 async def list_colleagues(session: SessionDep) -> list[ColleagueRead]:
     users = await users_repo.list_active_by_roles(session, roles=CARE_ROLES)
     return [ColleagueRead.model_validate(u) for u in users]
+
+
+@router.post(
+    "/me/access-codes/activate",
+    response_model=AccessCodeClaimed,
+    status_code=201,
+    summary="Добавить ребёнка по коду от врача",
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def activate_access_code_for_me(
+    payload: AccessCodeClaim,
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> AccessCodeClaimed:
+    """Один экран на два случая: второй ребёнок на терапии и второй родитель,
+    у которого учётная запись уже есть (ADR-0040).
+
+    Живёт в `/users/me`, а не в карте ребёнка: ребёнка ещё нет в кабинете, и
+    `patient_id` для `require_patient_access` взять неоткуда — его приносит сам
+    код.
+    """
+
+    if user.role is not UserRole.PARENT:
+        # Специалист получает доступ к ребёнку через ведение, а не через код
+        # семьи: иначе код становился бы способом «взять» чужого пациента.
+        raise ApiError(ErrorCode.FORBIDDEN, "Код доступа активирует семья.")
+    if user.channel != "web":
+        raise ApiError(ErrorCode.FORBIDDEN, "Добавить ребёнка можно только в веб-кабинете.")
+
+    patient = await access_codes_service.activate_for_user(
+        session, code=payload.code, parent=user, ip=client_address(request)
+    )
+    return AccessCodeClaimed(patient_id=patient.id, patient_name=patient.full_name)
 
 
 @router.get("/me", response_model=UserRead, summary="Свой профиль")

@@ -124,13 +124,19 @@ describe("кто ведёт ребёнка дома", () => {
    * ADR-0032): приглашение из списка пациентов зовёт первого родителя, и
    * позванный так второй заводил двойника.
    */
-  it("врач приглашает второго родителя к этому ребёнку", async () => {
+  it("врач выдаёт семье код доступа прямо из карты", async () => {
+    // Прежде здесь стояло приглашение по почте: врач набирал чужой адрес при
+    // семье, а второй родитель, позванный из списка пациентов, заводил
+    // двойника карты (ADR-0040).
     const user = userEvent.setup();
-    (api.GET as Mock).mockResolvedValue({
-      data: [
-        { id: "p1", full_name: "Мать", phone: null, email: "m@example.com" },
-      ],
-      error: undefined,
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith("/access-codes")) return { data: [], error: undefined };
+      return {
+        data: [
+          { id: "p1", full_name: "Мать", phone: null, email: "m@example.com" },
+        ],
+        error: undefined,
+      };
     });
     (api.POST as Mock).mockImplementation(async (path: string) => {
       if (path === "/api/v1/auth/refresh") {
@@ -138,12 +144,10 @@ describe("кто ведёт ребёнка дома", () => {
       }
       return {
         data: {
-          id: "inv1",
-          email: "dad@example.com",
-          role: "parent",
-          token: "secret-token",
-          expires_at: "2026-09-18T10:00:00Z",
-          patient_id: PATIENT_ID,
+          code: "TRWX4K92",
+          expires_at: "2026-09-22T10:00:00Z",
+          deep_link: "https://t.me/ketocare_bot?start=TRWX4K92",
+          join_url: "https://app.example.org/join?code=TRWX4K92",
         },
         error: undefined,
       };
@@ -152,26 +156,18 @@ describe("кто ведёт ребёнка дома", () => {
     render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
 
     await user.click(
-      await screen.findByRole("button", {
-        name: "Пригласить родителя",
-      }),
-    );
-    await user.type(
-      await screen.findByLabelText("Электронная почта"),
-      "dad@example.com",
+      await screen.findByRole("button", { name: "Дать доступ семье" }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Создать приглашение" }),
+      await screen.findByRole("button", { name: /Дать доступ семье/ }),
     );
 
-    expect(api.POST).toHaveBeenCalledWith("/api/v1/auth/invitations", {
-      body: {
-        email: "dad@example.com",
-        role: "parent",
-        patient_id: PATIENT_ID,
-      },
-    });
-    expect(await screen.findByText(/secret-token/)).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/access-codes",
+      { params: { path: { patient_id: PATIENT_ID } } },
+    );
+    // Код показывается крупно и целиком: врач поворачивает экран к родителю.
+    expect(await screen.findByText("TRWX4K92")).toBeInTheDocument();
   });
 
   it("семье приглашать некого — кнопки нет", async () => {
@@ -187,7 +183,7 @@ describe("кто ведёт ребёнка дома", () => {
 
     expect(await screen.findByText("Мать")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Пригласить родителя" }),
+      screen.queryByRole("button", { name: "Дать доступ семье" }),
     ).not.toBeInTheDocument();
   });
 });

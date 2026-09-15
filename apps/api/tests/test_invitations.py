@@ -236,7 +236,7 @@ class TestInvitationList:
     приглашал эту семью?» оставался без ответа.
     """
 
-    async def _invite(self, client, inviter, auth_headers, email: str, role: str = "parent"):
+    async def _invite(self, client, inviter, auth_headers, email: str, role: str = "doctor"):
         response = await client.post(
             "/api/v1/auth/invitations",
             json={"email": email, "role": role},
@@ -245,14 +245,33 @@ class TestInvitationList:
         assert response.status_code == 201, response.text
         return response.json()
 
-    async def test_doctor_sees_only_own_invitations(self, client, session, make_user, auth_headers):
-        """Список адресов чужих семей — сведения о пациентах другого специалиста."""
+    async def test_specialist_sees_only_own_invitations(
+        self, client, session, make_user, auth_headers
+    ):
+        """Чужие приглашения не показываются даже списком.
+
+        Новых приглашений специалист больше не создаёт — семье выдаётся код
+        (ADR-0040), а персонал зовёт администратор. Но выданные до перехода
+        строки остаются, и правило видимости к ним применяется прежнее, поэтому
+        они и заводятся здесь репозиторием, а не через закрытую ручку.
+        """
 
         mine = await make_user(UserRole.DOCTOR)
         other = await make_user(UserRole.DOCTOR)
-
-        await self._invite(client, mine, auth_headers, "my.family@example.com")
-        await self._invite(client, other, auth_headers, "other.family@example.com")
+        await invitations_repo.create(
+            session,
+            email="my.family@example.com",
+            role=UserRole.PARENT,
+            token=invitations_repo.generate_token(),
+            created_by=mine.id,
+        )
+        await invitations_repo.create(
+            session,
+            email="other.family@example.com",
+            role=UserRole.PARENT,
+            token=invitations_repo.generate_token(),
+            created_by=other.id,
+        )
 
         response = await client.get("/api/v1/auth/invitations", headers=auth_headers(mine))
 
@@ -262,17 +281,16 @@ class TestInvitationList:
 
     async def test_admin_sees_all_and_who_invited(self, client, session, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)
-        doctor = await make_user(UserRole.DOCTOR)
-        await self._invite(client, doctor, auth_headers, "family@example.com")
+        inviter = await make_user(UserRole.ADMIN)
+        await self._invite(client, inviter, auth_headers, "staff@example.com")
 
         response = await client.get("/api/v1/auth/invitations", headers=auth_headers(admin))
 
         items = response.json()["items"]
-        assert any(item["email"] == "family@example.com" for item in items)
-        # «Кто-то» администратора не устраивает: приглашение семьи делает автора
-        # её ведущим специалистом.
-        invited = next(i for i in items if i["email"] == "family@example.com")
-        assert invited["invited_by_name"] == doctor.full_name
+        assert any(item["email"] == "staff@example.com" for item in items)
+        # «Кто-то» администратора не устраивает: за приглашением стоит человек.
+        invited = next(i for i in items if i["email"] == "staff@example.com")
+        assert invited["invited_by_name"] == inviter.full_name
 
     async def test_token_is_never_listed(self, client, session, make_user, auth_headers):
         """Иначе список сам становится способом войти чужой учётной записью."""
@@ -378,14 +396,19 @@ class TestRevokeInvitation:
 
         mine = await make_user(UserRole.DOCTOR)
         other = await make_user(UserRole.DOCTOR)
-        created = await client.post(
-            "/api/v1/auth/invitations",
-            json={"email": "not.yours@example.com", "role": "parent"},
-            headers=auth_headers(other),
+        # Заводится репозиторием: новых приглашений специалист больше не
+        # создаёт (ADR-0040), а правило «чужое недоступно» относится к строкам,
+        # выданным до перехода, и остаётся в силе.
+        created = await invitations_repo.create(
+            session,
+            email="not.yours@example.com",
+            role=UserRole.PARENT,
+            token=invitations_repo.generate_token(),
+            created_by=other.id,
         )
 
         response = await client.post(
-            f"/api/v1/auth/invitations/{created.json()['id']}/revoke",
+            f"/api/v1/auth/invitations/{created.id}/revoke",
             headers=auth_headers(mine),
         )
         assert response.status_code == 404

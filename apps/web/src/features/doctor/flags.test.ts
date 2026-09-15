@@ -36,6 +36,7 @@ function overview(patch: Partial<PatientOverview> = {}): PatientOverview {
     seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
     last_reading_on: null,
     monitoring_phase: "routine",
+    family_activated: false,
     ...patch,
   };
 }

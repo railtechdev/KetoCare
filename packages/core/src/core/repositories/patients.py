@@ -182,6 +182,28 @@ async def list_parent_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> li
     return list(await session.scalars(stmt))
 
 
+async def activated_ids(
+    session: AsyncSession, *, patient_ids: Sequence[uuid.UUID]
+) -> set[uuid.UUID]:
+    """Из переданных — те, у кого доступ семьи уже активирован (ADR-0040).
+
+    Одним запросом на весь список, а не по ребёнку: главная врача и так стоит
+    `1 + N` обращений за сводками, и добавлять к ним ещё N запросов о родителях
+    незачем.
+
+    «Активирован» — есть хотя бы одна связь `parent_patient`. Карта без семьи
+    это штатное состояние (врач завёл её на приёме), и список показывает
+    пометку «доступ не активирован» вместо тревоги «семья молчит».
+    """
+
+    if not patient_ids:
+        return set()
+
+    stmt = select(ParentPatient.patient_id).where(ParentPatient.patient_id.in_(patient_ids))
+    result = await session.execute(stmt)
+    return set(result.scalars().all())
+
+
 async def list_for_ids(
     session: AsyncSession,
     *,

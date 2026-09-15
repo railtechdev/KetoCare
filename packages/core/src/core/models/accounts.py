@@ -294,3 +294,39 @@ class LinkCode(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
     used_at: Mapped[datetime | None]
+
+
+class AccessCode(Base, CreatedAtMixin):
+    """Код доступа семьи к ребёнку (ADR-0040).
+
+    PK — сам код, как у `link_codes`: код и есть ключ, второго идентификатора у
+    него нет. Один вид кода на все случаи — первый родитель, второй родитель,
+    ещё один чат: два вида кодов семья и бот различать не должны.
+
+    Хранится **в открытом виде**, в отличие от токена приглашения, который лежит
+    хэшем. Это не небрежность, а разница назначения: приглашение — длинная
+    ссылка, которую показывают один раз, код — восемь знаков, которые диктуют
+    вслух и переписывают с экрана врача. Показать его повторно обязано и само
+    приложение: карта показывает журнал кодов, пока они действуют. Защищают его
+    срок и отзыв, а не хранение.
+    """
+
+    __tablename__ = "access_codes"
+
+    code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False, index=True
+    )
+    #: Кто выдал: специалист (этап А плана) или родитель себе (этап Б).
+    #: От роли выдавшего зависит срок жизни — см. `access_codes.create`.
+    issued_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+    used_at: Mapped[datetime | None]
+    #: Учётная запись, которую код привязал или создал. Нужна журналу карты:
+    #: «кто именно получил доступ», а не только «код погашен».
+    used_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    #: Отозван из карты. Отдельно от `used_at`: «передумали» и «воспользовались»
+    #: — разные события, и в журнале они выглядят по-разному.
+    revoked_at: Mapped[datetime | None]
