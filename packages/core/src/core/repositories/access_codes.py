@@ -162,6 +162,34 @@ async def revoke(session: AsyncSession, *, code: str, patient_id: uuid.UUID) -> 
     return revoked
 
 
+async def revoke_pending_of(
+    session: AsyncSession, *, patient_id: uuid.UUID, issued_by: uuid.UUID
+) -> int:
+    """Гасит непогашенные коды, выданные этим человеком этому ребёнку.
+
+    Нужна там, где специалиста снимают с пациента: активация такого кода и так
+    отказывает (выдавший больше не ведёт ребёнка), но в журнале карты он
+    оставался «Действует» — и новый ведущий врач не выдавал свой, видя живой
+    чужой код. Гасим сразу, чтобы журнал говорил правду без дополнительных
+    запросов.
+    """
+
+    now = datetime.now(UTC)
+    stmt = (
+        update(AccessCode)
+        .where(
+            AccessCode.patient_id == patient_id,
+            AccessCode.issued_by == issued_by,
+            AccessCode.used_at.is_(None),
+            AccessCode.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+        .returning(AccessCode.code)
+    )
+    result = await session.execute(stmt)
+    return len(result.scalars().all())
+
+
 async def get(session: AsyncSession, code: str) -> AccessCode | None:
     return await session.get(AccessCode, code.strip().upper())
 

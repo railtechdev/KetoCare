@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from core import exclusions
 from core.models import Patient
 from core.models.enums import UserRole
+from core.repositories import access_codes as access_codes_repo
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
@@ -342,6 +343,15 @@ async def remove_patient_doctor(
         )
 
     await patients_repo.unlink_doctor(session, doctor_id=doctor_id, patient_id=patient_id)
+
+    # Коды доступа, выданные этим специалистом этому ребёнку, гаснут вместе с
+    # ведением: активировать их всё равно нельзя (ADR-0040 — код действует,
+    # пока выдавший ведёт ребёнка), но живыми в журнале они вводили в
+    # заблуждение нового ведущего врача.
+    revoked = await access_codes_repo.revoke_pending_of(
+        session, patient_id=patient_id, issued_by=doctor_id
+    )
+
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,
@@ -349,6 +359,7 @@ async def remove_patient_doctor(
         entity="doctor_patient",
         entity_id=patient_id,
         before={"doctor_id": str(doctor_id)},
+        after={"access_codes_revoked": revoked},
         ip=client_address(request),
     )
     return Response(status_code=204)

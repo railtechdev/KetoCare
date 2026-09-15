@@ -112,12 +112,17 @@ class TestIssuing:
 
         await client.post(codes_url(patient.id), headers=auth_headers(doctor))
 
+        # Фильтр по ребёнку обязателен: база живёт дольше теста, и запись от
+        # соседнего прогона (или от ручной проверки на стенде) выдавала бы себя
+        # за проверяемую.
         entry = await session.scalar(
-            select(AuditLog).where(AuditLog.action == "access_code_issued")
+            select(AuditLog).where(
+                AuditLog.action == "access_code_issued",
+                AuditLog.entity_id == patient.id,
+            )
         )
         assert entry is not None
         assert entry.user_id == doctor.id
-        assert entry.entity_id == patient.id
 
 
 class TestJournalAndRevoke:
@@ -673,10 +678,12 @@ class TestAuditTrail:
         await client.post(f"{codes_url(patient.id)}/{code}/revoke", headers=auth_headers(doctor))
 
         entry = await session.scalar(
-            select(AuditLog).where(AuditLog.action == "access_code_revoked")
+            select(AuditLog).where(
+                AuditLog.action == "access_code_revoked",
+                AuditLog.entity_id == patient.id,
+            )
         )
         assert entry is not None
-        assert entry.entity_id == patient.id
 
     async def test_activation_writes_account_and_link(
         self, client, session, make_user, make_patient, auth_headers
@@ -699,15 +706,144 @@ class TestAuditTrail:
             },
         )
 
-        accepted = await session.scalar(
-            select(AuditLog).where(AuditLog.action == "accept_access_code")
-        )
         linked = await session.scalar(
             select(AuditLog).where(
-                AuditLog.action == "link_parent", AuditLog.entity == "parent_patient"
+                AuditLog.action == "link_parent",
+                AuditLog.entity == "parent_patient",
+                AuditLog.entity_id == patient.id,
             )
         )
-        assert accepted is not None and linked is not None
-        assert linked.entity_id == patient.id
+        assert linked is not None
+        accepted = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "accept_access_code",
+                AuditLog.user_id == linked.user_id,
+            )
+        )
+        assert accepted is not None
         # Сам код в видимой администратору нагрузке не лежит.
         assert "code" not in (accepted.after or {})
+
+
+class TestCodeSurvivesRefusals:
+    """Отказ не должен стоить семье её единственного кода.
+
+    Проверяется исходом, а не механизмом: после отказа код обязан СРАБОТАТЬ. До
+    этого тесты смотрели на строку в базе и доказывали не то, что думали —
+    возврат кода в бою делает откат транзакции, а в тестовой фикстуре сессия
+    подменена и откатов нет (#240).
+    """
+
+    async def test_taken_email_leaves_the_code_usable(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+        occupied = await make_user(UserRole.PARENT)
+        patient = await make_patient()
+        await _lead(session, doctor, patient)
+        code = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()[
+            "code"
+        ]
+
+        refused = await client.post(
+            ACTIVATE_URL,
+            json={
+                "code": code,
+                "email": occupied.email,
+                "full_name": "Мама",
+                "password": NEW_PASSWORD,
+            },
+        )
+        assert refused.status_code == 409, refused.text
+
+        # Тем же кодом, другой почтой — и всё получается.
+        accepted = await client.post(
+            ACTIVATE_URL,
+            json={
+                "code": code,
+                "email": "mama@example.com",
+                "full_name": "Мама",
+                "password": NEW_PASSWORD,
+            },
+        )
+
+        assert accepted.status_code == 201, accepted.text
+
+    async def test_busy_email_does_not_touch_the_code(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Занятая почта отклоняется ДО погашения: код даже не трогается."""
+        doctor = await make_user(UserRole.DOCTOR)
+        occupied = await make_user(UserRole.PARENT)
+        patient = await make_patient()
+        await _lead(session, doctor, patient)
+        code = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()[
+            "code"
+        ]
+
+        await client.post(
+            ACTIVATE_URL,
+            json={
+                "code": code,
+                "email": occupied.email,
+                "full_name": "Мама",
+                "password": NEW_PASSWORD,
+            },
+        )
+
+        stored = await codes_repo.get(session, code)
+        assert stored is not None
+        assert stored.used_at is None and stored.used_by is None
+
+
+class TestUnlinkingRevokesCodes:
+    """Снятие специалиста с пациента гасит его коды (#242).
+
+    Активировать их и так было нельзя — код действует, пока выдавший ведёт
+    ребёнка, — но в журнале они оставались «Действует», и новый ведущий врач не
+    выдавал свой, видя живой чужой код.
+    """
+
+    async def test_codes_of_the_removed_doctor_are_revoked(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        first = await make_user(UserRole.DOCTOR)
+        second = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await _lead(session, first, patient)
+        await _lead(session, second, patient)
+        code = (await client.post(codes_url(patient.id), headers=auth_headers(first))).json()[
+            "code"
+        ]
+
+        removal = await client.delete(
+            f"/api/v1/patients/{patient.id}/doctors/{first.id}",
+            headers=auth_headers(second),
+        )
+        assert removal.status_code == 204, removal.text
+
+        journal = await client.get(codes_url(patient.id), headers=auth_headers(second))
+        row = next(r for r in journal.json() if r["code"] == code)
+        assert row["status"] == "revoked", "журнал обязан говорить правду"
+
+    async def test_codes_of_the_remaining_doctor_survive(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Гасятся коды снятого, а не все подряд."""
+        first = await make_user(UserRole.DOCTOR)
+        second = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await _lead(session, first, patient)
+        await _lead(session, second, patient)
+        mine = (await client.post(codes_url(patient.id), headers=auth_headers(second))).json()[
+            "code"
+        ]
+
+        await client.delete(
+            f"/api/v1/patients/{patient.id}/doctors/{first.id}",
+            headers=auth_headers(second),
+        )
+
+        journal = await client.get(codes_url(patient.id), headers=auth_headers(second))
+        row = next(r for r in journal.json() if r["code"] == mine)
+        assert row["status"] == "pending"

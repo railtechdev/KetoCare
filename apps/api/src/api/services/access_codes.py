@@ -189,6 +189,13 @@ async def _require_live_issuer(session: AsyncSession, code: AccessCode) -> None:
     # Код возвращается в обращение: семья не виновата в том, что специалиста
     # сняли с пациента, и сжигать её единственный код из-за чужого действия
     # нельзя — врачу пришлось бы выдавать новый.
+    #
+    # В бою то же самое делает откат транзакции (`get_session` откатывает её на
+    # любом `ApiError`), и на него одного полагаться не стоит: он вернёт код,
+    # пока отказ — последнее, что происходит в запросе. Появится между
+    # погашением и отказом любая запись, которую нужно сохранить, — и откат
+    # заберёт с собой уже не только код. Возврат здесь говорит о намерении
+    # прямо, а не полагается на порядок строк (#240).
     await codes_repo.release(session, code=code.code)
     raise ApiError(
         ErrorCode.CONFLICT,
@@ -250,17 +257,17 @@ async def activate_new_account(
 ) -> tuple[User, Patient]:
     """Активация незнакомым системе человеком: заводится учётная запись родителя."""
 
-    claimed = await _claim_or_refuse(session, code)
-    await _require_live_issuer(session, claimed)
-
+    # Почта проверяется ДО погашения: иначе каждая проверка гасила код и
+    # возвращала его обратно, а «обратно» держалось на откате транзакции, а не
+    # на самом возврате (#240). Здесь код ещё не тронут, и объяснять нечего.
     if await users_repo.get_by_email(session, email) is not None:
-        # Код возвращается: человек просто уже зарегистрирован, и его путь —
-        # войти и добавить ребёнка по этому же коду.
-        await codes_repo.release(session, code=claimed.code)
         raise ApiError(
             ErrorCode.CONFLICT,
             "Эта почта уже занята. Войдите и добавьте ребёнка по коду в настройках.",
         )
+
+    claimed = await _claim_or_refuse(session, code)
+    await _require_live_issuer(session, claimed)
 
     parent = await users_repo.create(
         session,
