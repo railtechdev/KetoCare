@@ -24,7 +24,7 @@ const PATIENT: Patient = {
   excluded_products: [],
   allergy_labels: [],
   notes: null,
-  family_activated: false,
+  family_activated: true,
 };
 
 function renderNav({
