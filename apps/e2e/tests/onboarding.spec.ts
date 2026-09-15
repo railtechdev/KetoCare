@@ -48,9 +48,7 @@ test("врач заводит карту и выдаёт код, семья вх
     .last()
     .click();
 
-  const code = (
-    await doctor.locator("output").first().innerText()
-  ).trim();
+  const code = (await doctor.locator("output").first().innerText()).trim();
   expect(code).toHaveLength(8);
 
   // --- 3. семья активирует код в вебе -------------------------------------
@@ -63,9 +61,7 @@ test("врач заводит карту и выдаёт код, семья вх
   await family.getByLabel("Имя и фамилия").fill("Родитель Прогонный");
   await family.getByLabel("Пароль", { exact: true }).fill(PARENT_PASSWORD);
   await family.getByLabel("Пароль ещё раз").fill(PARENT_PASSWORD);
-  await family
-    .getByRole("button", { name: "Создать учётную запись" })
-    .click();
+  await family.getByRole("button", { name: "Создать учётную запись" }).click();
 
   await expect(
     family.getByRole("button", { name: "Перейти ко входу" }),
