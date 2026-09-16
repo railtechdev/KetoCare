@@ -247,6 +247,29 @@ async def _attach_parent(
     return patient
 
 
+async def _require_web_code(session: AsyncSession, code: AccessCode) -> None:
+    """Код родителя в вебе не действует — он подключает Telegram (ADR-0040).
+
+    Родитель выпускает его себе на пятнадцать минут, чтобы подключить ещё один
+    чат. Если бы этим кодом можно было завести учётную запись на `/join`, семья
+    получила бы право раздавать постоянный доступ к карте ребёнка — а по
+    решению 3 ADR-0040 доступ выдаёт специалист. Незаметное расширение прав
+    хуже явного отказа.
+    """
+
+    issuer = await users_repo.get(session, code.issued_by)
+    if issuer is None or issuer.role is not UserRole.PARENT:
+        return
+
+    # Код возвращается в обращение: он предназначался боту и ещё пригодится.
+    await codes_repo.release(session, code=code.code)
+    raise ApiError(
+        ErrorCode.CONFLICT,
+        "Этот код подключает Telegram и в кабинете не действует. "
+        "Чтобы открыть кабинет ещё одному взрослому, попросите код у врача.",
+    )
+
+
 async def activate_new_account(
     session: AsyncSession,
     *,
@@ -269,6 +292,7 @@ async def activate_new_account(
         )
 
     claimed = await _claim_or_refuse(session, code)
+    await _require_web_code(session, claimed)
     await _require_live_issuer(session, claimed)
 
     parent = await users_repo.create(
@@ -306,6 +330,7 @@ async def activate_for_user(
     """Активация тем, кто уже вошёл: второй ребёнок или второй родитель с учёткой."""
 
     claimed = await _claim_or_refuse(session, code)
+    await _require_web_code(session, claimed)
     await _require_live_issuer(session, claimed)
 
     already = await access_repo.user_has_patient_access(
@@ -411,9 +436,9 @@ async def _parent_behind_telegram(
     1. **Этот Telegram уже знаком.** Человек привязывает ещё один чат или ещё
        одного ребёнка. Учётная запись та же.
     2. **Код выпустил себе сам родитель** (замена коду привязки: «подключить
-       ещё один чат»), а его Telegram системе ещё не знаком. Это он и есть —
-       код живёт четверть часа и вводится в соседнем окне. Заводить ему вторую
-       учётную запись значило бы разложить одну семью по двум кабинетам.
+       ещё один чат»). Чат привязывается к его учётной записи — как это делал
+       код привязки, — но удостоверением она от этого не обзаводится: см.
+       комментарий в самой ветке.
     3. **Код выпустил специалист**, и Telegram незнаком: пришёл кто-то новый —
        первый родитель, второй взрослый. Учётная запись рождается здесь.
     """
@@ -429,24 +454,35 @@ async def _parent_behind_telegram(
 
     issuer = await users_repo.get(session, code.issued_by)
     if issuer is not None and issuer.role is UserRole.PARENT:
-        if issuer.telegram_user_id is not None:
-            # У выпустившего код родителя Telegram уже другой: код попал к
-            # другому человеку. Пятнадцатиминутный код на «свой второй чат» —
-            # не способ выдать доступ третьему лицу; для этого есть код врача.
-            raise ApiError(ErrorCode.CONFLICT, _CODE_INVALID)
-        issuer.telegram_user_id = telegram_user_id
-        await session.flush()
+        # `telegram_user_id` здесь НЕ проставляется, хотя это и выглядело бы
+        # удобным. Код мог дойти не до того человека — родитель сам передал его
+        # второму взрослому, — и тогда чужой Telegram навсегда стал бы
+        # удостоверением этой учётной записи. Дальше он был бы «знакомым»
+        # (случай 1), и код врача на ДРУГОГО ребёнка привязал бы того ребёнка к
+        # учётной записи первого родителя, открыв ему чужую семью.
+        #
+        # Цена отказа: родитель с кабинетом, активировавший позже код врача на
+        # второго ребёнка прямо в боте, получит вторую учётную запись. Это видно
+        # врачу (в карте два родителя) и поправимо, а тихий доступ к чужим
+        # клиническим данным — нет. Второго ребёнка такой родитель добавляет в
+        # кабинете (`POST /users/me/access-codes/activate`).
         return issuer
 
-    parent = await users_repo.create(
-        session,
-        role=UserRole.PARENT,
-        full_name=" ".join(part for part in (first_name, last_name) if part),
-        telegram_user_id=telegram_user_id,
-        # Ни почты, ни пароля: их у человека нет, и выдумывать их за него значит
-        # завести учётную запись, вход в которую он не проходил.
-        invited_by=code.issued_by,
-    )
+    try:
+        parent = await users_repo.create(
+            session,
+            role=UserRole.PARENT,
+            full_name=" ".join(part for part in (first_name, last_name) if part),
+            telegram_user_id=telegram_user_id,
+            # Ни почты, ни пароля: их у человека нет, и выдумывать их за него
+            # значит завести учётную запись, вход в которую он не проходил.
+            invited_by=code.issued_by,
+        )
+    except IntegrityError as exc:
+        # Два `/start` с разными кодами из одного нового Telegram: проверка выше
+        # и вставка здесь — не одна операция. Частичный уникальный индекс их
+        # разведёт, но без перехвата второй получил бы 500.
+        raise ApiError(ErrorCode.CONFLICT, _CHAT_TAKEN) from exc
     await audit_repo.write_audit_log(
         session,
         user_id=parent.id,

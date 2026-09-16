@@ -1,4 +1,4 @@
-import { Button, Section, toast } from "@ketocare/ui";
+import { Button, Input, Section, toast } from "@ketocare/ui";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,11 +53,11 @@ export function WebAccessPanel({ session }: { session: Session }) {
       >
         <label className="flex flex-col gap-1">
           <span>{t("webAccess.email")}</span>
-          <input
+          <Input
             type="email"
             required
             autoComplete="email"
-            className="min-h-touch rounded-xl border border-border bg-card px-3"
+            className="min-h-touch"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
@@ -65,12 +65,12 @@ export function WebAccessPanel({ session }: { session: Session }) {
 
         <label className="flex flex-col gap-1">
           <span>{t("webAccess.password")}</span>
-          <input
+          <Input
             type="password"
             required
             minLength={12}
             autoComplete="new-password"
-            className="min-h-touch rounded-xl border border-border bg-card px-3"
+            className="min-h-touch"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />

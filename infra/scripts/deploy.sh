@@ -153,7 +153,12 @@ check_headers() {
     }
     for expected in "$@"; do
         if ! printf '%s' "$headers" | grep -qi "$expected"; then
-            echo "У $url нет заголовка «$expected» — см. docs/DEPLOY.md, «nginx и TLS»."
+            # Скобки обязательны: следом идёт «»», и bash 3.2 (штатный на macOS)
+            # не разбирает многобайтные знаки при выделении имени переменной —
+            # он читает `expected` вместе с первым байтом кавычки и падает под
+            # `set -u` на «unbound variable». На сервере bash 5, поэтому дефект
+            # виден только прогоном на своей машине.
+            echo "У $url нет заголовка «${expected}» — см. docs/DEPLOY.md, «nginx и TLS»."
         fi
     done
 }

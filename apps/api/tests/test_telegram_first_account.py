@@ -14,8 +14,9 @@ import pytest
 from sqlalchemy import select
 
 from core.config import get_settings
-from core.models import User
+from core.models import AccessCode, TelegramAccount, User
 from core.models.enums import UserRole
+from core.repositories import access as access_repo
 from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
 
@@ -129,13 +130,17 @@ class TestBornInTelegram:
         )
         assert response.status_code == 201, response.text
 
+        # Вторая учётная запись не заведена — чат привязан к выпустившему.
+        assert (await session.scalar(select(User).where(User.telegram_user_id == CHAT_ID))) is None
+        link = await session.scalar(
+            select(TelegramAccount).where(TelegramAccount.chat_id == CHAT_ID)
+        )
+        assert link is not None and link.parent_id == parent.id
+
+        # А удостоверением учётная запись не обзавелась: код мог дойти не до
+        # того человека, и чужой Telegram стал бы её постоянным ключом.
         await session.refresh(parent)
-        assert parent.telegram_user_id == CHAT_ID
-        assert (
-            await session.scalar(
-                select(User).where(User.telegram_user_id == CHAT_ID, User.id != parent.id)
-            )
-        ) is None
+        assert parent.telegram_user_id is None
 
 
 @pytest.mark.asyncio
@@ -301,3 +306,121 @@ class TestAdminSeesTheLimit:
         ]
         assert listed, "учётная запись без почты обязана быть видна"
         assert listed[0]["email"] is None
+
+
+@pytest.mark.asyncio
+class TestParentCodeStaysInTelegram:
+    """Код, выпущенный родителем, — это подключение чата, а не выдача доступа.
+
+    До этапа Б родитель не мог открыть карту ребёнка никому: у него был только
+    код привязки Telegram. Общий код доступа сделал бы это молча — семья начала
+    бы раздавать постоянные кабинеты. Решение 3 ADR-0040 оставляет выдачу
+    доступа специалисту, и это должно исполняться сервером, а не текстом на
+    экране.
+    """
+
+    async def _parent_code(self, client, session, make_user, make_patient, auth_headers):
+        parent = await make_user(UserRole.PARENT)
+        patient = await make_patient("Амина")
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        code = (
+            await client.post(
+                f"/api/v1/patients/{patient.id}/access-codes", headers=auth_headers(parent)
+            )
+        ).json()["code"]
+        return parent, patient, code
+
+    async def test_join_refuses_a_parent_code(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, code = await self._parent_code(client, session, make_user, make_patient, auth_headers)
+
+        response = await client.post(
+            "/api/v1/auth/access-codes/activate",
+            json={
+                "code": code,
+                "email": "stranger@example.com",
+                "full_name": "Посторонний Взрослый",
+                "password": "очень-длинный-пароль",
+            },
+        )
+        assert response.status_code == 409, response.text
+        assert "у врача" in response.json()["error"]["message"]
+
+        # Код не сгорел: он предназначался боту и ещё пригодится.
+        stored = await session.get(AccessCode, code)
+        assert stored is not None and stored.used_at is None
+
+    async def test_cabinet_refuses_a_parent_code(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, code = await self._parent_code(client, session, make_user, make_patient, auth_headers)
+        neighbour = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/users/me/access-codes/activate",
+            headers=auth_headers(neighbour),
+            json={"code": code},
+        )
+        assert response.status_code == 409
+
+    async def test_someone_elses_telegram_does_not_become_the_issuer_identity(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Главное последствие, ради которого удостоверение не проставляется.
+
+        Родитель передал свой код второму взрослому. Тот вводит его в боте —
+        чат привязывается к учётной записи родителя (так же работал код
+        привязки), но `telegram_user_id` у неё НЕ появляется. Иначе этот чужой
+        Telegram стал бы «знакомым», и код врача на другого ребёнка привязал бы
+        того ребёнка к учётной записи первого родителя — то есть открыл бы ему
+        чужую семью.
+        """
+
+        parent, _, code = await self._parent_code(
+            client, session, make_user, make_patient, auth_headers
+        )
+        stranger_telegram = CHAT_ID + 77
+
+        activated = await client.post(
+            "/api/v1/auth/access-codes/activate-telegram",
+            headers=bot_headers(),
+            json={
+                "code": code,
+                "chat_id": stranger_telegram,
+                "telegram_user_id": stranger_telegram,
+                "first_name": "Бабушка",
+            },
+        )
+        assert activated.status_code == 201, activated.text
+
+        await session.refresh(parent)
+        assert parent.telegram_user_id is None
+
+        # И проверка того самого последствия: код врача на ЧУЖОГО ребёнка из
+        # этого Telegram заводит новую учётную запись, а не открывает карту
+        # первому родителю.
+        doctor = await make_user(UserRole.DOCTOR)
+        other = await make_patient("Чужой ребёнок")
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=other.id)
+        doctor_code = (
+            await client.post(
+                f"/api/v1/patients/{other.id}/access-codes", headers=auth_headers(doctor)
+            )
+        ).json()["code"]
+
+        second = await client.post(
+            "/api/v1/auth/access-codes/activate-telegram",
+            headers=bot_headers(),
+            json={
+                "code": doctor_code,
+                "chat_id": stranger_telegram + 1,
+                "telegram_user_id": stranger_telegram,
+                "first_name": "Бабушка",
+            },
+        )
+        assert second.status_code == 201, second.text
+
+        assert not await access_repo.user_has_patient_access(
+            session, user_id=parent.id, role=UserRole.PARENT, patient_id=other.id
+        ), "чужой ребёнок не должен появиться в кабинете первого родителя"

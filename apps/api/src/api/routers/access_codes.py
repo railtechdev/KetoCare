@@ -46,7 +46,10 @@ def _require_issuer(user: PatientAccessDep) -> None:
     """
 
     if user.role not in ISSUER_ROLES:
-        raise ApiError(ErrorCode.FORBIDDEN, "Код доступа выдаёт лечащий врач или диетолог.")
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Код доступа выдаёт лечащий врач, диетолог или родитель ребёнка.",
+        )
     if user.channel != "web":
         # Сессии бота и Mini App сужены до одного ребёнка и живут 15 минут;
         # выпуск через них означал бы, что временный доступ к чату умеет
