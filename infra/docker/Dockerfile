@@ -31,6 +31,10 @@ COPY apps/bot apps/bot
 COPY apps/worker apps/worker
 # Сиды демо-данных запускаются внутри контейнера api (docs/DEPLOY.md).
 COPY infra/scripts infra/scripts
+# Статьи помощника: индекс поиска производен от них и пересобирается при
+# выкате (`deploy.sh`). Остальной `docs/` в образ не идёт — он большой и
+# приложению не нужен, а эти пять файлов и есть то, чем помощник отвечает.
+COPY docs/knowledge-base docs/knowledge-base
 RUN uv sync --frozen --no-dev --all-packages
 
 # Каталоги томов создаются в образе и отдаются `app` заранее.
