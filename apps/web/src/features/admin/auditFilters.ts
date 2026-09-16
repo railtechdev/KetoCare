@@ -45,7 +45,6 @@ export const AUDIT_ENTITIES = [
   "doctor_summaries",
   "ai_conversations",
   "telegram_accounts",
-  "link_codes",
   "access_codes",
   "attachments",
   "leads",
@@ -89,7 +88,10 @@ export const AUDIT_ACTIONS = [
   "grant_patient_access",
   "revoke_patient_access",
   "link_parent",
-  "telegram_link_code_issued",
+  // Учётная запись родителя, родившаяся в боте: почты и пароля у неё нет
+  // (ADR-0040, этап Б), и `set_credentials` — момент, когда она их задаёт.
+  "create_user",
+  "set_credentials",
   "telegram_link",
   "telegram_unlink",
 ] as const;

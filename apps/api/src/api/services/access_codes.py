@@ -15,20 +15,23 @@ import uuid
 from datetime import UTC, datetime
 from typing import Protocol
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
-from core.models import AccessCode, Patient, User
+from core.models import AccessCode, Patient, TelegramAccount, User
 from core.models.enums import UserRole
 from core.repositories import access as access_repo
 from core.repositories import access_codes as codes_repo
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
+from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
 from ..errors import ApiError, ErrorCode
 from ..schemas_access import AccessCodeCreated, AccessCodeRead, AccessCodeStatus
 from ..security import hash_password_async
+from . import telegram as telegram_service
 
 
 class Actor(Protocol):
@@ -99,12 +102,11 @@ async def issue(
     return AccessCodeCreated(
         code=code.code,
         expires_at=code.expires_at,
-        # Ссылки в бота здесь НЕТ намеренно, хотя `build_deep_link` рядом:
-        # `/auth/link-codes/verify` гасит только `link_codes`, и код доступа
-        # семьи он не понимает — `/start <код>` ответил бы «код недействителен»
-        # на главном экране новой функции. Бот переводится на общий код этапом Б
-        # плана; до тех пор QR ведёт на веб-активацию, которая работает.
-        deep_link=None,
+        # Ссылка в бота — главный путь семьи с этапа Б: бот принимает этот же
+        # код (`/auth/access-codes/activate-telegram`). До этапа Б поле стояло
+        # пустым намеренно — бот понимал только коды привязки и ответил бы
+        # «код недействителен» на главном экране новой функции.
+        deep_link=telegram_service.build_deep_link(code.code),
         join_url=_join_url(code.code),
     )
 
@@ -317,3 +319,141 @@ async def activate_for_user(
         raise ApiError(ErrorCode.CONFLICT, "Этот ребёнок уже есть в вашем кабинете.")
 
     return await _attach_parent(session, code=claimed, parent=parent, ip=ip)
+
+
+#: Занятый чат отвечает одинаково и до погашения кода, и на гонке вставки.
+_CHAT_TAKEN = "Этот чат уже привязан. Сначала отвяжите его в кабинете."
+
+
+async def activate_from_telegram(
+    session: AsyncSession,
+    *,
+    code: str,
+    chat_id: int,
+    telegram_user_id: int,
+    first_name: str,
+    last_name: str | None,
+    ip: str | None,
+) -> tuple[Patient, TelegramAccount, str]:
+    """Активация кода прямо в боте (ADR-0040, этап Б).
+
+    Третий и главный путь: семья выходит от врача с кодом на руках и открывает
+    бота, не заводя ни почты, ни пароля. Учётную запись такого родителя
+    удостоверяет `telegram_user_id`, а веб он включает сам и потом
+    (`POST /users/me/credentials`).
+
+    Порядок шагов — тот же, что был у кода привязки: занятость чата
+    проверяется ДО погашения, иначе чужая привязка сжигала бы код семьи, и она
+    получала бы отказ, ничего не сделав неправильно.
+
+    Возвращает то же, из чего собирается `LinkVerified`: бот не должен
+    различать, каким кодом родитель пришёл.
+    """
+
+    existing = await telegram_repo.get_active_link_by_chat(session, chat_id)
+    if existing is not None:
+        raise ApiError(ErrorCode.CONFLICT, _CHAT_TAKEN)
+
+    claimed = await _claim_or_refuse(session, code)
+    await _require_live_issuer(session, claimed)
+
+    parent = await _parent_behind_telegram(
+        session,
+        code=claimed,
+        telegram_user_id=telegram_user_id,
+        first_name=first_name,
+        last_name=last_name,
+        ip=ip,
+    )
+
+    patient = await _attach_parent(session, code=claimed, parent=parent, ip=ip)
+
+    secret = telegram_repo.generate_binding_secret()
+    try:
+        link = await telegram_repo.create_link(
+            session,
+            parent_id=parent.id,
+            patient_id=patient.id,
+            chat_id=chat_id,
+            secret=secret,
+        )
+    except IntegrityError as exc:
+        # Проверка занятости и вставка — не одна операция: два запроса с разными
+        # кодами на один чат оба пройдут проверку. Частичный уникальный индекс их
+        # разведёт, но без перехвата второй получил бы 500 вместо объяснения.
+        raise ApiError(ErrorCode.CONFLICT, _CHAT_TAKEN) from exc
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=parent.id,
+        action="telegram_link",
+        entity="telegram_accounts",
+        entity_id=link.id,
+        ip=ip,
+        after={"chat_id": link.chat_id, "patient_id": str(link.patient_id)},
+    )
+    return patient, link, secret
+
+
+async def _parent_behind_telegram(
+    session: AsyncSession,
+    *,
+    code: AccessCode,
+    telegram_user_id: int,
+    first_name: str,
+    last_name: str | None,
+    ip: str | None,
+) -> User:
+    """Чья учётная запись стоит за этим Telegram — найденная, своя или новая.
+
+    Три случая, и путать их нельзя:
+
+    1. **Этот Telegram уже знаком.** Человек привязывает ещё один чат или ещё
+       одного ребёнка. Учётная запись та же.
+    2. **Код выпустил себе сам родитель** (замена коду привязки: «подключить
+       ещё один чат»), а его Telegram системе ещё не знаком. Это он и есть —
+       код живёт четверть часа и вводится в соседнем окне. Заводить ему вторую
+       учётную запись значило бы разложить одну семью по двум кабинетам.
+    3. **Код выпустил специалист**, и Telegram незнаком: пришёл кто-то новый —
+       первый родитель, второй взрослый. Учётная запись рождается здесь.
+    """
+
+    known = await users_repo.get_by_telegram_user_id(session, telegram_user_id)
+    if known is not None:
+        if known.role is not UserRole.PARENT:
+            # Колонка общая для всех ролей, и сотрудник, привязавший однажды свой
+            # Telegram, иначе получил бы ребёнка в родительские права — тихо и
+            # мимо всех проверок ролей.
+            raise ApiError(ErrorCode.CONFLICT, _CODE_INVALID)
+        return known
+
+    issuer = await users_repo.get(session, code.issued_by)
+    if issuer is not None and issuer.role is UserRole.PARENT:
+        if issuer.telegram_user_id is not None:
+            # У выпустившего код родителя Telegram уже другой: код попал к
+            # другому человеку. Пятнадцатиминутный код на «свой второй чат» —
+            # не способ выдать доступ третьему лицу; для этого есть код врача.
+            raise ApiError(ErrorCode.CONFLICT, _CODE_INVALID)
+        issuer.telegram_user_id = telegram_user_id
+        await session.flush()
+        return issuer
+
+    parent = await users_repo.create(
+        session,
+        role=UserRole.PARENT,
+        full_name=" ".join(part for part in (first_name, last_name) if part),
+        telegram_user_id=telegram_user_id,
+        # Ни почты, ни пароля: их у человека нет, и выдумывать их за него значит
+        # завести учётную запись, вход в которую он не проходил.
+        invited_by=code.issued_by,
+    )
+    await audit_repo.write_audit_log(
+        session,
+        user_id=parent.id,
+        action="create_user",
+        entity="users",
+        entity_id=parent.id,
+        ip=ip,
+        after={"role": parent.role.value, "source": "telegram"},
+    )
+    return parent

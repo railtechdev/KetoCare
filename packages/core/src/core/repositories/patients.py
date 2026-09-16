@@ -52,6 +52,23 @@ async def update(session: AsyncSession, *, patient: Patient, **fields: Any) -> P
 async def link_parent(
     session: AsyncSession, *, parent_id: uuid.UUID, patient_id: uuid.UUID
 ) -> ParentPatient:
+    """Идемпотентна, как и `link_doctor`: повтор возвращает существующую связь.
+
+    Повтор — обычное дело с ADR-0040: родитель выпускает себе код, чтобы
+    подключить второй чат, и приходит с ним к ребёнку, который у него уже есть.
+    Уникальный индекс по паре не даёт завести дубль, но падать на этом нечем:
+    «родитель уже ведёт ребёнка» — состояние, которого вызов и добивался.
+    """
+
+    existing = await session.scalar(
+        select(ParentPatient).where(
+            ParentPatient.parent_id == parent_id,
+            ParentPatient.patient_id == patient_id,
+        )
+    )
+    if existing is not None:
+        return existing
+
     link = ParentPatient(parent_id=parent_id, patient_id=patient_id)
     session.add(link)
     await session.flush()

@@ -73,7 +73,7 @@ describe("вход в Mini App", () => {
     renderGate();
 
     expect(await screen.findByText(/ещё не привязан/)).toBeInTheDocument();
-    expect(screen.getByText(/код привязки/)).toBeInTheDocument();
+    expect(screen.getByText(/Код доступа выдаёт врач/)).toBeInTheDocument();
   });
 
   it("вне Telegram объясняет, откуда приложение открывается", async () => {

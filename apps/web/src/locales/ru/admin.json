@@ -76,7 +76,6 @@
       "revoke": "Отзыв приглашения",
       "revoke_patient_access": "Открепление от пациента",
       "telegram_link": "Привязка Telegram",
-      "telegram_link_code_issued": "Выпуск кода привязки Telegram",
       "telegram_unlink": "Отвязка Telegram",
       "totp_enabled": "Второй фактор включён",
       "totp_reset": "Сброс второго фактора администратором",
@@ -85,7 +84,9 @@
       "update": "Изменение",
       "access_code_issued": "Выдан код доступа",
       "access_code_revoked": "Отозван код доступа",
-      "accept_access_code": "Активация кода доступа"
+      "accept_access_code": "Активация кода доступа",
+      "create_user": "Заведена учётная запись",
+      "set_credentials": "Задан вход в кабинет"
     },
     "entities": {
       "ai_conversations": "Переписки с помощником",
@@ -95,7 +96,6 @@
       "invitations": "Приглашения",
       "ketone_methods": "Методы измерения кетонов",
       "leads": "Заявки с сайта",
-      "link_codes": "Коды привязки",
       "medical_profiles": "Медицинские профили",
       "medications": "Лекарства",
       "parent_patient": "Родители пациентов",

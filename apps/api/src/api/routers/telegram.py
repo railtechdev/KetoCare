@@ -1,27 +1,26 @@
-"""Привязка Telegram-чата к ребёнку (раздел 7.1 ТЗ, [ADR-0009](../../../../../docs/adr/0009-telegram-bot-authentication.md)).
+"""Привязка Telegram-чата к ребёнку (раздел 7.1 ТЗ, [ADR-0009](../../../../../docs/adr/0009-telegram-bot-authentication.md), [ADR-0040](../../../../../docs/adr/0040-patient-record-before-family-account.md)).
 
 Три шага и три разных субъекта:
 
-1. Родитель в кабинете просит код: `POST /patients/{patient_id}/link-codes`.
-   Обычная сессия, обычная проверка доступа к ребёнку.
-2. Бот, получив `/start <код>`, гасит код: `POST /auth/link-codes/verify`.
+1. Код доступа выпускает врач в карте ребёнка или сам родитель в кабинете:
+   `POST /patients/{patient_id}/access-codes` (роутер `access_codes.py`).
+2. Бот, получив `/start <код>`, гасит его: `POST /auth/access-codes/activate-telegram`.
    Сервисный токен. В ответ — секрет привязки, который бот сохраняет у себя.
+   Учётная запись родителя при этом может и родиться: почты и пароля у него нет.
 3. Перед работой с данными бот меняет секрет на сессию: `POST /auth/bot/session`.
    Сервисный токен **и** секрет. В ответ — access-токен на 15 минут, суженный до
    одного ребёнка.
 
-Отвязка — `POST /patients/{patient_id}/telegram/{link_id}/revoke`, тоже родителем
+**Кода привязки (`link_codes`) больше нет.** Видов кода было два: один понимал
+бот, другой выдавал врач — и семья, пришедшая с приёма с кодом врача, получала в
+боте «код недействителен». Вид кода теперь один, а разницу в сроке жизни (неделя
+у специалиста, четверть часа у родителя) держит `ttl_for(role)`.
+
+Отвязка — `POST /patients/{patient_id}/telegram/{link_id}/revoke`, родителем
 из кабинета. Раздел 5.3 ТЗ ручку отвязки не перечисляет, но поле `revoked_at` в
 схеме есть, а правило 7 требует аудита «привязки/**отвязки** Telegram»: отзыв
 предусмотрен, просто не выписан. Без него привязку нечем снять, если телефон
 потерян.
-
-Путь выдачи кода — `POST /patients/{patient_id}/link-codes`, а не `POST
-/auth/link-codes` из сводной таблицы 5.3. Так `patient_id` приходит из пути и
-ручка проходит через `require_patient_access`, как любая другая ручка с данными
-пациента (правило 5). С `patient_id` в теле проверка была бы ручной — то есть
-такой, которую можно забыть, и родитель выпустил бы код привязки на чужого
-ребёнка.
 """
 
 from __future__ import annotations
@@ -31,11 +30,8 @@ from datetime import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Request
-from sqlalchemy.exc import IntegrityError
 
-from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
-from core.repositories import patients as patients_repo
 from core.repositories import reminders as reminders_repo
 from core.repositories import telegram as telegram_repo
 
@@ -45,60 +41,20 @@ from ..deps.bot import verify_bot_service_token
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import BOT_RATE_LIMIT, limiter
 from ..schemas import ReminderSettingsRead, ReminderSettingsWrite
+from ..schemas_access import AccessCodeTelegramActivate
 from ..schemas_telegram import (
     BotSession,
     BotSessionRequest,
-    LinkCodeCreated,
-    LinkCodeVerify,
     LinkVerified,
     TelegramLinkRead,
 )
+from ..services import access_codes as access_codes_service
 from ..services import telegram as telegram_service
 
 router = APIRouter(prefix="/patients/{patient_id}", tags=["telegram"])
 bot_router = APIRouter(prefix="/auth", tags=["telegram"])
 
 PatientIdPath = Annotated[uuid.UUID, Path()]
-
-
-@router.post(
-    "/link-codes",
-    response_model=LinkCodeCreated,
-    status_code=201,
-    summary="Выпустить код привязки Telegram",
-)
-async def create_link_code(
-    patient_id: PatientIdPath, request: Request, session: SessionDep, user: PatientAccessDep
-) -> LinkCodeCreated:
-    if user.role is not UserRole.PARENT:
-        # Привязывает бот именно семья: раздел 7 ТЗ описывает бота как канал
-        # родителя. Врачу и диетологу он не нужен, а админ к пациенту и так не
-        # имеет доступа.
-        raise ApiError(ErrorCode.FORBIDDEN, "Код привязки выпускает родитель.")
-    if user.channel != "web":
-        # Сессиям, открытым самой привязкой (бот, Mini App), выпуск новых кодов
-        # закрыт: иначе временный доступ к одному чату размножался бы в новые
-        # привязки. Текст называет кабинет, а не бота: из Mini App это увидел бы
-        # человек, которому «недоступно из бота» ничего не объясняет.
-        raise ApiError(ErrorCode.FORBIDDEN, "Код привязки выпускается только в веб-кабинете.")
-
-    code = await telegram_repo.create_code(session, parent_id=user.id, patient_id=patient_id)
-
-    await audit_repo.write_audit_log(
-        session,
-        user_id=user.id,
-        action="telegram_link_code_issued",
-        entity="link_codes",
-        entity_id=patient_id,
-        ip=client_address(request),
-        after={"expires_at": code.expires_at.isoformat()},
-    )
-
-    return LinkCodeCreated(
-        code=code.code,
-        expires_at=code.expires_at,
-        deep_link=telegram_service.build_deep_link(code.code),
-    )
 
 
 @router.get(
@@ -214,76 +170,40 @@ async def revoke_link(
 
 
 @bot_router.post(
-    "/link-codes/verify",
+    "/access-codes/activate-telegram",
     response_model=LinkVerified,
-    summary="Погасить код привязки (бот)",
+    status_code=201,
+    summary="Активировать код доступа (бот)",
     dependencies=[Depends(verify_bot_service_token)],
 )
 @limiter.limit(BOT_RATE_LIMIT)
-async def verify_link_code(
-    payload: LinkCodeVerify, request: Request, session: SessionDep
+async def activate_access_code_from_telegram(
+    payload: AccessCodeTelegramActivate, request: Request, session: SessionDep
 ) -> LinkVerified:
-    """Гасит код и создаёт привязку.
+    """Гасит код доступа и создаёт привязку чата — вместе с учётной записью
+    родителя, если её ещё нет (ADR-0040, этап Б).
+
+    Пришла на место `POST /auth/link-codes/verify`: коды привязки были вторым
+    видом кода, понятным только боту, и семья, получившая код от врача, в боте
+    получала отказ. Вид кода теперь один.
 
     Проверка сервисного токена — зависимостью, а не первой строкой тела: так она
     отрабатывает до разбора тела (иначе кривое тело без токена давало бы 422
     вместо 401) и попадает в OpenAPI, откуда о заголовке узнаёт клиент.
+
+    Ответ намеренно той же формы, что был у погашения кода привязки: боту всё
+    равно, чьим кодом пришёл родитель.
     """
 
-    # Занятость чата проверяется ДО погашения кода. При обратном порядке чужая
-    # привязка сжигала бы код родителя: он получал 409 и должен был просить
-    # новый, ничего не сделав неправильно.
-    existing = await telegram_repo.get_active_link_by_chat(session, payload.chat_id)
-    if existing is not None:
-        # Живая привязка чата не перенацеливается: `UPDATE ... WHERE chat_id`
-        # это обновление по несекретному ключу, то есть способ увести чужой чат
-        # себе. Чат сначала отвязывают из кабинета — там, где видно, чей он.
-        raise ApiError(
-            ErrorCode.CONFLICT,
-            "Этот чат уже привязан. Сначала отвяжите его в кабинете.",
-        )
-
-    # Атомарное погашение: два одновременных `/start` с одним кодом дадут
-    # привязку ровно одному чату.
-    code = await telegram_repo.claim_code(session, payload.code)
-    if code is None:
-        # Один ответ на «нет такого кода», «истёк» и «уже использован»: иначе
-        # восьмисимвольный код можно перебирать, отличая существующие от несуществующих.
-        raise ApiError(ErrorCode.NOT_FOUND, "Код привязки недействителен или истёк.")
-
-    patient = await patients_repo.get(session, code.patient_id)
-    if patient is None:
-        raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
-
-    secret = telegram_repo.generate_binding_secret()
-    try:
-        link = await telegram_repo.create_link(
-            session,
-            parent_id=code.parent_id,
-            patient_id=code.patient_id,
-            chat_id=payload.chat_id,
-            secret=secret,
-        )
-    except IntegrityError as exc:
-        # Проверка занятости выше и вставка ниже — не одна операция: два
-        # одновременных запроса с разными кодами на один чат оба пройдут
-        # проверку. Частичный уникальный индекс их разведёт, но без этого
-        # перехвата второй получил бы 500 вместо внятного отказа.
-        raise ApiError(
-            ErrorCode.CONFLICT,
-            "Этот чат уже привязан. Сначала отвяжите его в кабинете.",
-        ) from exc
-
-    await audit_repo.write_audit_log(
+    patient, link, secret = await access_codes_service.activate_from_telegram(
         session,
-        user_id=code.parent_id,
-        action="telegram_link",
-        entity="telegram_accounts",
-        entity_id=link.id,
+        code=payload.code,
+        chat_id=payload.chat_id,
+        telegram_user_id=payload.telegram_user_id,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
         ip=client_address(request),
-        after={"chat_id": link.chat_id, "patient_id": str(link.patient_id)},
     )
-
     return LinkVerified(
         link_id=link.id,
         patient_id=link.patient_id,

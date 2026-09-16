@@ -550,7 +550,10 @@ class UserRead(BaseModel):
     id: uuid.UUID
     role: UserRole
     full_name: str
-    email: str
+    #: Пусто у родителя, пришедшего из Telegram и не заводившего вход в веб
+    #: (ADR-0040). Администратор видит такую учётную запись и по пустой почте
+    #: понимает, почему ей нельзя выдать временный пароль.
+    email: str | None
     phone: str | None
     is_active: bool
     created_at: datetime
@@ -575,6 +578,21 @@ class MeUpdate(BaseModel):
 
     full_name: RequiredName
     phone: str | None = Field(default=None, max_length=32)
+
+
+class CredentialsCreate(BaseModel):
+    """Вход в веб-кабинет для учётной записи, заведённой из Telegram (ADR-0040).
+
+    Это не смена пароля: текущего пароля нет, и спрашивать его не о чем. Смена
+    пароля живёт в `PasswordChange` и требует знать прежний — повторный вызов
+    этой ручки отвергается, иначе открытая чужая сессия в Mini App задавала бы
+    новый пароль, не зная старого.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
 
 
 class PasswordChange(BaseModel):
@@ -611,7 +629,8 @@ class FamilyMemberRead(BaseModel):
     id: uuid.UUID
     full_name: str
     phone: str | None
-    email: str
+    #: Пусто у родителя из Telegram: связь с ним идёт через бот (ADR-0040).
+    email: str | None
 
 
 class ColleagueRead(BaseModel):

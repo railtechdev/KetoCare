@@ -15,7 +15,7 @@ from ..storage import Binding, BindingStore
 router = Router(name="start")
 
 # Код — восемь символов из алфавита без похожих знаков (см. репозиторий
-# link_codes). Здесь проверяется только длина и состав: настоящую проверку
+# access_codes). Здесь проверяется только длина и состав: настоящую проверку
 # делает API, а бот лишь не гоняет заведомый мусор.
 CODE_LENGTH = 8
 
@@ -96,9 +96,21 @@ async def _link(
         await message.answer(texts.LINK_ONLY_PRIVATE)
         return
 
+    if message.from_user is None:
+        # Сообщение без автора приходит от канала. Привязывать некого: учётная
+        # запись родителя заводится по идентификатору человека.
+        await message.answer(texts.LINK_ONLY_PRIVATE)
+        return
+
     verified = None
     try:
-        verified = await api.verify_link_code(code=code.strip(), chat_id=message.chat.id)
+        verified = await api.activate_access_code(
+            code=code.strip(),
+            chat_id=message.chat.id,
+            telegram_user_id=message.from_user.id,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+        )
     except BotApiError as exc:
         if exc.status == 409:
             await message.answer(texts.LINK_CHAT_BUSY)

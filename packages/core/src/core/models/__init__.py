@@ -4,7 +4,6 @@ from .accounts import (
     AccessCode,
     DoctorPatient,
     Invitation,
-    LinkCode,
     ParentPatient,
     Patient,
     ReminderDelivery,
@@ -64,7 +63,6 @@ __all__ = [
     "TelegramAccount",
     "UserBackupCode",
     "AccessCode",
-    "LinkCode",
     # clinical
     "AedDrug",
     "IntakeOption",

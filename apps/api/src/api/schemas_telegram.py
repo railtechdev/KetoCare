@@ -8,29 +8,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class LinkCodeCreated(BaseModel):
-    """Код привязки. Показывается родителю один раз и живёт 15 минут."""
-
-    code: str
-    expires_at: datetime
-    # Готовая ссылка `https://t.me/<bot>?start=<код>`: родителю с телефона проще
-    # нажать, чем переписывать код. Собирается на сервере, потому что имя бота
-    # знает только он (BOT_USERNAME). Пусто, если имя бота не настроено — тогда
-    # кабинет показывает сам код.
-    deep_link: str | None = None
-
-
-class LinkCodeVerify(BaseModel):
-    """Что присылает бот, получив `/start <код>`."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    code: str = Field(min_length=1, max_length=8)
-    chat_id: int
-
-
 class LinkVerified(BaseModel):
-    """Ответ боту после успешной привязки.
+    """Ответ боту после успешной привязки по коду доступа (ADR-0040).
 
     `secret` отдаётся ровно один раз — в БД лежит только его sha256. Потерявший
     секрет бот не сможет восстановить его иначе, чем через новую привязку, и это
@@ -91,6 +70,15 @@ class MiniAppSession(BaseModel):
     expires_in: int
     patient_id: uuid.UUID
     patient_name: str
+    #: Адрес веб-кабинета (`WEB_ORIGIN`). Приходит с сервера, а не из своей
+    #: переменной сборки: у Mini App её никогда не было, и оттого пустое
+    #: состояние вкладки «Меню» отправляло в кабинет, не давая туда пути.
+    web_url: str
+    #: Заведён ли у родителя вход по почте. `false` — у учётной записи из
+    #: Telegram (ADR-0040): ей показывается «Вход в кабинет», остальным нет.
+    #: Признак приходит с сервера, потому что решает его ручка: экран, гадающий
+    #: сам, однажды предложил бы то, что кончится отказом 409.
+    has_web_credentials: bool
 
 
 class TelegramLinkRead(BaseModel):

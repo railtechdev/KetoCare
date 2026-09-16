@@ -6,6 +6,10 @@ import { launchData } from "../../lib/telegram";
 export interface Session {
   patientId: string;
   patientName: string;
+  /** Адрес веб-кабинета. Приходит с сервера: своей переменной сборки нет. */
+  webUrl: string;
+  /** Заведён ли вход по почте. `false` — учётная запись из Telegram. */
+  hasWebCredentials: boolean;
 }
 
 /** Почему приложение не открылось. Каждое состояние ведёт к своему экрану. */
@@ -51,7 +55,12 @@ export function useOpenSession() {
       }
 
       setTokens({ access: data.access_token, refresh: data.refresh_token });
-      return { patientId: data.patient_id, patientName: data.patient_name };
+      return {
+        patientId: data.patient_id,
+        patientName: data.patient_name,
+        webUrl: data.web_url,
+        hasWebCredentials: data.has_web_credentials,
+      };
     },
   });
 }

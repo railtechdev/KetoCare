@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 #: Статус считается на чтении, как у приглашений: хранить его отдельной колонкой
 #: значит однажды разойтись с `used_at`/`revoked_at`/`expires_at`.
@@ -26,10 +26,9 @@ class AccessCodeCreated(BaseModel):
 
     code: str
     expires_at: datetime
-    #: `https://t.me/<бот>?start=<код>` — путь семьи через Telegram. Пока
-    #: всегда `None`: бот гасит только коды привязки (`link_codes`), а общий код
-    #: он научится принимать этапом Б плана. Поле объявлено заранее, чтобы
-    #: кабинет не переписывался вместе с ботом.
+    #: `https://t.me/<бот>?start=<код>` — путь семьи через Telegram. Пусто
+    #: только там, где не задан `BOT_USERNAME`: имя бота знает сервер, и
+    #: собрать ссылку больше неоткуда.
     deep_link: str | None = None
     #: Адрес веб-активации: `${WEB_ORIGIN}/join?code=…`. Нужен и сам по себе, и
     #: как запасной QR там, где бота нет.
@@ -77,3 +76,24 @@ class AccessCodeClaimed(BaseModel):
 
     patient_id: uuid.UUID
     patient_name: str
+
+
+class AccessCodeTelegramActivate(BaseModel):
+    """Что присылает бот, получив `/start <код>` (ADR-0040, этап Б).
+
+    Человека опознаёт `telegram_user_id`, а не `chat_id`: в личном чате они
+    совпадают, но чатов у человека бывает несколько, и учётную запись надо
+    находить по нему самому, а не по одному из его чатов.
+
+    Имя приходит от Telegram и идёт в `full_name` новой учётной записи —
+    спрашивать его отдельным шагом там, где оно уже известно, значит ставить
+    семье лишнюю дверь на пути, который и затевался ради её отсутствия.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1, max_length=16)
+    chat_id: int
+    telegram_user_id: int
+    first_name: str = Field(min_length=1, max_length=128)
+    last_name: str | None = Field(default=None, max_length=128)

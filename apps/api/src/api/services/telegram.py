@@ -106,6 +106,8 @@ async def issue_miniapp_session(
         expires_in=int(ACCESS_TOKEN_TTL.total_seconds()),
         patient_id=link.patient_id,
         patient_name=patient.full_name,
+        web_url=get_settings().web_origin.rstrip("/"),
+        has_web_credentials=parent.email is not None and parent.password_hash is not None,
     )
 
 

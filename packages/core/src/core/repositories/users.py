@@ -18,10 +18,31 @@ async def get(session: AsyncSession, user_id: uuid.UUID) -> User | None:
     return await session.get(User, user_id)
 
 
-async def get_by_email(session: AsyncSession, email: str) -> User | None:
-    """email — citext, поэтому сравнение регистронезависимое на уровне БД."""
+async def get_by_email(session: AsyncSession, email: str | None) -> User | None:
+    """email — citext, поэтому сравнение регистронезависимое на уровне БД.
 
+    Пустая почта не ищется вовсе. SQLAlchemy превратила бы `User.email == None`
+    в `email IS NULL` и вернула бы первого попавшегося родителя из Telegram —
+    учётную запись, которой почту никто не задавал. Ручке входа это дало бы
+    дверь без пароля, а проверке занятости почты — ложное «занято».
+    """
+
+    if email is None:
+        return None
     result: User | None = await session.scalar(select(User).where(User.email == email))
+    return result
+
+
+async def get_by_telegram_user_id(session: AsyncSession, telegram_user_id: int) -> User | None:
+    """Родитель, пришедший из Telegram: его удостоверяет идентификатор человека.
+
+    Не chat_id: чатов у человека бывает несколько, и привязка чата к ребёнку
+    живёт отдельной таблицей.
+    """
+
+    result: User | None = await session.scalar(
+        select(User).where(User.telegram_user_id == telegram_user_id)
+    )
     return result
 
 
@@ -30,11 +51,18 @@ async def create(
     *,
     role: UserRole,
     full_name: str,
-    email: str,
-    password_hash: str,
+    email: str | None = None,
+    password_hash: str | None = None,
     phone: str | None = None,
     invited_by: uuid.UUID | None = None,
+    telegram_user_id: int | None = None,
 ) -> User:
+    """Почта и пароль необязательны только у родителя из Telegram (ADR-0040).
+
+    У остальных ролей пустой вход отвергает ограничение схемы
+    `users_staff_have_credentials` — умолчания здесь не значат «можно всем».
+    """
+
     user = User(
         role=role,
         full_name=full_name,
@@ -42,6 +70,7 @@ async def create(
         password_hash=password_hash,
         phone=phone,
         invited_by=invited_by,
+        telegram_user_id=telegram_user_id,
     )
     session.add(user)
     await session.flush()
