@@ -4,7 +4,6 @@ import type { components } from "@ketocare/api-client";
 import { api } from "../../lib/api";
 
 export type TelegramLink = components["schemas"]["TelegramLinkRead"];
-export type LinkCode = components["schemas"]["LinkCodeCreated"];
 
 /**
  * Привязка Telegram-чата к ребёнку (раздел 7 ТЗ, ADR-0009).
@@ -23,26 +22,6 @@ export function useTelegramLinks(patientId: string) {
         { params: { path: { patient_id: patientId } } },
       );
       if (error || !data) throw error ?? new Error("Empty telegram links");
-      return data;
-    },
-  });
-}
-
-/**
- * Выпуск кода привязки.
- *
- * Код живёт 15 минут и гасится первым же использованием, поэтому он не
- * кэшируется и не хранится: каждый показ — это новый код. Список привязок после
- * выпуска не трогаем — привязка появится только когда родитель дойдёт до бота.
- */
-export function useCreateLinkCodeMutation(patientId: string) {
-  return useMutation({
-    mutationFn: async (): Promise<LinkCode> => {
-      const { data, error } = await api.POST(
-        "/api/v1/patients/{patient_id}/link-codes",
-        { params: { path: { patient_id: patientId } } },
-      );
-      if (error || !data) throw error ?? new Error("Empty link code response");
       return data;
     },
   });

@@ -173,6 +173,35 @@ class TestTelegramInit:
         assert claims["chan"] == "miniapp"
         assert claims["tg"] == str(link.id)
 
+    async def test_session_carries_the_web_address_and_credentials_flag(
+        self, client, session, make_user, make_patient
+    ):
+        """Форма ответа с именем потребителя — Mini App (ADR-0040, этап Б).
+
+        `web_url` приходит с сервера, потому что у Mini App нет и никогда не
+        было переменной сборки с адресом кабинета: пустое состояние вкладки
+        «Меню» отправляло в кабинет, не давая туда пути.
+
+        `has_web_credentials` решает, показывать ли «Вход в кабинет». Решает
+        сервер: экран, гадающий сам, однажды предложил бы то, что кончится 409.
+        """
+
+        parent, _, _ = await _linked_family(session, make_user, make_patient)
+
+        response = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+        body = response.json()
+
+        assert body["web_url"].startswith("http")
+        assert not body["web_url"].endswith("/")
+        assert body["has_web_credentials"] is True, "у этого родителя почта и пароль есть"
+
+        parent.email = None
+        parent.password_hash = None
+        await session.flush()
+
+        again = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+        assert again.json()["has_web_credentials"] is False
+
     async def test_forged_launch_is_rejected(self, client, session, make_user, make_patient):
         await _linked_family(session, make_user, make_patient)
 

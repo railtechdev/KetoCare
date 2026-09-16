@@ -1,4 +1,4 @@
-"""Привязка Telegram и аутентификация бота (раздел 7.1 ТЗ, ADR-0009).
+"""Привязка Telegram и аутентификация бота (раздел 7.1 ТЗ, ADR-0009, ADR-0040).
 
 Большая часть тестов здесь — не про счастливый путь, а про конкретные атаки,
 найденные при состязательном разборе проекта: перехват чужого чата, выпуск кода
@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import select
 
 from core.config import get_settings
-from core.models import AuditLog, KetoneLog, LinkCode, TelegramAccount
+from core.models import AccessCode, AuditLog, KetoneLog, TelegramAccount, User
 from core.models.enums import DiarySource, UserRole
 from core.repositories import patients as patients_repo
 
@@ -47,22 +47,35 @@ async def _family(session, make_user, make_patient, *, name: str = "Амина")
     return parent, patient
 
 
-async def _issue_code(client, auth_headers, parent, patient) -> str:
+async def _issue_code(client, auth_headers, issuer, patient) -> str:
     response = await client.post(
-        f"/api/v1/patients/{patient.id}/link-codes", headers=auth_headers(parent)
+        f"/api/v1/patients/{patient.id}/access-codes", headers=auth_headers(issuer)
     )
     assert response.status_code == 201, response.text
     return response.json()["code"]
 
 
+def _activate(client, code: str, *, chat_id: int = CHAT_ID, telegram_user_id: int | None = None):
+    """Запрос бота. `telegram_user_id` по умолчанию равен `chat_id`: в личном
+    чате Telegram присылает их одинаковыми, и тесты, которым личность неважна,
+    не должны выдумывать второе число."""
+
+    return client.post(
+        "/api/v1/auth/access-codes/activate-telegram",
+        headers=bot_headers(),
+        json={
+            "code": code,
+            "chat_id": chat_id,
+            "telegram_user_id": telegram_user_id if telegram_user_id is not None else chat_id,
+            "first_name": "Родитель",
+        },
+    )
+
+
 async def _link(client, auth_headers, parent, patient, chat_id: int = CHAT_ID) -> dict:
     code = await _issue_code(client, auth_headers, parent, patient)
-    response = await client.post(
-        "/api/v1/auth/link-codes/verify",
-        headers=bot_headers(),
-        json={"code": code, "chat_id": chat_id},
-    )
-    assert response.status_code == 200, response.text
+    response = await _activate(client, code, chat_id=chat_id)
+    assert response.status_code == 201, response.text
     return response.json()
 
 
@@ -105,18 +118,10 @@ class TestLinkFlow:
         parent, patient = await _family(session, make_user, make_patient)
         code = await _issue_code(client, auth_headers, parent, patient)
 
-        first = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": code, "chat_id": CHAT_ID},
-        )
-        assert first.status_code == 200
+        first = await _activate(client, code)
+        assert first.status_code == 201
 
-        second = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": code, "chat_id": OTHER_CHAT_ID},
-        )
+        second = await _activate(client, code, chat_id=OTHER_CHAT_ID)
         assert second.status_code == 404
         assert second.json()["error"]["code"] == "not_found"
 
@@ -126,31 +131,25 @@ class TestLinkFlow:
         parent, patient = await _family(session, make_user, make_patient)
         code = await _issue_code(client, auth_headers, parent, patient)
 
-        row = await session.get(LinkCode, code)
+        row = await session.get(AccessCode, code)
         row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         await session.flush()
 
-        response = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": code, "chat_id": CHAT_ID},
-        )
+        response = await _activate(client, code)
         assert response.status_code == 404
 
     async def test_unknown_code_answers_like_expired(self, client):
         """Один ответ на «нет такого» и «истёк»: иначе код перебирается."""
 
-        response = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": "ZZZZZZZZ", "chat_id": CHAT_ID},
-        )
+        response = await _activate(client, "ZZZZZZZZ")
         assert response.status_code == 404
-        assert response.json()["error"]["message"] == "Код привязки недействителен или истёк."
+        assert response.json()["error"]["message"] == (
+            "Код недействителен или истёк. Попросите у врача новый код доступа."
+        )
 
 
 @pytest.mark.asyncio
-class TestLinkCodeAccess:
+class TestAccessCodeIssuing:
     async def test_parent_cannot_issue_code_for_other_child(
         self, client, session, make_user, make_patient, auth_headers
     ):
@@ -161,37 +160,62 @@ class TestLinkCodeAccess:
         attacker = await make_user(UserRole.PARENT)
 
         response = await client.post(
-            f"/api/v1/patients/{victim_patient.id}/link-codes", headers=auth_headers(attacker)
+            f"/api/v1/patients/{victim_patient.id}/access-codes", headers=auth_headers(attacker)
         )
         assert response.status_code == 403
         assert response.json()["error"]["code"] == "forbidden"
 
-    async def test_doctor_cannot_issue_code(
+    async def test_doctor_code_works_in_the_bot(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        patient = await make_patient()
+        """Код врача открывает бота — ради этого этап Б и делался (ADR-0040).
+
+        До него видов кода было два: бот понимал только `link_codes`, и семья,
+        вышедшая с приёма с кодом врача, получала «код недействителен» на первом
+        же шаге. Учётной записи у неё при этом нет вовсе — она рождается здесь.
+        """
+
+        patient = await make_patient("Амина")
         doctor = await make_user(UserRole.DOCTOR)
         await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
 
-        response = await client.post(
-            f"/api/v1/patients/{patient.id}/link-codes", headers=auth_headers(doctor)
-        )
-        assert response.status_code == 403
+        code = await _issue_code(client, auth_headers, doctor, patient)
+        response = await _activate(client, code)
+
+        assert response.status_code == 201, response.text
+        assert response.json()["patient_name"] == "Амина"
+
+        parent = await session.scalar(select(User).where(User.telegram_user_id == CHAT_ID))
+        assert parent is not None
+        assert parent.role is UserRole.PARENT
+        assert parent.email is None, "родитель из Telegram заводится без почты"
+        assert parent.password_hash is None
 
 
 @pytest.mark.asyncio
 class TestBotServiceToken:
     async def test_missing_token_rejected(self, client):
         response = await client.post(
-            "/api/v1/auth/link-codes/verify", json={"code": "AAAAAAAA", "chat_id": CHAT_ID}
+            "/api/v1/auth/access-codes/activate-telegram",
+            json={
+                "code": "AAAAAAAA",
+                "chat_id": CHAT_ID,
+                "telegram_user_id": CHAT_ID,
+                "first_name": "Родитель",
+            },
         )
         assert response.status_code == 401
 
     async def test_wrong_token_rejected(self, client):
         response = await client.post(
-            "/api/v1/auth/link-codes/verify",
+            "/api/v1/auth/access-codes/activate-telegram",
             headers={"X-Bot-Token": "wrong-service-token"},
-            json={"code": "AAAAAAAA", "chat_id": CHAT_ID},
+            json={
+                "code": "AAAAAAAA",
+                "chat_id": CHAT_ID,
+                "telegram_user_id": CHAT_ID,
+                "first_name": "Родитель",
+            },
         )
         assert response.status_code == 401
 
@@ -256,11 +280,7 @@ class TestChatHijack:
         )
         code = await _issue_code(client, auth_headers, attacker_parent, attacker_patient)
 
-        response = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": code, "chat_id": CHAT_ID},
-        )
+        response = await _activate(client, code, telegram_user_id=OTHER_CHAT_ID)
         assert response.status_code == 409
         assert response.json()["error"]["code"] == "conflict"
 
@@ -413,7 +433,7 @@ class TestBotSessionLimits:
         )
         assert response.status_code == 403
 
-    async def test_bot_token_cannot_issue_new_link_codes(
+    async def test_bot_token_cannot_issue_new_access_codes(
         self, client, session, make_user, make_patient, auth_headers
     ):
         """Иначе один захваченный чат размножался бы в новые привязки."""
@@ -423,7 +443,7 @@ class TestBotSessionLimits:
         token = await _bot_session(client, link)
 
         response = await client.post(
-            f"/api/v1/patients/{patient.id}/link-codes",
+            f"/api/v1/patients/{patient.id}/access-codes",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 403
@@ -448,7 +468,7 @@ class TestAudit:
                 await session.scalars(select(AuditLog.action).where(AuditLog.user_id == parent.id))
             ).all()
         )
-        assert "telegram_link_code_issued" in actions
+        assert "access_code_issued" in actions
         assert "telegram_link" in actions
         assert "telegram_unlink" in actions
 
@@ -457,18 +477,29 @@ class TestAudit:
 class TestValidation:
     async def test_extra_field_rejected(self, client):
         response = await client.post(
-            "/api/v1/auth/link-codes/verify",
+            "/api/v1/auth/access-codes/activate-telegram",
             headers=bot_headers(),
-            json={"code": "AAAAAAAA", "chat_id": CHAT_ID, "parent_id": str(uuid.uuid4())},
+            json={
+                "code": "AAAAAAAA",
+                "chat_id": CHAT_ID,
+                "telegram_user_id": CHAT_ID,
+                "first_name": "Родитель",
+                "parent_id": str(uuid.uuid4()),
+            },
         )
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
 
     async def test_chat_id_must_be_integer(self, client):
         response = await client.post(
-            "/api/v1/auth/link-codes/verify",
+            "/api/v1/auth/access-codes/activate-telegram",
             headers=bot_headers(),
-            json={"code": "AAAAAAAA", "chat_id": "не число"},
+            json={
+                "code": "AAAAAAAA",
+                "chat_id": "не число",
+                "telegram_user_id": CHAT_ID,
+                "first_name": "Родитель",
+            },
         )
         assert response.status_code == 422
 
@@ -629,12 +660,8 @@ class TestCodeInput:
         parent, patient = await _family(session, make_user, make_patient)
         code = await _issue_code(client, auth_headers, parent, patient)
 
-        response = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": code.lower(), "chat_id": CHAT_ID},
-        )
-        assert response.status_code == 200, response.text
+        response = await _activate(client, code.lower())
+        assert response.status_code == 201, response.text
 
     async def test_busy_chat_does_not_burn_the_code(
         self, client, session, make_user, make_patient, auth_headers
@@ -653,11 +680,7 @@ class TestCodeInput:
         parent, patient = await _family(session, make_user, make_patient, name="Свой")
         code = await _issue_code(client, auth_headers, parent, patient)
 
-        busy = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": code, "chat_id": CHAT_ID},
-        )
+        busy = await _activate(client, code, telegram_user_id=OTHER_CHAT_ID)
         assert busy.status_code == 409
 
         await client.post(
@@ -665,12 +688,8 @@ class TestCodeInput:
             headers=auth_headers(victim_parent),
         )
 
-        retry = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            headers=bot_headers(),
-            json={"code": code, "chat_id": CHAT_ID},
-        )
-        assert retry.status_code == 200, "код не должен был сгореть из-за чужой привязки"
+        retry = await _activate(client, code, telegram_user_id=OTHER_CHAT_ID)
+        assert retry.status_code == 201, "код не должен был сгореть из-за чужой привязки"
 
 
 class TestReminderSettings:

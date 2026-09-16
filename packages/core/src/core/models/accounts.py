@@ -5,7 +5,17 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Numeric, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import BIGINT, CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,9 +29,22 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
 
     role: Mapped[UserRole] = mapped_column(pg_enum(UserRole, "user_role"), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
+    # Почта и пароль — вход в веб-кабинет, а не удостоверение личности. Родитель
+    # приходит из Telegram: его удостоверяет `telegram_user_id`, и требовать
+    # почту значило бы либо выдумывать её за него, либо закрывать ему вход
+    # (ADR-0040, этап Б). У сотрудника вход только один, и пустые колонки у него
+    # запрещены ограничением `users_staff_have_credentials` — забытая проверка в
+    # коде иначе однажды заведёт врача, которому нечем войти.
+    #
+    # Единственности почты `unique=True` здесь не задаёт: частичный индекс
+    # `WHERE email IS NOT NULL` живёт в миграции — обычный UNIQUE в PostgreSQL
+    # пропускает сколько угодно NULL, но выразить частичность в модели нечем.
+    email: Mapped[str | None] = mapped_column(CITEXT)
     phone: Mapped[str | None] = mapped_column(String(32))
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    # Кто это в Telegram. Не chat_id: чатов у человека бывает несколько
+    # (`telegram_links` привязывает чат к ребёнку), а учётная запись одна.
+    telegram_user_id: Mapped[int | None] = mapped_column(BIGINT)
     # Момент последней смены пароля. Раздел 11 ТЗ требует ревокации сессий при
     # смене пароля, а refresh-токены у нас без состояния: хранилища выданных
     # токенов нет. Отметка попадает в токен claim'ом, и токен, выданный до
@@ -72,6 +95,24 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
         PG_UUID(as_uuid=True), ForeignKey("users.id")
     )
     last_login_at: Mapped[datetime | None]
+
+    __table_args__ = (
+        Index("uq_users_email", "email", unique=True, postgresql_where=text("email IS NOT NULL")),
+        Index(
+            "uq_users_telegram_user_id",
+            "telegram_user_id",
+            unique=True,
+            postgresql_where=text("telegram_user_id IS NOT NULL"),
+        ),
+        # Учётная запись без почты и пароля бывает только у родителя, пришедшего
+        # из Telegram. Сотрудник без пароля не вошёл бы никогда, а обнаружилось бы
+        # это на приёме: проверка стоит в схеме, потому что учётные записи
+        # заводятся не одним путём (приглашение, код доступа, сид, `create_admin`).
+        CheckConstraint(
+            "role = 'parent' OR (email IS NOT NULL AND password_hash IS NOT NULL)",
+            name="users_staff_have_credentials",
+        ),
+    )
 
 
 class UserBackupCode(Base, UUIDPkMixin, CreatedAtMixin):
@@ -277,23 +318,6 @@ class ReminderDelivery(Base, UUIDPkMixin):
     sent_on: Mapped[date] = mapped_column(nullable=False)
     sent_at: Mapped[datetime] = mapped_column(nullable=False)
     chat_id: Mapped[int] = mapped_column(BIGINT, nullable=False)
-
-
-class LinkCode(Base):
-    """PK — сам код (8 символов), а не отдельный uuid id: раздел 4.2 ТЗ описывает поле
-    `code` первым и без `id`, в отличие от всех остальных таблиц раздела."""
-
-    __tablename__ = "link_codes"
-
-    code: Mapped[str] = mapped_column(String(8), primary_key=True)
-    parent_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
-    )
-    patient_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
-    )
-    expires_at: Mapped[datetime] = mapped_column(nullable=False)
-    used_at: Mapped[datetime | None]
 
 
 class AccessCode(Base, CreatedAtMixin):

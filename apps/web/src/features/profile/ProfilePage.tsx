@@ -153,7 +153,10 @@ export function ProfilePage() {
                 type="email"
                 label={t("fields.email")}
                 hint={t("emailHint")}
-                value={profile.email}
+                // Пусто не бывает: в кабинет входят почтой, а у родителя из
+                // Telegram её нет — он сюда и не попадает (ADR-0040). Схема
+                // допускает `null`, и поле обязано что-то показать.
+                value={profile.email ?? ""}
                 readOnly
                 disabled
               />

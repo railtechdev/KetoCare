@@ -9,6 +9,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { WebAccessPanel } from "../session/WebAccessPanel";
 import type { Session } from "../session/useSession";
 import { type Overview, usePatientOverview } from "./useOverview";
 
@@ -62,6 +63,9 @@ export function HomeScreen({ session }: { session: Session }) {
       >
         {overview.data !== undefined && <Summary overview={overview.data} />}
       </AsyncSection>
+
+      {/* Ниже сводки: разовое дело не должно стоять над ежедневным. */}
+      <WebAccessPanel session={session} />
     </main>
   );
 }

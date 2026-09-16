@@ -51,11 +51,26 @@ class FakeChat:
 
 
 @dataclass
+class FakeUser:
+    """`from_user` — кто прислал сообщение.
+
+    Отдельно от чата намеренно: в личной переписке идентификаторы совпадают, но
+    учётную запись родителя система заводит по человеку, а не по комнате
+    (ADR-0040).
+    """
+
+    id: int = CHAT_ID
+    first_name: str = "Айгуль"
+    last_name: str | None = None
+
+
+@dataclass
 class FakeMessage:
     """Минимальный Message: только то, чем пользуются обработчики."""
 
     text: str | None = None
     chat: FakeChat = field(default_factory=FakeChat)
+    from_user: FakeUser | None = field(default_factory=FakeUser)
     answers: list[tuple[str, Any]] = field(default_factory=list)
 
     async def answer(self, text: str, reply_markup: Any = None, **_: Any) -> None:
@@ -105,6 +120,9 @@ class TestLinking:
         binding = await store.get(CHAT_ID)
         assert binding is not None
         assert binding.secret == SECRET, "секрет обязан сохраниться: восстановить его нельзя"
+        # Личность берётся у автора сообщения, а не у чата: по ней сервер
+        # находит или заводит учётную запись родителя (ADR-0040).
+        assert api.verified_telegram_user_id == CHAT_ID
 
     @pytest.mark.asyncio
     async def test_group_chat_cannot_be_linked(self, api, store):
@@ -130,7 +148,7 @@ class TestLinking:
 
         await start._link(message, api=api, store=store, settings=SETTINGS, code="ZZZZZZZZ")
 
-        assert "15 минут" in message.last
+        assert "Попросите новый" in message.last
         assert await store.get(CHAT_ID) is None
 
     @pytest.mark.asyncio

@@ -112,12 +112,23 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
                 </Button>
               )}
 
-              <Button asChild variant="ghost" size="sm" className="min-h-touch">
-                <a href={`mailto:${member.email}`}>
-                  <Mail aria-hidden="true" />
-                  {member.email}
-                </a>
-              </Button>
+              {/* Почты может не быть вовсе: родитель из Telegram её не заводил
+                  (ADR-0040). Безусловная кнопка давала бы `mailto:null` —
+                  пустую ссылку ровно в панели контактов, ради которой панель и
+                  делалась (ADR-0011). */}
+              {member.email !== null && (
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-touch"
+                >
+                  <a href={`mailto:${member.email}`}>
+                    <Mail aria-hidden="true" />
+                    {member.email}
+                  </a>
+                </Button>
+              )}
             </li>
           ))}
         </ul>

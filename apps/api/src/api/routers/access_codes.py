@@ -31,20 +31,25 @@ router = APIRouter(prefix="/patients/{patient_id}/access-codes", tags=["access-c
 
 PatientIdPath = Annotated[uuid.UUID, Path()]
 
-CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
+#: Кто вправе выдать код. Родитель — с этапа Б: это замена коду привязки
+#: Telegram, которым он подключал себе второй чат. Срок у его кода другой —
+#: пятнадцать минут против недели, — и выбирает его `ttl_for(role)` в
+#: репозитории, а не эта ручка (решение 5 ADR-0040).
+ISSUER_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN, UserRole.PARENT)
 
 
 def _require_issuer(user: PatientAccessDep) -> None:
-    """Код выдаёт ведущий специалист — и только из веб-кабинета.
+    """Код выдаёт ведущий специалист или сам родитель — и только из веб-кабинета.
 
     Роль проверяется здесь, а не зависимостью `require_roles`: администратор к
-    клиническим данным доступа не имеет вовсе, и до этой ручки не дойдёт, а
-    родителю выдача кодов открывается только на этапе Б плана — тогда правило и
-    смягчается, в одном месте.
+    клиническим данным доступа не имеет вовсе и до этой ручки не дойдёт.
     """
 
-    if user.role not in CARE_ROLES:
-        raise ApiError(ErrorCode.FORBIDDEN, "Код доступа выдаёт лечащий врач или диетолог.")
+    if user.role not in ISSUER_ROLES:
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Код доступа выдаёт лечащий врач, диетолог или родитель ребёнка.",
+        )
     if user.channel != "web":
         # Сессии бота и Mini App сужены до одного ребёнка и живут 15 минут;
         # выпуск через них означал бы, что временный доступ к чату умеет

@@ -71,12 +71,34 @@ class BotApi:
 
     # --- привязка ---
 
-    async def verify_link_code(self, *, code: str, chat_id: int) -> LinkVerified:
+    async def activate_access_code(
+        self,
+        *,
+        code: str,
+        chat_id: int,
+        telegram_user_id: int,
+        first_name: str,
+        last_name: str | None,
+    ) -> LinkVerified:
+        """Гасит код доступа и получает привязку (ADR-0040).
+
+        Учётной записи у родителя может не быть вовсе: сервер заводит её по
+        `telegram_user_id`. Поэтому идентичность передаётся из `from_user`, а не
+        из `chat`: в личном чате они совпадают, но совпадение — не то, на чём
+        держится опознание человека.
+        """
+
         payload = await self._request(
             "POST",
-            "/api/v1/auth/link-codes/verify",
+            "/api/v1/auth/access-codes/activate-telegram",
             headers={"X-Bot-Token": self._service_token},
-            json={"code": code, "chat_id": chat_id},
+            json={
+                "code": code,
+                "chat_id": chat_id,
+                "telegram_user_id": telegram_user_id,
+                "first_name": first_name,
+                "last_name": last_name,
+            },
         )
         return LinkVerified(
             link_id=uuid.UUID(payload["link_id"]),

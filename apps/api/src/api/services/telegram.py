@@ -106,6 +106,11 @@ async def issue_miniapp_session(
         expires_in=int(ACCESS_TOKEN_TTL.total_seconds()),
         patient_id=link.patient_id,
         patient_name=patient.full_name,
+        web_url=get_settings().web_origin.rstrip("/"),
+        # Тот же предикат, что у отказа `POST /users/me/credentials` («хоть что-то
+        # заполнено»), а не «заполнено и то, и другое»: иначе состояние «почта
+        # есть, пароля нет» показало бы панель, которая кончится 409.
+        has_web_credentials=parent.email is not None or parent.password_hash is not None,
     )
 
 

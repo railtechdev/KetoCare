@@ -12,11 +12,8 @@ import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
-import {
-  useCreateLinkCodeMutation,
-  useRevokeLinkMutation,
-  useTelegramLinks,
-} from "./useTelegramLinks";
+import { useIssueAccessCode } from "../access/useAccessCodes";
+import { useRevokeLinkMutation, useTelegramLinks } from "./useTelegramLinks";
 
 interface Props {
   patientId: string;
@@ -26,9 +23,9 @@ interface Props {
 /**
  * Привязка Telegram-чата к ребёнку.
  *
- * Код показывается ОДИН раз и живёт 15 минут: он одноразовый и гасится первым
- * же `/start`. Поэтому он не кэшируется, не хранится и исчезает при уходе с
- * экрана — если родитель не успел, выпускается новый.
+ * Код тот же, что выдаёт врач в карте ребёнка (ADR-0040): вид кода один, и
+ * бот не различает, кто его выпустил. Код родителя живёт 15 минут — его вводят
+ * в соседнем окне, — и гасится первым же `/start`; не успел, выпускается новый.
  *
  * Ссылка `t.me/<бот>?start=<код>` собирается сервером, потому что имя бота
  * знает только он (`BOT_USERNAME`). Если имя не настроено, сервер вернёт `null`
@@ -39,7 +36,7 @@ export function TelegramPanel({ patientId, childName }: Props) {
   const { t } = useTranslation("telegram");
 
   const links = useTelegramLinks(patientId);
-  const issue = useCreateLinkCodeMutation(patientId);
+  const issue = useIssueAccessCode(patientId);
   const revoke = useRevokeLinkMutation(patientId);
 
   // Показываем только живые привязки: отозванная строка — это история, и её

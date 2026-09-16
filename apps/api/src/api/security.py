@@ -284,5 +284,13 @@ def totp_secret_usable(secret: str | None) -> bool:
     return True
 
 
-def totp_provisioning_uri(secret: str, *, email: str) -> str:
-    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="KetoCare")
+def totp_provisioning_uri(secret: str, *, email: str | None, full_name: str) -> str:
+    """Подпись записи в приложении-аутентификаторе.
+
+    Почты может не быть — у родителя из Telegram (ADR-0040). Пустое имя в
+    `otpauth://` приложения показывают как безымянную запись: у человека с
+    несколькими записями она неотличима от чужой, и он подтверждает не тем
+    кодом. Поэтому вместо почты подставляется имя.
+    """
+
+    return pyotp.TOTP(secret).provisioning_uri(name=email or full_name, issuer_name="KetoCare")

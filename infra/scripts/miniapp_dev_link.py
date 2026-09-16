@@ -60,9 +60,11 @@ def build_init_data(*, chat_id: int, bot_token: str) -> str:
 
 
 async def ensure_link(email: str, chat_id: int) -> tuple[str, str]:
+    from api.services import access_codes as access_codes_service
     from core.db import get_sessionmaker
     from core.models.enums import UserRole
     from core.repositories import access as access_repo
+    from core.repositories import access_codes as access_codes_repo
     from core.repositories import patients as patients_repo
     from core.repositories import telegram as telegram_repo
     from core.repositories import users as users_repo
@@ -83,12 +85,21 @@ async def ensure_link(email: str, chat_id: int) -> tuple[str, str]:
 
         existing = await telegram_repo.get_active_link_by_chat(session, chat_id)
         if existing is None:
-            await telegram_repo.create_link(
+            # Через код доступа и ту же функцию сервиса, что вызывает ручка бота
+            # (ADR-0040, этап Б). Прямой `create_link` был короче, но отладочная
+            # привязка переставала повторять продукт: путь, который скрипт
+            # проверяет, шёл бы мимо погашения кода и мимо заведения родителя.
+            code = await access_codes_repo.create(
+                session, patient_id=patient.id, issued_by=parent.id, role=parent.role
+            )
+            await access_codes_service.activate_from_telegram(
                 session,
-                parent_id=parent.id,
-                patient_id=patient.id,
+                code=code.code,
                 chat_id=chat_id,
-                secret=telegram_repo.generate_binding_secret(),
+                telegram_user_id=chat_id,
+                first_name=parent.full_name,
+                last_name=None,
+                ip=None,
             )
             await session.commit()
             state = "создана"

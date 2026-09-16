@@ -77,16 +77,18 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
 
         {issued !== null && (
           <div className="flex flex-col items-center gap-field">
-            {/* QR ведёт на веб-активацию, а не в бота: код доступа бот пока не
-                понимает — он гасит только коды привязки, и `/start <код>`
-                ответил бы отказом. Поле `deep_link` сервер сейчас не заполняет
-                вовсе; когда заполнит (этап Б), здесь появится выбор. */}
+            {/* QR ведёт в бота, если имя бота настроено, и на веб-активацию,
+                если нет. Подпись обязана называть, что откроется: до этапа Б
+                бот кода доступа не понимал, поле `deep_link` приходило пустым,
+                и обе подписи говорили про страницу входа. */}
             <QrCode
               value={issued.deep_link ?? issued.join_url}
               alt={t("panel.qrAlt", { code: issued.code })}
             />
             <p className="m-0 text-center text-sm text-muted-foreground">
-              {t("panel.qrHintTelegram")}
+              {issued.deep_link === null
+                ? t("panel.qrHintWeb")
+                : t("panel.qrHintTelegram")}
             </p>
 
             <span className="text-sm font-medium">{t("panel.codeLabel")}</span>

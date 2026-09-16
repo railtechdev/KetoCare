@@ -21,7 +21,14 @@ from ..cookies import set_auth_cookies
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, limiter
-from ..schemas import ColleagueRead, MeUpdate, PasswordChange, TokenPair, UserRead
+from ..schemas import (
+    ColleagueRead,
+    CredentialsCreate,
+    MeUpdate,
+    PasswordChange,
+    TokenPair,
+    UserRead,
+)
 from ..schemas_access import AccessCodeClaim, AccessCodeClaimed
 from ..security import create_token, hash_password_async, verify_password_async
 from ..services import access_codes as access_codes_service
@@ -102,6 +109,72 @@ async def update_me(payload: MeUpdate, user: CurrentUserDep, session: SessionDep
     return UserRead.model_validate(updated)
 
 
+@router.post(
+    "/me/credentials",
+    response_model=UserRead,
+    status_code=201,
+    summary="Задать вход в веб-кабинет",
+    dependencies=[Depends(require_roles(UserRole.PARENT))],
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def set_credentials(
+    payload: CredentialsCreate,
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> UserRead:
+    """Включает веб-кабинет родителю, заведённому из Telegram (ADR-0040).
+
+    Веб для такой семьи необязателен и включается ею самой. До этого вызова у
+    учётной записи нет ни почты, ни пароля: её удостоверяет Telegram.
+
+    Повторный вызов отвергается (409). Ручка не спрашивает текущего пароля —
+    спрашивать нечего, — и, оставаясь открытой, она стала бы вторым способом
+    сменить пароль в обход знания прежнего: чужая открытая сессия в Mini App
+    перевела бы кабинет на свою почту. Смена — в `/users/me/password`.
+
+    Токенов не выдаёт: сессия у вызвавшего уже есть, а `password_changed_at`
+    здесь не ставится — обрывать нечего, прежним паролем никто не входил.
+    """
+
+    me = await users_repo.get(session, user.id)
+    if me is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+
+    if me.email is not None or me.password_hash is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Вход в кабинет уже настроен: пароль меняется в профиле.",
+        )
+
+    # Занятость почты проверяется до записи: уникальный индекс дал бы 500, а
+    # человеку нужно объяснение — у него, скорее всего, уже есть кабинет,
+    # заведённый по коду от врача.
+    if await users_repo.get_by_email(session, payload.email) is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Эта почта уже занята. Войдите в кабинет и добавьте ребёнка по коду.",
+        )
+
+    me.email = payload.email
+    me.password_hash = await hash_password_async(payload.password)
+    # `password_changed_at` НЕ ставится: эта отметка обрывает прежние сессии, а
+    # обрывать нечего — пароля до сих пор не было. Поставленная, она выкинула бы
+    # родителя из Mini App ровно в тот момент, когда он включил себе кабинет.
+    await session.flush()
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=me.id,
+        action="set_credentials",
+        entity="users",
+        entity_id=me.id,
+        after={"email": me.email},
+        ip=client_address(request),
+    )
+    return UserRead.model_validate(me)
+
+
 @router.post("/me/password", response_model=TokenPair, summary="Сменить свой пароль")
 @limiter.limit(AUTH_RATE_LIMIT)
 async def change_password(
@@ -124,6 +197,15 @@ async def change_password(
     me = await users_repo.get(session, user.id)
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+
+    # У родителя из Telegram пароля может не быть вовсе (ADR-0040): менять
+    # нечего, и «текущий пароль неверен» тут было бы неправдой. Оракула здесь
+    # нет — человек спрашивает про свою собственную учётную запись.
+    if me.password_hash is None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "У этой учётной записи ещё нет пароля — сначала задайте вход в кабинет.",
+        )
 
     if not await verify_password_async(me.password_hash, payload.current_password):
         await audit_repo.write_audit_log_independent(

@@ -114,7 +114,11 @@ async def login(
     # «неверный пароль» и «учётная запись отключена»: иначе по ответу или по
     # задержке можно перебирать существующие учётные записи. Для отсутствующего
     # пользователя argon2 всё равно прогоняется вхолостую.
-    if user is None:
+    # Учётная запись без пароля отвечает тем же 401 и тем же временем, что
+    # несуществующая: родитель из Telegram (ADR-0040, этап Б) заведомо есть в
+    # базе, и отдельный ответ «паролем сюда не входят» превратил бы вход в
+    # оракул присутствия. Своё объяснение он получает в боте, где он и живёт.
+    if user is None or user.password_hash is None:
         await waste_password_verification_async()
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
@@ -417,7 +421,10 @@ async def totp_setup(
     )
 
     return TotpSetupResponse(
-        secret=secret, provisioning_uri=totp_provisioning_uri(secret, email=db_user.email)
+        secret=secret,
+        provisioning_uri=totp_provisioning_uri(
+            secret, email=db_user.email, full_name=db_user.full_name
+        ),
     )
 
 
@@ -903,6 +910,13 @@ async def set_password_after_reset(
     db_user = await users_repo.get(session, user.id)
     if db_user is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+
+    # Пароля не может не быть: сюда пускает только `password_change_required`,
+    # а ставит его сброс администратором, который учётной записи без почты
+    # отказывает. Проверка стоит ради того, чтобы разрыв этой цепочки стал
+    # ошибкой, а не сравнением с `None` внутри argon2.
+    if db_user.password_hash is None:
+        raise ApiError(ErrorCode.CONFLICT, "У учётной записи нет пароля для замены.")
 
     if await verify_password_async(db_user.password_hash, payload.new_password):
         raise ApiError(

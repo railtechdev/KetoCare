@@ -278,6 +278,16 @@ async def reset_password(
     if user is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Пользователь не найден.")
 
+    # Временным паролем входят по почте. Её нет у родителя из Telegram
+    # (ADR-0040), и выданный ему пароль был бы паролем без логина: человек
+    # решил бы, что доступ восстановлен, а войти не смог бы ничем.
+    if user.email is None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "У учётной записи нет почты: входить временным паролем нечем. "
+            "Родитель задаёт почту сам — в Telegram, разделом «Вход в кабинет».",
+        )
+
     temporary = _generate_temporary_password()
     user.password_hash = await hash_password_async(temporary)
     user.password_changed_at = datetime.now(UTC)

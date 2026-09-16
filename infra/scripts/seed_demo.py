@@ -150,6 +150,10 @@ def _require_password_on_allowed_host() -> None:
 
 # Значения на 100 г. Источник указан честно: это данные USDA, а не выдуманные
 # цифры — база продуктов кормит расчёт, и происхождение должно быть прослеживаемо.
+#: Демонстрационный «человек в Telegram». Число выдумано и ни с кем не совпадает:
+#: настоящие идентификаторы Telegram начинаются не с этого диапазона.
+DEMO_TELEGRAM_USER_ID = 900000001
+
 DEMO_PRODUCTS = [
     ("Масло сливочное", 717, 81.1, 0.9, 0.1, 0.0),
     ("Масло оливковое", 884, 100.0, 0.0, 0.0, 0.0),
@@ -202,7 +206,16 @@ async def main() -> int:
         category = await _category(session)
         added = await _products(session, category_id=category.id, changed_by=admin.id)
 
+        # Родитель «из Telegram»: почты и пароля у него нет вовсе (ADR-0040,
+        # этап Б). Заводится, чтобы кабинет администратора показывал такую
+        # учётную запись и её было на чём проверять: у неё пустая колонка
+        # почты, и временный пароль ей выдать нельзя.
+        telegram_parent = await _telegram_parent(session)
+
         patient = await _patient(session, parent=parent, doctor=doctor)
+        await patients_repo.link_parent(
+            session, parent_id=telegram_parent.id, patient_id=patient.id
+        )
         await _prescription(session, patient_id=patient.id, author_id=doctor.id)
         entries = await _diary(session, patient_id=patient.id, author_id=parent.id)
 
@@ -217,10 +230,25 @@ async def main() -> int:
     print("  admin@example.com   — администратор (второй фактор сброшен)")
     print("  doctor@example.com  — врач (второй фактор сброшен)")
     print("  parent@example.com  — родитель")
+    print("  Айгуль из Telegram  — родитель без почты и пароля: входит только ботом")
     # Заданный человеком пароль в журнал не печатается: на стенде этот вывод
     # уходит в консоль команды и в её журнал, а знает его и так тот, кто задал.
     print(_password_line())
     return 0
+
+
+async def _telegram_parent(session: AsyncSession) -> User:
+    """Родитель, у которого веб-кабинета нет и не обязан быть."""
+
+    existing = await users_repo.get_by_telegram_user_id(session, DEMO_TELEGRAM_USER_ID)
+    if existing is not None:
+        return existing
+    return await users_repo.create(
+        session,
+        role=UserRole.PARENT,
+        full_name="Айгуль из Telegram",
+        telegram_user_id=DEMO_TELEGRAM_USER_ID,
+    )
 
 
 async def _user(

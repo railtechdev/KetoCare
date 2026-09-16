@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from core.config import get_settings
 from core.models import AccessCode, AuditLog, ParentPatient
 from core.models.enums import UserRole
 from core.repositories import access_codes as codes_repo
@@ -90,17 +91,23 @@ class TestIssuing:
 
         assert response.status_code == 403, response.text
 
-    async def test_parent_cannot_issue_on_stage_a(
+    async def test_parent_issues_a_short_lived_code(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        """Родителю выдача откроется на этапе Б — вместе с кодами привязки чата."""
+        """Родитель выпускает код себе — это замена коду привязки чата.
+
+        Срок у него четверть часа, а не неделя: он вводится в соседнем окне, и
+        выбор срока живёт в `ttl_for(role)`, а не в ручке (решение 5 ADR-0040).
+        """
         parent = await make_user(UserRole.PARENT)
         patient = await make_patient()
         await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
 
         response = await client.post(codes_url(patient.id), headers=auth_headers(parent))
 
-        assert response.status_code == 403, response.text
+        assert response.status_code == 201, response.text
+        expires_at = datetime.fromisoformat(response.json()["expires_at"])
+        assert expires_at - datetime.now(UTC) < timedelta(hours=1)
 
     async def test_issuing_is_written_to_audit(
         self, client, session, make_user, make_patient, auth_headers
@@ -594,17 +601,16 @@ class TestAccessBoundaries:
         assert stored.issued_by == doctor.id
 
 
-class TestBotCannotBePromised:
-    """Потребитель поля `deep_link` — Telegram-бот, и он этого кода не понимает.
+class TestBotTakesTheSameCode:
+    """Потребитель поля `deep_link` — Telegram-бот, и с этапа Б он этот код понимает.
 
-    Бот гасит коды привязки (`/auth/link-codes/verify` и таблица `link_codes`);
-    код доступа семьи он научится принимать этапом Б. Пока этого не случилось,
-    ссылка `t.me/<бот>?start=<код>` на экране врача означала бы отказ у КАЖДОЙ
-    семьи на главном экране новой функции — и проверял бы это только живой
-    Telegram.
+    До этапа Б видов кода было два, и ссылка `t.me/<бот>?start=<код>` на экране
+    врача означала бы отказ у КАЖДОЙ семьи на главном экране новой функции.
+    Теперь она означает рабочий путь — и это проверяется вызовом ботовой ручки,
+    а не чтением кода.
     """
 
-    async def test_issue_does_not_offer_a_bot_link(
+    async def test_issue_offers_both_ways(
         self, client, session, make_user, make_patient, auth_headers
     ):
         doctor = await make_user(UserRole.DOCTOR)
@@ -613,31 +619,35 @@ class TestBotCannotBePromised:
 
         issued = await client.post(codes_url(patient.id), headers=auth_headers(doctor))
 
-        assert issued.json()["deep_link"] is None
         assert "/join?code=" in issued.json()["join_url"]
+        deep_link = issued.json()["deep_link"]
+        assert deep_link is None or issued.json()["code"] in deep_link
 
-    async def test_bot_endpoint_refuses_an_access_code(
-        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    async def test_bot_endpoint_accepts_an_access_code(
+        self, client, session, make_user, make_patient, auth_headers
     ):
-        """И это не догадка: ботовая ручка на таком коде отвечает отказом."""
-        from api.deps.bot import verify_bot_service_token
-        from api.main import create_app
+        """Ручка бота гасит код врача и заводит родителя без почты."""
 
         doctor = await make_user(UserRole.DOCTOR)
-        patient = await make_patient()
+        patient = await make_patient("Амина")
         await _lead(session, doctor, patient)
         code = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()[
             "code"
         ]
 
         response = await client.post(
-            "/api/v1/auth/link-codes/verify",
-            json={"code": code, "chat_id": 4242},
-            headers={"X-Bot-Token": "dev-bot-service-token"},
+            "/api/v1/auth/access-codes/activate-telegram",
+            json={
+                "code": code,
+                "chat_id": 4242,
+                "telegram_user_id": 4242,
+                "first_name": "Айгуль",
+            },
+            headers={"X-Bot-Token": get_settings().bot_api_token},
         )
 
-        assert response.status_code in (401, 404), response.text
-        assert verify_bot_service_token is not None and create_app is not None
+        assert response.status_code == 201, response.text
+        assert response.json()["patient_name"] == "Амина"
 
 
 class TestAdminStaysOut:

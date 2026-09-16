@@ -55,17 +55,28 @@ class FakeApi:
     seizure_type_items: list[dict[str, Any]] = field(default_factory=list)
     duration_items: list[dict[str, Any]] = field(default_factory=list)
     dictionary_error: Exception | None = None
+    #: Кто пришёл в бота: `from_user.id`, а не `chat.id` (ADR-0040).
+    verified_telegram_user_id: int | None = None
     #: Ответ `POST /ai/parse` для сценария «Еда словами».
     parsed: dict[str, Any] | None = None
     parse_error: Exception | None = None
     #: Фразы, дошедшие до разбора.
     parsed_texts: list[str] = field(default_factory=list)
 
-    async def verify_link_code(self, *, code: str, chat_id: int) -> LinkVerified:
+    async def activate_access_code(
+        self,
+        *,
+        code: str,
+        chat_id: int,
+        telegram_user_id: int,
+        first_name: str,
+        last_name: str | None,
+    ) -> LinkVerified:
         self.verified_code = code
+        self.verified_telegram_user_id = telegram_user_id
         if self.verify_error is not None:
             raise self.verify_error
-        assert self.verified is not None, "тест обязан задать ответ verify_link_code"
+        assert self.verified is not None, "тест обязан задать ответ activate_access_code"
         return self.verified
 
     async def create_log(
