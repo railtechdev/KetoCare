@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 
-import { DOCTOR_TOTP_SECRET, PASSWORD, ROOT } from "./src/env";
+import { chromium } from "@playwright/test";
+
+import { DOCTOR_TOTP_SECRET, PASSWORD, ROOT, WEB_URL } from "./src/env";
 
 /**
  * Данные прогона — перед каждым запуском, а не отдельным шагом в памяти
@@ -11,7 +13,7 @@ import { DOCTOR_TOTP_SECRET, PASSWORD, ROOT } from "./src/env";
  * проявляется как «Неверный код подтверждения» — сообщение, по которому причину
  * не найти.
  */
-export default function globalSetup(): void {
+export default async function globalSetup(): Promise<void> {
   // Учётные данные передаются сиду ЯВНО, из того же парсера, которым их читают
   // тесты (`src/env.ts`: окружение, затем корневой `.env`, затем дефолт). Иначе
   // значения расходятся: тест берёт их из файла, сид — из своего окружения, и
@@ -29,4 +31,36 @@ export default function globalSetup(): void {
       E2E_TOTP_SECRET: DOCTOR_TOTP_SECRET,
     },
   });
+
+  await warmUp();
+}
+
+/**
+ * Прогрев дев-сервера кабинета до первого сценария.
+ *
+ * Vite собирает модули по требованию, и ПЕРВАЯ навигация в прогоне платит за
+ * сборку всего экрана. В CI это стоило секунд, и первый по алфавиту сценарий
+ * (`journey`) упирался в ожидание `expect` на 15 секунд — падая каждый раз в
+ * новом месте: то на меню, то на истории назначений, то на карточке кетонов.
+ * Три разных места при одном и том же зелёном API — это не дефект продукта, это
+ * холодный старт.
+ *
+ * Прогрев открывает вход и главную один раз, до сценариев, — дальше модули уже
+ * собраны. Ошибки глотаются намеренно: прогрев не должен становиться ещё одной
+ * причиной падения прогона.
+ */
+async function warmUp(): Promise<void> {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ baseURL: WEB_URL });
+    for (const path of ["/login", "/app/home"]) {
+      await page
+        .goto(path, { waitUntil: "networkidle", timeout: 60_000 })
+        .catch(() => null);
+    }
+  } catch {
+    // Прогрев — удобство, а не условие прогона.
+  } finally {
+    await browser.close();
+  }
 }
