@@ -16,7 +16,10 @@ import { MenuScreen } from "./MenuScreen";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
-  return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
+  return {
+    ...actual,
+    api: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn(), DELETE: vi.fn() },
+  };
 });
 
 const SESSION = {
@@ -74,13 +77,73 @@ function renderScreen() {
   return render(<MenuScreen session={SESSION} />, { wrapper: Wrapper });
 }
 
+/** Сводка нужна экрану ради одного числа: сколько приёмов назначил врач. */
+function overview(mealsPerDay: number | null = 4) {
+  return {
+    patient_id: SESSION.patientId,
+    date: "2026-08-31",
+    prescription:
+      mealsPerDay === null
+        ? null
+        : {
+            id: "p1",
+            patient_id: SESSION.patientId,
+            meals_per_day: mealsPerDay,
+          },
+    day: null,
+    seizures_today: { count: 0 },
+    seizure_trend: { direction: "flat" },
+    last_reading_on: null,
+  };
+}
+
+/** Ответы по адресу запроса: экран ходит уже в четыре разных места. */
+function respond(
+  options: {
+    menu?: unknown;
+    mealsPerDay?: number | null;
+    recipes?: unknown[];
+    dishes?: unknown[];
+  } = {},
+) {
+  (api.GET as Mock).mockImplementation(async (path: string) => {
+    if (path.includes("/overview")) {
+      // `??` здесь был бы ошибкой: он считает null отсутствием значения, и
+      // «нет назначения» превращалось бы в четыре приёма.
+      const meals = "mealsPerDay" in options ? options.mealsPerDay : 4;
+      return {
+        data: overview(meals ?? null),
+        response: { status: 200 },
+      };
+    }
+    if (path.includes("/recipes")) {
+      return {
+        data: { items: options.recipes ?? [], total: 0 },
+        response: { status: 200 },
+      };
+    }
+    if (path.includes("/custom-dishes")) {
+      return {
+        data: { items: options.dishes ?? [], total: 0 },
+        response: { status: 200 },
+      };
+    }
+    return {
+      data: options.menu === undefined ? menu() : options.menu,
+      response: { status: options.menu === null ? 404 : 200 },
+    };
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  (api.GET as Mock).mockResolvedValue({
+  respond();
+  (api.POST as Mock).mockResolvedValue({ data: {}, response: { status: 200 } });
+  (api.PUT as Mock).mockResolvedValue({
     data: menu(),
     response: { status: 200 },
   });
-  (api.POST as Mock).mockResolvedValue({ data: {}, response: { status: 200 } });
+  (api.DELETE as Mock).mockResolvedValue({ response: { status: 204 } });
 });
 
 describe("план дня в Mini App", () => {
@@ -252,5 +315,225 @@ describe("план дня в Mini App", () => {
     renderScreen();
 
     expect(await screen.findByText(/Рецепт изменился/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Сборка дня с телефона (17.09.2026).
+ *
+ * До этапа Б экран был только на чтение: «меню составляют за столом». С этапа Б
+ * довод перестал быть верным — у семьи из Telegram веб-кабинета нет вовсе, и
+ * садиться ей было не за что.
+ */
+describe("сборка дня в Mini App", () => {
+  const RECIPE = {
+    id: "33333333-3333-4333-8333-333333333333",
+    title: "Запеканка со сливками",
+    servings: 2,
+    status: "published",
+    computed: {
+      kcal: 420,
+      fat: 40,
+      protein: 8,
+      carbs: 3,
+      fiber: 1,
+      ratio: 3.6,
+    },
+  };
+
+  it("находит блюдо, ставит в приём и сохраняет день", async () => {
+    const user = userEvent.setup();
+    respond({ recipes: [RECIPE] });
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Собрать день" }),
+    );
+    await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
+
+    // Приём выбирается из назначенных врачом, а не набирается числом.
+    await user.selectOptions(
+      screen.getByLabelText("Приём пищи"),
+      screen.getByRole("option", { name: "Приём 2" }),
+    );
+    await user.clear(screen.getByLabelText("Порций"));
+    await user.type(screen.getByLabelText("Порций"), "0,5");
+    await user.click(screen.getByRole("button", { name: "Добавить в день" }));
+
+    await waitFor(() => {
+      expect(api.PUT).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/menus",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            items: [
+              // Уже стоявшая позиция уезжает без искажений — иначе сервер
+              // сочтёт её другой и сбросит отметку «съедено».
+              expect.objectContaining({
+                meal_index: 1,
+                portion_factor: 1,
+              }),
+              {
+                meal_index: 2,
+                recipe_id: RECIPE.id,
+                custom_dish_id: null,
+                portion_factor: 0.5,
+              },
+            ],
+          }),
+        }),
+      );
+    });
+  });
+
+  it("итоги дня клиент не присылает — их считает ядро", async () => {
+    const user = userEvent.setup();
+    respond({ recipes: [RECIPE] });
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Собрать день" }),
+    );
+    await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
+    await user.click(screen.getByRole("button", { name: "Добавить в день" }));
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalled());
+    const call = (api.PUT as Mock).mock.calls[0] as [string, { body: unknown }];
+    const body = call[1].body;
+    // Второй источник клинических чисел в браузере запрещён правилом 2.
+    expect(body).not.toHaveProperty("totals");
+    expect(body).not.toHaveProperty("engine_version");
+  });
+
+  it("без назначения объясняет, почему собрать нельзя", async () => {
+    const user = userEvent.setup();
+    // Приёмы задаёт врач. Подставить один «чтобы работало» значило бы принять
+    // медицинское решение за него.
+    respond({ mealsPerDay: null });
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Собрать день" }),
+    );
+
+    expect(await screen.findByText(/Назначения пока нет/)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Найти блюдо или рецепт"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("убирает позицию из дня", async () => {
+    const user = userEvent.setup();
+    respond({
+      menu: menu({
+        items: [
+          {
+            id: "item-1",
+            menu_id: "menu-1",
+            patient_id: SESSION.patientId,
+            meal_index: 1,
+            recipe_id: "r1",
+            custom_dish_id: null,
+            portion_factor: 1,
+            eaten: false,
+            title: "Омлет",
+            changed_since_saved: false,
+          },
+          {
+            id: "item-2",
+            menu_id: "menu-1",
+            patient_id: SESSION.patientId,
+            meal_index: 2,
+            recipe_id: "r2",
+            custom_dish_id: null,
+            portion_factor: 1,
+            eaten: false,
+            title: "Салат",
+            changed_since_saved: false,
+          },
+        ],
+      }),
+    });
+    renderScreen();
+
+    const salad = (await screen.findByText("Салат")).closest("li");
+    await user.click(
+      within(salad as HTMLElement).getByRole("button", { name: "Убрать" }),
+    );
+
+    await waitFor(() => {
+      expect(api.PUT).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/menus",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            items: [
+              {
+                meal_index: 1,
+                recipe_id: "r1",
+                custom_dish_id: null,
+                portion_factor: 1,
+              },
+            ],
+          }),
+        }),
+      );
+    });
+  });
+
+  it("съеденное убрать нельзя — сначала снимается отметка", async () => {
+    // Съеденное блюдо это уже не план, а запись о том, что ребёнок ел. Снять её
+    // одним нажатием значило бы потерять клинические данные мимо решения.
+    respond({
+      menu: menu({
+        items: [
+          {
+            id: "item-1",
+            menu_id: "menu-1",
+            patient_id: SESSION.patientId,
+            meal_index: 1,
+            recipe_id: "r1",
+            custom_dish_id: null,
+            portion_factor: 1,
+            eaten: true,
+            title: "Омлет",
+            changed_since_saved: false,
+          },
+        ],
+      }),
+    });
+    renderScreen();
+
+    expect(await screen.findByText("Омлет")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Убрать" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("последняя позиция убирается снятием плана, а не пустым днём", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const dish = (await screen.findByText("Омлет на сливках")).closest("li");
+    await user.click(
+      within(dish as HTMLElement).getByRole("button", { name: "Убрать" }),
+    );
+
+    // Схема требует хотя бы одну позицию: пустой `items` был бы отказом 422.
+    await waitFor(() => expect(api.DELETE).toHaveBeenCalled());
+    expect(api.PUT).not.toHaveBeenCalled();
+  });
+
+  it("завтрашний день запрашивается отдельно от сегодняшнего", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("Омлет на сливках");
+
+    await user.click(screen.getByRole("button", { name: "Завтра" }));
+
+    await waitFor(() => {
+      const dates = (api.GET as Mock).mock.calls
+        .filter(([path]) => path.endsWith("/menus"))
+        .map(([, options]) => options.params.query.date);
+      expect(new Set(dates).size).toBe(2);
+    });
   });
 });

@@ -1,17 +1,23 @@
 import {
   AsyncSection,
+  Button,
   MacroBar,
   Section,
   WarningBanner,
   formatMass,
 } from "@ketocare/ui";
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { usePatientOverview } from "../home/useOverview";
 import type { Session } from "../session/useSession";
+import { ComposePanel } from "./ComposePanel";
+import { itemsOf, mealNumbers, withDish, withoutItem } from "./dayPlan";
 import type { Menu, MenuItem } from "./useMenu";
-import { today, useMarkEaten, useMenu } from "./useMenu";
+import { today, tomorrow, useMarkEaten, useMenu } from "./useMenu";
+import { useSaveMenu } from "./useSaveMenu";
 
 /**
  * Приёмы, которые есть в плане, в порядке дня.
@@ -33,22 +39,99 @@ function markFailedId(itemId: string): string {
 // целыми (правило П45 канона — `formatMass` кита).
 
 /**
- * План питания на сегодня с отметками «съедено» (раздел 9 ТЗ).
+ * План питания с отметками «съедено» и сборкой дня (раздел 9 ТЗ).
  *
- * Того же вида, что в кабинете, но без правки состава: меню составляют за
- * столом, а отмечают выполнение — на ходу, и это разные занятия. Свободного
- * текста здесь нет до этапа 4: придуманная еда попала бы в итоги дня наравне с
- * настоящей.
+ * **Собрать день теперь можно отсюда.** Прежде экран был только на чтение с
+ * доводом «меню составляют за столом, а отмечают на ходу» — он перестал быть
+ * верным с этапа Б: у семьи из Telegram веб-кабинета нет вовсе, и «за столом»
+ * ей было не с чем сесть. Отправлять её в браузер телефона, где она не вошла,
+ * значит предлагать не путь, а его видимость.
+ *
+ * Свободного текста здесь по-прежнему нет: придуманная еда попала бы в итоги дня
+ * наравне с настоящей. Состав собирается только из опубликованных рецептов и
+ * своих блюд ребёнка, а итоги считает ядро на сервере.
  */
 export function MenuScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
-  const day = today();
+  const [day, setDay] = useState(today());
+  const [composing, setComposing] = useState(false);
   const menu = useMenu(session.patientId, day);
   const mark = useMarkEaten(session.patientId, day);
+  const save = useSaveMenu(session.patientId, day);
+  // Число приёмов задаёт врач; без назначения раскладывать день не по чему.
+  const overview = usePatientOverview(session.patientId);
+  const meals = mealNumbers(overview.data?.prescription?.meals_per_day ?? null);
+
+  const addDish = ({
+    dish,
+    mealIndex,
+    portionFactor,
+  }: {
+    dish: { kind: "recipe" | "custom"; id: string };
+    mealIndex: number;
+    portionFactor: number;
+  }) => {
+    save.mutate(
+      withDish(itemsOf(menu.data ?? null), dish, mealIndex, portionFactor),
+      { onSuccess: () => setComposing(false) },
+    );
+  };
 
   return (
     <main className="flex flex-col gap-block p-block">
       <h1 className="text-page-title">{t("menu.title")}</h1>
+
+      {/* Сегодня и завтра: план собирают вечером на завтра, а отмечают
+          выполнение сегодня. Третьей даты нет намеренно — см. `tomorrow()`. */}
+      <div className="flex gap-field" role="group" aria-label={t("menu.day")}>
+        {[
+          { value: today(), label: t("menu.today") },
+          { value: tomorrow(), label: t("menu.tomorrow") },
+        ].map((option) => (
+          <Button
+            key={option.value}
+            type="button"
+            variant={day === option.value ? "default" : "outline"}
+            className="min-h-touch"
+            aria-pressed={day === option.value}
+            onClick={() => {
+              setDay(option.value);
+              setComposing(false);
+            }}
+          >
+            {option.label}
+          </Button>
+        ))}
+      </div>
+
+      {composing ? (
+        <Section title={t("menu.compose.title")} density="compact">
+          {meals.length === 0 ? (
+            // Отключённая кнопка обязана называть причину, а не просто не
+            // нажиматься: без назначения приёмов не существует.
+            <p className="m-0 text-muted-foreground">
+              {t("menu.compose.noPrescription")}
+            </p>
+          ) : (
+            <ComposePanel
+              patientId={session.patientId}
+              meals={meals}
+              saving={save.isPending}
+              saveError={save.isError ? save.error : null}
+              onAdd={addDish}
+              onCancel={() => setComposing(false)}
+            />
+          )}
+        </Section>
+      ) : (
+        <Button
+          type="button"
+          className="min-h-touch self-start"
+          onClick={() => setComposing(true)}
+        >
+          {t("menu.compose.open")}
+        </Button>
+      )}
 
       <AsyncSection
         loading={menu.isPending}
@@ -91,6 +174,10 @@ export function MenuScreen({ session }: { session: Session }) {
             onToggle={(item) =>
               mark.mutate({ itemId: item.id, eaten: !item.eaten })
             }
+            onRemove={(item) =>
+              save.mutate(withoutItem(menu.data ?? null, item.id))
+            }
+            removing={save.isPending}
             pendingId={mark.isPending ? mark.variables?.itemId : undefined}
             failedId={mark.isError ? mark.variables?.itemId : undefined}
             failure={errorMessageOf(mark.error) ?? t("menu.markFailedHint")}
@@ -104,12 +191,16 @@ export function MenuScreen({ session }: { session: Session }) {
 function DayPlan({
   menu,
   onToggle,
+  onRemove,
+  removing,
   pendingId,
   failedId,
   failure,
 }: {
   menu: Menu;
   onToggle: (item: MenuItem) => void;
+  onRemove: (item: MenuItem) => void;
+  removing: boolean;
   pendingId: string | undefined;
   failedId: string | undefined;
   failure: string;
@@ -171,6 +262,23 @@ function DayPlan({
                       )}
                     </span>
                   </label>
+
+                  {/* Убрать можно только неотмеченное. Съеденное блюдо — это
+                      уже не план, а запись о том, что ребёнок ел: снять её
+                      одним нажатием значило бы потерять клинические данные
+                      мимо чьего-либо решения. Сначала снимается отметка. */}
+                  {!item.eaten && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="ml-9 min-h-touch"
+                      disabled={removing}
+                      onClick={() => onRemove(item)}
+                    >
+                      {t("menu.compose.remove")}
+                    </Button>
+                  )}
 
                   {/* Отказ отметки называется словами и стоит под той
                       позицией, которую не приняли: без сети отметка отказывает
