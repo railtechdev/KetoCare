@@ -93,7 +93,7 @@ cp .env.example .env   # и заполнить, см. ниже
 | --- | --- |
 | `POSTGRES_PASSWORD` | сгенерировать; строку подключения контейнеры собирают из него сами (`DATABASE_URL`/`REDIS_URL` из `.env` контейнерами перекрываются) |
 | `SECRET_KEY` | `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `BOT_TOKEN`, `BOT_USERNAME` | **отдельный** бот BotFather для стенда: один токен нельзя long-poll'ить из двух мест — dev-бот на том же токене начнёт конфликтовать (`terminated by other getUpdates request`) |
+| `BOT_TOKEN`, `BOT_USERNAME` | **отдельный** бот BotFather для стенда: один токен нельзя long-poll'ить из двух мест — dev-бот на том же токене начнёт конфликтовать (`terminated by other getUpdates request`). **`BOT_USERNAME` обязателен**: из него собирается ссылка `t.me/<бот>?start=<код>`, то есть QR на экране врача. Без него QR ведёт на веб-активацию, и главный путь семьи — «навёл камеру, попал в бота» — молча превращается в «заведи почту и пароль» |
 | `BOT_API_TOKEN` | сгенерировать так же, как `SECRET_KEY` |
 | `TRUSTED_PROXY_IPS` | `172.30.100.1` — шлюз docker-сети, откуда приходит трафик host-nginx (подсеть зафиксирована в compose) |
 | `WEB_ORIGIN` | `https://app.ketocare.railtech.uz` |
