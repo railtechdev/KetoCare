@@ -68,7 +68,22 @@ export function MenuScreen({ session }: { session: Session }) {
         retryLabel={t("actions.retry")}
         onRetry={() => void menu.refetch()}
         isEmpty={menu.data === null}
-        empty={<p className="text-muted-foreground">{t("menu.none")}</p>}
+        empty={
+          // Пустое состояние отправляло в кабинет, не давая туда пути: адреса
+          // кабинета у Mini App не было ни одной переменной сборки. С этапа Б
+          // он приходит в сессии (`web_url`), и «там же» стало ссылкой.
+          <div className="flex flex-col gap-field">
+            <p className="m-0 text-muted-foreground">{t("menu.none")}</p>
+            <a
+              className="text-primary underline underline-offset-4"
+              href={session.webUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t("menu.openWeb")}
+            </a>
+          </div>
+        }
       >
         {menu.data != null && (
           <DayPlan
