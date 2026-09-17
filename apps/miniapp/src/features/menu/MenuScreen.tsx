@@ -1,7 +1,6 @@
 import {
   AsyncSection,
   Button,
-  MacroBar,
   Section,
   WarningBanner,
   formatMass,
@@ -14,6 +13,7 @@ import { errorMessageOf } from "../../lib/api";
 import { usePatientOverview } from "../home/useOverview";
 import type { Session } from "../session/useSession";
 import { ComposePanel } from "./ComposePanel";
+import { DayTotals, type DayTargets } from "./DayTotals";
 import { itemsOf, mealNumbers, withDish, withoutItem } from "./dayPlan";
 import type { Menu, MenuItem } from "./useMenu";
 import { today, tomorrow, useMarkEaten, useMenu } from "./useMenu";
@@ -64,7 +64,18 @@ export function MenuScreen({ session }: { session: Session }) {
   const save = useSaveMenu(session.patientId, day);
   // Число приёмов задаёт врач; без назначения раскладывать день не по чему.
   const overview = usePatientOverview(session.patientId);
-  const meals = mealNumbers(overview.data?.prescription?.meals_per_day ?? null);
+  const prescription = overview.data?.prescription ?? null;
+  const meals = mealNumbers(prescription?.meals_per_day ?? null);
+  // Цели берутся из активного назначения, а не из сводки за день: сводка
+  // посчитана для сегодня, а назначение действует и завтра — на вкладке
+  // «Завтра» цели обязаны остаться теми же.
+  const targets: DayTargets | null =
+    prescription === null
+      ? null
+      : {
+          kcalPerDay: prescription.kcal_per_day,
+          carbsLimitG: prescription.carbs_limit_g,
+        };
 
   // **Состав дня обязан быть известен достоверно.** `PUT` задаёт весь день, и
   // отправленный из незагруженного состояния он означает «день теперь состоит
@@ -201,6 +212,7 @@ export function MenuScreen({ session }: { session: Session }) {
               save.mutate(withoutItem(menu.data ?? null, item.id));
             }}
             removing={save.isPending}
+            targets={targets}
             // Отказ записи называется словами под планом: «Убрать» нажимают при
             // закрытой панели, и её сообщение об ошибке туда не доходит —
             // кнопка просто включалась обратно, а позиция оставалась на месте.
@@ -225,6 +237,7 @@ function DayPlan({
   onRemove,
   removing,
   saveFailed,
+  targets,
   pendingId,
   failedId,
   failure,
@@ -234,6 +247,7 @@ function DayPlan({
   onRemove: (item: MenuItem) => void;
   removing: boolean;
   saveFailed: string | null;
+  targets: DayTargets | null;
   pendingId: string | undefined;
   failedId: string | undefined;
   failure: string;
@@ -309,9 +323,9 @@ function DayPlan({
                   {!item.eaten && (
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="ml-9 min-h-touch"
+                      className="mt-1 ml-9 min-h-touch"
                       disabled={removing}
                       onClick={() => onRemove(item)}
                     >
@@ -370,16 +384,7 @@ function DayPlan({
         );
       })}
 
-      {menu.totals !== null && menu.totals !== undefined && (
-        <Section title={t("menu.totals")} density="compact">
-          <MacroBar
-            fatG={menu.totals.fat}
-            proteinG={menu.totals.protein}
-            carbsG={menu.totals.carbs}
-            showGrams
-          />
-        </Section>
-      )}
+      <DayTotals menu={menu} targets={targets} />
     </div>
   );
 }

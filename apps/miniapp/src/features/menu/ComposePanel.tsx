@@ -101,7 +101,7 @@ export function ComposePanel({
             {chosen.servings === null
               ? t("menu.compose.portionsHintDish")
               : t("menu.compose.portionsHintRecipe", {
-                  servings: chosen.servings,
+                  count: chosen.servings,
                 })}
           </span>
         </div>
@@ -188,7 +188,9 @@ export function ComposePanel({
                   <span className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     {option.kcal !== null && (
                       <span className="tabular-nums">
-                        {formatKcal(option.kcal)}
+                        {t("menu.compose.kcal", {
+                          value: formatKcal(option.kcal),
+                        })}
                       </span>
                     )}
                     {option.ratio !== null && (

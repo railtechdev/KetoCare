@@ -83,7 +83,6 @@
       "loadError": "Не удалось загрузить блюда",
       "meal": "Приём пищи",
       "portions": "Порций",
-      "portionsHintRecipe": "В раскладке рецепта {{servings}}. Одна порция — это 1.",
       "portionsHintDish": "Одно блюдо — это 1. Половина — 0,5.",
       "add": "Добавить в день",
       "adding": "Добавляем…",
@@ -93,7 +92,21 @@
       "failed": "Не удалось сохранить день. Попробуйте ещё раз.",
       "noPrescription": "Назначения пока нет, и приёмов пищи в дне тоже: их задаёт врач. Как только назначение появится, день можно будет собрать.",
       "prescriptionUnknown": "Загружаем назначение — от него зависит, сколько приёмов в дне.",
-      "removeFailed": "Не удалось изменить план"
+      "removeFailed": "Не удалось изменить план",
+      "kcal": "{{value}} ккал",
+      "portionsHintRecipe_one": "Рецепт рассчитан на {{count}} порцию. Одна порция — это 1.",
+      "portionsHintRecipe_few": "Рецепт рассчитан на {{count}} порции. Одна порция — это 1.",
+      "portionsHintRecipe_many": "Рецепт рассчитан на {{count}} порций. Одна порция — это 1."
+    },
+    "targets": {
+      "kcalLabel": "Калорийность",
+      "kcalOfTarget": "{{value}} из {{target}} ккал",
+      "kcalLeft": "осталось {{value}} ккал",
+      "kcalOver": "сверх нормы {{value}} ккал",
+      "carbsLabel": "Углеводы",
+      "carbsOfLimit": "{{value}} из {{limit}} г",
+      "carbsLeft": "осталось {{value}} г",
+      "carbsOver": "сверх лимита {{value}} г"
     }
   },
   "charts": {
