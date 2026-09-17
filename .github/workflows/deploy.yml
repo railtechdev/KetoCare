@@ -155,6 +155,12 @@ jobs:
           ATTACHMENT_PURGE_DAYS: ${{ vars.ATTACHMENT_PURGE_DAYS }}
           REPORT_LINK_TTL_HOURS: ${{ vars.REPORT_LINK_TTL_HOURS }}
           TZ: ${{ vars.TZ }}
+          # Бэкапы. Публичный ключ age — секрет не по содержанию (он публичный),
+          # а по последствиям подмены: чужой ключ в этой строке означает копии,
+          # которые расшифрует не клиника. `BACKUP_REMOTE` — переменная: адрес
+          # хранилища не секрет, а `rclone config` живёт на сервере.
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          BACKUP_REMOTE: ${{ vars.BACKUP_REMOTE }}
         run: |
           umask 077
           # Значения экранируются shlex.quote: deploy.sh не парсит окружение, а
@@ -183,6 +189,7 @@ jobs:
               "PUBLIC_CONTACT_EMAIL", "PUBLIC_TELEGRAM_URL",
               "ATTACHMENT_QUOTA_MB", "ATTACHMENT_PURGE_DAYS",
               "REPORT_LINK_TTL_HOURS", "TZ",
+              "BACKUP_AGE_RECIPIENT", "BACKUP_REMOTE",
           ]
           print("# Собран автоматически .github/workflows/deploy.yml — правки")
           print("# руками затираются следующим деплоем. Источник значений —")
