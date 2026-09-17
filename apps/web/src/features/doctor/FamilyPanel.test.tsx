@@ -170,6 +170,111 @@ describe("кто ведёт ребёнка дома", () => {
     expect(await screen.findByText("TRWX4K92")).toBeInTheDocument();
   });
 
+  /**
+   * Родитель из Telegram веб-кабинета не имеет, а отключить потерянный телефон
+   * можно было только оттуда. Путь шёл через администратора и отключение всей
+   * учётной записи — и всё это время старое устройство писало в дневник.
+   */
+  it("врач видит устройства семьи и отключает потерянное", async () => {
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/patients/{patient_id}/telegram") {
+        return {
+          data: [
+            {
+              id: "link-1",
+              patient_id: PATIENT_ID,
+              parent_id: "p1",
+              chat_id: 4242,
+              linked_at: "2026-09-12T10:00:00Z",
+              revoked_at: null,
+            },
+            {
+              id: "link-old",
+              patient_id: PATIENT_ID,
+              parent_id: "p1",
+              chat_id: 4141,
+              linked_at: "2026-08-01T10:00:00Z",
+              revoked_at: "2026-08-15T10:00:00Z",
+            },
+          ],
+          error: undefined,
+        };
+      }
+      return {
+        data: [
+          { id: "p1", full_name: "Мать", phone: null, email: null },
+          { id: "p2", full_name: "Отец", phone: null, email: "f@example.com" },
+        ],
+        error: undefined,
+      };
+    });
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/auth/refresh") {
+        return { data: { access_token: token }, error: undefined };
+      }
+      return {
+        data: { id: "link-1", revoked_at: "2026-09-17T00:00:00Z" },
+        error: undefined,
+      };
+    });
+
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    // Живая привязка видна, отозванная — нет: это история для аудита.
+    expect(await screen.findByText(/Telegram подключён/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Telegram подключён/)).toHaveLength(1);
+    // У отца устройств нет — и об этом сказано, а не промолчано.
+    expect(screen.getByText("Telegram не подключён")).toBeInTheDocument();
+    // Число чата врачу не показывается: оно ни о чём.
+    expect(screen.queryByText(/4242/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Отключить" }));
+    // Подтверждение называет родителя, а не спрашивает «вы уверены?».
+    expect(
+      await screen.findByRole("heading", { name: /Отключить Telegram у Мать/ }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Отключить" }).at(-1)!,
+    );
+
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/telegram/{link_id}/revoke",
+      { params: { path: { patient_id: PATIENT_ID, link_id: "link-1" } } },
+    );
+  });
+
+  it("родителю устройства видны, но кнопки отключить нет — она в его разделе Telegram", async () => {
+    token = tokenFor("parent");
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/patients/{patient_id}/telegram") {
+        return {
+          data: [
+            {
+              id: "link-1",
+              patient_id: PATIENT_ID,
+              parent_id: "p1",
+              chat_id: 4242,
+              linked_at: "2026-09-12T10:00:00Z",
+              revoked_at: null,
+            },
+          ],
+          error: undefined,
+        };
+      }
+      return {
+        data: [{ id: "p1", full_name: "Мать", phone: null, email: null }],
+        error: undefined,
+      };
+    });
+
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    expect(await screen.findByText(/Telegram подключён/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Отключить" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("семье приглашать некого — кнопки нет", async () => {
     token = tokenFor("parent");
     (api.GET as Mock).mockResolvedValue({

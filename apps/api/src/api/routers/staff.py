@@ -141,7 +141,7 @@ async def set_credentials(
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
 
-    if me.email is not None or me.password_hash is not None:
+    if me.has_web_credentials:
         raise ApiError(
             ErrorCode.CONFLICT,
             "Вход в кабинет уже настроен: пароль меняется в профиле.",

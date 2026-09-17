@@ -114,6 +114,32 @@ class TestLinkFlow:
         )
         assert response.status_code == 201, response.text
 
+    async def test_bot_gets_the_cabinet_address_and_whether_it_is_on(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Форма ответа с именем потребителя — бот, приветствие после привязки.
+
+        После «Готово, чат привязан» родитель обязан узнать, что кабинет
+        существует и как его включить; своей переменной с адресом у бота нет.
+        `has_web_credentials` различает две семьи: пришедшую от врача (кабинета
+        нет — сказать, как включить) и уже имеющую кабинет (просто адрес).
+        """
+
+        parent, patient = await _family(session, make_user, make_patient)
+        link = await _link(client, auth_headers, parent, patient)
+
+        assert link["web_url"].startswith("http")
+        assert not link["web_url"].endswith("/")
+        assert link["has_web_credentials"] is True, "этот родитель заведён с почтой"
+
+        doctor = await make_user(UserRole.DOCTOR)
+        other = await make_patient("Второй")
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=other.id)
+        code = await _issue_code(client, auth_headers, doctor, other)
+        born = await _activate(client, code, chat_id=OTHER_CHAT_ID)
+        assert born.status_code == 201, born.text
+        assert born.json()["has_web_credentials"] is False, "родился в боте — кабинета нет"
+
     async def test_code_is_single_use(self, client, session, make_user, make_patient, auth_headers):
         parent, patient = await _family(session, make_user, make_patient)
         code = await _issue_code(client, auth_headers, parent, patient)

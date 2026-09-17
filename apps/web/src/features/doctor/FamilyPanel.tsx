@@ -1,17 +1,24 @@
 import {
   AsyncSection,
   Button,
+  ConfirmDialog,
   EmptyState,
   FormSheet,
   Section,
+  formatOccurredAt,
+  toast,
 } from "@ketocare/ui";
-import { Mail, Phone, UserPlus, Users } from "lucide-react";
+import { Mail, MessageCircle, Phone, UserPlus, Users } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { AccessCodePanel } from "../access/AccessCodePanel";
+import {
+  useRevokeLinkMutation,
+  useTelegramLinks,
+} from "../telegram/useTelegramLinks";
 import { useFamily } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import { isCareRole } from "./types";
@@ -40,11 +47,20 @@ import { isCareRole } from "./types";
  *
  * Кнопка — только у специалиста: семья доступа не раздаёт, и сервер ответил бы
  * 403 (правило П3 канона).
+ *
+ * **Подключённые устройства семьи и их отключение — тоже здесь.** Родитель из
+ * Telegram веб-кабинета не имеет, а отключить потерянный телефон можно было
+ * только оттуда: путь шёл «родитель → врач → у врача нет кнопки →
+ * администратор отключает всю учётную запись», и всё это время старое
+ * устройство писало в дневник ребёнка. Врач — единственный, кто выдаёт доступ;
+ * логично, что он же его и снимает. Право в API у него было и до экрана.
  */
 export function FamilyPanel({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
   const { session } = useSession();
   const family = useFamily(patientId);
+  const links = useTelegramLinks(patientId);
+  const revoke = useRevokeLinkMutation(patientId);
   const [inviteOpen, setInviteOpen] = useState(false);
 
   // Подпись одна: «родителя» верно и при пустой семье, и при одном родителе.
@@ -129,6 +145,20 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
                   </a>
                 </Button>
               )}
+
+              <Devices
+                memberId={member.id}
+                memberName={member.full_name}
+                links={links.data}
+                loadFailed={links.isError}
+                canRevoke={canInvite}
+                revoking={revoke.isPending}
+                onRevoke={(linkId) =>
+                  revoke.mutate(linkId, {
+                    onSuccess: () => toast.success(t("family.devices.revoked")),
+                  })
+                }
+              />
             </li>
           ))}
         </ul>
@@ -146,5 +176,103 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
         </FormSheet>
       )}
     </Section>
+  );
+}
+
+/**
+ * Устройства одного родителя: живые привязки Telegram и кнопка отключить.
+ *
+ * Идентификатор чата врачу не показывается — ему говорит дата подключения, а
+ * число ни о чём. Отозванные строки не показываются: это история, и её место в
+ * журнале аудита. Пока список едет, строка молчит — устройства второстепенны
+ * рядом с контактами, и скелетон на каждого родителя мельтешил бы.
+ */
+function Devices({
+  memberId,
+  memberName,
+  links,
+  loadFailed,
+  canRevoke,
+  revoking,
+  onRevoke,
+}: {
+  memberId: string;
+  memberName: string;
+  links:
+    | {
+        id: string;
+        parent_id: string;
+        linked_at: string;
+        revoked_at: string | null;
+      }[]
+    | undefined;
+  loadFailed: boolean;
+  canRevoke: boolean;
+  revoking: boolean;
+  onRevoke: (linkId: string) => void;
+}) {
+  const { t } = useTranslation("doctor");
+
+  if (loadFailed) {
+    return (
+      <span className="basis-full text-sm text-destructive">
+        {t("family.devices.loadError")}
+      </span>
+    );
+  }
+  if (links === undefined) return null;
+
+  const mine = links.filter(
+    (link) => link.parent_id === memberId && link.revoked_at === null,
+  );
+  if (mine.length === 0) {
+    return (
+      <span className="basis-full text-sm text-muted-foreground">
+        {t("family.devices.none")}
+      </span>
+    );
+  }
+
+  return (
+    <ul className="m-0 flex basis-full list-none flex-col gap-1 p-0">
+      {mine.map((link) => (
+        <li
+          key={link.id}
+          className="flex flex-wrap items-center gap-field text-sm"
+        >
+          <MessageCircle aria-hidden="true" className="size-4" />
+          <span>
+            {t("family.devices.connected", {
+              date: formatOccurredAt(new Date(link.linked_at)),
+            })}
+          </span>
+          {/* Заголовок называет родителя: отключение прекращает запись с его
+              устройства, и подтверждать надо конкретное действие, а не
+              абстрактное «вы уверены?» (правило П14 канона). */}
+          {canRevoke && (
+            <ConfirmDialog
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-touch"
+                  disabled={revoking}
+                >
+                  {t("family.devices.revoke")}
+                </Button>
+              }
+              title={t("family.devices.confirmRevoke.title", {
+                name: memberName,
+              })}
+              description={t("family.devices.confirmRevoke.body")}
+              confirmLabel={t("family.devices.confirmRevoke.confirm")}
+              cancelLabel={t("family.devices.confirmRevoke.cancel")}
+              onConfirm={() => onRevoke(link.id)}
+            />
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

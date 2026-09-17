@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from .. import keyboards, texts
-from ..api import BotApi, BotApiError
+from ..api import BotApi, BotApiError, LinkVerified
 from ..config import BotSettings
 from ..storage import Binding, BindingStore
 
@@ -131,6 +131,26 @@ async def _link(
         ),
     )
     await message.answer(
-        texts.LINK_SUCCESS.format(patient_name=verified.patient_name),
+        welcome(verified, settings),
         reply_markup=keyboards.main_menu(settings),
     )
+
+
+def welcome(verified: LinkVerified, settings: BotSettings) -> str:
+    """Приветствие после привязки: что у семьи теперь есть и где.
+
+    Строка про приложение — только когда кнопка приложения есть, как в /help.
+    Строка про кабинет — всегда, но разная: семье от врача кабинет ещё надо
+    включить, семья с кабинетом получает просто адрес.
+    """
+
+    lines = [texts.LINK_SUCCESS.format(patient_name=verified.patient_name)]
+    if settings.has_miniapp:
+        lines.append(texts.LINK_SUCCESS_APP_LINE)
+    cabinet = (
+        texts.LINK_SUCCESS_CABINET_ON
+        if verified.has_web_credentials
+        else texts.LINK_SUCCESS_CABINET_OFF
+    )
+    lines.append(cabinet.format(web_url=verified.web_url))
+    return "".join(lines)

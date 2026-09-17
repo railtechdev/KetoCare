@@ -185,6 +185,8 @@ def api() -> FakeApi:
             patient_id=PATIENT_ID,
             patient_name=PATIENT_NAME,
             secret=SECRET,
+            web_url="https://app.example",
+            has_web_credentials=False,
         )
     )
 
