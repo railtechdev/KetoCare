@@ -359,7 +359,7 @@ async def activate_from_telegram(
     first_name: str,
     last_name: str | None,
     ip: str | None,
-) -> tuple[Patient, TelegramAccount, str]:
+) -> tuple[User, Patient, TelegramAccount, str]:
     """Активация кода прямо в боте (ADR-0040, этап Б).
 
     Третий и главный путь: семья выходит от врача с кодом на руках и открывает
@@ -417,7 +417,7 @@ async def activate_from_telegram(
         ip=ip,
         after={"chat_id": link.chat_id, "patient_id": str(link.patient_id)},
     )
-    return patient, link, secret
+    return parent, patient, link, secret
 
 
 async def _parent_behind_telegram(

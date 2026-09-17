@@ -55,6 +55,9 @@ class LinkVerified:
     patient_id: uuid.UUID
     patient_name: str
     secret: str
+    #: Адрес кабинета и есть ли туда вход — для приветствия после привязки.
+    web_url: str
+    has_web_credentials: bool
 
 
 @dataclass(slots=True)
@@ -105,6 +108,8 @@ class BotApi:
             patient_id=uuid.UUID(payload["patient_id"]),
             patient_name=payload["patient_name"],
             secret=payload["secret"],
+            web_url=payload["web_url"],
+            has_web_credentials=bool(payload["has_web_credentials"]),
         )
 
     async def _token(self, *, link_id: uuid.UUID, secret: str) -> str:

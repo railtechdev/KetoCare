@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -123,6 +123,38 @@ class TestLinking:
         # Личность берётся у автора сообщения, а не у чата: по ней сервер
         # находит или заводит учётную запись родителя (ADR-0040).
         assert api.verified_telegram_user_id == CHAT_ID
+
+    @pytest.mark.asyncio
+    async def test_welcome_tells_where_the_app_and_the_cabinet_are(self, api, store):
+        """«Готово, выберите, что записать» оставляло семью в боте навсегда.
+
+        Родитель от врача не знает ни о приложении, ни о кабинете, и узнать ему
+        неоткуда: это единственное сообщение, которое он точно прочтёт.
+        """
+
+        message = FakeMessage(text="/start ABCD2345")
+        with_app = BotSettings(
+            bot_token="t", bot_api_token="s", tz="Asia/Tashkent", miniapp_url="https://tma.example"
+        )
+
+        await start._link(message, api=api, store=store, settings=with_app, code="ABCD2345")
+
+        assert "кнопка «Приложение»" in message.last
+        assert "Вход в кабинет" in message.last, "кабинета ещё нет — сказать, как включить"
+        assert "https://app.example" in message.last, "адрес называется, а не подразумевается"
+
+    @pytest.mark.asyncio
+    async def test_welcome_does_not_tell_to_enable_an_existing_cabinet(self, api, store):
+        """Семья с кабинетом (пришла из веба, подключает чат) получает адрес, а не
+        поручение включить то, что у неё уже есть."""
+
+        api.verified = replace(api.verified, has_web_credentials=True)
+        message = FakeMessage(text="/start ABCD2345")
+
+        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
+
+        assert "https://app.example" in message.last
+        assert "Вход в кабинет" not in message.last
 
     @pytest.mark.asyncio
     async def test_group_chat_cannot_be_linked(self, api, store):
@@ -844,10 +876,15 @@ class TestGroupChats:
 
 class TestHelp:
     def test_help_answers_the_two_inevitable_questions(self):
-        """«Как исправить запись» и «как отвязать чат» — оба ответа в кабинете."""
+        """«Как исправить запись» и «как отключить устройство» — оба ответа названы.
+
+        Второй — двумя путями: в кабинете и у врача. Родитель из Telegram
+        кабинета не имеет, и один только кабинетный ответ был бы для него тупиком.
+        """
 
         assert "исправить" in texts.HELP.lower()
-        assert "отвязать" in texts.HELP.lower()
+        assert "отключить" in texts.HELP.lower()
+        assert "врача" in texts.HELP.lower()
         assert "дневники" in texts.HELP.lower()
 
     @pytest.mark.asyncio

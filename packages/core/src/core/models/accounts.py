@@ -67,6 +67,18 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     @property
+    def has_web_credentials(self) -> bool:
+        """Заведён ли вход в веб-кабинет (ADR-0040, этап Б).
+
+        «Хоть что-то заполнено», а не «заполнено и то, и другое»: тот же
+        предикат, что у отказа `POST /users/me/credentials`. Два разных
+        предиката однажды показали бы родителю панель «Вход в кабинет», которая
+        кончается отказом 409.
+        """
+
+        return self.email is not None or self.password_hash is not None
+
+    @property
     def totp_enrolled(self) -> bool:
         """Второй фактор ВКЛЮЧАЛСЯ — секрет когда-то записан (пусть и испорчен).
 
