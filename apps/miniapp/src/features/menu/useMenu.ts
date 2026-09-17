@@ -12,6 +12,20 @@ export function today(now: Date = new Date()): string {
   return local.toISOString().slice(0, 10);
 }
 
+/**
+ * Завтрашняя дата — в том же местном поясе.
+ *
+ * День вперёд, а не календарь: план собирают вечером на завтра, и это
+ * единственный случай, ради которого приложению нужна другая дата. Выбор любой
+ * даты — это навигация по календарю на 360 px, то есть отдельная работа; в
+ * кабинете она уже есть (`features/menu/DayNavigator.tsx`).
+ */
+export function tomorrow(now: Date = new Date()): string {
+  const next = new Date(now.getTime());
+  next.setDate(next.getDate() + 1);
+  return today(next);
+}
+
 export function menuKey(patientId: string, day: string) {
   return ["patient", patientId, "menu", day] as const;
 }
