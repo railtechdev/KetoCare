@@ -41,7 +41,11 @@ export function useSaveMenu(patientId: string, day: string) {
       if (error || !data) throw error ?? new Error("Empty menu response");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Ответ кладётся в кэш сразу, а не ждёт рефетча: до его прихода
+      // `menu.data` не содержит только что добавленной позиции, и следующее
+      // действие отправило бы состав без неё — сервер молча снял бы свежее.
+      queryClient.setQueryData(menuKey(patientId, day), saved);
       void queryClient.invalidateQueries({ queryKey: menuKey(patientId, day) });
       // Сводка на главной показывает итоги дня и вердикт о допуске — они
       // производны от состава, и без обновления главная осталась бы с числами

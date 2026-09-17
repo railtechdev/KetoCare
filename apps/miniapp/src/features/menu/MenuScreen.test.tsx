@@ -282,7 +282,9 @@ describe("план дня в Mini App", () => {
     (api.GET as Mock).mockResolvedValue({ response: { status: 404 } });
     renderScreen();
 
-    expect(await screen.findByText(/плана нет/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Плана на этот день нет/),
+    ).toBeInTheDocument();
     // И выход отсюда есть: до этого пустое состояние отправляло в кабинет,
     // не давая туда пути — адреса кабинета у Mini App не было вовсе.
     expect(
@@ -535,5 +537,124 @@ describe("сборка дня в Mini App", () => {
         .map(([, options]) => options.params.query.date);
       expect(new Set(dates).size).toBe(2);
     });
+  });
+});
+
+/**
+ * Находки ревью 17.09.2026. Главная — F1: панель сборки отрисовывалась выше
+ * запроса плана и не зависела от него, а состав считался из `menu.data`, равного
+ * `undefined` при ожидании и при отказе. `PUT` уезжал с одной позицией, и сервер
+ * трактовал это как «весь день теперь состоит из этого».
+ */
+describe("день не собирается вслепую", () => {
+  it("пока план не загружен, собрать нечего — и кнопки нет", async () => {
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("/overview")) {
+        return { data: overview(4), response: { status: 200 } };
+      }
+      // План висит: ответа нет ни успехом, ни отказом.
+      if (path.endsWith("/menus")) return new Promise(() => undefined);
+      return { data: { items: [], total: 0 }, response: { status: 200 } };
+    });
+
+    renderScreen();
+
+    await waitFor(() => expect(api.GET).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: "Собрать день" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("отказ загрузки плана не даёт его переписать", async () => {
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("/overview")) {
+        return { data: overview(4), response: { status: 200 } };
+      }
+      if (path.endsWith("/menus")) {
+        return { error: { detail: "упало" }, response: { status: 500 } };
+      }
+      return { data: { items: [], total: 0 }, response: { status: 200 } };
+    });
+
+    renderScreen();
+
+    // Экран объясняет, что происходит, но собрать день не предлагает: иначе
+    // добавление ужина стёрло бы завтрак и обед вместе с их отметками.
+    expect(
+      await screen.findByText(/Не удалось загрузить план дня/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Собрать день" }),
+    ).not.toBeInTheDocument();
+    expect(api.PUT).not.toHaveBeenCalled();
+  });
+
+  it("пока назначение не пришло, «назначения нет» не утверждается", async () => {
+    const user = userEvent.setup();
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("/overview")) return new Promise(() => undefined);
+      if (path.endsWith("/menus")) {
+        return { data: menu(), response: { status: 200 } };
+      }
+      return { data: { items: [], total: 0 }, response: { status: 200 } };
+    });
+
+    renderScreen();
+    await user.click(
+      await screen.findByRole("button", { name: "Собрать день" }),
+    );
+
+    // «Назначения нет» — утверждение о клиническом факте; из незнания его
+    // делать нельзя.
+    expect(await screen.findByText(/Загружаем назначение/)).toBeInTheDocument();
+    expect(screen.queryByText(/Назначения пока нет/)).not.toBeInTheDocument();
+  });
+
+  it("отказ при удалении позиции называется словами", async () => {
+    const user = userEvent.setup();
+    (api.PUT as Mock).mockResolvedValue({
+      error: { error: { code: "conflict", message: "День занят" } },
+      response: { status: 409 },
+    });
+    respond({
+      menu: menu({
+        items: [
+          {
+            id: "item-1",
+            menu_id: "menu-1",
+            patient_id: SESSION.patientId,
+            meal_index: 1,
+            recipe_id: "r1",
+            custom_dish_id: null,
+            portion_factor: 1,
+            eaten: false,
+            title: "Омлет",
+            changed_since_saved: false,
+          },
+          {
+            id: "item-2",
+            menu_id: "menu-1",
+            patient_id: SESSION.patientId,
+            meal_index: 2,
+            recipe_id: "r2",
+            custom_dish_id: null,
+            portion_factor: 1,
+            eaten: false,
+            title: "Салат",
+            changed_since_saved: false,
+          },
+        ],
+      }),
+    });
+    renderScreen();
+
+    const salad = (await screen.findByText("Салат")).closest("li");
+    await user.click(
+      within(salad as HTMLElement).getByRole("button", { name: "Убрать" }),
+    );
+
+    // Панель сборки при удалении закрыта, и её сообщение сюда не доходило:
+    // кнопка просто включалась обратно, а позиция оставалась на месте.
+    expect(await screen.findByText("День занят")).toBeInTheDocument();
   });
 });

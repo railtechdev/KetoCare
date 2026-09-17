@@ -110,7 +110,10 @@ export function useDishOptions(patientId: string, query: string) {
     // Ожидание — пока не пришёл ни один из двух списков: показывать половину
     // выдачи как полную значит предлагать выбрать из неполного.
     isPending: recipes.isPending || dishes.isPending,
-    isError: recipes.isError && dishes.isError,
+    // Отказ ЛЮБОГО из двух списков — отказ выдачи: показать оставшийся как
+    // полный значит сказать семье «своего блюда больше нет», и она поставит в
+    // день другое. Довод тот же, что у `isPending` строкой выше.
+    isError: recipes.isError || dishes.isError,
     isPaused:
       recipes.fetchStatus === "paused" || dishes.fetchStatus === "paused",
     refetch: () => {
