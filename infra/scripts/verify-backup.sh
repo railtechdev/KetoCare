@@ -67,9 +67,13 @@ psql_check() {
     docker exec "$CONTAINER" psql -U ketocare -d "$CHECK_DB" -tAc "$1"
 }
 
-cleanup() {
+drop_check_db() {
     docker exec "$CONTAINER" psql -U ketocare -d postgres \
         -c "DROP DATABASE IF EXISTS $CHECK_DB WITH (FORCE)" >/dev/null 2>&1 || true
+}
+
+cleanup() {
+    drop_check_db
     # Всё временное — здесь, одним обработчиком. Второй `trap ... EXIT` не
     # добавляется к первому, а заменяет его, и расшифрованный дамп переживал бы
     # выход скрипта.
@@ -78,7 +82,14 @@ cleanup() {
 trap cleanup EXIT
 
 # --- разворачиваем ------------------------------------------------------------
-cleanup
+#
+# Здесь снимается ТОЛЬКО база от прошлого прогона. Раньше тут вызывался
+# `cleanup` целиком — и он же удалял только что расшифрованный дамп, за секунду
+# до того, как его собирались разворачивать. Проверка падала на «в
+# восстановленной базе 0 таблиц», то есть обвиняла копию в том, что сама же и
+# сделала. Открытый дамп этого не замечал (`rm -f ""` ничего не делает), а
+# зашифрованный — единственный, который у нас теперь бывает.
+drop_check_db
 docker exec "$CONTAINER" psql -U ketocare -d postgres \
     -c "CREATE DATABASE $CHECK_DB" >/dev/null || fail "не удалось создать временную базу"
 
