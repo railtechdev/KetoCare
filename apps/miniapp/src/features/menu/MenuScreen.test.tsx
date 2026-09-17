@@ -77,7 +77,7 @@ function renderScreen() {
   return render(<MenuScreen session={SESSION} />, { wrapper: Wrapper });
 }
 
-/** Сводка нужна экрану ради одного числа: сколько приёмов назначил врач. */
+/** Сводка нужна экрану ради назначения: приёмы в дне и цели по рациону. */
 function overview(mealsPerDay: number | null = 4) {
   return {
     patient_id: SESSION.patientId,
@@ -89,6 +89,9 @@ function overview(mealsPerDay: number | null = 4) {
             id: "p1",
             patient_id: SESSION.patientId,
             meals_per_day: mealsPerDay,
+            kcal_per_day: 1200,
+            carbs_limit_g: 12,
+            ratio: 3.5,
           },
     day: null,
     seizures_today: { count: 0 },
@@ -656,5 +659,43 @@ describe("день не собирается вслепую", () => {
     // Панель сборки при удалении закрыта, и её сообщение сюда не доходило:
     // кнопка просто включалась обратно, а позиция оставалась на месте.
     expect(await screen.findByText("День занят")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Пока день собирали в кабинете, семья смотрела на готовый план, где цели видно.
+ * С переносом сборки на телефон одни макронутриенты означали бы «собери
+ * суточный рацион ребёнка на терапии вслепую».
+ */
+describe("итоги дня рядом с целями назначения", () => {
+  it("показывает калорийность и углеводы против назначения", async () => {
+    renderScreen();
+
+    expect(await screen.findByText("1 200 из 1 200 ккал")).toBeInTheDocument();
+    expect(screen.getByText("10,0 из 12,0 г")).toBeInTheDocument();
+    // Соотношение — значком кита; вердикта о допуске экран не выносит: правило
+    // живёт одним куском в кабинете, и вторая его реализация означала бы, что
+    // одна семья слышит о своём ребёнке разное в разных каналах.
+    expect(screen.getByText(/3\.5/)).toBeInTheDocument();
+  });
+
+  it("на завтра цели те же — назначение действует и завтра", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("1 200 из 1 200 ккал");
+
+    await user.click(screen.getByRole("button", { name: "Завтра" }));
+
+    // Сводка посчитана для сегодня, но цели берутся из активного назначения:
+    // брать их из сводки значило бы оставить завтрашний день без ориентира.
+    expect(await screen.findByText("1 200 из 1 200 ккал")).toBeInTheDocument();
+  });
+
+  it("без назначения показываются одни показатели, без выдуманных целей", async () => {
+    respond({ mealsPerDay: null });
+    renderScreen();
+
+    expect(await screen.findByText(/Жиры/)).toBeInTheDocument();
+    expect(screen.queryByText(/из .* ккал/)).not.toBeInTheDocument();
   });
 });
