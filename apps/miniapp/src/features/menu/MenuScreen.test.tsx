@@ -220,6 +220,11 @@ describe("план дня в Mini App", () => {
     renderScreen();
 
     expect(await screen.findByText(/плана нет/)).toBeInTheDocument();
+    // И выход отсюда есть: до этого пустое состояние отправляло в кабинет,
+    // не давая туда пути — адреса кабинета у Mini App не было вовсе.
+    expect(
+      screen.getByRole("link", { name: "Открыть кабинет" }),
+    ).toHaveAttribute("href", SESSION.webUrl);
   });
 
   it("называет исключённые ребёнку продукты в плане", async () => {
