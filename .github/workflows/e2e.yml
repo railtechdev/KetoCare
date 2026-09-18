@@ -15,6 +15,10 @@ env:
   REDIS_URL: redis://localhost:6379/0
   SECRET_KEY: ci-secret-key-not-used-outside-ci-000000000000
   BOT_API_TOKEN: ci-bot-service-token-not-used-outside-ci
+  # Токен бота нужен Mini App: им подписывается строка запуска. Значение
+  # фиктивное — подпись считает прогон, проверяет сервер, и обоим нужен один и
+  # тот же токен. Настоящий здесь не нужен: Telegram в прогоне не участвует.
+  BOT_TOKEN: 111111:ci-bot-token-not-used-outside-ci
   TZ: Asia/Tashkent
   # Порты, которые ждут `apps/e2e/src/env.ts` и vite: в CI корневого `.env` нет,
   # и без них конфигурация взяла бы значения по умолчанию, а vite — свои.

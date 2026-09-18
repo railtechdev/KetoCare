@@ -2,7 +2,13 @@ import { execFileSync } from "node:child_process";
 
 import { chromium } from "@playwright/test";
 
-import { DOCTOR_TOTP_SECRET, PASSWORD, ROOT, WEB_URL } from "./src/env";
+import {
+  DOCTOR_TOTP_SECRET,
+  MINIAPP_URL,
+  PASSWORD,
+  ROOT,
+  WEB_URL,
+} from "./src/env";
 
 /**
  * Данные прогона — перед каждым запуском, а не отдельным шагом в памяти
@@ -36,7 +42,7 @@ export default async function globalSetup(): Promise<void> {
 }
 
 /**
- * Прогрев дев-сервера кабинета до первого сценария.
+ * Прогрев дев-серверов до первого сценария.
  *
  * Vite собирает модули по требованию, и ПЕРВАЯ навигация в прогоне платит за
  * сборку всего экрана. В CI это стоило секунд, и первый по алфавиту сценарий
@@ -45,19 +51,31 @@ export default async function globalSetup(): Promise<void> {
  * Три разных места при одном и том же зелёном API — это не дефект продукта, это
  * холодный старт.
  *
- * Прогрев открывает вход и главную один раз, до сценариев, — дальше модули уже
- * собраны. Ошибки глотаются намеренно: прогрев не должен становиться ещё одной
- * причиной падения прогона.
+ * **Mini App прогревается тоже, и по той же причине.** Он поднимается отдельным
+ * сервером, то есть платит за холодный старт отдельно; его сценарий идёт после
+ * `journey` и упёрся бы в то же ожидание. Разбираться потом во второй раз в том
+ * же самом — трата, которой можно не платить.
+ *
+ * Прогрев открывает по паре адресов у каждого, до сценариев, — дальше модули
+ * уже собраны. Ошибки глотаются намеренно: прогрев не должен становиться ещё
+ * одной причиной падения прогона.
  */
 async function warmUp(): Promise<void> {
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ baseURL: WEB_URL });
+    const cabinet = await browser.newPage({ baseURL: WEB_URL });
     for (const path of ["/login", "/app/home"]) {
-      await page
+      await cabinet
         .goto(path, { waitUntil: "networkidle", timeout: 60_000 })
         .catch(() => null);
     }
+
+    // Без подписи Mini App покажет «открывается из Telegram» — для прогрева это
+    // и нужно: модули экрана собраны, а сессия тут ни при чём.
+    const miniapp = await browser.newPage({ baseURL: MINIAPP_URL });
+    await miniapp
+      .goto("/", { waitUntil: "networkidle", timeout: 60_000 })
+      .catch(() => null);
   } catch {
     // Прогрев — удобство, а не условие прогона.
   } finally {

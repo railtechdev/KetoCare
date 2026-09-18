@@ -1,14 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { API_PORT, API_URL, ROOT, WEB_URL } from "./src/env";
+import { API_PORT, API_URL, MINIAPP_URL, ROOT, WEB_URL } from "./src/env";
 
 /**
- * Сквозные тесты кабинета (раздел 13 ТЗ, раздел 15 п. 22).
+ * Сквозные тесты кабинета и Mini App (раздел 13 ТЗ, раздел 15 п. 22).
  *
- * Поднимаются два процесса: API и дев-сервер кабинета. Postgres и Redis —
- * снаружи (`make dev` локально, сервисы job'а в CI): база живёт дольше прогона,
- * и поднимать её из конфигурации теста значило бы прятать состояние, от
- * которого зависит результат.
+ * Поднимаются три процесса: API, дев-сервер кабинета и дев-сервер Mini App.
+ * Postgres и Redis — снаружи (`make dev` локально, сервисы job'а в CI): база
+ * живёт дольше прогона, и поднимать её из конфигурации теста значило бы прятать
+ * состояние, от которого зависит результат.
  *
  * Один браузер. Кабинет — не сайт: он открывается в рабочем окне специалиста и
  * на телефоне родителя, но проверять кросс-браузерность сквозным сценарием
@@ -62,6 +62,18 @@ export default defineConfig({
       // «порт занят».
       command: "pnpm --filter @ketocare/web run dev -- --strictPort",
       url: WEB_URL,
+      cwd: ROOT,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      // Mini App — отдельный сервер, а не путь внутри кабинета: в бою это
+      // отдельный host (`tma.`) со своей политикой рамки, и прогон обязан
+      // повторять эту раскладку, а не упрощать её.
+      command: "pnpm --filter @ketocare/miniapp run dev -- --strictPort",
+      url: MINIAPP_URL,
       cwd: ROOT,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
