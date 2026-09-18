@@ -5,6 +5,7 @@ import {
   EmptyState,
   Skeleton,
   Tiles,
+  formatMeasured,
   formatWeight,
 } from "@ketocare/ui";
 import { NotebookPen } from "lucide-react";
@@ -186,7 +187,7 @@ function DiaryEntry({
         };
       case "ketones":
         return {
-          title: t("ketones.cardTitle", { value: entry.value }),
+          title: t("ketones.cardTitle", { value: formatMeasured(entry.value) }),
           lines: [
             t(
               entry.method === "blood"
@@ -203,7 +204,9 @@ function DiaryEntry({
           lines: [
             entry.height_cm === null
               ? null
-              : t("weight.heightValue", { value: entry.height_cm }),
+              : t("weight.heightValue", {
+                  value: formatMeasured(entry.height_cm),
+                }),
           ],
         };
       case "medications":

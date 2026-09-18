@@ -9,6 +9,7 @@ import {
   WarningBanner,
   formatKcal,
   formatOccurredAt,
+  formatMeasured,
   formatWeight,
 } from "@ketocare/ui";
 import { CalendarOff, ClipboardList } from "lucide-react";
@@ -226,7 +227,7 @@ function OverviewPanels({
             {data.last_ketone == null
               ? t("summary.readings.noKetone")
               : t("summary.readings.ketoneValue", {
-                  value: data.last_ketone.value,
+                  value: formatMeasured(data.last_ketone.value),
                   method: t(
                     `summary.readings.method.${data.last_ketone.method}`,
                   ),

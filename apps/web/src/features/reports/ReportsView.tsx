@@ -7,6 +7,7 @@ import {
   Section,
   Skeleton,
   Tiles,
+  formatMeasured,
   toast,
 } from "@ketocare/ui";
 import { Download, FileText } from "lucide-react";
@@ -26,8 +27,6 @@ import {
   type ReportRange,
   type SeizureByType,
 } from "./useReports";
-
-const AMOUNT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 
 function monthAgo(): string {
   const date = new Date();
@@ -381,9 +380,9 @@ function Measurement({
         series.mean === null
           ? t("measurements.empty")
           : t("measurements.value", {
-              mean: AMOUNT.format(series.mean),
-              min: AMOUNT.format(series.min ?? 0),
-              max: AMOUNT.format(series.max ?? 0),
+              mean: formatMeasured(series.mean),
+              min: formatMeasured(series.min ?? 0),
+              max: formatMeasured(series.max ?? 0),
               count: series.points.length,
               unit,
             })

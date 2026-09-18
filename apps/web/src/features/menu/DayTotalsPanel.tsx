@@ -5,6 +5,7 @@ import {
   Section,
   TargetBar,
   WarningBanner,
+  formatGrams,
   formatKcal,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
@@ -34,7 +35,6 @@ interface Props {
 }
 
 /** Числа в русской записи: «12,5 г», а не «12.5 г» (правило П22 канона). */
-const AMOUNT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 /** Итоги дня против назначения (раздел 8.3 ТЗ, строка «Меню»). */
 export function DayTotalsPanel({
@@ -105,13 +105,13 @@ export function DayTotalsPanel({
             value={totals.kcal}
             target={targets.kcalPerDay}
             valueText={t("totals.kcalOfTarget", {
-              value: AMOUNT.format(totals.kcal),
-              target: AMOUNT.format(targets.kcalPerDay),
+              value: formatKcal(totals.kcal),
+              target: formatKcal(targets.kcalPerDay),
             })}
             hint={
               left.kcal >= 0
-                ? t("totals.kcalLeft", { value: AMOUNT.format(left.kcal) })
-                : t("totals.kcalOver", { value: AMOUNT.format(-left.kcal) })
+                ? t("totals.kcalLeft", { value: formatKcal(left.kcal) })
+                : t("totals.kcalOver", { value: formatKcal(-left.kcal) })
             }
           />
           <TargetBar
@@ -120,13 +120,13 @@ export function DayTotalsPanel({
             value={totals.carbs}
             target={targets.carbsLimitG}
             valueText={t("totals.carbsOfLimit", {
-              value: AMOUNT.format(totals.carbs),
-              limit: AMOUNT.format(targets.carbsLimitG),
+              value: formatGrams(totals.carbs),
+              limit: formatGrams(targets.carbsLimitG),
             })}
             hint={
               left.carbs >= 0
-                ? t("totals.carbsLeft", { value: AMOUNT.format(left.carbs) })
-                : t("totals.carbsOver", { value: AMOUNT.format(-left.carbs) })
+                ? t("totals.carbsLeft", { value: formatGrams(left.carbs) })
+                : t("totals.carbsOver", { value: formatGrams(-left.carbs) })
             }
           />
         </div>

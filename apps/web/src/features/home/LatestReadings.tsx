@@ -3,6 +3,7 @@ import {
   DiaryEntryCard,
   EmptyState,
   Tiles,
+  formatMeasured,
   formatWeight,
 } from "@ketocare/ui";
 import { Droplets, Scale } from "lucide-react";
@@ -56,7 +57,7 @@ export function LatestReadings({ ketone, weight }: Props) {
             occurredAt={new Date(ketone.occurred_at)}
           >
             <p className="m-0 text-metric font-semibold tabular-nums">
-              {t("ketone.value", { value: ketone.value })}
+              {t("ketone.value", { value: formatMeasured(ketone.value) })}
             </p>
             <p className="m-0 mt-1 text-sm text-muted-foreground">
               {t(`ketone.method.${ketone.method}`)}
