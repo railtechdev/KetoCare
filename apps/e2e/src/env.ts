@@ -70,12 +70,29 @@ export const REDIS_PORT = REDIS.port || "6379";
 export const REDIS_DB = REDIS.pathname.replace("/", "") || "0";
 
 export const WEB_PORT = value("WEB_PORT", "5173");
+export const MINIAPP_PORT = value("MINIAPP_PORT", "5174");
 export const API_PORT = apiPort();
 // `localhost`, а не `127.0.0.1`: vite слушает имя, которое на этой машине
 // разрешается сначала в ::1, и проверка готовности по адресу IPv4 не отвечает
 // вовсе — Playwright решает, что сервер не поднялся, и ждёт две минуты впустую.
 export const WEB_URL = `http://localhost:${WEB_PORT}`;
+export const MINIAPP_URL = `http://localhost:${MINIAPP_PORT}`;
 export const API_URL = `http://127.0.0.1:${API_PORT}`;
+
+/**
+ * Токен бота — им подписывается строка запуска Mini App.
+ *
+ * Значение фиктивное и годится только для прогона: подпись считает тест, а
+ * проверяет сервер, и обоим нужен ОДИН и тот же токен. Настоящий токен здесь не
+ * нужен вовсе — Telegram в прогоне не участвует.
+ */
+export const BOT_TOKEN = value(
+  "BOT_TOKEN",
+  "e2e:bot-token-not-used-outside-tests",
+);
+
+/** Сервисный токен бота: им бот гасит код доступа (ADR-0009, два ключа). */
+export const BOT_API_TOKEN = value("BOT_API_TOKEN", "dev-bot-service-token");
 
 /**
  * Учётные записи стенда. Пароль по умолчанию годится только для локальной базы:
