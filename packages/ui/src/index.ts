@@ -20,6 +20,8 @@ export {
   formatNumber,
   formatOccurredAt,
   formatRatio,
+  formatFactor,
+  formatMeasured,
   formatWeight,
 } from "./lib/format";
 

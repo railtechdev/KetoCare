@@ -1,3 +1,5 @@
+import { formatFactor } from "@ketocare/ui";
+
 /**
  * Календарные операции над датой меню.
  *
@@ -49,11 +51,14 @@ export function formatDayLabel(value: string): string {
   }).format(parseIsoDate(value));
 }
 
-/** Множитель порции в локальном формате: 1,5 вместо 1.5. */
+/**
+ * Множитель порции в локальном формате: 1,5 вместо 1.5.
+ *
+ * Обёртка над помощником кита, а не своё `Intl.NumberFormat`: имя остаётся
+ * предметным, реализация — одна на всех (П45).
+ */
 export function formatPortionFactor(factor: number): string {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(
-    factor,
-  );
+  return formatFactor(factor);
 }
 
 function parseIsoDate(value: string): Date {

@@ -30,6 +30,7 @@ import {
   Tiles,
   toast,
   WarningBanner,
+  formatMeasured,
 } from "@ketocare/ui";
 import { Inbox, Pencil, Trash2, X } from "lucide-react";
 
@@ -141,9 +142,13 @@ export function UiShowcase() {
           proteinG={0.5}
           carbsG={0.1}
         />
+        {/* Число идёт через помощник кита, а не литералом: витрина для того и
+            сделана, чтобы расхождения были видны, — а литерал показывал бы
+            запись, которой в продукте нет. Именно здесь «3.4 ммоль/л» через
+            точку и стояло над «Ж 40,5» через запятую (П45). */}
         <DiaryEntryCard
           className="mt-4 max-w-md"
-          title="3.4 ммоль/л"
+          title={`${formatMeasured(3.4)} ммоль/л`}
           occurredAt={new Date()}
           source="web"
         >

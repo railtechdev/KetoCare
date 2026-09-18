@@ -4,6 +4,7 @@ import {
   RatioBadge,
   Section,
   formatOccurredAt,
+  formatMeasured,
   formatWeight,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
@@ -117,7 +118,7 @@ function Summary({ overview }: { overview: Overview }) {
         <dl className="grid grid-cols-2 gap-field">
           <Reading
             label={t("home.readings.ketones")}
-            value={ketone ? String(ketone.value) : null}
+            value={ketone ? formatMeasured(ketone.value) : null}
             at={ketone?.occurred_at}
             empty={t("home.readings.none")}
           />
