@@ -1472,7 +1472,7 @@ describe("калькулятор", () => {
     await user.clear(grams);
     await user.type(grams, "5001");
 
-    const fieldError = screen.getByText(/Не больше 5000 г/);
+    const fieldError = screen.getByText(/Не больше 5 000 г/);
     expect(grams).toHaveAttribute("aria-invalid", "true");
     expect(grams).toHaveAttribute("aria-describedby", fieldError.id);
 
@@ -1481,7 +1481,7 @@ describe("калькулятор", () => {
     // Причина одна и та же у пересчёта и у сохранения — две строки, по одной
     // на каждый блок действий.
     const reasons = screen
-      .getAllByText("Масса продукта «Масло сливочное» больше 5000 г.")
+      .getAllByText("Масса продукта «Масло сливочное» больше 5 000 г.")
       .map((element) => element.id);
     expect(reasons).toContain(scale.getAttribute("aria-describedby"));
     const save = screen.getByRole("button", { name: "Сохранить" });
@@ -1706,7 +1706,7 @@ describe("калькулятор", () => {
     const kcal = await screen.findByLabelText(/Калорийность/);
     await waitFor(() => expect(kcal).toHaveValue(400));
     expect(
-      screen.getByText("Из назначения: 1200 ккал ÷ 3 приёма"),
+      screen.getByText("Из назначения: 1 200 ккал ÷ 3 приёма"),
     ).toBeInTheDocument();
   });
 });
@@ -1817,7 +1817,7 @@ describe("калькулятор без выбранного ребёнка", ()
     const handOff = screen.getByRole("button", { name: "Передать" });
     expect(handOff).toBeDisabled();
     const reasons = screen
-      .getAllByText("Масса продукта «Масло сливочное» больше 5000 г.")
+      .getAllByText("Масса продукта «Масло сливочное» больше 5 000 г.")
       .map((element) => element.id);
     expect(reasons).toContain(handOff.getAttribute("aria-describedby"));
   });

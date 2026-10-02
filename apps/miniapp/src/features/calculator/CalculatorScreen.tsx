@@ -1,4 +1,5 @@
 import {
+  formatMass,
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
@@ -250,7 +251,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
         : tooHeavy !== undefined
           ? t("calculator.blocked.tooHeavy", {
               name: tooHeavy.product.name,
-              max: CALC_GRAMS_MAX,
+              max: formatMass(CALC_GRAMS_MAX),
             })
           : parseAmount(factor) > 0
             ? null
@@ -422,7 +423,9 @@ export function CalculatorScreen({ session }: { session: Session }) {
 
                   {tooHeavyRow && (
                     <p id={errorId} className="m-0 text-sm text-destructive">
-                      {t("calculator.gramsTooMuch", { max: CALC_GRAMS_MAX })}
+                      {t("calculator.gramsTooMuch", {
+                        max: formatMass(CALC_GRAMS_MAX),
+                      })}
                     </p>
                   )}
 
@@ -499,7 +502,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
               suggested !== null &&
               kcal === String(suggested.kcal)
                 ? t("calculator.kcalFromPrescription", {
-                    kcal: prescription.kcal_per_day,
+                    kcal: formatKcal(prescription.kcal_per_day),
                     meals: prescription.meals_per_day,
                   })
                 : t("calculator.mealKcalHint")

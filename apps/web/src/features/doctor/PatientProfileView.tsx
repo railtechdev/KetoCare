@@ -1,4 +1,5 @@
 import {
+  formatMeasured,
   AsyncSection,
   Button,
   EmptyState,
@@ -152,7 +153,9 @@ export function PatientProfileView({
             value={
               patient.height_cm === null
                 ? null
-                : t("card.heightValue", { value: patient.height_cm })
+                : t("card.heightValue", {
+                    value: formatMeasured(patient.height_cm),
+                  })
             }
           />
           {/* Дата замера стоит рядом с числом: вес ребёнка на кетодиете —

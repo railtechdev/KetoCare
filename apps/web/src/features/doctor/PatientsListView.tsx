@@ -1,4 +1,5 @@
 import {
+  formatKcal,
   AsyncSection,
   Button,
   DataTable,
@@ -137,7 +138,9 @@ export function PatientsListView() {
           <span className="tabular-nums">
             {row.original.kcalPerDay === null
               ? "—"
-              : t("list.kcalValue", { value: row.original.kcalPerDay })}
+              : t("list.kcalValue", {
+                  value: formatKcal(row.original.kcalPerDay),
+                })}
           </span>
         ),
       },

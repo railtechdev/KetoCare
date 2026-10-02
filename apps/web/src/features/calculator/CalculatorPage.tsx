@@ -1,4 +1,6 @@
 import {
+  formatKcal,
+  formatMass,
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
@@ -352,7 +354,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
       ? null
       : t("blocked.tooHeavy", {
           name: tooHeavy.product.name,
-          max: CALC_GRAMS_MAX,
+          max: formatMass(CALC_GRAMS_MAX),
         });
   // Сохранение в карте ребёнка разрешает не тайминг, а сам ответ проверки:
   // успешный, на ЭТОТ массив состава (задержка передаёт ту же ссылку) и на
@@ -857,7 +859,7 @@ function GoalFields({
     prescription === null
       ? null
       : t("goal.fromPrescription", {
-          kcal: prescription.kcal_per_day,
+          kcal: formatKcal(prescription.kcal_per_day),
           meals: prescription.meals_per_day,
         });
 

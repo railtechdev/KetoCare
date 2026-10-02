@@ -10,6 +10,7 @@ import {
 } from "recharts";
 
 import { cn } from "../lib/cn";
+import { formatMeasured } from "../lib/format";
 
 export interface TrendPoint {
   /** Момент измерения */
@@ -38,7 +39,15 @@ export interface TrendChartProps {
   /** Доступное описание графика: скринридер не видит линию */
   caption: string;
   emptyState: React.ReactNode;
-  /** Форматирование даты остаётся за приложением: локаль у него, не у пакета */
+  /**
+   * Форматирование ДАТЫ остаётся за приложением: локаль у него, не у пакета.
+   *
+   * Значения — наоборот, печатает сам кит (`formatMeasured`): на графике стоят
+   * величины, снятые прибором, и правило их записи одно на всю систему
+   * (правило П45). Пока числа подставлялись сырыми, на экране дневника «2.7
+   * ммоль/л» в подсказке и в текстовой альтернативе стояло рядом с «2,7
+   * ммоль/л» в карточке записи — про один и тот же замер.
+   */
   formatDate: (value: Date) => string;
   className?: string;
 }
@@ -104,6 +113,7 @@ export function TrendChart({
             stroke="var(--color-muted-foreground)"
             fontSize={12}
             width={48}
+            tickFormatter={(value: number) => formatMeasured(value)}
             label={{
               value: unit,
               angle: -90,
@@ -112,8 +122,16 @@ export function TrendChart({
             }}
           />
           <Tooltip
+            // Имени у ряда нет — он на графике один, и подпись «значение»
+            // ничего не добавляет. Без `separator` recharts всё равно ставит
+            // своё « : » между пустым именем и числом, и подсказка читалась
+            // как «08.09 : 2,8 ммоль/л» — с двоеточием, повисшим в воздухе.
+            separator=""
             labelFormatter={(ts) => formatDate(new Date(Number(ts)))}
-            formatter={(value: number) => [`${value} ${unit}`, ""]}
+            formatter={(value: number) => [
+              `${formatMeasured(value)} ${unit}`,
+              "",
+            ]}
             contentStyle={{
               background: "var(--color-card)",
               border: "1px solid var(--color-border)",
@@ -151,7 +169,7 @@ export function TrendChart({
             <tr key={point.ts}>
               <th scope="row">{formatDate(new Date(point.ts))}</th>
               <td>
-                {point.value} {unit}
+                {formatMeasured(point.value)} {unit}
               </td>
             </tr>
           ))}

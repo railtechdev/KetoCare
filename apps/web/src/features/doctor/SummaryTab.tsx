@@ -1,4 +1,5 @@
 import {
+  formatGrams,
   AsyncSection,
   Button,
   EmptyState,
@@ -120,17 +121,23 @@ function OverviewPanels({
 
             <dt className="text-muted-foreground">{t("fields.kcal")}</dt>
             <dd className="m-0 tabular-nums">
-              {t("units.kcalPerDay", { value: prescription.kcal_per_day })}
+              {t("units.kcalPerDay", {
+                value: formatKcal(prescription.kcal_per_day),
+              })}
             </dd>
 
             <dt className="text-muted-foreground">{t("fields.protein")}</dt>
             <dd className="m-0 tabular-nums">
-              {t("units.gramsPerDay", { value: prescription.protein_g })}
+              {t("units.gramsPerDay", {
+                value: formatGrams(prescription.protein_g),
+              })}
             </dd>
 
             <dt className="text-muted-foreground">{t("fields.carbsLimit")}</dt>
             <dd className="m-0 tabular-nums">
-              {t("units.gramsPerDay", { value: prescription.carbs_limit_g })}
+              {t("units.gramsPerDay", {
+                value: formatGrams(prescription.carbs_limit_g),
+              })}
             </dd>
 
             <dt className="text-muted-foreground">{t("fields.meals")}</dt>
@@ -204,7 +211,7 @@ function OverviewPanels({
               <p className="m-0 text-sm text-muted-foreground">
                 {t("summary.day.kcalBelowTarget", {
                   value: formatKcal(day.totals.kcal),
-                  target: prescription?.kcal_per_day ?? 0,
+                  target: formatKcal(prescription?.kcal_per_day ?? 0),
                 })}
               </p>
             )}

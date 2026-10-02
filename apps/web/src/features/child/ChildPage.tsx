@@ -1,4 +1,5 @@
 import {
+  formatMeasured,
   AsyncSection,
   Button,
   Card,
@@ -165,7 +166,9 @@ export function ChildPage() {
                     <span className="text-sm text-muted-foreground">
                       {child.height_cm === null
                         ? t("children.noHeight")
-                        : t("children.height", { value: child.height_cm })}
+                        : t("children.height", {
+                            value: formatMeasured(child.height_cm),
+                          })}
                     </span>
                     <span className="text-sm text-muted-foreground">
                       {/* Названия, а не идентификаторы: поле хранит ссылки на
