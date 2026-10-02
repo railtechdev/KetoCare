@@ -59,4 +59,17 @@ describe("числа в Mini App", () => {
       "оберните значение помощником кита (formatGrams / formatKcal / formatMass / formatMeasured)",
     ).toEqual([]);
   });
+  it("не зовут проверку словарей из рантайма", () => {
+    // `@ketocare/ui/testing` читает файловую систему (`node:fs`). Сегодня он
+    // виден только тестам, но публичный вход у пакета есть, и импорт из экранного
+    // кода сломался бы на сборке, а не на ревью.
+    const root = join(import.meta.dirname);
+    const guilty = globSync("**/*.{ts,tsx}", { cwd: root })
+      .filter((file) => !file.includes(".test."))
+      .filter((file) =>
+        readFileSync(join(root, file), "utf8").includes("@ketocare/ui/testing"),
+      );
+
+    expect(guilty, "этот вход только для тестов").toEqual([]);
+  });
 });

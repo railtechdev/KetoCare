@@ -123,7 +123,9 @@ function durationLine(
   t: TFunction<"diary">,
 ): string | null {
   if (entry.duration_sec !== null) {
-    return t("seizures.durationValue", { value: entry.duration_sec });
+    return t("seizures.durationValue", {
+      value: formatMeasured(entry.duration_sec),
+    });
   }
   if (entry.duration_option_id !== null) {
     return t("seizures.durationInterval", {

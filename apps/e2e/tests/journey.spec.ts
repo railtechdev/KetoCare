@@ -120,6 +120,16 @@ test("врач назначает, семья ведёт день, отчёт с
       .first(),
   ).toBeVisible();
 
+  // Подсказка графика — единственное место этого экрана, которого нет в jsdom:
+  // recharts не рисует SVG без ширины, и проверка кита доходит только до
+  // текстовой альтернативы. Здесь настоящий браузер, и смотреть надо здесь.
+  await parent.locator(".recharts-dot").first().hover();
+  const tooltip = parent.locator(".recharts-tooltip-wrapper");
+  await expect(tooltip).toContainText(`${KETONE.replace(".", ",")} ммоль/л`);
+  // Двоеточия в подсказке быть не должно: имени у ряда нет, подпись — дата
+  // «02.10», а recharts без `separator` ставил своё « : » перед числом.
+  await expect(tooltip).not.toContainText(":");
+
   await parent.goto("/app/diary?kind=weight");
   await parent.getByRole("button", { name: "Добавить запись" }).first().click();
   await parent.locator("#weight-value").fill(WEIGHT);

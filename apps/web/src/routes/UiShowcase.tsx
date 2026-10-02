@@ -214,7 +214,7 @@ export function UiShowcase() {
             <>
               <MetricRow label="MetricRow — «сколько»">
                 <Metric label="Кетосоотношение" value="3.5 : 1" />
-                <Metric label="Калорийность" value="1200" unit="ккал" />
+                <Metric label="Калорийность" value="1 200" unit="ккал" />
                 <Metric label="Белок" value="25" unit="г" />
                 <Metric label="Рост" value={null} />
               </MetricRow>
@@ -234,7 +234,7 @@ export function UiShowcase() {
           aside={
             <MetricRow label="Тот же ряд в колонке 20rem">
               <Metric label="Кетосоотношение" value="3.5 : 1" />
-              <Metric label="Калорийность" value="1200" unit="ккал" />
+              <Metric label="Калорийность" value="1 200" unit="ккал" />
             </MetricRow>
           }
         />
