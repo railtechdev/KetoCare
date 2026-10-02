@@ -1,5 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { EmptyState, FormFooter, WarningBanner } from "@ketocare/ui";
+import {
+  EmptyState,
+  FormFooter,
+  WarningBanner,
+  formatMeasured,
+  formatWeight,
+} from "@ketocare/ui";
 import { Pill } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
@@ -487,8 +493,8 @@ function KetoneForm({
         error={
           errors.value &&
           t("ketones.valueInvalid", {
-            min: KETONE_MIN_MMOL,
-            max: KETONE_MAX_MMOL,
+            min: formatMeasured(KETONE_MIN_MMOL),
+            max: formatMeasured(KETONE_MAX_MMOL),
           })
         }
         {...register("value")}
@@ -574,7 +580,10 @@ function WeightForm({
         label={t("weight.value")}
         error={
           errors.weightKg &&
-          t("weight.valueInvalid", { min: WEIGHT_MIN_KG, max: WEIGHT_MAX_KG })
+          t("weight.valueInvalid", {
+            min: formatWeight(WEIGHT_MIN_KG),
+            max: formatWeight(WEIGHT_MAX_KG),
+          })
         }
         {...register("weightKg")}
       />

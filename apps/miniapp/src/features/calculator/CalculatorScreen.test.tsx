@@ -377,7 +377,7 @@ describe("калькулятор в Mini App", () => {
     );
     expect(screen.getByLabelText("Ккал на приём")).toHaveValue("300");
     expect(
-      screen.getByText("Из назначения: 1200 ккал ÷ 4 приёма"),
+      screen.getByText("Из назначения: 1 200 ккал ÷ 4 приёма"),
     ).toBeInTheDocument();
 
     await addProduct(user);
@@ -1585,14 +1585,14 @@ describe("калькулятор в Mini App", () => {
     // С запятой: предел сравнивается с тем же числом, что уходит в расчёт.
     await user.type(grams, "5000,5");
 
-    const fieldError = screen.getByText(/Не больше 5000 г/);
+    const fieldError = screen.getByText(/Не больше 5 000 г/);
     expect(grams).toHaveAttribute("aria-invalid", "true");
     expect(grams).toHaveAttribute("aria-describedby", fieldError.id);
 
     const scale = screen.getByRole("button", { name: "Пересчитать порции" });
     expect(scale).toBeDisabled();
     const reason = screen.getByText(
-      "Масса продукта «Масло сливочное» больше 5000 г.",
+      "Масса продукта «Масло сливочное» больше 5 000 г.",
     );
     expect(scale).toHaveAttribute("aria-describedby", reason.id);
     // Подбор граммов со входа не берёт — предел его не выключает.

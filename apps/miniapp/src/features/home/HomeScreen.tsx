@@ -1,4 +1,6 @@
 import {
+  formatGrams,
+  formatKcal,
   AsyncSection,
   MacroBar,
   RatioBadge,
@@ -89,12 +91,14 @@ function Summary({ overview }: { overview: Overview }) {
           <div className="flex flex-wrap items-center gap-field">
             <RatioBadge ratio={Number(prescription.ratio)} />
             <span>
-              {t("home.prescription.kcal", { kcal: prescription.kcal_per_day })}
+              {t("home.prescription.kcal", {
+                kcal: formatKcal(prescription.kcal_per_day),
+              })}
             </span>
             <span className="text-muted-foreground">
               {t("home.prescription.macros", {
-                protein: prescription.protein_g,
-                carbs: prescription.carbs_limit_g,
+                protein: formatGrams(prescription.protein_g),
+                carbs: formatGrams(prescription.carbs_limit_g),
               })}
             </span>
           </div>

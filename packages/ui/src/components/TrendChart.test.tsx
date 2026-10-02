@@ -44,6 +44,27 @@ describe("TrendChart", () => {
     expect(dates).toEqual(["2026-03-01", "2026-03-02", "2026-03-03"]);
   });
 
+  it("печатает значения по-русски, как и остальные числа", () => {
+    // Здесь проверялись только даты — и значения полтора месяца стояли сырыми:
+    // «2.8 ммоль/л» в таблице под графиком против «2,8 ммоль/л» в карточке той
+    // же записи. Правило П45 кетоны называет прямо.
+    render(
+      <TrendChart
+        points={POINTS}
+        unit="ммоль/л"
+        caption="Кетоны за период"
+        emptyState="Нет измерений"
+        formatDate={formatDate}
+      />,
+    );
+
+    const table = screen.getByRole("table", { name: "Кетоны за период" });
+    const values = Array.from(table.querySelectorAll("td")).map((td) =>
+      td.textContent?.trim(),
+    );
+    expect(values).toEqual(["2,8 ммоль/л", "4,1 ммоль/л", "3,2 ммоль/л"]);
+  });
+
   it("подписывает график для скринридера", () => {
     render(
       <TrendChart

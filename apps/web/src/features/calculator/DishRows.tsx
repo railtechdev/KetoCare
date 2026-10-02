@@ -1,4 +1,5 @@
 import {
+  formatMass,
   Button,
   CALC_GRAMS_MAX,
   EmptyState,
@@ -143,7 +144,7 @@ export function DishRows({
 
             {tooHeavy && (
               <p id={errorId} className="m-0 text-sm text-destructive">
-                {t("gramsTooMuch", { max: CALC_GRAMS_MAX })}
+                {t("gramsTooMuch", { max: formatMass(CALC_GRAMS_MAX) })}
               </p>
             )}
 

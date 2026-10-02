@@ -1,4 +1,5 @@
 import {
+  formatGrams,
   AsyncSection,
   Badge,
   Button,
@@ -122,7 +123,7 @@ export function ProductCard({
                 carbsG={data.carbs_100g}
               />
               <p className="m-0 text-sm text-muted-foreground tabular-nums">
-                {t("card.fiber", { value: data.fiber_100g })}
+                {t("card.fiber", { value: formatGrams(data.fiber_100g) })}
               </p>
             </Section>
 

@@ -9,6 +9,7 @@ import {
   WarningBanner,
   formatGrams,
   formatKcal,
+  formatMass,
   type ProductName,
   useDebouncedValue,
 } from "@ketocare/ui";
@@ -231,7 +232,7 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
         <p className="text-muted-foreground">
           {t("recipes.servings", {
             count: recipe.servings,
-            yield: recipe.yield_g,
+            yield: formatMass(recipe.yield_g),
           })}
         </p>
       </Section>
@@ -311,7 +312,7 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
               )}
             </span>
             <span className="text-muted-foreground tabular-nums">
-              {t("recipes.grams", { value: ingredient.grams })}
+              {t("recipes.grams", { value: formatMass(ingredient.grams) })}
             </span>
           </li>
         ))}

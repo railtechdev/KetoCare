@@ -2,6 +2,8 @@ import { globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { rawNumbersNextToUnits } from "@ketocare/ui/testing";
+
 /**
  * Правило П45 канона исполняемое, а не только записанное.
  *
@@ -55,6 +57,24 @@ describe("числа на экранах кабинета", () => {
     expect(
       guilty,
       "правило точности живёт в packages/ui/src/lib/format.ts — берите помощник оттуда",
+    ).toEqual([]);
+  });
+  it("не подставляют сырое число рядом с единицей измерения", () => {
+    // Третий способ показать сырое число, мимо обеих проверок выше: единица
+    // измерения стоит в шаблоне словаря, а вызов подставляет в него поле ответа
+    // как есть. Так «1200 ккал в сутки» стояло в одной строке с «1 200 ккал»
+    // из соседнего блока, а дробный рост печатался как «120.5 см».
+    const guilty = rawNumbersNextToUnits({
+      localesDir: join(import.meta.dirname, "locales/ru"),
+      sourceDir: join(import.meta.dirname),
+    }).map(
+      (found) =>
+        `${found.file}:${found.line} ${found.key} → ${found.variable}: ${found.expression}`,
+    );
+
+    expect(
+      guilty,
+      "оберните значение помощником кита (formatGrams / formatKcal / formatMass / formatMeasured)",
     ).toEqual([]);
   });
 });

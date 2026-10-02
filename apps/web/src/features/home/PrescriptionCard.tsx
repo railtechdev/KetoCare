@@ -1,4 +1,5 @@
 import {
+  formatGrams,
   EmptyState,
   Metric,
   MetricRow,
@@ -56,13 +57,13 @@ export function PrescriptionCard({
         <Metric
           label={t("prescription.protein")}
           value={t("prescription.gramsValue", {
-            value: prescription.protein_g,
+            value: formatGrams(prescription.protein_g),
           })}
         />
         <Metric
           label={t("prescription.carbsLimit")}
           value={t("prescription.gramsValue", {
-            value: prescription.carbs_limit_g,
+            value: formatGrams(prescription.carbs_limit_g),
           })}
         />
         {/* Число приёмов врач задаёт с первого назначения, а семье его до сих
