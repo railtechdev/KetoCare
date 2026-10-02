@@ -120,3 +120,26 @@ async def revoke(session: AsyncSession, link_id: uuid.UUID) -> TelegramAccount |
     )
     revoked: TelegramAccount | None = await session.scalar(stmt)
     return revoked
+
+
+async def revoke_for_parent(
+    session: AsyncSession, *, parent_id: uuid.UUID, patient_id: uuid.UUID
+) -> list[TelegramAccount]:
+    """Отзывает все живые привязки этого взрослого к этому ребёнку.
+
+    Нужна, когда взрослому закрывают доступ: иначе его чат продолжал бы писать
+    в дневник ребёнка — сессия бота опирается на привязку, а не на связь
+    взрослого с ребёнком.
+    """
+
+    stmt = (
+        update(TelegramAccount)
+        .where(
+            TelegramAccount.parent_id == parent_id,
+            TelegramAccount.patient_id == patient_id,
+            TelegramAccount.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(UTC))
+        .returning(TelegramAccount)
+    )
+    return list((await session.scalars(stmt)).all())

@@ -36,6 +36,7 @@ from ..schemas import (
     PatientRead,
     PatientUpdate,
 )
+from ..services import family as family_service
 
 CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 
@@ -256,7 +257,7 @@ async def list_patient_doctors(
 async def list_patient_parents(
     patient_id: Annotated[uuid.UUID, Path()],
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> list[FamilyMemberRead]:
     """Зеркало `/doctors`, но с контактами.
 
@@ -268,9 +269,34 @@ async def list_patient_parents(
     доступ к данным ребёнка, он видит и второго родителя.
     """
 
-    parent_ids = await patients_repo.list_parent_ids(session, patient_id=patient_id)
-    parents = [await users_repo.get(session, pid) for pid in parent_ids]
-    return [FamilyMemberRead.model_validate(p) for p in parents if p is not None]
+    return await family_service.members(session, patient_id=patient_id, viewer=user)
+
+
+@router.delete(
+    "/{patient_id}/parents/{parent_id}",
+    status_code=204,
+    summary="Закрыть взрослому доступ к ребёнку",
+)
+async def remove_patient_parent(
+    patient_id: Annotated[uuid.UUID, Path()],
+    parent_id: Annotated[uuid.UUID, Path()],
+    request: Request,
+    session: SessionDep,
+    user: PatientAccessDep,
+) -> None:
+    """Убирает взрослого из близких ребёнка (ADR-0043).
+
+    Вправе: ведущий специалист, пригласивший этого взрослого и сам взрослый.
+    Данные, которые он вёл, остаются за ребёнком.
+    """
+
+    await family_service.remove(
+        session,
+        patient_id=patient_id,
+        member_id=parent_id,
+        actor=user,
+        ip=client_address(request),
+    )
 
 
 @router.post(

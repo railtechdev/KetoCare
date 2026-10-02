@@ -262,6 +262,18 @@ export function LoginPage() {
           <p className="m-0 mt-1 text-sm text-muted-foreground">
             {t("login.noAccount")}
           </p>
+          {/* Код на руках — частый случай: его прислали врач или родитель.
+              Без этой ссылки страница с формой для кода находилась только по
+              адресу из приглашения (аудит пути, 02.10.2026). */}
+          {/* Обычная ссылка, а не `Link` роутера: страница входа рисуется и
+              вне дерева маршрутов (проверка сессии), а переход на публичную
+              страницу полной загрузкой ничего не теряет. */}
+          <a
+            href="/join"
+            className="mt-2 inline-block text-sm text-primary underline underline-offset-4"
+          >
+            {t("login.haveCode")}
+          </a>
         </div>
       </div>
     </div>

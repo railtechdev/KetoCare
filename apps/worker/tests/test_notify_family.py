@@ -36,3 +36,38 @@ class TestNoticeText:
         """Чат привязан к одному ребёнку — называть его по имени незачем."""
 
         assert "ребён" not in NOTICE.lower()
+
+
+class TestFamilyJoined:
+    """Уведомление о новом близком (ADR-0043)."""
+
+    def test_names_the_newcomer_and_who_invited(self) -> None:
+        from worker.reminders.notify import joined_notice
+
+        text = joined_notice(newcomer_name="Мария", inviter_name="Анна")
+        assert "Мария" in text and "Анна" in text
+
+    def test_says_where_to_close_access(self) -> None:
+        """Сообщение без следующего шага — тревога без выхода."""
+        from worker.reminders.notify import joined_notice
+
+        text = joined_notice(newcomer_name="Мария", inviter_name=None)
+        assert "«Близкие»" in text
+        assert "None" not in text
+
+    def test_skips_the_newcomer_and_revoked_chats(self) -> None:
+        import uuid
+        from datetime import UTC, datetime
+        from types import SimpleNamespace
+
+        from worker.reminders.notify import joined_recipients
+
+        mother, grandma = uuid.uuid4(), uuid.uuid4()
+        links = [
+            SimpleNamespace(parent_id=mother, chat_id=1, revoked_at=None),
+            SimpleNamespace(parent_id=mother, chat_id=1, revoked_at=None),
+            SimpleNamespace(parent_id=mother, chat_id=2, revoked_at=datetime.now(UTC)),
+            SimpleNamespace(parent_id=grandma, chat_id=3, revoked_at=None),
+        ]
+
+        assert joined_recipients(links, newcomer_id=grandma) == [1]

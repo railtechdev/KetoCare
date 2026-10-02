@@ -96,6 +96,7 @@ async def issue_access_code(
         patient_id=patient_id,
         issuer=user,
         purpose=purpose,
+        channel=user.channel,
         ip=client_address(request),
     )
 

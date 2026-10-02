@@ -50,7 +50,11 @@ async def update(session: AsyncSession, *, patient: Patient, **fields: Any) -> P
 
 
 async def link_parent(
-    session: AsyncSession, *, parent_id: uuid.UUID, patient_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    parent_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    invited_by: uuid.UUID | None = None,
 ) -> ParentPatient:
     """Идемпотентна, как и `link_doctor`: повтор возвращает существующую связь.
 
@@ -69,10 +73,49 @@ async def link_parent(
     if existing is not None:
         return existing
 
-    link = ParentPatient(parent_id=parent_id, patient_id=patient_id)
+    # `invited_by` — только у новой связи: повтор не переписывает, кто позвал.
+    link = ParentPatient(parent_id=parent_id, patient_id=patient_id, invited_by=invited_by)
     session.add(link)
     await session.flush()
     return link
+
+
+async def get_parent_link(
+    session: AsyncSession, *, parent_id: uuid.UUID, patient_id: uuid.UUID
+) -> ParentPatient | None:
+    link: ParentPatient | None = await session.scalar(
+        select(ParentPatient).where(
+            ParentPatient.parent_id == parent_id,
+            ParentPatient.patient_id == patient_id,
+        )
+    )
+    return link
+
+
+async def unlink_parent(
+    session: AsyncSession, *, parent_id: uuid.UUID, patient_id: uuid.UUID
+) -> bool:
+    """Закрывает взрослому доступ к ребёнку (ADR-0043). Данные не затрагиваются.
+
+    Связь — это доступ, а не клиническая запись: дневники, которые взрослый
+    вёл, остаются за ребёнком и подписаны его именем. Поэтому строка связи
+    удаляется, как и у `unlink_doctor`, а след остаётся в журнале аудита.
+
+    Возвращает False, если связи не было.
+    """
+
+    link = await session.scalar(
+        select(ParentPatient).where(
+            ParentPatient.parent_id == parent_id,
+            ParentPatient.patient_id == patient_id,
+        )
+    )
+    if link is None:
+        return False
+
+    await session.delete(link)
+    await session.flush()
+    return True
 
 
 async def link_doctor(

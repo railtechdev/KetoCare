@@ -135,6 +135,7 @@ class TestIssuing:
         assert entry.after == {
             "code": code,
             "purpose": "family_member",
+            "channel": "web",
             "expires_at": entry.after["expires_at"],
         }
 

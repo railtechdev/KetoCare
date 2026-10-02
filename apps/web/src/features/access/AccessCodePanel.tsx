@@ -1,12 +1,13 @@
 import {
   AsyncSection,
   Button,
+  toast,
   ConfirmDialog,
   EmptyState,
   formatOccurredAt,
   Section,
 } from "@ketocare/ui";
-import { KeyRound, Copy } from "lucide-react";
+import { KeyRound, Copy, Share2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -53,6 +54,46 @@ export function AccessCodePanel({
   const issue = useIssueAccessCode(patientId, "family_member");
   const revoke = useRevokeAccessCode(patientId);
   const journal = useAccessCodes(patientId, true);
+
+  /**
+   * Приглашение целиком: что сделать по шагам, ссылка и код на случай, если
+   * ссылка не откроется. Восемь знаков без объяснений бабушке не помогут —
+   * а именно их раньше копировала единственная кнопка (аудит пути, 02.10.2026).
+   */
+  function invitationText(created: AccessCodeCreated): string {
+    const date = formatOccurredAt(new Date(created.expires_at));
+    return created.deep_link === null
+      ? t("panel.share.textWeb", {
+          url: created.join_url,
+          code: created.code,
+          date,
+        })
+      : t("panel.share.textTelegram", {
+          link: created.deep_link,
+          code: created.code,
+          date,
+        });
+  }
+
+  async function handleShare(created: AccessCodeCreated) {
+    const text = invitationText(created);
+    // Системное «Поделиться» на телефоне открывает тот же список чатов, что
+    // и в любом другом приложении, — искать, куда вставлять, не нужно.
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch {
+        // Закрыли окно или браузер отказал — падаем в копирование ниже.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(t("panel.share.copied"));
+    } catch {
+      toast.error(t("panel.share.failed"));
+    }
+  }
 
   async function handleIssue() {
     const created = await issue.mutateAsync().catch(() => null);
@@ -109,6 +150,15 @@ export function AccessCodePanel({
             <output className="rounded-md bg-muted px-4 py-2 font-mono text-page-title tracking-widest">
               {issued.code}
             </output>
+
+            <Button
+              type="button"
+              className="min-h-touch"
+              onClick={() => void handleShare(issued)}
+            >
+              <Share2 aria-hidden="true" />
+              {t("panel.share.action")}
+            </Button>
 
             <Button
               type="button"

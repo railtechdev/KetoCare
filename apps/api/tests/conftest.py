@@ -18,6 +18,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from api import after_commit
 from api.deps.auth import get_session
 from api.main import create_app
 from api.ratelimit import limiter
@@ -100,7 +101,14 @@ async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
         # Коммит подменён на flush: данные видны внутри теста, но откатываются фикстурой.
-        yield session
+        # Отложенные до коммита задачи ведут себя как в бою: уходят после
+        # успешного запроса и выбрасываются при отказе.
+        try:
+            yield session
+        except Exception:
+            after_commit.discard(session)
+            raise
+        await after_commit.run_deferred(session)
 
     app.dependency_overrides[get_session] = _override_session
 

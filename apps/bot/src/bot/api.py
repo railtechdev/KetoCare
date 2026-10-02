@@ -38,10 +38,19 @@ PARSE_TIMEOUT_S = 16.0
 class BotApiError(Exception):
     """Сбой вызова API. `code` — код из раздела 5.1 ТЗ, если API его прислал."""
 
-    def __init__(self, code: str | None, message: str, status: int) -> None:
+    def __init__(
+        self,
+        code: str | None,
+        message: str,
+        status: int,
+        details: dict[str, object] | None = None,
+    ) -> None:
         self.code = code
         self.message = message
         self.status = status
+        #: `details` конверта: по `reason` бот различает отказы одного статуса
+        #: («этот ребёнок уже здесь» и «чат занят другим ребёнком» — оба 409).
+        self.details = details or {}
         super().__init__(f"{status} {code}: {message}")
 
 
@@ -315,11 +324,11 @@ class BotApi:
             body: dict[str, Any] = response.json()
             return body
 
-        code, message = _error_of(response)
-        raise BotApiError(code, message, response.status_code)
+        code, message, details = _error_of(response)
+        raise BotApiError(code, message, response.status_code, details)
 
 
-def _error_of(response: httpx.Response) -> tuple[str | None, str]:
+def _error_of(response: httpx.Response) -> tuple[str | None, str, dict[str, object]]:
     """Разбирает конверт ошибки раздела 5.1 ТЗ.
 
     Ответ может и не быть этим конвертом — например, прокси вернул html-страницу
@@ -328,6 +337,11 @@ def _error_of(response: httpx.Response) -> tuple[str | None, str]:
 
     try:
         error = response.json()["error"]
-        return error.get("code"), error.get("message", "")
+        details = error.get("details")
+        return (
+            error.get("code"),
+            error.get("message", ""),
+            details if isinstance(details, dict) else {},
+        )
     except (ValueError, KeyError, TypeError):
-        return None, response.text[:200]
+        return None, response.text[:200], {}

@@ -180,17 +180,43 @@ class TestLinking:
 
         await start._link(message, api=api, store=store, settings=SETTINGS, code="ZZZZZZZZ")
 
-        assert "Попросите новый" in message.last
+        assert "попросите новый" in message.last
+        # Не только «у врача»: код мог прислать родитель ребёнка (ADR-0042).
+        assert "родителя" in message.last
         assert await store.get(CHAT_ID) is None
 
     @pytest.mark.asyncio
-    async def test_busy_chat_tells_to_unlink_first(self, api, store):
-        api.verify_error = BotApiError("conflict", "занято", 409)
+    async def test_chat_with_another_child_explains_the_way_out(self, api, store):
+        """Один человек — один ребёнок в боте; второй — через кабинет, и это сказано."""
+        api.verify_error = BotApiError("conflict", "занято", 409, {"reason": "chat_taken"})
         message = FakeMessage()
 
         await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
 
         assert message.last == texts.LINK_CHAT_BUSY
+        assert "Вход в кабинет" in message.last
+
+    @pytest.mark.asyncio
+    async def test_code_for_the_same_child_is_not_an_error(self, api, store):
+        """Повторный код в рабочем чате — не стена, а «всё уже готово»."""
+        api.verify_error = BotApiError("conflict", "уже", 409, {"reason": "already_here"})
+        message = FakeMessage()
+
+        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
+
+        assert message.last == texts.LINK_ALREADY_HERE
+
+    @pytest.mark.asyncio
+    async def test_other_conflicts_say_what_the_server_said(self, api, store):
+        """«У выдавшего больше нет доступа» — не «чат занят» (находка аудита 02.10.2026)."""
+        api.verify_error = BotApiError(
+            "conflict", "Код больше не действует: у того, кто его выдал, …", 409, {}
+        )
+        message = FakeMessage()
+
+        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
+
+        assert message.last.startswith("Код больше не действует")
 
     @pytest.mark.asyncio
     async def test_bare_code_is_treated_as_a_code_not_as_chatter(self, api, store):
@@ -240,7 +266,21 @@ class TestLinking:
         assert start.looks_like_code("ABCD2345")
         assert start.looks_like_code("  ABCD2345 ")
         assert not start.looks_like_code("ABCD234")
-        assert not start.looks_like_code("ABCD-345")
+        # Код диктуют и записывают группами — это всё ещё код.
+        assert start.looks_like_code("ABCD 2345")
+        assert start.looks_like_code("ABCD-2345")
+        assert start.compact_code(" abcd-2345 ") == "abcd2345"
+        assert not start.looks_like_code("здравствуйте")
+
+    @pytest.mark.asyncio
+    async def test_bare_code_in_a_linked_chat_gets_an_answer(self, api, linked_store):
+        """Раньше код в привязанном чате молча уходил в «я умею записывать данные»."""
+        api.verify_error = BotApiError("conflict", "уже", 409, {"reason": "already_here"})
+        message = FakeMessage(text="ABCD 2345")
+
+        await fallback.unknown(message, api=api, store=linked_store, settings=SETTINGS)
+
+        assert message.last == texts.LINK_ALREADY_HERE
 
 
 class TestKetones:
@@ -883,7 +923,7 @@ class TestHelp:
         """
 
         assert "исправить" in texts.HELP.lower()
-        assert "отключить" in texts.HELP.lower()
+        assert "закрыть доступ" in texts.HELP.lower()
         assert "врача" in texts.HELP.lower()
         assert "дневники" in texts.HELP.lower()
 

@@ -102,6 +102,12 @@ export function JoinPage() {
 
   return (
     <Shell title={t("join.title")} description={t("join.intro")}>
+      {/* Почта и пароль — не единственный путь: семья, у которой есть
+          Telegram, подключается ботом в одно нажатие. Сказать об этом здесь,
+          а не оставить человека заполнять форму, которая ему не нужна. */}
+      <p className="m-0 rounded-xl border border-border bg-card px-4 py-3 text-sm">
+        {t("join.telegramHint")}
+      </p>
       <form
         onSubmit={handleSubmit((values) => {
           join.mutate(values, { onSuccess: () => setDone(true) });
