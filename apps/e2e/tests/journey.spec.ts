@@ -123,7 +123,17 @@ test("врач назначает, семья ведёт день, отчёт с
   // Подсказка графика — единственное место этого экрана, которого нет в jsdom:
   // recharts не рисует SVG без ширины, и проверка кита доходит только до
   // текстовой альтернативы. Здесь настоящий браузер, и смотреть надо здесь.
-  await parent.locator(".recharts-dot").first().hover();
+  //
+  // Мышь ведётся в координаты точки, а не `hover()` по ней: стоит курсору
+  // оказаться над графиком, recharts рисует поверх точки ряда «активную»
+  // (`.recharts-active-dot`), Playwright считает, что она перехватывает
+  // указатель, и ждёт до конца таймаута. Подсказку вызывает положение курсора
+  // над областью графика, а не элемент под ним.
+  const lineDot = parent.locator(".recharts-line-dot").first();
+  await lineDot.scrollIntoViewIfNeeded();
+  const dot = await lineDot.boundingBox();
+  expect(dot).not.toBeNull();
+  await parent.mouse.move(dot!.x + dot!.width / 2, dot!.y + dot!.height / 2);
   const tooltip = parent.locator(".recharts-tooltip-wrapper");
   await expect(tooltip).toContainText(`${KETONE.replace(".", ",")} ммоль/л`);
   // Двоеточия в подсказке быть не должно: имени у ряда нет, подпись — дата
