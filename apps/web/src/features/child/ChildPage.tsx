@@ -29,6 +29,7 @@ import { errorMessageOf } from "../../lib/api";
 import { IntakeForm } from "../intake/IntakeForm";
 import { RemindersPanel } from "../telegram/RemindersPanel";
 import { TelegramPanel } from "../telegram/TelegramPanel";
+import { FamilyPanel } from "../doctor/FamilyPanel";
 import { ChildForm } from "./ChildForm";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
@@ -456,6 +457,12 @@ function ChildCare({ child, onDone }: { child: Patient; onDone: () => void }) {
         title={t("care.section")}
         description={t("care.intro")}
       />
+
+      {/* Тот же блок, что в карте у врача: кто ведёт ребёнка дома и выдача
+          доступа другому взрослому (ADR-0042). Родитель видит здесь и тех, кому
+          доступ открыл врач, — состав взрослых при ребёнке не должен быть
+          тайной для семьи. */}
+      <FamilyPanel patientId={child.id} />
     </PageLayout>
   );
 }

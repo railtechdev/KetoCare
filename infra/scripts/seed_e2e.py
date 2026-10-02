@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from core.config import get_settings
 from core.models import Patient, Product, ProductCategory, User, UserBackupCode
-from core.models.enums import Sex, UserRole
+from core.models.enums import AccessCodePurpose, Sex, UserRole
 from core.repositories import access as access_repo
 from core.repositories import access_codes as access_codes_repo
 from core.repositories import patients as patients_repo
@@ -380,7 +380,10 @@ async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Pati
         # здесь же — сам путь выдачи проверяет `journey.spec.ts`.
         await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
         code = await access_codes_repo.create(
-            session, patient_id=patient.id, issued_by=doctor.id, role=doctor.role
+            session,
+            patient_id=patient.id,
+            issued_by=doctor.id,
+            purpose=AccessCodePurpose.FAMILY_MEMBER,
         )
         claimed = await access_codes_repo.claim(session, code.code)
         assert claimed is not None, "только что выпущенный код обязан гаситься"

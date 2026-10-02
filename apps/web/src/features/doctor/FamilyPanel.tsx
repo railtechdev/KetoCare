@@ -45,15 +45,18 @@ import { isCareRole } from "./types";
  * несёт ребёнка, поэтому двойник карты невозможен, а второй взрослый получает
  * такой же код, а не отдельный механизм.
  *
- * Кнопка — только у специалиста: семья доступа не раздаёт, и сервер ответил бы
- * 403 (правило П3 канона).
+ * **Кнопка есть и у родителя** (ADR-0042): второму взрослому, который ухаживает
+ * за ребёнком, доступ открывает и сама семья, а не только врач. Тот же блок
+ * стоит в разделе «Ребёнок» → «Кто ведёт», и родитель видит в нём, кому доступ
+ * уже открыт. Отключение устройств остаётся специалисту: у родителя для своих
+ * чатов есть раздел «Telegram».
  *
  * **Подключённые устройства семьи и их отключение — тоже здесь.** Родитель из
  * Telegram веб-кабинета не имеет, а отключить потерянный телефон можно было
  * только оттуда: путь шёл «родитель → врач → у врача нет кнопки →
  * администратор отключает всю учётную запись», и всё это время старое
- * устройство писало в дневник ребёнка. Врач — единственный, кто выдаёт доступ;
- * логично, что он же его и снимает. Право в API у него было и до экрана.
+ * устройство писало в дневник ребёнка. Снимает доступ врач: он ведёт ребёнка и
+ * отвечает за то, кто видит его данные. Право в API у него было и до экрана.
  */
 export function FamilyPanel({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
@@ -63,20 +66,22 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
   const revoke = useRevokeLinkMutation(patientId);
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  // Подпись одна: «родителя» верно и при пустой семье, и при одном родителе.
-  // Две подписи по числу родителей меняли ширину кнопки после загрузки семьи.
-  const canInvite = isCareRole(session?.role);
+  const isSpecialist = isCareRole(session?.role);
+  const isParent = session?.role === "parent";
+  const canGrant = isSpecialist || isParent;
+  // Голос панели: врач выдаёт доступ «семье», родитель — «другому взрослому».
+  const voice = isParent ? "parent" : "specialist";
 
   return (
     <Section
       title={t("family.title")}
-      description={t("family.intro")}
+      description={t(`family.${voice}.intro`)}
       density="compact"
       action={
-        canInvite && (
+        canGrant && (
           <Button type="button" onClick={() => setInviteOpen(true)}>
             <UserPlus aria-hidden="true" />
-            {t("family.grantAccess")}
+            {t(`family.${voice}.grantAccess`)}
           </Button>
         )
       }
@@ -151,7 +156,7 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
                 memberName={member.full_name}
                 links={links.data}
                 loadFailed={links.isError}
-                canRevoke={canInvite}
+                canRevoke={isSpecialist}
                 revoking={revoke.isPending}
                 onRevoke={(linkId) =>
                   revoke.mutate(linkId, {
@@ -164,15 +169,15 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
         </ul>
       </AsyncSection>
 
-      {canInvite && (
+      {canGrant && (
         <FormSheet
           closeLabel={t("common:actions.close")}
           open={inviteOpen}
           onOpenChange={setInviteOpen}
-          title={t("family.grantAccessTitle")}
-          description={t("family.grantAccessIntro")}
+          title={t(`family.${voice}.grantAccessTitle`)}
+          description={t(`family.${voice}.grantAccessIntro`)}
         >
-          <AccessCodePanel patientId={patientId} />
+          <AccessCodePanel patientId={patientId} audience={voice} />
         </FormSheet>
       )}
     </Section>

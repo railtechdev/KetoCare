@@ -319,6 +319,24 @@ class TestScopeSurvivesRefresh:
         )
         assert response.status_code == 200
 
+    async def test_open_session_cannot_issue_access(self, client, session, make_user, make_patient):
+        """Выдача доступа другому взрослому — только из веб-кабинета (ADR-0042).
+
+        Сессию Mini App открывает телефон, а не пароль: держащий чужой
+        разблокированный телефон иначе выпустил бы себе недельный код и завёл
+        постоянную учётную запись при ребёнке, которую семья убрать не может.
+        """
+        _, patient, _ = await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        for body in ({"purpose": "family_member"}, {"purpose": "own_chat"}, None):
+            response = await client.post(
+                f"/api/v1/patients/{patient.id}/access-codes",
+                headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+                json=body,
+            )
+            assert response.status_code == 403, (body, response.text)
+
     async def test_open_session_cannot_reach_another_child(
         self, client, session, make_user, make_patient
     ):

@@ -62,7 +62,7 @@ def build_init_data(*, chat_id: int, bot_token: str) -> str:
 async def ensure_link(email: str, chat_id: int) -> tuple[str, str]:
     from api.services import access_codes as access_codes_service
     from core.db import get_sessionmaker
-    from core.models.enums import UserRole
+    from core.models.enums import AccessCodePurpose, UserRole
     from core.repositories import access as access_repo
     from core.repositories import access_codes as access_codes_repo
     from core.repositories import patients as patients_repo
@@ -90,7 +90,10 @@ async def ensure_link(email: str, chat_id: int) -> tuple[str, str]:
             # привязка переставала повторять продукт: путь, который скрипт
             # проверяет, шёл бы мимо погашения кода и мимо заведения родителя.
             code = await access_codes_repo.create(
-                session, patient_id=patient.id, issued_by=parent.id, role=parent.role
+                session,
+                patient_id=patient.id,
+                issued_by=parent.id,
+                purpose=AccessCodePurpose.OWN_CHAT,
             )
             await access_codes_service.activate_from_telegram(
                 session,
