@@ -150,7 +150,11 @@ export function TelegramPanel({ patientId, childName }: Props) {
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <span className="font-medium">
-                    {t("links.chat", { id: link.chat_id })}
+                    {/* Имя владельца, а не номер чата: «Чат 4242 / Чат
+                        5151» не говорили, какой из них бабушкин. */}
+                    {link.parent_name
+                      ? t("links.owner", { name: link.parent_name })
+                      : t("links.chat", { id: link.chat_id })}
                   </span>
                   <span className="text-sm text-muted-foreground">
                     {t("links.linkedAt", {

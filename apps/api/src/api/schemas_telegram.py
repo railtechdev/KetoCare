@@ -98,3 +98,6 @@ class TelegramLinkRead(BaseModel):
     chat_id: int
     linked_at: datetime
     revoked_at: datetime | None
+    #: Чей это чат — имя взрослого. Без него список у ребёнка был рядом «Чат
+    #: 4242 / Чат 5151», и понять, какой из них бабушкин, было нельзя.
+    parent_name: str | None = None

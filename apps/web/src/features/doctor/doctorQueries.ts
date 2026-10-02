@@ -1,4 +1,9 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
 import { patientOverviewQuery } from "../patients/overview";
@@ -259,6 +264,33 @@ export function familyKey(patientId: string) {
  * осмысленное действие — связаться с семьёй — интерфейсом не поддерживалось:
  * контактов родителя в продукте не было нигде.
  */
+/**
+ * Закрыть взрослому доступ к ребёнку (ADR-0043). Право считает сервер и
+ * отдаёт в `can_remove`; экран кнопку без него не показывает.
+ *
+ * Ушедший сам из близких теряет и ребёнка: список детей обновляется, иначе
+ * кабинет держал бы на экране карту, к которой доступа уже нет.
+ */
+export function useRemoveFamilyMember(patientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (parentId: string): Promise<void> => {
+      const { error } = await api.DELETE(
+        "/api/v1/patients/{patient_id}/parents/{parent_id}",
+        { params: { path: { patient_id: patientId, parent_id: parentId } } },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: familyKey(patientId) });
+      void queryClient.invalidateQueries({
+        queryKey: ["telegram-links", patientId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["patients"] });
+    },
+  });
+}
+
 export function useFamily(patientId: string) {
   return useQuery({
     queryKey: familyKey(patientId),

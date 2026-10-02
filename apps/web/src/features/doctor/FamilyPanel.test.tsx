@@ -13,7 +13,10 @@ import { FamilyPanel } from "./FamilyPanel";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
-  return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
+  return {
+    ...actual,
+    api: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
+  };
 });
 
 i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
@@ -336,11 +339,11 @@ describe("кто ведёт ребёнка дома", () => {
     ).not.toBeInTheDocument();
     await user.click(
       await screen.findByRole("button", {
-        name: "Дать доступ другому взрослому",
+        name: "Пригласить близкого",
       }),
     );
     await user.click(
-      await screen.findByRole("button", { name: "Выпустить код" }),
+      await screen.findByRole("button", { name: "Создать приглашение" }),
     );
 
     expect(api.POST).toHaveBeenCalledWith(
@@ -361,5 +364,130 @@ describe("кто ведёт ребёнка дома", () => {
     expect(
       screen.getByText(/только тому, кому доверяете уход за ребёнком/),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * ADR-0043: кто позвал — тот и закрывает доступ; себя — «Выйти». Кнопка стоит
+   * только там, где сервер разрешил (`can_remove`): обещать действие, на
+   * которое он ответит 403, — ложный сценарий.
+   */
+  it("родитель закрывает доступ тому, кого пригласил, — и только ему", async () => {
+    token = tokenFor("parent");
+    const user = userEvent.setup();
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/patients/{patient_id}/telegram")
+        return { data: [], error: undefined };
+      return {
+        data: [
+          {
+            id: "me",
+            full_name: "Анна",
+            phone: null,
+            email: null,
+            invited_by_name: "Врач Иванов",
+            is_me: true,
+            can_remove: true,
+          },
+          {
+            id: "grandma",
+            full_name: "Мария",
+            phone: null,
+            email: null,
+            invited_by_name: "Анна",
+            is_me: false,
+            can_remove: true,
+          },
+          {
+            id: "father",
+            full_name: "Олег",
+            phone: null,
+            email: null,
+            invited_by_name: "Врач Иванов",
+            is_me: false,
+            can_remove: false,
+          },
+        ],
+        error: undefined,
+      };
+    });
+    (api.DELETE as Mock).mockResolvedValue({ error: undefined });
+
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    expect(await screen.findByText("Анна (вы)")).toBeInTheDocument();
+    // Кто кого позвал — видно, чтобы незнакомое имя не было загадкой.
+    expect(screen.getByText("Пригласил(а): Анна")).toBeInTheDocument();
+    // Себе — «Выйти», бабушке — «Закрыть доступ», отцу — ничего.
+    expect(screen.getAllByRole("button", { name: "Выйти" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Закрыть доступ" }),
+    ).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Закрыть доступ" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Закрыть доступ для Мария?",
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getAllByRole("button", { name: "Закрыть доступ" }).at(-1)!,
+    );
+
+    expect(api.DELETE).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/parents/{parent_id}",
+      { params: { path: { patient_id: PATIENT_ID, parent_id: "grandma" } } },
+    );
+  });
+
+  /**
+   * Бабушка далеко: QR ей не покажешь, а восемь знаков без объяснений не
+   * помогут. Приглашение уходит целиком — шаги, ссылка, код и срок.
+   */
+  it("приглашение отправляется целиком через «Поделиться»", async () => {
+    token = tokenFor("parent");
+    const user = userEvent.setup();
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "share", {
+      value: share,
+      configurable: true,
+    });
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith("/access-codes")) return { data: [], error: undefined };
+      return { data: [], error: undefined };
+    });
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/auth/refresh") {
+        return { data: { access_token: token }, error: undefined };
+      }
+      return {
+        data: {
+          code: "BABU5K92",
+          expires_at: "2026-10-09T10:00:00Z",
+          deep_link: "https://t.me/ketocare_bot?start=BABU5K92",
+          join_url: "https://app.example.org/join?code=BABU5K92",
+        },
+        error: undefined,
+      };
+    });
+
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Пригласить близкого" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Создать приглашение" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Поделиться приглашением" }),
+    );
+
+    expect(share).toHaveBeenCalledTimes(1);
+    const text = String(share.mock.calls[0]?.[0]?.text);
+    expect(text).toContain("https://t.me/ketocare_bot?start=BABU5K92");
+    expect(text).toContain("BABU5K92");
+    expect(text).toContain("«Запустить»");
+
+    Reflect.deleteProperty(navigator, "share");
   });
 });

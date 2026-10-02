@@ -56,7 +56,18 @@ class TestFamilyContacts:
         response = await client.get(parents_url(patient.id), headers=auth_headers(doctor))
 
         card = response.json()[0]
-        assert set(card) == {"id", "full_name", "phone", "email"}
+        # Сверх контактов — только то, что считает сервер для экрана «Близкие»
+        # (ADR-0043): кто позвал, «это вы», можно ли убрать. Хэша пароля и
+        # секретов здесь быть не должно.
+        assert set(card) == {
+            "id",
+            "full_name",
+            "phone",
+            "email",
+            "invited_by_name",
+            "is_me",
+            "can_remove",
+        }
 
     async def test_two_parents_both_listed(
         self, client, session, make_user, make_patient, auth_headers

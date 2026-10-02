@@ -19,7 +19,7 @@ import {
   useRevokeLinkMutation,
   useTelegramLinks,
 } from "../telegram/useTelegramLinks";
-import { useFamily } from "./doctorQueries";
+import { useFamily, useRemoveFamilyMember } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import { isCareRole } from "./types";
 
@@ -64,6 +64,7 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
   const family = useFamily(patientId);
   const links = useTelegramLinks(patientId);
   const revoke = useRevokeLinkMutation(patientId);
+  const remove = useRemoveFamilyMember(patientId);
   const [inviteOpen, setInviteOpen] = useState(false);
 
   const isSpecialist = isCareRole(session?.role);
@@ -74,7 +75,7 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
 
   return (
     <Section
-      title={t("family.title")}
+      title={t(`family.${voice}.title`)}
       description={t(`family.${voice}.intro`)}
       density="compact"
       action={
@@ -115,8 +116,22 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
               key={member.id}
               className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
             >
-              <span className="min-w-0 flex-1 break-words">
-                {member.full_name}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="break-words">
+                  {member.is_me
+                    ? t("family.member.me", { name: member.full_name })
+                    : member.full_name}
+                </span>
+                {/* Кто позвал — чтобы незнакомое имя в списке не оставалось
+                    загадкой: понятно, у кого спросить (ADR-0043). */}
+                {member.invited_by_name !== null &&
+                  member.invited_by_name !== undefined && (
+                    <span className="text-sm text-muted-foreground">
+                      {t("family.member.invitedBy", {
+                        name: member.invited_by_name,
+                      })}
+                    </span>
+                  )}
               </span>
 
               {member.phone !== null && (
@@ -164,6 +179,60 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
                   })
                 }
               />
+
+              {/* Право считает сервер (`can_remove`): кнопка не обещает
+                  действия, на которое он ответит 403. Себя — «Выйти»,
+                  другого — «Закрыть доступ»: это разные решения. */}
+              {member.can_remove && (
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="min-h-touch"
+                      disabled={remove.isPending}
+                    >
+                      {member.is_me
+                        ? t("family.remove.leave")
+                        : t("family.remove.action")}
+                    </Button>
+                  }
+                  title={
+                    member.is_me
+                      ? t("family.remove.leaveTitle")
+                      : t("family.remove.title", { name: member.full_name })
+                  }
+                  description={
+                    member.is_me
+                      ? t("family.remove.leaveBody")
+                      : t("family.remove.body")
+                  }
+                  confirmLabel={
+                    member.is_me
+                      ? t("family.remove.leave")
+                      : t("family.remove.action")
+                  }
+                  cancelLabel={t("common:actions.cancel")}
+                  onConfirm={() =>
+                    remove.mutate(member.id, {
+                      onSuccess: () =>
+                        toast.success(
+                          member.is_me
+                            ? t("family.remove.left")
+                            : t("family.remove.done", {
+                                name: member.full_name,
+                              }),
+                        ),
+                      onError: (error) =>
+                        toast.error(
+                          errorMessageOf(error) ??
+                            t("common:errors.unexpected"),
+                        ),
+                    })
+                  }
+                />
+              )}
             </li>
           ))}
         </ul>

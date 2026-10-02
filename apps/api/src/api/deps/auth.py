@@ -20,6 +20,7 @@ from core.repositories import access as access_repo
 from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
+from .. import after_commit
 from ..errors import ApiError, ErrorCode
 from ..security import (
     Channel,
@@ -37,7 +38,9 @@ async def get_session() -> AsyncIterator[AsyncSession]:
             await session.commit()
         except Exception:
             await session.rollback()
+            after_commit.discard(session)
             raise
+        await after_commit.run_deferred(session)
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

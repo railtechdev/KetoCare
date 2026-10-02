@@ -72,3 +72,68 @@ NOTICE = (
     "Врач обновил назначение. Откройте кабинет: меню на ближайшие дни нужно "
     "пересчитать под новые цели."
 )
+
+
+async def notify_family_joined(
+    ctx: dict[str, Any],
+    patient_id: str,
+    newcomer_id: str,
+    newcomer_name: str,
+    inviter_name: str | None,
+) -> int:
+    """Сообщить остальным взрослым, что к ребёнку подключился новый (ADR-0043).
+
+    Доступ к данным ребёнка не должен появляться тихо: если код ушёл не тому
+    человеку, первой это заметит семья. Самому новичку не пишем — он только что
+    вошёл и знает об этом. Возвращает число доставленных чатов.
+    """
+
+    settings = Settings()  # type: ignore[call-arg]
+    if not settings.bot_token:
+        return 0
+
+    text = joined_notice(newcomer_name=newcomer_name, inviter_name=inviter_name)
+    sessionmaker = get_sessionmaker()
+    delivered = 0
+
+    async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
+        links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
+        for chat_id in joined_recipients(links, newcomer_id=uuid.UUID(newcomer_id)):
+            try:
+                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+            except TelegramSendError as exc:
+                logger.warning(
+                    "family_joined_notice_not_delivered", patient_id=patient_id, reason=str(exc)
+                )
+                continue
+            delivered += 1
+
+    return delivered
+
+
+def joined_recipients(links: list[Any], *, newcomer_id: uuid.UUID) -> list[int]:
+    """Живые чаты ребёнка, кроме чатов самого новичка, — без повторов."""
+
+    seen: list[int] = []
+    for link in links:
+        if link.revoked_at is not None or link.parent_id == newcomer_id:
+            continue
+        if link.chat_id not in seen:
+            seen.append(link.chat_id)
+    return seen
+
+
+def joined_notice(*, newcomer_name: str, inviter_name: str | None) -> str:
+    """Текст уведомления о новом близком.
+
+    Имена взрослых — да, имя ребёнка — нет: чат и так привязан к нему одному.
+    Последняя фраза — следующий шаг, а не тревога: в подавляющем большинстве
+    случаев новичка позвал кто-то из своих, и сообщение это подтверждает.
+    """
+
+    by = f" по приглашению: {inviter_name}" if inviter_name else ""
+    return (
+        f"К дневнику ребёнка подключился новый близкий: {newcomer_name}{by}.\n\n"
+        "Если вы не знаете этого человека, откройте приложение, раздел «Близкие», "
+        "и закройте ему доступ — или скажите врачу."
+    )
