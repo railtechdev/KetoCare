@@ -310,13 +310,12 @@ class TestAdminSeesTheLimit:
 
 @pytest.mark.asyncio
 class TestParentCodeStaysInTelegram:
-    """Код, выпущенный родителем, — это подключение чата, а не выдача доступа.
+    """Код своего чата — это подключение чата, а не выдача доступа.
 
-    До этапа Б родитель не мог открыть карту ребёнка никому: у него был только
-    код привязки Telegram. Общий код доступа сделал бы это молча — семья начала
-    бы раздавать постоянные кабинеты. Решение 3 ADR-0040 оставляет выдачу
-    доступа специалисту, и это должно исполняться сервером, а не текстом на
-    экране.
+    Выдать доступ другому взрослому родитель может (ADR-0042), но явно — кодом
+    с назначением `family_member`. Код своего чата, выпущенный без назначения,
+    не должен делать того же молча: иначе каждый, кому родитель показал экран
+    раздела «Telegram», получал бы постоянный кабинет.
     """
 
     async def _parent_code(self, client, session, make_user, make_patient, auth_headers):
@@ -345,7 +344,8 @@ class TestParentCodeStaysInTelegram:
             },
         )
         assert response.status_code == 409, response.text
-        assert "у врача" in response.json()["error"]["message"]
+        # Отказ объясняет, где взять код, который здесь сработает.
+        assert "Кто ведёт" in response.json()["error"]["message"]
 
         # Код не сгорел: он предназначался боту и ещё пригодится.
         stored = await session.get(AccessCode, code)

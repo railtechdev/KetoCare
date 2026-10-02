@@ -94,10 +94,10 @@ class TestIssuing:
     async def test_parent_issues_a_short_lived_code(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        """Родитель выпускает код себе — это замена коду привязки чата.
+        """Без назначения родитель выпускает код своего чата — как до ADR-0042.
 
         Срок у него четверть часа, а не неделя: он вводится в соседнем окне, и
-        выбор срока живёт в `ttl_for(role)`, а не в ручке (решение 5 ADR-0040).
+        выбор срока живёт в `ttl_for(purpose)`, а не в ручке.
         """
         parent = await make_user(UserRole.PARENT)
         patient = await make_patient()

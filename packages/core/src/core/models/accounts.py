@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, UpdatedAtMixin, UUIDPkMixin
-from .enums import Sex, UserRole, pg_enum
+from .enums import AccessCodePurpose, Sex, UserRole, pg_enum
 
 
 class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
@@ -336,8 +336,9 @@ class AccessCode(Base, CreatedAtMixin):
     """Код доступа семьи к ребёнку (ADR-0040).
 
     PK — сам код, как у `link_codes`: код и есть ключ, второго идентификатора у
-    него нет. Один вид кода на все случаи — первый родитель, второй родитель,
-    ещё один чат: два вида кодов семья и бот различать не должны.
+    него нет. Один формат кода на все случаи — первый родитель, второй
+    взрослый, ещё один чат: семья и бот виды кодов не различают. Различает
+    сервер — по назначению (`purpose`, ADR-0042).
 
     Хранится **в открытом виде**, в отличие от токена приглашения, который лежит
     хэшем. Это не небрежность, а разница назначения: приглашение — длинная
@@ -353,10 +354,14 @@ class AccessCode(Base, CreatedAtMixin):
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False, index=True
     )
-    #: Кто выдал: специалист (этап А плана) или родитель себе (этап Б).
-    #: От роли выдавшего зависит срок жизни — см. `access_codes.create`.
+    #: Кто выдал: ведущий специалист или родитель ребёнка.
     issued_by: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    #: Зачем выпущен: свой чат или другой взрослый (ADR-0042). От назначения
+    #: зависят срок жизни и то, чья учётная запись получит доступ.
+    purpose: Mapped[AccessCodePurpose] = mapped_column(
+        pg_enum(AccessCodePurpose, "access_code_purpose"), nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
     used_at: Mapped[datetime | None]

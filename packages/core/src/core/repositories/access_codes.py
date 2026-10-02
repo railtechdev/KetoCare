@@ -1,12 +1,11 @@
 """Коды доступа семьи к ребёнку (ADR-0040).
 
-Один вид кода на все случаи: первый родитель, второй родитель, ещё один чат.
-Выпускает его специалист из карты ребёнка — или, начиная с этапа Б плана, сам
-родитель, чтобы привязать ещё одно устройство.
+Один формат кода на все случаи: первый родитель, второй взрослый, ещё один
+чат. Выпускает его ведущий специалист из карты ребёнка или сам родитель.
 
-Срок жизни зависит от того, кто выдал, и это не настройка, а разное назначение:
-код специалиста уносят с приёма и активируют дома через день-два, код родителя
-вводят тут же, в соседнем окне.
+Срок жизни зависит от назначения кода (ADR-0042): код для другого взрослого
+уносят с собой и активируют через день-два, код своего чата вводят тут же, в
+соседнем окне.
 
 Формат кода общий с `link_codes` — те же восемь знаков и тот же алфавит без
 похожих символов: человек не должен различать «коды разных видов», их и не
@@ -24,17 +23,17 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AccessCode
-from ..models.enums import UserRole
+from ..models.enums import AccessCodePurpose
 
-#: Код специалиста живёт неделю: его выдают на приёме и активируют дома, часто
-#: не в тот же день. Столько же живёт приглашение персонала — и по той же
-#: причине.
-SPECIALIST_CODE_TTL = timedelta(days=7)
+#: Код для другого взрослого живёт неделю: его выдают на приёме (или родитель
+#: передаёт его второму взрослому) и активируют дома, часто не в тот же день.
+#: Столько же живёт приглашение персонала — и по той же причине.
+FAMILY_CODE_TTL = timedelta(days=7)
 
 #: Код, который родитель выпускает себе сам (привязать ещё один чат), живёт
-#: столько же, сколько сегодняшний код привязки Telegram: он вводится сразу, и
+#: столько же, сколько прежний код привязки Telegram: он вводится сразу, и
 #: растягивать его незачем.
-PARENT_CODE_TTL = timedelta(minutes=15)
+OWN_CHAT_CODE_TTL = timedelta(minutes=15)
 
 #: Длина задана схемой: `access_codes.code` — String(8).
 CODE_LENGTH = 8
@@ -51,19 +50,22 @@ def generate_code() -> str:
     return "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
 
 
-def ttl_for(role: UserRole) -> timedelta:
-    """Срок жизни по роли выдавшего — решение 5 ADR-0040.
+def ttl_for(purpose: AccessCodePurpose) -> timedelta:
+    """Срок жизни по назначению кода — ADR-0042 (прежде — по роли, ADR-0040).
 
-    Выбор живёт здесь, а не в роутере: иначе он однажды разойдётся между ручкой
-    специалиста и ручкой родителя, и код на неделю окажется там, где его вводят
-    в соседнем окне.
+    Выбор живёт здесь, а не в роутере: иначе он однажды разойдётся между
+    ручками, и код на неделю окажется там, где его вводят в соседнем окне.
     """
 
-    return PARENT_CODE_TTL if role is UserRole.PARENT else SPECIALIST_CODE_TTL
+    return OWN_CHAT_CODE_TTL if purpose is AccessCodePurpose.OWN_CHAT else FAMILY_CODE_TTL
 
 
 async def create(
-    session: AsyncSession, *, patient_id: uuid.UUID, issued_by: uuid.UUID, role: UserRole
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    issued_by: uuid.UUID,
+    purpose: AccessCodePurpose,
 ) -> AccessCode:
     """Выпускает код.
 
@@ -76,7 +78,8 @@ async def create(
         code=generate_code(),
         patient_id=patient_id,
         issued_by=issued_by,
-        expires_at=datetime.now(UTC) + ttl_for(role),
+        purpose=purpose,
+        expires_at=datetime.now(UTC) + ttl_for(purpose),
     )
     session.add(code)
     await session.flush()

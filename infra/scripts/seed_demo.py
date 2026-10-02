@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from core.config import get_settings
 from core.models import Patient, Product, ProductCategory, User
-from core.models.enums import DiarySource, KetoneMethod, Sex, UserRole
+from core.models.enums import AccessCodePurpose, DiarySource, KetoneMethod, Sex, UserRole
 from core.repositories import access as access_repo
 from core.repositories import access_codes as access_codes_repo
 from core.repositories import diary as diary_repo
@@ -339,7 +339,10 @@ async def _patient(session: AsyncSession, *, parent: User, doctor: User) -> Pati
         # тут же гасится — демо-стенд должен открываться, а не ждать, пока
         # кто-то введёт восемь знаков.
         code = await access_codes_repo.create(
-            session, patient_id=patient.id, issued_by=doctor.id, role=doctor.role
+            session,
+            patient_id=patient.id,
+            issued_by=doctor.id,
+            purpose=AccessCodePurpose.FAMILY_MEMBER,
         )
         claimed = await access_codes_repo.claim(session, code.code)
         assert claimed is not None, "только что выпущенный код обязан гаситься"

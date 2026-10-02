@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
 from core.models import AccessCode, Patient, TelegramAccount, User
-from core.models.enums import UserRole
+from core.models.enums import AccessCodePurpose, UserRole
 from core.repositories import access as access_repo
 from core.repositories import access_codes as codes_repo
 from core.repositories import audit as audit_repo
@@ -74,16 +74,21 @@ def _join_url(code: str) -> str:
 
 
 async def issue(
-    session: AsyncSession, *, patient_id: uuid.UUID, issuer: Actor, ip: str | None
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    issuer: Actor,
+    purpose: AccessCodePurpose,
+    ip: str | None,
 ) -> AccessCodeCreated:
     """Выпускает код и пишет выдачу в журнал.
 
-    Срок жизни выбирается по роли выдавшего внутри репозитория (решение 5
-    ADR-0040): у специалиста неделя, у родителя четверть часа.
+    Срок жизни выбирается по назначению внутри репозитория (ADR-0042): у кода
+    для другого взрослого неделя, у кода своего чата четверть часа.
     """
 
     code = await codes_repo.create(
-        session, patient_id=patient_id, issued_by=issuer.id, role=issuer.role
+        session, patient_id=patient_id, issued_by=issuer.id, purpose=purpose
     )
 
     # Выдача доступа к клиническим данным — операция с учётными записями по
@@ -96,7 +101,11 @@ async def issue(
         entity="access_codes",
         entity_id=patient_id,
         ip=ip,
-        after={"code": code.code, "expires_at": code.expires_at.isoformat()},
+        after={
+            "code": code.code,
+            "purpose": code.purpose.value,
+            "expires_at": code.expires_at.isoformat(),
+        },
     )
 
     return AccessCodeCreated(
@@ -111,7 +120,25 @@ async def issue(
     )
 
 
-async def journal(session: AsyncSession, *, patient_id: uuid.UUID) -> list[AccessCodeRead]:
+def _visible_code(code: AccessCode, *, viewer_id: uuid.UUID) -> str | None:
+    """Значение кода своего чата видит только выпустивший его.
+
+    Такой код привязывает чат к учётной записи выдавшего, а не к тому, кто его
+    ввёл. Журнал читают все взрослые при ребёнке и его специалисты, и любой из
+    них, прочитав чужой живой код, подключил бы свой Telegram к чужой учётной
+    записи — дальше его записи в дневнике шли бы от имени другого человека.
+    Код для другого взрослого так не устроен: он заводит учётную запись
+    вошедшему, и выдать такой же может каждый, кто его видит.
+    """
+
+    if code.purpose is AccessCodePurpose.OWN_CHAT and code.issued_by != viewer_id:
+        return None
+    return code.code
+
+
+async def journal(
+    session: AsyncSession, *, patient_id: uuid.UUID, viewer_id: uuid.UUID
+) -> list[AccessCodeRead]:
     """Журнал кодов ребёнка с именами участников."""
 
     codes = await codes_repo.list_for_patient(session, patient_id=patient_id)
@@ -127,12 +154,13 @@ async def journal(session: AsyncSession, *, patient_id: uuid.UUID) -> list[Acces
 
     return [
         AccessCodeRead(
-            code=code.code,
+            code=_visible_code(code, viewer_id=viewer_id),
             status=_status(code, now=now),
             expires_at=code.expires_at,
             created_at=code.created_at,
             used_at=code.used_at,
             revoked_at=code.revoked_at,
+            purpose=code.purpose,
             issued_by_name=names.get(code.issued_by),
             used_by_name=names.get(code.used_by) if code.used_by is not None else None,
         )
@@ -173,8 +201,8 @@ async def _issuer_still_leads(session: AsyncSession, code: AccessCode) -> bool:
 
     Код живёт неделю, и специалист, которого за это время сняли с пациента или
     отключили, иначе продолжал бы раздавать доступ к ребёнку уже выданным кодом.
-    Для кода, выпущенного самим родителем (этап Б), проверка та же: связь
-    родителя с ребёнком могла исчезнуть.
+    Для кода, выпущенного родителем, проверка та же: его учётную запись могли
+    отключить, а связь с ребёнком — убрать.
     """
 
     issuer = await users_repo.get(session, code.issued_by)
@@ -201,7 +229,7 @@ async def _require_live_issuer(session: AsyncSession, code: AccessCode) -> None:
     await codes_repo.release(session, code=code.code)
     raise ApiError(
         ErrorCode.CONFLICT,
-        "Код больше не действует: выдавший его специалист не ведёт этого ребёнка. "
+        "Код больше не действует: у выдавшего его больше нет доступа к этому ребёнку. "
         "Попросите лечащего врача выдать новый.",
     )
 
@@ -248,17 +276,16 @@ async def _attach_parent(
 
 
 async def _require_web_code(session: AsyncSession, code: AccessCode) -> None:
-    """Код родителя в вебе не действует — он подключает Telegram (ADR-0040).
+    """Код своего чата в вебе не действует — он подключает Telegram (ADR-0042).
 
     Родитель выпускает его себе на пятнадцать минут, чтобы подключить ещё один
-    чат. Если бы этим кодом можно было завести учётную запись на `/join`, семья
-    получила бы право раздавать постоянный доступ к карте ребёнка — а по
-    решению 3 ADR-0040 доступ выдаёт специалист. Незаметное расширение прав
-    хуже явного отказа.
+    чат. Отказ решает назначение кода, а не роль выдавшего: доступ другому
+    взрослому родитель выдаёт явно — кодом с назначением `family_member`, с
+    неделей жизни и пояснением на экране, — а не тем, что код своего чата
+    случайно сработал на `/join`.
     """
 
-    issuer = await users_repo.get(session, code.issued_by)
-    if issuer is None or issuer.role is not UserRole.PARENT:
+    if code.purpose is not AccessCodePurpose.OWN_CHAT:
         return
 
     # Код возвращается в обращение: он предназначался боту и ещё пригодится.
@@ -266,7 +293,8 @@ async def _require_web_code(session: AsyncSession, code: AccessCode) -> None:
     raise ApiError(
         ErrorCode.CONFLICT,
         "Этот код подключает Telegram и в кабинете не действует. "
-        "Чтобы открыть кабинет ещё одному взрослому, попросите код у врача.",
+        "Чтобы открыть кабинет ещё одному взрослому, выпустите для него код в разделе "
+        "«Ребёнок» → «Кто ведёт».",
     )
 
 
@@ -435,12 +463,13 @@ async def _parent_behind_telegram(
 
     1. **Этот Telegram уже знаком.** Человек привязывает ещё один чат или ещё
        одного ребёнка. Учётная запись та же.
-    2. **Код выпустил себе сам родитель** (замена коду привязки: «подключить
-       ещё один чат»). Чат привязывается к его учётной записи — как это делал
-       код привязки, — но удостоверением она от этого не обзаводится: см.
+    2. **Код своего чата** (`own_chat`: родитель выпустил его себе, «подключить
+       ещё один чат»). Чат привязывается к учётной записи выдавшего — как это
+       делал код привязки, — но удостоверением она от этого не обзаводится: см.
        комментарий в самой ветке.
-    3. **Код выпустил специалист**, и Telegram незнаком: пришёл кто-то новый —
-       первый родитель, второй взрослый. Учётная запись рождается здесь.
+    3. **Код для другого взрослого** (`family_member`, выдал специалист или
+       родитель), и Telegram незнаком: пришёл кто-то новый — первый родитель,
+       второй взрослый. Учётная запись рождается здесь.
     """
 
     known = await users_repo.get_by_telegram_user_id(session, telegram_user_id)
@@ -452,8 +481,13 @@ async def _parent_behind_telegram(
             raise ApiError(ErrorCode.CONFLICT, _CODE_INVALID)
         return known
 
-    issuer = await users_repo.get(session, code.issued_by)
-    if issuer is not None and issuer.role is UserRole.PARENT:
+    if code.purpose is AccessCodePurpose.OWN_CHAT:
+        issuer = await users_repo.get(session, code.issued_by)
+        if issuer is None or issuer.role is not UserRole.PARENT:
+            # Схема и ручка такого кода не допускают; отказ здесь — на случай
+            # строки, заведённой мимо них, чтобы чат не ушёл сотруднику.
+            await codes_repo.release(session, code=code.code)
+            raise ApiError(ErrorCode.NOT_FOUND, _CODE_INVALID)
         # `telegram_user_id` здесь НЕ проставляется, хотя это и выглядело бы
         # удобным. Код мог дойти не до того человека — родитель сам передал его
         # второму взрослому, — и тогда чужой Telegram навсегда стал бы

@@ -12,9 +12,24 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from core.models.enums import AccessCodePurpose
+
 #: Статус считается на чтении, как у приглашений: хранить его отдельной колонкой
 #: значит однажды разойтись с `used_at`/`revoked_at`/`expires_at`.
 AccessCodeStatus = Literal["pending", "used", "expired", "revoked"]
+
+
+class AccessCodeIssue(BaseModel):
+    """Тело выпуска кода (ADR-0042). Необязательно целиком.
+
+    Назначение не указано — берётся то, что выпускала роль до появления выбора:
+    специалист открывает доступ другому взрослому, родитель подключает свой
+    чат. Так прежние клиенты (раздел «Telegram» у семьи) работают без правок.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    purpose: AccessCodePurpose | None = None
 
 
 class AccessCodeCreated(BaseModel):
@@ -38,12 +53,19 @@ class AccessCodeCreated(BaseModel):
 class AccessCodeRead(BaseModel):
     """Строка журнала кодов в карте ребёнка."""
 
-    code: str
+    #: Пусто у чужого кода своего чата (ADR-0042): по нему чат привязывается к
+    #: учётной записи выдавшего, и второй взрослый, прочитав код в журнале, вёл
+    #: бы дневник от имени первого родителя. Строка остаётся — журнал говорит,
+    #: что код был, но не отдаёт сам код.
+    code: str | None
     status: AccessCodeStatus
     expires_at: datetime
     created_at: datetime
     used_at: datetime | None = None
     revoked_at: datetime | None = None
+    #: Свой чат выдавшего или доступ другому взрослому: в журнале это разные
+    #: события, и второе — выдача доступа к данным ребёнка.
+    purpose: AccessCodePurpose
     #: Имя того, кто выдал, и того, кому достался доступ. Именами, а не
     #: идентификаторами: журнал читает человек, и вопрос у него — «кто».
     issued_by_name: str | None = None

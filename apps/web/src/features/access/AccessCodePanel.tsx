@@ -30,13 +30,27 @@ import {
  * Код показывается не «один раз», в отличие от ссылки-приглашения: он хранится
  * открытым и виден в журнале, пока действует. Это осознанный размен (ADR-0040):
  * восемь знаков диктуют вслух, а защищают их неделя жизни и отзыв.
+ *
+ * **Выдаёт и родитель** (ADR-0042) — второму взрослому, который ухаживает за
+ * ребёнком вместе с ним. Механика та же, меняются только слова: врач говорит о
+ * «семье», родитель — о «другом взрослом» (`audience`). Назначение кода
+ * передаётся явно в обоих случаях: этот экран выдаёт доступ, а не подключает
+ * свой чат, и полагаться на выбор сервера по роли здесь незачем.
  */
-export function AccessCodePanel({ patientId }: { patientId: string }) {
+export function AccessCodePanel({
+  patientId,
+  audience,
+}: {
+  patientId: string;
+  audience: "specialist" | "parent";
+}) {
   const { t } = useTranslation("access");
   const [issued, setIssued] = useState<AccessCodeCreated | null>(null);
   const [copied, setCopied] = useState(false);
+  // Ключи с голосом выдающего; общие — без префикса.
+  const voice = (key: string) => t(`panel.${audience}.${key}`);
 
-  const issue = useIssueAccessCode(patientId);
+  const issue = useIssueAccessCode(patientId, "family_member");
   const revoke = useRevokeAccessCode(patientId);
   const journal = useAccessCodes(patientId, true);
 
@@ -51,8 +65,8 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
   return (
     <div className="flex flex-col gap-block">
       <Section
-        title={t("panel.title")}
-        description={t("panel.intro")}
+        title={voice("title")}
+        description={voice("intro")}
         density="compact"
         action={
           <Button
@@ -64,7 +78,7 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
             {issue.isPending
               ? t("panel.issuing")
               : issued === null
-                ? t("panel.issue")
+                ? voice("issue")
                 : t("panel.issueAnother")}
           </Button>
         }
@@ -87,11 +101,11 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
             />
             <p className="m-0 text-center text-sm text-muted-foreground">
               {issued.deep_link === null
-                ? t("panel.qrHintWeb")
-                : t("panel.qrHintTelegram")}
+                ? voice("qrHintWeb")
+                : voice("qrHintTelegram")}
             </p>
 
-            <span className="text-sm font-medium">{t("panel.codeLabel")}</span>
+            <span className="text-sm font-medium">{voice("codeLabel")}</span>
             <output className="rounded-md bg-muted px-4 py-2 font-mono text-page-title tracking-widest">
               {issued.code}
             </output>
@@ -117,10 +131,12 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
             <p className="m-0 text-sm break-all text-muted-foreground">
               {t("panel.joinUrl", { url: issued.join_url })}
             </p>
-            {/* Правило клиники, кому давать код, система не проверяет — но
-                назвать его на экране обязана (ADR-0040, решение 6). */}
+            {/* Правило, кому давать код, система не проверяет — но назвать
+                его на экране обязана (ADR-0040, решение 6). Родителю оно
+                звучит иначе: законный представитель он сам, и передавая код,
+                он и даёт то самое согласие. */}
             <p className="m-0 text-center text-sm text-muted-foreground">
-              {t("panel.whoMay")}
+              {voice("whoMay")}
             </p>
           </div>
         )}
@@ -149,19 +165,31 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
             <EmptyState
               icon={KeyRound}
               title={t("panel.journalEmpty")}
-              description={t("panel.journalEmptyDescription")}
+              description={voice("journalEmptyDescription")}
             />
           }
         >
           <ul className="m-0 flex list-none flex-col gap-field p-0">
-            {(journal.data ?? []).map((row) => (
+            {(journal.data ?? []).map((row, index) => (
               <li
-                key={row.code}
+                // Код бывает скрыт (чужой код своего чата), и ключом служит
+                // время выпуска с позицией — строки журнала не переставляются.
+                key={`${row.created_at}-${index}`}
                 className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
               >
-                <span className="font-mono tracking-widest">{row.code}</span>
+                {/* Чужой код своего чата сервер не отдаёт: по нему вошедший
+                    вёл бы дневник от имени выпустившего (ADR-0042). */}
+                <span className="font-mono tracking-widest">
+                  {row.code ?? t("panel.hiddenCode")}
+                </span>
                 <span className="text-sm text-muted-foreground">
                   {t(`panel.status.${row.status}`)}
+                </span>
+                {/* Журнал общий: в нём и коды своего чата, которые родитель
+                    выпускает в разделе «Telegram». Без пометки они читались бы
+                    как выданный кому-то доступ. */}
+                <span className="text-sm text-muted-foreground">
+                  {t(`panel.purpose.${row.purpose}`)}
                 </span>
                 {row.issued_by_name !== null &&
                   row.issued_by_name !== undefined && (
@@ -176,7 +204,7 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
                     </span>
                   )}
 
-                {row.status === "pending" && (
+                {row.status === "pending" && row.code !== null && (
                   <ConfirmDialog
                     trigger={
                       <Button
@@ -190,12 +218,13 @@ export function AccessCodePanel({ patientId }: { patientId: string }) {
                     }
                     // Заголовок называет код: «отозвать?» без объекта — вопрос
                     // без предмета, а кодов в журнале бывает несколько.
-                    title={t("panel.revokeTitle", { code: row.code })}
+                    title={t("panel.revokeTitle", { code: row.code ?? "" })}
                     description={t("panel.revokeDescription")}
                     confirmLabel={t("panel.revoke")}
                     cancelLabel={t("common:actions.cancel")}
                     onConfirm={() => {
-                      void revoke.mutateAsync(row.code).catch(() => null);
+                      if (row.code !== null)
+                        void revoke.mutateAsync(row.code).catch(() => null);
                     }}
                   />
                 )}

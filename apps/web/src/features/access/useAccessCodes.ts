@@ -5,6 +5,7 @@ import { api } from "../../lib/api";
 
 export type AccessCodeCreated = components["schemas"]["AccessCodeCreated"];
 export type AccessCodeRead = components["schemas"]["AccessCodeRead"];
+export type AccessCodePurpose = components["schemas"]["AccessCodePurpose"];
 
 /** Ключ журнала кодов ребёнка — ветка пациента, как и остальные его данные. */
 function journalKey(patientId: string) {
@@ -29,14 +30,25 @@ export function useAccessCodes(patientId: string, enabled: boolean) {
   });
 }
 
-export function useIssueAccessCode(patientId: string) {
+/**
+ * Выпуск кода. Назначение не указано — сервер берёт прежнее для роли: у
+ * специалиста «другой взрослый», у родителя «свой чат» (ADR-0042). Экран
+ * выдачи доступа называет назначение явно, раздел «Telegram» — нет.
+ */
+export function useIssueAccessCode(
+  patientId: string,
+  purpose?: AccessCodePurpose,
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (): Promise<AccessCodeCreated> => {
       const { data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/access-codes",
-        { params: { path: { patient_id: patientId } } },
+        {
+          params: { path: { patient_id: patientId } },
+          body: purpose === undefined ? undefined : { purpose },
+        },
       );
       if (error || !data) throw error ?? new Error("Empty issue response");
       return data;

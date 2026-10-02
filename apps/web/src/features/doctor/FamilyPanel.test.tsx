@@ -162,9 +162,14 @@ describe("кто ведёт ребёнка дома", () => {
       await screen.findByRole("button", { name: /Дать доступ семье/ }),
     );
 
+    // Назначение передаётся явно: этот экран выдаёт доступ другому взрослому,
+    // и выбор сервера «по роли» здесь не нужен (ADR-0042).
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/access-codes",
-      { params: { path: { patient_id: PATIENT_ID } } },
+      {
+        params: { path: { patient_id: PATIENT_ID } },
+        body: { purpose: "family_member" },
+      },
     );
     // Код показывается крупно и целиком: врач поворачивает экран к родителю.
     expect(await screen.findByText("TRWX4K92")).toBeInTheDocument();
@@ -275,20 +280,86 @@ describe("кто ведёт ребёнка дома", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("семье приглашать некого — кнопки нет", async () => {
+  /**
+   * Решение заказчика от 02.10.2026 (ADR-0042): второму взрослому доступ
+   * открывает и сам родитель. Слова у панели другие — родитель выдаёт его не
+   * «семье», а тому, кто ухаживает за ребёнком вместе с ним, — а код и запрос
+   * те же, что у врача.
+   */
+  it("родитель выдаёт код другому взрослому", async () => {
     token = tokenFor("parent");
-    (api.GET as Mock).mockResolvedValue({
-      data: [
-        { id: "p1", full_name: "Мать", phone: null, email: "m@example.com" },
-      ],
-      error: undefined,
+    const user = userEvent.setup();
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      // Чужой живой код своего чата приходит без значения: строка есть,
+      // кода и кнопки отзыва нет (ADR-0042).
+      if (path.endsWith("/access-codes"))
+        return {
+          data: [
+            {
+              code: null,
+              status: "pending",
+              purpose: "own_chat",
+              expires_at: "2026-10-02T10:15:00Z",
+              created_at: "2026-10-02T10:00:00Z",
+              issued_by_name: "Отец",
+              used_by_name: null,
+            },
+          ],
+          error: undefined,
+        };
+      return {
+        data: [
+          { id: "p1", full_name: "Мать", phone: null, email: "m@example.com" },
+        ],
+        error: undefined,
+      };
+    });
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/auth/refresh") {
+        return { data: { access_token: token }, error: undefined };
+      }
+      return {
+        data: {
+          code: "BABU5K92",
+          expires_at: "2026-10-09T10:00:00Z",
+          deep_link: "https://t.me/ketocare_bot?start=BABU5K92",
+          join_url: "https://app.example.org/join?code=BABU5K92",
+        },
+        error: undefined,
+      };
     });
 
     render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
 
-    expect(await screen.findByText("Мать")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Дать доступ семье" }),
     ).not.toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Дать доступ другому взрослому",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Выпустить код" }),
+    );
+
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/access-codes",
+      {
+        params: { path: { patient_id: PATIENT_ID } },
+        body: { purpose: "family_member" },
+      },
+    );
+    expect(await screen.findByText("BABU5K92")).toBeInTheDocument();
+    expect(screen.getByText("••••••••")).toBeInTheDocument();
+    expect(screen.getByText("свой Telegram")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Отозвать" }),
+    ).not.toBeInTheDocument();
+    // Правило передачи называется родителю его словами: кому можно и что
+    // откроется.
+    expect(
+      screen.getByText(/только тому, кому доверяете уход за ребёнком/),
+    ).toBeInTheDocument();
   });
 });
