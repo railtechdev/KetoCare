@@ -452,18 +452,42 @@ def _tokens(segment: str) -> list[str]:
 #: Параметры `env`, забирающие следующее слово: `env -u NAME cmd`, `env -C dir cmd`.
 _ENV_OPTIONS_WITH_VALUE = {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
 
+#: Параметры `xargs` (GNU и BSD), забирающие следующее слово: `xargs -I {} cmd`,
+#: `xargs -n 1 cmd`, `xargs -a список cmd`. Без их разбора командой считалось
+#: значение параметра.
+_XARGS_OPTIONS_WITH_VALUE = {
+    "-I",
+    "-J",
+    "-L",
+    "-n",
+    "-P",
+    "-s",
+    "-E",
+    "-d",
+    "-a",
+    "-R",
+    "-S",
+    "--arg-file",
+    "--delimiter",
+    "--max-args",
+    "--max-procs",
+    "--max-chars",
+    "--process-slot-var",
+}
 
-def command_tokens(segment: str) -> list[str]:
-    """Слова сегмента, начиная с имени настоящей команды.
 
-    Снимаются присваивания окружения (`FOO=bar`), обёртки (`sudo`, `nohup` …) и
-    `env` с его параметрами. `env` — не читающая команда, а обёртка: `env rm
-    файл` удаляет файл. Пока он стоял в списке читающих, такая команда
-    проходила как чтение. Голый `env` (печать окружения) остаётся самим собой.
+def _unwrap(segment: str) -> tuple[list[str], bool]:
+    """Слова сегмента с настоящей команды — и стоял ли перед ней `xargs`.
+
+    `xargs` разбирается как `env`: судят по команде, которую он запускает.
+    Вдобавок он получает аргументы из стандартного ввода, то есть защищённый
+    путь в сегменте может не стоять вовсе: `ls каталог | xargs rm`. Поэтому
+    признак «через xargs» отдаётся наружу — его проверяет `segments_blocked`.
     """
 
-    skip_prefix = {"sudo", "command", "nohup", "time", "xargs", "nice"}
+    skip_prefix = {"sudo", "command", "nohup", "time", "nice"}
     tokens = _tokens(segment)
+    via_xargs = False
     index = 0
     while index < len(tokens):
         token = tokens[index]
@@ -473,6 +497,19 @@ def command_tokens(segment: str) -> list[str]:
         if token in skip_prefix:
             index += 1
             continue
+        if token.rsplit("/", maxsplit=1)[-1] == "xargs":
+            via_xargs = True
+            rest = index + 1
+            while rest < len(tokens) and tokens[rest].startswith("-"):
+                if tokens[rest] == "--":
+                    rest += 1
+                    break
+                rest += 2 if tokens[rest] in _XARGS_OPTIONS_WITH_VALUE else 1
+            if rest >= len(tokens):
+                # Голый `xargs` запускает `echo`: печатает, ничего не пишет.
+                return tokens[index:], via_xargs
+            index = rest
+            continue
         if token.rsplit("/", maxsplit=1)[-1] == "env":
             rest = index + 1
             while rest < len(tokens) and tokens[rest].startswith("-"):
@@ -480,11 +517,27 @@ def command_tokens(segment: str) -> list[str]:
             while rest < len(tokens) and "=" in tokens[rest] and not tokens[rest].startswith("-"):
                 rest += 1
             if rest >= len(tokens):
-                return tokens[index:]
+                return tokens[index:], via_xargs
             index = rest
             continue
-        return tokens[index:]
-    return []
+        return tokens[index:], via_xargs
+    return [], via_xargs
+
+
+def command_tokens(segment: str) -> list[str]:
+    """Слова сегмента, начиная с имени настоящей команды.
+
+    Снимаются присваивания окружения (`FOO=bar`), обёртки (`sudo`, `nohup` …),
+    `env` и `xargs` с их параметрами. `env` — не читающая команда, а обёртка:
+    `env rm файл` удаляет файл. Пока он стоял в списке читающих, такая команда
+    проходила как чтение. Голый `env` (печать окружения) остаётся самим собой.
+    """
+
+    return _unwrap(segment)[0]
+
+
+def runs_through_xargs(segment: str) -> bool:
+    return _unwrap(segment)[1]
 
 
 def first_word(segment: str) -> str:
@@ -518,7 +571,10 @@ def segment_is_read_only(segment: str) -> bool:
             for token in tokens
         ):
             return False
-        return _git_verb(segment) in GIT_READ_ONLY
+        verb, rest, _ = _git_parts(segment)
+        if verb == "grep":
+            return _git_grep_is_read_only(rest)
+        return verb in GIT_READ_ONLY
 
     # cd в защищённый каталог открывает запись относительными путями дальше
     if name == "cd":
@@ -532,7 +588,14 @@ def segment_is_read_only(segment: str) -> bool:
             for token in _tokens(segment)
         )
 
+    # Голый `xargs` (без команды) запускает `echo`.
+    if name == "xargs":
+        return True
+
     args = command_tokens(segment)[1:]
+
+    if name == "uniq":
+        return _uniq_is_read_only(args)
 
     if name == "sed":
         return _sed_is_read_only(args)
@@ -545,6 +608,47 @@ def segment_is_read_only(segment: str) -> bool:
         return False
 
     return name in READ_ONLY
+
+
+#: Параметры `uniq`, забирающие следующее слово: `uniq -f 1 файл`.
+_UNIQ_OPTIONS_WITH_VALUE = {"-f", "-s", "-w", "--skip-fields", "--skip-chars", "--check-chars"}
+
+
+def _uniq_is_read_only(args: list[str]) -> bool:
+    """`uniq ВХОД` печатает; `uniq ВХОД ВЫХОД` пишет во второй аргумент."""
+
+    positional = 0
+    index = 0
+    options_done = False
+    while index < len(args):
+        arg = args[index]
+        if not options_done and arg == "--":
+            options_done = True
+        elif not options_done and arg.startswith("-") and arg != "-":
+            if arg in _UNIQ_OPTIONS_WITH_VALUE:
+                index += 1
+        else:
+            positional += 1
+        index += 1
+    return positional < 2
+
+
+def _git_grep_is_read_only(args: list[str]) -> bool:
+    """`git grep` читает, пока не открывает найденное программой.
+
+    `-O`/`--open-files-in-pager[=программа]` запускает произвольную команду над
+    найденными файлами. Короткие флаги git склеивает (`-iO`), длинные — понимает
+    по однозначному началу (`--open`), поэтому проверка нарочно грубая.
+    """
+
+    for arg in args:
+        if arg == "--":
+            break
+        if arg.startswith("--op"):
+            return False
+        if arg.startswith("-") and not arg.startswith("--") and "O" in arg:
+            return False
+    return True
 
 
 # Скрипт `sed -n`, который только печатает: адреса (номер, `$`, `/регулярка/`,
@@ -700,7 +804,7 @@ def segment_blocked(segment: str) -> bool:
 
     if first_word(segment) in HEREDOC_INTERPRETERS:
         body = heredoc_bodies(segment)
-        if body.strip() and any(segment_blocked(s) for s in split_segments(body)):
+        if body.strip() and segments_blocked(split_segments(body)):
             return True
 
     command_part = strip_heredocs(segment)
@@ -709,6 +813,30 @@ def segment_blocked(segment: str) -> bool:
         return True
     return mentions_env(command_part) and not (
         segment_is_read_only(command_part) or env_usage_is_read_only(command_part)
+    )
+
+
+def segments_blocked(segments: list[str]) -> bool:
+    """Команда, в которой упомянут защищённый путь, нарушает защиту?
+
+    Кроме сегментов, пишущих по защищённому пути сами, ловятся два случая, где
+    путь «внесён» в пишущую команду без упоминания в её сегменте:
+
+    - `cd` в защищённый каталог — дальше пишут относительным путём;
+    - `xargs` с пишущей командой — пути приходят из стандартного ввода
+      (`ls каталог | xargs rm`, `find … | xargs sed -i`). Откуда именно идёт
+      ввод, не разбирается: в команде с защищённым путём `xargs` с пишущей
+      командой блокируется всегда.
+    """
+
+    if any(segment_blocked(s) for s in segments):
+        return True
+    if any(first_word(s) == "cd" and mentions_protected_paths(local_part(s)) for s in segments):
+        return True
+    return any(
+        runs_through_xargs(local_part(s))
+        and not segment_is_read_only(strip_heredocs(local_part(s)))
+        for s in segments
     )
 
 
@@ -1025,16 +1153,7 @@ def main() -> int:
     if not mentions_protected(command):
         return 0
 
-    segments = split_segments(command)
-    for segment in segments:
-        if segment_blocked(segment):
-            print(BLOCK_MESSAGE, file=sys.stderr)
-            return 2
-
-    # Путь упомянут, но каждый сегмент, где он встречается, только читает.
-    # Отдельно ловим случай, когда защищённый путь «внесён» через cd, а пишет
-    # следующий сегмент уже относительным путём.
-    if any(first_word(s) == "cd" and mentions_protected_paths(local_part(s)) for s in segments):
+    if segments_blocked(split_segments(command)):
         print(BLOCK_MESSAGE, file=sys.stderr)
         return 2
 

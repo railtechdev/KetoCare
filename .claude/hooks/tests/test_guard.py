@@ -1095,3 +1095,62 @@ class TestGitGlobalOptionsDoNotHideTheVerb:
         _git(foreign, "init", "-b", "main")
         command = f'git -C {foreign} commit --allow-empty -m "x"'
         assert check_command(command, cwd=repo_on_main) == ALLOW
+
+
+class TestReadingCommandsThatRunOrWrite:
+    """Ещё три «читающие» команды, которые пишут или запускают программу.
+
+    `xargs` стоял среди обёрток наравне с `nohup`, но в отличие от них получает
+    аргументы из стандартного ввода: `ls docs/medical | xargs rm` удалял
+    каталог, хотя сегмент с `rm` пути не упоминал. `uniq ВХОД ВЫХОД` пишет во
+    второй аргумент. `git grep -O` открывает найденное программой — до этой
+    правки `git grep` не был среди читающих вовсе и блокировался целиком.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "ls docs/medical | xargs rm",
+            "ls docs/medical/reference-cases | xargs -n 1 rm",
+            "find docs/medical -print0 | xargs -0 -I{} rm {}",
+            "find docs/medical -name '*.yaml' | xargs sed -i 's/a/b/'",
+            "ls docs/medical | env xargs rm",
+            "ls docs/medical | xargs -P4 sh -c 'rm $0'",
+            "xargs -a docs/medical/list rm",
+            "bash <<EOF\nls docs/medical | xargs rm\nEOF",
+            "uniq docs/medical/a.yaml docs/medical/b.yaml",
+            "uniq /tmp/a docs/medical/b.yaml",
+            "cat docs/medical/a.yaml | uniq - docs/medical/b.yaml",
+            "uniq -f 1 /tmp/a docs/medical/b.yaml",
+            "git grep -O ratio -- docs/medical",
+            "git grep -Ovim ratio docs/medical",
+            "git grep -iO ratio docs/medical",
+            "git grep --open-files-in-pager=vim ratio docs/medical",
+            "git grep --open ratio docs/medical",
+        ],
+    )
+    def test_writing_blocked(self, command: str) -> None:
+        assert check_command(command) == BLOCK, f"запись пропущена: {command}"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "ls docs/medical | xargs grep -n ratio",
+            "find docs/medical -name '*.yaml' -print0 | xargs -0 grep -l ratio",
+            "ls docs/medical | xargs -n 1 wc -l",
+            "ls docs/medical | xargs",
+            "cat docs/medical/a.yaml | xargs echo",
+            "uniq docs/medical/reference-cases/a.yaml",
+            "uniq -c docs/medical/reference-cases/a.yaml",
+            "uniq -f 1 docs/medical/reference-cases/a.yaml",
+            "sort docs/medical/a.yaml | uniq -c",
+            "git grep ratio -- docs/medical",
+            "git grep -n -e ratio docs/medical",
+            "git -C . grep ratio docs/medical",
+        ],
+    )
+    def test_reading_allowed(self, command: str) -> None:
+        assert check_command(command) == ALLOW, f"чтение заблокировано: {command}"
+
+    def test_xargs_without_protected_path_is_not_our_business(self) -> None:
+        assert check_command("find /tmp/x -name '*.o' | xargs rm") == ALLOW
