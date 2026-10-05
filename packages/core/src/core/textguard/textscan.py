@@ -25,12 +25,17 @@ def normalize(text: str) -> str:
 
     lowered = text.lower().replace("ё", "е")
     without_markup = re.sub(r"[*_`#>]+", " ", lowered)
-    return re.sub(r"\s+", " ", without_markup)
+    # Знаки внутри предложения — пробел: «следует, повторить анализ» иначе
+    # проходил мимо признака «следует повторить», и одна запятая снимала
+    # запрет (находка ревью, 05.10.2026). Словарь нормализуется так же
+    # (`find_any`), поэтому «вероятно, это» в нём по-прежнему совпадает.
+    without_punctuation = re.sub(r"[,;:()«»\"“”„]+", " ", without_markup)
+    return re.sub(r"\s+", " ", without_punctuation)
 
 
 def find_any(text: str, needles: tuple[str, ...]) -> str | None:
     for needle in needles:
-        if needle in text:
+        if normalize(needle).strip() in text:
             return needle
     return None
 

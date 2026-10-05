@@ -19,7 +19,12 @@ from ..models import FamilyNudge, Patient
 async def lock_patient(session: AsyncSession, patient_id: uuid.UUID) -> None:
     """Держать строку ребёнка до конца транзакции — проверка и запись атомарны."""
 
-    await session.execute(select(Patient.id).where(Patient.id == patient_id).with_for_update())
+    # FOR NO KEY UPDATE, а не FOR UPDATE: вставки записей дневника этого
+    # ребёнка берут FOR KEY SHARE на строке пациента и иначе ждали бы конца
+    # транзакции напоминания (замечание ревью, 05.10.2026).
+    await session.execute(
+        select(Patient.id).where(Patient.id == patient_id).with_for_update(key_share=True)
+    )
 
 
 async def last_since(

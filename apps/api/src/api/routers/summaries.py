@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, date, datetime
 from typing import Annotated, Any
@@ -312,7 +313,12 @@ def _hard_findings(
     ручка — текст, который врач утверждает. Второй копии правил быть не должно.
     """
 
-    from_model = set(textguard.sentences(draft or ""))
+    # Предложения черновика с жёсткой находкой — то, что модель сказала сама.
+    model_claims = [
+        _words(finding.fragment)
+        for finding in textguard.check(draft or "")
+        if finding.hard and finding.kind is not textguard.Kind.INTERNAL
+    ]
     blocking: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
     for finding in textguard.check(text):
@@ -320,13 +326,44 @@ def _hard_findings(
             continue
         if finding.kind is textguard.Kind.INTERNAL:
             origin = "guard"
-        elif finding.fragment in from_model:
+        elif _from_model(_words(finding.fragment), model_claims):
             origin = "draft"
         else:
             origin = "doctor"
         target = warnings if origin == "doctor" else blocking
         target.append({**finding.as_dict(), "origin": origin})
     return blocking, warnings
+
+
+#: Доля слов, при которой предложение считается фразой модели. Прежде
+#: сравнение шло на точное совпадение, и одна запятая, одно добавленное слово
+#: или склейка с соседним предложением превращали запрет на неизменённый вывод
+#: модели в подтверждаемое предупреждение, а экран подписывал его «ваш текст»
+#: (находка ревью, 05.10.2026).
+_MODEL_OVERLAP = 0.6
+
+
+def _words(fragment: str) -> frozenset[str]:
+    return frozenset(re.findall(r"\w+", textguard.normalize(fragment).lower()))
+
+
+def _from_model(words: frozenset[str], model_claims: list[frozenset[str]]) -> bool:
+    """Предложение по содержанию — фраза модели с жёсткой находкой.
+
+    Две стороны сравнения: большая часть фразы модели вошла в предложение
+    (дописали слово, склеили с соседним) или предложение почти целиком состоит
+    из слов фразы модели (разрезали её надвое). Переписанное своими словами не
+    совпадает ни с одной стороны и остаётся предупреждением. При сомнении фраза
+    считается модельной: запрет здесь — безопасная сторона.
+    """
+
+    for claim in model_claims:
+        if not claim or not words:
+            continue
+        shared = len(claim & words)
+        if shared / len(claim) >= _MODEL_OVERLAP or shared / len(words) >= 0.8:
+            return True
+    return False
 
 
 async def _audit(

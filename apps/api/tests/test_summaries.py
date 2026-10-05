@@ -375,8 +375,12 @@ class TestApprove:
     async def test_a_draft_sentence_rewritten_by_the_doctor_is_the_doctors(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        """Переписанное предложение — уже слова врача, а не модели. Разметка и
-        регистр правкой не считаются: жирный шрифт запрета не снимает."""
+        """Переписанное своими словами предложение — уже слова врача, а не модели.
+
+        Мелкая правка фразы модели — нет (находка ревью, 05.10.2026): жирный
+        шрифт, регистр, одно дописанное слово, запятая и склейка с соседним
+        предложением запрета не снимают.
+        """
 
         doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
         draft = DRAFT.replace(
@@ -385,14 +389,24 @@ class TestApprove:
         )
         summary = await _with_draft(session, patient, doctor, draft=draft)
 
-        bold = draft.replace("Следует повторить", "**СЛЕДУЕТ** повторить")
-        rewritten = draft.replace("анализ крови.", "анализ крови в октябре.")
+        sentence = "Следует повторить анализ крови."
+        tweaks = {
+            "жирный и регистр": draft.replace("Следует повторить", "**СЛЕДУЕТ** повторить"),
+            "одно слово": draft.replace(sentence, "Следует повторить анализ крови сейчас."),
+            "запятая": draft.replace(sentence, "Следует, повторить анализ крови."),
+            "склейка": draft.replace("3.2 ммоль/л. Следует", "3.2 ммоль/л, следует"),
+        }
+        for name, text in tweaks.items():
+            response = await _approve(
+                client, patient, summary, doctor, auth_headers, text, ack=True
+            )
+            assert response.status_code == 422, (name, response.text)
+            assert response.json()["error"]["details"]["acknowledgeable"] is False, name
 
-        bolded = await _approve(client, patient, summary, doctor, auth_headers, bold, ack=True)
+        rewritten = draft.replace(
+            sentence, "На приёме обсудим, нужен ли контроль лабораторных показателей."
+        )
         own = await _approve(client, patient, summary, doctor, auth_headers, rewritten, ack=True)
-
-        assert bolded.status_code == 422
-        assert bolded.json()["error"]["details"]["acknowledgeable"] is False
         assert own.status_code == 200, own.text
         assert own.json()["approved_md"] == rewritten
 

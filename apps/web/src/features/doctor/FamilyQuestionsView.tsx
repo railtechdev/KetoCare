@@ -177,7 +177,9 @@ function ConversationReader({
   onBack: () => void;
 }) {
   const { t } = useTranslation("doctor");
-  const conversation = useConversation(patientId, conversationId);
+  const conversation = useConversation(patientId, conversationId, {
+    reader: true,
+  });
   const messages = conversation.data ?? [];
   const started = messages[0]?.created_at;
 
