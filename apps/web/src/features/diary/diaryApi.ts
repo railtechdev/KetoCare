@@ -1,4 +1,5 @@
 import type { components } from "@ketocare/api-client";
+import type { DiaryEntryBody } from "@ketocare/ui";
 
 import { api } from "../../lib/api";
 import type { DiaryRange } from "./time";
@@ -37,19 +38,10 @@ export type DiaryLog =
   | ({ kind: "side-effects" } & Schemas["SideEffectLogRead"]);
 
 /**
- * Тело записи из формы.
- *
- * Одно и то же тело годится и для POST, и для PATCH: схема изменения повторяет
- * схему создания, но с необязательными полями. Форма показывает все поля сразу,
- * поэтому и при изменении отправляются все — очищенное поле должно очиститься.
+ * Тело записи из формы — общее с Mini App и потому из кита (ADR-0044).
+ * Совместимость с `*LogCreate` проверяет компилятор в вызовах ниже.
  */
-export type DiaryBody =
-  | { kind: "seizures"; body: Schemas["SeizureLogCreate"] }
-  | { kind: "ketones"; body: Schemas["KetoneLogCreate"] }
-  | { kind: "weight"; body: Schemas["WeightLogCreate"] }
-  | { kind: "medications"; body: Schemas["MedicationLogCreate"] }
-  | { kind: "meals"; body: Schemas["MealLogCreate"] }
-  | { kind: "side-effects"; body: Schemas["SideEffectLogCreate"] };
+export type DiaryBody = DiaryEntryBody;
 
 export interface DiaryPage {
   items: DiaryLog[];

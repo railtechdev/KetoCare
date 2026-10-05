@@ -11,6 +11,43 @@ export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
 export { isRefusal } from "./lib/assistantAnswer";
 export type { AssistantMessageSignals } from "./lib/assistantAnswer";
+export {
+  DURATIONS_BOTH,
+  KETONE_MAX_MMOL,
+  KETONE_MIN_MMOL,
+  OCCURRED_AT_CLOCK_SKEW_MS,
+  OCCURRED_AT_FUTURE,
+  SEIZURE_COUNT_MIN,
+  WEIGHT_MAX_KG,
+  WEIGHT_MIN_KG,
+  diaryFieldErrors,
+  fromDateTimeLocalInput,
+  ketoneBody,
+  ketoneSchema,
+  mealBody,
+  mealSchema,
+  medicationBody,
+  medicationSchema,
+  parseDateInput,
+  seizureBody,
+  seizureSchema,
+  sideEffectBody,
+  sideEffectSchema,
+  toDateInput,
+  toDateTimeLocalInput,
+  weightBody,
+  weightSchema,
+} from "./lib/diaryEntry";
+export type {
+  DiaryEntryBody,
+  DiaryEntryKind,
+  KetoneValues,
+  MealValues,
+  MedicationValues,
+  SeizureValues,
+  SideEffectValues,
+  WeightValues,
+} from "./lib/diaryEntry";
 export { productNameState } from "./lib/productName";
 export type { ProductName, ProductNameInput } from "./lib/productName";
 export {
