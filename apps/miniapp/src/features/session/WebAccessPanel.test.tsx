@@ -60,7 +60,7 @@ describe("вход в кабинет из Mini App", () => {
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith("/api/v1/users/me/credentials/reset", {
-        body: { password: "синий чайник на подоконнике" },
+        body: { password: "синий чайник на подоконнике", init_data: "" },
       }),
     );
   });

@@ -558,7 +558,7 @@ class TestPasswordResetFromTheMiniApp:
         response = await client.post(
             "/api/v1/users/me/credentials/reset",
             headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
-            json={"password": "синий чайник на подоконнике"},
+            json={"password": "синий чайник на подоконнике", "init_data": init_data()},
         )
 
         assert response.status_code == 204, response.text
@@ -584,7 +584,7 @@ class TestPasswordResetFromTheMiniApp:
         response = await client.post(
             "/api/v1/users/me/credentials/reset",
             headers=auth_headers(parent),
-            json={"password": "синий чайник на подоконнике"},
+            json={"password": "синий чайник на подоконнике", "init_data": init_data()},
         )
 
         assert response.status_code == 403
@@ -596,7 +596,70 @@ class TestPasswordResetFromTheMiniApp:
         response = await client.post(
             "/api/v1/users/me/credentials/reset",
             headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
-            json={"password": "qwerty123456"},
+            json={"password": "qwerty123456", "init_data": init_data()},
         )
 
         assert response.status_code == 422
+
+    async def test_stale_launch_is_refused(self, client, session, make_user, make_patient):
+        """Подпись старше десяти минут — «закройте и откройте снова» (ревью E3-2)."""
+        await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+        old = init_data(at=datetime.now(UTC) - timedelta(minutes=20))
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={"password": "синий чайник на подоконнике", "init_data": old},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"]["details"] == {"reason": "stale_launch"}
+
+    async def test_someone_elses_signature_is_refused(
+        self, client, session, make_user, make_patient
+    ):
+        await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={
+                "password": "синий чайник на подоконнике",
+                "init_data": init_data(chat_id=CHAT_ID + 1),
+            },
+        )
+
+        assert response.status_code == 403
+
+    async def test_email_cannot_be_changed_here(self, client, session, make_user, make_patient):
+        await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={
+                "password": "синий чайник на подоконнике",
+                "init_data": init_data(),
+                "email": "thief@example.com",
+            },
+        )
+
+        assert response.status_code == 422
+
+    async def test_cabinet_not_enabled_yet(self, client, session, make_user, make_patient):
+        parent, _, _ = await _linked_family(session, make_user, make_patient)
+        parent.email = None
+        parent.password_hash = None
+        await session.flush()
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={"password": "синий чайник на подоконнике", "init_data": init_data()},
+        )
+
+        assert response.status_code == 409

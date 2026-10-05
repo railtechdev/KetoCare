@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api, errorMessageOf } from "../../lib/api";
+import { launchData } from "../../lib/telegram";
 import type { Session } from "./useSession";
 
 /**
@@ -145,8 +146,11 @@ function WebPasswordReset({ session }: { session: Session }) {
 
   const reset = useMutation({
     mutationFn: async () => {
+      // Свежая подпись Telegram — повторная проверка, что телефон в руках
+      // владельца (ADR-0051). Без строки запуска сервер откажет понятным
+      // «закройте приложение и откройте снова».
       const { error } = await api.POST("/api/v1/users/me/credentials/reset", {
-        body: { password },
+        body: { password, init_data: launchData() ?? "" },
       });
       if (error) throw error;
     },

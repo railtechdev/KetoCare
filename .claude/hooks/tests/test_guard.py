@@ -692,11 +692,11 @@ class TestEngineCommentsAreNotMath:
     def test_changed_string_value_is_not_a_comment(self, tmp_path: Path) -> None:
         """Строка-значение — часть программы: сообщение об ошибке видит человек."""
 
-        before = '''def check(x):
+        before = """def check(x):
     if x < 0:
         raise ValueError("нельзя")
     return x
-'''
+"""
         after = before.replace('"нельзя"', '"нельзя: значение отрицательное"')
         assert self._changed(self._repo(tmp_path, before), after) == "engine.py"
 
@@ -900,9 +900,7 @@ class TestEngineVersionMustActuallyGrow:
         """Сравнение числовое, а не строковое: «1.10.0» больше «1.9.0»."""
 
         assert (
-            self._verdict(
-                tmp_path, 'ENGINE_VERSION = "1.9.0"\n', 'ENGINE_VERSION = "1.10.0"\n'
-            )
+            self._verdict(tmp_path, 'ENGINE_VERSION = "1.9.0"\n', 'ENGINE_VERSION = "1.10.0"\n')
             == "bumped"
         )
 
@@ -1030,6 +1028,17 @@ class TestReadingFormsAreReading:
             # экранированная кавычка не прячет запись
             'echo "a\\"b" > docs/medical/x.md',
             'cat "a\\"" ; rm docs/medical/x.md',
+            # находки ревью 05.10.2026: лазейки разрешений чтения
+            "git -c core.pager='tee docs/medical/spec.md' log",
+            "git --config-env=core.pager=X log docs/medical",
+            "git log --output=docs/medical/x.md",
+            'gawk \'@include "inplace"; {gsub(/a/,"b")} 1\' docs/medical/spec.md',
+            "awk --source='BEGIN{system(\"rm docs/medical/x\")}'",
+            "awk -e'BEGIN{print}' docs/medical/spec.md",
+            "awk --file=/tmp/x.awk docs/medical/spec.md",
+            "gawk -l ext docs/medical/spec.md",
+            "env -S 'rm docs/medical/x'",
+            "env --split-string='rm docs/medical/x'",
         ],
     )
     def test_writing_blocked(self, command: str) -> None:

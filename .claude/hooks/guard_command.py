@@ -508,6 +508,16 @@ def segment_is_read_only(segment: str) -> bool:
         return False
 
     if name == "git":
+        # `-c core.pager=…`, `diff.external`, `core.fsmonitor` исполняют
+        # произвольную команду, `--output=` пишет в файл: с ними чтения нет
+        # (находка ревью, 05.10.2026).
+        tokens = command_tokens(segment)
+        if any(
+            token in ("-c", "--config-env", "--exec-path")
+            or token.startswith(("--config-env=", "--exec-path=", "--output"))
+            for token in tokens
+        ):
+            return False
         return _git_verb(segment) in GIT_READ_ONLY
 
     # cd в защищённый каталог открывает запись относительными путями дальше
@@ -515,8 +525,12 @@ def segment_is_read_only(segment: str) -> bool:
         return not mentions_protected(segment)
 
     # Голый `env` печатает окружение; с командой его снимает `command_tokens`.
+    # `-S`/`--split-string` исполняют строку — это команда, а не чтение.
     if name == "env":
-        return True
+        return not any(
+            token in ("-S", "--split-string") or token.startswith("--split-string=")
+            for token in _tokens(segment)
+        )
 
     args = command_tokens(segment)[1:]
 
@@ -594,12 +608,23 @@ def _awk_is_read_only(args: list[str]) -> bool:
     не чтение.
     """
 
-    for index, arg in enumerate(args):
-        if arg in ("-i", "-f", "--include", "--file") or arg.startswith(("-i", "-f", "--include=")):
-            return False
-        if arg == "-v" or (index > 0 and args[index - 1] == "-v"):
+    # Белый список, а не перечень опасного: у gawk десятки способов писать —
+    # `@include "inplace"`, `-e`/`--source` с программой во флаге, `--file=`,
+    # `-l`/`--load` с расширением (находка ревью, 05.10.2026). Разрешены только
+    # `-F` и `-v`; любой другой флаг — не чтение.
+    skip_value = False
+    for arg in args:
+        if skip_value:
+            skip_value = False
             continue
-        if not arg.startswith("-") and ("system" in arg or "|" in arg):
+        if arg in ("-F", "-v"):
+            skip_value = True
+            continue
+        if arg.startswith(("-F", "-v")) and len(arg) > 2:
+            continue
+        if arg.startswith("-"):
+            return False
+        if any(marker in arg for marker in ("system", "|", "@include", "@load", "getline")):
             return False
     return True
 
@@ -896,6 +921,7 @@ BLOCK_MESSAGE = """BLOCKED: команда затрагивает защищён
   docs/knowledge-base/clinical/* — клинические статьи помощника подписывает медкоманда (10.4)
   */migrations/versions/*   — миграция, ПОПАВШАЯ В MAIN, не правится (ТЗ §0.3, правило 3);
                               ревизия ветки, ещё не слитая в main, — правится свободно
+                              (сверка с origin/main: перед правкой — git fetch)
   .env                      — секреты редактирует человек (ТЗ §0.7); чтение (--env-file) разрешено
   .claude/settings.json     — выключает все хуки разом
 

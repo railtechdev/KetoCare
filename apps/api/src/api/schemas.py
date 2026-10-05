@@ -591,20 +591,26 @@ class MeUpdate(BaseModel):
 
 
 class PasswordResetViaTelegram(BaseModel):
-    """Новый пароль кабинета из Mini App (аудит блокеров, E3)."""
+    """Новый пароль кабинета из Mini App (аудит блокеров, E3; ADR-0051).
+
+    `init_data` — свежая строка запуска Mini App: повторная проверка второго
+    канала в момент сброса, а не доверие токену, выданному час назад.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     password: NewPassword
+    init_data: str = Field(min_length=1, max_length=4096)
 
 
 class CredentialsCreate(BaseModel):
     """Вход в веб-кабинет для учётной записи, заведённой из Telegram (ADR-0040).
 
     Это не смена пароля: текущего пароля нет, и спрашивать его не о чем. Смена
-    пароля живёт в `PasswordChange` и требует знать прежний — повторный вызов
-    этой ручки отвергается, иначе открытая чужая сессия в Mini App задавала бы
-    новый пароль, не зная старого.
+    пароля живёт в `PasswordChange` и требует знать прежний; повторный вызов
+    этой ручки отвергается. Забытый пароль сбрасывается отдельной ручкой
+    (`PasswordResetViaTelegram`, ADR-0051): только из Mini App, со свежей
+    подписью Telegram, без смены почты и с сообщением владельцу.
     """
 
     model_config = ConfigDict(extra="forbid")
