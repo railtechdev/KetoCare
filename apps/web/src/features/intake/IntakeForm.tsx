@@ -77,10 +77,17 @@ export function IntakeForm({
   patientId,
   childName,
   onDone,
+  audience = "family",
 }: {
   patientId: string;
   childName: string;
   onDone: () => void;
+  /**
+   * Кто заполняет. Специалист (ADR-0046) заполняет ту же анкету со слов семьи
+   * на приёме; подсказка «врачебные поля заполняет врач» ему не нужна — они у
+   * него в медицинском профиле рядом.
+   */
+  audience?: "family" | "specialist";
 }) {
   const { t } = useTranslation("intake");
 
@@ -281,9 +288,11 @@ export function IntakeForm({
                 }
               />
 
-              <p className="m-0 text-sm text-muted-foreground">
-                {t("doctorFieldsHint")}
-              </p>
+              {audience === "family" && (
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t("doctorFieldsHint")}
+                </p>
+              )}
             </Section>
           )}
 

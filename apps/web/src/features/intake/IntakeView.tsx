@@ -1,10 +1,19 @@
-import { AsyncSection, EmptyState, FactList, Section } from "@ketocare/ui";
-import { ClipboardList } from "lucide-react";
+import {
+  AsyncSection,
+  Button,
+  EmptyState,
+  FactList,
+  FormSheet,
+  Section,
+} from "@ketocare/ui";
+import { ClipboardList, Pencil } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "../doctor/dates";
 import { LinesSkeleton } from "../doctor/skeletons";
+import { IntakeForm } from "./IntakeForm";
 import {
   useAedDrugs,
   useIntakeOptions,
@@ -28,15 +37,50 @@ import {
  * Подписи вопросов берутся из словаря семьи (`intake`), а не заводятся своими:
  * это те же самые вопросы, и вторая копия однажды разошлась бы с первой —
  * врач и семья читали бы разные формулировки одного ответа.
+ *
+ * **Специалист её и заполняет** (ADR-0046, аудит блокеров C11), когда
+ * `editable`: у семьи из Telegram веб-кабинета нет, и анкета у неё оставалась
+ * пустой, хотя сервер специалисту запись разрешал всегда. Форма та же, что у
+ * семьи (`IntakeForm`), — в панели, а не своя копия: вопросы и правила ответа у
+ * анкеты одни, кто бы её ни заполнял.
  */
-export function IntakeView({ patientId }: { patientId: string }) {
+export function IntakeView({
+  patientId,
+  childName,
+  editable = false,
+}: {
+  patientId: string;
+  /** Нужен форме для подтверждения «Анкета … сохранена». */
+  childName?: string;
+  editable?: boolean;
+}) {
   const { t } = useTranslation("intake");
   const intake = usePatientIntake(patientId);
   const options = useIntakeOptions();
   const drugs = useAedDrugs();
+  const [editing, setEditing] = useState(false);
+
+  const filled = intake.data !== null && intake.data !== undefined;
 
   return (
-    <Section title={t("title")} description={t("intro")} density="compact">
+    <Section
+      title={t("title")}
+      description={t("intro")}
+      density="compact"
+      action={
+        editable &&
+        intake.isSuccess && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil aria-hidden="true" />
+            {filled ? t("specialist.edit") : t("specialist.fill")}
+          </Button>
+        )
+      }
+    >
       <AsyncSection
         loading={intake.isPending || options.isPending || drugs.isPending}
         skeleton={<LinesSkeleton label={t("title")} lines={6} />}
@@ -58,7 +102,11 @@ export function IntakeView({ patientId }: { patientId: string }) {
           <EmptyState
             icon={ClipboardList}
             title={t("empty.title")}
-            description={t("empty.description")}
+            description={
+              editable
+                ? t("empty.specialistDescription")
+                : t("empty.description")
+            }
           />
         }
       >
@@ -70,6 +118,23 @@ export function IntakeView({ patientId }: { patientId: string }) {
           />
         )}
       </AsyncSection>
+
+      {editable && (
+        <FormSheet
+          closeLabel={t("common:actions.close")}
+          open={editing}
+          onOpenChange={setEditing}
+          title={t("specialist.sheetTitle")}
+          description={t("specialist.sheetIntro")}
+        >
+          <IntakeForm
+            patientId={patientId}
+            childName={childName ?? ""}
+            audience="specialist"
+            onDone={() => setEditing(false)}
+          />
+        </FormSheet>
+      )}
     </Section>
   );
 }
