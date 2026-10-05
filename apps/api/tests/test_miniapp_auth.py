@@ -25,6 +25,8 @@ from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
 
+from .test_custom_dishes import BUTTER, _product
+
 BOT_TOKEN = "1234567:AA-test-token"
 CHAT_ID = 987654321
 
@@ -431,3 +433,106 @@ class TestRequestValidation:
         )
 
         assert response.status_code == 422
+
+
+class TestMiniAppKeepsTheDay:
+    """Сохранить блюдо из калькулятора и поставить его в день — сессией Mini App.
+
+    Потребители — `features/calculator/SaveDish.tsx` (сохранение с ключом
+    попытки), `features/menu/AddToPlan.tsx` и `features/menu/MenuScreen.tsx`
+    («Вчера», «Как вчера»). Тесты Mini App работают с подделками ответов, и
+    подделка повторяет представление автора о контракте, а не сам контракт —
+    поэтому форма и права пинятся здесь, у поставщика.
+    """
+
+    pytestmark = pytest.mark.asyncio
+
+    async def _open(self, client, session, make_user, make_patient):
+        _, patient, _ = await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+        assert opened.status_code == 200, opened.text
+        return patient, {"Authorization": f"Bearer {opened.json()['access_token']}"}
+
+    async def test_saves_a_dish_and_a_lost_answer_replays_it(
+        self, client, session, make_user, make_patient
+    ):
+        patient, headers = await self._open(client, session, make_user, make_patient)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        body = {
+            "title": "Масло сливочное",
+            "ingredients": [{"product_id": str(butter.id), "grams": 30}],
+        }
+        keyed = {**headers, "Idempotency-Key": "8e03978e-40d5-43e8-bc93-6894a57f9324"}
+
+        first = await client.post(
+            f"/api/v1/patients/{patient.id}/custom-dishes", json=body, headers=keyed
+        )
+        again = await client.post(
+            f"/api/v1/patients/{patient.id}/custom-dishes", json=body, headers=keyed
+        )
+
+        assert first.status_code == 201, first.text
+        saved = first.json()
+        # То, что читают `SaveDish` и `AddToPlan`: id — в позицию дня, title — в
+        # подтверждение на экране.
+        assert {"id", "title", "computed", "engine_version"} <= saved.keys()
+        assert saved["title"] == "Масло сливочное"
+        # Повтор с тем же ключом — тот же ответ, а не второе блюдо (ADR-0035).
+        assert again.json()["id"] == saved["id"]
+
+    async def test_yesterday_is_composed_and_marked_and_a_rewrite_keeps_the_mark(
+        self, client, session, make_user, make_patient
+    ):
+        """Вчерашний день сессии Mini App открыт так же, как сегодняшний.
+
+        И главное, на чём стоят «Добавить в план» и «Как вчера»: день, переданный
+        целиком, сохраняет отметку «съедено» у позиции, совпавшей по ключу
+        `(meal_index, recipe_id, custom_dish_id)`.
+        """
+
+        patient, headers = await self._open(client, session, make_user, make_patient)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        made = await client.post(
+            f"/api/v1/patients/{patient.id}/custom-dishes",
+            json={
+                "title": "Завтрак",
+                "ingredients": [{"product_id": str(butter.id), "grams": 30}],
+            },
+            headers=headers,
+        )
+        dish_id = made.json()["id"]
+        yesterday = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+        breakfast = {"meal_index": 1, "custom_dish_id": dish_id, "portion_factor": 1}
+
+        put = await client.put(
+            f"/api/v1/patients/{patient.id}/menus",
+            json={"date": yesterday, "items": [breakfast]},
+            headers=headers,
+        )
+        assert put.status_code == 200, put.text
+        item_id = put.json()["items"][0]["id"]
+
+        marked = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{item_id}/eaten",
+            json={"eaten": True},
+            headers=headers,
+        )
+        assert marked.status_code == 200, marked.text
+
+        rewritten = await client.put(
+            f"/api/v1/patients/{patient.id}/menus",
+            json={"date": yesterday, "items": [breakfast, {**breakfast, "meal_index": 2}]},
+            headers=headers,
+        )
+        assert rewritten.status_code == 200, rewritten.text
+
+        read = await client.get(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": yesterday},
+            headers=headers,
+        )
+        assert read.status_code == 200, read.text
+        items = {item["meal_index"]: item for item in read.json()["items"]}
+        assert items[1]["id"] == item_id
+        assert items[1]["eaten"] is True
+        assert items[2]["eaten"] is False
