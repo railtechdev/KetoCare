@@ -15,21 +15,30 @@ description: Разработка UI в apps/web (SPA) и apps/miniapp — эк�
 ## UI
 
 - Компоненты — из `packages/ui`; новый общий компонент клади туда, не в apps/web.
-- Стилизация — Tailwind 4 (ТЗ §3). Тема задана в `packages/ui/src/styles/tokens.css`
+- Стилизация — Tailwind 4 + shadcn/ui. Тема задана в `packages/ui/src/styles/tokens.css`
   блоком `@theme`: значения оттуда становятся и CSS-переменными, и утилитами
-  (`--color-accent` → `bg-accent`/`text-accent`). Палитра из ТЗ §8.2: фон #FAF7F2,
-  поверхность #FFFFFF, акцент #2E5E4E, текст #2B2B2B, danger #B4483E, warning #C98A2B,
-  success #3E7C4F; радиус 12 px, шрифт Inter.
-- Пользуйся утилитами темы (`bg-surface`, `text-ink`, `rounded-kc`), не литеральными
-  цветами: Mini App перекрашивает интерфейс, подставляя themeParams Telegram в те же
-  переменные. Хардкод цвета в компоненте — ошибка ревью.
-- Текст на цветной подложке бери из парного токена (`text-on-accent`, `text-on-warning`),
-  а не «белый по умолчанию»: на warning белый даёт контраст 2.9 при требуемых 4.5.
-  Контраст обеих тем проверяет `packages/ui/src/styles/contrast.test.ts`.
-- Обязательные общие компоненты (ТЗ §8.2): RatioBadge, MacroBar, WarningBanner,
-  DiaryEntryCard — готовы; TrendChart (с маркерами смены назначения) и DataTable
-  добавляются вместе с экранами, которые их используют (recharts и
-  @tanstack/react-table уже установлены).
+  (`--color-primary` → `bg-primary`/`text-primary`). Словарь — как у кита shadcn/ui:
+  `background`, `foreground`, `card`, `primary`, `secondary`, `muted`,
+  `muted-foreground`, `accent`, `destructive`, `border`, `input`, `ring`; сверх него
+  наши `warning`, `success` и `--spacing-touch`. Значения — только в `tokens.css`;
+  выбывшие имена (`canvas`, `surface`, `ink`, `line`, `danger`, `on-accent`)
+  ловит `tokens.test.ts`.
+- Пользуйся утилитами темы (`bg-card`, `text-foreground`, `text-muted-foreground`,
+  `border-border`), не литеральными цветами: Mini App перекрашивает
+  интерфейс, подставляя themeParams Telegram в те же переменные. Хардкод цвета в
+  компоненте — ошибка ревью.
+- Шкалы, а не глазомер: `text-page-title` / `text-section-title` / `text-card-title`,
+  `gap-screen` / `gap-block` / `gap-field`; ширина страницы — роль `PageLayout width`,
+  колонки — примитивы кита (`Columns`, `Tiles`, `MetricRow`, `FactList`, `SplitView`,
+  `Workspace`). Подробно — `docs/UI_GUIDE.md` и раздел «UI-канон» в `CLAUDE.md`.
+- Текст на цветной подложке бери из парного токена (`text-primary-foreground`,
+  `text-on-warning`, `text-on-success`), а не «белый по умолчанию»: на warning белый
+  даёт контраст ниже требуемых 4.5. Контраст обеих тем проверяет
+  `packages/ui/src/styles/contrast.test.ts`.
+- Общие предметные компоненты кита: RatioBadge, MacroBar, MacroFacts, TargetBar,
+  WarningBanner, DiaryEntryCard, TrendChart, DataTable, ChatMessage/ChatComposer;
+  состояния — AsyncSection, EmptyState, ErrorState, ConfirmDialog, FormSheet. Прежде
+  чем писать своё — список «Общие места `apps/web`» в `CLAUDE.md`.
 - `RatioBadge` принимает вердикт о допуске от сервера (`ratio_within_tolerance`),
   а НЕ считает его сам: `RATIO_TOLERANCE` — медицинская константа ядра, её копия
   в TypeScript со временем разойдётся, и интерфейс покажет «в норме» там, где ядро
@@ -50,5 +59,11 @@ TanStack Router; guard по роли из JWT. Раздел недоступно
 
 ## Miniapp-специфика
 
-@telegram-apps/sdk-react; themeParams → CSS-переменные (тёмная тема обязательна);
-safe-area; auth только через initData → POST /auth/telegram-init.
+Роутера и cookie нет: экран один, токены в памяти вкладки, заголовком. Всё
+знание о Telegram — в `apps/miniapp/src/lib/{telegram,theme}.ts`; вне Telegram
+приложение тоже открывается. themeParams → CSS-переменные (тёмная тема
+обязательна); safe-area. Вход — только по подписи запуска → POST
+/auth/telegram-init; подпись читается из адреса (`tgWebAppData`), SDK
+`@telegram-apps/sdk-react` и `window.Telegram.WebApp` — запасные. Сессия сужена до
+одного ребёнка. То, что обязано совпадать с кабинетом (проверка записи дневника,
+цель приёма, вердикт дня), живёт в ките, а не копируется.
