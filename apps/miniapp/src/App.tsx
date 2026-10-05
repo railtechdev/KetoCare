@@ -13,6 +13,7 @@ import { Skeleton, Toaster } from "@ketocare/ui";
 import { TabBar, type TabBarItem } from "./components/TabBar";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { MenuScreen } from "./features/menu/MenuScreen";
+import { ChildSwitcher } from "./features/session/ChildSwitcher";
 import { SessionGate } from "./features/session/SessionGate";
 import type { Session } from "./features/session/useSession";
 import { webApp } from "./lib/telegram";
@@ -24,7 +25,8 @@ type TabId = "home" | "menu" | "calculator" | "recipes" | "diary" | "assistant";
  * Mini App: кабинет родителя внутри Telegram (раздел 9 ТЗ).
  *
  * Врачебного и административного здесь нет ничего — ни по замыслу, ни по
- * доступу: сессия сужена до одного ребёнка (ADR-0017).
+ * доступу: сессия сужена до одного ребёнка (ADR-0017). Если Telegram ведёт
+ * нескольких детей, другой открывается новой сессией (ADR-0048).
  */
 /**
  * Вкладки сверх первых двух грузятся по требованию.
@@ -73,14 +75,24 @@ export function App() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-background pt-[var(--safe-top,0px)]">
-      <SessionGate>{(session) => <Screens session={session} />}</SessionGate>
+      <SessionGate>
+        {(session, { switchChild }) => (
+          <Screens session={session} onSwitchChild={switchChild} />
+        )}
+      </SessionGate>
       {/* Подтверждения действий («Запись исправлена») — тостами кита. */}
       <Toaster position="top-center" />
     </div>
   );
 }
 
-function Screens({ session }: { session: Session }) {
+function Screens({
+  session,
+  onSwitchChild,
+}: {
+  session: Session;
+  onSwitchChild: (patientId: string) => void;
+}) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<TabId>("home");
 
@@ -99,6 +111,9 @@ function Screens({ session }: { session: Session }) {
 
   return (
     <>
+      {/* Над экранами, а не на одной вкладке: какой ребёнок открыт, важно на
+          каждой — запись в дневник уходит именно ему (ADR-0048). */}
+      <ChildSwitcher session={session} onSwitch={onSwitchChild} />
       <div className="flex-1">
         {/* Пока чанк вкладки едет — скелетон, а не пустота: в Telegram
             приложение открывается поверх чата, и мигание пустым экраном

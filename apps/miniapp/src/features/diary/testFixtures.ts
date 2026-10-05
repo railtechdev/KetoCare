@@ -13,6 +13,7 @@ export const GRANDMA = "33333333-3333-4333-8333-333333333333";
 export const SESSION = {
   patientId: PATIENT_ID,
   patientName: "Амина",
+  children: [],
   webUrl: "https://ketocare.example",
   hasWebCredentials: true,
 };

@@ -18,6 +18,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 const session: Session = {
   patientId: "11111111-1111-1111-1111-111111111111",
   patientName: "Амина",
+  children: [],
   webUrl: "https://ketocare.example",
   hasWebCredentials: false,
 };

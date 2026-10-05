@@ -1,5 +1,8 @@
 {
   "opening": "Открываем приложение…",
+  "child": {
+    "label": "Ребёнок"
+  },
   "session": {
     "notLinked": {
       "title": "Этот Telegram ещё не привязан",
