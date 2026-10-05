@@ -1533,6 +1533,51 @@ class TestSpecialistComposesDay:
         assert audit is not None and audit.user_id == dietitian.id
         assert audit.after["patient_id"] == str(patient.id)
 
+    async def test_unchanged_resave_notifies_once(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        """Повторное сохранение того же дня не шлёт семье то же сообщение снова."""
+
+        _, patient, dietitian, breakfast, _ = await self._setup(session, make_user, make_patient)
+        day = {"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]}
+
+        await client.put(_url(patient), json=day, headers=auth_headers(dietitian))
+        again = await client.put(_url(patient), json=day, headers=auth_headers(dietitian))
+        changed = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_index": 1, "recipe_id": str(breakfast.id), "portion_factor": 0.5}],
+            },
+            headers=auth_headers(dietitian),
+        )
+
+        assert again.status_code == 200 and changed.status_code == 200
+        assert [task for task, _ in enqueued].count("notify_family_menu_composed") == 2
+
+    @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.DIETITIAN])
+    async def test_specialist_cannot_mark_eaten(
+        self, client, session, make_user, make_patient, auth_headers, role
+    ):
+        """Отметка — запись семьи; запрет держит сервер, а не только экран."""
+
+        _, patient, specialist, breakfast, _ = await self._setup(
+            session, make_user, make_patient, role=role
+        )
+        saved = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]},
+            headers=auth_headers(specialist),
+        )
+
+        response = await client.post(
+            f"{_url(patient)}/items/{saved.json()['items'][0]['id']}/eaten",
+            json={"eaten": True},
+            headers=auth_headers(specialist),
+        )
+
+        assert response.status_code == 403
+
     async def test_family_save_notifies_nobody(
         self, client, session, make_user, make_patient, auth_headers, enqueued
     ):

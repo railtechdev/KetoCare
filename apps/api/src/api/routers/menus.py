@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import date
 from typing import Annotated
 
@@ -147,7 +148,10 @@ async def upsert_menu(
     # стёрло бы её молча — а день теперь составляет и специалист, не видящий,
     # что семья успела съесть с утра (ADR-0047). Отказ — тот же, что у удаления
     # дня: сначала снимается отметка.
-    lost = menus_repo.eaten_left_out(await menus_repo.list_items(session, menu_id=menu.id), specs)
+    stored = await menus_repo.list_items(session, menu_id=menu.id)
+    # Снимок до замены: `replace_items` правит сохранённые позиции на месте.
+    plan_before = _plan_of(stored)
+    lost = menus_repo.eaten_left_out(stored, specs)
     if lost:
         raise ApiError(
             ErrorCode.CONFLICT,
@@ -164,7 +168,9 @@ async def upsert_menu(
         session, menu=menu, totals=totals, engine_version=engine_version
     )
 
-    if user.role in SPECIALIST_ROLES:
+    # Сообщение — только если план действительно поменялся: повторное
+    # сохранение того же дня слало бы семье одно и то же снова и снова.
+    if user.role in SPECIALIST_ROLES and plan_before != _plan_of(items):
         await menus_service.tell_family_about_plan(
             session,
             menu=menu,
@@ -230,6 +236,20 @@ async def delete_menu(
     )
 
 
+def _plan_of(items: Sequence[MenuItem]) -> list[tuple[int, str, str, float]]:
+    """Состав дня без отметок и идентификаторов — то, что видит семья у плиты."""
+
+    return sorted(
+        (
+            item.meal_index,
+            str(item.recipe_id or ""),
+            str(item.custom_dish_id or ""),
+            float(item.portion_factor),
+        )
+        for item in items
+    )
+
+
 @router.post(
     "/items/{item_id}/eaten",
     response_model=MenuItemRead,
@@ -240,8 +260,16 @@ async def mark_item_eaten(
     item_id: Annotated[uuid.UUID, Path()],
     payload: MenuItemEatenWrite,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> MenuItemRead:
+    # Отметка — запись семьи о том, что ребёнок ел (ADR-0047). Специалист
+    # составляет план, но не свидетельствует за семью; экран кабинета флажок
+    # ему не показывает, а запрет держит сервер (правило 5 CLAUDE.md).
+    if user.role in SPECIALIST_ROLES:
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Отметку «съедено» ставит семья: это её запись о том, что ребёнок ел.",
+        )
     item = await _owned_item(session, item_id, patient_id)
     updated = await menus_repo.set_eaten(session, item=item, eaten=payload.eaten)
     return MenuItemRead.model_validate(updated)
