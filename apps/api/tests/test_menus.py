@@ -3,17 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import Sequence
 from datetime import date
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select, text
 
-from api.deps.auth import get_session
-from api.main import API_PREFIX, create_app
-from api.routers.menus import router as menus_router
 from core.models import (
     AuditLog,
     CustomDish,
@@ -34,26 +29,6 @@ MENU_DATE = "2026-03-02"
 
 BUTTER = dict(kcal_100g=717, fat_100g=81.1, protein_100g=0.9, carbs_100g=0.1, fiber_100g=0.0)
 CHICKEN = dict(kcal_100g=165, fat_100g=3.6, protein_100g=31.0, carbs_100g=0.0, fiber_100g=0.0)
-
-
-@pytest_asyncio.fixture
-async def client(session) -> AsyncIterator[AsyncClient]:
-    """Роутер меню подключает к приложению координатор (main.py). Пока этого не
-    произошло, тест подключает его сам — иначе файл не проходит в одиночку."""
-
-    app = create_app()
-    menus_prefix = f"{API_PREFIX}{menus_router.prefix}"
-    if not any(getattr(route, "path", "").startswith(menus_prefix) for route in app.routes):
-        app.include_router(menus_router, prefix=API_PREFIX)
-
-    async def _override_session():
-        yield session
-
-    app.dependency_overrides[get_session] = _override_session
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
-        yield http_client
 
 
 async def _product(session, name: str, **macros) -> Product:
@@ -1410,3 +1385,258 @@ class TestMenuDayRemoval:
         )
 
         assert response.status_code == 403
+
+
+class TestSpecialistComposesDay:
+    """Ведущий специалист составляет день за семью (ADR-0047, решение G2)."""
+
+    async def _setup(self, session, make_user, make_patient, *, role=UserRole.DIETITIAN):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        specialist = await make_user(role)
+        await patients_repo.link_doctor(session, doctor_id=specialist.id, patient_id=patient.id)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        breakfast = await _recipe(session, specialist, ingredients=[(butter, 50)])
+        dinner = await _recipe(session, specialist, ingredients=[(chicken, 40)])
+        return parent, patient, specialist, breakfast, dinner
+
+    async def _eaten_breakfast(self, client, auth_headers, parent, patient, breakfast) -> str:
+        created = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]},
+            headers=auth_headers(parent),
+        )
+        breakfast_id = created.json()["items"][0]["id"]
+        marked = await client.post(
+            f"{_url(patient)}/items/{breakfast_id}/eaten",
+            json={"eaten": True},
+            headers=auth_headers(parent),
+        )
+        assert marked.status_code == 200, marked.text
+        return breakfast_id
+
+    async def test_specialist_save_keeps_family_eaten_marks(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Семья отметила завтрак — диетолог дополняет день ужином. Отметка цела."""
+
+        parent, patient, dietitian, breakfast, dinner = await self._setup(
+            session, make_user, make_patient
+        )
+        breakfast_id = await self._eaten_breakfast(client, auth_headers, parent, patient, breakfast)
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_index": 1, "recipe_id": str(breakfast.id)},
+                    {"meal_index": 3, "recipe_id": str(dinner.id)},
+                ],
+            },
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 200, response.text
+        items = {item["meal_index"]: item for item in response.json()["items"]}
+        assert items[1]["id"] == breakfast_id
+        assert items[1]["eaten"] is True
+
+    async def test_specialist_cannot_drop_an_eaten_item(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """План без съеденной позиции стёр бы запись о еде — отказ, день прежний."""
+
+        parent, patient, dietitian, breakfast, dinner = await self._setup(
+            session, make_user, make_patient
+        )
+        breakfast_id = await self._eaten_breakfast(client, auth_headers, parent, patient, breakfast)
+
+        response = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(dinner.id)}]},
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["details"]["reason"] == "drops_eaten_items"
+        row = await session.get(MenuItem, uuid.UUID(breakfast_id))
+        assert row is not None and row.deleted_at is None and row.eaten is True
+
+    async def test_family_cannot_drop_an_eaten_item_either(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient, _, breakfast, _ = await self._setup(session, make_user, make_patient)
+        await self._eaten_breakfast(client, auth_headers, parent, patient, breakfast)
+
+        # Тот же завтрак в другом приёме — для сервера это другая позиция.
+        response = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 2, "recipe_id": str(breakfast.id)}]},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 409, response.text
+
+    async def test_of_two_equal_items_the_eaten_one_survives(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Два одинаковых перекуса, съеден второй; план оставил один — уцелеть должен он."""
+
+        parent, patient, dietitian, breakfast, _ = await self._setup(
+            session, make_user, make_patient
+        )
+        item = {"meal_index": 2, "recipe_id": str(breakfast.id)}
+        created = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [item, item]},
+            headers=auth_headers(parent),
+        )
+        second_id = created.json()["items"][1]["id"]
+        await client.post(
+            f"{_url(patient)}/items/{second_id}/eaten",
+            json={"eaten": True},
+            headers=auth_headers(parent),
+        )
+
+        response = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [item]},
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 200, response.text
+        [kept] = response.json()["items"]
+        assert kept["id"] == second_id and kept["eaten"] is True
+
+    async def test_specialist_save_notifies_the_family(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        _, patient, dietitian, breakfast, _ = await self._setup(session, make_user, make_patient)
+
+        response = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]},
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 200, response.text
+        notices = [args for task, args in enqueued if task == "notify_family_menu_composed"]
+        assert notices == [(str(patient.id), MENU_DATE, dietitian.full_name, "dietitian")]
+
+        audit = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "menu_composed_by_specialist",
+                AuditLog.entity_id == uuid.UUID(response.json()["id"]),
+            )
+        )
+        assert audit is not None and audit.user_id == dietitian.id
+        assert audit.after["patient_id"] == str(patient.id)
+
+    async def test_family_save_notifies_nobody(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        parent, patient, _, breakfast, _ = await self._setup(session, make_user, make_patient)
+
+        response = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert [task for task, _ in enqueued if task == "notify_family_menu_composed"] == []
+        audits = await session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "menu_composed_by_specialist")
+            .where(AuditLog.entity_id == uuid.UUID(response.json()["id"]))
+        )
+        assert audits == 0
+
+    async def test_refused_save_notifies_nobody(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        """Отказ сохранения — и сообщения нет: задача уходит только после записи."""
+
+        parent, patient, dietitian, breakfast, dinner = await self._setup(
+            session, make_user, make_patient
+        )
+        await self._eaten_breakfast(client, auth_headers, parent, patient, breakfast)
+
+        response = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(dinner.id)}]},
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 409
+        assert [task for task, _ in enqueued if task == "notify_family_menu_composed"] == []
+
+    @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.DIETITIAN])
+    async def test_non_leading_specialist_is_refused(
+        self, client, session, make_user, make_patient, auth_headers, enqueued, role
+    ):
+        _, patient, _, breakfast, _ = await self._setup(session, make_user, make_patient)
+        outsider = await make_user(role)
+
+        response = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]},
+            headers=auth_headers(outsider),
+        )
+
+        assert response.status_code == 403
+        assert enqueued == []
+
+    async def test_day_names_who_composed_it_last(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Контракт для кабинета и Mini App: имя, роль и время последнего сохранения.
+
+        Потребители: `apps/web` (`features/menu/ComposedBy.tsx`) и `apps/miniapp`
+        (`features/menu/MenuScreen.tsx`) — строка «Составил(а): …» под днём.
+        """
+
+        parent, patient, doctor, breakfast, _ = await self._setup(
+            session, make_user, make_patient, role=UserRole.DOCTOR
+        )
+        day = {"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]}
+
+        by_family = await client.put(_url(patient), json=day, headers=auth_headers(parent))
+        assert by_family.json()["updated_by_name"] == parent.full_name
+        assert by_family.json()["updated_by_role"] == "parent"
+
+        await client.put(_url(patient), json=day, headers=auth_headers(doctor))
+        read = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        body = read.json()
+        assert body["updated_by_name"] == doctor.full_name
+        assert body["updated_by_role"] == "doctor"
+        assert isinstance(body["updated_at"], str) and body["updated_at"]
+        # Автор дня — по-прежнему тот, кто его завёл; меняется только «последний».
+        menu = await session.get(Menu, uuid.UUID(body["id"]))
+        assert menu is not None and menu.created_by == parent.id
+
+    async def test_eaten_mark_does_not_change_who_composed(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient, dietitian, breakfast, _ = await self._setup(
+            session, make_user, make_patient
+        )
+        saved = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}]},
+            headers=auth_headers(dietitian),
+        )
+        await client.post(
+            f"{_url(patient)}/items/{saved.json()['items'][0]['id']}/eaten",
+            json={"eaten": True},
+            headers=auth_headers(parent),
+        )
+
+        read = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert read.json()["updated_by_name"] == dietitian.full_name

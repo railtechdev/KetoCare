@@ -14,6 +14,8 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from core.models.enums import UserRole
+
 from .schemas import MAX_MEALS_PER_DAY, DishComputed
 
 # Технические, а не медицинские границы. Сколько блюд бывает в дне и насколько
@@ -177,3 +179,14 @@ class MenuRead(BaseModel):
     #: вопрос 29 медицинской команде.
     excluded_products: list[WithdrawnProduct] = []
     created_at: datetime
+    #: Когда состав дня сохранили последний раз. Отметка «съедено» его не
+    #: сдвигает: она про еду, а не про план.
+    updated_at: datetime
+    #: Кто последним сохранил состав дня (ADR-0047): день составляет и семья, и
+    #: ведущий специалист, и обоим нужно видеть, чей это план. Имя взрослого, не
+    #: ребёнка. Пусто у дней, сохранённых до появления отметки, — угадывать
+    #: автора по тому, кто завёл день, значило бы подписать чужой план.
+    updated_by_name: str | None = None
+    #: Роль сохранившего: экран подписывает специалиста ролью («диетолог»), а
+    #: Mini App показывает строку только под планом специалиста.
+    updated_by_role: UserRole | None = None

@@ -20,12 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core import exclusions
 from core.models import CustomDish, Menu, MenuItem, Product, Recipe
 from core.models.enums import RecipeStatus
+from core.repositories import audit as audit_repo
 from core.repositories import menus as menus_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
+from core.repositories import users as users_repo
 from core.repositories.menus import MenuItemSpec
 from keto_engine import ENGINE_VERSION, Ingredient, scale, verify
 
+from .. import after_commit
 from ..errors import ApiError, ErrorCode
 from ..schemas import DishComputed
 from ..schemas_menus import (
@@ -39,6 +42,52 @@ from . import composition as composition_service
 
 # Состав блюда: продукт и его масса в граммах.
 type Composition = list[tuple[uuid.UUID, float]]
+
+
+async def tell_family_about_plan(
+    session: AsyncSession,
+    *,
+    menu: Menu,
+    composer_id: uuid.UUID,
+    items: int,
+    ip: str | None,
+) -> None:
+    """Специалист сохранил день — семья узнаёт об этом в Telegram (ADR-0047).
+
+    План, по которому сегодня кормят ребёнка, поменял другой человек, и семья
+    не должна обнаружить это у плиты. Задача уходит только после коммита
+    (`after_commit.defer`): отказ сохранения — и сообщения нет. Имя и роль —
+    аргументами, дата — строкой: воркеру незачем читать учётную запись.
+
+    В сообщении нет ни граммов, ни соотношения, ни имени ребёнка (раздел 7.5
+    ТЗ): чат мог быть групповым.
+    """
+
+    composer = await users_repo.get(session, composer_id)
+    if composer is None:
+        return
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=composer_id,
+        action="menu_composed_by_specialist",
+        entity="menus",
+        entity_id=menu.id,
+        ip=ip,
+        after={
+            "patient_id": str(menu.patient_id),
+            "date": menu.date.isoformat(),
+            "items": items,
+        },
+    )
+    after_commit.defer(
+        session,
+        "notify_family_menu_composed",
+        str(menu.patient_id),
+        menu.date.isoformat(),
+        composer.full_name,
+        composer.role.value,
+    )
 
 
 def to_spec(item: MenuItemWrite, snapshot: dict[str, Any] | None = None) -> MenuItemSpec:
@@ -56,6 +105,7 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
     а не `model_validate(menu)`."""
 
     live = await _live_compositions(session, menu=menu, items=items)
+    composer = None if menu.updated_by is None else await users_repo.get(session, menu.updated_by)
 
     return MenuRead(
         id=menu.id,
@@ -83,6 +133,9 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
         withdrawn_products=_withdrawn_products(items, live),
         excluded_products=await _excluded_products(session, menu=menu, items=items, live=live),
         created_at=menu.created_at,
+        updated_at=menu.updated_at,
+        updated_by_name=None if composer is None else composer.full_name,
+        updated_by_role=None if composer is None else composer.role,
     )
 
 

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Any
 
 import httpx
@@ -136,4 +137,75 @@ def joined_notice(*, newcomer_name: str, inviter_name: str | None) -> str:
         f"К дневнику ребёнка подключился новый близкий: {newcomer_name}{by}.\n\n"
         "Если вы не знаете этого человека, откройте приложение, раздел «Близкие», "
         "и закройте ему доступ — или скажите врачу."
+    )
+
+
+async def notify_family_menu_composed(
+    ctx: dict[str, Any],
+    patient_id: str,
+    menu_date: str,
+    composer_name: str,
+    composer_role: str,
+) -> int:
+    """Сообщить семье, что план дня составил специалист (ADR-0047).
+
+    План, по которому кормят ребёнка, поменял не тот, кто его готовит, — и семья
+    должна узнать это до готовки, а не у плиты. Возвращает число доставленных
+    чатов.
+    """
+
+    settings = Settings()  # type: ignore[call-arg]
+    if not settings.bot_token:
+        return 0
+
+    text = menu_composed_notice(
+        composer_name=composer_name,
+        composer_role=composer_role,
+        menu_date=date.fromisoformat(menu_date),
+    )
+    sessionmaker = get_sessionmaker()
+    delivered = 0
+
+    async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
+        links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
+        for chat_id in live_chats(links):
+            try:
+                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+            except TelegramSendError as exc:
+                logger.warning(
+                    "menu_composed_notice_not_delivered", patient_id=patient_id, reason=str(exc)
+                )
+                continue
+            delivered += 1
+
+    return delivered
+
+
+def live_chats(links: list[Any]) -> list[int]:
+    """Неотозванные чаты ребёнка — без повторов (два взрослых в одной группе)."""
+
+    seen: list[int] = []
+    for link in links:
+        if link.revoked_at is None and link.chat_id not in seen:
+            seen.append(link.chat_id)
+    return seen
+
+
+#: Как специалист назван в сообщении. Неизвестная роль — нейтральное слово, а
+#: не догадка: сообщение уходит семье, и «врач» вместо «диетолога» — неправда.
+_ROLE_WORDS = {"doctor": "врач", "dietitian": "диетолог"}
+
+
+def menu_composed_notice(*, composer_name: str, composer_role: str, menu_date: date) -> str:
+    """Текст уведомления о плане от специалиста.
+
+    Имя взрослого — да (решение заказчика G6), имя ребёнка — нет, и ни граммов,
+    ни соотношения (раздел 7.5 ТЗ): чат мог быть групповым. Последняя фраза —
+    где смотреть, потому что сам план бот не показывает.
+    """
+
+    role = _ROLE_WORDS.get(composer_role, "специалист")
+    return (
+        f"{composer_name}, {role}, составил(а) план питания на "
+        f"{menu_date.strftime('%d.%m')}. Откройте приложение, вкладка «Меню»."
     )
