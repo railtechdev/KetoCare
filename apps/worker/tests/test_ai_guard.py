@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from worker.ai.guard import Kind, Verdict, check
+from worker.ai.guard import RUSSIAN_SHARE_MIN, Kind, Verdict, check, check_answer
 
 CASES = Path(__file__).parent / "data" / "assistant_guard_cases.yaml"
 
@@ -51,7 +51,7 @@ CORPUS = _load()
     "case", CORPUS["must_block"], ids=[c["text"][:40] for c in CORPUS["must_block"]]
 )
 def test_forbidden_answers_are_blocked(case: dict[str, Any]) -> None:
-    verdict = check(case["text"])
+    verdict = check_answer(case["text"])
 
     assert verdict.blocked, f"пропущено: {case['text']} ({case['why']})"
     assert verdict.kind == Kind(case["kind"]), (
@@ -66,7 +66,7 @@ def test_useful_answers_pass(case: dict[str, Any]) -> None:
     """Ложное срабатывание не бесплатно: помощник, отвечающий шаблоном на
     «куда вписать кетоны», бесполезен, и семья перестаёт им пользоваться."""
 
-    verdict = check(case["text"])
+    verdict = check_answer(case["text"])
 
     assert not verdict.blocked, (
         f"заблокировано зря: {case['text']} ({case['why']}); правило {verdict.rule}"
@@ -87,6 +87,7 @@ class TestCorpusItself:
             Kind.THERAPY_CHANGE.value,
             Kind.SYMPTOM_READING.value,
             Kind.DIAGNOSIS.value,
+            Kind.UNREADABLE.value,
         }
 
 
@@ -113,3 +114,31 @@ class TestFailClosed:
         """«ё» в одном месте и «е» в другом — не повод пропустить ответ."""
 
         assert check("У вашего ребёнка судороги, вероятно, из-за кетоза").blocked
+
+
+class TestLanguage:
+    """Ответ не по-русски не читается правилами — и не показывается (ADR-0021)."""
+
+    def test_question_in_uzbek_is_not_refused(self) -> None:
+        """Вопрос — не ответ: узбекский вопрос не запрет (ADR-0052)."""
+
+        assert not check("Ketonlarni qayerga yozaman?").blocked
+
+    def test_answer_without_letters_is_blocked(self) -> None:
+        assert check_answer("[[kb:diary]] 3,2").kind == Kind.UNREADABLE
+
+    def test_threshold_leaves_room_on_both_sides(self) -> None:
+        """Порог выбран с запасом: русский ответ с латиницей — выше, узбекский с
+        русскими цитатами — ниже, и ни один не стоит у самой границы."""
+
+        assert 0.5 <= RUSSIAN_SHARE_MIN <= 0.7
+
+    def test_language_check_failure_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import worker.ai.guard as guard
+
+        def boom(_: str) -> Verdict:
+            raise RuntimeError("правило сломалось")
+
+        monkeypatch.setattr(guard, "_russian", boom)
+
+        assert guard.check_answer("Кетоны записываются кнопкой").kind == Kind.INTERNAL
