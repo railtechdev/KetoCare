@@ -179,12 +179,12 @@ export const en: Dict = {
     telegram: {
       eyebrow: "Telegram",
       h2: "Log entries straight from the messenger",
-      lead: "A ketone reading is one message to the bot. The bot and the mini app are part of the platform: everything lands in the same diary and is visible to the clinician. The bot is being released step by step, so some of the scenarios below already work and some are on the way.",
+      lead: "A ketone reading is one message to the bot. The bot and the mini app are part of the platform: everything lands in the same diary and is visible to the clinician.",
       items: [
-        "Ketones, weight and wellbeing — 2–4 taps, with buttons",
-        "Coming: food in plain text — the AI parses it, you confirm it",
-        "Coming: reminders for measurements and medication",
-        "Coming: the parent workspace as a mini app inside Telegram",
+        "Ketones, weight, wellbeing and seizures — 2–4 taps, with buttons",
+        "Food in plain text — the AI parses it, you confirm it",
+        "Reminders for measurements and medication — for every adult in the family",
+        "A mini app inside Telegram: day plan, calculator, recipes, diary and family access",
       ],
       botLabel: "bot",
       replay: "Play again",

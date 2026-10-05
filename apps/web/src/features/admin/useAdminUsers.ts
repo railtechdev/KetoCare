@@ -134,3 +134,30 @@ export function useResetPasswordMutation() {
     },
   });
 }
+
+/**
+ * Передать детей ушедшего специалиста коллеге (ADR-0045).
+ *
+ * Ответ — только число: кого именно передали, администратор не видит.
+ */
+export function useTransferCareMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (args: { fromUserId: string; toUserId: string }) => {
+      const { data, error } = await api.POST(
+        "/api/v1/admin/users/{user_id}/transfer-care",
+        {
+          params: { path: { user_id: args.fromUserId } },
+          body: { to_user_id: args.toUserId },
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty transfer response");
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "audit"] });
+    },
+  });
+}

@@ -658,7 +658,7 @@ class TestDeactivationKeepsPatientsVisible:
         body = response.json()["error"]
         assert body["code"] == "conflict"
         # Сообщение называет число и следующий шаг, а не просто отказывает.
-        assert "1" in body["message"] and "коллеге" in body["message"]
+        assert "1" in body["message"] and "Передать пациентов" in body["message"]
 
     async def test_role_change_is_guarded_too(
         self, client, session, make_user, make_patient, auth_headers
@@ -905,3 +905,82 @@ class TestAdminOverview:
         response = await client.get("/api/v1/admin/overview", headers=auth_headers(doctor))
 
         assert response.status_code == 403
+
+
+class TestCareTransfer:
+    """Передача детей ушедшего специалиста (ADR-0045; аудит блокеров, C1).
+
+    Прежде принять таких детей было некому: снять последнего ведущего нельзя,
+    отключить его учётную запись нельзя, добавить коллегу мог только он сам.
+    Потребитель — админка кабинета (раздел «Учётные записи»).
+    """
+
+    async def test_admin_hands_all_patients_over_and_can_then_deactivate(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        leaving = await make_user(UserRole.DOCTOR)
+        colleague = await make_user(UserRole.DIETITIAN)
+        first, second = await make_patient(), await make_patient()
+        for patient in (first, second):
+            await patients_repo.link_doctor(session, doctor_id=leaving.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"{USERS_URL}/{leaving.id}/transfer-care",
+            json={"to_user_id": str(colleague.id)},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        # Администратору — только число: кого именно, он не видит.
+        assert response.json() == {"transferred": 2}
+        for patient in (first, second):
+            assert await patients_repo.list_doctor_ids(session, patient_id=patient.id) == [
+                colleague.id
+            ]
+
+        deactivated = await client.patch(
+            f"{USERS_URL}/{leaving.id}", json={"is_active": False}, headers=auth_headers(admin)
+        )
+        assert deactivated.status_code == 200, deactivated.text
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "transfer_care", AuditLog.entity_id == leaving.id
+            )
+        )
+        assert entry is not None and entry.user_id == admin.id
+        assert sorted(entry.after["patients"]) == sorted([str(first.id), str(second.id)])
+
+    async def test_only_admin_may_transfer(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+        other = await make_user(UserRole.DOCTOR)
+
+        response = await client.post(
+            f"{USERS_URL}/{other.id}/transfer-care",
+            json={"to_user_id": str(doctor.id)},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("target_role", [UserRole.PARENT, UserRole.ADMIN])
+    async def test_receiver_must_be_an_active_specialist(
+        self, client, session, make_user, make_patient, auth_headers, target_role
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        leaving = await make_user(UserRole.DOCTOR)
+        target = await make_user(target_role)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=leaving.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"{USERS_URL}/{leaving.id}/transfer-care",
+            json={"to_user_id": str(target.id)},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422
+        assert await patients_repo.list_doctor_ids(session, patient_id=patient.id) == [leaving.id]

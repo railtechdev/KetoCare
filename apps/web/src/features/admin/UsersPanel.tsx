@@ -24,6 +24,7 @@ import { Field, SelectField } from "../../components/Field";
 import { useSession } from "../auth/useSession";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { TableSkeleton } from "./TableSkeleton";
+import { CareTransferPanel } from "./CareTransferPanel";
 import { UserAccountForm } from "./UserAccountForm";
 import {
   EMPTY_USERS_FILTER,
@@ -314,27 +315,34 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         title={t("users.editTitle")}
       >
         {editing !== null && (
-          <UserAccountForm
-            // Форма пересоздаётся при выборе другой учётной записи: react-hook-form
-            // читает defaultValues только при монтировании, и без этого в ней
-            // остались бы роль и активность предыдущего пользователя.
-            key={editing.id}
-            user={editing}
-            pending={update.isPending}
-            error={update.error}
-            onCancel={() => setEditingId(null)}
-            onSubmit={(changes) =>
-              update.mutate(
-                { userId: editing.id, changes },
-                {
-                  onSuccess: (saved) => {
-                    setEditingId(null);
-                    toast.success(t("users.saved", { name: saved.full_name }));
+          <div className="flex flex-col gap-block">
+            <UserAccountForm
+              // Форма пересоздаётся при выборе другой учётной записи: react-hook-form
+              // читает defaultValues только при монтировании, и без этого в ней
+              // остались бы роль и активность предыдущего пользователя.
+              key={editing.id}
+              user={editing}
+              pending={update.isPending}
+              error={update.error}
+              onCancel={() => setEditingId(null)}
+              onSubmit={(changes) =>
+                update.mutate(
+                  { userId: editing.id, changes },
+                  {
+                    onSuccess: (saved) => {
+                      setEditingId(null);
+                      toast.success(
+                        t("users.saved", { name: saved.full_name }),
+                      );
+                    },
                   },
-                },
-              )
-            }
-          />
+                )
+              }
+            />
+            {(editing.sole_patients ?? 0) > 0 && (
+              <CareTransferPanel user={editing} />
+            )}
+          </div>
         )}
       </FormSheet>
 

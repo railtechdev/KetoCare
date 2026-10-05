@@ -166,6 +166,15 @@ async def unlink_doctor(
     return True
 
 
+async def list_led_patient_ids(session: AsyncSession, *, doctor_id: uuid.UUID) -> list[uuid.UUID]:
+    """Все дети, которых ведёт специалист, — для передачи ведения (ADR-0045)."""
+
+    rows = await session.scalars(
+        select(DoctorPatient.patient_id).where(DoctorPatient.doctor_id == doctor_id)
+    )
+    return list(rows.all())
+
+
 async def list_doctor_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> list[uuid.UUID]:
     """Идентификаторы специалистов, ведущих пациента."""
 

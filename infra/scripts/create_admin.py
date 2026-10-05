@@ -20,6 +20,13 @@
 Повторный запуск с тем же адресом ничего не меняет и не перезаписывает пароль:
 команда для создания первой учётной записи, а не для сброса доступа. Сброс —
 `--reset-password`, и он тоже пишется в журнал аудита.
+
+`--reset-totp` сбрасывает второй фактор администратору, потерявшему телефон и
+резервные коды. Себе в кабинете его не сбросить (это делает другой
+администратор), и клиника с одним администратором иначе теряла управление
+учётными записями до вмешательства разработчика (аудит блокеров, C2). Пароль
+при этом не меняется: при следующем входе система попросит настроить второй
+фактор заново.
 """
 
 from __future__ import annotations
@@ -35,6 +42,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from core.config import get_settings
 from core.models import AuditLog
 from core.models.enums import UserRole
+from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import users as users_repo
 from core.tools.db_guard import MIN_PASSWORD_LENGTH
 
@@ -136,6 +144,40 @@ async def create_admin(
     return 0
 
 
+async def reset_totp(*, email: str) -> int:
+    """Сбросить второй фактор существующему администратору."""
+
+    settings = get_settings()
+    engine = create_async_engine(settings.database_url)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+
+    try:
+        async with maker() as session:
+            existing = await users_repo.get_by_email(session, email)
+            if existing is None or existing.role is not UserRole.ADMIN:
+                print(f"Администратора {email} нет — ничего не изменено.")
+                return 1
+            existing.totp_secret = None
+            existing.totp_pending_secret = None
+            await backup_codes_repo.drop_for_user(session, user_id=existing.id)
+            session.add(
+                AuditLog(
+                    user_id=None,
+                    action="totp_reset",
+                    entity="users",
+                    entity_id=existing.id,
+                    after={"email": email, "via": "create_admin"},
+                )
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+    print(f"Второй фактор сброшен: {email}")
+    print("Пароль прежний. При входе система попросит настроить второй фактор заново.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python infra/scripts/create_admin.py",
@@ -143,15 +185,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--email", required=True, help="Рабочий адрес администратора")
     parser.add_argument("--name", required=True, help="Имя и фамилия")
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--reset-password",
         action="store_true",
         help="Выдать новый временный пароль существующему администратору",
+    )
+    mode.add_argument(
+        "--reset-totp",
+        action="store_true",
+        help="Сбросить второй фактор существующему администратору (телефон утерян)",
     )
     args = parser.parse_args(argv)
 
     if "@" not in args.email:
         parser.error("--email должен быть адресом почты")
+
+    if args.reset_totp:
+        return asyncio.run(reset_totp(email=args.email))
 
     # Пароль приходит переменной окружения, а не аргументом: аргументы видны в
     # `ps aux` любому пользователю машины.

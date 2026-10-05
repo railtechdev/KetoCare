@@ -198,6 +198,7 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) ->
         looked_up=None,
         maker_engine=None,
         engines=[],
+        dropped_codes_for=None,
     )
 
     class _Session:
@@ -245,6 +246,13 @@ def _fake_db(monkeypatch: pytest.MonkeyPatch, existing: object | None = None) ->
     monkeypatch.setattr(ADMIN, "create_async_engine", _engine)
     monkeypatch.setattr(ADMIN, "async_sessionmaker", _maker)
     monkeypatch.setattr(ADMIN, "users_repo", _Users)
+
+    class _BackupCodes:
+        @staticmethod
+        async def drop_for_user(session: object, *, user_id: object) -> None:
+            recorder.dropped_codes_for = user_id
+
+    monkeypatch.setattr(ADMIN, "backup_codes_repo", _BackupCodes)
     monkeypatch.setattr("api.security.hash_password", lambda value: f"hash:{value}")
     return recorder
 
@@ -739,3 +747,47 @@ def test_empty_variable_counts_as_no_password(
 
     assert ADMIN.main(ARGV) == 0
     assert "Временный пароль:" in capsys.readouterr().out
+
+
+def test_reset_totp_clears_the_factor_and_keeps_the_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Единственный администратор потерял телефон — сброс с сервера (аудит, C2)."""
+    existing = SimpleNamespace(
+        role=ADMIN.UserRole.ADMIN,
+        full_name="Админ Клиники",
+        email="admin@clinic.example",
+        password_hash="старый-хеш",
+        password_change_required=False,
+        totp_secret="секрет-администратора",
+        totp_pending_secret=None,
+        id="id-существующего",
+    )
+    recorder = _fake_db(monkeypatch, existing=existing)
+
+    assert ADMIN.main([*ARGV, "--reset-totp"]) == 0
+
+    assert existing.totp_secret is None
+    assert existing.password_hash == "старый-хеш"
+    assert recorder.dropped_codes_for == "id-существующего"
+    rows = _audit(recorder)
+    assert [row.action for row in rows] == ["totp_reset"]
+    assert recorder.commits == 1
+
+
+def test_reset_totp_refuses_a_non_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing = SimpleNamespace(
+        role=ADMIN.UserRole.DOCTOR, totp_secret="секрет", id="id-врача", email="d@x"
+    )
+    recorder = _fake_db(monkeypatch, existing=existing)
+
+    assert ADMIN.main([*ARGV, "--reset-totp"]) == 1
+    assert existing.totp_secret == "секрет"
+    assert recorder.commits == 0
+
+
+def test_reset_modes_are_exclusive() -> None:
+    with pytest.raises(SystemExit):
+        ADMIN.main([*ARGV, "--reset-totp", "--reset-password"])
