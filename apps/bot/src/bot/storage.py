@@ -21,6 +21,14 @@
 - `bot:binding:<chat>` — прежний хеш одной привязки (до ADR-0048). Читается и
   переносится в новую раскладку при первом обращении, чтобы обновление бота не
   отвязало ни одной семьи.
+
+Прежний ключ **не удаляется и продолжает вестись** — ради отката бота на
+прежнюю версию (ADR-0048, «Откат»): `put` дублирует в него последнюю привязку,
+и откатанный бот продолжает работать хотя бы с последним подключённым ребёнком.
+Перенос из него никогда не перезаписывает запись новой раскладки: прежний ключ
+копируется, только если записи этого ребёнка в новой раскладке нет. Иначе
+устаревший секрет из прежнего ключа затирал бы свежий, полученный после
+повторной привязки.
 """
 
 from __future__ import annotations
@@ -28,7 +36,8 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Awaitable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from redis.asyncio import Redis
@@ -48,6 +57,10 @@ class Binding:
     #: записей, заведённых до ADR-0048, его нет, и оно выводится из полного
     #: имени по тому же правилу, что на сервере («Имя и фамилия»).
     patient_first_name: str = ""
+    #: Когда чат получил этого ребёнка (ISO 8601, UTC). По нему дети стоят в
+    #: том же порядке, что в Mini App (там — по `linked_at` привязки). У
+    #: перенесённых из прежней раскладки его нет — они старше всех и стоят первыми.
+    linked_at: str = ""
 
     @property
     def first_name(self) -> str:
@@ -65,6 +78,7 @@ def _to_json(binding: Binding) -> str:
             "patient_id": str(binding.patient_id),
             "patient_name": binding.patient_name,
             "patient_first_name": binding.patient_first_name,
+            "linked_at": binding.linked_at,
         },
         ensure_ascii=False,
     )
@@ -77,6 +91,7 @@ def _from_mapping(raw: dict[str, Any]) -> Binding:
         patient_id=uuid.UUID(str(raw["patient_id"])),
         patient_name=str(raw["patient_name"]),
         patient_first_name=str(raw.get("patient_first_name") or ""),
+        linked_at=str(raw.get("linked_at") or ""),
     )
 
 
@@ -94,7 +109,7 @@ class BindingStore:
         self._redis = redis
 
     async def all(self, chat_id: int) -> list[Binding]:
-        """Все дети чата в постоянном порядке — по имени, затем по идентификатору."""
+        """Все дети чата в постоянном порядке — по времени привязки, как в Mini App."""
 
         await self._migrate_legacy(chat_id)
         raw: dict[Any, Any] = await cast(
@@ -112,10 +127,14 @@ class BindingStore:
                 broken.append(field_name)
         if broken:
             await cast("Awaitable[int]", self._redis.hdel(_BINDINGS_PREFIX + str(chat_id), *broken))
-        return sorted(bindings, key=lambda b: (b.first_name.casefold(), str(b.patient_id)))
+        return sorted(bindings, key=lambda b: (b.linked_at, str(b.patient_id)))
 
     async def get(self, chat_id: int) -> Binding | None:
-        """Привязка выбранного ребёнка; если выбор потерян — первого по порядку."""
+        """Привязка выбранного ребёнка; если выбор потерян — первого по порядку.
+
+        Только для начала действия. Шаги начатого сценария берут ребёнка,
+        про которого он начат (`deps.scenario_binding`), а не выбранного.
+        """
 
         bindings = await self.all(chat_id)
         if not bindings:
@@ -134,11 +153,18 @@ class BindingStore:
         """
 
         await self._migrate_legacy(chat_id)
+        if not binding.linked_at:
+            binding = replace(binding, linked_at=datetime.now(UTC).isoformat())
         await cast(
             "Awaitable[int]",
             self._redis.hset(
                 _BINDINGS_PREFIX + str(chat_id), str(binding.patient_id), _to_json(binding)
             ),
+        )
+        # Прежняя раскладка ведётся параллельно — для отката бота (см. модуль).
+        await cast(
+            "Awaitable[int]",
+            self._redis.hset(_LEGACY_PREFIX + str(chat_id), mapping=_legacy_mapping(binding)),
         )
         await self.select(chat_id, binding.patient_id)
 
@@ -154,15 +180,29 @@ class BindingStore:
                 return binding
         return None
 
-    async def forget(self, chat_id: int, patient_id: uuid.UUID) -> Binding | None:
+    async def forget(
+        self, chat_id: int, patient_id: uuid.UUID, link_id: uuid.UUID | None = None
+    ) -> Binding | None:
         """Забывает привязку одного ребёнка (её отозвали) и называет, кто выбран теперь.
 
         Остальные дети чата остаются: отзыв одной привязки не гасит другую
         (ADR-0048). Возвращает привязку, ставшую выбранной, или None, если
         детей у чата больше нет.
+
+        Прежний ключ с той же привязкой снимается — иначе перенос воскресил бы
+        отозванную. Прежний ключ с ДРУГОЙ привязкой того же ребёнка (откатанный
+        бот привязал его заново) остаётся: она новее, и перенос её подхватит.
         """
 
         await self._migrate_legacy(chat_id)
+        legacy = await self._legacy(chat_id)
+        legacy_dropped = (
+            legacy is not None
+            and legacy.patient_id == patient_id
+            and (link_id is None or legacy.link_id == link_id)
+        )
+        if legacy_dropped:
+            await cast("Awaitable[int]", self._redis.delete(_LEGACY_PREFIX + str(chat_id)))
         await cast(
             "Awaitable[int]",
             self._redis.hdel(_BINDINGS_PREFIX + str(chat_id), str(patient_id)),
@@ -174,33 +214,64 @@ class BindingStore:
         current = await self.get(chat_id)
         if current is not None:
             await self.select(chat_id, current.patient_id)
+            if legacy_dropped:
+                # Откатанный бот увидит оставшегося ребёнка, а не пустой чат.
+                await cast(
+                    "Awaitable[int]",
+                    self._redis.hset(
+                        _LEGACY_PREFIX + str(chat_id), mapping=_legacy_mapping(current)
+                    ),
+                )
         return current
 
-    async def _migrate_legacy(self, chat_id: int) -> None:
-        """Переносит привязку из раскладки до ADR-0048, если она там осталась."""
+    async def _legacy(self, chat_id: int) -> Binding | None:
+        """Привязка из прежней раскладки; битая — снимается и считается отсутствующей."""
 
         legacy_key = _LEGACY_PREFIX + str(chat_id)
         raw: dict[Any, Any] = await cast(
             "Awaitable[dict[Any, Any]]", self._redis.hgetall(legacy_key)
         )
         if not raw:
-            return
+            return None
         try:
-            binding = _from_mapping({_text(k): _text(v) for k, v in raw.items()})
+            return _from_mapping({_text(k): _text(v) for k, v in raw.items()})
         except (KeyError, ValueError, TypeError):
             await cast("Awaitable[int]", self._redis.delete(legacy_key))
+            return None
+
+    async def _migrate_legacy(self, chat_id: int) -> None:
+        """Переносит привязку из раскладки до ADR-0048, если её ещё нет в новой.
+
+        Только если записи этого ребёнка в новой раскладке нет (`HSETNX`):
+        прежний ключ никогда не затирает новую запись. Сам прежний ключ не
+        удаляется — он нужен для отката (см. модуль).
+        """
+
+        binding = await self._legacy(chat_id)
+        if binding is None:
             return
-        await cast(
+        added = await cast(
             "Awaitable[int]",
-            self._redis.hset(
+            self._redis.hsetnx(
                 _BINDINGS_PREFIX + str(chat_id), str(binding.patient_id), _to_json(binding)
             ),
         )
-        await cast(
-            "Awaitable[Any]",
-            self._redis.set(_ACTIVE_PREFIX + str(chat_id), str(binding.patient_id), nx=True),
-        )
-        await cast("Awaitable[int]", self._redis.delete(legacy_key))
+        if added:
+            await cast(
+                "Awaitable[Any]",
+                self._redis.set(_ACTIVE_PREFIX + str(chat_id), str(binding.patient_id), nx=True),
+            )
+
+
+def _legacy_mapping(binding: Binding) -> dict[str, str]:
+    """Привязка в прежней раскладке — ровно те поля, что читает бот до ADR-0048."""
+
+    return {
+        "link_id": str(binding.link_id),
+        "secret": binding.secret,
+        "patient_id": str(binding.patient_id),
+        "patient_name": binding.patient_name,
+    }
 
 
 def _text(value: Any) -> str:

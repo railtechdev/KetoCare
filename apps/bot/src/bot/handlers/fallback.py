@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from .. import texts
@@ -26,7 +27,11 @@ router.message.filter(F.chat.type == "private")
 
 @router.message()
 async def unknown(
-    message: Message, api: BotApi, store: BindingStore, settings: BotSettings
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     text = (message.text or "").strip()
     binding = await store.get(message.chat.id)
@@ -38,7 +43,7 @@ async def unknown(
     # API ответит по существу: «этот ребёнок уже здесь» — или добавит в чат
     # ещё одного ребёнка (ADR-0048).
     if looks_like_code(text):
-        await handle_bare_code(message, api=api, store=store, settings=settings)
+        await handle_bare_code(message, state, api=api, store=store, settings=settings)
         return
 
     # Непривязанному — про привязку, а не про кнопки: его настоящий следующий

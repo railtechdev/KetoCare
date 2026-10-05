@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import get_settings
 from core.models import TelegramAccount
 from core.models.enums import UserRole
+from core.repositories import access as access_repo
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
@@ -58,6 +59,14 @@ async def _openable_links(session: AsyncSession, chat_id: int) -> list[TelegramA
     for link in await telegram_repo.list_active_links_by_chat(session, chat_id):
         parent = await users_repo.get(session, link.parent_id)
         if parent is None or not parent.is_active or parent.role is not UserRole.PARENT:
+            continue
+        # Связь взрослого с ребёнком проверяется явно, как в `_rebind`, а не
+        # выводится из живой привязки: сегодня каждый путь отзыва доступа гасит
+        # и привязки, но новый путь, забывший об этом, иначе открывал бы
+        # отрезанному взрослому ребёнка из переключателя (ревью ADR-0048).
+        if not await access_repo.user_has_patient_access(
+            session, user_id=parent.id, role=parent.role, patient_id=link.patient_id
+        ):
             continue
         openable.append(link)
     return openable

@@ -38,13 +38,90 @@ async def require_binding(message: Message, store: BindingStore) -> Binding | No
     return binding
 
 
+#: Ребёнок, про которого начат сценарий, — в данных FSM (ADR-0048, ревью).
+_SCENARIO_PATIENT = "scenario_patient_id"
+_SCENARIO_LINK = "scenario_link_id"
+
+
+async def begin_scenario(
+    message: Message, state: FSMContext, store: BindingStore
+) -> Binding | None:
+    """Привязка выбранного ребёнка — и отметка в сценарии, что он про НЕГО.
+
+    Выбранный ребёнок чата меняется не только кнопкой «👶»: код другого
+    ребёнка, присланный текстом посреди сценария, делает выбранным его, а
+    aiogram обрабатывает обновления одного чата параллельно — переключение
+    может обогнать отправку. Если на шаге записи брать выбранного «сейчас»,
+    замер, начатый про Аню, ушёл бы Тимуру. Поэтому ребёнок фиксируется в
+    момент старта, и все дальнейшие шаги берут его привязку
+    (`scenario_binding`), а не выбранную.
+    """
+
+    binding = await require_binding(message, store)
+    if binding is not None:
+        await state.update_data(
+            {
+                _SCENARIO_PATIENT: str(binding.patient_id),
+                _SCENARIO_LINK: str(binding.link_id),
+            }
+        )
+    return binding
+
+
+async def scenario_binding(
+    message: Message, state: FSMContext, store: BindingStore, settings: BotSettings
+) -> Binding | None:
+    """Привязка ребёнка, про которого начат сценарий, или None с объяснением.
+
+    Ищется среди привязок чата по ребёнку, а не берётся выбранная: см.
+    `begin_scenario`. Ребёнка в чате больше нет — запись не уходит никому, и
+    сценарий закрывается. Привязка того же ребёнка могла смениться (новый код,
+    восстановление секрета) — это тот же ребёнок, и запись уходит с её
+    нынешним секретом.
+
+    Сценарий без отметки начат до обновления бота. Тогда в чате был один
+    ребёнок, и если он один и сейчас — запись про него. Детей стало больше —
+    отказ: угадывать, про кого запись, нельзя.
+    """
+
+    data = await state.get_data()
+    raw = data.get(_SCENARIO_PATIENT)
+    bindings = await store.all(message.chat.id)
+    if not bindings:
+        await state.clear()
+        await message.answer(texts.NOT_LINKED)
+        return None
+
+    if raw is None:
+        if len(bindings) == 1:
+            return bindings[0]
+        await state.clear()
+        await message.answer(
+            texts.SCENARIO_CHILD_UNKNOWN,
+            reply_markup=await menu(store, message.chat.id, settings),
+        )
+        return None
+
+    for binding in bindings:
+        if str(binding.patient_id) == str(raw):
+            return binding
+
+    await state.clear()
+    await message.answer(
+        texts.SCENARIO_CHILD_GONE, reply_markup=await menu(store, message.chat.id, settings)
+    )
+    return None
+
+
 async def several_children(store: BindingStore, chat_id: int) -> bool:
     """Ведёт ли чат двоих детей и больше (ADR-0048)."""
 
     return len(await store.all(chat_id)) >= 2
 
 
-async def child_label(store: BindingStore, chat_id: int) -> str | None:
+async def child_label(
+    store: BindingStore, chat_id: int, binding: Binding | None = None
+) -> str | None:
     """Имя выбранного ребёнка — только когда чат ведёт нескольких.
 
     У чата одного ребёнка имени в переписке нет, как и прежде: незачем, и
@@ -55,6 +132,9 @@ async def child_label(store: BindingStore, chat_id: int) -> str | None:
 
     if not await several_children(store, chat_id):
         return None
+    if binding is not None:
+        # Шаг сценария называет ребёнка, про которого сценарий начат.
+        return binding.first_name
     active = await store.get(chat_id)
     return active.first_name if active is not None else None
 
@@ -82,7 +162,7 @@ async def link_revoked(
     """
 
     await state.clear()
-    remaining = await store.forget(message.chat.id, binding.patient_id)
+    remaining = await store.forget(message.chat.id, binding.patient_id, binding.link_id)
     if remaining is None:
         await message.answer(texts.LINK_REVOKED)
         return

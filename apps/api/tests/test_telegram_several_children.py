@@ -477,3 +477,178 @@ class TestRepositoryForMailings:
                     chat_id=CHAT_ID,
                     secret=telegram_repo.generate_binding_secret(),
                 )
+
+
+class TestReviewFindings:
+    """Находки safety-review по ADR-0048 (05.10.2026)."""
+
+    async def test_own_chat_code_of_another_adult_is_refused_and_not_burnt(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Код «подключить свой Telegram» не отдаёт ребёнка знакомому чужому Telegram."""
+
+        # Бабушка уже знакома системе: ведёт внуков из своего чата.
+        await _two_grandchildren(client, session, make_user, make_patient, auth_headers)
+        # Мама другого ребёнка выпускает код своего чата — и он доходит до бабушки.
+        mother = await make_user(UserRole.PARENT)
+        other = await make_patient("Лейла Ахмедова")
+        await patients_repo.link_parent(session, parent_id=mother.id, patient_id=other.id)
+        issued = await client.post(
+            f"/api/v1/patients/{other.id}/access-codes",
+            headers=auth_headers(mother),
+            json={"purpose": "own_chat"},
+        )
+        assert issued.status_code == 201, issued.text
+        code = str(issued.json()["code"])
+
+        response = await _activate(client, code)
+
+        assert response.status_code == 409, response.text
+        error = response.json()["error"]
+        assert error["details"] == {"reason": "own_chat_other_adult"}
+        assert "близкого" in error["message"]
+        # Ни привязки чата к ребёнку, ни доступа бабушкиной учётной записи.
+        assert (
+            await telegram_repo.get_active_link_for_child(
+                session, chat_id=CHAT_ID, patient_id=other.id
+            )
+            is None
+        )
+        assert await patients_repo.list_parent_ids(session, patient_id=other.id) == [mother.id]
+        # Код не сожжён: мама подключает им свой телефон.
+        own = await client.post(
+            ACTIVATE,
+            headers=bot_headers(),
+            json={
+                "code": code,
+                "chat_id": CHAT_ID + 50,
+                "telegram_user_id": CHAT_ID + 50,
+                "first_name": "Мама",
+            },
+        )
+        assert own.status_code == 201, own.text
+
+    async def test_foreign_telegram_cannot_add_a_child_to_a_leading_chat(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Чат с привязками принимает ребёнка только от своего владельца."""
+
+        doctor, _, _, _ = await _two_grandchildren(
+            client, session, make_user, make_patient, auth_headers
+        )
+        third = await make_patient("Лейла Иванова")
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=third.id)
+        code = await _code(client, auth_headers, doctor, third)
+
+        response = await client.post(
+            ACTIVATE,
+            headers=bot_headers(),
+            json={
+                "code": code,
+                "chat_id": CHAT_ID,
+                "telegram_user_id": CHAT_ID + 99,
+                "first_name": "Чужой",
+            },
+        )
+
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["details"] == {"reason": "chat_taken"}
+        assert (
+            await telegram_repo.get_active_link_for_child(
+                session, chat_id=CHAT_ID, patient_id=third.id
+            )
+            is None
+        )
+
+    async def test_bot_token_cannot_switch(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, second, linked = await _two_grandchildren(
+            client, session, make_user, make_patient, auth_headers
+        )
+        token = (
+            await client.post(
+                "/api/v1/auth/bot/session",
+                headers=bot_headers(),
+                json={"link_id": linked[0]["link_id"], "secret": linked[0]["secret"]},
+            )
+        ).json()["access_token"]
+
+        response = await client.post(
+            SWITCH, headers=_bearer(token), json={"patient_id": str(second.id)}
+        )
+
+        assert response.status_code in (401, 403), response.text
+
+    async def test_child_without_parent_access_is_not_offered(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Живая привязка без связи взрослого с ребёнком сессии не открывает."""
+
+        _, first, second, linked = await _two_grandchildren(
+            client, session, make_user, make_patient, auth_headers
+        )
+        link = await session.get(TelegramAccount, opened_link_id(linked, 1))
+        assert link is not None
+        # Доступ закрыт путём, который привязку не погасил.
+        assert await patients_repo.unlink_parent(
+            session, parent_id=link.parent_id, patient_id=second.id
+        )
+
+        opened = (await client.post(INIT, json={"init_data": init_data(chat_id=CHAT_ID)})).json()
+        assert [child["patient_id"] for child in opened["children"]] == [str(first.id)]
+
+        refused = await client.post(
+            SWITCH, headers=_bearer(opened["access_token"]), json={"patient_id": str(second.id)}
+        )
+        assert refused.status_code == 404
+        named = await client.post(
+            INIT, json={"init_data": init_data(chat_id=CHAT_ID), "patient_id": str(second.id)}
+        )
+        assert named.status_code == 404
+
+    async def test_refresh_after_switch_keeps_the_switched_child(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Mini App обновляет пару телом, и обновление не уводит к первому ребёнку."""
+
+        _, first, second, linked = await _two_grandchildren(
+            client, session, make_user, make_patient, auth_headers
+        )
+        opened = (await client.post(INIT, json={"init_data": init_data(chat_id=CHAT_ID)})).json()
+        switched = (
+            await client.post(
+                SWITCH,
+                headers=_bearer(opened["access_token"]),
+                json={"patient_id": str(second.id)},
+            )
+        ).json()
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": switched["refresh_token"]}
+        )
+
+        assert refreshed.status_code == 200, refreshed.text
+        body = refreshed.json()
+        # Канал Mini App получает новую пару телом, без куки кабинета.
+        assert body["refresh_token"]
+        assert "refresh_token" not in refreshed.cookies
+        claims = decode_token(body["access_token"], expected_type="access")
+        assert claims["patient_scope"] == str(second.id)
+        assert claims["tg"] == linked[1]["link_id"]
+        assert claims["chan"] == "miniapp"
+        own = await client.get(
+            f"/api/v1/patients/{second.id}/overview", headers=_bearer(body["access_token"])
+        )
+        assert own.status_code == 200, own.text
+        other = await client.get(
+            f"/api/v1/patients/{first.id}/overview", headers=_bearer(body["access_token"])
+        )
+        assert other.status_code in (403, 404)
+
+        # Отзыв привязки второго ребёнка гасит и обновление его пары.
+        await telegram_repo.revoke(session, opened_link_id(linked, 1))
+        dead = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": body["refresh_token"]}
+        )
+        assert dead.status_code == 401

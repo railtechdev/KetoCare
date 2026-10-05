@@ -197,6 +197,13 @@ class FakeRedis:
         target.update(mapping or {})
         return 1
 
+    async def hsetnx(self, key: str, field: str, value: str) -> int:
+        target = self.hashes.setdefault(key, {})
+        if field in target:
+            return 0
+        target[field] = value
+        return 1
+
     async def hdel(self, key: str, *fields: str) -> int:
         target = self.hashes.get(key, {})
         removed = sum(1 for name in fields if target.pop(name, None) is not None)

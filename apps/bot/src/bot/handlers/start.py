@@ -91,15 +91,25 @@ async def help_command(message: Message, settings: BotSettings, store: BindingSt
 
 
 async def handle_bare_code(
-    message: Message, api: BotApi, store: BindingStore, settings: BotSettings
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     """Код, присланный сообщением, а не по ссылке.
 
     Deep-link открывается с телефона одним нажатием, но родитель, читающий
     кабинет с компьютера, перепишет код руками. Отказывать ему из-за формы ввода
     незачем.
+
+    Начатый сценарий закрывается, как и при `/start <код>`: код другого ребёнка
+    делает выбранным его, и запись, начатая про прежнего, продолжаться не
+    должна (ADR-0048, ревью). Шаги сценария и без этого пишут ребёнку, про
+    которого начаты (`deps.scenario_binding`), — это вторая линия.
     """
 
+    await state.clear()
     await _link(message, api=api, store=store, settings=settings, code=message.text or "")
 
 
