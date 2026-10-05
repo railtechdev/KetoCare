@@ -240,3 +240,48 @@ class TestStringValuesInPayload:
         cleaned = pseudonymize({"medications": [{"drug_name": "Депакин хроно", "dose": "300 мг"}]})
 
         assert cleaned["medications"][0]["drug_name"] == "Депакин хроно"
+
+
+class TestMachineValuesSurvive:
+    """Маска телефона не трогает то, что пишет система (аудит блокеров, 05.10.2026).
+
+    Прежде она срабатывала на каждую дату и на 17 % идентификаторов продуктов:
+    разбор еды отклонялся — модель не могла вернуть искалеченный `product_id`, —
+    а сводка врача получала «[скрыто]» вместо всех дат.
+    """
+
+    def test_product_ids_are_untouched(self) -> None:
+        import uuid
+
+        from worker.ai.pseudonymize import pseudonymize, scrub_free_text
+
+        ids = [str(uuid.uuid4()) for _ in range(2000)]
+        assert [scrub_free_text(value) for value in ids] == ids
+        # Реальный случай из аудита: середина идентификатора похожа на телефон.
+        risky = "78e51061-7311-48a3-82ce-6f447ed4d57b"
+        assert pseudonymize({"products": [{"id": risky, "name": "Масло"}]}) == {
+            "products": [{"id": risky, "name": "Масло"}]
+        }
+
+    def test_dates_are_untouched(self) -> None:
+        from worker.ai.pseudonymize import scrub_free_text
+
+        assert scrub_free_text("2026-10-05") == "2026-10-05"
+        assert scrub_free_text("2026-10-05T08:30:00+05:00") == "2026-10-05T08:30:00+05:00"
+
+    def test_phones_next_to_them_are_still_masked(self) -> None:
+        from worker.ai.pseudonymize import MASK, scrub_free_text
+
+        text = "1a69a7b7-0000-4000-8000-123456789012, 2026-10-01, звоните +998 90 123-45-67"
+        cleaned = scrub_free_text(text)
+        assert cleaned is not None
+        assert "1a69a7b7-0000-4000-8000-123456789012" in cleaned
+        assert "2026-10-01" in cleaned
+        assert cleaned.endswith(MASK)
+        assert "123-45-67" not in cleaned
+
+    def test_date_shaped_digits_that_are_not_a_date_are_masked(self) -> None:
+        """«1234-56-78» — не дата; маска её не щадит (замечание ревью)."""
+        from worker.ai.pseudonymize import MASK, scrub_free_text
+
+        assert scrub_free_text("тел 1234-56-7890") == f"тел {MASK}"

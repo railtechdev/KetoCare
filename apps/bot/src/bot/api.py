@@ -35,6 +35,10 @@ _EXPIRY_MARGIN = timedelta(seconds=30)
 PARSE_TIMEOUT_S = 16.0
 
 
+#: Код ошибки, когда до API не дошли вовсе: сети нет или он перезапускается.
+TRANSPORT_ERROR = "transport"
+
+
 class BotApiError(Exception):
     """Сбой вызова API. `code` — код из раздела 5.1 ТЗ, если API его прислал."""
 
@@ -164,20 +168,27 @@ class BotApi:
         patient_id: uuid.UUID,
         kind: str,
         payload: dict[str, Any],
+        idempotency_key: str,
     ) -> dict[str, Any]:
         """Запись в дневник. `kind` — часть пути: ketones, weight, side-effects…
 
         `source` бот не передаёт и передать не может: канал проставляет сервер по
         токену, иначе запись из чата могла бы объявить себя чем угодно.
+
+        Ключ попытки (ADR-0035) — один на запись, и при обрыве связи запрос
+        повторяется с ним же: если первый дошёл, а ответ потерялся, сервер
+        вернёт прежнюю запись, а не заведёт вторую (аудит блокеров, 05.10.2026).
         """
 
         token = await self._token(link_id=link_id, secret=secret)
-        return await self._request(
-            "POST",
-            f"/api/v1/patients/{patient_id}/logs/{kind}",
-            headers={"Authorization": f"Bearer {token}"},
-            json=payload,
-        )
+        headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": idempotency_key}
+        path = f"/api/v1/patients/{patient_id}/logs/{kind}"
+        try:
+            return await self._request("POST", path, headers=headers, json=payload)
+        except BotApiError as exc:
+            if exc.code != TRANSPORT_ERROR:
+                raise
+        return await self._request("POST", path, headers=headers, json=payload)
 
     async def get_menu(
         self,
@@ -313,13 +324,20 @@ class BotApi:
         # Имя не `timeout`: это не ожидание корутины, а параметр httpx для
         # одного запроса. `USE_CLIENT_DEFAULT` — сам httpx: он отличает
         # «таймаут не задан» от «таймаут снят», и None означал бы второе.
-        response = await self._client.request(
-            method,
-            path,
-            headers=headers,
-            json=json,
-            timeout=httpx.USE_CLIENT_DEFAULT if wait_s is None else wait_s,
-        )
+        try:
+            response = await self._client.request(
+                method,
+                path,
+                headers=headers,
+                json=json,
+                timeout=httpx.USE_CLIENT_DEFAULT if wait_s is None else wait_s,
+            )
+        except httpx.TransportError as exc:
+            # Обрыв, таймаут, API перезапускается при выкате. Прежде исключение
+            # уходило мимо обработчиков сценариев, и родитель не получал ни
+            # «записано», ни «не удалось» — молчание после нажатия кнопки
+            # (аудит блокеров, 05.10.2026).
+            raise BotApiError(TRANSPORT_ERROR, str(exc) or type(exc).__name__, 0) from exc
         if response.is_success:
             body: dict[str, Any] = response.json()
             return body

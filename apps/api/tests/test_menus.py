@@ -15,6 +15,7 @@ from api.deps.auth import get_session
 from api.main import API_PREFIX, create_app
 from api.routers.menus import router as menus_router
 from core.models import (
+    AuditLog,
     CustomDish,
     Menu,
     MenuItem,
@@ -1327,6 +1328,57 @@ class TestMenuDayRemoval:
 
         assert again.status_code == 200, again.text
         assert len(again.json()["items"]) == 1
+
+    async def test_day_with_eaten_marks_is_not_removed(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Отметка «съедено» — запись о том, что ребёнок ел, а не план (ADR-0041).
+
+        Правило жило только на экране Mini App, и удаление дня стирало отметки
+        одним нажатием из любого канала (аудит блокеров, 05.10.2026).
+        """
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        day = date(2026, 9, 3)
+        saved = await _save_day(client, auth_headers, parent, patient, session, day)
+        item_id = saved.json()["items"][0]["id"]
+        marked = await client.post(
+            f"{_url(patient)}/items/{item_id}/eaten",
+            json={"eaten": True},
+            headers=auth_headers(parent),
+        )
+        assert marked.status_code == 200, marked.text
+
+        refused = await client.delete(
+            _url(patient), params={"date": day.isoformat()}, headers=auth_headers(parent)
+        )
+
+        assert refused.status_code == 409
+        assert refused.json()["error"]["details"]["reason"] == "has_eaten_items"
+        still = await client.get(
+            _url(patient), params={"date": day.isoformat()}, headers=auth_headers(parent)
+        )
+        assert still.status_code == 200
+
+    async def test_removal_is_audited(self, client, session, make_user, make_patient, auth_headers):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        day = date(2026, 9, 4)
+        await _save_day(client, auth_headers, parent, patient, session, day)
+
+        await client.delete(
+            _url(patient), params={"date": day.isoformat()}, headers=auth_headers(parent)
+        )
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "menu_day_removed", AuditLog.user_id == parent.id
+            )
+        )
+        assert entry is not None and entry.user_id == parent.id
+        assert entry.before == {
+            "patient_id": str(patient.id),
+            "date": day.isoformat(),
+            "items": 1,
+        }
 
     async def test_removing_a_day_that_is_not_planned_is_not_an_error(
         self, client, session, make_user, make_patient, auth_headers

@@ -385,13 +385,20 @@ class TestForgivingInput:
 
 
 class TestBotRefusalsSayWhy:
-    async def test_chat_already_with_this_child(
+    async def test_known_chat_with_a_live_code_is_rebound(
         self, client, session, make_user, make_patient, auth_headers
     ):
+        """Бот потерял хранилище — повторный код возвращает чат к работе.
+
+        Прежде ответ был «код не нужен», и после восстановления сервера все семьи
+        оставались без дневника (аудит блокеров, 05.10.2026). Доступа это не
+        добавляет: тот же человек, тот же ребёнок. Код не гасится — он остаётся
+        тому, кому был выдан.
+        """
         mother = await make_user(UserRole.PARENT)
         patient = await make_patient()
         await patients_repo.link_parent(session, parent_id=mother.id, patient_id=patient.id)
-        await telegram_repo.create_link(
+        old = await telegram_repo.create_link(
             session,
             parent_id=mother.id,
             patient_id=patient.id,
@@ -413,11 +420,56 @@ class TestBotRefusalsSayWhy:
             },
         )
 
-        assert response.status_code == 409
-        assert response.json()["error"]["details"] == {"reason": "already_here"}
-        # Код не сгорел: он предназначался кому-то другому.
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["link_id"] != str(old.id)
+        await session.refresh(old)
+        assert old.revoked_at is not None
         stored = await session.get(AccessCode, code)
         assert stored is not None and stored.used_at is None
+        # Новый секрет действительно открывает сессию бота.
+        opened = await client.post(
+            "/api/v1/auth/bot/session",
+            headers=bot_headers(),
+            json={"link_id": body["link_id"], "secret": body["secret"]},
+        )
+        assert opened.status_code == 200, opened.text
+        # Новичка не появилось — о «новом близком» семье не пишем.
+        assert await _parents_count(session, patient) == 1
+
+    async def test_known_chat_with_a_spent_code_says_already_here(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        mother = await make_user(UserRole.PARENT)
+        patient = await make_patient()
+        await patients_repo.link_parent(session, parent_id=mother.id, patient_id=patient.id)
+        await telegram_repo.create_link(
+            session,
+            parent_id=mother.id,
+            patient_id=patient.id,
+            chat_id=771_600_210,
+            secret=telegram_repo.generate_binding_secret(),
+        )
+        code = (
+            await client.post(codes_url(patient.id), headers=auth_headers(mother), json=FAMILY)
+        ).json()["code"]
+        row = await session.get(AccessCode, code)
+        row.revoked_at = row.created_at
+        await session.flush()
+
+        response = await client.post(
+            TELEGRAM_URL,
+            headers=bot_headers(),
+            json={
+                "code": code,
+                "chat_id": 771_600_210,
+                "telegram_user_id": 771_600_210,
+                "first_name": "Мама",
+            },
+        )
+
+        assert response.status_code == 409
+        assert response.json()["error"]["details"] == {"reason": "already_here"}
 
     async def test_chat_with_another_child(
         self, client, session, make_user, make_patient, auth_headers
@@ -619,3 +671,10 @@ class TestNoticeOnlyAfterCommit:
         after_commit.discard(fake)  # type: ignore[arg-type]
 
         assert fake.info == {}
+
+
+async def _parents_count(session, patient) -> int:
+    rows = await session.scalars(
+        select(ParentPatient.parent_id).where(ParentPatient.patient_id == patient.id)
+    )
+    return len(rows.all())

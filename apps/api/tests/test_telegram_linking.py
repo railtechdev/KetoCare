@@ -836,3 +836,60 @@ class TestReminderSettings:
 
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.asyncio
+class TestBotReadsMedicationSchedule:
+    async def test_bot_session_lists_todays_medications(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Кнопка «💊 Лекарства» строится по схеме врача — бот обязан её читать.
+
+        Потребитель — `apps/bot` (`BotApi.list_medications`, сценарий в
+        `handlers/scenarios.py`): он берёт `id`, `drug_name` и `dose`. Маршрута
+        не было в списке разрешённого боту, и кнопка с первого дня отвечала
+        родителю «не удалось сохранить», а тесты обеих сторон работали с
+        подделками (аудит блокеров, 05.10.2026).
+        """
+        parent, patient = await _family(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        created = await client.post(
+            f"/api/v1/patients/{patient.id}/medications",
+            headers=auth_headers(doctor),
+            json={
+                "drug_name": "Вальпроевая кислота",
+                "dose": "300 мг",
+                "frequency_code": "twice_daily",
+                "started_at": "2026-09-01",
+            },
+        )
+        assert created.status_code == 201, created.text
+        link = await _link(client, auth_headers, parent, patient)
+        token = await _bot_session(client, link)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/medications?active_on=2026-10-05",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200, response.text
+        items = response.json()["items"]
+        assert len(items) == 1
+        assert {"id", "drug_name", "dose"} <= set(items[0])
+
+    async def test_bot_still_cannot_change_the_schedule(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Открыто только чтение: схему ведёт врач."""
+        parent, patient = await _family(session, make_user, make_patient)
+        link = await _link(client, auth_headers, parent, patient)
+        token = await _bot_session(client, link)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/medications",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"drug_name": "x", "dose": "1", "started_at": "2026-10-01"},
+        )
+
+        assert response.status_code == 403

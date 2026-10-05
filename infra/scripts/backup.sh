@@ -129,6 +129,23 @@ for volume in attachments erased; do
     echo "  том $volume: $volume-$STAMP.tar.gz${AGE_RECIPIENT:+.age} ($((SIZE / 1024)) КБ)"
 done
 
+# --- хранилище бота ----------------------------------------------------------
+# В redis лежат секреты привязок бота (ADR-0009): без них после восстановления
+# бот не узнаёт ни одну семью. Повторный код восстанавливает привязку и без
+# этой копии, но обходить так каждую семью в день аварии — это день без
+# дневника у всех (аудит блокеров, 05.10.2026). SAVE, а не копия файлов тома:
+# AOF, снятый на ходу, бывает недописан; снимок RDB согласован.
+TMP="$DEST/.redis-$STAMP.rdb.part"
+trap 'rm -f "$TMP"' EXIT
+$COMPOSE exec -T redis sh -c 'redis-cli SAVE >/dev/null && cat /data/dump.rdb' > "$TMP" \
+    || fail "не удалось снять снимок redis"
+[ -s "$TMP" ] || fail "снимок redis пуст"
+mv "$TMP" "$DEST/redis-$STAMP.rdb"
+trap - EXIT
+SIZE=$(wc -c < "$DEST/redis-$STAMP.rdb")
+encrypt "$DEST/redis-$STAMP.rdb"
+echo "  redis: redis-$STAMP.rdb${AGE_RECIPIENT:+.age} ($((SIZE / 1024)) КБ)"
+
 # --- внешнее хранилище -------------------------------------------------------
 # До уборки: если увезти не удалось, пусть на диске останется всё, что есть.
 if [ -n "$REMOTE" ]; then
@@ -139,6 +156,7 @@ if [ -n "$REMOTE" ]; then
         --include "postgres-$STAMP.*" \
         --include "attachments-$STAMP.*" \
         --include "erased-$STAMP.*" \
+        --include "redis-$STAMP.*" \
         || fail "не удалось увезти копию в $REMOTE"
     echo "  увезено в $REMOTE"
 fi
@@ -150,6 +168,8 @@ find "$DEST" -maxdepth 1 -name 'postgres-*.dump' -mtime "+$KEEP_DAYS" -delete
 find "$DEST" -maxdepth 1 -name 'postgres-*.dump.age' -mtime "+$KEEP_DAYS" -delete
 find "$DEST" -maxdepth 1 -name '*.tar.gz' -mtime "+$KEEP_DAYS" -delete
 find "$DEST" -maxdepth 1 -name '*.tar.gz.age' -mtime "+$KEEP_DAYS" -delete
+find "$DEST" -maxdepth 1 -name 'redis-*.rdb' -mtime "+$KEEP_DAYS" -delete
+find "$DEST" -maxdepth 1 -name 'redis-*.rdb.age' -mtime "+$KEEP_DAYS" -delete
 find "$DEST" -maxdepth 1 -name '.*.part' -mtime +1 -delete
 
 COPIES=$(find "$DEST" -maxdepth 1 -name 'postgres-*.dump*' | wc -l)

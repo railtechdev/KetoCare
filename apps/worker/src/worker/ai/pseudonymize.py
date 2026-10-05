@@ -200,7 +200,37 @@ def scrub_free_text(text: str | None) -> str | None:
 
     cleaned = _EMAIL.sub(MASK, text)
     cleaned = _TG_USERNAME.sub(MASK, cleaned)
-    return _PHONE.sub(MASK, cleaned)
+    return _PHONE.sub(_mask_phone, cleaned)
+
+
+#: Машинные значения, похожие на телефон по форме, но контактом не являющиеся.
+#: Маска телефона (цифры через дефисы, от десяти знаков) срабатывала на каждую
+#: дату `2026-10-05` и на 17 % идентификаторов продуктов: модель получала
+#: «78e[скрыто]a3-…» и не могла вернуть продукт, разбор еды отклонялся после
+#: оплаченного вызова, а сводка врача теряла все даты (аудит блокеров,
+#: 05.10.2026). Контакта в них нет по построению: дату и идентификатор пишет
+#: система, а не человек.
+_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+_ISO_DATE = re.compile(r"(?<!\d)(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?!\d)")
+
+
+def _mask_phone(match: re.Match[str]) -> str:
+    """Маска телефона — кроме совпадений внутри идентификатора или даты."""
+
+    text = match.string
+    start, end = match.span()
+    for shape in (_UUID, _ISO_DATE):
+        for found in shape.finditer(text):
+            if found.start() <= start and end <= found.end():
+                return match.group(0)
+            # Совпадение, целиком состоящее из даты или куска идентификатора,
+            # может захватить и соседний символ (пробел, «T»): сверяем и
+            # пересечение без цифр снаружи.
+            if found.start() < end and start < found.end():
+                outside = text[start : found.start()] + text[found.end() : end]
+                if not any(ch.isdigit() for ch in outside):
+                    return match.group(0)
+    return MASK
 
 
 def _patient_from(patient: dict[str, Any]) -> str:

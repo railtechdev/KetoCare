@@ -966,3 +966,44 @@ class TestBotVisibleDictionaryShape:
         item = response.json()["items"][0]
         assert "name_ru" in item
         assert "id" in item
+
+
+class TestRepeatIsNotADuplicate:
+    """Повтор с тем же ключом — тот же ответ, а не вторая запись (ADR-0035).
+
+    Ключ стоял только на блюдах и вопросах помощнику. Ответ, потерянный при
+    обрыве связи, и повтор давали второй приступ в отчёте врача (аудит блокеров,
+    05.10.2026). Потребитель — `apps/bot` (`BotApi.create_log` шлёт ключ попытки
+    и повторяет запрос при обрыве).
+    """
+
+    @pytest.mark.parametrize("kind", KINDS)
+    async def test_same_key_twice_is_one_record(
+        self, client, session, make_user, make_patient, auth_headers, kind
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        payload = await _payload(session, kind, patient=patient, author=doctor)
+        headers = {**auth_headers(parent), "Idempotency-Key": str(uuid.uuid4())}
+
+        first = await client.post(_url(patient.id, kind), json=payload, headers=headers)
+        second = await client.post(_url(patient.id, kind), json=payload, headers=headers)
+
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+        assert second.json()["id"] == first.json()["id"]
+        listed = await client.get(_url(patient.id, kind), headers=auth_headers(parent))
+        assert listed.json()["total"] == 1
+
+    async def test_without_a_key_nothing_changes(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Кабинет ключа не шлёт — запись идёт как прежде."""
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        payload = await _payload(session, "weight", patient=patient, author=parent)
+
+        response = await client.post(
+            _url(patient.id, "weight"), json=payload, headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 201

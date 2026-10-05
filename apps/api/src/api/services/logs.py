@@ -20,11 +20,13 @@ from core.repositories import diary as diary_repo
 from core.repositories.diary import DiaryLog
 
 from ..deps.auth import CurrentUser
+from ..deps.idempotency import WriteAttempt
 from ..deps.query import Pagination, Period
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page
 from ..schemas_logs import LogCreate, LogUpdate, MealLogCreate
 from ..security import Channel
+from . import idempotency
 
 # Канал проставляет сервер, а не клиент (раздел 5.3 ТЗ). Если бы `source` приходил
 # из тела запроса, запись из веба могла бы объявить себя подтверждённым разбором
@@ -76,7 +78,31 @@ async def create_log[M: DiaryLog, R: BaseModel](
     patient_id: uuid.UUID,
     payload: LogCreate,
     author: CurrentUser,
+    attempt: WriteAttempt | None = None,
 ) -> R:
+    """Записать в дневник.
+
+    С ключом попытки (`Idempotency-Key`, ADR-0035) повтор того же запроса
+    получает прежний ответ, а не вторую запись. Прежде ключ стоял только на
+    блюдах и вопросах помощнику: ответ, потерянный при обрыве связи, и повтор
+    давали второй приступ в отчёте врача (аудит блокеров, 05.10.2026).
+    Бронь ключа живёт в той же транзакции, что и запись: отказ ниже откатывает
+    обе, и исправленный запрос с тем же ключом пройдёт.
+    """
+
+    reservation: uuid.UUID | None = None
+    if attempt is not None:
+        outcome = await idempotency.begin(
+            session,
+            user_id=author.id,
+            key=attempt.key,
+            fingerprint=attempt.fingerprint,
+            patient_id=patient_id,
+        )
+        if isinstance(outcome, idempotency.Replay):
+            return read.model_validate(outcome.body)
+        reservation = outcome
+
     fields = payload.model_dump(exclude={"occurred_at"})
     # По умолчанию — канал, из которого пришла запись; подтверждённый разбор
     # ниже подменяет его на `ai_parsed`.
@@ -115,7 +141,12 @@ async def create_log[M: DiaryLog, R: BaseModel](
         # подтверждён и израсходован.
         await ai_jobs_repo.mark_confirmed(session, job=job, log_id=log.id)
 
-    return read.model_validate(log)
+    created = read.model_validate(log)
+    if reservation is not None:
+        await idempotency.finish(
+            session, key_id=reservation, status=201, body=created.model_dump(mode="json")
+        )
+    return created
 
 
 async def update_log[M: DiaryLog, R: BaseModel](
