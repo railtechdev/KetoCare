@@ -214,12 +214,18 @@ async def _control_visit_notices(
         if not claimed:
             skipped += 1
             continue
+        # Чат двоих детей получает имя над текстом — как у остальных
+        # напоминаний (ADR-0048): иначе непонятно, чей визит.
+        names = await child_names(session, patient_id=visit.patient_id, chat_ids=[link.chat_id])
         try:
             await send_message(
                 client,
                 token=token,
                 chat_id=link.chat_id,
-                text=visit_notice_text(visit.planned_on, labs_for(visit.month_offset)),
+                text=named(
+                    visit_notice_text(visit.planned_on, labs_for(visit.month_offset)),
+                    names.get(link.chat_id),
+                ),
             )
         except TelegramSendError as exc:
             logger.warning(
