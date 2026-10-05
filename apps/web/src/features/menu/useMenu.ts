@@ -1,8 +1,8 @@
 import type { components } from "@ketocare/api-client";
+import type { DayTolerance, ToleranceGap } from "@ketocare/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, errorCodeOf } from "../../lib/api";
-import type { DayTolerance, ToleranceGap } from "../patients/dayVerdict";
 import { patientOverviewKey, patientOverviewQuery } from "../patients/overview";
 
 export type MenuRead = components["schemas"]["MenuRead"];
@@ -266,7 +266,7 @@ export function useEatenMutation(patientId: string | null, date: string) {
  * него. Поэтому для прочих дат вердикта нет, и показатели выводятся нейтрально.
  *
  * Отдаётся ответ сервера как есть: своя форма вердикта была бы четвёртой копией
- * одного и того же, а как его показывать — решает `patients/dayVerdict`.
+ * одного и того же, а как его показывать — решает `dayVerdict` кита.
  *
  * Вместе с вердиктом отдаётся причина его отсутствия (`gap`) — тоже серверная.
  * Причин две, «назначения нет» и «день посчитан прежней версией ядра», и

@@ -5,17 +5,15 @@ import {
   Section,
   TargetBar,
   WarningBanner,
+  dayVerdict,
   formatGrams,
   formatKcal,
-} from "@ketocare/ui";
-import { useTranslation } from "react-i18next";
-
-import {
-  dayVerdict,
   toleranceGapKey,
   type DayTolerance,
   type ToleranceGap,
-} from "../patients/dayVerdict";
+} from "@ketocare/ui";
+import { useTranslation } from "react-i18next";
+
 import type { DayTargets, DayTotals } from "./useMenu";
 
 interface Props {
@@ -61,7 +59,7 @@ export function DayTotalsPanel({
 
   // «Осталось до цели» вместо арифметики в уме (правило П18 канона). Знак
   // разницы решает только формулировку: превышение — не вердикт о соответствии
-  // назначению, его выносит сервер (`patients/dayVerdict`).
+  // назначению, его выносит сервер (`dayVerdict` кита).
   const left =
     targets === null
       ? null
