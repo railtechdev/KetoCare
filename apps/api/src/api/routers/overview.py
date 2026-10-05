@@ -12,6 +12,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path
 
+from core.models.enums import UserRole
+
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..schemas_overview import PatientOverview
 from ..services import overview as overview_service
@@ -23,6 +25,14 @@ router = APIRouter(prefix="/patients/{patient_id}/overview", tags=["overview"])
 async def get_overview(
     patient_id: Annotated[uuid.UUID, Path()],
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> PatientOverview:
-    return await overview_service.build_overview(session, patient_id=patient_id)
+    overview = await overview_service.build_overview(session, patient_id=patient_id)
+    if user.role is UserRole.PARENT and overview.next_control is not None:
+        # Цель визита («оценка эффективности», «решение о продолжении») семье не
+        # отдаётся: о ней говорит врач, а не продукт (ADR-0050). Дата визита —
+        # отдаётся: о ней семье и так пишет бот.
+        overview = overview.model_copy(
+            update={"next_control": overview.next_control.model_copy(update={"purpose": None})}
+        )
+    return overview

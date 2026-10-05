@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..control_schedule import PlannedPoint
-from ..models import ControlVisit, TelegramAccount
+from ..models import ControlVisit, Patient, TelegramAccount
 from . import therapy as therapy_repo
 
 
@@ -82,11 +82,16 @@ async def add_schedule(
     построение графика не должно затирать правки врача.
     """
 
+    # Два одновременных «Построить график» иначе оба увидели бы пустоту и
+    # второй упал бы на уникальном индексе: построение идёт по одному на ребёнка.
+    await session.execute(select(Patient.id).where(Patient.id == patient_id).with_for_update())
+    # Отменённая врачом точка (мягко удалённая) тоже считается заведённой:
+    # повторное построение не должно возвращать визит, который врач отменил.
+    # Вернуть его можно визитом вне графика.
     existing = set(
         await session.scalars(
             select(ControlVisit.month_offset).where(
                 ControlVisit.patient_id == patient_id,
-                ControlVisit.deleted_at.is_(None),
                 ControlVisit.month_offset.is_not(None),
             )
         )

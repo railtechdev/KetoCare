@@ -336,6 +336,36 @@ class TestControlVisits:
         assert body["therapy_started_on"] == start.isoformat()
         assert body["weekly_labs"][0] == "ОАК"
 
+    async def test_cancelled_point_is_not_rebuilt_and_family_sees_no_purpose(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor, _dietitian, parent, patient = await _team(session, make_user, make_patient)
+        # Старт четыре месяца назад: ближайший несостоявшийся — шестимесячный
+        # визит с пометкой «оценка эффективности».
+        start = add_months(local_today(), -4)
+        await _start_therapy(client, auth_headers, doctor, patient, start)
+        base = f"/api/v1/patients/{patient.id}"
+        built = (
+            await client.post(f"{base}/control-visits/schedule", headers=auth_headers(doctor))
+        ).json()
+        for visit in built[:2]:  # 1 и 3 месяца прошли — отмечены
+            await client.patch(
+                f"{base}/control-visits/{visit['id']}",
+                json={"completed_on": local_today().isoformat()},
+                headers=auth_headers(doctor),
+            )
+
+        doctor_view = await client.get(f"{base}/overview", headers=auth_headers(doctor))
+        family_view = await client.get(f"{base}/overview", headers=auth_headers(parent))
+        assert doctor_view.json()["next_control"]["purpose"] == "efficacy_review"
+        assert family_view.json()["next_control"]["purpose"] is None
+        assert family_view.json()["next_control"]["planned_on"] == built[2]["planned_on"]
+
+        # Отменённую врачом точку повторное построение не возвращает.
+        await client.delete(f"{base}/control-visits/{built[3]['id']}", headers=auth_headers(doctor))
+        again = await client.post(f"{base}/control-visits/schedule", headers=auth_headers(doctor))
+        assert again.json() == []
+
     async def test_roles(self, client, session, make_user, make_patient, auth_headers):
         doctor, dietitian, parent, patient = await _team(session, make_user, make_patient)
         base = f"/api/v1/patients/{patient.id}"
