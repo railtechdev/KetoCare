@@ -16,6 +16,7 @@ from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import users as users_repo
 
+from .. import after_commit, login_throttle
 from ..client_address import client_address
 from ..cookies import set_auth_cookies
 from ..deps.auth import CurrentUserDep, SessionDep, bearer_token, require_roles
@@ -26,6 +27,7 @@ from ..schemas import (
     CredentialsCreate,
     MeUpdate,
     PasswordChange,
+    PasswordResetViaTelegram,
     TokenPair,
     UserRead,
 )
@@ -173,6 +175,64 @@ async def set_credentials(
         ip=client_address(request),
     )
     return UserRead.model_validate(me)
+
+
+@router.post(
+    "/me/credentials/reset",
+    status_code=204,
+    summary="Задать новый пароль кабинета из Telegram",
+    dependencies=[Depends(require_roles(UserRole.PARENT))],
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def reset_password_via_telegram(
+    payload: PasswordResetViaTelegram,
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> None:
+    """Забытый пароль кабинета — сбросить там, где семья живёт (аудит, E3).
+
+    Прежде пароль родителю сбрасывал только администратор клиники, хотя
+    личность родителя уже подтверждает Telegram: Mini App открывается подписью
+    его аккаунта. Как у сервисов, восстанавливающих доступ через проверенный
+    второй канал, сброс разрешён только из Mini App — не из кабинета (там
+    пароль меняют, зная прежний) и не ботом (сервисный токен — не человек).
+
+    Риск чужого разблокированного телефона закрывают два свойства: почту отсюда
+    не сменить — кабинет остаётся на почте владельца, — и во все чаты этого
+    взрослого приходит сообщение о смене пароля. Отметка смены пароля обрывает
+    прежние сессии кабинета; Mini App после ответа открывает свою заново.
+    """
+
+    if user.channel != "miniapp":
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Новый пароль без прежнего задаётся только в приложении в Telegram.",
+        )
+    me = await users_repo.get(session, user.id)
+    if me is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+    if not me.has_web_credentials or me.email is None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Кабинет ещё не включён: задайте почту и пароль в блоке «Вход в кабинет».",
+        )
+
+    me.password_hash = await hash_password_async(payload.password)
+    me.password_changed_at = datetime.now(UTC)
+    me.password_change_required = False
+    await session.flush()
+    await login_throttle.reset(me.email)
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=me.id,
+        action="password_reset_via_telegram",
+        entity="users",
+        entity_id=me.id,
+        ip=client_address(request),
+    )
+    after_commit.defer(session, "notify_password_changed", str(me.id))
 
 
 @router.post("/me/password", response_model=TokenPair, summary="Сменить свой пароль")

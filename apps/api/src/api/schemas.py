@@ -590,6 +590,14 @@ class MeUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=32)
 
 
+class PasswordResetViaTelegram(BaseModel):
+    """Новый пароль кабинета из Mini App (аудит блокеров, E3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    password: NewPassword
+
+
 class CredentialsCreate(BaseModel):
     """Вход в веб-кабинет для учётной записи, заведённой из Telegram (ADR-0040).
 

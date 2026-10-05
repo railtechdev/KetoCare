@@ -99,6 +99,7 @@ export const AUDIT_ACTIONS = [
   // (ADR-0040, этап Б), и `set_credentials` — момент, когда она их задаёт.
   "create_user",
   "set_credentials",
+  "password_reset_via_telegram",
   "telegram_link",
   "telegram_rebind",
   "telegram_unlink",

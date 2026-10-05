@@ -35,12 +35,34 @@ function renderPanel(value: Session = session) {
 }
 
 describe("вход в кабинет из Mini App", () => {
-  it("не предлагается тому, у кого кабинет уже есть", () => {
+  it("у кого кабинет уже есть — адрес и сброс пароля, а не повторное включение", async () => {
     // Признак приходит с сервера: экран, решающий сам, однажды предложил бы
-    // то, что кончится отказом 409.
+    // то, что кончится отказом 409. Забытый пароль сбрасывается здесь же —
+    // Telegram уже подтверждает личность (аудит блокеров, E3).
+    post.mockResolvedValue({ error: undefined });
     renderPanel({ ...session, hasWebCredentials: true });
 
-    expect(screen.queryByText("Вход в кабинет")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Почта")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "https://ketocare.example" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Забыли пароль? Задать новый" }),
+    );
+    await userEvent.type(
+      screen.getByLabelText(/Новый пароль/),
+      "синий чайник на подоконнике",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Сохранить новый пароль" }),
+    );
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith("/api/v1/users/me/credentials/reset", {
+        body: { password: "синий чайник на подоконнике" },
+      }),
+    );
   });
 
   it("задаёт почту и пароль и говорит, куда идти дальше", async () => {
