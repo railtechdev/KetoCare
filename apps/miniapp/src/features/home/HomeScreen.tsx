@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { FamilyBlock } from "../family/FamilyBlock";
+import { DayVerdictNote } from "../menu/DayVerdictNote";
 import { RemindersBlock } from "../reminders/RemindersBlock";
 import { WebAccessPanel } from "../session/WebAccessPanel";
 import type { Session } from "../session/useSession";
@@ -25,11 +26,10 @@ import { type Overview, usePatientOverview } from "./useOverview";
  * разложить его на части значило бы показать четыре куска дня, снятых в четыре
  * разных момента, и на границе суток они относились бы к разным датам.
  *
- * Вердикта «день в допуске» здесь пока нет намеренно. То, что интерфейс говорит
- * о соответствии дня назначению, живёт одним куском в кабинете
- * (`features/patients/dayVerdict.ts`), и вторая копия этого правила — ровно тот
- * случай, когда два экрана начинают говорить о ребёнке разное. Когда вердикт
- * понадобится и здесь, он переезжает в общий пакет, а не копируется.
+ * Вердикт «день в допуске» стоит под итогами дня с 05.10.2026: правило переехало
+ * из кабинета в кит (`dayVerdict`), а не скопировано, — два экрана, говорящие о
+ * ребёнке по-разному, хуже экрана, который молчит. Сводка всегда за сегодня, и
+ * вердикт в ней относится к тому же дню.
  */
 export function HomeScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
@@ -116,12 +116,20 @@ function Summary({ overview }: { overview: Overview }) {
         {day === null || day === undefined ? (
           <p className="text-muted-foreground">{t("home.today.noMenu")}</p>
         ) : (
-          <MacroBar
-            fatG={day.totals.fat}
-            proteinG={day.totals.protein}
-            carbsG={day.totals.carbs}
-            showGrams
-          />
+          <>
+            <MacroBar
+              fatG={day.totals.fat}
+              proteinG={day.totals.protein}
+              carbsG={day.totals.carbs}
+              showGrams
+            />
+            <DayVerdictNote
+              tolerance={day.tolerance}
+              gap={day.tolerance_gap}
+              kcal={day.totals.kcal}
+              targetKcal={prescription?.kcal_per_day ?? null}
+            />
+          </>
         )}
       </Section>
 
