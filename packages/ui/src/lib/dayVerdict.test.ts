@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import doctorRu from "../../locales/ru/doctor.json";
-import homeRu from "../../locales/ru/home.json";
-import menuRu from "../../locales/ru/menu.json";
 import {
   dayVerdict,
   TOLERANCE_GAP_KEY,
@@ -85,27 +82,15 @@ describe("dayVerdict", () => {
 });
 
 /**
- * Ключ, которого нет в словаре, i18n показывает самим ключом: на экране семьи
- * вместо объяснения появится строка «day.engineUnknown». Экран при этом не
- * падает, тест экрана тоже — поэтому полнота проверяется здесь, по списку
- * причин сервера.
+ * Полнота словарей проверяется в каждом приложении по его словарям (кабинет —
+ * `features/patients/dayVerdictDictionaries.test.ts`, Mini App —
+ * `features/menu/DayVerdictNote.test.tsx`): кит словарей не держит.
  */
-describe("словари объясняют каждую причину сервера", () => {
-  const screens: Array<[string, Record<string, unknown>]> = [
-    ["главная семьи", homeRu.day as Record<string, unknown>],
-    [
-      "карта пациента",
-      (doctorRu.summary as { day: Record<string, unknown> }).day,
-    ],
-    ["меню", menuRu.totals as Record<string, unknown>],
-  ];
-
-  it.each(screens)("%s", (_name, dictionary) => {
-    for (const key of Object.values(TOLERANCE_GAP_KEY)) {
-      expect(typeof dictionary[key]).toBe("string");
-    }
-    // И нейтральный текст на случай, когда причины нет вовсе.
-    expect(typeof dictionary[TOLERANCE_GAP_UNKNOWN_KEY]).toBe("string");
+describe("причина отсутствия вердикта и неизвестное соотношение", () => {
+  it("у каждой причины сервера свой ключ", () => {
+    const keys = Object.values(TOLERANCE_GAP_KEY);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).not.toContain(TOLERANCE_GAP_UNKNOWN_KEY);
   });
 
   it("без причины берётся нейтральный текст, а не вероятная причина", () => {

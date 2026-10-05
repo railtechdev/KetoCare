@@ -1,7 +1,20 @@
-import type { components } from "@ketocare/api-client";
+/**
+ * Вердикт сервера о дне — формой ответа `DaySummary.tolerance`.
+ *
+ * Кит не зависит от `@ketocare/api-client` (у пакета одна сторона — экраны), и
+ * форма повторена здесь структурно, как `PrescriptionTargets` у
+ * `mealTargetsFrom`. Совпадение с OpenAPI держит проверка типов в кабинете
+ * (`features/patients/dayVerdictDictionaries.test.ts`): новая причина сервера
+ * без строки здесь не скомпилируется.
+ */
+export interface DayTolerance {
+  ratio_within_tolerance: boolean | null;
+  kcal_within_tolerance: boolean;
+}
 
-export type DayTolerance = components["schemas"]["DayTolerance"];
-export type ToleranceGap = components["schemas"]["ToleranceGap"];
+/** Почему вердикта нет — словами сервера (`DaySummary.tolerance_gap`). */
+export type ToleranceGap =
+  "no_prescription" | "engine_changed" | "engine_unknown";
 
 export interface DayVerdict {
   /** Кетосоотношение вышло за допуск назначения. */
@@ -46,6 +59,11 @@ export interface DayVerdict {
  * функцией: пока оно было размазано по четырём экранам, правка одного из них не
  * доходила до остальных, и один и тот же день описывался по-разному на главной,
  * в меню и в карте пациента.
+ *
+ * **Живёт в ките с 05.10.2026**: вердикт показывает и Mini App, а семья из
+ * Telegram и семья в кабинете — одна и та же семья. Две копии правила значили
+ * бы, что о соответствии дня назначению она слышит разное в зависимости от
+ * того, откуда смотрит (тот же довод, что у `mealTargetsFrom`).
  *
  * **Отсутствие вердикта объясняется причиной сервера, а не догадкой экрана.**
  * Причин две: назначения нет вовсе и день посчитан прежней основной версией

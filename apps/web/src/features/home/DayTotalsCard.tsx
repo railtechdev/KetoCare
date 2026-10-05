@@ -1,7 +1,13 @@
-import { MacroBar, RatioBadge, WarningBanner, formatKcal } from "@ketocare/ui";
+import {
+  MacroBar,
+  RatioBadge,
+  WarningBanner,
+  dayVerdict,
+  formatKcal,
+  toleranceGapKey,
+} from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { dayVerdict, toleranceGapKey } from "../patients/dayVerdict";
 import { Panel } from "./Panel";
 import type { DaySummary } from "./types";
 

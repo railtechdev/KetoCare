@@ -9,6 +9,13 @@ export type { FrozenAttempt } from "./lib/useFrozenAttempt";
 export { RETRYABLE_ERROR_CODES, canRetry } from "./lib/retryable";
 export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
+export {
+  dayVerdict,
+  TOLERANCE_GAP_KEY,
+  TOLERANCE_GAP_UNKNOWN_KEY,
+  toleranceGapKey,
+} from "./lib/dayVerdict";
+export type { DayTolerance, DayVerdict, ToleranceGap } from "./lib/dayVerdict";
 export { isRefusal } from "./lib/assistantAnswer";
 export type { AssistantMessageSignals } from "./lib/assistantAnswer";
 export { productNameState } from "./lib/productName";
