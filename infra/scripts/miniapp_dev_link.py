@@ -83,7 +83,9 @@ async def ensure_link(email: str, chat_id: int) -> tuple[str, str]:
         if patient is None:
             raise SystemExit("Ребёнок не найден.")
 
-        existing = await telegram_repo.get_active_link_by_chat(session, chat_id)
+        existing = await telegram_repo.get_active_link_for_child(
+            session, chat_id=chat_id, patient_id=patient.id
+        )
         if existing is None:
             # Через код доступа и ту же функцию сервиса, что вызывает ручка бота
             # (ADR-0040, этап Б). Прямой `create_link` был короче, но отладочная

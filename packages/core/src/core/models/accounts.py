@@ -241,9 +241,15 @@ class Invitation(Base, UUIDPkMixin, CreatedAtMixin):
 class TelegramAccount(Base, UUIDPkMixin):
     """Привязка Telegram-чата к паре «родитель + ребёнок» ([ADR-0009](../../../../../docs/adr/0009-telegram-bot-authentication.md)).
 
-    `chat_id` уникален не глобально, а среди живых привязок: частичный индекс
-    `WHERE revoked_at IS NULL`. Глобальная уникальность делала повторную привязку
-    того же чата после отзыва невозможной как новую строку — оставалось затирать
+    Уникальна пара `(chat_id, patient_id)` среди живых привязок: частичный
+    индекс `WHERE revoked_at IS NULL`. До ADR-0048 уникальным был один
+    `chat_id`, и семья с двумя детьми на диете (или бабушка двоих внуков) вела
+    второго ребёнка только в кабинете. Теперь у чата по привязке на ребёнка, и
+    у каждой — свой секрет: отзыв одной не задевает другую, а токен бота и
+    Mini App по-прежнему сужен до одного ребёнка.
+
+    Почему частичный, а не глобальный: глобальная уникальность делала повторную
+    привязку после отзыва невозможной как новую строку — оставалось затирать
     существующую, теряя, кому и к какому ребёнку чат принадлежал раньше. Для
     клинической системы это потеря журнала (правило 4 в духе), а заодно и способ
     угнать чужую привязку: `UPDATE ... WHERE chat_id = ...` не спрашивает, чья
@@ -253,8 +259,9 @@ class TelegramAccount(Base, UUIDPkMixin):
     __tablename__ = "telegram_accounts"
     __table_args__ = (
         Index(
-            "uq_telegram_accounts_active_chat",
+            "uq_telegram_accounts_active_chat_patient",
             "chat_id",
+            "patient_id",
             unique=True,
             postgresql_where=text("revoked_at IS NULL"),
         ),
