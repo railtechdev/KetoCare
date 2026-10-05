@@ -25,6 +25,7 @@ from core.config import Settings
 from core.db import get_sessionmaker
 from core.repositories import telegram as telegram_repo
 
+from .children import child_names, named
 from .telegram import TelegramSendError, send_message
 
 logger = structlog.get_logger(__name__)
@@ -44,12 +45,18 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
         links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
+        names = await child_names(
+            session, patient_id=uuid.UUID(patient_id), chat_ids=live_chats(links)
+        )
         for link in links:
             if link.revoked_at is not None:
                 continue
             try:
                 await send_message(
-                    client, token=settings.bot_token, chat_id=link.chat_id, text=NOTICE
+                    client,
+                    token=settings.bot_token,
+                    chat_id=link.chat_id,
+                    text=named(NOTICE, names.get(link.chat_id)),
                 )
             except TelegramSendError as exc:
                 # Один заблокированный чат не отменяет уведомление остальным:
@@ -67,8 +74,9 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
 
 #: Текст уведомления (раздел 5.4 ТЗ — формулировка оттуда).
 #:
-#: Ни цифр, ни ФИО: параметры назначения бот не показывает (раздел 7.5), а имя
-#: ребёнка в чате незачем — чат и так привязан к нему одному.
+#: Ни цифр, ни ФИО: параметры назначения бот не показывает (раздел 7.5). Имя
+#: ребёнка — только в чате, который ведёт нескольких детей, и только имя
+#: (`children.named`, ADR-0048).
 #:
 #: Отправляет в приложение, а не в кабинет: у большинства взрослых из Telegram
 #: кабинета нет вовсе, а план дня на сегодня и завтра собирается прямо в
@@ -104,9 +112,16 @@ async def notify_family_joined(
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
         links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
-        for chat_id in joined_recipients(links, newcomer_id=uuid.UUID(newcomer_id)):
+        recipients = joined_recipients(links, newcomer_id=uuid.UUID(newcomer_id))
+        names = await child_names(session, patient_id=uuid.UUID(patient_id), chat_ids=recipients)
+        for chat_id in recipients:
             try:
-                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+                await send_message(
+                    client,
+                    token=settings.bot_token,
+                    chat_id=chat_id,
+                    text=named(text, names.get(chat_id)),
+                )
             except TelegramSendError as exc:
                 logger.warning(
                     "family_joined_notice_not_delivered", patient_id=patient_id, reason=str(exc)
@@ -132,7 +147,8 @@ def joined_recipients(links: list[Any], *, newcomer_id: uuid.UUID) -> list[int]:
 def joined_notice(*, newcomer_name: str, inviter_name: str | None) -> str:
     """Текст уведомления о новом близком.
 
-    Имена взрослых — да, имя ребёнка — нет: чат и так привязан к нему одному.
+    Имена взрослых — да; имя ребёнка — только в чате нескольких детей, его
+    ставит `children.named` над текстом (ADR-0048).
     Последняя фраза — следующий шаг, а не тревога: в подавляющем большинстве
     случаев новичка позвал кто-то из своих, и сообщение это подтверждает.
     """
@@ -168,9 +184,16 @@ async def notify_family_nudge(
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
         links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
-        for chat_id in nudge_recipients(links):
+        recipients = nudge_recipients(links)
+        names = await child_names(session, patient_id=uuid.UUID(patient_id), chat_ids=recipients)
+        for chat_id in recipients:
             try:
-                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+                await send_message(
+                    client,
+                    token=settings.bot_token,
+                    chat_id=chat_id,
+                    text=named(text, names.get(chat_id)),
+                )
             except TelegramSendError as exc:
                 logger.warning("family_nudge_not_delivered", patient_id=patient_id, reason=str(exc))
                 continue
@@ -239,9 +262,16 @@ async def notify_family_menu_composed(
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
         links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
-        for chat_id in live_chats(links):
+        recipients = live_chats(links)
+        names = await child_names(session, patient_id=uuid.UUID(patient_id), chat_ids=recipients)
+        for chat_id in recipients:
             try:
-                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+                await send_message(
+                    client,
+                    token=settings.bot_token,
+                    chat_id=chat_id,
+                    text=named(text, names.get(chat_id)),
+                )
             except TelegramSendError as exc:
                 logger.warning(
                     "menu_composed_notice_not_delivered", patient_id=patient_id, reason=str(exc)
