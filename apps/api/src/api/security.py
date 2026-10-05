@@ -27,6 +27,31 @@ logger = structlog.get_logger(__name__)
 
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
 REFRESH_TOKEN_TTL = timedelta(days=30)
+
+#: Сессии сотрудников — короче (аудит блокеров, E6). Прежде врач, однажды
+#: вошедший, оставался в кабинете бессрочно: каждое обновление выдавало новые
+#: тридцать дней. NIST SP 800-63B для уровня AAL2 (пароль + второй фактор)
+#: требует повторного входа не реже раза в сутки и после простоя. Двенадцать
+#: часов простоя — смена врача; сутки от входа — абсолютный предел.
+#: Родителей это не касается: уровень их учётной записи — AAL1, а повторный
+#: вход каждый день для бабушки был бы стеной.
+STAFF_REFRESH_TOKEN_TTL = timedelta(hours=12)
+STAFF_SESSION_MAX_AGE = timedelta(hours=24)
+STAFF_ROLES = frozenset({UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIETITIAN})
+
+
+def staff_session_expired(role: UserRole, claims: dict[str, Any]) -> bool:
+    """Сессия сотрудника старше суток от входа паролем."""
+
+    if role not in STAFF_ROLES:
+        return False
+    started = claims.get("auth")
+    if not isinstance(started, int):
+        return True
+    age = datetime.now(UTC).timestamp() - started
+    return age > STAFF_SESSION_MAX_AGE.total_seconds()
+
+
 # Токен первичной настройки 2FA: выдаётся после проверки пароля пользователю,
 # которому 2FA обязательна, но ещё не настроена. Даёт доступ ТОЛЬКО к
 # /auth/totp/setup и /auth/totp/verify, поэтому живёт недолго.
@@ -114,6 +139,7 @@ def create_token(
     password_changed_at: datetime | None = None,
     channel: Channel = "web",
     binding_id: uuid.UUID | None = None,
+    auth_time: int | None = None,
 ) -> str:
     """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ).
 
@@ -132,6 +158,8 @@ def create_token(
 
     now = datetime.now(UTC)
     ttl = _TTL_BY_TYPE[token_type]
+    if token_type == "refresh" and role in STAFF_ROLES:
+        ttl = STAFF_REFRESH_TOKEN_TTL
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "role": role.value,
@@ -146,6 +174,9 @@ def create_token(
         payload["pwd"] = int(password_changed_at.timestamp())
     if channel != "web":
         payload["chan"] = channel
+    # Момент входа паролем — переносится через все обновления. По нему
+    # сессия сотрудника кончается через сутки, сколько бы её ни продлевали.
+    payload["auth"] = auth_time if auth_time is not None else int(now.timestamp())
     if binding_id is not None:
         # Привязка, по которой выдан токен. Нужна, чтобы отзыв действовал
         # немедленно: без неё отозванная привязка ещё пятнадцать минут

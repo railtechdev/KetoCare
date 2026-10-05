@@ -68,10 +68,12 @@ from ..schemas_access import AccessCodeActivate
 from ..schemas_telegram import MiniAppInitRequest, MiniAppSession
 from ..security import (
     Channel,
+    auth_challenge,
     create_token,
     decode_token,
     generate_totp_secret,
     hash_password_async,
+    staff_session_expired,
     token_predates_password_change,
     totp_provisioning_uri,
     totp_secret_usable,
@@ -91,8 +93,12 @@ ROLES_REQUIRING_TOTP = frozenset({UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIET
 _INVALID_CREDENTIALS = "Неверный email или пароль."
 
 
-def _issue_tokens(user: User) -> TokenPair:
-    """Оба токена несут отметку смены пароля: по ней отзываются старые сессии."""
+def _issue_tokens(user: User, *, auth_time: int | None = None) -> TokenPair:
+    """Оба токена несут отметку смены пароля: по ней отзываются старые сессии.
+
+    `auth_time` — момент входа паролем; при обновлении переносится из прежнего
+    токена, чтобы сессия сотрудника не продлевалась бесконечно (E6).
+    """
 
     return TokenPair(
         access_token=create_token(
@@ -100,12 +106,14 @@ def _issue_tokens(user: User) -> TokenPair:
             role=user.role,
             token_type="access",
             password_changed_at=user.password_changed_at,
+            auth_time=auth_time,
         ),
         refresh_token=create_token(
             user_id=user.id,
             role=user.role,
             token_type="refresh",
             password_changed_at=user.password_changed_at,
+            auth_time=auth_time,
         ),
     )
 
@@ -308,7 +316,11 @@ async def refresh(
         # (`get_current_user`), поэтому отзыв гасит и обновлённую пару.
         return await _reissue_scoped(session, user, claims, channel)
 
-    tokens = _issue_tokens(user)
+    if staff_session_expired(user.role, claims):
+        raise auth_challenge("Сессия длится не дольше суток — войдите заново.")
+
+    started = claims.get("auth")
+    tokens = _issue_tokens(user, auth_time=started if isinstance(started, int) else None)
     tokens = set_auth_cookies(response, tokens)
     return tokens
 

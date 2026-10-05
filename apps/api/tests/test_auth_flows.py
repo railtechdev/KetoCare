@@ -956,3 +956,73 @@ class TestRefreshRateLimit:
             await client.post("/api/v1/auth/login", json=wrong)
 
         assert (await client.post("/api/v1/auth/login", json=right)).status_code == 200
+
+
+class TestStaffSessionLimits:
+    """Сессия сотрудника не продлевается бесконечно (аудит блокеров, E6; NIST AAL2).
+
+    Простой — двенадцать часов, абсолютный предел — сутки от входа паролем.
+    Родителей это не касается.
+    """
+
+    async def test_staff_refresh_token_lives_twelve_hours(self, session, make_user):
+        from datetime import UTC, datetime, timedelta
+
+        from api.security import create_token, decode_token
+
+        doctor = await make_user(UserRole.DOCTOR)
+        parent = await make_user(UserRole.PARENT)
+        now = datetime.now(UTC).timestamp()
+
+        staff = decode_token(
+            create_token(user_id=doctor.id, role=doctor.role, token_type="refresh"),
+            expected_type="refresh",
+        )
+        family = decode_token(
+            create_token(user_id=parent.id, role=parent.role, token_type="refresh"),
+            expected_type="refresh",
+        )
+
+        assert staff["exp"] - now <= timedelta(hours=12).total_seconds() + 5
+        assert family["exp"] - now >= timedelta(days=29).total_seconds()
+
+    async def test_refresh_keeps_the_login_moment_and_ends_after_a_day(
+        self, client, session, make_user
+    ):
+        from datetime import UTC, datetime, timedelta
+
+        from api.security import create_token
+
+        doctor = await make_user(UserRole.DOCTOR)
+        fresh = create_token(user_id=doctor.id, role=doctor.role, token_type="refresh")
+        stale = create_token(
+            user_id=doctor.id,
+            role=doctor.role,
+            token_type="refresh",
+            auth_time=int((datetime.now(UTC) - timedelta(hours=25)).timestamp()),
+        )
+
+        ok = await client.post("/api/v1/auth/refresh", json={"refresh_token": fresh})
+        expired = await client.post("/api/v1/auth/refresh", json={"refresh_token": stale})
+
+        assert ok.status_code == 200, ok.text
+        assert expired.status_code == 401
+        # Это вызов входа, а не отказ по существу: кабинет уходит на форму входа.
+        assert expired.headers.get("www-authenticate") == "Bearer"
+
+    async def test_parent_session_is_not_cut_after_a_day(self, client, session, make_user):
+        from datetime import UTC, datetime, timedelta
+
+        from api.security import create_token
+
+        parent = await make_user(UserRole.PARENT)
+        old = create_token(
+            user_id=parent.id,
+            role=parent.role,
+            token_type="refresh",
+            auth_time=int((datetime.now(UTC) - timedelta(days=10)).timestamp()),
+        )
+
+        response = await client.post("/api/v1/auth/refresh", json={"refresh_token": old})
+
+        assert response.status_code == 200, response.text

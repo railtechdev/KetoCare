@@ -85,12 +85,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Вся история: шаг про ENGINE_VERSION сравнивает ядро с базой PR.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
       - run: uv sync --all-packages
       - name: Эталоны + property-тесты + покрытие 100%
         run: uv run pytest packages/keto_engine --cov=keto_engine --cov-report=term-missing --cov-fail-under=100
+      - name: ENGINE_VERSION поднята, если изменилась математика ядра
+        # Правило 2 CLAUDE.md. Прежде его проверял только хук агента
+        # (engine-guard.sh): правка ядра человеком или из командной строки
+        # проходила без bump'а (аудит блокеров, E9). Те же скрипты, что у хука,
+        # но база — коммит, от которого ответвлён PR.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          base=$(git merge-base "origin/$BASE_REF" HEAD)
+          touched=$(git diff --name-only "$base" HEAD -- packages/keto_engine/src)
+          [ -n "$touched" ] || { echo "ядро не менялось"; exit 0; }
+          changed=$(ENGINE_BASE_REF="$base" python3 .claude/hooks/engine_code_changed.py $touched)
+          [ -n "$changed" ] || { echo "изменились только пояснения"; exit 0; }
+          verdict=$(ENGINE_BASE_REF="$base" python3 .claude/hooks/engine_version_bumped.py \
+            packages/keto_engine/src/keto_engine/constants.py)
+          if [ "$verdict" != "bumped" ]; then
+            echo "::error::Изменена математика ядра ($changed), а ENGINE_VERSION не поднята: $verdict"
+            exit 1
+          fi
+          echo "ENGINE_VERSION поднята"
       - name: Эталоны не помечены skip/xfail
         run: |
           if grep -rnE "pytest\.mark\.(skip|skipif|xfail)|pytest\.(skip|xfail)\(" \

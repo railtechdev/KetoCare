@@ -14,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from core.models.enums import AccessCodePurpose
 
+from .schemas import NewPassword
+
 #: Статус считается на чтении, как у приглашений: хранить его отдельной колонкой
 #: значит однажды разойтись с `used_at`/`revoked_at`/`expires_at`.
 AccessCodeStatus = Literal["pending", "used", "expired", "revoked"]
@@ -83,7 +85,7 @@ class AccessCodeActivate(BaseModel):
     code: str = Field(min_length=1, max_length=16)
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=12, max_length=128)
+    password: NewPassword
     phone: str | None = Field(default=None, max_length=32)
 
 

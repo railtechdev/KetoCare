@@ -92,7 +92,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
         return error_response(
             ErrorCode.VALIDATION_ERROR,
-            "Проверьте правильность заполнения полей.",
+            _explained(exc) or "Проверьте правильность заполнения полей.",
             details={"fields": _format_validation_errors(exc)},
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
@@ -176,3 +176,18 @@ def _map_status(status_code: int) -> tuple[ErrorCode, str]:
             return ErrorCode.RATE_LIMITED, "Слишком много запросов, попробуйте позже."
         case _:
             return ErrorCode.INTERNAL, "Внутренняя ошибка сервера."
+
+
+def _explained(exc: RequestValidationError) -> str | None:
+    """Своё объяснение валидатора — вместо общего «проверьте поля».
+
+    Когда отказ один и его причина написана нами (например, «пароль слишком
+    простой»), человек должен прочитать её, а не гадать, какое из полей не так.
+    Клиенты показывают верхнее сообщение ответа.
+    """
+
+    errors = exc.errors()
+    if len(errors) != 1 or errors[0].get("type") != "value_error":
+        return None
+    error = errors[0].get("ctx", {}).get("error")
+    return str(error) if error else None
