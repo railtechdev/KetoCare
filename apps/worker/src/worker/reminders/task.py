@@ -30,7 +30,8 @@ from core.repositories import control_visits as control_visits_repo
 from core.repositories import diary as diary_repo
 from core.repositories import reminders as reminders_repo
 
-from .children import child_names, named
+from . import texts
+from .children import chat_languages, child_names, named
 from .telegram import TelegramSendError, send_message
 
 logger = structlog.get_logger(__name__)
@@ -44,19 +45,16 @@ WINDOW = timedelta(minutes=6)
 
 #: Тексты. Мягкие и без обвинения: семья и так знает, что пропустила, а
 #: напоминание, которое читается как упрёк, выключают в первый же день.
-TEXTS = {
-    "ketones": "Напоминание: пора измерить кетоны 🩸",
-    "weight": "Напоминание: пора взвесить ребёнка ⚖️",
-    "medications": "Напоминание: приём препаратов по схеме 💊",
-    # «Так и отметьте» обещало кнопку «спокойный день», которой нет: семья
-    # искала её и не находила. Отметить спокойный день можно тем, что есть, —
-    # самочувствием (аудит блокеров, 05.10.2026).
-    "no_records": (
-        "За сегодня в дневнике нет записей. Если день прошёл спокойно — "
-        "отметьте самочувствие кнопкой «🙂 Самочувствие»: врачу важно видеть "
-        "и спокойные дни."
-    ),
+#: Сами тексты — в `texts.py`, на двух языках (ADR-0052); здесь — какой
+#: ключ каталога у какого вида напоминания. `TEXTS` — русские, для тех, кто
+#: читает текст напрямую.
+TEXT_KEYS = {
+    "ketones": "reminder_ketones",
+    "weight": "reminder_weight",
+    "medications": "reminder_medications",
+    "no_records": "reminder_no_records",
 }
+TEXTS = {kind: texts.RU[key] for kind, key in TEXT_KEYS.items()}
 
 #: Какой моделью дневника проверяется, что напоминать уже не о чем.
 _LOG_MODELS: dict[str, Any] = {
@@ -116,12 +114,14 @@ async def reminders_cron(ctx: dict[str, Any]) -> dict[str, int]:
                 names = await child_names(
                     session, patient_id=reminder.patient_id, chat_ids=[link.chat_id]
                 )
+                # На языке взрослого, чей это чат (ADR-0052).
+                language = (await chat_languages(session, [link])).get(link.chat_id)
                 try:
                     await send_message(
                         client,
                         token=settings.bot_token,
                         chat_id=link.chat_id,
-                        text=named(TEXTS[kind], names.get(link.chat_id)),
+                        text=named(texts.text(language, TEXT_KEYS[kind]), names.get(link.chat_id)),
                     )
                 except TelegramSendError as exc:
                     # Чат мог быть заблокирован или удалён. Это не повод ронять
@@ -155,23 +155,10 @@ async def reminders_cron(ctx: dict[str, Any]) -> dict[str, int]:
 VISIT_NOTICE_DAYS_BEFORE = 3
 VISIT_NOTICE_AT = time(10, 0)
 
-_MONTHS_GENITIVE = (
-    "января",
-    "февраля",
-    "марта",
-    "апреля",
-    "мая",
-    "июня",
-    "июля",
-    "августа",
-    "сентября",
-    "октября",
-    "ноября",
-    "декабря",
-)
 
-
-def visit_notice_text(planned_on: date, labs: tuple[str, ...]) -> str:
+def visit_notice_text(
+    planned_on: date, labs: tuple[str, ...], *, language: str | None = None
+) -> str:
     """Напоминание о визите — без медицинских советов (раздел 7.4 ТЗ).
 
     Перечень анализов — ровно тот, что назвала клиника (вопрос 34): «можно
@@ -180,11 +167,18 @@ def visit_notice_text(planned_on: date, labs: tuple[str, ...]) -> str:
     об этом врач.
     """
 
-    when = f"{planned_on.day} {_MONTHS_GENITIVE[planned_on.month - 1]}"
-    text = f"Напоминание: {when} — контрольный визит к врачу 🗓"
+    # Перечень анализов — клинический текст клиники и приходит по-русски на
+    # любом языке: переводить его без клиники нельзя (ADR-0052).
+    when = texts.text(
+        language,
+        "visit_date",
+        day=planned_on.day,
+        month=texts.month(language, planned_on.month),
+    )
+    text = texts.text(language, "visit", when=when)
     if labs:
-        text += "\n\nАнализы и обследования к визиту: " + ", ".join(labs) + "."
-    text += "\n\nЕсли дату нужно перенести, свяжитесь с клиникой."
+        text += texts.text(language, "visit_labs", labs=", ".join(labs))
+    text += texts.text(language, "visit_reschedule")
     return text
 
 
@@ -217,13 +211,16 @@ async def _control_visit_notices(
         # Чат двоих детей получает имя над текстом — как у остальных
         # напоминаний (ADR-0048): иначе непонятно, чей визит.
         names = await child_names(session, patient_id=visit.patient_id, chat_ids=[link.chat_id])
+        language = (await chat_languages(session, [link])).get(link.chat_id)
         try:
             await send_message(
                 client,
                 token=token,
                 chat_id=link.chat_id,
                 text=named(
-                    visit_notice_text(visit.planned_on, labs_for(visit.month_offset)),
+                    visit_notice_text(
+                        visit.planned_on, labs_for(visit.month_offset), language=language
+                    ),
                     names.get(link.chat_id),
                 ),
             )

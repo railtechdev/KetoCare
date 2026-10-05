@@ -17,6 +17,7 @@ from pydantic import (
     model_validator,
 )
 
+from core.languages import Language
 from core.models.enums import Sex, UserRole
 from keto_engine import Ingredient, verify
 
@@ -577,6 +578,29 @@ class UserRead(BaseModel):
     #: Признак отвечает на вопрос кнопки, а не на вопрос входа: испорченным
     #: секретом войти нельзя, а сбросить его — нужно.
     totp_resettable: bool
+    #: Язык семейных каналов (ADR-0052). Пусто — человек не выбирал.
+    language: Language | None = None
+
+
+class LanguageRead(BaseModel):
+    """Язык человека в боте, Mini App и сообщениях Telegram (ADR-0052).
+
+    Отдельная ручка, а не поле `GET /users/me`: её читает бот, а профиль с
+    почтой и телефоном боту не нужен (раздел 7.5 ТЗ, закрытый список ботовых
+    маршрутов).
+    """
+
+    #: Пусто — человек ещё не выбирал; бот и Mini App тогда берут язык из
+    #: Telegram и сохраняют его сюда же.
+    language: Language | None
+
+
+class LanguageUpdate(BaseModel):
+    """Выбор языка: только известные языки, неизвестный — 422."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: Language
 
 
 class MeUpdate(BaseModel):

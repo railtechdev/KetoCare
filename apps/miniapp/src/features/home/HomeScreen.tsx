@@ -8,6 +8,7 @@ import {
   formatOccurredAt,
   formatMeasured,
   formatWeight,
+  formatLocale,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
@@ -15,6 +16,7 @@ import { errorMessageOf } from "../../lib/api";
 import { FamilyBlock } from "../family/FamilyBlock";
 import { DayVerdictNote } from "../menu/DayVerdictNote";
 import { RemindersBlock } from "../reminders/RemindersBlock";
+import { LanguageSwitch } from "../session/LanguageSwitch";
 import { WebAccessPanel } from "../session/WebAccessPanel";
 import type { Session } from "../session/useSession";
 import { type Overview, usePatientOverview } from "./useOverview";
@@ -39,9 +41,14 @@ export function HomeScreen({ session }: { session: Session }) {
 
   return (
     <main className="flex flex-col gap-block p-block">
-      <header>
+      <header className="flex flex-wrap items-center justify-between gap-field">
         {/* Имя ребёнка без пробелов не должно распирать экран телефона. */}
-        <h1 className="break-words text-page-title">{session.patientName}</h1>
+        <h1 className="min-w-0 break-words text-page-title">
+          {session.patientName}
+        </h1>
+        {/* Язык — на первом экране, а не в настройках: его ищет тот, кто не
+            читает языка, на котором приложение открылось (ADR-0052). */}
+        <LanguageSwitch persist />
       </header>
 
       <AsyncSection
@@ -210,7 +217,7 @@ function Reading({
 function formatIsoDay(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (match === null) return value;
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(formatLocale(), {
     day: "numeric",
     month: "long",
     year: "numeric",

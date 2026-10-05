@@ -10,7 +10,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from .. import texts
+from .. import keyboards, texts
 from ..api import BotApi
 from ..config import BotSettings
 from ..deps import menu
@@ -50,7 +50,9 @@ async def unknown(
     # шаг — код из кабинета, и совет «выберите кнопку» привёл бы его к
     # «чат не привязан» уже после нажатия.
     if binding is None:
-        await message.answer(texts.NOT_LINKED)
+        # Языки — под объяснением: человек, написавший боту по-узбекски, мог
+        # получить его по-русски и должен видеть, где это поменять (ADR-0052).
+        await message.answer(texts.NOT_LINKED, reply_markup=keyboards.languages())
         return
 
     # Раздел 7.5: бот не отвечает на медицинские вопросы и не поддерживает

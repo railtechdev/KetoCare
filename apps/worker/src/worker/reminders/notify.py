@@ -25,7 +25,8 @@ from core.config import Settings
 from core.db import get_sessionmaker
 from core.repositories import telegram as telegram_repo
 
-from .children import child_names, named
+from . import texts
+from .children import chat_languages, child_names, named, parent_language
 from .telegram import TelegramSendError, send_message
 
 logger = structlog.get_logger(__name__)
@@ -48,6 +49,7 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
         names = await child_names(
             session, patient_id=uuid.UUID(patient_id), chat_ids=live_chats(links)
         )
+        languages = await chat_languages(session, links)
         for link in links:
             if link.revoked_at is not None:
                 continue
@@ -56,7 +58,10 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
                     client,
                     token=settings.bot_token,
                     chat_id=link.chat_id,
-                    text=named(NOTICE, names.get(link.chat_id)),
+                    text=named(
+                        texts.text(languages.get(link.chat_id), "prescription_changed"),
+                        names.get(link.chat_id),
+                    ),
                 )
             except TelegramSendError as exc:
                 # Один заблокированный чат не отменяет уведомление остальным:
@@ -82,10 +87,7 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
 #: кабинета нет вовсе, а план дня на сегодня и завтра собирается прямо в
 #: приложении (ADR-0041). Цели нового назначения приложение показывает рядом с
 #: итогами дня — там их и можно увидеть, не в чате.
-NOTICE = (
-    "Врач обновил назначение. Откройте приложение — кнопка «Приложение» слева "
-    "от поля ввода — и заново соберите план питания на сегодня и завтра под новые цели."
-)
+NOTICE = texts.RU["prescription_changed"]
 
 
 async def notify_family_joined(
@@ -106,7 +108,6 @@ async def notify_family_joined(
     if not settings.bot_token:
         return 0
 
-    text = joined_notice(newcomer_name=newcomer_name, inviter_name=inviter_name)
     sessionmaker = get_sessionmaker()
     delivered = 0
 
@@ -114,7 +115,13 @@ async def notify_family_joined(
         links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
         recipients = joined_recipients(links, newcomer_id=uuid.UUID(newcomer_id))
         names = await child_names(session, patient_id=uuid.UUID(patient_id), chat_ids=recipients)
+        languages = await chat_languages(session, links)
         for chat_id in recipients:
+            text = joined_notice(
+                newcomer_name=newcomer_name,
+                inviter_name=inviter_name,
+                language=languages.get(chat_id),
+            )
             try:
                 await send_message(
                     client,
@@ -144,7 +151,9 @@ def joined_recipients(links: list[Any], *, newcomer_id: uuid.UUID) -> list[int]:
     return seen
 
 
-def joined_notice(*, newcomer_name: str, inviter_name: str | None) -> str:
+def joined_notice(
+    *, newcomer_name: str, inviter_name: str | None, language: str | None = None
+) -> str:
     """Текст уведомления о новом близком.
 
     Имена взрослых — да; имя ребёнка — только в чате нескольких детей, его
@@ -153,12 +162,8 @@ def joined_notice(*, newcomer_name: str, inviter_name: str | None) -> str:
     случаев новичка позвал кто-то из своих, и сообщение это подтверждает.
     """
 
-    by = f" по приглашению: {inviter_name}" if inviter_name else ""
-    return (
-        f"К дневнику ребёнка подключился новый близкий: {newcomer_name}{by}.\n\n"
-        "Если вы не знаете этого человека, откройте приложение, раздел «Близкие», "
-        "и закройте ему доступ — или скажите врачу."
-    )
+    by = texts.text(language, "joined_by", inviter=inviter_name) if inviter_name else ""
+    return texts.text(language, "joined", newcomer=newcomer_name, by=by)
 
 
 async def notify_family_nudge(
@@ -178,7 +183,6 @@ async def notify_family_nudge(
     if not settings.bot_token:
         return 0
 
-    text = nudge_notice(specialist_name=specialist_name, specialist_role=specialist_role)
     sessionmaker = get_sessionmaker()
     delivered = 0
 
@@ -186,7 +190,13 @@ async def notify_family_nudge(
         links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
         recipients = nudge_recipients(links)
         names = await child_names(session, patient_id=uuid.UUID(patient_id), chat_ids=recipients)
+        languages = await chat_languages(session, links)
         for chat_id in recipients:
+            text = nudge_notice(
+                specialist_name=specialist_name,
+                specialist_role=specialist_role,
+                language=languages.get(chat_id),
+            )
             try:
                 await send_message(
                     client,
@@ -212,11 +222,11 @@ def nudge_recipients(links: list[Any]) -> list[int]:
     return seen
 
 
-#: Роль специалиста словами — так, как семья его знает.
-_ROLE_WORDS = {"doctor": "Врач", "dietitian": "Диетолог"}
+#: Роль специалиста словами — так, как семья его знает (ключ каталога).
+_ROLE_WORDS = {"doctor": "role_doctor", "dietitian": "role_dietitian"}
 
 
-def nudge_notice(*, specialist_name: str, specialist_role: str) -> str:
+def nudge_notice(*, specialist_name: str, specialist_role: str, language: str | None = None) -> str:
     """Текст просьбы.
 
     Нейтральный намеренно (аудит блокеров, C5): кто просит, о чём и где это
@@ -227,11 +237,8 @@ def nudge_notice(*, specialist_name: str, specialist_role: str) -> str:
     «Специалист», а не пустое место.
     """
 
-    role = _ROLE_WORDS.get(specialist_role, "Специалист")
-    return (
-        f"{role} {specialist_name} просит отметить в дневнике, как прошли последние дни.\n\n"
-        "Записать можно кнопками в этом чате или в приложении."
-    )
+    role = texts.text(language, _ROLE_WORDS.get(specialist_role, "role_other"))
+    return texts.text(language, "nudge", role=role, name=specialist_name)
 
 
 async def notify_family_menu_composed(
@@ -252,11 +259,6 @@ async def notify_family_menu_composed(
     if not settings.bot_token:
         return 0
 
-    text = menu_composed_notice(
-        composer_name=composer_name,
-        composer_role=composer_role,
-        menu_date=date.fromisoformat(menu_date),
-    )
     sessionmaker = get_sessionmaker()
     delivered = 0
 
@@ -264,7 +266,14 @@ async def notify_family_menu_composed(
         links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
         recipients = live_chats(links)
         names = await child_names(session, patient_id=uuid.UUID(patient_id), chat_ids=recipients)
+        languages = await chat_languages(session, links)
         for chat_id in recipients:
+            text = menu_composed_notice(
+                composer_name=composer_name,
+                composer_role=composer_role,
+                menu_date=date.fromisoformat(menu_date),
+                language=languages.get(chat_id),
+            )
             try:
                 await send_message(
                     client,
@@ -294,10 +303,12 @@ def live_chats(links: list[Any]) -> list[int]:
 
 #: Как специалист назван в сообщении. Неизвестная роль — нейтральное слово, а
 #: не догадка: сообщение уходит семье, и «врач» вместо «диетолога» — неправда.
-_ROLE_WORDS_LOWER = {"doctor": "врач", "dietitian": "диетолог"}
+_ROLE_WORDS_LOWER = {"doctor": "role_doctor_lower", "dietitian": "role_dietitian_lower"}
 
 
-def menu_composed_notice(*, composer_name: str, composer_role: str, menu_date: date) -> str:
+def menu_composed_notice(
+    *, composer_name: str, composer_role: str, menu_date: date, language: str | None = None
+) -> str:
     """Текст уведомления о плане от специалиста.
 
     Имя взрослого — да (решение заказчика G6), имя ребёнка — нет, и ни граммов,
@@ -305,20 +316,19 @@ def menu_composed_notice(*, composer_name: str, composer_role: str, menu_date: d
     где смотреть, потому что сам план бот не показывает.
     """
 
-    role = _ROLE_WORDS_LOWER.get(composer_role, "специалист")
-    return (
-        f"{composer_name}, {role}, составил(а) план питания на "
-        f"{menu_date.strftime('%d.%m')}. Откройте приложение, вкладка «Меню»."
+    role = texts.text(language, _ROLE_WORDS_LOWER.get(composer_role, "role_other_lower"))
+    return texts.text(
+        language,
+        "menu_composed",
+        name=composer_name,
+        role=role,
+        date=menu_date.strftime("%d.%m"),
     )
 
 
 #: Сообщение владельцу о смене пароля кабинета из Telegram (аудит, E3).
 #: Следующий шаг назван: если это был не он — новый код и врач.
-PASSWORD_CHANGED_NOTICE = (
-    "Пароль от кабинета KetoCare изменён из приложения в Telegram.\n\n"
-    "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство, "
-    "а администратор клиники выдаст вам временный пароль."
-)
+PASSWORD_CHANGED_NOTICE = texts.RU["password_changed"]
 
 
 async def notify_password_changed(ctx: dict[str, Any], parent_id: str) -> int:
@@ -332,11 +342,11 @@ async def notify_password_changed(ctx: dict[str, Any], parent_id: str) -> int:
     delivered = 0
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
         links = await telegram_repo.list_live_links_for_parent(session, uuid.UUID(parent_id))
+        # Сообщение адресовано самому взрослому — и на его языке (ADR-0052).
+        text = texts.text(await parent_language(session, uuid.UUID(parent_id)), "password_changed")
         for chat_id in sorted({link.chat_id for link in links}):
             try:
-                await send_message(
-                    client, token=settings.bot_token, chat_id=chat_id, text=PASSWORD_CHANGED_NOTICE
-                )
+                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
             except TelegramSendError as exc:
                 logger.warning("password_changed_notice_not_delivered", reason=str(exc))
                 continue

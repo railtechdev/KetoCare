@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 
 import { api, errorDetailsOf, setTokens } from "../../lib/api";
+import { applyLanguage, currentLanguage, knownLanguage } from "../../lib/i18n";
 import { launchData } from "../../lib/telegram";
 
 /** Ребёнок, которого ведёт этот Telegram (ADR-0048). */
@@ -72,11 +73,16 @@ interface SessionBody {
   children?: { patient_id: string; name: string }[];
   web_url: string;
   has_web_credentials: boolean;
+  /** Язык человека (ADR-0052). Нет у сервера до ADR-0052 — тогда прежний. */
+  language?: string | null;
 }
 
 function toSession(data: SessionBody): Session {
   setTokens({ access: data.access_token, refresh: data.refresh_token });
   rememberChild(data.patient_id);
+  // Язык — свойство человека и приходит с сервера: выбор, сделанный в боте,
+  // сильнее языка клиента Telegram, по которому экран открылся (ADR-0052).
+  applyLanguage(knownLanguage(data.language) ?? currentLanguage());
   return {
     patientId: data.patient_id,
     patientName: data.patient_name,

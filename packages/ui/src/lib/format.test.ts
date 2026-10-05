@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   formatDose,
@@ -11,6 +11,8 @@ import {
   formatDayTime,
   formatRatio,
   formatWeight,
+  formatLocale,
+  setFormatLanguage,
 } from "./format";
 
 describe("formatRatio", () => {
@@ -99,3 +101,36 @@ describe("formatDose", () => {
     expect(formatDose(300)).toBe("300");
   });
 });
+
+describe("язык записи (ADR-0052)", () => {
+  afterEach(() => {
+    setFormatLanguage("ru");
+  });
+
+  it("по-узбекски числа пишутся так же, как по-русски", () => {
+    // Иначе одно и то же число на узбекском экране и в боте читалось бы по-разному.
+    setFormatLanguage("uz");
+    expect(formatKcal(12345)).toBe(formatKcalRu(12345));
+    expect(formatGrams(4)).toBe("4,0");
+    expect(formatWeight(8.25)).toBe("8,25");
+  });
+
+  it("цифровые даты — через точку на обоих языках", () => {
+    setFormatLanguage("uz");
+    expect(formatDayTime(new Date(2026, 9, 5, 14, 30))).toBe("05.10, 14:30");
+  });
+
+  it("локаль для дат с месяцем — узбекская латиница", () => {
+    setFormatLanguage("uz");
+    expect(formatLocale()).toBe("uz-Latn-UZ");
+    setFormatLanguage("ru");
+    expect(formatLocale()).toBe("ru-RU");
+  });
+});
+
+function formatKcalRu(value: number): string {
+  setFormatLanguage("ru");
+  const result = formatKcal(value);
+  setFormatLanguage("uz");
+  return result;
+}

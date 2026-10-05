@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message, ReplyKeyboardMarkup
 
-from .. import keyboards, texts
+from .. import i18n, keyboards, language, texts
 from ..api import BotApi, BotApiError, LinkVerified
 from ..config import BotSettings
 from ..deps import menu
@@ -59,7 +59,10 @@ async def start_without_code(
     bindings = await store.all(message.chat.id)
     binding = await store.get(message.chat.id)
     if binding is None:
-        await message.answer(texts.START_NEED_CODE)
+        # Языки — прямо под первым сообщением: умолчание из Telegram угадывает
+        # не всегда (у узбекской семьи интерфейс бывает русским или английским),
+        # и выбор обязан быть виден до того, как понадобится (ADR-0052).
+        await message.answer(texts.START_NEED_CODE, reply_markup=keyboards.languages())
         return
     text = (
         texts.START_ALREADY_LINKED_SEVERAL.format(
@@ -139,6 +142,8 @@ async def _link(
             telegram_user_id=message.from_user.id,
             first_name=message.from_user.first_name,
             last_name=message.from_user.last_name,
+            # Язык, на котором бот уже говорит с человеком (ADR-0052).
+            language=i18n.current(),
         )
     except BotApiError as exc:
         if exc.status == 409:
@@ -155,16 +160,23 @@ async def _link(
 
     # Привязка ребёнка добавляется к уже имеющимся и становится выбранной: код
     # только что прислан ради него (ADR-0048).
-    await store.put(
-        message.chat.id,
-        Binding(
-            link_id=verified.link_id,
-            secret=verified.secret,
-            patient_id=verified.patient_id,
-            patient_name=verified.patient_name,
-            patient_first_name=verified.patient_first_name,
-        ),
+    binding = Binding(
+        link_id=verified.link_id,
+        secret=verified.secret,
+        patient_id=verified.patient_id,
+        patient_name=verified.patient_name,
+        patient_first_name=verified.patient_first_name,
     )
+    await store.put(message.chat.id, binding)
+    # Теперь сервер знает человека: приветствие — на его языке (ADR-0052).
+    await language.after_link(
+        api=api,
+        store=store,
+        chat_id=message.chat.id,
+        binding=binding,
+        server_language=verified.language,
+    )
+    await language.apply_chat_ui(_bot_of(message), message.chat.id, settings)
     await message.answer(
         welcome(verified, settings, children=await store.all(message.chat.id)),
         reply_markup=await menu(store, message.chat.id, settings),
@@ -232,6 +244,61 @@ def _names(bindings: list[Binding]) -> str:
     return ", ".join(binding.first_name for binding in bindings)
 
 
+def _bot_of(message: Message) -> Bot | None:
+    """Бот, от имени которого пришло сообщение; в тестах его нет."""
+
+    bot = getattr(message, "bot", None)
+    return bot if isinstance(bot, Bot) else None
+
+
+# --- Язык (ADR-0052) ----------------------------------------------------
+#
+# Кнопка «🌐 Til / Язык» есть в каждом меню, команда /language — в синем
+# меню, языки — под первым сообщением непривязанного чата. Выбор закрывает
+# начатый сценарий так же, как любая кнопка меню: клавиатуры сценария были на
+# прежнем языке.
+
+
+@router.message(Command("language"))
+@router.message(F.text.in_(i18n.variants("BTN_LANGUAGE")))
+async def language_menu(message: Message, state: FSMContext) -> None:
+    if message.chat.type != "private":
+        return
+    await state.clear()
+    await message.answer(texts.LANGUAGE_ASK, reply_markup=keyboards.languages())
+
+
+@router.callback_query(F.data.startswith(keyboards.LANGUAGE_PREFIX))
+async def language_chosen(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    await callback.answer()
+    message = callback.message
+    if message is None or isinstance(message, InaccessibleMessage):
+        return
+    chosen = i18n.known((callback.data or "").removeprefix(keyboards.LANGUAGE_PREFIX))
+    if chosen is None:
+        return
+    await state.clear()
+    await language.choose(api=api, store=store, chat_id=message.chat.id, language=chosen)
+    # Подтверждение — уже на выбранном языке: так человек и видит, что выбор
+    # сработал, даже не прочитав, что там написано.
+    i18n.switch(chosen)
+    await language.apply_chat_ui(_bot_of(message), message.chat.id, settings)
+    if await store.get(message.chat.id) is None:
+        # Непривязанному — следующий шаг на новом языке: прислать код.
+        await message.answer(texts.LANGUAGE_CHOSEN)
+        await message.answer(texts.START_NEED_CODE)
+        return
+    await message.answer(
+        texts.LANGUAGE_CHOSEN, reply_markup=await menu(store, message.chat.id, settings)
+    )
+
+
 # --- Выбор ребёнка (ADR-0048) -------------------------------------------
 #
 # Обработчики живут в этом роутере, а не в сценариях: он подключён первым, и
@@ -241,7 +308,7 @@ def _names(bindings: list[Binding]) -> str:
 # `state.clear()` ни один из них не сработает.
 
 
-@router.message(F.text.startswith(texts.BTN_CHILD_PREFIX))
+@router.message(F.text.startswith(i18n.variants("BTN_CHILD_PREFIX")))
 async def child_menu(
     message: Message, state: FSMContext, store: BindingStore, settings: BotSettings
 ) -> None:

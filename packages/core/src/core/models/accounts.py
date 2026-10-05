@@ -65,6 +65,12 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     # отобрать второй фактор у владельца учётной записи.
     totp_pending_secret: Mapped[str | None] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Язык семейных каналов — бота, Mini App и сообщений воркера в Telegram
+    # (ADR-0052). Свойство человека, а не чата: бот, приложение и рассылки
+    # обязаны говорить с ним одинаково. Пусто — человек ещё не выбирал, и
+    # сообщения идут по-русски (`core.languages.effective`). Кабинет в
+    # браузере язык не читает.
+    language: Mapped[str | None] = mapped_column(String(8))
 
     @property
     def has_web_credentials(self) -> bool:
@@ -124,6 +130,9 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
             "role = 'parent' OR (email IS NOT NULL AND password_hash IS NOT NULL)",
             name="users_staff_have_credentials",
         ),
+        # Закрытый список: неизвестный язык воркер и бот показали бы русским, а
+        # экран — пустыми ключами словаря. Новый язык — это миграция и словари.
+        CheckConstraint("language IN ('ru', 'uz')", name="users_language_known"),
     )
 
 

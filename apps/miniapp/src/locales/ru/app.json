@@ -3,6 +3,12 @@
   "child": {
     "label": "Ребёнок"
   },
+  "language": {
+    "label": "Til / Язык",
+    "ru": "Русский",
+    "uz": "O‘zbekcha",
+    "saveFailed": "Не удалось сохранить язык — бот пока о нём не знает. Выберите ещё раз."
+  },
   "session": {
     "notLinked": {
       "title": "Этот Telegram ещё не привязан",

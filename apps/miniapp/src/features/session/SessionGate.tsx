@@ -5,7 +5,8 @@ import { useTranslation } from "react-i18next";
 
 import { onSessionExpired } from "../../lib/api";
 import { launchDiagnosis } from "../../lib/telegram";
-import type { Session } from "./useSession";
+import { LanguageSwitch } from "./LanguageSwitch";
+import type { Session, SessionProblem } from "./useSession";
 import { useOpenSession } from "./useSession";
 
 /**
@@ -57,63 +58,82 @@ export function SessionGate({
   }
 
   if (open.isError) {
-    if (open.error === "not_linked") {
-      return (
-        <EmptyState
-          title={t("session.notLinked.title")}
-          description={t("session.notLinked.description")}
-        />
-      );
-    }
-
-    if (open.error === "outside_telegram") {
-      // Две причины выглядят снаружи одинаково, а лечатся по-разному: страницу
-      // открыли ссылкой (Telegram есть, подписи нет) или не загрузился скрипт
-      // Telegram (нет и объекта). Поэтому под текстом стоит строка проверки —
-      // без неё разбор превращается в переписку вслепую.
-      const facts = launchDiagnosis();
-      const yes = t("session.outside.yes");
-      const no = t("session.outside.no");
-
-      return (
-        <EmptyState
-          title={t("session.outside.title")}
-          description={
-            <span className="flex flex-col gap-field">
-              <span>{t("session.outside.description")}</span>
-              <span>
-                {!facts.telegram
-                  ? t("session.outside.noScript")
-                  : facts.launchParams
-                    ? // Клиент открыл приложение как Mini App, но подписи среди
-                      // параметров нет: обменивать на сессию нечего.
-                      t("session.outside.noSignature")
-                    : t("session.outside.byLink")}
-              </span>
-              <span className="text-xs">
-                {t("session.outside.diagnosis", {
-                  telegram: facts.telegram ? yes : no,
-                  launchParams: facts.launchParams ? yes : no,
-                  keys: facts.keys || no,
-                })}
-              </span>
-            </span>
-          }
-        />
-      );
-    }
-
+    // Язык — и на экранах, где приложение не открылось: объяснение на
+    // непонятном языке оставляло бы человека без следующего шага (ADR-0052).
+    // Сохранять выбор некуда — входа ещё нет.
     return (
-      <ErrorState
-        title={t("session.failed.title")}
-        description={t("session.failed.description")}
-        retryLabel={t("actions.retry")}
-        onRetry={() => {
-          open.mutate();
-        }}
-      />
+      <div className="flex flex-col gap-block p-block">
+        <LanguageSwitch persist={false} />
+        <Problem problem={open.error} onRetry={() => open.mutate()} />
+      </div>
     );
   }
 
   return <>{children(open.data, { switchChild })}</>;
+}
+
+/** Три исхода неудачного входа — три текста, каждый со своим следующим шагом. */
+function Problem({
+  problem,
+  onRetry,
+}: {
+  problem: SessionProblem;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+
+  if (problem === "not_linked") {
+    return (
+      <EmptyState
+        title={t("session.notLinked.title")}
+        description={t("session.notLinked.description")}
+      />
+    );
+  }
+
+  if (problem === "outside_telegram") {
+    // Две причины выглядят снаружи одинаково, а лечатся по-разному: страницу
+    // открыли ссылкой (Telegram есть, подписи нет) или не загрузился скрипт
+    // Telegram (нет и объекта). Поэтому под текстом стоит строка проверки —
+    // без неё разбор превращается в переписку вслепую.
+    const facts = launchDiagnosis();
+    const yes = t("session.outside.yes");
+    const no = t("session.outside.no");
+
+    return (
+      <EmptyState
+        title={t("session.outside.title")}
+        description={
+          <span className="flex flex-col gap-field">
+            <span>{t("session.outside.description")}</span>
+            <span>
+              {!facts.telegram
+                ? t("session.outside.noScript")
+                : facts.launchParams
+                  ? // Клиент открыл приложение как Mini App, но подписи среди
+                    // параметров нет: обменивать на сессию нечего.
+                    t("session.outside.noSignature")
+                  : t("session.outside.byLink")}
+            </span>
+            <span className="text-xs">
+              {t("session.outside.diagnosis", {
+                telegram: facts.telegram ? yes : no,
+                launchParams: facts.launchParams ? yes : no,
+                keys: facts.keys || no,
+              })}
+            </span>
+          </span>
+        }
+      />
+    );
+  }
+
+  return (
+    <ErrorState
+      title={t("session.failed.title")}
+      description={t("session.failed.description")}
+      retryLabel={t("actions.retry")}
+      onRetry={onRetry}
+    />
+  );
 }

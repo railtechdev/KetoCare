@@ -18,6 +18,7 @@
 
 - `bot:bindings:<chat>` — хеш «patient_id → привязка в JSON»;
 - `bot:active:<chat>` — patient_id выбранного ребёнка;
+- `bot:language:<chat>` — копия языка человека (ADR-0052), с коротким сроком;
 - `bot:binding:<chat>` — прежний хеш одной привязки (до ADR-0048). Читается и
   переносится в новую раскладку при первом обращении, чтобы обновление бота не
   отвязало ни одной семьи.
@@ -45,6 +46,26 @@ from redis.asyncio import Redis
 _LEGACY_PREFIX = "bot:binding:"
 _BINDINGS_PREFIX = "bot:bindings:"
 _ACTIVE_PREFIX = "bot:active:"
+_LANGUAGE_PREFIX = "bot:language:"
+
+#: Сколько бот верит своей копии языка привязанного чата (ADR-0052). Пять
+#: минут: выбор, сделанный в Mini App, доходит до бота к следующему делу, а
+#: сервер получает один запрос на чат за пять минут, а не на каждое сообщение.
+LANGUAGE_TTL_S = 300
+
+
+@dataclass(frozen=True, slots=True)
+class StoredLanguage:
+    """Копия языка чата (ADR-0052)."""
+
+    language: str
+    #: Выбран кнопкой, а не взят из Telegram: при привязке он сильнее умолчания.
+    explicit: bool = False
+    #: Когда копия сверена с сервером (секунды эпохи). None — не сверялась.
+    checked_at: float | None = None
+    #: Выбор ещё не дошёл до сервера (сбой связи): при следующей сверке бот
+    #: отправит его, а не затрёт прежним значением с сервера.
+    pending: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +244,41 @@ class BindingStore:
                     ),
                 )
         return current
+
+    # --- язык чата (ADR-0052) ---
+    #
+    # Источник истины — сервер (`users.language`). Здесь его копия с отметкой,
+    # когда она сверена с сервером: у привязанного чата бот перепроверяет её
+    # раз в `LANGUAGE_TTL_S`, чтобы выбор, сделанный в Mini App, дошёл до бота
+    # за минуты. У непривязанного чата сервера, которому принадлежал бы выбор,
+    # ещё нет, и копия — единственное место, где он живёт.
+
+    async def language(self, chat_id: int) -> StoredLanguage | None:
+        raw = await cast("Awaitable[Any]", self._redis.get(_LANGUAGE_PREFIX + str(chat_id)))
+        if raw is None:
+            return None
+        try:
+            parsed = json.loads(_text(raw))
+            checked = parsed.get("checked_at")
+            return StoredLanguage(
+                language=str(parsed["language"]),
+                explicit=bool(parsed.get("explicit")),
+                checked_at=float(checked) if checked is not None else None,
+                pending=bool(parsed.get("pending")),
+            )
+        except (KeyError, ValueError, TypeError, AttributeError):
+            return None
+
+    async def set_language(self, chat_id: int, stored: StoredLanguage) -> None:
+        value = json.dumps(
+            {
+                "language": stored.language,
+                "explicit": stored.explicit,
+                "checked_at": stored.checked_at,
+                "pending": stored.pending,
+            }
+        )
+        await cast("Awaitable[Any]", self._redis.set(_LANGUAGE_PREFIX + str(chat_id), value))
 
     async def _legacy(self, chat_id: int) -> Binding | None:
         """Привязка из прежней раскладки; битая — снимается и считается отсутствующей."""

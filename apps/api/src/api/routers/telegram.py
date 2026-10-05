@@ -51,6 +51,7 @@ from ..schemas_telegram import (
     TelegramLinkRead,
 )
 from ..services import access_codes as access_codes_service
+from ..services import languages as languages_service
 from ..services import telegram as telegram_service
 
 router = APIRouter(prefix="/patients/{patient_id}", tags=["telegram"])
@@ -209,6 +210,7 @@ async def activate_access_code_from_telegram(
         last_name=payload.last_name,
         ip=client_address(request),
     )
+    language = await languages_service.adopt_default(session, parent, payload.language)
     return LinkVerified(
         link_id=link.id,
         patient_id=link.patient_id,
@@ -217,6 +219,7 @@ async def activate_access_code_from_telegram(
         secret=secret,
         web_url=get_settings().web_origin.rstrip("/"),
         has_web_credentials=parent.has_web_credentials,
+        language=language,
     )
 
 

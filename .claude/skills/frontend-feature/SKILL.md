@@ -51,6 +51,12 @@ description: Разработка UI в apps/web (SPA) и apps/miniapp — эк�
 Все строки — `react-i18next`, файлы `src/locales/ru/*.json`, ключи по разделам
 (`calculator.solve.infeasible`). Строка в JSX-литерале = ошибка.
 
+Mini App — на двух языках (ADR-0052): новый ключ кладётся и в
+`apps/miniapp/src/locales/ru/app.json`, и в `uz/app.json` (латиница), с теми
+же `{{переменными}}`; паритет держит `locales/locales.test.ts`. Даты с
+названием месяца — `Intl.DateTimeFormat(formatLocale(), …)` из кита, не
+`"ru-RU"`. Кабинет (`apps/web`) — только русский.
+
 ## Роли и роутинг
 
 TanStack Router; guard по роли из JWT. Раздел недоступной роли не рендерится

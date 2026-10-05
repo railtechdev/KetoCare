@@ -48,6 +48,9 @@ class InitData:
 
     user_id: int
     auth_date: datetime
+    #: Язык интерфейса Telegram (`user.language_code`) — умолчание языка
+    #: приложения для того, кто его ещё не выбирал (ADR-0052). Бывает пустым.
+    language_code: str | None = None
 
 
 def parse_init_data(raw: str, *, bot_token: str, now: datetime | None = None) -> InitData:
@@ -91,7 +94,10 @@ def parse_init_data(raw: str, *, bot_token: str, now: datetime | None = None) ->
         # вперёд: подписанная строка «из будущего» не должна жить дольше часа.
         raise InitDataError("Подпись initData просрочена")
 
-    return InitData(user_id=_user_id(fields.get("user", "")), auth_date=auth_date)
+    raw_user = fields.get("user", "")
+    return InitData(
+        user_id=_user_id(raw_user), auth_date=auth_date, language_code=_language_code(raw_user)
+    )
 
 
 def _auth_date(raw: str) -> datetime:
@@ -99,6 +105,16 @@ def _auth_date(raw: str) -> datetime:
         return datetime.fromtimestamp(int(raw), tz=UTC)
     except (TypeError, ValueError) as exc:
         raise InitDataError("В initData нет отметки времени") from exc
+
+
+def _language_code(raw: str) -> str | None:
+    """`user.language_code` — или None: поле необязательно, и его отсутствие не отказ."""
+
+    try:
+        value = json.loads(raw).get("language_code")
+    except (ValueError, AttributeError):
+        return None
+    return value if isinstance(value, str) and value else None
 
 
 def _user_id(raw: str) -> int:

@@ -11,6 +11,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core import languages
 from core.config import get_settings
 from core.models import TelegramAccount
 from core.models.enums import UserRole
@@ -23,6 +24,7 @@ from core.repositories import users as users_repo
 from ..errors import ApiError, ErrorCode
 from ..schemas_telegram import BotSession, MiniAppChild, MiniAppSession
 from ..security import ACCESS_TOKEN_TTL, TokenType, create_token
+from . import languages as languages_service
 from .telegram_initdata import InitDataError, parse_init_data
 
 
@@ -88,6 +90,7 @@ async def _miniapp_session_for(
     links: list[TelegramAccount],
     action: str,
     ip: str | None,
+    telegram_language: str | None = None,
 ) -> MiniAppSession:
     """Пара токенов, суженная до ребёнка ОДНОЙ привязки, и список детей чата.
 
@@ -138,6 +141,13 @@ async def _miniapp_session_for(
         children=await _children(session, links),
         web_url=get_settings().web_origin.rstrip("/"),
         has_web_credentials=parent.has_web_credentials,
+        # Язык Telegram — только как умолчание для того, кто ещё не выбирал
+        # (ADR-0052); переключение ребёнка подписи не несёт и берёт сохранённый.
+        language=await languages_service.adopt_default(
+            session,
+            parent,
+            languages.from_telegram(telegram_language) if telegram_language else None,
+        ),
     )
 
 
@@ -185,7 +195,12 @@ async def issue_miniapp_session(
 
     link = links[0] if patient_id is None else _pick(links, patient_id)
     return await _miniapp_session_for(
-        session, link=link, links=links, action="login_miniapp", ip=ip
+        session,
+        link=link,
+        links=links,
+        action="login_miniapp",
+        ip=ip,
+        telegram_language=parsed.language_code,
     )
 
 
