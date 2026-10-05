@@ -283,7 +283,15 @@ function EntryFields({
               label={t("diary.form.seizureType")}
               value={text("seizureTypeId")}
               onChange={set("seizureTypeId")}
-              options={withCurrent(seizureTypes, text("seizureTypeId"), t)}
+              // Выведенный тип остаётся в списке только у записи, которая на
+              // нём стоит: новый приступ — по ILAE 2025 (ADR-0050).
+              options={withCurrent(
+                seizureTypes.filter(
+                  (type) => !type.retired || type.id === text("seizureTypeId"),
+                ),
+                text("seizureTypeId"),
+                t,
+              )}
             />
           )}
           <TextField

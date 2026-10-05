@@ -351,11 +351,19 @@ function SeizureForm({
             {...register("seizureTypeId")}
           >
             <option value="">{t("seizures.typePlaceholder")}</option>
-            {seizureTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
+            {/* Выведенный тип предлагается только записи, которая на нём уже
+                стоит: новый приступ записывается по ILAE 2025 (ADR-0050). */}
+            {seizureTypes
+              .filter(
+                (type) => !type.retired || type.id === editing?.seizure_type_id,
+              )
+              .map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.retired
+                    ? t("seizures.retiredType", { name: type.name })
+                    : type.name}
+                </option>
+              ))}
           </SelectField>
         )}
 

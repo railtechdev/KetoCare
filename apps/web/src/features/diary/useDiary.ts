@@ -27,8 +27,13 @@ export interface MedicationOption {
 export interface DictionaryOption {
   id: string;
   name: string;
-  /** Короткий код типа приступа (A, C, F, FG, M, T, TC, O) для месячной сетки */
+  /** Короткий код типа приступа (ГТКП, ФППБТК…) для месячной сетки */
   code?: string | null;
+  /**
+   * Тип выведен из справочника при переходе на ILAE 2025 (ADR-0050): прежние
+   * записи им подписаны, но новую им не сделать.
+   */
+  retired?: boolean;
 }
 
 /** Ключ запроса дневника: иерархия «пациент → дневники → вид → период» (раздел 8.4 ТЗ). */
@@ -235,7 +240,11 @@ export function useSeizureTypes(enabled: boolean) {
     queryFn: async (): Promise<DictionaryOption[]> => {
       const { data, error } = await api.GET(
         "/api/v1/dictionaries/seizure-types",
-        { params: { query: { limit: 200, offset: 0 } } },
+        // Справочник целиком, вместе с выведенными типами: иначе записи,
+        // сделанные до перехода на ILAE 2025, остались бы без названия.
+        {
+          params: { query: { limit: 200, offset: 0, include_retired: true } },
+        },
       );
       if (error || !data) {
         throw error ?? new Error("Empty seizure types response");
@@ -244,6 +253,7 @@ export function useSeizureTypes(enabled: boolean) {
         id: item.id,
         name: item.name_ru,
         code: item.code,
+        retired: item.retired ?? false,
       }));
     },
   });

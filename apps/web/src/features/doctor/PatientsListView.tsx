@@ -16,16 +16,16 @@ import { SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import { PatientViewLink } from "./PatientViewLink";
 import { useNavigate } from "@tanstack/react-router";
 
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
-import { usePatients } from "../patients/usePatients";
+import { usePatients, type TherapyFilter } from "../patients/usePatients";
 import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
-import { ageInMonths } from "./dates";
+import { ageInMonths, formatIsoDate } from "./dates";
 import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import { TableSkeleton } from "./skeletons";
@@ -42,6 +42,8 @@ interface PatientRow {
   kcalPerDay: number | null;
   flags: PatientFlags | null;
   attention: number;
+  /** Ближайший несостоявшийся контрольный визит (вопрос 17). */
+  nextControl: { plannedOn: string; overdue: boolean } | null;
 }
 
 /** Список пациентов врача с флагами (раздел 8.3 ТЗ, «Врач / Пациенты»). */
@@ -49,13 +51,16 @@ interface PatientRow {
 export function PatientsListView() {
   const { t } = useTranslation("doctor");
   const [query, setQuery] = useState("");
+  // Рабочий список по умолчанию: завершившие терапию уходят из него, но не из
+  // системы — их карты читаются, если выбрать их явно (вопрос 18, ADR-0050).
+  const [therapy, setTherapy] = useState<TherapyFilter>("active");
   const [inviteOpen, setInviteOpen] = useState(false);
   const navigate = useNavigate();
   const createChild = useCreateChildMutation();
 
   // Поиск уходит на сервер (см. `usePatients`), поэтому список уже отобран.
   const debouncedQuery = useDebouncedValue(query, SEARCH_DELAY_MS);
-  const patients = usePatients(debouncedQuery);
+  const patients = usePatients(debouncedQuery, therapy);
   const items = useMemo(() => patients.data?.items ?? [], [patients.data]);
 
   const overviews = usePatientOverviews(
@@ -80,6 +85,12 @@ export function PatientsListView() {
           kcalPerDay: overview?.prescription?.kcal_per_day ?? null,
           flags,
           attention: attentionRank(flags),
+          nextControl: overview?.next_control
+            ? {
+                plannedOn: overview.next_control.planned_on,
+                overdue: overview.next_control.overdue,
+              }
+            : null,
         };
       })
       .sort(
@@ -146,6 +157,24 @@ export function PatientsListView() {
         ),
       },
       {
+        id: "nextControl",
+        header: t("list.columns.nextControl"),
+        enableSorting: false,
+        cell: ({ row }) => {
+          const next = row.original.nextControl;
+          if (next === null) {
+            return <span className="text-sm text-muted-foreground">—</span>;
+          }
+          return (
+            <span
+              className={`tabular-nums ${next.overdue ? "font-semibold text-destructive" : ""}`}
+            >
+              {formatIsoDate(next.plannedOn) ?? next.plannedOn}
+            </span>
+          );
+        },
+      },
+      {
         id: "flags",
         header: t("list.columns.flags"),
         enableSorting: false,
@@ -195,6 +224,16 @@ export function PatientsListView() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        <SelectField
+          id="patient-therapy"
+          width="medium"
+          label={t("list.therapy.label")}
+          value={therapy}
+          onChange={(event) => setTherapy(event.target.value as TherapyFilter)}
+        >
+          <option value="active">{t("list.therapy.active")}</option>
+          <option value="ended">{t("list.therapy.ended")}</option>
+        </SelectField>
       </FilterBar>
 
       {/* Ошибка обновления списка не прячет уже показанных пациентов: врач,
@@ -218,11 +257,19 @@ export function PatientsListView() {
         isEmpty={rows.length === 0}
         empty={
           debouncedQuery.trim() === "" ? (
-            <EmptyState
-              icon={Users}
-              title={t("list.empty")}
-              description={t("list.emptyDescription")}
-            />
+            therapy === "ended" ? (
+              <EmptyState
+                icon={Users}
+                title={t("list.emptyEnded")}
+                description={t("list.emptyEndedDescription")}
+              />
+            ) : (
+              <EmptyState
+                icon={Users}
+                title={t("list.empty")}
+                description={t("list.emptyDescription")}
+              />
+            )
           ) : (
             <EmptyState
               icon={SearchX}

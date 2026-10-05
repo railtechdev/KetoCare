@@ -9,9 +9,11 @@ import {
 } from "@ketocare/ui";
 import {
   Activity,
+  CalendarClock,
   CircleAlert,
   CircleCheck,
   CircleHelp,
+  CircleStop,
   ClipboardList,
   KeyRound,
   Siren,
@@ -57,10 +59,12 @@ export const FLAG_KEYS = [
   "seizures-grew",
   "seizures-appeared",
   "stale",
+  "control-overdue",
   "nutrition",
   // Последним: это состояние, а не сигнал, и порядок в строке обязан совпадать
   // с порядком по вниманию (`attentionRank`).
   "family-not-activated",
+  "therapy-ended",
 ] as const;
 
 export type FlagKey = (typeof FLAG_KEYS)[number];
@@ -93,6 +97,18 @@ const LOOK: Record<
   },
   // Не тревога, а состояние: карта заведена, семья кодом ещё не вошла
   // (ADR-0040). Красным оно быть не должно — врач ничего не пропустил.
+  "control-overdue": {
+    icon: CalendarClock,
+    tone: "warning",
+    label: "flags.controlOverdue",
+    description: "flags.legend.controlOverdue",
+  },
+  "therapy-ended": {
+    icon: CircleStop,
+    tone: "muted",
+    label: "flags.therapyEnded",
+    description: "flags.legend.therapyEnded",
+  },
   "family-not-activated": {
     icon: KeyRound,
     tone: "muted",
@@ -200,6 +216,8 @@ export function PatientFlagsView({
     "seizures-appeared": flags.seizuresAppeared,
     stale: flags.staleData,
     nutrition: flags.nutritionOff,
+    "control-overdue": flags.controlOverdue,
+    "therapy-ended": flags.therapyEnded,
   };
 
   const badges = FLAG_KEYS.filter((key) => shown[key]).map((key) => ({

@@ -6,12 +6,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from worker.reminders.task import TEXTS, WINDOW, _due_kinds, _is_due
+from worker.reminders.task import TEXTS, WINDOW, _due_kinds, _is_due, visit_notice_text
 
 TZ = ZoneInfo("Asia/Tashkent")
 
@@ -83,3 +83,23 @@ class TestTexts:
 
         assert "пропустили" not in TEXTS["no_records"]
         assert "не забыли" not in TEXTS["no_records"]
+
+
+class TestControlVisitNotice:
+    """Напоминание о контрольном визите (вопросы 17 и 34, ADR-0050)."""
+
+    def test_names_the_date_and_the_clinic_lab_list(self) -> None:
+        text = visit_notice_text(date(2026, 10, 8), ("ОАК", "ЭКГ"))
+        assert "8 октября" in text
+        assert "ОАК, ЭКГ" in text
+
+    def test_without_labs_there_is_no_empty_list(self) -> None:
+        text = visit_notice_text(date(2026, 3, 1), ())
+        assert "1 марта" in text
+        assert "Анализы" not in text
+
+    def test_does_not_name_the_purpose(self) -> None:
+        # «Оценка эффективности» в чате звучала бы как приговор: о причине
+        # визита говорит врач, а не бот.
+        text = visit_notice_text(date(2026, 7, 31), ("ОАК",))
+        assert "эффективн" not in text.lower()

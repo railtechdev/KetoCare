@@ -266,6 +266,8 @@ describe("attentionRank", () => {
         seizuresGrew: false,
         seizuresAppeared: false,
         prolongedSeizure: false,
+        therapyEnded: false,
+        controlOverdue: false,
       }),
     ).toBeGreaterThan(
       attentionRank({
@@ -278,6 +280,8 @@ describe("attentionRank", () => {
         seizuresGrew: false,
         seizuresAppeared: false,
         prolongedSeizure: false,
+        therapyEnded: false,
+        controlOverdue: false,
       }),
     );
   });
@@ -443,6 +447,8 @@ describe("доступ семьи не активирован (ADR-0040)", () =>
     seizuresGrew: false,
     seizuresAppeared: false,
     prolongedSeizure: false,
+    therapyEnded: false,
+    controlOverdue: false,
   };
 
   it("молчание не считается, пока семья не вошла", () => {
@@ -498,6 +504,8 @@ describe("затяжной приступ (ADR-0046, аудит C8)", () => {
     seizuresGrew: false,
     seizuresAppeared: false,
     prolongedSeizure: false,
+    therapyEnded: false,
+    controlOverdue: false,
   };
 
   it("горит, когда сервер назвал время затяжного приступа", () => {
@@ -529,5 +537,45 @@ describe("затяжной приступ (ADR-0046, аудит C8)", () => {
     });
 
     expect(prolonged).toBeGreaterThan(everythingElse);
+  });
+});
+
+describe("завершение терапии и контроль (вопросы 17 и 18, ADR-0050)", () => {
+  it("у завершившего терапию пометок наблюдения нет", () => {
+    // Семья после окончания диеты замеров не ведёт — «молчание» здесь норма,
+    // а не сигнал. Рост приступов тоже не пометка списка: ребёнок не на
+    // сопровождении, и решение о нём принимается не по очереди внимания.
+    const flags = computePatientFlags(
+      overview({
+        therapy_ended_on: "2026-08-01",
+        prescription: null,
+        seizure_trend: { recent: 4, previous: 1, grew: true, appeared: false },
+        next_control: { planned_on: "2026-08-01", overdue: true },
+      }),
+    );
+    expect(flags?.therapyEnded).toBe(true);
+    expect(flags?.noPrescription).toBe(false);
+    expect(flags?.staleData).toBe(false);
+    expect(flags?.seizuresGrew).toBe(false);
+    expect(flags?.controlOverdue).toBe(false);
+    expect(attentionRank(flags)).toBe(0);
+  });
+
+  it("просроченный контроль поднимает ребёнка в списке", () => {
+    const due = computePatientFlags(
+      overview({
+        last_reading_on: "2026-08-28",
+        next_control: { planned_on: "2026-08-20", overdue: true },
+      }),
+    );
+    const calm = computePatientFlags(
+      overview({
+        last_reading_on: "2026-08-28",
+        next_control: { planned_on: "2026-09-20", overdue: false },
+      }),
+    );
+    expect(due?.controlOverdue).toBe(true);
+    expect(calm?.controlOverdue).toBe(false);
+    expect(attentionRank(due)).toBeGreaterThan(attentionRank(calm));
   });
 });

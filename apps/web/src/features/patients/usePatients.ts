@@ -15,11 +15,19 @@ import { api } from "../../lib/api";
  * первые 200 строк, и поиск по ним отвечал «не найдено» о пациенте, который
  * есть, — самый вредный из возможных ответов, потому что выглядит достоверным.
  */
-export function usePatients(query = "") {
+/**
+ * `therapy` — рабочий список («active») или завершившие терапию («ended»);
+ * не задан — все, как у семьи и у выбора пациента (вопрос 18, ADR-0050).
+ * Отбор делает сервер: страница отдаёт 200 строк, и отбор на клиенте
+ * показал бы пустой рабочий список при двухстах завершивших.
+ */
+export type TherapyFilter = "active" | "ended";
+
+export function usePatients(query = "", therapy?: TherapyFilter) {
   const needle = query.trim();
 
   return useQuery({
-    queryKey: ["patients", needle],
+    queryKey: ["patients", needle, therapy ?? "all"],
     // Прошлая выдача держится, пока грузится новая: иначе таблица мигает
     // пустотой на каждой набранной букве.
     placeholderData: keepPreviousData,
@@ -30,6 +38,7 @@ export function usePatients(query = "") {
             limit: 200,
             offset: 0,
             ...(needle === "" ? {} : { q: needle }),
+            ...(therapy === undefined ? {} : { therapy }),
           },
         },
       });
