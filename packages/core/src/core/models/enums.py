@@ -41,7 +41,6 @@ class RecipeCategory(enum.StrEnum):
 
 class RecipeStatus(enum.StrEnum):
     DRAFT = "draft"
-    REVIEWED = "reviewed"
     PUBLISHED = "published"
 
 
