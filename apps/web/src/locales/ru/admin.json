@@ -65,6 +65,7 @@
       "unlink_parent": "Закрыт доступ взрослого к ребёнку",
       "family_nudge": "Напоминание семье в Telegram",
       "menu_day_removed": "Убран день плана питания",
+      "menu_composed_by_specialist": "План питания составлен специалистом",
       "login": "Вход",
       "login_failed": "Неудачный вход",
       "login_failed_totp": "Неверный код второго фактора",

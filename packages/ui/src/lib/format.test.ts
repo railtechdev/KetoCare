@@ -7,6 +7,7 @@ import {
   formatMass,
   formatNumber,
   formatOccurredAt,
+  formatDayTime,
   formatRatio,
   formatWeight,
 } from "./format";
@@ -19,6 +20,13 @@ describe("formatRatio", () => {
 
   it("округляет до одного знака, а не отбрасывает", () => {
     expect(formatRatio(3.96)).toBe("4.0 : 1");
+  });
+});
+
+describe("formatDayTime", () => {
+  it("день, месяц и время — без года", () => {
+    const formatted = formatDayTime(new Date(2026, 9, 5, 14, 30));
+    expect(formatted).toBe("05.10, 14:30");
   });
 });
 

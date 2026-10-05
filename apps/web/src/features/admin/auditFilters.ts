@@ -92,6 +92,9 @@ export const AUDIT_ACTIONS = [
   "link_parent",
   "unlink_parent",
   "menu_day_removed",
+  // План дня составил специалист за семью (ADR-0047): семье об этом пишут в
+  // Telegram, а в журнале остаётся, кто и когда.
+  "menu_composed_by_specialist",
   // Учётная запись родителя, родившаяся в боте: почты и пароля у неё нет
   // (ADR-0040, этап Б), и `set_credentials` — момент, когда она их задаёт.
   "create_user",
