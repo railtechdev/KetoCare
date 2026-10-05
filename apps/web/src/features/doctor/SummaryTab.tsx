@@ -1,4 +1,6 @@
 import {
+  dayVerdict,
+  toleranceGapKey,
   formatGrams,
   AsyncSection,
   Button,
@@ -18,7 +20,6 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
-import { dayVerdict, toleranceGapKey } from "../patients/dayVerdict";
 import { usePatientOverview } from "../patients/overview";
 import { PatientViewLink } from "./PatientViewLink";
 import { LinesSkeleton } from "./skeletons";
@@ -85,7 +86,7 @@ function OverviewPanels({
   const day = data.day ?? null;
   const tolerance = day?.tolerance ?? null;
 
-  // Что показывать предупреждением, а что набором, решает patients/dayVerdict —
+  // Что показывать предупреждением, а что набором, решает `dayVerdict` кита —
   // одинаково для главной родителя, меню и этой карты.
   const verdict = dayVerdict(tolerance, day?.tolerance_gap ?? null);
 

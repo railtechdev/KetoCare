@@ -35,6 +35,7 @@ import { useTranslation } from "react-i18next";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import type { Session } from "../session/useSession";
 import { usePatientOverview } from "../home/useOverview";
+import { SaveDish } from "./SaveDish";
 import {
   MIN_QUERY,
   type DishRow,
@@ -260,6 +261,29 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // причины совпадают, и два одинаковых абзаца — второе сообщение об одном и
   // том же (правило П27), озвученное дважды.
   const blockedBy = solveBlockedBy ?? scaleBlockedBy;
+
+  /**
+   * Почему посчитанное нельзя сохранить прямо сейчас (правило П44 канона).
+   *
+   * Сохраняется только состав, показатели которого на экране посчитаны по нему
+   * же: иначе в блюда ребёнка ушли бы граммы, которых никто не проверял, — в
+   * том числе без сверки с исключёнными ему продуктами. Порядок тот же, что у
+   * кабинета (`SaveDishForm`): сначала то, что устраняет человек, ожидание —
+   * последним. Ответ, оставшийся от прежнего состава (`isPlaceholderData`), —
+   * не проверка этого.
+   */
+  //
+  // Состав с пустой или неподъёмной массой формы сохранения не получает вовсе
+  // (см. разметку): о нём уже сказано у поля и у кнопок расчёта, и вторая
+  // строка с тем же текстом — второе сообщение об одном и том же (П27).
+  const saveOffered = dish !== null && filled && tooHeavy === undefined;
+  const saveBlockedBy = busy
+    ? t("calculator.save.blocked.busy")
+    : verify.isError && !stale
+      ? t("calculator.save.blocked.checkFailed")
+      : stale || !verify.isSuccess || verify.isPlaceholderData
+        ? t("calculator.save.blocked.notChecked")
+        : null;
   const reasonId = useId();
   const waitingId = useId();
 
@@ -721,6 +745,16 @@ export function CalculatorScreen({ session }: { session: Session }) {
             {retrying ? t("actions.retrying") : t("actions.retry")}
           </Button>
         )}
+      {/* После расчёта — сохранить блюдо и поставить его в день. Без этого
+          посчитанное было некуда унести: у семьи из Telegram кабинета нет. */}
+      {saveOffered && (
+        <SaveDish
+          patientId={session.patientId}
+          rows={rows}
+          blockedBy={saveBlockedBy}
+        />
+      )}
+
       {/* Постоянная область: повторный отказ с тем же текстом баннер заново
           не объявляет. */}
       <p role="status" className="sr-only">

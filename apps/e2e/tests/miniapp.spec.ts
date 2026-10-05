@@ -31,7 +31,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 // `/auth/telegram-init` ограничен пятью обращениями в минуту, а один прогон
 // тратит их законно: проверка привязки в предусловиях, запуск, перезагрузка.
-// Без сброса тест падал на «Не удалось открыть кабинет» — то есть на 429,
+// Без сброса тест падал на «Не удалось открыть приложение» — то есть на 429,
 // который на экране выглядит как сбой сессии.
 test.beforeEach(flushRateLimits);
 
@@ -143,5 +143,5 @@ test("подделанная подпись не пускает", async ({ page 
 
   await page.goto(`${MINIAPP_URL}/#tgWebAppData=${encodeURIComponent(forged)}`);
 
-  await expect(page.getByText(/Не удалось открыть кабинет/)).toBeVisible();
+  await expect(page.getByText(/Не удалось открыть приложение/)).toBeVisible();
 });

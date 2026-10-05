@@ -5,14 +5,25 @@ import {
   TargetBar,
   formatKcal,
   formatGrams,
+  type DayTolerance,
+  type ToleranceGap,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
+import { DayVerdictNote } from "./DayVerdictNote";
 import type { Menu } from "./useMenu";
 
 export interface DayTargets {
   kcalPerDay: number;
   carbsLimitG: number;
+}
+
+/** Вердикт сервера за показанный день — или «день не сегодняшний». */
+export interface DayVerdictInput {
+  tolerance: DayTolerance | null;
+  gap: ToleranceGap | null;
+  /** Вердикт сервер считает только за сегодня: для других дней его нет вовсе. */
+  otherDay: boolean;
 }
 
 /**
@@ -28,20 +39,19 @@ export interface DayTargets {
  * которую НАБИРАЮТ, углеводы — предел, который нельзя превышать: у них разный
  * смысл заполнения, и `kind` это различает.
  *
- * **Вердикта о соответствии назначению здесь нет.** То, что интерфейс говорит о
- * попадании дня в допуск, живёт одним куском в кабинете
- * (`features/patients/dayVerdict.ts`) и различает три причины, по которым
- * вердикта может не быть. Вторая реализация этого правила означала бы, что одна
- * и та же семья слышит о своём ребёнке разное в зависимости от того, откуда
- * смотрит. Переносить его в кит — отдельная работа; до неё экран показывает
- * числа и цели, а утверждений о допуске не делает.
+ * **Вердикт о соответствии назначению — с 05.10.2026 и здесь**, тем же
+ * правилом, что в кабинете: `dayVerdict` переехал в кит (`DayVerdictNote`).
+ * Готовый вердикт сервер отдаёт только за сегодня и только в `/overview`, поэтому
+ * его приносит экран (`verdict`), а не план дня: у `GET /menus` вердикта нет.
  */
 export function DayTotals({
   menu,
   targets,
+  verdict,
 }: {
   menu: Menu;
   targets: DayTargets | null;
+  verdict: DayVerdictInput;
 }) {
   const { t } = useTranslation();
   const totals = menu.totals;
@@ -53,10 +63,17 @@ export function DayTotals({
         // `self-start`: содержимое `Section` — колонка flex, и значок без него
         // растягивается во всю ширину, переставая читаться как значок.
         //
-        // Без `withinTolerance`: значок показывает число, но не утверждает, что
-        // день в допуске — это вердикт, и его источник один (см. докстроку).
+        // Цвет допуска — только из вердикта сервера за этот же день; для
+        // других дней значок показывает одно число.
         <div className="self-start">
-          <RatioBadge ratio={totals.ratio} />
+          <RatioBadge
+            ratio={totals.ratio}
+            withinTolerance={
+              verdict.otherDay
+                ? undefined
+                : (verdict.tolerance?.ratio_within_tolerance ?? undefined)
+            }
+          />
         </div>
       )}
 
@@ -109,6 +126,14 @@ export function DayTotals({
           />
         </div>
       )}
+
+      <DayVerdictNote
+        tolerance={verdict.tolerance}
+        gap={verdict.gap}
+        otherDay={verdict.otherDay}
+        kcal={totals.kcal}
+        targetKcal={targets?.kcalPerDay ?? null}
+      />
     </Section>
   );
 }

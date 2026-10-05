@@ -64,7 +64,8 @@ async def issue_miniapp_session(
         # инструкцию по привязке, а не сообщение об отказе (раздел 9 ТЗ).
         raise ApiError(
             ErrorCode.NOT_FOUND,
-            "Этот Telegram не привязан ни к одному ребёнку. Привяжите его в кабинете.",
+            "Этот Telegram не привязан ни к одному ребёнку. "
+            "Пришлите боту код доступа от врача или родителя ребёнка.",
         )
 
     parent = await users_repo.get(session, link.parent_id)

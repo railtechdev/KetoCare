@@ -6,7 +6,38 @@ import { api } from "../../lib/api";
 /** Глубина графика. Тридцать дней — это то, о чём врач спрашивает на приёме. */
 export const TREND_DAYS = 30;
 
-export type TrendKind = "ketones" | "weight";
+export type TrendKind = "ketones" | "weight" | "seizures";
+
+/**
+ * Приступы по дням: сумма `count` за местные сутки, нули включены.
+ *
+ * Нули — это и есть сведения: день без приступа на графике обязан стоять
+ * точкой на нуле, а не пропуском, иначе линия соединяла бы два тяжёлых дня
+ * через спокойную неделю. Пустой ответ — ни одного приступа за месяц —
+ * возвращает пустой ряд, и график говорит «записей нет» словами.
+ */
+export function seizuresPerDay(
+  items: readonly { occurred_at: string; count: number }[],
+  now: Date = new Date(),
+): TrendPoint[] {
+  if (items.length === 0) return [];
+  const days: TrendPoint[] = [];
+  const index = new Map<string, TrendPoint>();
+  const first = startOfDay(now);
+  first.setDate(first.getDate() - (TREND_DAYS - 1));
+  for (let offset = 0; offset < TREND_DAYS; offset += 1) {
+    const day = new Date(first);
+    day.setDate(first.getDate() + offset);
+    const point = { at: day, value: 0 };
+    days.push(point);
+    index.set(day.toDateString(), point);
+  }
+  for (const item of items) {
+    const point = index.get(new Date(item.occurred_at).toDateString());
+    if (point !== undefined) point.value += item.count;
+  }
+  return days;
+}
 
 /**
  * Границы периода — моменты с поясом, а не даты.
@@ -51,6 +82,15 @@ export function useTrend(patientId: string, kind: TrendKind) {
         path: { patient_id: patientId },
         query: { from: range.from, to: range.to, limit: 200, offset: 0 },
       };
+
+      if (kind === "seizures") {
+        const { data, error } = await api.GET(
+          "/api/v1/patients/{patient_id}/logs/seizures",
+          { params },
+        );
+        if (error || !data) throw error ?? new Error("Empty seizures response");
+        return seizuresPerDay(data.items);
+      }
 
       if (kind === "ketones") {
         const { data, error } = await api.GET(

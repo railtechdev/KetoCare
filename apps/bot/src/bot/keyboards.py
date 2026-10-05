@@ -166,6 +166,37 @@ def seizure_durations(items: list[tuple[str, str]]) -> InlineKeyboardMarkup:
     )
 
 
+SEIZURE_COUNT_PREFIX = "scount:"
+#: «5 и больше» — дальше число вводится руками: кнопок на каждое число не
+#: напасёшься, а серия из пяти и больше встречается реже, чем один-два.
+SEIZURE_COUNT_MORE_DATA = "scount-more"
+#: Сколько приступов предлагается кнопками. Пятый и дальше — вводом.
+SEIZURE_COUNT_BUTTONS = (1, 2, 3, 4)
+
+
+def seizure_counts() -> InlineKeyboardMarkup:
+    """Сколько приступов было: 1-4 кнопками, «5 и больше» — числом.
+
+    Одной строкой: четыре коротких числа помещаются в ширину телефона, а
+    столбик из пяти кнопок прятал бы «Отмену» под сгиб.
+    """
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=str(n), callback_data=f"{SEIZURE_COUNT_PREFIX}{n}")
+                for n in SEIZURE_COUNT_BUTTONS
+            ],
+            [
+                InlineKeyboardButton(
+                    text=texts.BTN_SEIZURE_COUNT_MORE, callback_data=SEIZURE_COUNT_MORE_DATA
+                )
+            ],
+            _cancel_row(),
+        ]
+    )
+
+
 MEDICATION_PREFIX = "med:"
 
 

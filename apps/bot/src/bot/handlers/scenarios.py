@@ -1,12 +1,8 @@
 """FSM-сценарии ввода (раздел 7.3 ТЗ).
 
-Реализованы кетоны, вес, самочувствие, лекарства и еда. Приступ не реализован
-намеренно: шкала длительности из раздела 7.3 расходится со шкалой анкеты
-регистрации и теряет пороги 10 и 30 минут (эпилептический статус) — вопрос 23 в
-`docs/medical/OPEN_QUESTIONS.md`. Перерисовать кнопки дешевле, чем переучивать
-семью, поэтому сценарий ждёт ответа медицинской команды. Из меню кнопка убрана,
-а нажатие оставшейся на устройстве старой кнопки отвечает, где записать приступ
-сейчас (`seizure_not_here`).
+Реализованы приступ, кетоны, вес, самочувствие, лекарства и еда. Шкала
+длительности приступа — та же, что в анкете регистрации (вопрос 23, ADR-0020),
+число приступов в серии спрашивается отдельным шагом (вопрос 35).
 
 Общая форма каждого сценария — 2-4 шага, инлайновые кнопки, «Отмена» на каждом
 шаге. Валидация чисел — только диапазон из ТЗ: интерпретировать значение бот не
@@ -61,6 +57,12 @@ WEIGHT_MIN, WEIGHT_MAX = Decimal("2"), Decimal("150")
 # проверяет только то, что введено число.
 MAX_DURATION_SEC = 86_400
 
+# Серия приступов, введённая числом (вопрос 35). Нижняя граница — пять: меньшие
+# числа стоят кнопками, и «3», набранное здесь, означало бы, что родитель не
+# заметил кнопки. Верхняя — сто: у API предел тысяча, но сто приступов за одну
+# запись — уже не серия, а скорее опечатка; бот переспрашивает, а не решает.
+SEIZURE_COUNT_TYPED_MIN, SEIZURE_COUNT_TYPED_MAX = 5, 100
+
 # Ограничение поля `side_effect_logs.symptom` — String(255).
 SYMPTOM_MAX_LENGTH = 255
 
@@ -80,14 +82,16 @@ class When(StatesGroup):
 class Seizure(StatesGroup):
     """Приступ (раздел 7.3 ТЗ).
 
-    Три шага плюс общий «когда»: тип из справочника, длительность из шкалы
-    анкеты (или точное число, если засекали), время. Комментария здесь нет
-    намеренно — ТЗ помечает его необязательным, а лишний вопрос человеку,
-    который только что видел приступ у ребёнка, стоит дороже, чем даёт: описать
-    подробности он может в кабинете.
+    Четыре шага плюс общий «когда»: тип из справочника, сколько приступов было
+    (вопрос 35), длительность из шкалы анкеты (или точное число, если засекали),
+    время. Комментария здесь нет намеренно — ТЗ помечает его необязательным, а
+    лишний вопрос человеку, который только что видел приступ у ребёнка, стоит
+    дороже, чем даёт.
     """
 
     type_choice = State()
+    count = State()
+    count_exact = State()
     duration = State()
     duration_exact = State()
 
@@ -556,22 +560,97 @@ async def medication_choice(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(Seizure.type_choice, F.data.startswith(keyboards.SEIZURE_TYPE_PREFIX))
-async def seizure_type(
-    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
-) -> None:
-    """Тип выбран — спрашиваем длительность по шкале анкеты."""
+async def seizure_type(callback: CallbackQuery, state: FSMContext) -> None:
+    """Тип выбран — спрашиваем, сколько приступов было (вопрос 35).
+
+    Без этого шага серия из десяти спазмов записывалась как один приступ, а
+    число приступов — главная величина, по которой судят о терапии.
+    """
 
     await callback.answer()
     message = _answerable(callback)
     if message is None:
         return
 
+    type_id = (callback.data or "").removeprefix(keyboards.SEIZURE_TYPE_PREFIX)
+    await state.set_state(Seizure.count)
+    await state.update_data(seizure_type_id=type_id)
+    await message.answer(texts.SEIZURE_ASK_COUNT, reply_markup=keyboards.seizure_counts())
+
+
+@router.callback_query(Seizure.count, F.data == keyboards.SEIZURE_COUNT_MORE_DATA)
+async def seizure_count_more(callback: CallbackQuery, state: FSMContext) -> None:
+    """«5 и больше» — число вводится руками."""
+
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    await state.set_state(Seizure.count_exact)
+    await message.answer(texts.SEIZURE_ASK_COUNT_EXACT, reply_markup=keyboards.cancel_only())
+
+
+@router.callback_query(Seizure.count, F.data.startswith(keyboards.SEIZURE_COUNT_PREFIX))
+async def seizure_count(
+    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+) -> None:
+    await callback.answer()
+    message = _answerable(callback)
+    if message is None:
+        return
+
+    raw = (callback.data or "").removeprefix(keyboards.SEIZURE_COUNT_PREFIX)
+    # Кнопки знают только 1-4. Иное значение — подделанный или устаревший
+    # callback: переспросить дешевле, чем записать чужое число.
+    if not raw.isascii() or not raw.isdigit() or int(raw) not in keyboards.SEIZURE_COUNT_BUTTONS:
+        await message.answer(texts.SEIZURE_ASK_COUNT, reply_markup=keyboards.seizure_counts())
+        return
+
+    await state.update_data(seizure_count=int(raw))
+    await _ask_seizure_duration(message, state, api=api, store=store)
+
+
+@router.message(Seizure.count_exact)
+async def seizure_count_exact(
+    message: Message, state: FSMContext, api: BotApi, store: BindingStore
+) -> None:
+    """Серия из пяти и больше — целым числом, в пределах 5-100.
+
+    Бот проверяет только то, что введено число в диапазоне: судить, много это
+    или мало, он не вправе (раздел 7.5 ТЗ).
+    """
+
+    raw = (message.text or "").strip()
+    if (
+        not _WHOLE_SECONDS.fullmatch(raw)
+        or not SEIZURE_COUNT_TYPED_MIN <= int(raw) <= SEIZURE_COUNT_TYPED_MAX
+    ):
+        await message.answer(
+            texts.SEIZURE_COUNT_INVALID.format(
+                low=SEIZURE_COUNT_TYPED_MIN, high=SEIZURE_COUNT_TYPED_MAX
+            ),
+            reply_markup=keyboards.cancel_only(),
+        )
+        return
+
+    await state.update_data(seizure_count=int(raw))
+    await _ask_seizure_duration(message, state, api=api, store=store)
+
+
+async def _ask_seizure_duration(
+    message: Message, state: FSMContext, *, api: BotApi, store: BindingStore
+) -> None:
+    """Шкала длительности из справочника анкеты.
+
+    Для серии спрашивается самый долгий приступ: пороги эпилептического
+    статуса относятся к одному приступу (ADR-0020, дополнение 05.10.2026).
+    """
+
     binding = await require_binding(message, store)
     if binding is None:
         await state.clear()
         return
-
-    type_id = (callback.data or "").removeprefix(keyboards.SEIZURE_TYPE_PREFIX)
 
     try:
         options = await api.duration_options(link_id=binding.link_id, secret=binding.secret)
@@ -587,10 +666,33 @@ async def seizure_type(
         return
 
     buttons = [(str(item["id"]), str(item["name_ru"])) for item in options]
+    data = await state.get_data()
+    series = _seizure_count(data) > 1
     await state.set_state(Seizure.duration)
-    await state.update_data(seizure_type_id=type_id, seizure_duration_names=dict(buttons))
+    await state.update_data(seizure_duration_names=dict(buttons))
     await message.answer(
-        texts.SEIZURE_ASK_DURATION, reply_markup=keyboards.seizure_durations(buttons)
+        texts.SEIZURE_ASK_DURATION_SERIES if series else texts.SEIZURE_ASK_DURATION,
+        reply_markup=keyboards.seizure_durations(buttons),
+    )
+
+
+def _seizure_count(data: dict[str, Any]) -> int:
+    """Число приступов из состояния сценария.
+
+    Единица по умолчанию — для записи, начатой до выката этого шага: в её
+    сохранённом состоянии числа ещё нет, а прежде бот всегда писал одну.
+    """
+
+    value = data.get("seizure_count", 1)
+    return value if isinstance(value, int) else 1
+
+
+def _seizure_summary(data: dict[str, Any], duration: str) -> str:
+    count = _seizure_count(data)
+    return texts.SEIZURE_SAVED.format(
+        type=data.get("seizure_type_names", {}).get(data["seizure_type_id"], "приступ"),
+        count=count,
+        duration=texts.SEIZURE_SAVED_LONGEST.format(duration=duration) if count > 1 else duration,
     )
 
 
@@ -601,8 +703,12 @@ async def seizure_duration_exact_ask(callback: CallbackQuery, state: FSMContext)
     if message is None:
         return
 
+    data = await state.get_data()
     await state.set_state(Seizure.duration_exact)
-    await message.answer(texts.SEIZURE_ASK_EXACT, reply_markup=keyboards.cancel_only())
+    await message.answer(
+        texts.SEIZURE_ASK_EXACT_SERIES if _seizure_count(data) > 1 else texts.SEIZURE_ASK_EXACT,
+        reply_markup=keyboards.cancel_only(),
+    )
 
 
 @router.callback_query(Seizure.duration, F.data.startswith(keyboards.SEIZURE_DURATION_PREFIX))
@@ -628,10 +734,10 @@ async def seizure_duration(callback: CallbackQuery, state: FSMContext) -> None:
         payload={
             "seizure_type_id": data["seizure_type_id"],
             "duration_option_id": option_id,
+            "count": _seizure_count(data),
         },
-        summary=texts.SEIZURE_SAVED.format(
-            type=data.get("seizure_type_names", {}).get(data["seizure_type_id"], "приступ"),
-            duration=data.get("seizure_duration_names", {}).get(option_id, "длительность указана"),
+        summary=_seizure_summary(
+            data, data.get("seizure_duration_names", {}).get(option_id, "длительность указана")
         ),
     )
 
@@ -662,11 +768,12 @@ async def seizure_duration_exact(message: Message, state: FSMContext) -> None:
         message,
         state,
         kind="seizures",
-        payload={"seizure_type_id": data["seizure_type_id"], "duration_sec": seconds},
-        summary=texts.SEIZURE_SAVED.format(
-            type=data.get("seizure_type_names", {}).get(data["seizure_type_id"], "приступ"),
-            duration=texts.SEIZURE_SAVED_EXACT_SEC.format(value=seconds),
-        ),
+        payload={
+            "seizure_type_id": data["seizure_type_id"],
+            "duration_sec": seconds,
+            "count": _seizure_count(data),
+        },
+        summary=_seizure_summary(data, texts.SEIZURE_SAVED_EXACT_SEC.format(value=seconds)),
     )
 
 

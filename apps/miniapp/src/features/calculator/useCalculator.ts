@@ -223,6 +223,69 @@ export function useScale() {
   });
 }
 
+export type SavedDish = components["schemas"]["CustomDishRead"];
+
+/**
+ * То, что уходит на сервер при сохранении блюда, — строкой.
+ *
+ * Подпись попытки для ключа `Idempotency-Key` (ADR-0035): пока название и
+ * состав те же, повтор после потерянного ответа получает прежнее блюдо, а не
+ * второе такое же. Граммы — разобранным числом: «12,5» и «12.5» — один запрос.
+ */
+export function dishSignature(
+  patientId: string,
+  title: string,
+  rows: DishRow[],
+): string {
+  return JSON.stringify([
+    patientId,
+    title.trim(),
+    rows.map((row) => [row.product.id, parseAmount(row.grams)]),
+  ]);
+}
+
+/**
+ * Сохранение посчитанного состава в блюда ребёнка (раздел 8.3 ТЗ).
+ *
+ * Сервер пересчитывает состав сам по `product_id`: макронутриенты клиента для
+ * сохранения не принимаются, и второго источника клинических чисел нет.
+ *
+ * Запись, а не расчёт: без сети отказывает сразу (общее правило записей,
+ * ADR-0034), а не ждёт связи в очереди, — иначе блюдо появилось бы молча после
+ * возврата сети, а повторное нажатие дало бы второе. Тот же ключ попытки, что у
+ * кабинета (`useSaveDishMutation`).
+ */
+export function useSaveDish(patientId: string) {
+  return useMutation({
+    networkMode: "always",
+    retry: false,
+    mutationFn: async (input: {
+      title: string;
+      rows: DishRow[];
+      idempotencyKey: string;
+    }): Promise<SavedDish> => {
+      const { data, error } = await api.POST(
+        "/api/v1/patients/{patient_id}/custom-dishes",
+        {
+          params: {
+            path: { patient_id: patientId },
+            header: { "Idempotency-Key": input.idempotencyKey },
+          },
+          body: {
+            title: input.title,
+            ingredients: input.rows.map((row) => ({
+              product_id: row.product.id,
+              grams: parseAmount(row.grams),
+            })),
+          },
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty save response");
+      return data;
+    },
+  });
+}
+
 /** Продукт на 100 г — как его ждёт `/calc`. */
 function ingredientOf(row: DishRow) {
   return {

@@ -9,20 +9,14 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import "../../lib/i18n";
 import { api } from "../../lib/api";
-import { ChartsScreen } from "./ChartsScreen";
-import { trendRange } from "./useTrend";
+import { seizuresPerDay, trendRange } from "../charts/useTrend";
+import { DiaryScreen } from "./DiaryScreen";
+import { SESSION, defaultLogs, fakeGet } from "./testFixtures";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
   return { ...actual, api: { GET: vi.fn() } };
 });
-
-const SESSION = {
-  patientId: "11111111-1111-4111-8111-111111111111",
-  patientName: "Амина",
-  webUrl: "https://ketocare.example",
-  hasWebCredentials: true,
-};
 
 function renderScreen() {
   const client = new QueryClient({
@@ -34,7 +28,7 @@ function renderScreen() {
     );
   }
   // `client` — тестам, которым нужно тронуть сам кэш (фоновое обновление).
-  const result = render(<ChartsScreen session={SESSION} />, {
+  const result = render(<DiaryScreen session={SESSION} />, {
     wrapper: Wrapper,
   });
   return Object.assign(result, { client });
@@ -44,21 +38,7 @@ beforeEach(() => {
   // Иначе будущий тест почистил бы кэш прошлого, ничего об этом не сказав.
   screenClient = undefined;
   vi.clearAllMocks();
-  (api.GET as Mock).mockImplementation((path: string) => {
-    if (path.includes("prescriptions")) {
-      return Promise.resolve({
-        data: { items: [{ ratio: 4, effective_from: "2026-08-01" }], total: 1 },
-      });
-    }
-    return Promise.resolve({
-      data: {
-        items: [
-          { occurred_at: "2026-08-30T07:30:00Z", value: 3.2, weight_kg: 18.4 },
-        ],
-        total: 1,
-      },
-    });
-  });
+  (api.GET as Mock).mockImplementation(fakeGet());
 });
 
 /** Кэш открытого экрана: чистим до возврата сети, чтобы паузы не снимались. */
@@ -97,34 +77,43 @@ describe("динамика в Mini App", () => {
     }
   });
 
-  it("показывает оба показателя", async () => {
+  it("показывает три графика и записи под ними", async () => {
     renderScreen();
 
     expect(
       await screen.findByRole("heading", { name: "Кетоны" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Вес" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Приступы" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Записи за две недели" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Кетоны: 3,2 ммоль/л")).toBeInTheDocument();
   });
 
   it("пустой ответ — это «записей нет», а не молчание блока", async () => {
     // Блок молчит, только пока ответа нет. Если сервер ответил и записей за
     // месяц действительно нет, это надо сказать: иначе экран одинаково молчит
     // и когда связи нет, и когда ребёнок месяц не измерялся.
-    (api.GET as Mock).mockResolvedValue({
-      data: { items: [], total: 0 },
-    });
+    (api.GET as Mock).mockImplementation(fakeGet({}));
 
     renderScreen();
 
     expect(
       await screen.findAllByText("Записей за этот период нет."),
     ).toHaveLength(2);
+    // У приступов пустота — хорошая новость, и сказана она своими словами.
+    expect(
+      screen.getByText("За 30 дней приступов не записано."),
+    ).toBeInTheDocument();
   });
 
   it("с записями рисует графики и молчит про пустоту", async () => {
     renderScreen();
 
-    expect(await screen.findAllByRole("figure")).toHaveLength(2);
+    expect(await screen.findAllByRole("figure")).toHaveLength(3);
     expect(screen.queryByText("Записей за этот период нет.")).toBeNull();
     expect(
       screen.queryByText("Нет связи — покажем, как только она появится."),
@@ -137,7 +126,7 @@ describe("динамика в Mini App", () => {
     // отнимать место у самих графиков на телефоне.
     const { client } = renderScreen();
     screenClient = client;
-    expect(await screen.findAllByRole("figure")).toHaveLength(2);
+    expect(await screen.findAllByRole("figure")).toHaveLength(3);
 
     onlineManager.setOnline(false);
     try {
@@ -162,10 +151,11 @@ describe("динамика в Mini App", () => {
   it("без истории назначений говорит, что черт нет", async () => {
     // График без вертикальных черт молча врёт: скачок после смены соотношения
     // читается как ухудшение состояния.
+    const get = fakeGet(defaultLogs());
     (api.GET as Mock).mockImplementation((path: string) =>
-      path.includes("prescriptions")
+      path.endsWith("/prescriptions")
         ? Promise.resolve({ error: { detail: "нет" } })
-        : Promise.resolve({ data: { items: [], total: 0 } }),
+        : get(path),
     );
 
     renderScreen();
@@ -219,5 +209,37 @@ describe("границы периода", () => {
     const range = trendRange(new Date(2026, 2, 15, 10, 0));
 
     expect(new Date(range.to).getHours()).toBe(23);
+  });
+});
+
+describe("приступы по дням", () => {
+  const now = new Date(2026, 9, 5, 12, 0);
+
+  it("тридцать точек, дни без приступов — нули", () => {
+    const points = seizuresPerDay(
+      [
+        { occurred_at: new Date(2026, 9, 5, 8, 0).toISOString(), count: 2 },
+        { occurred_at: new Date(2026, 9, 5, 21, 0).toISOString(), count: 1 },
+        { occurred_at: new Date(2026, 9, 3, 9, 0).toISOString(), count: 1 },
+      ],
+      now,
+    );
+
+    expect(points).toHaveLength(30);
+    expect(points.at(-1)?.value).toBe(3);
+    expect(points.at(-3)?.value).toBe(1);
+    expect(points.at(-2)?.value).toBe(0);
+  });
+
+  it("ни одного приступа — пустой ряд, а не линия по нулю", () => {
+    expect(seizuresPerDay([], now)).toEqual([]);
+  });
+
+  it("запись старше периода в график не попадает", () => {
+    const points = seizuresPerDay(
+      [{ occurred_at: new Date(2026, 7, 1, 9, 0).toISOString(), count: 5 }],
+      now,
+    );
+    expect(points.reduce((sum, point) => sum + point.value, 0)).toBe(0);
   });
 });

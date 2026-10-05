@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { itemsOf, mealNumbers, withDish, withoutItem } from "./dayPlan";
+import {
+  copiedDay,
+  itemsOf,
+  mealNumbers,
+  withDish,
+  withoutItem,
+} from "./dayPlan";
 import type { Menu, MenuItem } from "./useMenu";
 
 function item(overrides: Partial<MenuItem>): MenuItem {
@@ -137,5 +143,63 @@ describe("приёмы пищи в дне", () => {
     // решение за врача (ADR-0029).
     expect(mealNumbers(null)).toEqual([]);
     expect(mealNumbers(0)).toEqual([]);
+  });
+});
+
+/**
+ * «Как вчера» — перенос в ПУСТОЙ день. `PUT` задаёт день целиком, и перенос
+ * поверх непустого дня стёр бы отметки «съедено» у позиций, не совпавших по
+ * ключу.
+ */
+describe("перенос предыдущего дня", () => {
+  const yesterday = menu([
+    item({ id: "a", meal_index: 1, recipe_id: "r1", portion_factor: 1.5 }),
+    item({
+      id: "b",
+      meal_index: 4,
+      recipe_id: null,
+      custom_dish_id: "d1",
+      portion_factor: 0.5,
+      eaten: true,
+    }),
+  ]);
+
+  it("переносит приёмы и порции как есть — в день без плана", () => {
+    expect(copiedDay(yesterday, null)).toEqual([
+      {
+        meal_index: 1,
+        recipe_id: "r1",
+        custom_dish_id: null,
+        portion_factor: 1.5,
+      },
+      {
+        meal_index: 4,
+        recipe_id: null,
+        custom_dish_id: "d1",
+        portion_factor: 0.5,
+      },
+    ]);
+  });
+
+  it("отметки «съедено» не переносятся", () => {
+    // Вчерашнее съеденное не значит, что сегодня ребёнок уже поел.
+    for (const position of copiedDay(yesterday, null) ?? []) {
+      expect(position).not.toHaveProperty("eaten");
+    }
+  });
+
+  it("непустой день не переписывается", () => {
+    const today = menu([item({ id: "t", meal_index: 2, eaten: true })]);
+
+    expect(copiedDay(yesterday, today)).toBeNull();
+  });
+
+  it("день с меню без позиций считается пустым", () => {
+    expect(copiedDay(yesterday, menu([]))).toHaveLength(2);
+  });
+
+  it("переносить нечего — переноса нет", () => {
+    expect(copiedDay(null, null)).toBeNull();
+    expect(copiedDay(menu([]), null)).toBeNull();
   });
 });

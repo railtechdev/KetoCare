@@ -35,6 +35,18 @@ function renderScreen() {
   return render(<HomeScreen session={SESSION} />, { wrapper: Wrapper });
 }
 
+/**
+ * Сводка — по своему адресу, прочее — пустыми списками: близкие и вход в
+ * кабинет ходят в свои ручки, и сводка вместо их ответа роняла бы экран.
+ */
+function serveOverview({ data }: { data: unknown }) {
+  (api.GET as Mock).mockImplementation(async (path: string) =>
+    path.endsWith("/overview")
+      ? { data, response: { status: 200 } }
+      : { data: [], response: { status: 200 } },
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   (api.GET as Mock).mockResolvedValue({
@@ -68,6 +80,83 @@ describe("сводка в Mini App", () => {
     } finally {
       onlineManager.setOnline(true);
     }
+  });
+
+  it("под итогами дня — вердикт о допуске тем же правилом, что в кабинете", async () => {
+    // Соотношение в допуске — сказано словами; недобор калорий — набор, а не
+    // тревога (вопрос 9 медкоманде, `dayVerdict` кита).
+    serveOverview({
+      data: {
+        patient_id: SESSION.patientId,
+        date: "2026-10-05",
+        prescription: {
+          ratio: 4,
+          kcal_per_day: 1200,
+          protein_g: 20,
+          carbs_limit_g: 10,
+          meals_per_day: 4,
+        },
+        day: {
+          totals: {
+            kcal: 600,
+            fat: 60,
+            protein: 10,
+            carbs: 5,
+            fiber: 0,
+            ratio: 4,
+          },
+          tolerance: {
+            ratio_within_tolerance: true,
+            kcal_within_tolerance: false,
+          },
+          tolerance_gap: null,
+          engine_version: "1.0.0",
+        },
+        seizures_today: { count: 0 },
+        seizure_trend: { direction: "flat" },
+        last_reading_on: null,
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText("Кетосоотношение дня соответствует назначению."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Набрано 600 из 1 200 ккал/)).toBeInTheDocument();
+  });
+
+  it("день, посчитанный прежним ядром, объясняется своей причиной", async () => {
+    serveOverview({
+      data: {
+        patient_id: SESSION.patientId,
+        date: "2026-10-05",
+        prescription: null,
+        day: {
+          totals: {
+            kcal: 600,
+            fat: 60,
+            protein: 10,
+            carbs: 5,
+            fiber: 0,
+            ratio: 4,
+          },
+          tolerance: null,
+          tolerance_gap: "engine_changed",
+          engine_version: "0.4.0",
+        },
+        seizures_today: { count: 0 },
+        seizure_trend: { direction: "flat" },
+        last_reading_on: null,
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/прежней версией расчётного ядра/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/активного назначения нет/),
+    ).not.toBeInTheDocument();
   });
 
   it("имя ребёнка видно и до ответа сервера", async () => {

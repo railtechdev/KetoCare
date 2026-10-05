@@ -13,17 +13,25 @@ export function today(now: Date = new Date()): string {
 }
 
 /**
- * Завтрашняя дата — в том же местном поясе.
+ * Дата со сдвигом от сегодня — в том же местном поясе.
  *
- * День вперёд, а не календарь: план собирают вечером на завтра, и это
- * единственный случай, ради которого приложению нужна другая дата. Выбор любой
- * даты — это навигация по календарю на 360 px, то есть отдельная работа; в
- * кабинете она уже есть (`features/menu/DayNavigator.tsx`).
+ * Дней у приложения три, а не календарь: вчера (отметить съеденное задним
+ * числом и посмотреть, что ребёнок ел), сегодня и завтра (план собирают вечером
+ * на завтра). Выбор любой даты — это навигация по календарю на 360 px, то есть
+ * отдельная работа; в кабинете она уже есть (`features/menu/DayNavigator.tsx`).
+ *
+ * Сдвиг идёт по календарю (`setDate`), а не на 24 часа: в день перевода часов
+ * сутки короче или длиннее, и «плюс 24 часа» попадало бы в тот же день.
  */
+export function dayAt(offset: number, now: Date = new Date()): string {
+  const shifted = new Date(now.getTime());
+  shifted.setDate(shifted.getDate() + offset);
+  return today(shifted);
+}
+
+/** Завтрашняя дата — частный случай `dayAt`. */
 export function tomorrow(now: Date = new Date()): string {
-  const next = new Date(now.getTime());
-  next.setDate(next.getDate() + 1);
-  return today(next);
+  return dayAt(1, now);
 }
 
 export function menuKey(patientId: string, day: string) {
@@ -36,9 +44,14 @@ export function menuKey(patientId: string, day: string) {
  * Меню может не быть — это обычное состояние, а не сбой: семья могла не
  * планировать день. Поэтому 404 превращается в `null`, а не в ошибку экрана.
  */
-export function useMenu(patientId: string, day: string) {
+export function useMenu(
+  patientId: string,
+  day: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: menuKey(patientId, day),
+    enabled,
     queryFn: async (): Promise<Menu | null> => {
       const { data, error, response } = await api.GET(
         "/api/v1/patients/{patient_id}/menus",
