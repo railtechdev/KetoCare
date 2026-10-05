@@ -720,6 +720,27 @@ class TestEngineCommentsAreNotMath:
         )
         assert done.stdout.strip() == "fresh.py"
 
+    def test_base_ref_from_ci_is_respected(self, tmp_path: Path) -> None:
+        """CI сравнивает с базой PR (`ENGINE_BASE_REF`), а не с HEAD (аудит, E9)."""
+
+        repo = self._repo(tmp_path, self.BEFORE)
+        base = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=True
+        ).stdout.strip()
+        changed = self.BEFORE.replace("protein + carbs", "protein + carbs - fiber")
+        (repo / "engine.py").write_text(changed, encoding="utf-8")
+        subprocess.run(["git", "commit", "-qam", "change"], cwd=repo, check=True)
+        script = Path(__file__).resolve().parents[1] / "engine_code_changed.py"
+        done = subprocess.run(
+            [sys.executable, str(script), "engine.py"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "ENGINE_BASE_REF": base},
+        )
+        assert done.stdout.strip() == "engine.py"
+
     def test_a_constant_change_is_code(self, tmp_path: Path) -> None:
         """`constants.py` — не исключение: там лежат медицинские константы.
 

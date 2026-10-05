@@ -20,8 +20,15 @@ from .security import ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL
 _ATTRS = {"httponly": True, "secure": True, "samesite": "lax", "path": "/"}
 
 
-def set_auth_cookies(response: Response, tokens: TokenPair) -> None:
-    """Положить пару токенов в куки.
+def set_auth_cookies(response: Response, tokens: TokenPair) -> TokenPair:
+    """Положить пару токенов в куки и вернуть то, что можно отдать телом.
+
+    **Токен обновления телом не отдаётся** (раздел 5.2 ТЗ: «httpOnly cookie для
+    web»). Прежде он уходил и в куку, и в JSON-ответ, и скрипт, внедрённый в
+    страницу, читал тридцатидневный токен из ответа — httpOnly защищал ровно
+    половину (аудит блокеров, E5). Кабинет держит в памяти только токен доступа,
+    а обновляется кукой. Mini App куки не использует и получает пару телом
+    другими ручками — его это не касается.
 
     **Срок жизни задаётся явно и равен сроку самого токена.** Без `max_age` кука
     сессионная — исчезает при закрытии браузера, — и refresh-токен, подписанный
@@ -30,6 +37,8 @@ def set_auth_cookies(response: Response, tokens: TokenPair) -> None:
     существует ровно столько, сколько длится прогон.
     """
 
+    if tokens.refresh_token is None:
+        raise ValueError("Пара без токена обновления не кладётся в куки.")
     response.set_cookie(
         "access_token",
         tokens.access_token,
@@ -42,6 +51,7 @@ def set_auth_cookies(response: Response, tokens: TokenPair) -> None:
         max_age=int(REFRESH_TOKEN_TTL.total_seconds()),
         **_ATTRS,  # type: ignore[arg-type]
     )
+    return tokens.model_copy(update={"refresh_token": None})
 
 
 def clear_auth_cookies(response: Response) -> None:

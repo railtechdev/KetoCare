@@ -7,6 +7,7 @@ from datetime import date, datetime, time
 from typing import Annotated, Any, Literal
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     EmailStr,
@@ -19,6 +20,7 @@ from pydantic import (
 from core.models.enums import Sex, UserRole
 from keto_engine import Ingredient, verify
 
+from .password_policy import check_new_password
 from .services.product_import import macro_sum_exceeds_limit, macro_sum_message
 
 
@@ -40,6 +42,12 @@ RequiredName = Annotated[str, _required(255)]
 RequiredShortText = Annotated[str, _required(64)]
 #: Длинный обязательный текст: заметка врача.
 RequiredLongText = Annotated[str, _required(10000)]
+
+
+#: Новый пароль: 12–128 знаков и не из очевидных (аудит блокеров, E7).
+NewPassword = Annotated[
+    str, Field(min_length=12, max_length=128), AfterValidator(check_new_password)
+]
 
 
 class Page[T](BaseModel):
@@ -64,7 +72,9 @@ class LoginRequest(BaseModel):
 
 class TokenPair(BaseModel):
     access_token: str
-    refresh_token: str
+    #: Пусто в ответах веб-кабинету: там токен обновления живёт только в
+    #: httpOnly-куке (аудит блокеров, E5). Mini App получает его телом.
+    refresh_token: str | None = None
     token_type: str = "bearer"
 
 
@@ -160,7 +170,7 @@ class PasswordSet(BaseModel):
     знает — пароль ему выдал администратор, и задача как раз в том, чтобы
     временный перестал действовать."""
 
-    new_password: Annotated[str, Field(min_length=12, max_length=128)]
+    new_password: NewPassword
 
 
 class AdminPasswordReset(BaseModel):
@@ -592,7 +602,7 @@ class CredentialsCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    password: NewPassword
 
 
 class PasswordChange(BaseModel):
@@ -605,7 +615,7 @@ class PasswordChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=12, max_length=128)
+    new_password: NewPassword
 
 
 class FamilyMemberRead(BaseModel):
@@ -725,7 +735,7 @@ class InvitationCreated(BaseModel):
 class InvitationAccept(BaseModel):
     token: str
     full_name: RequiredName
-    password: str = Field(min_length=12, max_length=128)
+    password: NewPassword
     phone: str | None = None
 
 

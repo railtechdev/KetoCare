@@ -55,13 +55,16 @@ class TestRateLimitNotBypassable:
     async def test_rotating_forwarded_header_does_not_bypass_limit(
         self, client, session, make_user
     ):
-        """Раньше ротация X-Forwarded-For давала новое ведро на каждый запрос,
-        и перебор пароля шёл без ограничений."""
+        """Ротация X-Forwarded-For давала новое ведро на каждый запрос, и перебор
+        пароля шёл без ограничений. Теперь подбор упирается в порог неудач
+        учётной записи, которому адрес клиента безразличен (аудит блокеров, E8);
+        что заголовок от недоверенного пира не меняет ключ лимита по адресу,
+        проверяют тесты `client_address` выше."""
         parent = await make_user(UserRole.PARENT)
         payload = {"email": parent.email, "password": "wrong-password"}
 
         statuses = []
-        for i in range(9):
+        for i in range(12):
             response = await client.post(
                 "/api/v1/auth/login", json=payload, headers={"X-Forwarded-For": f"1.2.3.{i}"}
             )

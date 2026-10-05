@@ -23,6 +23,7 @@ from core.repositories import dictionaries as dictionaries_repo
 from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
 
+from .. import login_throttle
 from ..deps.auth import CurrentUser
 from ..errors import ApiError, ErrorCode
 from ..schemas_admin import (
@@ -364,6 +365,11 @@ async def reset_password(
         entity_id=user.id,
         ip=ip,
     )
+    # Временный пароль снимает блокировку неудачных входов: иначе человек,
+    # которому его продиктовали, получал бы тот же отказ «слишком много
+    # попыток» ещё до проверки пароля (замечание ревью, 05.10.2026).
+    if user.email:
+        await login_throttle.reset(user.email)
     return temporary
 
 

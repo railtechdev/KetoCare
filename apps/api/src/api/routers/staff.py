@@ -18,7 +18,7 @@ from core.repositories import users as users_repo
 
 from ..client_address import client_address
 from ..cookies import set_auth_cookies
-from ..deps.auth import CurrentUserDep, SessionDep, require_roles
+from ..deps.auth import CurrentUserDep, SessionDep, bearer_token, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, limiter
 from ..schemas import (
@@ -30,7 +30,7 @@ from ..schemas import (
     UserRead,
 )
 from ..schemas_access import AccessCodeClaim, AccessCodeClaimed
-from ..security import create_token, hash_password_async, verify_password_async
+from ..security import create_token, decode_token, hash_password_async, verify_password_async
 from ..services import access_codes as access_codes_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -233,19 +233,36 @@ async def change_password(
         ip=client_address(request),
     )
 
+    # Момент входа переносится: смена пароля — повторный ввод одного фактора,
+    # без второго, и не должна продлевать сутки сессии сотрудника (замечание
+    # ревью E6, 05.10.2026).
+    started = _login_moment(request)
     tokens = TokenPair(
         access_token=create_token(
             user_id=me.id,
             role=me.role,
             token_type="access",
             password_changed_at=me.password_changed_at,
+            auth_time=started,
         ),
         refresh_token=create_token(
             user_id=me.id,
             role=me.role,
             token_type="refresh",
             password_changed_at=me.password_changed_at,
+            auth_time=started,
         ),
     )
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
     return tokens
+
+
+def _login_moment(request: Request) -> int | None:
+    """Момент входа паролем из предъявленного токена доступа, если он есть."""
+
+    try:
+        claims = decode_token(bearer_token(request), expected_type="access")
+    except ApiError:
+        return None
+    started = claims.get("auth")
+    return started if isinstance(started, int) else None

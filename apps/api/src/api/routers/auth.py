@@ -23,6 +23,7 @@ from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
+from .. import login_throttle
 from ..client_address import client_address
 from ..cookies import clear_auth_cookies, set_auth_cookies
 from ..deps.auth import (
@@ -36,7 +37,13 @@ from ..deps.auth import (
 )
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
-from ..ratelimit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
+from ..ratelimit import (
+    AUTH_RATE_LIMIT,
+    LOGIN_RATE_LIMIT,
+    REFRESH_RATE_LIMIT,
+    TELEGRAM_INIT_RATE_LIMIT,
+    limiter,
+)
 from ..schemas import (
     BackupCodes,
     BackupCodesRegenerate,
@@ -61,10 +68,12 @@ from ..schemas_access import AccessCodeActivate
 from ..schemas_telegram import MiniAppInitRequest, MiniAppSession
 from ..security import (
     Channel,
+    auth_challenge,
     create_token,
     decode_token,
     generate_totp_secret,
     hash_password_async,
+    staff_session_expired,
     token_predates_password_change,
     totp_provisioning_uri,
     totp_secret_usable,
@@ -84,8 +93,12 @@ ROLES_REQUIRING_TOTP = frozenset({UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIET
 _INVALID_CREDENTIALS = "Неверный email или пароль."
 
 
-def _issue_tokens(user: User) -> TokenPair:
-    """Оба токена несут отметку смены пароля: по ней отзываются старые сессии."""
+def _issue_tokens(user: User, *, auth_time: int | None = None) -> TokenPair:
+    """Оба токена несут отметку смены пароля: по ней отзываются старые сессии.
+
+    `auth_time` — момент входа паролем; при обновлении переносится из прежнего
+    токена, чтобы сессия сотрудника не продлевалась бесконечно (E6).
+    """
 
     return TokenPair(
         access_token=create_token(
@@ -93,21 +106,33 @@ def _issue_tokens(user: User) -> TokenPair:
             role=user.role,
             token_type="access",
             password_changed_at=user.password_changed_at,
+            auth_time=auth_time,
         ),
         refresh_token=create_token(
             user_id=user.id,
             role=user.role,
             token_type="refresh",
             password_changed_at=user.password_changed_at,
+            auth_time=auth_time,
         ),
     )
 
 
 @router.post("/login", response_model=LoginResponse, summary="Вход по паролю (+ TOTP)")
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(LOGIN_RATE_LIMIT)
 async def login(
     payload: LoginRequest, request: Request, response: Response, session: SessionDep
 ) -> LoginResponse:
+    # Порог неудач по учётной записи — до проверки пароля: иначе запертая
+    # учётная запись продолжала бы отвечать «верно / неверно» подбирающему.
+    # Ответ один и тот же для существующей и несуществующей почты.
+    if await login_throttle.is_locked(payload.email, client_address(request)):
+        raise ApiError(
+            ErrorCode.RATE_LIMITED,
+            "Слишком много неудачных попыток входа. Подождите 15 минут или "
+            "попросите администратора выдать временный пароль.",
+        )
+
     user = await users_repo.get_by_email(session, payload.email)
 
     # Один и тот же 401 и одно и то же время ответа для «нет такого email»,
@@ -120,10 +145,12 @@ async def login(
     # оракул присутствия. Своё объяснение он получает в боте, где он и живёт.
     if user is None or user.password_hash is None:
         await waste_password_verification_async()
+        await login_throttle.record_failure(payload.email, client_address(request))
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
     password_ok = await verify_password_async(user.password_hash, payload.password)
     if not password_ok or not user.is_active:
+        await login_throttle.record_failure(payload.email, client_address(request))
         # Отдельная транзакция: запрос завершится исключением, и сессия ручки
         # будет откатана — обычная запись аудита пропала бы вместе с ней.
         await audit_repo.write_audit_log_independent(
@@ -201,6 +228,7 @@ async def login(
             not payload.totp_code
             or not verify_totp(user.totp_secret, payload.totp_code, user_id=user.id)
         ):
+            await login_throttle.record_failure(payload.email, client_address(request))
             await audit_repo.write_audit_log_independent(
                 user_id=user.id,
                 action="login_failed_totp",
@@ -222,6 +250,9 @@ async def login(
                 ip=client_address(request),
             )
 
+    # Пароль и второй фактор верны — прежние ошибки не были перебором.
+    await login_throttle.reset(payload.email)
+
     if user.password_change_required:
         # После проверки пароля и второго фактора, а не вместо них: временный
         # пароль сокращает путь до смены, но не отменяет ни одной проверки.
@@ -237,7 +268,7 @@ async def login(
         )
 
     tokens = _issue_tokens(user)
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
 
     await audit_repo.write_audit_log(
         session,
@@ -285,8 +316,12 @@ async def refresh(
         # (`get_current_user`), поэтому отзыв гасит и обновлённую пару.
         return await _reissue_scoped(session, user, claims, channel)
 
-    tokens = _issue_tokens(user)
-    set_auth_cookies(response, tokens)
+    if staff_session_expired(user.role, claims):
+        raise auth_challenge("Сессия длится не дольше суток — войдите заново.")
+
+    started = claims.get("auth")
+    tokens = _issue_tokens(user, auth_time=started if isinstance(started, int) else None)
+    tokens = set_auth_cookies(response, tokens)
     return tokens
 
 
@@ -344,7 +379,7 @@ async def _reissue_scoped(
     response_model=MiniAppSession,
     summary="Вход в Mini App по подписи Telegram",
 )
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(TELEGRAM_INIT_RATE_LIMIT)
 async def telegram_init(
     payload: MiniAppInitRequest, request: Request, session: SessionDep
 ) -> MiniAppSession:
@@ -492,7 +527,7 @@ async def totp_verify(
         )
 
     tokens = _issue_tokens(db_user)
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
     return TotpEnabledResponse(tokens=tokens, backup_codes=codes)
 
 
@@ -939,5 +974,5 @@ async def set_password_after_reset(
     )
 
     tokens = _issue_tokens(db_user)
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
     return tokens

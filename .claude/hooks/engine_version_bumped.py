@@ -24,6 +24,7 @@ semver и сравниваются как кортежи чисел. Годит�
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import subprocess
@@ -45,9 +46,21 @@ def _parse(source: str) -> tuple[int, ...] | None:
         return None
 
 
+
+def _base_ref() -> str:
+    """С чем сравнивать: HEAD для хука агента, база PR для CI.
+
+    CI задаёт `ENGINE_BASE_REF` — коммит, от которого ответвлён PR: правка ядра
+    человеком или из командной строки хук агента не проходит, и без этой
+    проверки в CI требование bump'а держалось бы только на агенте (аудит
+    блокеров, E9).
+    """
+
+    return os.environ.get("ENGINE_BASE_REF") or "HEAD"
+
 def _blob_at_head(path: str) -> str | None:
     completed = subprocess.run(
-        ["git", "show", f"HEAD:{path}"],
+        ["git", "show", f"{_base_ref()}:{path}"],
         capture_output=True,
         text=True,
         check=False,

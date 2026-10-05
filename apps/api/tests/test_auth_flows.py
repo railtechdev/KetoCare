@@ -765,11 +765,33 @@ class TestRefresh:
         login = await client.post(
             "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
         )
-        refresh_token = login.json()["tokens"]["refresh_token"]
+        refresh_token = login.cookies["refresh_token"]
 
         response = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
         assert response.status_code == 200, response.text
         assert response.json()["access_token"]
+
+    async def test_refresh_token_is_not_in_the_web_body(self, client, session, make_user):
+        """Токен обновления кабинету — только httpOnly-кукой (аудит блокеров, E5).
+
+        Прежде он уходил и телом: скрипт, внедрённый в страницу, читал
+        тридцатидневный токен из ответа. Потребитель — кабинет: он держит в
+        памяти только токен доступа.
+        """
+        parent = await make_user(UserRole.PARENT)
+        login = await client.post(
+            "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
+        )
+
+        assert login.status_code == 200, login.text
+        assert login.json()["tokens"]["refresh_token"] is None
+        assert login.json()["tokens"]["access_token"]
+        assert login.cookies.get("refresh_token")
+
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": login.cookies["refresh_token"]}
+        )
+        assert refreshed.json()["refresh_token"] is None
 
     async def test_access_token_not_accepted_as_refresh(self, client, session, make_user):
         parent = await make_user(UserRole.PARENT)
@@ -787,10 +809,12 @@ class TestRefresh:
 
 
 class TestRateLimiting:
-    """Раздел 11 ТЗ: `/auth/*` — 5 запросов в минуту на IP.
+    """Вход защищён двумя лимитами (раздел 11 ТЗ; аудит блокеров, E2 и E8).
 
-    Без лимита `POST /auth/login` открыт для перебора пароля и шестизначного
-    TOTP-кода.
+    Поток с одного адреса — 20 обращений в минуту (успешные шаги не должны
+    запирать сотрудников за общим адресом клиники), подбор пароля — порог
+    неудач по учётной записи. Без лимитов `POST /auth/login` открыт для перебора
+    пароля и шестизначного TOTP-кода.
     """
 
     async def test_login_is_rate_limited(self, client, session, make_user):
@@ -798,11 +822,11 @@ class TestRateLimiting:
         payload = {"email": parent.email, "password": "wrong-password"}
 
         statuses = [
-            (await client.post("/api/v1/auth/login", json=payload)).status_code for _ in range(7)
+            (await client.post("/api/v1/auth/login", json=payload)).status_code for _ in range(12)
         ]
 
         assert 429 in statuses, f"перебор пароля не ограничивается: {statuses}"
-        assert statuses.index(429) >= 5, f"лимит сработал раньше 5 попыток: {statuses}"
+        assert statuses.index(429) >= 10, f"лимит сработал раньше 10 попыток: {statuses}"
 
     async def test_rate_limited_response_uses_standard_error_shape(
         self, client, session, make_user
@@ -811,7 +835,7 @@ class TestRateLimiting:
         payload = {"email": parent.email, "password": "wrong-password"}
 
         response = None
-        for _ in range(8):
+        for _ in range(12):
             response = await client.post("/api/v1/auth/login", json=payload)
             if response.status_code == 429:
                 break
@@ -877,7 +901,7 @@ class TestRefreshRateLimit:
         login = await client.post(
             "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
         )
-        token = login.json()["tokens"]["refresh_token"]
+        token = login.cookies["refresh_token"]
 
         statuses = [
             (await client.post("/api/v1/auth/refresh", json={"refresh_token": token})).status_code
@@ -885,12 +909,167 @@ class TestRefreshRateLimit:
         ]
         assert 429 not in statuses, f"обновление сессии заблокировано лимитом: {statuses}"
 
-    async def test_login_still_strictly_limited(self, client, session, make_user):
-        """Послабление касается только refresh: подбор пароля по-прежнему ограничен."""
+    async def test_password_guessing_hits_the_account_limit(self, client, session, make_user):
+        """Подбор пароля упирается в порог неудач учётной записи (NIST SP 800-63B).
+
+        Порог — десять неудач за пятнадцать минут; дальше даже верный пароль
+        не проверяется, и ответ не выдаёт, существует ли адрес.
+        """
         parent = await make_user(UserRole.PARENT)
-        payload = {"email": parent.email, "password": "wrong-password"}
+        wrong = {"email": parent.email, "password": "wrong-password"}
 
         statuses = [
-            (await client.post("/api/v1/auth/login", json=payload)).status_code for _ in range(7)
+            (await client.post("/api/v1/auth/login", json=wrong)).status_code for _ in range(10)
         ]
-        assert 429 in statuses
+        assert set(statuses) == {401}
+
+        locked = await client.post(
+            "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
+        )
+        assert locked.status_code == 429
+        assert "15 минут" in locked.json()["error"]["message"]
+
+    async def test_successful_steps_do_not_spend_the_limit(self, client, session, make_user):
+        """Успешные входы не тратят лимит (аудит блокеров, E2).
+
+        Прежде 5 обращений в минуту с адреса считали и успешные: вход врача —
+        два шага, и третий сотрудник за общим адресом клиники получал отказ.
+        """
+        statuses = []
+        for _ in range(8):
+            parent = await make_user(UserRole.PARENT)
+            response = await client.post(
+                "/api/v1/auth/login", json={"email": parent.email, "password": PASSWORD}
+            )
+            statuses.append(response.status_code)
+        assert set(statuses) == {200}
+
+    async def test_success_resets_the_account_counter(self, client, session, make_user):
+        parent = await make_user(UserRole.PARENT)
+        wrong = {"email": parent.email, "password": "wrong-password"}
+        right = {"email": parent.email, "password": PASSWORD}
+
+        for _ in range(9):
+            await client.post("/api/v1/auth/login", json=wrong)
+        assert (await client.post("/api/v1/auth/login", json=right)).status_code == 200
+        for _ in range(9):
+            await client.post("/api/v1/auth/login", json=wrong)
+
+        assert (await client.post("/api/v1/auth/login", json=right)).status_code == 200
+
+
+class TestStaffSessionLimits:
+    """Сессия сотрудника не продлевается бесконечно (аудит блокеров, E6; NIST AAL2).
+
+    Простой — двенадцать часов, абсолютный предел — сутки от входа паролем.
+    Родителей это не касается.
+    """
+
+    async def test_staff_refresh_token_lives_twelve_hours(self, session, make_user):
+        from datetime import UTC, datetime, timedelta
+
+        from api.security import create_token, decode_token
+
+        doctor = await make_user(UserRole.DOCTOR)
+        parent = await make_user(UserRole.PARENT)
+        now = datetime.now(UTC).timestamp()
+
+        staff = decode_token(
+            create_token(user_id=doctor.id, role=doctor.role, token_type="refresh"),
+            expected_type="refresh",
+        )
+        family = decode_token(
+            create_token(user_id=parent.id, role=parent.role, token_type="refresh"),
+            expected_type="refresh",
+        )
+
+        assert staff["exp"] - now <= timedelta(hours=12).total_seconds() + 5
+        assert family["exp"] - now >= timedelta(days=29).total_seconds()
+
+    async def test_refresh_keeps_the_login_moment_and_ends_after_a_day(
+        self, client, session, make_user
+    ):
+        from datetime import UTC, datetime, timedelta
+
+        from api.security import create_token
+
+        doctor = await make_user(UserRole.DOCTOR)
+        fresh = create_token(user_id=doctor.id, role=doctor.role, token_type="refresh")
+        stale = create_token(
+            user_id=doctor.id,
+            role=doctor.role,
+            token_type="refresh",
+            auth_time=int((datetime.now(UTC) - timedelta(hours=25)).timestamp()),
+        )
+
+        ok = await client.post("/api/v1/auth/refresh", json={"refresh_token": fresh})
+        expired = await client.post("/api/v1/auth/refresh", json={"refresh_token": stale})
+
+        assert ok.status_code == 200, ok.text
+        assert expired.status_code == 401
+        # Это вызов входа, а не отказ по существу: кабинет уходит на форму входа.
+        assert expired.headers.get("www-authenticate") == "Bearer"
+
+    async def test_parent_session_is_not_cut_after_a_day(self, client, session, make_user):
+        from datetime import UTC, datetime, timedelta
+
+        from api.security import create_token
+
+        parent = await make_user(UserRole.PARENT)
+        old = create_token(
+            user_id=parent.id,
+            role=parent.role,
+            token_type="refresh",
+            auth_time=int((datetime.now(UTC) - timedelta(days=10)).timestamp()),
+        )
+
+        response = await client.post("/api/v1/auth/refresh", json={"refresh_token": old})
+
+        assert response.status_code == 200, response.text
+
+
+class TestLockoutCannotBeHeldByAnAttacker:
+    """Злоумышленник, знающий почту врача, не запирает его (замечание ревью E2/E8).
+
+    Порог 10 — на пару «почта + адрес»; почта целиком запирается только после
+    50 неудач с любых адресов.
+    """
+
+    async def test_failures_from_another_address_do_not_lock_the_doctor(self):
+        from api import login_throttle
+
+        email = "doctor@clinic.example"
+        for _ in range(10):
+            await login_throttle.record_failure(email, "198.51.100.7")
+
+        assert await login_throttle.is_locked(email, "198.51.100.7")
+        assert not await login_throttle.is_locked(email, "203.0.113.10")
+
+    async def test_distributed_guessing_hits_the_account_ceiling(self):
+        from api import login_throttle
+
+        email = "doctor@clinic.example"
+        for i in range(50):
+            await login_throttle.record_failure(email, f"198.51.100.{i}")
+
+        assert await login_throttle.is_locked(email, "203.0.113.10")
+
+    async def test_temporary_password_lifts_the_lock(self, session, make_user):
+        from api import login_throttle
+        from api.deps.auth import CurrentUser
+        from api.services import admin as admin_service
+
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        for _ in range(10):
+            await login_throttle.record_failure(doctor.email, "203.0.113.10")
+        assert await login_throttle.is_locked(doctor.email, "203.0.113.10")
+
+        await admin_service.reset_password(
+            session,
+            actor=CurrentUser(id=admin.id, role=UserRole.ADMIN),
+            user_id=doctor.id,
+            ip=None,
+        )
+
+        assert not await login_throttle.is_locked(doctor.email, "203.0.113.10")

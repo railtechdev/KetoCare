@@ -64,6 +64,24 @@ _test_client_seq = itertools.count(1)
 
 
 @pytest.fixture(autouse=True)
+def login_failures(monkeypatch) -> dict:
+    """Счётчик неудачных входов — в памяти теста, а не в Redis разработчика.
+
+    Иначе неудачи одного прогона переживали бы откат базы и запирали учётные
+    записи с теми же адресами в следующем — на пятнадцать минут.
+    """
+
+    from api import login_throttle
+
+    def _offline():
+        raise ConnectionError("Redis в тестах не используется")
+
+    monkeypatch.setattr(login_throttle, "_client", _offline)
+    login_throttle._memory.clear()
+    return login_throttle._memory
+
+
+@pytest.fixture(autouse=True)
 def enqueued(monkeypatch) -> list[tuple[str, tuple]]:
     """Очередь в тестах — список, а не живой Redis.
 
