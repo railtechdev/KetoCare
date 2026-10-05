@@ -12,6 +12,12 @@ export interface ChatMessageProps {
   note?: ReactNode;
   /** Ответа не было: отказ, шаблон или недоступность — подпись не ставится */
   refusal?: boolean;
+  /**
+   * Строка над репликой — когда она сказана. Нужна тому, кто читает чужую
+   * переписку (специалист в карте пациента): сам собеседник время своего
+   * разговора знает, а врачу без него не понять, о каком дне вопрос.
+   */
+  meta?: ReactNode;
   className?: string;
 }
 
@@ -36,6 +42,7 @@ export function ChatMessage({
   pending = false,
   note,
   refusal = false,
+  meta,
   className,
 }: ChatMessageProps) {
   const own = role === "user";
@@ -52,6 +59,9 @@ export function ChatMessage({
             : "bg-muted text-foreground",
         )}
       >
+        {meta !== undefined && (
+          <span className="text-xs opacity-80">{meta}</span>
+        )}
         {pending ? (
           <span aria-busy="true" className="flex flex-col gap-1 py-1">
             <Skeleton className="h-3 w-40" />

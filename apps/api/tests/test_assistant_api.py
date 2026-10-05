@@ -6,13 +6,17 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy import func, select
 
 from api.services import queue as queue_service
 from core.models import AiConversation, AuditLog, IdempotencyKey
 from core.models.enums import UserRole
+from core.repositories import ai_conversations as conversations_repo
 from core.repositories import patients as patients_repo
+from core.schemas.ai_conversations import new_message
 
 pytestmark = pytest.mark.asyncio
 
@@ -338,6 +342,53 @@ class TestReading:
             await session.scalars(select(AuditLog).where(AuditLog.action == "ai_conversation.read"))
         )
         assert [entry.user_id for entry in entries] == [doctor.id]
+
+    async def test_listing_counts_refusals_for_the_specialist_view(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ) -> None:
+        """Потребитель — раздел «Вопросы семьи» карты пациента (кабинет).
+
+        Врач видит в перечне, на какие вопросы помощник не ответил по существу,
+        не открывая каждый разговор: это вопросы, которые ждут человека. Отказ —
+        `blocked` (шаблон, нет материала) или `status == "failed"` (помощник
+        недоступен); ожидание отказом не считается.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        accepted = (await _ask(client, parent, patient, auth_headers)).json()
+
+        conversation = await conversations_repo.get(session, uuid.UUID(accepted["conversation_id"]))
+        assert conversation is not None
+        listing = await client.get(
+            f"/api/v1/patients/{patient.id}/ai-conversations", headers=auth_headers(doctor)
+        )
+        assert listing.json()["items"][0]["refused_count"] == 0
+
+        await conversations_repo.replace_message(
+            session,
+            conversation=conversation,
+            message=new_message(seq=1, role="assistant", text="Шаблон", blocked=True),
+        )
+        await conversations_repo.append(
+            session,
+            conversation=conversation,
+            messages=[
+                new_message(seq=2, role="user", text="ещё вопрос"),
+                new_message(seq=3, role="assistant", text="Недоступен", status="failed"),
+            ],
+        )
+        await session.flush()
+
+        listing = await client.get(
+            f"/api/v1/patients/{patient.id}/ai-conversations", headers=auth_headers(doctor)
+        )
+
+        assert listing.status_code == 200
+        item = listing.json()["items"][0]
+        assert item["refused_count"] == 2
+        assert item["preview"] == "куда записать кетоны"
 
     async def test_admin_has_no_access(
         self, client, session, make_user, make_patient, auth_headers, enqueued
