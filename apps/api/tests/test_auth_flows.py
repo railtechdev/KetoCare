@@ -1026,3 +1026,50 @@ class TestStaffSessionLimits:
         response = await client.post("/api/v1/auth/refresh", json={"refresh_token": old})
 
         assert response.status_code == 200, response.text
+
+
+class TestLockoutCannotBeHeldByAnAttacker:
+    """Злоумышленник, знающий почту врача, не запирает его (замечание ревью E2/E8).
+
+    Порог 10 — на пару «почта + адрес»; почта целиком запирается только после
+    50 неудач с любых адресов.
+    """
+
+    async def test_failures_from_another_address_do_not_lock_the_doctor(self):
+        from api import login_throttle
+
+        email = "doctor@clinic.example"
+        for _ in range(10):
+            await login_throttle.record_failure(email, "198.51.100.7")
+
+        assert await login_throttle.is_locked(email, "198.51.100.7")
+        assert not await login_throttle.is_locked(email, "203.0.113.10")
+
+    async def test_distributed_guessing_hits_the_account_ceiling(self):
+        from api import login_throttle
+
+        email = "doctor@clinic.example"
+        for i in range(50):
+            await login_throttle.record_failure(email, f"198.51.100.{i}")
+
+        assert await login_throttle.is_locked(email, "203.0.113.10")
+
+    async def test_temporary_password_lifts_the_lock(self, session, make_user):
+        from api import login_throttle
+        from api.deps.auth import CurrentUser
+        from api.services import admin as admin_service
+
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        for _ in range(10):
+            await login_throttle.record_failure(doctor.email, "203.0.113.10")
+        assert await login_throttle.is_locked(doctor.email, "203.0.113.10")
+
+        await admin_service.reset_password(
+            session,
+            actor=CurrentUser(id=admin.id, role=UserRole.ADMIN),
+            user_id=doctor.id,
+            ip=None,
+        )
+
+        assert not await login_throttle.is_locked(doctor.email, "203.0.113.10")

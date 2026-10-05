@@ -58,7 +58,7 @@ class CurrentUser:
     channel: Channel = "web"
 
 
-def _bearer_token(request: Request) -> str:
+def bearer_token(request: Request) -> str:
     header = request.headers.get("Authorization", "")
     scheme, _, token = header.partition(" ")
     if scheme.lower() == "bearer" and token:
@@ -73,7 +73,7 @@ def _bearer_token(request: Request) -> str:
 
 
 async def get_current_user(request: Request, session: SessionDep) -> CurrentUser:
-    payload = decode_token(_bearer_token(request), expected_type="access")
+    payload = decode_token(bearer_token(request), expected_type="access")
 
     try:
         user_id = uuid.UUID(payload["sub"])
@@ -274,7 +274,7 @@ async def get_totp_setup_user(request: Request, session: SessionDep) -> CurrentU
     ручке: остальные зависимости требуют `expected_type="access"`.
     """
 
-    token = _bearer_token(request)
+    token = bearer_token(request)
     try:
         payload = decode_token(token, expected_type="access")
     except ApiError:
@@ -316,7 +316,7 @@ async def get_password_reset_user(request: Request, session: SessionDep) -> Curr
     пароля без знания старого по любому access-токену.
     """
 
-    payload = decode_token(_bearer_token(request), expected_type="password_reset")
+    payload = decode_token(bearer_token(request), expected_type="password_reset")
 
     try:
         user_id = uuid.UUID(payload["sub"])

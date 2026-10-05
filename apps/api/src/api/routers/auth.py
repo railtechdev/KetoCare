@@ -126,7 +126,7 @@ async def login(
     # Порог неудач по учётной записи — до проверки пароля: иначе запертая
     # учётная запись продолжала бы отвечать «верно / неверно» подбирающему.
     # Ответ один и тот же для существующей и несуществующей почты.
-    if await login_throttle.is_locked(payload.email):
+    if await login_throttle.is_locked(payload.email, client_address(request)):
         raise ApiError(
             ErrorCode.RATE_LIMITED,
             "Слишком много неудачных попыток входа. Подождите 15 минут или "
@@ -145,12 +145,12 @@ async def login(
     # оракул присутствия. Своё объяснение он получает в боте, где он и живёт.
     if user is None or user.password_hash is None:
         await waste_password_verification_async()
-        await login_throttle.record_failure(payload.email)
+        await login_throttle.record_failure(payload.email, client_address(request))
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
     password_ok = await verify_password_async(user.password_hash, payload.password)
     if not password_ok or not user.is_active:
-        await login_throttle.record_failure(payload.email)
+        await login_throttle.record_failure(payload.email, client_address(request))
         # Отдельная транзакция: запрос завершится исключением, и сессия ручки
         # будет откатана — обычная запись аудита пропала бы вместе с ней.
         await audit_repo.write_audit_log_independent(
@@ -228,7 +228,7 @@ async def login(
             not payload.totp_code
             or not verify_totp(user.totp_secret, payload.totp_code, user_id=user.id)
         ):
-            await login_throttle.record_failure(payload.email)
+            await login_throttle.record_failure(payload.email, client_address(request))
             await audit_repo.write_audit_log_independent(
                 user_id=user.id,
                 action="login_failed_totp",
