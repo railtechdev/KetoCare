@@ -103,8 +103,60 @@ class TestWhoSeesWhat:
 
         assert await removable(mother) == {str(mother.id), str(grandma.id)}
         assert await removable(grandma) == {str(grandma.id)}
-        assert await removable(father) == {str(father.id)}
+        # Папу подключил врач — он основной родитель и убирает тех, кого
+        # позвала семья (бабушку), но не маму: основные друг друга не убирают.
+        assert await removable(father) == {str(father.id), str(grandma.id)}
         assert await removable(doctor) == {str(mother.id), str(grandma.id), str(father.id)}
+
+
+class TestLeadParent:
+    async def test_lead_removes_a_stranger_invited_by_grandma(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Мама получает «подключился новый близкий: …, по приглашению бабушки».
+
+        Без права основного родителя она не могла бы закрыть доступ незнакомцу —
+        уведомление звало бы к действию, которого у неё нет.
+        """
+        _, patient, mother, grandma, _ = await _family(
+            session, make_user, make_patient, client, auth_headers
+        )
+        code = (
+            await client.post(codes_url(patient.id), headers=auth_headers(grandma), json=FAMILY)
+        ).json()["code"]
+        nanny = await make_user(UserRole.PARENT)
+        joined = await client.post(
+            "/api/v1/users/me/access-codes/activate",
+            headers=auth_headers(nanny),
+            json={"code": code},
+        )
+        assert joined.status_code == 201, joined.text
+
+        response = await client.delete(
+            parents_url(patient.id, nanny.id), headers=auth_headers(mother)
+        )
+
+        assert response.status_code == 204, response.text
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "unlink_parent", AuditLog.entity_id == patient.id
+            )
+        )
+        assert entry is not None and entry.after["ground"] == "lead"
+
+    async def test_invited_adult_is_not_a_lead(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Бабушка, позванная мамой, не убирает папу, подключённого врачом."""
+        _, patient, _, grandma, father = await _family(
+            session, make_user, make_patient, client, auth_headers
+        )
+
+        response = await client.delete(
+            parents_url(patient.id, father.id), headers=auth_headers(grandma)
+        )
+
+        assert response.status_code == 403
 
 
 class TestRemoval:
