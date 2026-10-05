@@ -29,6 +29,7 @@ from .reminders.notify import (
     notify_family_joined,
     notify_family_menu_composed,
     notify_family_nudge,
+    notify_password_changed,
 )
 from .reminders.task import reminders_cron
 from .reports.task import render_report
@@ -47,6 +48,7 @@ class WorkerSettingsARQ:
         notify_family,
         notify_family_joined,
         notify_family_nudge,
+        notify_password_changed,
         notify_family_menu_composed,
         parse_free_text,
         assistant_reply,

@@ -143,3 +143,14 @@ async def revoke_for_parent(
         .returning(TelegramAccount)
     )
     return list((await session.scalars(stmt)).all())
+
+
+async def list_live_links_for_parent(
+    session: AsyncSession, parent_id: uuid.UUID
+) -> list[TelegramAccount]:
+    """Живые чаты одного взрослого — куда сообщить о событиях его учётной записи."""
+
+    stmt = select(TelegramAccount).where(
+        TelegramAccount.parent_id == parent_id, TelegramAccount.revoked_at.is_(None)
+    )
+    return list((await session.scalars(stmt)).all())
