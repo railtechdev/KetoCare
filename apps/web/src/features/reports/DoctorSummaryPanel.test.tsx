@@ -178,10 +178,108 @@ describe("черновик сводки", () => {
       expect(api.POST).toHaveBeenCalledWith(
         "/api/v1/patients/{patient_id}/summaries/{summary_id}/approve",
         expect.objectContaining({
-          body: { approved_md: "правленый текст" },
+          body: {
+            approved_md: "правленый текст",
+            acknowledged_findings: false,
+          },
         }),
       );
     });
+  });
+
+  /** Отказ ручки утверждения в той форме, в какой его отдаёт API. */
+  function rejectsApproval(acknowledgeable: boolean, origin: string) {
+    (api.POST as Mock).mockResolvedValueOnce({
+      error: {
+        error: {
+          code: "validation_error",
+          message: "Сообщение сервера",
+          details: {
+            acknowledgeable,
+            findings: [
+              {
+                kind: "diagnosis",
+                rule: "diagnosis",
+                fragment: "у ребенка эпилепсия, синдром веста",
+                matched: "синдром веста + у ребенка",
+                hard: true,
+                origin,
+              },
+            ],
+          },
+        },
+      },
+    });
+  }
+
+  async function approveEdited(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByRole("button", { name: reportsRu.summary.review }),
+    );
+    const field = screen.getByLabelText(reportsRu.summary.textLabel);
+    await user.type(field, " У ребёнка эпилепсия, синдром Веста.");
+    await user.click(
+      screen.getByRole("button", { name: reportsRu.summary.approve }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: reportsRu.summary.approve }),
+    );
+  }
+
+  it("свои слова врача — предупреждение, и их можно утвердить через подтверждение", async () => {
+    /* Постфильтр стоит против выдумок модели, а не против врача (дополнение
+       к ADR-0023): диагноз, вписанный врачом, не запрещает утверждение. */
+    serves([summary()]);
+    rejectsApproval(true, "doctor");
+    const user = userEvent.setup();
+    renderPanel();
+
+    await approveEdited(user);
+
+    expect(
+      await screen.findByText(reportsRu.summary.rejected.warning),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/синдром веста/)).toBeInTheDocument();
+
+    (api.POST as Mock).mockResolvedValueOnce({
+      data: summary({ approved_md: "текст" }),
+    });
+    await user.click(
+      screen.getByRole("button", { name: reportsRu.summary.rejected.anyway }),
+    );
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent(reportsRu.summary.rejected.confirmTitle);
+    await user.click(
+      within(confirm).getByRole("button", {
+        name: reportsRu.summary.rejected.anyway,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenLastCalledWith(
+        "/api/v1/patients/{patient_id}/summaries/{summary_id}/approve",
+        expect.objectContaining({
+          body: expect.objectContaining({ acknowledged_findings: true }),
+        }),
+      );
+    });
+  });
+
+  it("предложение черновика без изменений утвердить нельзя — кнопки «всё равно» нет", async () => {
+    serves([summary()]);
+    rejectsApproval(false, "draft");
+    const user = userEvent.setup();
+    renderPanel();
+
+    await approveEdited(user);
+
+    expect(
+      await screen.findByText(reportsRu.summary.rejected.blocking),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: reportsRu.summary.rejected.anyway }),
+    ).not.toBeInTheDocument();
   });
 
   it("утверждённая сводка не показывает пометку черновика", async () => {

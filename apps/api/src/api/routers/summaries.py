@@ -15,10 +15,15 @@
 подтверждение, а `draft_md` остаётся неизменным навсегда — пара «черновик и
 утверждённое» и есть доказательство, что человек был в контуре.
 
-Присланный текст проверяется постфильтром заново. Не из недоверия к врачу:
-утверждение может оказаться механическим нажатием, а рекомендация из черновика
-уедет в `approved_md`, оттуда в отчёт и в PDF. Собственное суждение врача о
-пациенте пишется во вкладке «Заметки», для этого она и есть.
+Присланный текст проверяется постфильтром заново: утверждение может оказаться
+механическим нажатием, а рекомендация из черновика уедет в `approved_md`, оттуда
+в отчёт и в PDF. **Но фильтр стоит против модели, а не против врача**
+(дополнение к ADR-0023 от 05.10.2026). Поэтому жёсткая находка в предложении,
+которое пришло из черновика без изменений, запрещает утверждение, как и раньше,
+а находка в предложении, которое врач написал или переписал сам, — это
+предупреждение: ручка возвращает его, и врач утверждает текст повторно с явным
+`acknowledged_findings`. Сбой самого фильтра (`internal`) по-прежнему запрещает
+утверждение при любом флаге — непроверенный текст документом не становится.
 """
 
 from __future__ import annotations
@@ -86,6 +91,10 @@ class SummaryApprove(BaseModel):
     #: Текст, который утверждается. Может отличаться от черновика — правка и
     #: есть работа врача.
     approved_md: Annotated[str, Field(min_length=1, max_length=MAX_SUMMARY_CHARS)]
+    #: Врач видел находки постфильтра в СВОИХ предложениях и утверждает текст
+    #: как есть. На предложения черновика, оставленные без изменений, и на сбой
+    #: фильтра флаг не действует: их врач может только убрать или переписать.
+    acknowledged_findings: bool = False
 
 
 def _read(summary: DoctorSummary) -> SummaryRead:
@@ -242,13 +251,20 @@ async def approve_summary(
     if summary.status is not AiJobStatus.DONE or summary.draft_md is None:
         raise ApiError(ErrorCode.CONFLICT, "Черновик ещё не готов.")
 
-    findings = _hard_findings(body.approved_md)
-    if findings:
+    blocking, warnings = _hard_findings(body.approved_md, draft=summary.draft_md)
+    if blocking:
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
-            "В тексте остались утверждения, которых в сводке быть не должно. "
-            "Уберите их или перенесите во вкладку «Заметки».",
-            details={"findings": findings},
+            "В тексте остались утверждения из черновика, которых в сводке быть не "
+            "должно. Уберите их или перепишите своими словами.",
+            details={"findings": blocking + warnings, "acknowledgeable": False},
+        )
+    if warnings and not body.acknowledged_findings:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "В вашем тексте есть утверждения, похожие на диагноз, рекомендацию или "
+            "причину. Проверьте их и подтвердите утверждение.",
+            details={"findings": warnings, "acknowledgeable": True},
         )
 
     approved = await summaries_repo.approve(
@@ -271,20 +287,46 @@ async def approve_summary(
         after={
             "edited": body.approved_md.strip() != (approved.draft_md or "").strip(),
             "checks": sorted({str(item.get("kind")) for item in (approved.checks or [])}),
+            # Что врач утвердил поверх предупреждения — классы, без текста.
+            "acknowledged": sorted({str(item["kind"]) for item in warnings}),
         },
     )
     await session.commit()
     return _read(approved)
 
 
-def _hard_findings(text: str) -> list[dict[str, Any]]:
-    """Находки, при которых текст нельзя утвердить.
+def _hard_findings(
+    text: str, *, draft: str | None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Жёсткие находки, разделённые на запрет и предупреждение.
+
+    Запрет — находка в предложении, пришедшем из черновика модели без
+    изменений, и сбой фильтра. Предупреждение — находка в предложении, которого
+    в черновике нет: его написал или переписал врач, и фильтр, поставленный
+    против выдумок модели, не вправе запрещать врачу его собственный текст
+    (дополнение к ADR-0023). Сравнение — по предложениям после той же
+    нормализации, которой пользуется фильтр: разметка и регистр правкой не
+    считаются, иначе «жирный» шрифт снимал бы запрет.
 
     Правила общие с воркером (`core.textguard`): он проверяет ими черновик,
     ручка — текст, который врач утверждает. Второй копии правил быть не должно.
     """
 
-    return [finding.as_dict() for finding in textguard.check(text) if finding.hard]
+    from_model = set(textguard.sentences(draft or ""))
+    blocking: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    for finding in textguard.check(text):
+        if not finding.hard:
+            continue
+        if finding.kind is textguard.Kind.INTERNAL:
+            origin = "guard"
+        elif finding.fragment in from_model:
+            origin = "draft"
+        else:
+            origin = "doctor"
+        target = warnings if origin == "doctor" else blocking
+        target.append({**finding.as_dict(), "origin": origin})
+    return blocking, warnings
 
 
 async def _audit(

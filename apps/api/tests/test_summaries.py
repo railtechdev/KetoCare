@@ -40,6 +40,17 @@ async def _doctor_with_patient(session, make_user, make_patient):
     return doctor, patient
 
 
+async def _approve(client, patient, summary, doctor, auth_headers, text, *, ack=False):
+    body: dict[str, object] = {"approved_md": text}
+    if ack:
+        body["acknowledged_findings"] = True
+    return await client.post(
+        f"/api/v1/patients/{patient.id}/summaries/{summary.id}/approve",
+        json=body,
+        headers=auth_headers(doctor),
+    )
+
+
 async def _with_draft(session, patient, doctor, *, draft: str = DRAFT, checks=None):
     """Строка, доведённая до состояния «черновик готов», — как её оставляет воркер."""
 
@@ -297,7 +308,114 @@ class TestApprove:
         )
 
         assert response.status_code == 422
-        assert response.json()["error"]["details"]["findings"][0]["kind"] == "recommendation"
+        details = response.json()["error"]["details"]
+        assert details["findings"][0]["kind"] == "recommendation"
+        # Строка вписана врачом, а не моделью: утвердить можно, но осознанно.
+        assert details["acknowledgeable"] is True
+
+    async def test_a_diagnosis_left_unchanged_from_the_draft_blocks_even_when_acknowledged(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Фильтр стоит против выдумок модели: её собственное предложение с
+        диагнозом, оставленное как есть, не утверждается никаким флагом."""
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        draft = DRAFT.replace(
+            "За период записано 6 приступов.",
+            "За период записано 6 приступов. У ребёнка эпилепсия, синдром Веста.",
+        )
+        summary = await _with_draft(session, patient, doctor, draft=draft)
+
+        response = await _approve(client, patient, summary, doctor, auth_headers, draft, ack=True)
+
+        assert response.status_code == 422
+        details = response.json()["error"]["details"]
+        assert details["acknowledgeable"] is False
+        assert [(f["kind"], f["origin"]) for f in details["findings"]] == [("diagnosis", "draft")]
+        await session.refresh(summary)
+        assert summary.approved_md is None
+
+    async def test_the_doctors_own_diagnosis_is_a_warning_and_approves_when_acknowledged(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Врач вправе написать в сводке диагноз своими словами: находка
+        возвращается предупреждением, утверждение идёт с явным флагом, и в
+        `approved_md` уходит ровно присланный текст."""
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        summary = await _with_draft(session, patient, doctor)
+        edited = DRAFT.replace(
+            "## Замечания по данным\nданных за период нет\n",
+            "## Замечания по данным\nУ ребёнка эпилепсия, синдром Веста. "
+            "Следует повторить анализ крови.\n",
+        )
+
+        first = await _approve(client, patient, summary, doctor, auth_headers, edited)
+
+        assert first.status_code == 422
+        details = first.json()["error"]["details"]
+        assert details["acknowledgeable"] is True
+        assert {(f["kind"], f["origin"]) for f in details["findings"]} == {
+            ("diagnosis", "doctor"),
+            ("recommendation", "doctor"),
+        }
+
+        second = await _approve(client, patient, summary, doctor, auth_headers, edited, ack=True)
+
+        assert second.status_code == 200, second.text
+        assert second.json()["approved_md"] == edited
+        assert second.json()["draft_md"] == DRAFT
+        entry = await session.scalar(
+            select(AuditLog).where(AuditLog.action == "ai_summary.approve")
+        )
+        assert entry is not None
+        assert entry.after["acknowledged"] == ["diagnosis", "recommendation"]
+        assert "веста" not in str(entry.after).lower()
+
+    async def test_a_draft_sentence_rewritten_by_the_doctor_is_the_doctors(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Переписанное предложение — уже слова врача, а не модели. Разметка и
+        регистр правкой не считаются: жирный шрифт запрета не снимает."""
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        draft = DRAFT.replace(
+            "7 замеров, от 1.9 до 3.2 ммоль/л.",
+            "7 замеров, от 1.9 до 3.2 ммоль/л. Следует повторить анализ крови.",
+        )
+        summary = await _with_draft(session, patient, doctor, draft=draft)
+
+        bold = draft.replace("Следует повторить", "**СЛЕДУЕТ** повторить")
+        rewritten = draft.replace("анализ крови.", "анализ крови в октябре.")
+
+        bolded = await _approve(client, patient, summary, doctor, auth_headers, bold, ack=True)
+        own = await _approve(client, patient, summary, doctor, auth_headers, rewritten, ack=True)
+
+        assert bolded.status_code == 422
+        assert bolded.json()["error"]["details"]["acknowledgeable"] is False
+        assert own.status_code == 200, own.text
+        assert own.json()["approved_md"] == rewritten
+
+    async def test_a_guard_failure_blocks_whatever_the_flag(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """Fail-closed: текст, который никто не проверил, документом не становится."""
+
+        from core.textguard import summary_guard
+
+        def broken(*_args, **_kwargs):
+            raise RuntimeError("словарь не загрузился")
+
+        monkeypatch.setattr(summary_guard, "_check", broken)
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        summary = await _with_draft(session, patient, doctor)
+
+        response = await _approve(client, patient, summary, doctor, auth_headers, DRAFT, ack=True)
+
+        assert response.status_code == 422
+        details = response.json()["error"]["details"]
+        assert details["acknowledgeable"] is False
+        assert details["findings"][0]["origin"] == "guard"
 
     async def test_a_draft_that_is_not_ready_cannot_be_approved(
         self, client, session, make_user, make_patient, auth_headers
