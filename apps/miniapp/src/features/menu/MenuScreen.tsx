@@ -3,6 +3,7 @@ import {
   Button,
   Section,
   WarningBanner,
+  formatDayTime,
   formatMass,
 } from "@ketocare/ui";
 
@@ -260,6 +261,16 @@ function DayPlan({
         <WarningBanner level="danger" title={t("menu.compose.removeFailed")}>
           {saveFailed}
         </WarningBanner>
+      )}
+
+      {/* План составил специалист — семья должна это видеть (ADR-0047). */}
+      {menu.updated_by_name && menu.updated_by_role !== "parent" && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("menu.composedBy", {
+            name: menu.updated_by_name,
+            when: formatDayTime(new Date(menu.updated_at)),
+          })}
+        </p>
       )}
 
       {menu.excluded_products.length > 0 && (

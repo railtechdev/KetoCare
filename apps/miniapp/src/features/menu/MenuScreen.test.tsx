@@ -295,6 +295,31 @@ describe("план дня в Mini App", () => {
     ).toHaveAttribute("href", SESSION.webUrl);
   });
 
+  it("называет специалиста, составившего план, и молчит о своём", async () => {
+    // День составляет и диетолог (ADR-0047): семья должна видеть, что план,
+    // по которому она кормит, поменял не она.
+    respond({
+      menu: menu({
+        updated_at: "2026-08-31T05:00:00Z",
+        updated_by_name: "Анна Петровна",
+        updated_by_role: "dietitian",
+      }),
+    });
+    const { unmount } = renderScreen();
+
+    expect(
+      await screen.findByText(/^Составил\(а\): Анна Петровна, /),
+    ).toBeInTheDocument();
+    unmount();
+
+    respond({
+      menu: menu({ updated_by_name: "Мама", updated_by_role: "parent" }),
+    });
+    renderScreen();
+    expect(await screen.findByText("Омлет на сливках")).toBeInTheDocument();
+    expect(screen.queryByText(/Составил\(а\)/)).not.toBeInTheDocument();
+  });
+
   it("называет исключённые ребёнку продукты в плане", async () => {
     // По этому плану кормят сегодня — молчать нельзя.
     (api.GET as Mock).mockResolvedValue({
