@@ -344,6 +344,29 @@ class ReminderDelivery(Base, UUIDPkMixin):
     chat_id: Mapped[int] = mapped_column(BIGINT, nullable=False)
 
 
+class FamilyNudge(Base, UUIDPkMixin, CreatedAtMixin):
+    """Специалист попросил семью отметить в дневнике последние дни (ADR-0046).
+
+    Отдельная строка, а не запись журнала аудита: по ней считается предел «не
+    чаще раза в сутки на ребёнка», а журнал аудита — свидетельство, не
+    состояние, и индекса под такой вопрос у него нет. Строка заводится только
+    тогда, когда сообщение действительно ушло в очередь: просьба, которую
+    некому доставить, предел не тратит.
+    """
+
+    __tablename__ = "family_nudges"
+    __table_args__ = (Index("ix_family_nudges_patient_created", "patient_id", "created_at"),)
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
+    )
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    #: Сколько чатов семьи должно было получить сообщение на момент просьбы.
+    recipients: Mapped[int] = mapped_column(nullable=False)
+
+
 class AccessCode(Base, CreatedAtMixin):
     """Код доступа семьи к ребёнку (ADR-0040).
 
