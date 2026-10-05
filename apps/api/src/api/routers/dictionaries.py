@@ -40,12 +40,25 @@ async def list_seizure_types(
     session: SessionDep,
     _: CurrentUserDep,
     page: PaginationDep,
+    include_retired: Annotated[
+        bool, Query(description="Вместе с выведенными из употребления (до ILAE 2025)")
+    ] = False,
 ) -> Page[SeizureTypeRead]:
     """Отдаётся вместе с коротким кодом: месячная сетка дневника приступов
-    подписывает столбцы «TC», а не «Тонико-клонический» (ADR-0007)."""
+    подписывает столбцы «ГТКП», а не полным названием (ADR-0007).
+
+    По умолчанию — только действующие типы ILAE 2025 (ADR-0050): этот список
+    читает бот, чтобы предложить кнопки, и прежний тип среди них означал бы
+    новую запись по классификации, от которой клиника отказалась. Экранам,
+    показывающим старые записи, нужен справочник целиком — `include_retired`.
+    """
 
     items, total = await dictionaries_repo.list_entries(
-        session, SeizureType, limit=page.limit, offset=page.offset
+        session,
+        SeizureType,
+        limit=page.limit,
+        offset=page.offset,
+        include_retired=include_retired,
     )
     return Page(items=[SeizureTypeRead.model_validate(e) for e in items], total=total)
 

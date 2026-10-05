@@ -14,6 +14,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from core.control_schedule import ControlPurpose
 from core.models.enums import KetoneMethod
 
 from .schemas import DishComputed, PrescriptionRead
@@ -154,6 +155,16 @@ class MonitoringPhase(enum.StrEnum):
     ROUTINE = "routine"
 
 
+class NextControl(BaseModel):
+    """Ближайший контрольный визит (вопросы 17 и 18, ADR-0050)."""
+
+    planned_on: date
+    #: Дата прошла, а визит не отмечен. Порога «просрочки» клиника не называла.
+    overdue: bool
+    #: Оценка эффективности (6 месяцев) или решение о продолжении (24 месяца).
+    purpose: ControlPurpose | None = None
+
+
 class PatientOverview(BaseModel):
     patient_id: uuid.UUID
     # Дата, за которую посчитаны итоги и приступы, — местная (settings.tz), не UTC
@@ -193,3 +204,10 @@ class PatientOverview(BaseModel):
     #: защита: оно разобрано в ADR-0031 — дата начала диеты не то, ради чего
     #: профиль закрыт, и семья начинает диету сама.
     monitoring_phase: MonitoringPhase
+    #: Дата завершения кетодиетотерапии (вопрос 18, ADR-0050); `None` — ребёнок
+    #: на терапии. Семья видит по ней нейтральную строку «терапия завершена»;
+    #: причина завершения сюда не входит — она в медицинском профиле.
+    therapy_ended_on: dt.date | None = None
+    #: Ближайший несостоявшийся контрольный визит (вопрос 17); `None` — визитов
+    #: в графике нет или все отмечены.
+    next_control: NextControl | None = None

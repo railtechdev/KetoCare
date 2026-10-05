@@ -23,8 +23,10 @@ import httpx
 import structlog
 
 from core.config import Settings
+from core.control_schedule import labs_for
 from core.db import get_sessionmaker
 from core.models import KetoneLog, MedicationLog, WeightLog
+from core.repositories import control_visits as control_visits_repo
 from core.repositories import diary as diary_repo
 from core.repositories import reminders as reminders_repo
 
@@ -134,9 +136,100 @@ async def reminders_cron(ctx: dict[str, Any]) -> dict[str, int]:
 
                 sent += 1
 
+        if _is_due(VISIT_NOTICE_AT, now_local):
+            visit_sent, visit_skipped = await _control_visit_notices(
+                session, client, token=settings.bot_token, today=now_local.date()
+            )
+            sent += visit_sent
+            skipped += visit_skipped
+
         await session.commit()
 
     return {"sent": sent, "skipped": skipped}
+
+
+#: За сколько дней до контрольного визита напомнить семье и в котором часу.
+#:
+#: Не медицинское число, а продуктовое (ADR-0050): «за несколько дней» — чтобы
+#: успеть сдать анализы к визиту, днём — чтобы сообщение не пришло ночью.
+VISIT_NOTICE_DAYS_BEFORE = 3
+VISIT_NOTICE_AT = time(10, 0)
+
+_MONTHS_GENITIVE = (
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
+
+def visit_notice_text(planned_on: date, labs: tuple[str, ...]) -> str:
+    """Напоминание о визите — без медицинских советов (раздел 7.4 ТЗ).
+
+    Перечень анализов — ровно тот, что назвала клиника (вопрос 34): «можно
+    сделать как напоминание пациенту». Семья видит дату и список, а не причину
+    визита: «оценка эффективности» в чате звучала бы как приговор, а говорит
+    об этом врач.
+    """
+
+    when = f"{planned_on.day} {_MONTHS_GENITIVE[planned_on.month - 1]}"
+    text = f"Напоминание: {when} — контрольный визит к врачу 🗓"
+    if labs:
+        text += "\n\nАнализы и обследования к визиту: " + ", ".join(labs) + "."
+    text += "\n\nЕсли дату нужно перенести, свяжитесь с клиникой."
+    return text
+
+
+async def _control_visit_notices(
+    session: Any, client: httpx.AsyncClient, *, token: str, today: date
+) -> tuple[int, int]:
+    """Напомнить семьям о визитах через `VISIT_NOTICE_DAYS_BEFORE` дней.
+
+    Право на отправку занимается по (ребёнок, «визит», дата визита, чат):
+    повторный тик в том же окне и перезапуск воркера второго сообщения не дадут.
+    Визит, перенесённый на другую дату, получит своё напоминание.
+    """
+
+    planned_on = today + timedelta(days=VISIT_NOTICE_DAYS_BEFORE)
+    sent = 0
+    skipped = 0
+    for visit, link in await control_visits_repo.due_for_family_notice(
+        session, planned_on=planned_on
+    ):
+        claimed = await reminders_repo.claim_delivery(
+            session,
+            patient_id=visit.patient_id,
+            kind="control_visit",
+            sent_on=visit.planned_on,
+            chat_id=link.chat_id,
+        )
+        if not claimed:
+            skipped += 1
+            continue
+        try:
+            await send_message(
+                client,
+                token=token,
+                chat_id=link.chat_id,
+                text=visit_notice_text(visit.planned_on, labs_for(visit.month_offset)),
+            )
+        except TelegramSendError as exc:
+            logger.warning(
+                "control_visit_notice_not_delivered",
+                patient_id=str(visit.patient_id),
+                reason=str(exc),
+            )
+            continue
+        sent += 1
+    return sent, skipped
 
 
 def _due_kinds(reminder: Any, now_local: datetime) -> list[tuple[str, time | None]]:

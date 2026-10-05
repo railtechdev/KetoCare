@@ -26,15 +26,35 @@ async def get[T: (SeizureType, KetoneMethodDict)](
 
 
 async def list_entries[T: (SeizureType, KetoneMethodDict)](
-    session: AsyncSession, model: type[T], *, limit: int = 50, offset: int = 0
+    session: AsyncSession,
+    model: type[T],
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    include_retired: bool = True,
 ) -> tuple[list[T], int]:
     """Порядок — по `sort`, затем по названию: `sort` задаёт администратор и
     дубликаты в нём допустимы, а порядок значений в справочнике должен быть
-    устойчивым между запросами."""
+    устойчивым между запросами.
 
-    stmt = select(model).order_by(model.sort, model.name_ru).limit(limit).offset(offset)
-    items = list(await session.scalars(stmt))
-    total = await session.scalar(select(func.count()).select_from(model))
+    `include_retired=False` прячет типы приступов, выведенные из употребления
+    при переходе на ILAE 2025 (ADR-0050): их нельзя выбрать для новой записи, но
+    прежние записи на них ссылаются, и показать такие записи можно только со
+    справочником целиком. У методов кетонов флага нет — параметр их не меняет.
+    """
+
+    stmt = select(model)
+    count = select(func.count()).select_from(model)
+    if issubclass(model, SeizureType):
+        if not include_retired:
+            stmt = stmt.where(SeizureType.retired.is_(False))
+            count = count.where(SeizureType.retired.is_(False))
+        # Действующие — первыми: прежние нужны для чтения старых записей, а
+        # не для выбора.
+        stmt = stmt.order_by(SeizureType.retired)
+    stmt = stmt.order_by(model.sort, model.name_ru)
+    items = list(await session.scalars(stmt.limit(limit).offset(offset)))
+    total = await session.scalar(count)
     return items, int(total or 0)
 
 

@@ -25,6 +25,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -42,8 +43,22 @@ class SeizureType(Base, UUIDPkMixin):
     # присланного заказчиком: в клетке месячной сетки «Тонико-клонический» не
     # помещается, «TC» — да (ADR-0007). Необязателен: своего кода у типов вне
     # того дневника пока нет — вопрос 4 в docs/medical/OPEN_QUESTIONS.md.
-    code: Mapped[str | None] = mapped_column(String(4))
+    #
+    # С 05.10.2026 справочник — классификация ILAE 2025 (ответ клиники на вопрос
+    # 4: «принимаем целиком», ADR-0050), и коды — русские сокращения
+    # официального перевода: ГТКП, ФППБТК. Самое длинное — шесть знаков, отсюда
+    # ширина колонки. У типов, которым перевод сокращения не дал, кода нет.
+    code: Mapped[str | None] = mapped_column(String(8))
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: Номер узла в таксономии ILAE 2025 («1.3», «3.1.2»). Пусто у типов вне
+    #: классификации — прежних, выведенных из употребления.
+    ilae_ref: Mapped[str | None] = mapped_column(String(8))
+    #: Выведен из употребления: новый приступ этим типом не записать, но прежние
+    #: записи продолжают ссылаться на него и показываются как были. Удалить
+    #: такой тип нельзя — на него ссылается дневник (ADR-0050).
+    retired: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
 
 class KetoneMethodDict(Base, UUIDPkMixin):

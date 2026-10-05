@@ -105,6 +105,11 @@ class SeizureTypeRead(DictionaryEntryRead):
     """
 
     code: str | None
+    #: Номер узла классификации ILAE 2025 («1.3»); пусто у прежних типов.
+    ilae_ref: str | None = None
+    #: Выведен из употребления (ADR-0050): записать им новый приступ нельзя, но
+    #: прежние записи на нём остаются и показываются как были.
+    retired: bool = False
 
 
 class DictionaryEntryCreate(BaseModel):
@@ -124,9 +129,10 @@ class SeizureTypeCreate(DictionaryEntryCreate):
     пустое значение честнее выдуманного.
     """
 
-    # Длина — как у колонки `seizure_types.code` (String(4)): за ней СУБД
-    # ответила бы ошибкой записи вместо понятного 422.
-    code: Annotated[str, Field(min_length=1, max_length=4)] | None = None
+    # Длина — как у колонки `seizure_types.code` (String(8) — под русские
+    # сокращения ILAE 2025, самое длинное «ФППБТК»): за ней СУБД ответила бы
+    # ошибкой записи вместо понятного 422.
+    code: Annotated[str, Field(min_length=1, max_length=8)] | None = None
 
 
 class DictionaryEntryUpdate(BaseModel):
@@ -151,9 +157,10 @@ class DictionaryEntryUpdate(BaseModel):
 
 
 class SeizureTypeUpdate(DictionaryEntryUpdate):
-    # Длина — как у колонки `seizure_types.code` (String(4)): за ней СУБД
-    # ответила бы ошибкой записи вместо понятного 422.
-    code: Annotated[str, Field(min_length=1, max_length=4)] | None = None
+    # Длина — как у колонки `seizure_types.code` (String(8) — под русские
+    # сокращения ILAE 2025, самое длинное «ФППБТК»): за ней СУБД ответила бы
+    # ошибкой записи вместо понятного 422.
+    code: Annotated[str, Field(min_length=1, max_length=8)] | None = None
 
 
 class AuditLogRead(BaseModel):

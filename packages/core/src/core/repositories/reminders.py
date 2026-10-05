@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import ReminderDelivery, ReminderSettings, TelegramAccount
+from . import therapy as therapy_repo
 
 #: Время «за сегодня нет записей» по умолчанию (раздел 7.4 ТЗ).
 #:
@@ -75,7 +76,12 @@ async def list_active(session: AsyncSession) -> list[tuple[ReminderSettings, Tel
     stmt = (
         select(TelegramAccount, ReminderSettings)
         .outerjoin(ReminderSettings, ReminderSettings.patient_id == TelegramAccount.patient_id)
-        .where(TelegramAccount.revoked_at.is_(None))
+        .where(
+            TelegramAccount.revoked_at.is_(None),
+            # Терапия завершена — напоминать о замерах больше не о чем
+            # (вопрос 18, ADR-0050). Привязка чата при этом остаётся.
+            ~therapy_repo.therapy_ended(TelegramAccount.patient_id),
+        )
     )
     rows = await session.execute(stmt)
     result: list[tuple[ReminderSettings, TelegramAccount]] = []

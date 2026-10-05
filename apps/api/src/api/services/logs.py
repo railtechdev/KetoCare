@@ -173,7 +173,12 @@ async def update_log[M: DiaryLog, R: BaseModel](
             fields.get("duration_sec", log.duration_sec),
             fields.get("duration_option_id", log.duration_option_id),
         )
-    await _check_references(session, patient_id=patient_id, fields=fields)
+    await _check_references(
+        session,
+        patient_id=patient_id,
+        fields=fields,
+        current_seizure_type_id=log.seizure_type_id if isinstance(log, SeizureLog) else None,
+    )
 
     updated = await diary_repo.update(session, log=log, fields=fields)
     return read.model_validate(updated)
@@ -270,7 +275,11 @@ def _check_one_duration_after_update(
 
 
 async def _check_references(
-    session: AsyncSession, *, patient_id: uuid.UUID, fields: dict[str, object]
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    fields: dict[str, object],
+    current_seizure_type_id: uuid.UUID | None = None,
 ) -> None:
     """Ссылки на другие таблицы обязаны вести на записи того же пациента.
 
@@ -286,6 +295,17 @@ async def _check_references(
         session, seizure_type_id
     ):
         raise ApiError(ErrorCode.VALIDATION_ERROR, "Тип приступа не найден в справочнике.")
+    # Тип из прежнего справочника (до ILAE 2025) новой записи не годится, но
+    # запись, уже стоящая на нём, правится без смены типа (ADR-0050).
+    if (
+        isinstance(seizure_type_id, uuid.UUID)
+        and seizure_type_id != current_seizure_type_id
+        and await diary_repo.seizure_type_is_retired(session, seizure_type_id)
+    ):
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Этот тип приступа выведен из справочника: выберите тип по классификации ILAE 2025.",
+        )
 
     duration_option_id = fields.get("duration_option_id")
     if isinstance(duration_option_id, uuid.UUID) and not await diary_repo.duration_option_is_usable(

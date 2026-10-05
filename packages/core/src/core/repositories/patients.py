@@ -13,6 +13,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from ..models import DoctorPatient, ParentPatient, Patient
 from ..models.enums import Sex
+from . import therapy as therapy_repo
 
 
 async def get(session: AsyncSession, patient_id: uuid.UUID) -> Patient | None:
@@ -292,6 +293,7 @@ async def list_for_ids(
     *,
     patient_ids: list[uuid.UUID],
     query: str | None = None,
+    therapy_ended: bool | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Patient], int]:
@@ -315,6 +317,11 @@ async def list_for_ids(
             "%" + query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         )
         condition = and_(condition, Patient.full_name.ilike(pattern, escape="\\"))
+    if therapy_ended is not None:
+        # Завершившие терапию уходят из рабочего списка, но не из системы
+        # (вопрос 18, ADR-0050): `None` — все, как прежде.
+        ended = therapy_repo.therapy_ended(Patient.id)
+        condition = and_(condition, ended if therapy_ended else ~ended)
 
     stmt = select(Patient).where(condition).order_by(Patient.full_name).limit(limit).offset(offset)
     items = list(await session.scalars(stmt))

@@ -19,7 +19,8 @@ from pydantic import (
     model_validator,
 )
 
-from core.models.enums import MedicationDoseUnit, MedicationFrequency
+from core.control_schedule import ControlPurpose
+from core.models.enums import MedicationDoseUnit, MedicationFrequency, TherapyEndReason
 
 from .schemas import RequiredLongText, RequiredName
 
@@ -74,8 +75,105 @@ class MedicalProfileRead(BaseModel):
     comorbidities: str | None
     aed_switch_count_id: uuid.UUID | None
     therapy_started_on: date | None
+    #: Завершение терапии (вопрос 18, ADR-0050). Ставится не этой формой, а
+    #: `PUT /therapy-end`; здесь — только для чтения врачом и диетологом.
+    therapy_ended_on: date | None = None
+    therapy_end_reason: TherapyEndReason | None = None
+    therapy_end_note: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+# --- therapy end (вопрос 18, ADR-0050) -------------------------------------
+
+
+class TherapyEndWrite(BaseModel):
+    """Завершение кетодиетотерапии.
+
+    Дата — не в будущем: завершение — свершившийся факт, по которому ребёнок
+    уходит из рабочих списков и перестаёт получать напоминания. Запланированное
+    окончание — это контрольный визит, а не статус. Дата не раньше начала
+    терапии проверяется на сервере по профилю.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ended_on: date
+    reason: TherapyEndReason
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+
+    @field_validator("note")
+    @classmethod
+    def _blank_note_is_none(cls, value: str | None) -> str | None:
+        return value or None
+
+    @model_validator(mode="after")
+    def _other_needs_note(self) -> TherapyEndWrite:
+        if self.reason is TherapyEndReason.OTHER and not self.note:
+            raise ValueError("Для причины «другое» нужно пояснение.")
+        return self
+
+
+# --- control visits (вопросы 17 и 34, ADR-0050) -----------------------------
+
+
+class ControlVisitRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    patient_id: uuid.UUID
+    planned_on: date
+    #: Месяц от начала терапии, если визит построен по графику; пусто — визит
+    #: назначен врачом вне графика.
+    month_offset: int | None
+    completed_on: date | None
+    note: str | None
+    #: Зачем точка сверх обычного визита (оценка эффективности — 6 месяцев,
+    #: решение о продолжении — 24 месяца; вопрос 18).
+    purpose: ControlPurpose | None = None
+    #: Анализы к визиту — перечень клиники (вопрос 34), без значений.
+    labs: list[str] = Field(default_factory=list)
+    #: Срок прошёл, а визит не отмечен состоявшимся. Порога «просрочки» клиника
+    #: не называла (вопрос 17), поэтому это просто факт: дата прошла.
+    overdue: bool = False
+
+
+class ControlVisitCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    planned_on: date
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+
+
+class ControlVisitUpdate(BaseModel):
+    """Перенос, отметка «состоялся» и пояснение. Не переданное поле не меняется."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    planned_on: date | None = None
+    completed_on: date | None = None
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> ControlVisitUpdate:
+        if not self.model_fields_set:
+            raise ValueError("Укажите хотя бы одно поле для изменения.")
+        if "planned_on" in self.model_fields_set and self.planned_on is None:
+            raise ValueError("Дату визита нельзя очистить — визит можно удалить.")
+        return self
+
+
+class ControlScheduleRead(BaseModel):
+    """График контроля пациента целиком: визиты и постоянные перечни анализов."""
+
+    visits: list[ControlVisitRead]
+    #: Дата, от которой строится график (слово врача, иначе первое назначение).
+    therapy_started_on: date | None
+    #: «Еженедельно» — перечень клиники (вопрос 34); срок не назван, поэтому
+    #: показывается врачу и не рассылается семье.
+    weekly_labs: list[str]
+    #: «Каждые 3–6 месяцев» — перечень клиники (вопрос 34).
+    periodic_labs: list[str]
 
 
 # --- medications ----------------------------------------------------------

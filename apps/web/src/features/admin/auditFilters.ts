@@ -35,6 +35,8 @@ export const AUDIT_ENTITIES = [
   "recipes",
   "prescriptions",
   "medical_profiles",
+  // Контрольные визиты (вопросы 17 и 34, ADR-0050).
+  "control_visits",
   "medications",
   "seizure_types",
   "ketone_methods",
@@ -107,6 +109,9 @@ export const AUDIT_ACTIONS = [
   "telegram_unlink",
   // Специалист попросил семью отметить дневник (ADR-0046).
   "family_nudge",
+  // Завершение терапии и его снятие (вопрос 18, ADR-0050).
+  "therapy_ended",
+  "therapy_resumed",
 ] as const;
 
 const UUID_PATTERN =

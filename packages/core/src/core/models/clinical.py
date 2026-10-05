@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -31,6 +32,7 @@ from .enums import (
     LastSeizurePrecision,
     MedicationDoseUnit,
     MedicationFrequency,
+    TherapyEndReason,
     pg_enum,
 )
 
@@ -74,6 +76,80 @@ class MedicalProfile(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDele
     #: Профиль пишет только он (`PUT /medical-profile`), читает ещё диетолог
     #: (ADR-0031).
     therapy_started_on: Mapped[date | None] = mapped_column(Date)
+    #: Дата завершения кетодиетотерапии (вопрос 18, ADR-0050).
+    #:
+    #: Пусто — ребёнок на терапии. Заполнено — терапия завершена: ребёнок уходит
+    #: из рабочих списков врача и из пометок «семья молчит», напоминания семье
+    #: прекращаются, но карта, дневники и отчёты остаются читаемыми — клинические
+    #: данные не удаляются (правило 4). Ставит и снимает только врач, отдельной
+    #: ручкой с записью в журнал аудита: от этой даты зависит, кого система
+    #: перестаёт сопровождать.
+    #:
+    #: В профиле, а не в `patients`: карточку ребёнка правит и семья, а решение
+    #: о завершении — врачебное. Семья видит только сам факт и дату (сводка),
+    #: причину — нет.
+    therapy_ended_on: Mapped[date | None] = mapped_column(Date)
+    #: Причина завершения — из закрытого провизорного списка (вопрос 52).
+    therapy_end_reason: Mapped[TherapyEndReason | None] = mapped_column(
+        pg_enum(TherapyEndReason, "therapy_end_reason")
+    )
+    #: Пояснение врача; обязательно при причине «другое».
+    therapy_end_note: Mapped[str | None]
+
+    __table_args__ = (
+        # Дата и причина ставятся и снимаются вместе: завершение без причины —
+        # это половина решения, а причина без даты — решение, которого не было.
+        CheckConstraint(
+            "(therapy_ended_on IS NULL) = (therapy_end_reason IS NULL)",
+            name="therapy_end_has_reason",
+        ),
+    )
+
+
+class ControlVisit(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
+    """Контрольная точка наблюдения: плановый визит к врачу (вопросы 17 и 34).
+
+    Ответ клиники от 09.09.2026: «Контрольный визит через 1, 3, 6, 9 и 12 месяцев
+    от старта диеты»; анализы — «можно сделать как напоминание пациенту».
+    Визиты ХРАНЯТСЯ, а не выводятся из даты старта на лету: иначе всякий
+    прошедший срок оставался бы «просроченным» навсегда — отметить, что визит
+    состоялся, было бы негде (`completed_on`).
+
+    `month_offset` — для точек, построенных по графику от даты начала терапии;
+    у визита, назначенного врачом вручную, он пуст. Уникальность по
+    (пациент, месяц) среди живых строк делает построение графика повторяемым:
+    второй вызов не задваивает визиты.
+
+    Значений анализов здесь нет намеренно: клиника назвала ввод показателей
+    «время- и энергозатратным», а без границ нормы по возрасту число ничего бы
+    не значило. Перечень анализов к визиту выводится из `month_offset`
+    (`core.control_schedule`), а не хранится.
+    """
+
+    __tablename__ = "control_visits"
+    __table_args__ = (
+        Index(
+            "uq_control_visits_patient_month",
+            "patient_id",
+            "month_offset",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND month_offset IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "month_offset IS NULL OR month_offset > 0", name="control_visit_month_positive"
+        ),
+    )
+
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False, index=True
+    )
+    planned_on: Mapped[date] = mapped_column(Date, nullable=False)
+    month_offset: Mapped[int | None] = mapped_column(Integer)
+    completed_on: Mapped[date | None] = mapped_column(Date)
+    note: Mapped[str | None]
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
 
 
 class Prescription(Base, UUIDPkMixin):

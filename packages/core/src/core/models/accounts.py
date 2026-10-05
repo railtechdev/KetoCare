@@ -343,7 +343,9 @@ class ReminderDelivery(Base, UUIDPkMixin):
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
     )
-    #: ketones | weight | medications | no_records | prescription
+    #: ketones | weight | medications | no_records | prescription | control_visit
+    #: (у `control_visit` в `sent_on` — дата визита, а не отправки: одно
+    #: напоминание на визит, ADR-0050)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     #: Местная дата семьи, а не UTC: «сегодня» у неё своё.
     sent_on: Mapped[date] = mapped_column(nullable=False)
