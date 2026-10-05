@@ -315,6 +315,62 @@ class TestMiniAppContract:
         await session.refresh(parent)
         assert parent.language is None
 
+    async def test_switching_child_keeps_the_saved_language(
+        self, client, session, make_user, make_patient
+    ):
+        """Переключение ребёнка подписи не несёт и язык не трогает (ADR-0048, ADR-0052)."""
+
+        parent, _, _, _ = await _linked(session, make_user, make_patient)
+        second = await make_patient("Timur")
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=second.id)
+        await telegram_repo.create_link(
+            session,
+            parent_id=parent.id,
+            patient_id=second.id,
+            chat_id=CHAT_ID,
+            secret=telegram_repo.generate_binding_secret(),
+        )
+        opened = await client.post(
+            "/api/v1/auth/telegram-init", json={"init_data": launch(language_code="uz")}
+        )
+        assert opened.json()["language"] == "uz"
+        headers = {"Authorization": f"Bearer {opened.json()['access_token']}"}
+
+        switched = await client.post(
+            "/api/v1/auth/miniapp/switch", headers=headers, json={"patient_id": str(second.id)}
+        )
+
+        assert switched.status_code == 200, switched.text
+        assert switched.json()["language"] == "uz"
+        await session.refresh(parent)
+        assert parent.language == "uz"
+
+    async def test_switching_child_does_not_invent_a_language(
+        self, client, session, make_user, make_patient
+    ):
+        """Без подписи умолчания нет: несохранённый язык так и остаётся пустым."""
+
+        parent, _, _, _ = await _linked(session, make_user, make_patient)
+        second = await make_patient("Timur")
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=second.id)
+        await telegram_repo.create_link(
+            session,
+            parent_id=parent.id,
+            patient_id=second.id,
+            chat_id=CHAT_ID,
+            secret=telegram_repo.generate_binding_secret(),
+        )
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": launch()})
+        headers = {"Authorization": f"Bearer {opened.json()['access_token']}"}
+
+        switched = await client.post(
+            "/api/v1/auth/miniapp/switch", headers=headers, json={"patient_id": str(second.id)}
+        )
+
+        assert switched.json()["language"] == "ru"
+        await session.refresh(parent)
+        assert parent.language is None
+
     async def test_miniapp_session_can_change_the_language(
         self, client, session, make_user, make_patient
     ):

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   formatDose,
@@ -11,6 +11,8 @@ import {
   formatDayTime,
   formatRatio,
   formatWeight,
+  formatFactor,
+  formatMeasured,
   formatLocale,
   setFormatLanguage,
 } from "./format";
@@ -105,14 +107,41 @@ describe("formatDose", () => {
 describe("язык записи (ADR-0052)", () => {
   afterEach(() => {
     setFormatLanguage("ru");
+    vi.restoreAllMocks();
   });
 
-  it("по-узбекски числа пишутся так же, как по-русски", () => {
-    // Иначе одно и то же число на узбекском экране и в боте читалось бы по-разному.
+  it("числа не зависят от языка: всегда русская запись", () => {
+    // Во встроенном браузере Telegram бывает `Intl` без данных для `uz`: он
+    // молча берёт локаль устройства и печатает «1,200» — «одна целая две
+    // десятых». Поэтому числа языка не берут вовсе — это и проверяется:
+    // ни один помощник не просит у `Intl` другой локали.
+    const numberFormat = vi.spyOn(Intl, "NumberFormat");
     setFormatLanguage("uz");
-    expect(formatKcal(12345)).toBe(formatKcalRu(12345));
-    expect(formatGrams(4)).toBe("4,0");
-    expect(formatWeight(8.25)).toBe("8,25");
+
+    const printed = [
+      formatKcal(1200),
+      formatGrams(3.2),
+      formatMass(50),
+      formatMeasured(3.2),
+      formatWeight(18.25),
+      formatFactor(1.5),
+      formatDose(0.125),
+      formatNumber(4, 1),
+    ];
+
+    expect(printed).toEqual([
+      "1\u00a0200",
+      "3,2",
+      "50",
+      "3,2",
+      "18,25",
+      "1,5",
+      "0,125",
+      "4,0",
+    ]);
+    expect(numberFormat.mock.calls.map((call) => call[0])).toEqual(
+      Array(printed.length).fill("ru-RU"),
+    );
   });
 
   it("цифровые даты — через точку на обоих языках", () => {
@@ -126,11 +155,10 @@ describe("язык записи (ADR-0052)", () => {
     setFormatLanguage("ru");
     expect(formatLocale()).toBe("ru-RU");
   });
-});
 
-function formatKcalRu(value: number): string {
-  setFormatLanguage("ru");
-  const result = formatKcal(value);
-  setFormatLanguage("uz");
-  return result;
-}
+  it("нет у среды узбекского — месяц по-русски, а не на языке устройства", () => {
+    vi.spyOn(Intl.DateTimeFormat, "supportedLocalesOf").mockReturnValue([]);
+    setFormatLanguage("uz");
+    expect(formatLocale()).toBe("ru-RU");
+  });
+});
