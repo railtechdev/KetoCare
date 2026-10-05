@@ -37,6 +37,9 @@ const MENU = {
   totals: TOTALS,
   engine_version: "1.0.0",
   created_at: "2026-08-28T06:00:00Z",
+  updated_at: "2026-08-28T06:00:00Z",
+  updated_by_name: "Анна Петровна",
+  updated_by_role: "dietitian",
   items: [
     {
       id: "item-1",
@@ -154,6 +157,18 @@ describe("MenuPage", () => {
       data: { ...MENU.items[0], eaten: true },
     });
     (api.PUT as unknown as Mock).mockResolvedValue({ data: MENU });
+  });
+
+  it("называет, кто последним составил день", async () => {
+    // День составляют и семья, и специалист (ADR-0047): по плану, который
+    // поменял другой человек, нельзя готовить, не зная об этом.
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        /^Составил\(а\): Анна Петровна, \d{2}\.\d{2}, \d{2}:\d{2}$/,
+      ),
+    ).toBeVisible();
   });
 
   it("показывает позиции дня с названиями блюд", async () => {

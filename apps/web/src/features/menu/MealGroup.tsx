@@ -1,4 +1,4 @@
-import { Button, ConfirmDialog, cn, formatMass } from "@ketocare/ui";
+import { Badge, Button, ConfirmDialog, cn, formatMass } from "@ketocare/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,7 +21,11 @@ interface Props {
   pending: boolean;
   onAdd: () => void;
   onRemove: (itemId: string) => void;
-  onToggleEaten: (itemId: string, eaten: boolean) => void;
+  /**
+   * Отметить съеденное. Нет обработчика — отметка только видна: специалист
+   * составляет план, но не свидетельствует за семью, что ребёнок ел (ADR-0047).
+   */
+  onToggleEaten?: (itemId: string, eaten: boolean) => void;
 }
 
 /**
@@ -92,18 +96,26 @@ export function MealGroup({
                 key={item.id}
                 className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-1"
               >
-                <label className="flex min-h-touch items-center gap-field text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-5 accent-primary"
-                    checked={item.eaten}
-                    aria-label={t("item.eatenFor", { name: title })}
-                    onChange={(event) =>
-                      onToggleEaten(item.id, event.target.checked)
-                    }
-                  />
-                  {t("item.eaten")}
-                </label>
+                {onToggleEaten ? (
+                  <label className="flex min-h-touch items-center gap-field text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-5 accent-primary"
+                      checked={item.eaten}
+                      aria-label={t("item.eatenFor", { name: title })}
+                      onChange={(event) =>
+                        onToggleEaten(item.id, event.target.checked)
+                      }
+                    />
+                    {t("item.eaten")}
+                  </label>
+                ) : (
+                  // Отметка семьи — то, что отличает план от выполнения: без
+                  // неё специалист видит намерение и принимает его за факт.
+                  <Badge variant={item.eaten ? "secondary" : "outline"}>
+                    {item.eaten ? t("item.eaten") : t("item.notEaten")}
+                  </Badge>
+                )}
 
                 <span
                   className={cn(

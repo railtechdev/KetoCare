@@ -19,6 +19,7 @@ export {
   formatMass,
   formatNumber,
   formatOccurredAt,
+  formatDayTime,
   formatRatio,
   formatFactor,
   formatMeasured,

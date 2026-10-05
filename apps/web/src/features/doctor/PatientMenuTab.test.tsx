@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -9,11 +10,15 @@ import doctorRu from "../../locales/ru/doctor.json";
 import menuRu from "../../locales/ru/menu.json";
 import recipesRu from "../../locales/ru/recipes.json";
 import { PatientRouter } from "../../test/PatientRouter";
+import { todayIso } from "../menu/dates";
 import { PatientMenuTab } from "./PatientMenuTab";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
-  return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
+  return {
+    ...actual,
+    api: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn(), DELETE: vi.fn() },
+  };
 });
 
 i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
@@ -38,6 +43,59 @@ const DISH = {
   },
 };
 
+/** День, который составила семья и в котором она уже отметила завтрак. */
+const MENU = {
+  id: "menu-1",
+  patient_id: PATIENT_ID,
+  date: todayIso(),
+  totals: { kcal: 400, fat: 44, protein: 3, carbs: 2, fiber: 0, ratio: 4 },
+  engine_version: "1.0.0",
+  created_at: "2026-10-05T06:00:00Z",
+  updated_at: "2026-10-05T06:00:00Z",
+  updated_by_name: "Мария Иванова",
+  updated_by_role: "parent",
+  withdrawn_products: [],
+  excluded_products: [],
+  items: [
+    {
+      id: "item-1",
+      menu_id: "menu-1",
+      patient_id: PATIENT_ID,
+      meal_index: 1,
+      recipe_id: null,
+      custom_dish_id: DISH_ID,
+      portion_factor: 1,
+      eaten: true,
+      has_snapshot: true,
+      ingredients: [],
+      changed_since_saved: false,
+    },
+  ],
+};
+
+function respond(path: string) {
+  if (path === "/api/v1/patients/{patient_id}/menus") return { data: MENU };
+  if (path === "/api/v1/patients/{patient_id}/custom-dishes") {
+    return { data: { items: [DISH], total: 1 } };
+  }
+  if (path === "/api/v1/patients/{patient_id}/overview") {
+    return {
+      data: {
+        patient_id: PATIENT_ID,
+        date: todayIso(),
+        prescription: {
+          kcal_per_day: 1600,
+          carbs_limit_g: 15,
+          meals_per_day: 4,
+        },
+        day: null,
+        seizures_today: { entries: 0, count: 0 },
+      },
+    };
+  }
+  return { data: { items: [], total: 0 } };
+}
+
 function renderFood() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -60,22 +118,10 @@ function renderFood() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (api.GET as Mock).mockImplementation((path: string) => {
-    if (path.includes("custom-dishes")) {
-      return Promise.resolve({ data: { items: [DISH], total: 1 } });
-    }
-    if (path.includes("menus")) {
-      return Promise.resolve({
-        data: {
-          date: "2026-09-08",
-          items: [],
-          totals: null,
-          withdrawn_products: [],
-        },
-      });
-    }
-    return Promise.resolve({ data: { items: [], total: 0 } });
-  });
+  (api.GET as Mock).mockImplementation((path: string) =>
+    Promise.resolve(respond(path)),
+  );
+  (api.PUT as Mock).mockResolvedValue({ data: MENU });
 });
 
 describe("питание пациента глазами специалиста", () => {
@@ -85,7 +131,9 @@ describe("питание пациента глазами специалиста"
     // семья находила его при сборке меню, а тот, кто передал, — нет.
     renderFood();
 
-    expect(await screen.findByText("Завтрак 4:1")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Блюда ребёнка" }),
+    ).toBeInTheDocument();
   });
 
   it("называет блок по-чужому, а не «Мои блюда»", async () => {
@@ -110,5 +158,83 @@ describe("питание пациента глазами специалиста"
     const href = decodeURIComponent(link.getAttribute("href") ?? "");
     expect(href).toContain(`/app/patients/${PATIENT_ID}/calculator`);
     expect(href).toContain(`item=dish:${DISH_ID}`);
+  });
+});
+
+describe("специалист составляет день (ADR-0047)", () => {
+  it("добавляет блюдо в приём — тем же экраном, что и семья", async () => {
+    const user = userEvent.setup();
+    renderFood();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить блюдо в приём: Приём 2",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: /Приём 2/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("может скопировать день и убрать ошибочный", async () => {
+    renderFood();
+
+    expect(
+      await screen.findByRole("button", { name: "Скопировать день" }),
+    ).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: "Убрать план" }),
+    ).toBeVisible();
+  });
+
+  it("видит отметку семьи, но не ставит её сам", async () => {
+    // Отметка «съедено» — запись семьи о том, что ребёнок ел; специалист
+    // составляет план, а не свидетельствует за семью.
+    renderFood();
+
+    expect(await screen.findByText("Съедено")).toBeVisible();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("убранная позиция уходит на сервер днём целиком", async () => {
+    const user = userEvent.setup();
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path === "/api/v1/patients/{patient_id}/menus"
+        ? Promise.resolve({
+            data: {
+              ...MENU,
+              items: [
+                { ...MENU.items[0], eaten: false },
+                { ...MENU.items[0], id: "item-2", meal_index: 2, eaten: false },
+              ],
+            },
+          })
+        : Promise.resolve(respond(path)),
+    );
+    renderFood();
+
+    const [first] = await screen.findAllByLabelText(
+      "Убрать «Завтрак 4:1» из меню",
+    );
+    await user.click(first!);
+    await user.click(await screen.findByRole("button", { name: "Убрать" }));
+
+    expect(api.PUT).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/menus",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          items: [expect.objectContaining({ meal_index: 2 })],
+        }),
+      }),
+    );
+  });
+
+  it("видит, кто составил день", async () => {
+    renderFood();
+
+    expect(
+      await screen.findByText(/^Составил\(а\): Мария Иванова, /),
+    ).toBeVisible();
   });
 });
