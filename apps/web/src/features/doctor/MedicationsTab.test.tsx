@@ -136,7 +136,8 @@ describe("препараты из анкеты семьи", () => {
       await screen.findByRole("option", { name: /Вальпроат натрия/ }),
     );
 
-    await user.type(screen.getByLabelText(/Принимаемая доза/), "300 мг");
+    await user.type(screen.getByLabelText(/Разовая доза/), "300");
+    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
     await user.selectOptions(
       screen.getByLabelText("Кратность"),
       "2 раза в сутки",
@@ -147,7 +148,9 @@ describe("препараты из анкеты семьи", () => {
     const body = (api.POST as Mock).mock.calls[0]?.[1]?.body;
     expect(body).toMatchObject({
       drug_name: "Вальпроат натрия",
-      dose: "300 мг",
+      dose_value: 300,
+      dose_unit: "mg",
+      dose_text: null,
       frequency_code: "twice_daily",
       // Пустое уточнение уходит как «уточнения нет».
       frequency: null,
@@ -238,7 +241,8 @@ describe("кратность приёма из списка", () => {
       await screen.findByRole("button", { name: "Назначить препарат" }),
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
-    await user.type(screen.getByLabelText(/Принимаемая доза/), "300 мг");
+    await user.type(screen.getByLabelText(/Разовая доза/), "300");
+    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
     await user.selectOptions(
       screen.getByLabelText("Кратность"),
       "Другая схема",
@@ -269,6 +273,8 @@ describe("кратность приёма из списка", () => {
         patient_id: PATIENT_ID,
         drug_name: "Топирамат",
         dose: "25 мг",
+        dose_value: 25,
+        dose_unit: "mg",
         frequency_code: null,
         frequency: "на ночь",
         started_at: "2026-08-01",
@@ -295,6 +301,8 @@ describe("кратность приёма из списка", () => {
         patient_id: PATIENT_ID,
         drug_name: "Топирамат",
         dose: "25 мг",
+        dose_value: 25,
+        dose_unit: "mg",
         frequency_code: null,
         frequency: "3 раза в день",
         started_at: "2026-08-01",
@@ -335,6 +343,8 @@ describe("кратность приёма из списка", () => {
         patient_id: PATIENT_ID,
         drug_name: "Топирамат",
         dose: "25 мг",
+        dose_value: 25,
+        dose_unit: "mg",
         frequency_code: null,
         frequency: "на ночь",
         started_at: "2026-08-01",
@@ -362,5 +372,126 @@ describe("кратность приёма из списка", () => {
       frequency_code: "once_daily",
       frequency: "на ночь",
     });
+  });
+});
+
+describe("доза числом и единицей", () => {
+  it("«2,5» с запятой и «мл» уходят числом и кодом единицы", async () => {
+    (api.POST as Mock).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+    await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
+    await user.type(screen.getByLabelText(/Разовая доза/), "2,5");
+    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мл");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "2 раза в сутки",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    expect((api.POST as Mock).mock.calls[0]?.[1]?.body).toMatchObject({
+      dose_value: 2.5,
+      dose_unit: "ml",
+      dose_text: null,
+    });
+  });
+
+  it("строка вместо числа не отправляется, ошибка у поля дозы", async () => {
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+    await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
+    await user.type(screen.getByLabelText(/Разовая доза/), "300 мг");
+    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "2 раза в сутки",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(
+      await screen.findByText(doctorRu.medications.errors.doseValue),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Разовая доза/)).toHaveFocus();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+
+  it("«другая единица» — доза словами вместо числа", async () => {
+    (api.POST as Mock).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+    await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
+    await user.selectOptions(
+      screen.getByLabelText(/Единица дозы/),
+      "другая единица",
+    );
+    expect(screen.queryByLabelText(/Разовая доза/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Доза словами/), "30 мг/кг/сут");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "2 раза в сутки",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    expect((api.POST as Mock).mock.calls[0]?.[1]?.body).toMatchObject({
+      dose_value: null,
+      dose_unit: "other",
+      dose_text: "30 мг/кг/сут",
+    });
+  });
+
+  it("правка записи со строкой дозы: строка в подсказке, единицу выбирает врач", async () => {
+    // Строку «по 1/2 таб. на ночь» в число не переводим: это решение врача.
+    medications = [
+      {
+        id: "m4",
+        patient_id: PATIENT_ID,
+        drug_name: "Топирамат",
+        dose: "по 1/2 таб. на ночь",
+        dose_value: null,
+        dose_unit: null,
+        frequency_code: "once_daily",
+        frequency: null,
+        started_at: "2026-08-01",
+        stopped_at: null,
+      },
+    ];
+    const user = userEvent.setup();
+    renderTab();
+
+    // В таблице строка — как была.
+    expect(await screen.findByText("по 1/2 таб. на ночь")).toBeInTheDocument();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Изменить назначение препарата Топирамат",
+      }),
+    );
+
+    expect(
+      await screen.findByText(/Раньше доза записывалась строкой/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Единица дозы/)).toHaveValue("");
+    expect(screen.getByLabelText(/Разовая доза/)).toHaveValue("");
+
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(
+      await screen.findByText(doctorRu.medications.errors.doseUnit),
+    ).toBeInTheDocument();
+    expect(api.PUT).not.toHaveBeenCalled();
   });
 });

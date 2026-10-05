@@ -859,7 +859,8 @@ class TestBotReadsMedicationSchedule:
             headers=auth_headers(doctor),
             json={
                 "drug_name": "Вальпроевая кислота",
-                "dose": "300 мг",
+                "dose_value": 300,
+                "dose_unit": "mg",
                 "frequency_code": "twice_daily",
                 "started_at": "2026-09-01",
             },
@@ -877,6 +878,8 @@ class TestBotReadsMedicationSchedule:
         items = response.json()["items"]
         assert len(items) == 1
         assert {"id", "drug_name", "dose"} <= set(items[0])
+        # Бот печатает `dose` как есть: строку собирает сервер (ADR-0049).
+        assert items[0]["dose"] == "300 мг"
 
     async def test_bot_still_cannot_change_the_schedule(
         self, client, session, make_user, make_patient, auth_headers

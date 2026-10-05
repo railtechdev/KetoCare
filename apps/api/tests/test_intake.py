@@ -326,25 +326,25 @@ class TestPatientIntake:
         )
         assert ok.status_code == 200, ok.text
 
-    async def test_rule_applies_when_editing_an_existing_intake(
+    async def test_rule_spares_an_intake_saved_before_it(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        """Правило действует и на уже заполненную анкету — это её цена.
+        """Анкета, где «Приступов нет» уже стояло без даты, сохраняется дальше.
 
-        PUT заменяет анкету целиком, поэтому строка, сохранённая раньше с
-        «Приступов нет» и без даты, теперь не сохранится, пока дату не введут:
-        семья не поправит в анкете НИЧЕГО другого. Клиника про уже собранные
-        анкеты не говорила, и это записано вопросом 48 — до ответа работает
-        самый строгий вариант, ближайший к сказанному.
+        Вопрос 48 (решение команды разработки, ADR-0049): дата обязательна
+        только при НОВОМ ответе. PUT заменяет анкету целиком, и без этой
+        оговорки семья, правя совсем другое поле, упиралась бы в правило,
+        появившееся позже её ответа.
 
-        Случай проверяется отдельно, потому что мутация «применять правило
-        только при создании» на тестах создания зелена.
+        Случай проверяется отдельно: мутация «правило только при создании» на
+        тестах создания зелена, а «правило всегда» зелена на них же.
         """
 
         parent, patient = await _parent_with_child(session, make_user, make_patient)
         url = f"/api/v1/patients/{patient.id}/intake"
         options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
         none_option = next(option for option in options if option.code == "freq_none")
+        other_option = next(option for option in options if option.code != "freq_none")
 
         # Анкета из прошлого: ответ «Приступов нет» уже стоит, даты нет.
         intake = await intake_repo.upsert(
@@ -361,7 +361,7 @@ class TestPatientIntake:
         )
         assert intake.last_seizure_on is None
 
-        # Семья правит совсем другое поле — и упирается в дату.
+        # Семья правит совсем другое поле — и сохраняет.
         response = await client.put(
             url,
             json={
@@ -370,9 +370,94 @@ class TestPatientIntake:
             },
             headers=auth_headers(parent),
         )
+        assert response.status_code == 200, response.text
+
+        # А вот ответ, данный заново, без даты уже не проходит: сначала другая
+        # частота, потом снова «Приступов нет».
+        changed = await client.put(
+            url, json={"seizure_frequency_id": str(other_option.id)}, headers=auth_headers(parent)
+        )
+        assert changed.status_code == 200, changed.text
+        again = await client.put(
+            url, json={"seizure_frequency_id": str(none_option.id)}, headers=auth_headers(parent)
+        )
+        assert again.status_code == 422, again.text
+        assert again.json()["error"]["details"]["field"] == "last_seizure_on"
+
+    @pytest.mark.parametrize(
+        ("body", "expected_on", "expected_precision"),
+        [
+            (
+                {"last_seizure_on": "2026-03-01", "last_seizure_precision": "month"},
+                "2026-03-01",
+                "month",
+            ),
+            (
+                {"last_seizure_on": "2025-01-01", "last_seizure_precision": "year"},
+                "2025-01-01",
+                "year",
+            ),
+            ({"last_seizure_on": None, "last_seizure_precision": "unknown"}, None, "unknown"),
+            (
+                {"last_seizure_on": "2026-03-17", "last_seizure_precision": "day"},
+                "2026-03-17",
+                "day",
+            ),
+            # Прежний клиент присылает одну дату — она точная.
+            ({"last_seizure_on": "2026-03-17"}, "2026-03-17", "day"),
+        ],
+    )
+    async def test_no_seizures_accepts_a_partial_date_or_dont_remember(
+        self,
+        client,
+        session,
+        make_user,
+        make_patient,
+        auth_headers,
+        body,
+        expected_on,
+        expected_precision,
+    ):
+        """Месяц с годом, один год или «не помню» — тоже ответы (вопрос 48)."""
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        none_option = next(option for option in options if option.code == "freq_none")
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake",
+            json={"seizure_frequency_id": str(none_option.id), **body},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["last_seizure_on"] == expected_on
+        assert response.json()["last_seizure_precision"] == expected_precision
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            # Месяц и год приходят первым днём — иначе «март» притворялся бы числом.
+            {"last_seizure_on": "2026-03-17", "last_seizure_precision": "month"},
+            {"last_seizure_on": "2025-03-01", "last_seizure_precision": "year"},
+            # «Не помню» с датой — противоречие.
+            {"last_seizure_on": "2026-03-17", "last_seizure_precision": "unknown"},
+            # Точность без даты — ответ не дан.
+            {"last_seizure_on": None, "last_seizure_precision": "month"},
+            {"last_seizure_precision": "approximately"},
+        ],
+    )
+    async def test_inconsistent_partial_date_is_rejected(
+        self, client, session, make_user, make_patient, auth_headers, body
+    ):
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+
+        response = await client.put(
+            f"/api/v1/patients/{patient.id}/intake", json=body, headers=auth_headers(parent)
+        )
 
         assert response.status_code == 422, response.text
-        assert response.json()["error"]["details"]["field"] == "last_seizure_on"
+        assert response.json()["error"]["code"] == "validation_error"
 
     async def test_future_date_is_a_typo_not_an_answer(
         self, client, session, make_user, make_patient, auth_headers

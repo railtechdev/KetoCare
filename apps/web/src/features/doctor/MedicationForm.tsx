@@ -1,10 +1,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useId } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import { FormFooter } from "@ketocare/ui";
+import { FormFooter, formatDose } from "@ketocare/ui";
 
 import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
@@ -12,6 +12,11 @@ import { errorMessageOf } from "../../lib/api";
 import { parseDateInput, toDateInput } from "../diary/time";
 import { useAedDrugs } from "../intake/useIntake";
 import { DrugNameField } from "./DrugNameField";
+import {
+  MEDICATION_DOSE_UNITS,
+  isMedicationDoseUnit,
+  parseDoseValue,
+} from "./medicationDose";
 import {
   MEDICATION_FREQUENCIES,
   isMedicationFrequency,
@@ -28,7 +33,13 @@ import type { Medication, MedicationBody } from "./types";
 const medicationSchema = z
   .object({
     drugName: z.string().trim().min(1),
-    dose: z.string().trim().min(1),
+    // Доза — числом и единицей из списка (ADR-0049). Число строкой: поле
+    // принимает и «2,5», и «2.5», а разбирает его `parseDoseValue`.
+    doseValue: z.string(),
+    doseUnit: z
+      .string()
+      .refine((value): boolean => isMedicationDoseUnit(value)),
+    doseText: z.string(),
     // Кратность — из списка (ADR-0033). Пустой выбор — строка, а не значение
     // перечисления: так форма отличает «не выбрано» от выбранного.
     // Проверка с явным `boolean`, а не охранник типа: охранник (и стрелка, из
@@ -43,6 +54,16 @@ const medicationSchema = z
       .string()
       .refine((value) => value === "" || parseDateInput(value) !== null),
   })
+  .refine(
+    // Число нужно при любой единице, кроме «другой»: у неё доза — слова.
+    (values) =>
+      values.doseUnit === "other" || parseDoseValue(values.doseValue) !== null,
+    { path: ["doseValue"] },
+  )
+  .refine(
+    (values) => values.doseUnit !== "other" || values.doseText.trim() !== "",
+    { path: ["doseText"] },
+  )
   .refine(
     // «Другая схема» без слов не говорит, как давать препарат. Сервер
     // проверяет то же; здесь — чтобы ошибка встала у поля, а не общей строкой.
@@ -68,7 +89,9 @@ type MedicationFormValues = z.infer<typeof medicationSchema>;
  */
 export const FIELD_ORDER = [
   "drugName",
-  "dose",
+  "doseValue",
+  "doseText",
+  "doseUnit",
   "frequencyCode",
   "frequency",
   "startedAt",
@@ -80,11 +103,18 @@ function toBody(values: MedicationFormValues): MedicationBody {
   if (!isMedicationFrequency(values.frequencyCode)) {
     throw new Error(`Unknown frequency code: ${values.frequencyCode}`);
   }
+  if (!isMedicationDoseUnit(values.doseUnit)) {
+    throw new Error(`Unknown dose unit: ${values.doseUnit}`);
+  }
   const note = values.frequency.trim();
+  const other = values.doseUnit === "other";
 
   return {
     drug_name: values.drugName.trim(),
-    dose: values.dose.trim(),
+    // Одно из двух, как требует сервер: число с единицей или слова у «другой».
+    dose_value: other ? null : parseDoseValue(values.doseValue),
+    dose_unit: values.doseUnit,
+    dose_text: other ? values.doseText.trim() : null,
     frequency_code: values.frequencyCode,
     frequency: note === "" ? null : note,
     started_at: values.startedAt,
@@ -130,6 +160,13 @@ export function MedicationForm({
     (medication.frequency_code === null ||
       medication.frequency_code === undefined);
 
+  // Доза, записанная до списка: строка как есть, без числа и единицы. Её не
+  // разбираем — «по 1/2 таб. на ночь» переводит в число врач. Строка встаёт
+  // в «Дозу словами» (на случай «другой единицы») и в подсказку.
+  const legacyDose =
+    medication !== null &&
+    (medication.dose_unit === null || medication.dose_unit === undefined);
+
   // Справочник тот же, что у анкеты семьи, и ключ у запроса общий: карта
   // пациента почти всегда уже показала анкету, поэтому список приходит из кэша.
   const drugs = useAedDrugs();
@@ -149,13 +186,23 @@ export function MedicationForm({
     shouldFocusError: false,
     defaultValues: {
       drugName: medication?.drug_name ?? suggestedDrugName ?? "",
-      dose: medication?.dose ?? "",
+      doseValue:
+        medication?.dose_value === null || medication?.dose_value === undefined
+          ? ""
+          : formatDose(medication.dose_value),
+      doseUnit: medication?.dose_unit ?? "",
+      doseText:
+        legacyDose || medication?.dose_unit === "other"
+          ? (medication?.dose ?? "")
+          : "",
       frequencyCode: medication?.frequency_code ?? "",
       frequency: medication?.frequency ?? "",
       startedAt: medication?.started_at ?? toDateInput(new Date()),
       stoppedAt: medication?.stopped_at ?? "",
     },
   });
+
+  const doseUnit = useWatch({ control, name: "doseUnit" });
 
   return (
     <form
@@ -198,18 +245,51 @@ export function MedicationForm({
             />
           )}
         />
-        {/* Доза — свободная строка, и единицу подсказывает пояснение, а не
-            подпись поля. Заказчица написала «мг/сут», но у сиропов миллилитры,
-            у АКТГ единицы действия, у части схем мг/кг/сут: зашитая единица
-            сделала бы часть карт неверными МОЛЧА. Вопрос 44 медкоманде. */}
-        <Field
-          id={`${ids}-dose`}
-          label={t("medications.fields.dose")}
-          placeholder={t("medications.dosePlaceholder")}
-          hint={t("medications.doseHint")}
-          error={errors.dose && t("medications.errors.required")}
-          {...register("dose")}
-        />
+        {/* Доза — числом и единицей из списка (ADR-0049, вопрос 44). Строкой
+            её больше не пишут: «5 мл» под подписью «мг/сут» было бы неправдой,
+            которую не заметить. Единицы — UCUM, как в HL7 FHIR doseQuantity. */}
+        {/* Число или слова — на одном месте: у «другой единицы» числа нет, и
+            поле дозы словами встаёт туда, где было число. */}
+        {doseUnit === "other" ? (
+          <Field
+            id={`${ids}-dose-text`}
+            label={t("medications.fields.doseText")}
+            placeholder={t("medications.doseTextPlaceholder")}
+            hint={t("medications.doseTextHint")}
+            error={errors.doseText && t("medications.errors.doseText")}
+            {...register("doseText")}
+          />
+        ) : (
+          <Field
+            id={`${ids}-dose-value`}
+            width="narrow"
+            inputMode="decimal"
+            autoComplete="off"
+            label={t("medications.fields.doseValue")}
+            hint={t("medications.doseHint")}
+            error={errors.doseValue && t("medications.errors.doseValue")}
+            {...register("doseValue")}
+          />
+        )}
+        <SelectField
+          id={`${ids}-dose-unit`}
+          width="medium"
+          label={t("medications.fields.doseUnit")}
+          hint={
+            legacyDose
+              ? t("medications.doseLegacyHint", { dose: medication.dose })
+              : undefined
+          }
+          error={errors.doseUnit && t("medications.errors.doseUnit")}
+          {...register("doseUnit")}
+        >
+          <option value="">{t("medications.doseUnitNotSet")}</option>
+          {MEDICATION_DOSE_UNITS.map((unit) => (
+            <option key={unit} value={unit}>
+              {t(`medications.doseUnits.${unit}`)}
+            </option>
+          ))}
+        </SelectField>
         {/* Список, а не строка: одно и то же назначение, записанное по-разному,
             нельзя ни сравнить, ни посчитать (вопрос 45 медкоманде). Значения —
             коды кратности HL7 FHIR, ADR-0033. */}

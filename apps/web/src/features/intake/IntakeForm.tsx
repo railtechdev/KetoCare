@@ -13,6 +13,16 @@ import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { toDateInput } from "../diary/time";
 import {
+  LAST_SEIZURE_EMPTY,
+  LAST_SEIZURE_PRECISIONS,
+  isLastSeizureComplete,
+  isLastSeizurePrecision,
+  lastSeizureFromIntake,
+  lastSeizureToBody,
+  monthName,
+  type LastSeizureValues,
+} from "./lastSeizure";
+import {
   optionsOfScale,
   visibleDrugs,
   useAedDrugs,
@@ -29,7 +39,7 @@ const STEPS = ["seizures", "therapy", "meals"] as const;
 type Step = (typeof STEPS)[number];
 
 interface Values {
-  lastSeizureOn: string;
+  lastSeizure: LastSeizureValues;
   onsetAgeId: string;
   seizureFrequencyId: string;
   seizureDurationId: string;
@@ -40,7 +50,7 @@ interface Values {
 }
 
 const EMPTY: Values = {
-  lastSeizureOn: "",
+  lastSeizure: LAST_SEIZURE_EMPTY,
   onsetAgeId: "",
   seizureFrequencyId: "",
   seizureDurationId: "",
@@ -107,7 +117,7 @@ export function IntakeForm({
       loaded == null
         ? EMPTY
         : {
-            lastSeizureOn: loaded.last_seizure_on ?? "",
+            lastSeizure: lastSeizureFromIntake(loaded),
             onsetAgeId: loaded.onset_age_id ?? "",
             seizureFrequencyId: loaded.seizure_frequency_id ?? "",
             seizureDurationId: loaded.seizure_duration_id ?? "",
@@ -129,22 +139,42 @@ export function IntakeForm({
   // клиника уже правила, а код уникален в паре со шкалой. Правило живёт на
   // сервере (`services/intake.check_last_seizure_known`), здесь оно только
   // видимо заранее — иначе семья узнавала бы о нём отказом после «Сохранить».
-  const answeredNoSeizures =
-    (options.data ?? []).some(
-      (option) =>
-        option.code === "freq_none" &&
-        option.id === (values ?? EMPTY).seizureFrequencyId,
-    ) && (values ?? EMPTY).lastSeizureOn === "";
+  //
+  // Дата бывает частичной — месяц с годом или один год, — а «не помню» тоже
+  // ответ (вопрос 48, ADR-0049). Требуется она только при НОВОМ ответе:
+  // анкета, где «Приступов нет» уже стояло без даты, сохраняется как была, —
+  // правило появилось позже её, и сервер её щадит так же.
+  const current = values ?? EMPTY;
+  const noSeizuresChosen = (options.data ?? []).some(
+    (option) =>
+      option.code === "freq_none" && option.id === current.seizureFrequencyId,
+  );
+  const savedWithoutDate =
+    loaded != null &&
+    loaded.seizure_frequency_id === current.seizureFrequencyId &&
+    (loaded.last_seizure_on ?? null) === null &&
+    (loaded.last_seizure_precision ?? null) === null;
+  const lastSeizureMissing =
+    !isLastSeizureComplete(current.lastSeizure) ||
+    (noSeizuresChosen &&
+      current.lastSeizure.precision === "" &&
+      !savedWithoutDate);
 
   function patch(change: Partial<Values>) {
     setValues((current) => ({ ...(current ?? EMPTY), ...change }));
   }
 
+  function patchLastSeizure(change: Partial<LastSeizureValues>) {
+    setValues((current) => {
+      const base = current ?? EMPTY;
+      return { ...base, lastSeizure: { ...base.lastSeizure, ...change } };
+    });
+  }
+
   function submit() {
     const current = values ?? EMPTY;
     const body: PatientIntakeBody = {
-      last_seizure_on:
-        current.lastSeizureOn === "" ? null : current.lastSeizureOn,
+      ...lastSeizureToBody(current.lastSeizure),
       onset_age_id: toId(current.onsetAgeId),
       seizure_frequency_id: toId(current.seizureFrequencyId),
       seizure_duration_id: toId(current.seizureDurationId),
@@ -198,8 +228,10 @@ export function IntakeForm({
             // Шаг назван явно: без него блокировка сработала бы на ЛЮБОМ шаге,
             // и стоило полю переехать — «Далее» начало бы молча ничего не
             // делать, потому что фокусировать было бы нечего.
-            if (step === "seizures" && answeredNoSeizures) {
-              document.getElementById("intake-last-seizure")?.focus();
+            if (step === "seizures" && lastSeizureMissing) {
+              document
+                .getElementById(firstMissingId(values.lastSeizure))
+                ?.focus();
               return;
             }
             if (isLast) submit();
@@ -221,24 +253,14 @@ export function IntakeForm({
                 value={values.onsetAgeId}
                 onChange={(value) => patch({ onsetAgeId: value })}
               />
-              <Field
-                id="intake-last-seizure"
-                type="date"
-                width="date"
-                label={t("fields.lastSeizureOn")}
-                hint={t("fields.lastSeizureHint")}
+              <LastSeizureField
+                values={values.lastSeizure}
                 error={
-                  answeredNoSeizures
+                  lastSeizureMissing
                     ? t("errors.lastSeizureRequired")
                     : undefined
                 }
-                // Будущую дату не принимает и сервер: по ней измеряется срок
-                // свободы от приступов.
-                max={toDateInput(new Date())}
-                value={values.lastSeizureOn}
-                onChange={(event) =>
-                  patch({ lastSeizureOn: event.target.value })
-                }
+                onChange={patchLastSeizure}
               />
               <ScaleField
                 scale="seizure_frequency"
@@ -434,5 +456,132 @@ function DrugPicker({
         ))}
       </ul>
     </fieldset>
+  );
+}
+
+/** Куда ставить фокус, когда ответ о последнем приступе не дописан. */
+function firstMissingId(values: LastSeizureValues): string {
+  if (values.precision === "day") return "intake-last-seizure-day";
+  if (values.precision === "month" && values.month === "") {
+    return "intake-last-seizure-month";
+  }
+  if (values.precision === "month" || values.precision === "year") {
+    return "intake-last-seizure-year";
+  }
+  return "intake-last-seizure";
+}
+
+/** Сколько лет назад предлагать: ребёнок на терапии — младше восемнадцати. */
+const YEARS_BACK = 20;
+
+/**
+ * Дата последнего приступа с той точностью, с какой её помнят (вопрос 48,
+ * ADR-0049): число, месяц с годом, один год или «не помню».
+ *
+ * Сначала — насколько точно помнят, потом — сама дата: иначе семья, помнящая
+ * только «весной прошлого года», выбирала бы между пустым полем и выдуманным
+ * числом, а выдуманное в записи неотличимо от точного.
+ */
+function LastSeizureField({
+  values,
+  error,
+  onChange,
+}: {
+  values: LastSeizureValues;
+  error?: string;
+  onChange: (change: Partial<LastSeizureValues>) => void;
+}) {
+  const { t } = useTranslation("intake");
+  const today = new Date();
+  const thisYear = today.getFullYear();
+  const years = Array.from({ length: YEARS_BACK + 1 }, (_, i) =>
+    String(thisYear - i),
+  );
+  // Будущий месяц текущего года не предлагается: сервер его не примет.
+  const lastMonth =
+    values.year === String(thisYear) ? today.getMonth() + 1 : 12;
+
+  return (
+    <>
+      <SelectField
+        id="intake-last-seizure"
+        width="wide"
+        label={t("fields.lastSeizureOn")}
+        hint={t("fields.lastSeizureHint")}
+        error={values.precision === "" ? error : undefined}
+        value={values.precision}
+        onChange={(event) => {
+          const value = event.target.value;
+          onChange({ precision: isLastSeizurePrecision(value) ? value : "" });
+        }}
+      >
+        <option value="">{t("notAnswered")}</option>
+        {LAST_SEIZURE_PRECISIONS.map((precision) => (
+          <option key={precision} value={precision}>
+            {t(`lastSeizurePrecision.${precision}`)}
+          </option>
+        ))}
+      </SelectField>
+
+      {values.precision === "day" && (
+        <Field
+          id="intake-last-seizure-day"
+          type="date"
+          width="date"
+          label={t("fields.lastSeizureDay")}
+          error={values.day === "" ? error : undefined}
+          // Будущую дату не принимает и сервер: по ней измеряется срок
+          // свободы от приступов.
+          max={toDateInput(today)}
+          value={values.day}
+          onChange={(event) => onChange({ day: event.target.value })}
+        />
+      )}
+
+      {values.precision === "month" && (
+        <SelectField
+          id="intake-last-seizure-month"
+          width="medium"
+          label={t("fields.lastSeizureMonth")}
+          error={values.month === "" ? error : undefined}
+          value={values.month}
+          onChange={(event) => onChange({ month: event.target.value })}
+        >
+          <option value="">{t("notAnswered")}</option>
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+            <option
+              key={month}
+              value={String(month)}
+              disabled={month > lastMonth}
+            >
+              {monthName(month)}
+            </option>
+          ))}
+        </SelectField>
+      )}
+
+      {(values.precision === "month" || values.precision === "year") && (
+        <SelectField
+          id="intake-last-seizure-year"
+          width="medium"
+          label={t("fields.lastSeizureYear")}
+          error={
+            values.year === "" &&
+            (values.precision === "year" || values.month !== "")
+              ? error
+              : undefined
+          }
+          value={values.year}
+          onChange={(event) => onChange({ year: event.target.value })}
+        >
+          <option value="">{t("notAnswered")}</option>
+          {years.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </SelectField>
+      )}
+    </>
   );
 }

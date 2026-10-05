@@ -92,7 +92,8 @@
       "access_code_revoked": "Отозван код доступа",
       "accept_access_code": "Активация кода доступа",
       "create_user": "Заведена учётная запись",
-      "set_credentials": "Задан вход в кабинет"
+      "set_credentials": "Задан вход в кабинет",
+      "password_reset_via_telegram": "Новый пароль кабинета задан из Telegram"
     },
     "entities": {
       "ai_conversations": "Переписки с помощником",

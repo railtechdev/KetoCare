@@ -30,6 +30,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -49,7 +50,7 @@ PROTECTED_DIRS = (
     # приложения, и подписывает его медицинская команда (раздел 10.4 ТЗ,
     # правило 1). Соседний каталог `product/` не защищён — там про кнопки.
     "docs/knowledge-base/clinical",
-    # Закоммиченные Alembic-миграции не правятся (ТЗ §0.3)
+    # Alembic-миграции, попавшие в main, не правятся (ТЗ §0.3)
     "migrations/versions",
     "alembic/versions",
 )
@@ -75,9 +76,14 @@ ALLOWED = (
 ENV_RE = re.compile(r"(^|[\s\"'/=])\.env(\.[A-Za-z0-9_-]+)?([\s\"';&|)]|$)")
 
 # Путь до файла миграции. Нужен отдельно от PROTECTED_RE: правило запрещает
-# править ЗАКОММИЧЕННУЮ миграцию, а свежесозданная ревизия — обычный рабочий
-# файл, который приходится и править, и удалять, и добавлять в индекс.
+# править миграцию, ПОПАВШУЮ В MAIN, а ревизия ветки — обычный рабочий файл,
+# который приходится и править по замечанию ревью, и удалять, и добавлять в индекс.
 MIGRATION_FILE_RE = re.compile(r"[\w./-]*(?:migrations|alembic)/versions/[\w.-]+\.py")
+
+# Ветка, попадание в которую замораживает миграцию (ТЗ §0.3: «после их
+# попадания в main»). Сверяется с удалённой веткой: локальная main в рабочих
+# деревьях не перематывается и отстаёт.
+FROZEN_REF = "origin/main"
 
 # --- команды, которые заведомо только читают -------------------------------
 READ_ONLY = {
@@ -122,7 +128,26 @@ READ_ONLY = {
     "yq",
     "date",
     "pwd",
-    "env",
+}
+
+# Флаги, с которыми «читающая» команда пишет файл. `find -delete` и `-exec rm`
+# удаляют, `yq -i` правит на месте, `sort -o` и `tree -o` пишут результат в файл.
+# Без этого списка они проходили как чтение: имя команды стояло в READ_ONLY.
+WRITING_FLAGS = {
+    "find": (
+        "-delete",
+        "-exec",
+        "-execdir",
+        "-ok",
+        "-okdir",
+        "-fprint",
+        "-fprint0",
+        "-fprintf",
+        "-fls",
+    ),
+    "yq": ("-i", "--inplace", "--in-place"),
+    "sort": ("-o", "--output"),
+    "tree": ("-o",),
 }
 
 # git — только читающие подкоманды
@@ -130,6 +155,19 @@ GIT_READ_ONLY = {"log", "diff", "show", "status", "ls-files", "blame", "cat-file
 
 # Подкоманды git, создающие коммит в текущей ветке. На main запрещены целиком.
 GIT_COMMIT_VERBS = {"commit", "merge", "rebase", "cherry-pick", "revert", "am"}
+
+# Глобальные параметры git, которые стоят ДО подкоманды и забирают следующее
+# слово: `git -C <каталог> commit`, `git -c k=v commit`. Без их разбора
+# подкомандой считался каталог или `k=v`, и коммит в main проходил мимо правила.
+GIT_OPTIONS_WITH_VALUE = {
+    "-C",
+    "-c",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--super-prefix",
+    "--config-env",
+}
 
 # Флаги, у которых `.env` — читаемый вход, а не цель записи.
 ENV_READ_FLAGS = ("--env-file", "--envfile", "--env_file")
@@ -161,59 +199,80 @@ def _project_dir() -> str:
     return os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 
 
-def _tracked_by_git(path: str) -> bool:
-    """Файл под контролем версий? Незакоммиченный — не защищён."""
+_MIGRATION_IN_LISTING_RE = re.compile(r"(?:^|/)(?:migrations|alembic)/versions/([^/]+\.py)$")
+
+
+def _migration_names_from(args: list[str]) -> frozenset[str] | None:
+    """Имена файлов миграций из листинга git; None — git не ответил."""
 
     try:
         result = subprocess.run(
-            ["git", "ls-files", "--error-unmatch", "--", path],
-            cwd=_project_dir(),
-            capture_output=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        # Git недоступен — считаем защищённым: лучше лишний вопрос человеку,
-        # чем правка закоммиченной миграции по недосмотру.
-        return True
-    return result.returncode == 0
-
-
-def _tracked_migration_names() -> frozenset[str]:
-    """Имена файлов закоммиченных миграций — без каталогов.
-
-    Сверять полный путь нельзя: `cd packages/core && rm migrations/versions/x.py`
-    даёт путь, которого нет в индексе от корня репозитория, и проверка сочла бы
-    закоммиченную миграцию новой. Имя ревизии несёт хеш и уникально, поэтому
-    сравнение по имени и строже, и честнее.
-    """
-
-    try:
-        result = subprocess.run(
-            ["git", "ls-files", "--", "*/versions/*.py"],
+            args,
             cwd=_project_dir(),
             capture_output=True,
             text=True,
             timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
-        return frozenset()
+        return None
     if result.returncode != 0:
-        return frozenset()
-    return frozenset(line.rsplit("/", 1)[-1] for line in result.stdout.split() if line)
+        return None
+    names = set()
+    for line in result.stdout.splitlines():
+        match = _MIGRATION_IN_LISTING_RE.search(line.strip())
+        if match:
+            names.add(match.group(1))
+    return frozenset(names)
+
+
+@functools.lru_cache(maxsize=1)
+def _frozen_migration_names() -> frozenset[str] | None:
+    """Имена миграций, которые уже нельзя править, — без каталогов.
+
+    Правило ТЗ §0.3: «никаких правок старых миграций после их попадания в
+    main». Поэтому сверка идёт с `origin/main`: ревизия, закоммиченная в ветке,
+    но ещё не слитая, правится по замечанию ревью без участия человека. Прежде
+    хук замораживал миграцию уже при `git add`, и правка до слияния требовала
+    человека ради правила, которое её не запрещает.
+
+    Если `origin/main` недоступна (клон без удалённой ветки, неглубокая выгрузка
+    в CI), запасной ответ — индекс: защищено всё, что закоммичено или добавлено.
+    Это строже правила, но не слабее. `None` — git не ответил вовсе.
+
+    Сверять полный путь нельзя: `cd packages/core && rm migrations/versions/x.py`
+    даёт путь от другого корня, и проверка сочла бы замороженную миграцию новой.
+    Имя ревизии несёт хеш и уникально, поэтому сравнение по имени и строже, и
+    честнее.
+    """
+
+    frozen = _migration_names_from(["git", "ls-tree", "-r", "--name-only", FROZEN_REF])
+    if frozen is not None:
+        return frozen
+    return _migration_names_from(["git", "ls-files", "--", "*/versions/*.py"])
+
+
+def _migration_is_frozen(path: str) -> bool:
+    """Миграция уже в main (или, без доступа к main, в индексе)?"""
+
+    frozen = _frozen_migration_names()
+    if frozen is None:
+        # Git недоступен — считаем защищённым: лучше лишний вопрос человеку,
+        # чем правка слитой миграции по недосмотру.
+        return True
+    return path.rsplit("/", 1)[-1] in frozen
 
 
 def _mask_allowed(text: str) -> str:
     masked = text
     for allowed in ALLOWED:
         masked = masked.replace(allowed, "@ALLOWED@")
-    # Свежая, ещё не добавленная в индекс ревизия — обычный файл. Скрываем её
-    # от проверки, чтобы `rm`/`git add` по ней работали: правило ТЗ говорит
-    # именно о закоммиченной миграции.
+    # Ревизия, ещё не попавшая в main, — обычный файл. Скрываем её от проверки,
+    # чтобы `rm`/`git add`/правка по ней работали: правило ТЗ говорит именно о
+    # миграции, попавшей в main.
     candidates = MIGRATION_FILE_RE.findall(masked)
     if candidates:
-        tracked = _tracked_migration_names()
         for candidate in candidates:
-            if candidate.rsplit("/", 1)[-1] not in tracked:
+            if not _migration_is_frozen(candidate):
                 masked = masked.replace(candidate, "@ALLOWED@")
     return masked
 
@@ -250,6 +309,12 @@ def split_segments(command: str) -> list[str]:
     файлом секретов сервера — в защиту локального файла секретов. Тело
     остаётся при своём сегменте; что с ним делать дальше, решают
     `strip_heredocs` и `heredoc_bodies`.
+
+    С учётом обратной косой черты, как у оболочки: внутри двойных кавычек `\\"`
+    кавычку не закрывает, а вне кавычек `\\;` — не разделитель (`find … -exec
+    rm {} \\;`). Внутри одинарных кавычек черта — обычный знак. Пока экранирование
+    не учитывалось, `grep "a\\"; b" файл` резался посередине строки, и обломок
+    с незакрытой кавычкой выглядел пишущей командой.
     """
 
     segments: list[str] = []
@@ -259,6 +324,10 @@ def split_segments(command: str) -> list[str]:
     index = 0
     while index < len(command):
         char = command[index]
+        if char == "\\" and quote != "'" and index + 1 < len(command):
+            current.append(command[index : index + 2])
+            index += 2
+            continue
         if quote:
             current.append(char)
             if char == quote:
@@ -380,16 +449,49 @@ def _tokens(segment: str) -> list[str]:
         return segment.split()
 
 
+#: Параметры `env`, забирающие следующее слово: `env -u NAME cmd`, `env -C dir cmd`.
+_ENV_OPTIONS_WITH_VALUE = {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
+
+
+def command_tokens(segment: str) -> list[str]:
+    """Слова сегмента, начиная с имени настоящей команды.
+
+    Снимаются присваивания окружения (`FOO=bar`), обёртки (`sudo`, `nohup` …) и
+    `env` с его параметрами. `env` — не читающая команда, а обёртка: `env rm
+    файл` удаляет файл. Пока он стоял в списке читающих, такая команда
+    проходила как чтение. Голый `env` (печать окружения) остаётся самим собой.
+    """
+
+    skip_prefix = {"sudo", "command", "nohup", "time", "xargs", "nice"}
+    tokens = _tokens(segment)
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if "=" in token and not token.startswith("-") and "/" not in token.split("=")[0]:
+            index += 1  # FOO=bar
+            continue
+        if token in skip_prefix:
+            index += 1
+            continue
+        if token.rsplit("/", maxsplit=1)[-1] == "env":
+            rest = index + 1
+            while rest < len(tokens) and tokens[rest].startswith("-"):
+                rest += 2 if tokens[rest] in _ENV_OPTIONS_WITH_VALUE else 1
+            while rest < len(tokens) and "=" in tokens[rest] and not tokens[rest].startswith("-"):
+                rest += 1
+            if rest >= len(tokens):
+                return tokens[index:]
+            index = rest
+            continue
+        return tokens[index:]
+    return []
+
+
 def first_word(segment: str) -> str:
     """Имя команды сегмента без присваиваний окружения и обёрток."""
-    skip_prefix = {"sudo", "command", "nohup", "time", "xargs", "nice"}
-    for token in _tokens(segment):
-        if "=" in token and not token.startswith("-") and "/" not in token.split("=")[0]:
-            continue  # FOO=bar
-        if token in skip_prefix:
-            continue
-        return token.rsplit("/", maxsplit=1)[-1]
-    return ""
+
+    tokens = command_tokens(segment)
+    return tokens[0].rsplit("/", maxsplit=1)[-1] if tokens else ""
 
 
 def _redirects(segment: str) -> bool:
@@ -406,14 +508,125 @@ def segment_is_read_only(segment: str) -> bool:
         return False
 
     if name == "git":
-        subcommands = [t for t in _tokens(segment)[1:] if not t.startswith("-")]
-        return bool(subcommands) and subcommands[0] in GIT_READ_ONLY
+        # `-c core.pager=…`, `diff.external`, `core.fsmonitor` исполняют
+        # произвольную команду, `--output=` пишет в файл: с ними чтения нет
+        # (находка ревью, 05.10.2026).
+        tokens = command_tokens(segment)
+        if any(
+            token in ("-c", "--config-env", "--exec-path")
+            or token.startswith(("--config-env=", "--exec-path=", "--output"))
+            for token in tokens
+        ):
+            return False
+        return _git_verb(segment) in GIT_READ_ONLY
 
     # cd в защищённый каталог открывает запись относительными путями дальше
     if name == "cd":
         return not mentions_protected(segment)
 
+    # Голый `env` печатает окружение; с командой его снимает `command_tokens`.
+    # `-S`/`--split-string` исполняют строку — это команда, а не чтение.
+    if name == "env":
+        return not any(
+            token in ("-S", "--split-string") or token.startswith("--split-string=")
+            for token in _tokens(segment)
+        )
+
+    args = command_tokens(segment)[1:]
+
+    if name == "sed":
+        return _sed_is_read_only(args)
+
+    if name in ("awk", "gawk", "mawk", "nawk"):
+        return _awk_is_read_only(args)
+
+    writing = WRITING_FLAGS.get(name, ())
+    if any(arg in writing or arg.startswith(tuple(f"{f}=" for f in writing)) for arg in args):
+        return False
+
     return name in READ_ONLY
+
+
+# Скрипт `sed -n`, который только печатает: адреса (номер, `$`, `/регулярка/`,
+# диапазон) и команды `p`, `l`, `=`, `q`, через `;`. Всё остальное — `w файл`,
+# `s///w`, `e` у GNU sed — пишет или исполняет, и разбирать их тоньше незачем.
+_SED_ADDRESS = r"(?:\d+|\$|/(?:[^/\\]|\\.)*/)"
+_SED_PRINT_SCRIPT_RE = re.compile(
+    rf"^\s*(?:{_SED_ADDRESS}(?:\s*[,~]\s*{_SED_ADDRESS})?\s*!?\s*[pl=q]\s*(?:;\s*|$))+$"
+)
+
+
+def _sed_is_read_only(args: list[str]) -> bool:
+    """`sed -n '1,20p' файл` — чтение; `-i`, `w` и прочее — запись."""
+
+    quiet = any(
+        a in ("--quiet", "--silent")
+        or (a.startswith("-") and not a.startswith("--") and "n" in a[1:])
+        for a in args
+    )
+    if not quiet:
+        # Без `-n` скрипт обычно правит текст (`s///`), а у `s` есть флаг
+        # `w файл`. Читающий случай, ради которого правило, один — `sed -n`.
+        return False
+    scripts: list[str] = []
+    positional: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in ("-e", "--expression"):
+            if index + 1 >= len(args):
+                return False
+            scripts.append(args[index + 1])
+            index += 2
+            continue
+        if arg.startswith("--expression="):
+            scripts.append(arg.split("=", 1)[1])
+        elif arg.startswith("-"):
+            # Короткие флаги пачкой (`-nE`); `-i`/`--in-place` и `-f файл`
+            # (скрипт неизвестен) — не чтение.
+            if arg.startswith("--"):
+                if arg not in ("--quiet", "--silent", "--regexp-extended", "--posix"):
+                    return False
+            elif set(arg[1:]) - set("nEr"):
+                return False
+        else:
+            positional.append(arg)
+        index += 1
+    if not scripts:
+        if not positional:
+            return False
+        scripts.append(positional[0])
+    return all(_SED_PRINT_SCRIPT_RE.match(script) for script in scripts)
+
+
+def _awk_is_read_only(args: list[str]) -> bool:
+    """`awk '{print $1}' файл` — чтение.
+
+    Пишет awk тремя путями: `print > "файл"` (ловит общая проверка
+    перенаправления — она смотрит и внутрь кавычек), `print | "команда"` и
+    `system()`, плюс `gawk -i inplace`. Программа из файла (`-f`) неизвестна —
+    не чтение.
+    """
+
+    # Белый список, а не перечень опасного: у gawk десятки способов писать —
+    # `@include "inplace"`, `-e`/`--source` с программой во флаге, `--file=`,
+    # `-l`/`--load` с расширением (находка ревью, 05.10.2026). Разрешены только
+    # `-F` и `-v`; любой другой флаг — не чтение.
+    skip_value = False
+    for arg in args:
+        if skip_value:
+            skip_value = False
+            continue
+        if arg in ("-F", "-v"):
+            skip_value = True
+            continue
+        if arg.startswith(("-F", "-v")) and len(arg) > 2:
+            continue
+        if arg.startswith("-"):
+            return False
+        if any(marker in arg for marker in ("system", "|", "@include", "@load", "getline")):
+            return False
+    return True
 
 
 def env_usage_is_read_only(segment: str) -> bool:
@@ -518,14 +731,38 @@ def current_branch(cwd: str | None = None) -> str | None:
     return result.stdout.strip()
 
 
-def _git_verb(segment: str) -> str | None:
-    if first_word(segment) != "git":
-        return None
-    for token in _tokens(segment)[1:]:
-        if token.startswith("-"):
+def _git_parts(segment: str) -> tuple[str | None, list[str], str | None]:
+    """Подкоманда git, слова после неё и каталог из `-C` (если задан).
+
+    Глобальные параметры с значением (`-C <каталог>`, `-c k=v`, `--git-dir
+    <путь>`) стоят до подкоманды и забирают следующее слово. Пока они не
+    разбирались, подкомандой считался каталог или `k=v`: `git -C . commit` на
+    main проходил мимо правила, а `git -C dir log` выглядел пишущим.
+    """
+
+    tokens = command_tokens(segment)
+    if not tokens or tokens[0].rsplit("/", maxsplit=1)[-1] != "git":
+        return None, [], None
+    directory: str | None = None
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in GIT_OPTIONS_WITH_VALUE:
+            if token == "-C" and index + 1 < len(tokens):
+                # Несколько `-C` складываются, как у самого git.
+                step = tokens[index + 1]
+                directory = os.path.join(directory, step) if directory else step
+            index += 2
             continue
-        return token
-    return None
+        if token.startswith("-"):
+            index += 1
+            continue
+        return token, tokens[index + 1 :], directory
+    return None, [], directory
+
+
+def _git_verb(segment: str) -> str | None:
+    return _git_parts(segment)[0]
 
 
 _NEW_BRANCH_FLAGS = {"-b", "-B", "-c", "-C"}
@@ -559,17 +796,16 @@ def _switch_target(segment: str, cwd: str) -> str | None:
     первая же команда с неё уходит.
     """
 
-    verb = _git_verb(segment)
+    verb, rest, _ = _git_parts(segment)
     if verb not in {"switch", "checkout"}:
         return None
 
-    tokens = _tokens(segment)
-    if "--" in tokens:
+    if "--" in rest:
         # `git checkout -- main.py` — это восстановление файла.
         return None
 
-    flags = {t for t in tokens if t.startswith("-")}
-    args = [t for t in tokens[2:] if not t.startswith("-")]
+    flags = {t for t in rest if t.startswith("-")}
+    args = [t for t in rest if not t.startswith("-")]
     if not args:
         return None
 
@@ -582,9 +818,10 @@ def _switch_target(segment: str, cwd: str) -> str | None:
 
 
 def _pushes_main(segment: str, on_main: bool) -> bool:
-    if _git_verb(segment) != "push":
+    verb, rest, _ = _git_parts(segment)
+    if verb != "push":
         return False
-    args = [t for t in _tokens(segment)[2:] if not t.startswith("-")]
+    args = [t for t in rest if not t.startswith("-")]
     if any(a == "main" or a.endswith(":main") for a in args):
         return True
     # Голый `git push` из main отправляет main.
@@ -644,25 +881,35 @@ def main_rule_violation(command: str, cwd: str | None = None) -> bool:
     # Правило защищает main ЭТОГО проекта. Чужой репозиторий — не наша ветка и
     # не наш деплой; блокировать там коммиты значит мешать работе, ничего не
     # защищая.
-    if not _inside_project(target):
-        return False
+    target_in_project = _inside_project(target)
 
     # Ветка отслеживается ПО ХОДУ команды: `git switch feat/x && git commit`
     # коммитит уже не в main, а `git switch main && git commit` — в main.
-    on_main = current_branch(target) == "main"
+    on_main = target_in_project and current_branch(target) == "main"
 
     for segment in segments:
-        moved = _switch_target(segment, target)
-        if moved is not None:
-            on_main = moved == "main"
-            continue
-
-        verb = _git_verb(segment)
+        verb, _, directory = _git_parts(segment)
         if verb is None:
             continue
-        if verb in GIT_COMMIT_VERBS and on_main:
+
+        # `git -C <каталог>` работает в другом каталоге — ветку читаем там.
+        where = target
+        if directory is not None:
+            where = os.path.abspath(os.path.join(target, os.path.expanduser(directory)))
+        if not _inside_project(where):
+            continue
+        same_place = os.path.realpath(where) == os.path.realpath(target)
+        segment_on_main = on_main if same_place else current_branch(where) == "main"
+
+        moved = _switch_target(segment, where)
+        if moved is not None:
+            if same_place:
+                on_main = moved == "main"
+            continue
+
+        if verb in GIT_COMMIT_VERBS and segment_on_main:
             return True
-        if _pushes_main(segment, on_main):
+        if _pushes_main(segment, segment_on_main):
             return True
     return False
 
@@ -672,9 +919,10 @@ BLOCK_MESSAGE = """BLOCKED: команда затрагивает защищён
 Защищено:
   docs/medical/*            — спецификации и эталоны меняет медицинская команда (ТЗ §0.1, правило 1)
   docs/knowledge-base/clinical/* — клинические статьи помощника подписывает медкоманда (10.4)
-  */migrations/versions/*   — ЗАКОММИЧЕННАЯ миграция не правится (ТЗ §0.3, правило 3);
-                              свежая, ещё не добавленная в индекс, — правится свободно
-  .env                      — секреты редактирует человек (правило 7); чтение (--env-file) разрешено
+  */migrations/versions/*   — миграция, ПОПАВШАЯ В MAIN, не правится (ТЗ §0.3, правило 3);
+                              ревизия ветки, ещё не слитая в main, — правится свободно
+                              (сверка с origin/main: перед правкой — git fetch)
+  .env                      — секреты редактирует человек (ТЗ §0.7); чтение (--env-file) разрешено
   .claude/settings.json     — выключает все хуки разом
 
 Разрешено без ограничений:
@@ -727,16 +975,16 @@ def file_block_reason(file_path: str) -> str | None:
         )
 
     if re.search(r"(^|/)(migrations|alembic)/versions/.*\.py$", rel):
-        # Свежесозданная ревизия ещё не в индексе — её правка легитимна.
-        if _tracked_by_git(rel):
+        # Ревизия ветки, ещё не попавшая в main, правится легитимно.
+        if _migration_is_frozen(rel):
             return (
-                f"{rel} — закоммиченная миграция не правится (ТЗ §0.3, правило 3 CLAUDE.md). "
+                f"{rel} — миграция уже в main и не правится (ТЗ §0.3, правило 3 CLAUDE.md). "
                 'Создай новую ревизию: cd packages/core && uv run alembic revision --autogenerate -m "..."'
             )
         return None
 
     if rel == ".env" or rel.startswith(".env."):
-        return f"{rel} — файлы с секретами редактирует человек (правило 7). Меняй .env.example."
+        return f"{rel} — файлы с секретами редактирует человек (ТЗ §0.7). Меняй .env.example."
 
     if rel == ".claude/settings.json":
         return (

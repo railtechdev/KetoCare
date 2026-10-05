@@ -26,7 +26,13 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, SoftDeleteMixin, UpdatedAtMixin, UUIDPkMixin
-from .enums import IntakeScale, MedicationFrequency, pg_enum
+from .enums import (
+    IntakeScale,
+    LastSeizurePrecision,
+    MedicationDoseUnit,
+    MedicationFrequency,
+    pg_enum,
+)
 
 
 class MedicalProfile(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
@@ -130,13 +136,34 @@ class Medication(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMi
             "(frequency_code IS NOT NULL AND frequency_code <> 'other') OR frequency IS NOT NULL",
             name="ck_medications_frequency_described",
         ),
+        # Доза числом и единицей (ADR-0049): число есть ровно тогда, когда есть
+        # единица, кроме «другой», у которой доза словами. CASE, а не OR: у
+        # OR с NULL ответ NULL, и CHECK пропустил бы число без единицы.
+        CheckConstraint(
+            "CASE WHEN dose_unit IS NULL OR dose_unit = 'other' THEN dose_value IS NULL "
+            "ELSE dose_value IS NOT NULL AND dose_value > 0 END",
+            name="ck_medications_dose_quantity",
+        ),
     )
 
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
     )
     drug_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Доза так, как её читает человек: «300 мг», «0,5 табл.». Заполнена всегда.
+    #:
+    #: С ADR-0049 у новой записи её собирает сервер из числа и единицы
+    #: (`services/medication_dose.describe_dose`), у «другой единицы» — это
+    #: слова врача, у записей до списка — строка как была. Читают её отчёты,
+    #: сводка врача, дневник и бот: им не нужно знать, как доза задана.
     dose: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Разовая доза числом (FHIR `doseQuantity.value`). Пусто у записей до
+    #: списка и у «другой единицы»: их строку в число без врача не перевести —
+    #: «2,5 мг/кг/сут» не разовая доза, а «по 1/2 таб.» требует прочтения.
+    dose_value: Mapped[float | None] = mapped_column(Numeric(10, 3))
+    dose_unit: Mapped[MedicationDoseUnit | None] = mapped_column(
+        pg_enum(MedicationDoseUnit, "medication_dose_unit")
+    )
     # Кратность — кодом из списка (ADR-0033). Пусто только у записей, заведённых
     # до списка: их кратность осталась словами в `frequency`, и перевести её в
     # код без врача нельзя — «утром и на ночь» бывает и двумя приёмами, и одним
@@ -247,6 +274,21 @@ class PatientIntake(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     """
 
     __tablename__ = "patient_intake"
+    __table_args__ = (
+        # Дата и её точность согласованы: у неточной даты день (и месяц) —
+        # первые, у «не помню» и «не отвечено» даты нет.
+        CheckConstraint(
+            "CASE last_seizure_precision "
+            "WHEN 'day' THEN last_seizure_on IS NOT NULL "
+            "WHEN 'month' THEN last_seizure_on IS NOT NULL "
+            "AND EXTRACT(DAY FROM last_seizure_on) = 1 "
+            "WHEN 'year' THEN last_seizure_on IS NOT NULL "
+            "AND EXTRACT(DAY FROM last_seizure_on) = 1 "
+            "AND EXTRACT(MONTH FROM last_seizure_on) = 1 "
+            "ELSE last_seizure_on IS NULL END",
+            name="ck_patient_intake_last_seizure_precision",
+        ),
+    )
 
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -258,7 +300,15 @@ class PatientIntake(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     # Дата последнего приступа **на момент анкеты**. Дальше она вычисляется из
     # дневника: хранить её обновляемым полем нельзя — она немедленно разойдётся
     # с записями, а лечение сверяется с записями (ADR-0007).
+    #
+    # Семья не всегда помнит число (вопрос 48, ADR-0049): дата бывает точной,
+    # до месяца или до года — тогда хранится первым днём месяца или года, — а
+    # бывает «не помню», и тогда даты нет. Точность лежит рядом и печатается
+    # вместе с датой: «март 2026» не должен стать «01.03.2026».
     last_seizure_on: Mapped[date | None] = mapped_column(Date)
+    last_seizure_precision: Mapped[LastSeizurePrecision | None] = mapped_column(
+        pg_enum(LastSeizurePrecision, "last_seizure_precision")
+    )
 
     onset_age_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("intake_options.id", ondelete="RESTRICT")

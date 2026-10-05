@@ -536,3 +536,130 @@ class TestMiniAppKeepsTheDay:
         assert items[1]["id"] == item_id
         assert items[1]["eaten"] is True
         assert items[2]["eaten"] is False
+
+
+class TestPasswordResetFromTheMiniApp:
+    """Забытый пароль кабинета — сбрасывается в Mini App (аудит блокеров, E3).
+
+    Потребитель — `WebAccessPanel` в Mini App. Telegram подтверждает личность,
+    почта не меняется, прежние сессии кабинета обрываются, владелец получает
+    сообщение во все свои чаты.
+    """
+
+    pytestmark = pytest.mark.asyncio
+
+    async def test_parent_sets_a_new_password_and_is_told(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        parent, _, _ = await _linked_family(session, make_user, make_patient)
+        old_web = auth_headers(parent)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={"password": "синий чайник на подоконнике", "init_data": init_data()},
+        )
+
+        assert response.status_code == 204, response.text
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": parent.email, "password": "синий чайник на подоконнике"},
+        )
+        assert login.status_code == 200, login.text
+        # Прежняя сессия кабинета оборвана.
+        me = await client.get("/api/v1/users/me", headers=old_web)
+        assert me.status_code == 401
+        assert ("notify_password_changed", (str(parent.id),)) in enqueued
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "password_reset_via_telegram", AuditLog.entity_id == parent.id
+            )
+        )
+        assert entry is not None
+
+    async def test_not_from_the_web_cabinet(self, client, session, make_user, auth_headers):
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers=auth_headers(parent),
+            json={"password": "синий чайник на подоконнике", "init_data": init_data()},
+        )
+
+        assert response.status_code == 403
+
+    async def test_obvious_password_is_refused(self, client, session, make_user, make_patient):
+        await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={"password": "qwerty123456", "init_data": init_data()},
+        )
+
+        assert response.status_code == 422
+
+    async def test_stale_launch_is_refused(self, client, session, make_user, make_patient):
+        """Подпись старше десяти минут — «закройте и откройте снова» (ревью E3-2)."""
+        await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+        old = init_data(at=datetime.now(UTC) - timedelta(minutes=20))
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={"password": "синий чайник на подоконнике", "init_data": old},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"]["details"] == {"reason": "stale_launch"}
+
+    async def test_someone_elses_signature_is_refused(
+        self, client, session, make_user, make_patient
+    ):
+        await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={
+                "password": "синий чайник на подоконнике",
+                "init_data": init_data(chat_id=CHAT_ID + 1),
+            },
+        )
+
+        assert response.status_code == 403
+
+    async def test_email_cannot_be_changed_here(self, client, session, make_user, make_patient):
+        await _linked_family(session, make_user, make_patient)
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={
+                "password": "синий чайник на подоконнике",
+                "init_data": init_data(),
+                "email": "thief@example.com",
+            },
+        )
+
+        assert response.status_code == 422
+
+    async def test_cabinet_not_enabled_yet(self, client, session, make_user, make_patient):
+        parent, _, _ = await _linked_family(session, make_user, make_patient)
+        parent.email = None
+        parent.password_hash = None
+        await session.flush()
+        opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
+            json={"password": "синий чайник на подоконнике", "init_data": init_data()},
+        )
+
+        assert response.status_code == 409

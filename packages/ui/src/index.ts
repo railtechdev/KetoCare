@@ -66,6 +66,7 @@ export {
   formatDayTime,
   formatRatio,
   formatFactor,
+  formatDose,
   formatMeasured,
   formatWeight,
 } from "./lib/format";

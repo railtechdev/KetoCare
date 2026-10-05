@@ -280,3 +280,35 @@ def menu_composed_notice(*, composer_name: str, composer_role: str, menu_date: d
         f"{composer_name}, {role}, составил(а) план питания на "
         f"{menu_date.strftime('%d.%m')}. Откройте приложение, вкладка «Меню»."
     )
+
+
+#: Сообщение владельцу о смене пароля кабинета из Telegram (аудит, E3).
+#: Следующий шаг назван: если это был не он — новый код и врач.
+PASSWORD_CHANGED_NOTICE = (
+    "Пароль от кабинета KetoCare изменён из приложения в Telegram.\n\n"
+    "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство, "
+    "а администратор клиники выдаст вам временный пароль."
+)
+
+
+async def notify_password_changed(ctx: dict[str, Any], parent_id: str) -> int:
+    """Сообщить во все чаты взрослого, что пароль кабинета изменён."""
+
+    settings = Settings()  # type: ignore[call-arg]
+    if not settings.bot_token:
+        return 0
+
+    sessionmaker = get_sessionmaker()
+    delivered = 0
+    async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
+        links = await telegram_repo.list_live_links_for_parent(session, uuid.UUID(parent_id))
+        for chat_id in sorted({link.chat_id for link in links}):
+            try:
+                await send_message(
+                    client, token=settings.bot_token, chat_id=chat_id, text=PASSWORD_CHANGED_NOTICE
+                )
+            except TelegramSendError as exc:
+                logger.warning("password_changed_notice_not_delivered", reason=str(exc))
+                continue
+            delivered += 1
+    return delivered

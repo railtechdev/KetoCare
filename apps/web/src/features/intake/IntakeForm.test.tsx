@@ -144,6 +144,7 @@ describe("IntakeForm", () => {
     expect(body.onset_age_id).toBeNull();
     expect(body.developmental_delay).toBeNull();
     expect(body.last_seizure_on).toBeNull();
+    expect(body.last_seizure_precision).toBeNull();
   });
 
   it("препараты отмечаются флажками и уходят списком", async () => {
@@ -209,8 +210,12 @@ describe("свобода от приступов измеряется сроко
       await screen.findByLabelText(intakeRu.fields.frequency),
       "o-freq-none",
     );
-    await user.type(
+    await user.selectOptions(
       screen.getByLabelText(intakeRu.fields.lastSeizureOn),
+      intakeRu.lastSeizurePrecision.day,
+    );
+    await user.type(
+      screen.getByLabelText(intakeRu.fields.lastSeizureDay),
       "2026-06-01",
     );
     await user.click(screen.getByRole("button", { name: intakeRu.next }));
@@ -223,22 +228,46 @@ describe("свобода от приступов измеряется сроко
     ).not.toBeInTheDocument();
   });
 
-  it("на уже заполненной анкете ошибка видна сразу", async () => {
-    // Семья открывает анкету, чтобы поправить питание, а упирается в дату,
-    // которой не вводила. Показать это надо на первом шаге, а не отказом после
-    // «Сохранить»: иначе она пройдёт три шага и вернётся ни с чем.
+  it("анкету, сохранённую без даты до правила, не запирает", async () => {
+    // Вопрос 48 (ADR-0049): дата обязательна только при НОВОМ ответе. Семья
+    // открывает анкету, чтобы поправить питание, — и правит, не упираясь в
+    // правило, появившееся позже её ответа. Сервер щадит её так же.
     saved = {
       seizure_frequency_id: "o-freq-none",
       last_seizure_on: null,
+      last_seizure_precision: null,
       current_aed_ids: [],
     };
+    const user = userEvent.setup();
     renderForm();
 
-    // Именно «сразу»: до всякого нажатия. С проверкой после клика тест был бы
-    // зелёным и на экране, который показывает ошибку только после отказа, —
-    // то есть проверял бы не то, что обещает названием.
+    await user.click(
+      await screen.findByRole("button", { name: intakeRu.next }),
+    );
+
     expect(
-      await screen.findByText(intakeRu.errors.lastSeizureRequired),
+      screen.queryByText(intakeRu.errors.lastSeizureRequired),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Шаг 2 из 3/)).toBeInTheDocument();
+  });
+
+  it("ответ, данный заново, дату требует", async () => {
+    saved = {
+      seizure_frequency_id: "o-freq",
+      last_seizure_on: null,
+      last_seizure_precision: null,
+      current_aed_ids: [],
+    };
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.selectOptions(
+      await screen.findByLabelText(intakeRu.fields.frequency),
+      "o-freq-none",
+    );
+
+    expect(
+      screen.getByText(intakeRu.errors.lastSeizureRequired),
     ).toBeInTheDocument();
   });
 
@@ -257,5 +286,126 @@ describe("свобода от приступов измеряется сроко
     expect(
       screen.queryByText(intakeRu.errors.lastSeizureRequired),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Частичная дата (вопрос 48, ADR-0049): семья помнит месяц или год, а то и не
+ * помнит вовсе. Угаданное число было бы неотличимо от точного.
+ */
+describe("дата последнего приступа с той точностью, с какой помнят", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(respond(path)),
+    );
+    (api.PUT as unknown as Mock).mockResolvedValue({
+      data: { id: "i1", patient_id: "p1", current_aed_ids: [] },
+    });
+  });
+
+  async function finish(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: intakeRu.next }));
+    await user.click(screen.getByRole("button", { name: intakeRu.next }));
+    await user.click(screen.getByRole("button", { name: intakeRu.submit }));
+    return (api.PUT as unknown as Mock).mock.calls[0]?.[1]?.body;
+  }
+
+  it("месяц и год уходят первым днём месяца с точностью «month»", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.selectOptions(
+      await screen.findByLabelText(intakeRu.fields.frequency),
+      "o-freq-none",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(intakeRu.fields.lastSeizureOn),
+      intakeRu.lastSeizurePrecision.month,
+    );
+    await user.selectOptions(
+      screen.getByLabelText(intakeRu.fields.lastSeizureYear),
+      "2025",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(intakeRu.fields.lastSeizureMonth),
+      "март",
+    );
+
+    const body = await finish(user);
+    expect(body.last_seizure_on).toBe("2025-03-01");
+    expect(body.last_seizure_precision).toBe("month");
+  });
+
+  it("только год — первым днём года с точностью «year»", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.selectOptions(
+      await screen.findByLabelText(intakeRu.fields.lastSeizureOn),
+      intakeRu.lastSeizurePrecision.year,
+    );
+    await user.selectOptions(
+      screen.getByLabelText(intakeRu.fields.lastSeizureYear),
+      "2024",
+    );
+
+    const body = await finish(user);
+    expect(body.last_seizure_on).toBe("2024-01-01");
+    expect(body.last_seizure_precision).toBe("year");
+  });
+
+  it("«не помню» — ответ без даты, и он пускает дальше при «Приступов нет»", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.selectOptions(
+      await screen.findByLabelText(intakeRu.fields.frequency),
+      "o-freq-none",
+    );
+    await user.selectOptions(
+      screen.getByLabelText(intakeRu.fields.lastSeizureOn),
+      intakeRu.lastSeizurePrecision.unknown,
+    );
+
+    const body = await finish(user);
+    expect(body.last_seizure_on).toBeNull();
+    expect(body.last_seizure_precision).toBe("unknown");
+  });
+
+  it("выбранная точность без даты не пускает дальше", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.selectOptions(
+      await screen.findByLabelText(intakeRu.fields.lastSeizureOn),
+      intakeRu.lastSeizurePrecision.year,
+    );
+    await user.click(screen.getByRole("button", { name: intakeRu.next }));
+
+    expect(
+      screen.getByText(intakeRu.errors.lastSeizureRequired),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(intakeRu.fields.lastSeizureYear),
+    ).toHaveFocus();
+  });
+
+  it("сохранённый месяц возвращается в поля месяцем, а не числом", async () => {
+    saved = {
+      seizure_frequency_id: "o-freq-none",
+      last_seizure_on: "2026-03-01",
+      last_seizure_precision: "month",
+      current_aed_ids: [],
+    };
+    renderForm();
+
+    expect(
+      await screen.findByLabelText(intakeRu.fields.lastSeizureMonth),
+    ).toHaveValue("3");
+    expect(screen.getByLabelText(intakeRu.fields.lastSeizureYear)).toHaveValue(
+      "2026",
+    );
+    expect(screen.queryByLabelText(intakeRu.fields.lastSeizureDay)).toBeNull();
   });
 });

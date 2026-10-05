@@ -8,14 +8,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from core.config import get_settings
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
+from .. import after_commit, login_throttle
 from ..client_address import client_address
 from ..cookies import set_auth_cookies
 from ..deps.auth import CurrentUserDep, SessionDep, bearer_token, require_roles
@@ -26,12 +30,14 @@ from ..schemas import (
     CredentialsCreate,
     MeUpdate,
     PasswordChange,
+    PasswordResetViaTelegram,
     TokenPair,
     UserRead,
 )
 from ..schemas_access import AccessCodeClaim, AccessCodeClaimed
 from ..security import create_token, decode_token, hash_password_async, verify_password_async
 from ..services import access_codes as access_codes_service
+from ..services.telegram_initdata import InitDataError, parse_init_data
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -128,10 +134,10 @@ async def set_credentials(
     Веб для такой семьи необязателен и включается ею самой. До этого вызова у
     учётной записи нет ни почты, ни пароля: её удостоверяет Telegram.
 
-    Повторный вызов отвергается (409). Ручка не спрашивает текущего пароля —
-    спрашивать нечего, — и, оставаясь открытой, она стала бы вторым способом
-    сменить пароль в обход знания прежнего: чужая открытая сессия в Mini App
-    перевела бы кабинет на свою почту. Смена — в `/users/me/password`.
+    Повторный вызов отвергается (409): иначе чужая открытая сессия в Mini App
+    перевела бы кабинет на свою почту. Смена пароля — в `/users/me/password`,
+    сброс забытого — `/users/me/credentials/reset` (ADR-0051): почту он не
+    меняет и требует свежей подписи Telegram.
 
     Токенов не выдаёт: сессия у вызвавшего уже есть, а `password_changed_at`
     здесь не ставится — обрывать нечего, прежним паролем никто не входил.
@@ -173,6 +179,65 @@ async def set_credentials(
         ip=client_address(request),
     )
     return UserRead.model_validate(me)
+
+
+@router.post(
+    "/me/credentials/reset",
+    status_code=204,
+    summary="Задать новый пароль кабинета из Telegram",
+    dependencies=[Depends(require_roles(UserRole.PARENT))],
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def reset_password_via_telegram(
+    payload: PasswordResetViaTelegram,
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> None:
+    """Забытый пароль кабинета — сбросить там, где семья живёт (аудит, E3).
+
+    Прежде пароль родителю сбрасывал только администратор клиники, хотя
+    личность родителя уже подтверждает Telegram: Mini App открывается подписью
+    его аккаунта. Как у сервисов, восстанавливающих доступ через проверенный
+    второй канал, сброс разрешён только из Mini App — не из кабинета (там
+    пароль меняют, зная прежний) и не ботом (сервисный токен — не человек).
+
+    Риск чужого разблокированного телефона закрывают два свойства: почту отсюда
+    не сменить — кабинет остаётся на почте владельца, — и во все чаты этого
+    взрослого приходит сообщение о смене пароля. Отметка смены пароля обрывает
+    прежние сессии кабинета; Mini App после ответа открывает свою заново.
+    """
+
+    if user.channel != "miniapp":
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Новый пароль без прежнего задаётся только в приложении в Telegram.",
+        )
+    me = await users_repo.get(session, user.id)
+    if me is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+    await _require_fresh_launch(session, payload.init_data, parent_id=me.id)
+    if not me.has_web_credentials or me.email is None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Кабинет ещё не включён: задайте почту и пароль в блоке «Вход в кабинет».",
+        )
+
+    me.password_hash = await hash_password_async(payload.password)
+    me.password_changed_at = datetime.now(UTC)
+    me.password_change_required = False
+    await session.flush()
+    await login_throttle.reset(me.email)
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=me.id,
+        action="password_reset_via_telegram",
+        entity="users",
+        entity_id=me.id,
+        ip=client_address(request),
+    )
+    after_commit.defer(session, "notify_password_changed", str(me.id))
 
 
 @router.post("/me/password", response_model=TokenPair, summary="Сменить свой пароль")
@@ -266,3 +331,29 @@ def _login_moment(request: Request) -> int | None:
         return None
     started = claims.get("auth")
     return started if isinstance(started, int) else None
+
+
+#: Насколько свежей должна быть подпись Telegram при сбросе пароля. Строка
+#: запуска живёт час (`telegram_initdata.MAX_AGE`); для сброса — десять минут:
+#: приложение открыто только что, телефон в руках владельца (замечание ревью
+#: E3-2, 05.10.2026). Заодно перезапуск после сброса гарантированно войдёт.
+_FRESH_LAUNCH = timedelta(minutes=10)
+
+
+async def _require_fresh_launch(session: SessionDep, raw: str, *, parent_id: uuid.UUID) -> None:
+    stale = ApiError(
+        ErrorCode.FORBIDDEN,
+        "Для смены пароля закройте приложение и откройте его снова — так мы убедимся, "
+        "что телефон у вас.",
+        details={"reason": "stale_launch"},
+    )
+    try:
+        launch = parse_init_data(raw, bot_token=get_settings().bot_token or "")
+    except InitDataError as exc:
+        raise stale from exc
+    if datetime.now(UTC) - launch.auth_date > _FRESH_LAUNCH:
+        raise stale
+    # Подпись — именно этого взрослого: личный чат с ботом, привязанный к нему.
+    link = await telegram_repo.get_active_link_by_chat(session, launch.user_id)
+    if link is None or link.parent_id != parent_id:
+        raise stale
