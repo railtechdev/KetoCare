@@ -15,6 +15,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Protocol
 
+import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,10 +29,13 @@ from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
+from .. import after_commit
 from ..errors import ApiError, ErrorCode
 from ..schemas_access import AccessCodeCreated, AccessCodeRead, AccessCodeStatus
 from ..security import hash_password_async
 from . import telegram as telegram_service
+
+logger = structlog.get_logger(__name__)
 
 
 class Actor(Protocol):
@@ -55,7 +59,10 @@ class Actor(Protocol):
 #: Один ответ на все три негодности кода: не существует, истёк, погашен, отозван.
 #: Разные тексты сообщали бы подбирающему, что код существовал, — а семье они
 #: одинаково бесполезны: действие всё равно одно, попросить у врача новый.
-_CODE_INVALID = "Код недействителен или истёк. Попросите у врача новый код доступа."
+_CODE_INVALID = (
+    "Код не подошёл: он истёк, уже использован или набран с ошибкой. "
+    "Попросите новый код у того, кто его прислал, — у врача или у родителя ребёнка."
+)
 
 
 def _status(code: AccessCode, *, now: datetime) -> AccessCodeStatus:
@@ -79,6 +86,7 @@ async def issue(
     patient_id: uuid.UUID,
     issuer: Actor,
     purpose: AccessCodePurpose,
+    channel: str,
     ip: str | None,
 ) -> AccessCodeCreated:
     """Выпускает код и пишет выдачу в журнал.
@@ -104,6 +112,9 @@ async def issue(
         after={
             "code": code.code,
             "purpose": code.purpose.value,
+            # Откуда выдан: кабинет или Mini App. Выдача из телефона — новое
+            # право (ADR-0043), и разбор «кто позвал чужого» начинается с этого.
+            "channel": channel,
             "expires_at": code.expires_at.isoformat(),
         },
     )
@@ -229,8 +240,9 @@ async def _require_live_issuer(session: AsyncSession, code: AccessCode) -> None:
     await codes_repo.release(session, code=code.code)
     raise ApiError(
         ErrorCode.CONFLICT,
-        "Код больше не действует: у выдавшего его больше нет доступа к этому ребёнку. "
-        "Попросите лечащего врача выдать новый.",
+        "Код больше не действует: у того, кто его выдал, больше нет доступа к этому "
+        "ребёнку. Попросите новый код у врача или у другого родителя ребёнка.",
+        details={"reason": "issuer_lost_access"},
     )
 
 
@@ -260,8 +272,19 @@ async def _attach_parent(
 
     patient = await _patient_or_refuse(session, code.patient_id)
 
-    await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+    newcomer = not await access_repo.user_has_patient_access(
+        session, user_id=parent.id, role=parent.role, patient_id=patient.id
+    )
+    # Кто открыл доступ, записывается в саму связь и только при её создании:
+    # код, погашенный уже подключённым взрослым, «пригласившим» его не делает
+    # (иначе бабушка, чей код мама ввела для второго телефона, могла бы
+    # закрыть маме доступ — находка ревью ADR-0043).
+    await patients_repo.link_parent(
+        session, parent_id=parent.id, patient_id=patient.id, invited_by=code.issued_by
+    )
     await codes_repo.mark_used_by(session, code=code.code, user_id=parent.id)
+    if newcomer and code.purpose is AccessCodePurpose.FAMILY_MEMBER:
+        await _tell_the_family(session, code=code, newcomer_id=parent.id)
 
     await audit_repo.write_audit_log(
         session,
@@ -273,6 +296,37 @@ async def _attach_parent(
         after={"code": code.code, "issued_by": str(code.issued_by)},
     )
     return patient
+
+
+async def _tell_the_family(
+    session: AsyncSession, *, code: AccessCode, newcomer_id: uuid.UUID
+) -> None:
+    """Остальные взрослые при ребёнке узнают о новом близком (ADR-0043).
+
+    Как у Family Link, который пишет о каждой смене родительских прав: доступ к
+    данным ребёнка не должен появляться тихо. Если код ушёл не тому человеку —
+    с потерянного телефона или по ошибке, — первой это заметит семья, и
+    сообщение говорит, где закрыть доступ.
+
+    Задача уходит только после коммита (`after_commit.defer`): активация из
+    бота ещё может откатиться на гонке двух кодов за один чат, и семья иначе
+    получила бы весть о подключении, которого не было. Имена — аргументами:
+    так воркеру не нужно читать учётную запись, которой на момент постановки
+    ещё нет в базе.
+    """
+
+    newcomer = await users_repo.get(session, newcomer_id)
+    inviter = await users_repo.get(session, code.issued_by)
+    if newcomer is None:
+        return
+    after_commit.defer(
+        session,
+        "notify_family_joined",
+        str(code.patient_id),
+        str(newcomer_id),
+        newcomer.full_name,
+        inviter.full_name if inviter is not None else None,
+    )
 
 
 async def _require_web_code(session: AsyncSession, code: AccessCode) -> None:
@@ -316,7 +370,8 @@ async def activate_new_account(
     if await users_repo.get_by_email(session, email) is not None:
         raise ApiError(
             ErrorCode.CONFLICT,
-            "Эта почта уже занята. Войдите и добавьте ребёнка по коду в настройках.",
+            "Эта почта уже занята. Войдите в кабинет и откройте «Ребёнок» → "
+            "«Добавить ребёнка по коду».",
         )
 
     claimed = await _claim_or_refuse(session, code)
@@ -405,7 +460,17 @@ async def activate_from_telegram(
 
     existing = await telegram_repo.get_active_link_by_chat(session, chat_id)
     if existing is not None:
-        raise ApiError(ErrorCode.CONFLICT, _CHAT_TAKEN)
+        # Бот подбирает текст по причине: «этот ребёнок уже здесь» и «чат занят
+        # другим ребёнком» — разные ситуации с разным следующим шагом, а одна
+        # формулировка на обе отправляла бабушку отвязывать чат в кабинете,
+        # которого у неё нет.
+        peeked = await codes_repo.get(session, code)
+        same_child = peeked is not None and peeked.patient_id == existing.patient_id
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Этот чат уже ведёт дневник этого ребёнка." if same_child else _CHAT_TAKEN,
+            details={"reason": "already_here" if same_child else "chat_taken"},
+        )
 
     claimed = await _claim_or_refuse(session, code)
     await _require_live_issuer(session, claimed)
@@ -478,7 +543,11 @@ async def _parent_behind_telegram(
             # Колонка общая для всех ролей, и сотрудник, привязавший однажды свой
             # Telegram, иначе получил бы ребёнка в родительские права — тихо и
             # мимо всех проверок ролей.
-            raise ApiError(ErrorCode.CONFLICT, _CODE_INVALID)
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Этот Telegram принадлежит сотруднику клиники и не может вести дневник ребёнка.",
+                details={"reason": "staff_telegram"},
+            )
         return known
 
     if code.purpose is AccessCodePurpose.OWN_CHAT:

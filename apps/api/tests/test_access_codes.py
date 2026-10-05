@@ -299,7 +299,7 @@ class TestActivation:
         )
 
         assert response.status_code == 404, response.text
-        assert response.json()["error"]["message"].startswith("Код недействителен")
+        assert response.json()["error"]["message"].startswith("Код не подошёл")
 
     async def test_taken_email_does_not_burn_the_code(
         self, client, session, make_user, make_patient, auth_headers

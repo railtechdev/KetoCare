@@ -86,6 +86,24 @@ async def create(
     return code
 
 
+#: Буквы кириллицы, которые на экране неотличимы от латинских из алфавита кода.
+#: Человек переписывает код с чужого телефона на русской раскладке и набирает
+#: «А», а не «A» — отказ в таком случае был бы ошибкой продукта, а не защитой.
+#: О, З, Ч и прочие сюда не входят: их латинских двойников в алфавите нет.
+_LOOKALIKES = str.maketrans("АВЕКМНРСТУХ", "ABEKMHPCTYX")
+
+
+def normalize_code(code: str) -> str:
+    """Приводит набранный человеком код к виду, в котором он хранится.
+
+    Регистр — к верхнему, пробелы и дефисы — прочь (код диктуют и записывают
+    группами «ABCD EFGH»), кириллические двойники — к латинице.
+    """
+
+    cleaned = "".join(ch for ch in code if not ch.isspace() and ch != "-")
+    return cleaned.upper().translate(_LOOKALIKES)
+
+
 async def claim(session: AsyncSession, code: str) -> AccessCode | None:
     """Атомарно гасит код и возвращает его; `None` — код не годен.
 
@@ -103,7 +121,7 @@ async def claim(session: AsyncSession, code: str) -> AccessCode | None:
     stmt = (
         update(AccessCode)
         .where(
-            AccessCode.code == code.strip().upper(),
+            AccessCode.code == normalize_code(code),
             AccessCode.used_at.is_(None),
             AccessCode.revoked_at.is_(None),
             AccessCode.expires_at > now,
@@ -152,7 +170,7 @@ async def revoke(session: AsyncSession, *, code: str, patient_id: uuid.UUID) -> 
     stmt = (
         update(AccessCode)
         .where(
-            AccessCode.code == code.strip().upper(),
+            AccessCode.code == normalize_code(code),
             AccessCode.patient_id == patient_id,
             AccessCode.used_at.is_(None),
             AccessCode.revoked_at.is_(None),
@@ -194,7 +212,7 @@ async def revoke_pending_of(
 
 
 async def get(session: AsyncSession, code: str) -> AccessCode | None:
-    return await session.get(AccessCode, code.strip().upper())
+    return await session.get(AccessCode, normalize_code(code))
 
 
 async def list_for_patient(session: AsyncSession, *, patient_id: uuid.UUID) -> Sequence[AccessCode]:

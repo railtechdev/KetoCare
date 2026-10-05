@@ -35,6 +35,7 @@ from core.config import get_settings
 from core.repositories import audit as audit_repo
 from core.repositories import reminders as reminders_repo
 from core.repositories import telegram as telegram_repo
+from core.repositories import users as users_repo
 
 from ..client_address import client_address
 from ..deps.auth import PatientAccessDep, SessionDep
@@ -128,7 +129,17 @@ async def list_links(
     patient_id: PatientIdPath, session: SessionDep, user: PatientAccessDep
 ) -> list[TelegramLinkRead]:
     links = await telegram_repo.list_links_for_patient(session, patient_id)
-    return [TelegramLinkRead.model_validate(link) for link in links]
+    names: dict[uuid.UUID, str | None] = {}
+    for link in links:
+        if link.parent_id not in names:
+            owner = await users_repo.get(session, link.parent_id)
+            names[link.parent_id] = owner.full_name if owner is not None else None
+    return [
+        TelegramLinkRead.model_validate(link).model_copy(
+            update={"parent_name": names[link.parent_id]}
+        )
+        for link in links
+    ]
 
 
 @router.post(

@@ -56,7 +56,7 @@ test("врач заводит карту и выдаёт код, семья вх
   const family = await familyContext.newPage();
   await family.goto(`/join?code=${code}`);
 
-  await expect(family.getByLabel("Код от врача")).toHaveValue(code);
+  await expect(family.getByLabel("Код доступа")).toHaveValue(code);
   await family.getByLabel("Электронная почта").fill(EMAIL);
   await family.getByLabel("Имя и фамилия").fill("Родитель Прогонный");
   await family.getByLabel("Пароль", { exact: true }).fill(PARENT_PASSWORD);

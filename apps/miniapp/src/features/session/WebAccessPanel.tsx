@@ -15,7 +15,8 @@ import type { Session } from "./useSession";
  *
  * Показывается по признаку с сервера (`has_web_credentials`), а не по своей
  * догадке: экран, решающий сам, однажды предложил бы то, что кончится 409.
- * После успеха блок исчезает — предлагать сделанное значит врать.
+ * После успеха форма уступает место адресу кабинета — предлагать сделанное
+ * значит врать, а молча исчезнуть значит бросить человека на полпути.
  */
 export function WebAccessPanel({ session }: { session: Session }) {
   const { t } = useTranslation();
@@ -38,7 +39,25 @@ export function WebAccessPanel({ session }: { session: Session }) {
     },
   });
 
-  if (session.hasWebCredentials || done) return null;
+  if (session.hasWebCredentials) return null;
+
+  // После включения блок не исчезает молча, а говорит, куда идти дальше:
+  // «включено» без адреса — поручение без места назначения (аудит пути,
+  // 02.10.2026).
+  if (done)
+    return (
+      <Section title={t("webAccess.title")} density="compact">
+        <p className="m-0">{t("webAccess.doneHint")}</p>
+        <a
+          className="break-all underline underline-offset-4"
+          href={session.webUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {session.webUrl}
+        </a>
+      </Section>
+    );
 
   return (
     <Section title={t("webAccess.title")} density="compact">

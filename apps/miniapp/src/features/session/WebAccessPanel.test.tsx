@@ -43,7 +43,7 @@ describe("вход в кабинет из Mini App", () => {
     expect(screen.queryByText("Вход в кабинет")).not.toBeInTheDocument();
   });
 
-  it("задаёт почту и пароль и исчезает", async () => {
+  it("задаёт почту и пароль и говорит, куда идти дальше", async () => {
     post.mockResolvedValue({ data: { email: "aigul@example.com" } });
     renderPanel();
 
@@ -64,11 +64,17 @@ describe("вход в кабинет из Mini App", () => {
         },
       });
     });
-    // Предлагать сделанное — врать: блок уходит сразу, не дожидаясь
-    // переоткрытия приложения.
+    // Предлагать сделанное — врать: форма уходит сразу. Но и молча исчезнуть
+    // нельзя — на её месте адрес кабинета и что делать дальше.
     await waitFor(() => {
-      expect(screen.queryByText("Вход в кабинет")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Почта")).not.toBeInTheDocument();
     });
+    expect(
+      screen.getByText(/войдите с этой почтой и паролем/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "https://ketocare.example" }),
+    ).toBeInTheDocument();
   });
 
   it("называет адрес кабинета, а не отправляет искать его", () => {

@@ -52,9 +52,7 @@ describe("активация кода доступа семьёй", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText(/Код от врача/)).toHaveValue(
-      "TRWX4K92",
-    );
+    expect(await screen.findByLabelText(/Код доступа/)).toHaveValue("TRWX4K92");
   });
 
   it("заполненная форма заводит учётную запись и ведёт ко входу", async () => {
@@ -136,6 +134,6 @@ describe("активация кода доступа семьёй", () => {
       /Код недействителен или истёк/,
     );
     // Форма на месте: человеку есть куда ввести новый код.
-    expect(screen.getByLabelText(/Код от врача/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Код доступа/)).toBeInTheDocument();
   });
 });

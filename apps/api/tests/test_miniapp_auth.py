@@ -319,23 +319,42 @@ class TestScopeSurvivesRefresh:
         )
         assert response.status_code == 200
 
-    async def test_open_session_cannot_issue_access(self, client, session, make_user, make_patient):
-        """Выдача доступа другому взрослому — только из веб-кабинета (ADR-0042).
+    async def test_open_session_invites_a_relative_and_nothing_else(
+        self, client, session, make_user, make_patient
+    ):
+        """Из Mini App родитель выдаёт только приглашение близкому (ADR-0043).
 
-        Сессию Mini App открывает телефон, а не пароль: держащий чужой
-        разблокированный телефон иначе выпустил бы себе недельный код и завёл
-        постоянную учётную запись при ребёнке, которую семья убрать не может.
+        Решение заказчика от 05.10.2026: семья из Telegram кабинета не имеет.
+        Код «свой чат» отсюда не выдаётся — он привязал бы чужой Telegram к
+        учётной записи этого родителя; запрос без назначения у родителя и есть
+        такой код. Потребитель — `FamilyBlock` в Mini App.
         """
         _, patient, _ = await _linked_family(session, make_user, make_patient)
         opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
+        headers = {"Authorization": f"Bearer {opened.json()['access_token']}"}
 
-        for body in ({"purpose": "family_member"}, {"purpose": "own_chat"}, None):
+        invited = await client.post(
+            f"/api/v1/patients/{patient.id}/access-codes",
+            headers=headers,
+            json={"purpose": "family_member"},
+        )
+        assert invited.status_code == 201, invited.text
+        assert set(invited.json()) == {"code", "expires_at", "deep_link", "join_url"}
+
+        for body in ({"purpose": "own_chat"}, None):
             response = await client.post(
-                f"/api/v1/patients/{patient.id}/access-codes",
-                headers={"Authorization": f"Bearer {opened.json()['access_token']}"},
-                json=body,
+                f"/api/v1/patients/{patient.id}/access-codes", headers=headers, json=body
             )
             assert response.status_code == 403, (body, response.text)
+
+        # В журнал выдачи попадает канал: разбор «кто позвал чужого» начинается
+        # с того, откуда выдан код.
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "access_code_issued", AuditLog.entity_id == patient.id
+            )
+        )
+        assert entry is not None and entry.after["channel"] == "miniapp"
 
     async def test_open_session_cannot_reach_another_child(
         self, client, session, make_user, make_patient

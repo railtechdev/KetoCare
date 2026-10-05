@@ -16,6 +16,7 @@ import {
   Paperclip,
   Plus,
   Stethoscope,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -54,6 +55,7 @@ const TABS = [
   "intake",
   "documents",
   "telegram",
+  "family",
   "care",
 ] as const;
 
@@ -97,6 +99,8 @@ export function ChildPage() {
     if (tab === "telegram")
       return <ChildTelegram child={child} onDone={backToList} />;
     if (tab === "care") return <ChildCare child={child} onDone={backToList} />;
+    if (tab === "family")
+      return <ChildFamily child={child} onDone={backToList} />;
     if (tab === "intake")
       return <ChildIntake child={child} onDone={backToList} />;
   }
@@ -108,7 +112,7 @@ export function ChildPage() {
       actions={
         <Button type="button" onClick={() => setTab("add")}>
           <Plus aria-hidden="true" />
-          {t("child.add")}
+          {t("child.addByCode")}
         </Button>
       }
     >
@@ -148,7 +152,7 @@ export function ChildPage() {
             action={
               <Button type="button" onClick={() => setTab("add")}>
                 <Plus aria-hidden="true" />
-                {t("child.add")}
+                {t("child.addByCode")}
               </Button>
             }
           />
@@ -221,6 +225,18 @@ export function ChildPage() {
                     >
                       <MessageCircle aria-hidden="true" />
                       {t("children.telegram")}
+                    </Button>
+                    {/* Близкие — отдельной кнопкой, а не внутри «Кто ведёт»:
+                        под стетоскопом и словом «специалисты» приглашение
+                        бабушки не искал никто (аудит пути, 02.10.2026). */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      onClick={() => open("family", child)}
+                    >
+                      <Users aria-hidden="true" />
+                      {t("children.family")}
                     </Button>
                     {/* Ручка `GET /patients/{id}/doctors` родителю прямо
                         разрешена — «родитель вправе знать, кто имеет доступ к
@@ -457,11 +473,31 @@ function ChildCare({ child, onDone }: { child: Patient; onDone: () => void }) {
         title={t("care.section")}
         description={t("care.intro")}
       />
+    </PageLayout>
+  );
+}
 
-      {/* Тот же блок, что в карте у врача: кто ведёт ребёнка дома и выдача
-          доступа другому взрослому (ADR-0042). Родитель видит здесь и тех, кому
-          доступ открыл врач, — состав взрослых при ребёнке не должен быть
-          тайной для семьи. */}
+/**
+ * Близкие ребёнка — глазами семьи (ADR-0042, ADR-0043).
+ *
+ * Тот же блок, что у врача в карте: кто ведёт ребёнка дома, кто кого позвал,
+ * приглашение и закрытие доступа. Родитель видит здесь и тех, кому доступ
+ * открыл врач, — состав взрослых при ребёнке не должен быть тайной для семьи.
+ */
+function ChildFamily({
+  child,
+  onDone,
+}: {
+  child: Patient;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation("child");
+
+  return (
+    <PageLayout
+      title={t("family.title", { name: child.full_name })}
+      onBack={onDone}
+    >
       <FamilyPanel patientId={child.id} />
     </PageLayout>
   );

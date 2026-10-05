@@ -5,7 +5,7 @@ from __future__ import annotations
 from aiogram import Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardMarkup
 
 from .. import keyboards, texts
 from ..api import BotApi, BotApiError, LinkVerified
@@ -20,8 +20,18 @@ router = Router(name="start")
 CODE_LENGTH = 8
 
 
+def compact_code(value: str) -> str:
+    """Код без пробелов и дефисов: его диктуют и записывают группами «ABCD EFGH».
+
+    Регистр и кириллические двойники («А» вместо «A») приводит API — одна
+    реализация на все каналы.
+    """
+
+    return "".join(ch for ch in value if not ch.isspace() and ch != "-")
+
+
 def looks_like_code(value: str) -> bool:
-    candidate = value.strip()
+    candidate = compact_code(value)
     return len(candidate) == CODE_LENGTH and candidate.isalnum()
 
 
@@ -105,7 +115,7 @@ async def _link(
     verified = None
     try:
         verified = await api.activate_access_code(
-            code=code.strip(),
+            code=compact_code(code),
             chat_id=message.chat.id,
             telegram_user_id=message.from_user.id,
             first_name=message.from_user.first_name,
@@ -113,7 +123,7 @@ async def _link(
         )
     except BotApiError as exc:
         if exc.status == 409:
-            await message.answer(texts.LINK_CHAT_BUSY)
+            await message.answer(_conflict_text(exc), reply_markup=_menu_if_linked(exc, settings))
             return
         if exc.status == 404:
             await message.answer(texts.LINK_CODE_INVALID)
@@ -154,3 +164,27 @@ def welcome(verified: LinkVerified, settings: BotSettings) -> str:
     )
     lines.append(cabinet.format(web_url=verified.web_url))
     return "".join(lines)
+
+
+def _conflict_text(exc: BotApiError) -> str:
+    """Отказ по существу: у каждой причины свой следующий шаг (ADR-0043).
+
+    Прежде любой 409 звучал как «чат привязан к другому ребёнку — отвяжите в
+    кабинете», и бабушка, у которой кабинета нет, оставалась перед стеной.
+    Причины без своего текста — «у выдавшего нет доступа», «Telegram
+    сотрудника» — API называет сам, и его сообщение уже русское и конкретное.
+    """
+
+    reason = exc.details.get("reason")
+    if reason == "already_here":
+        return texts.LINK_ALREADY_HERE
+    if reason == "chat_taken":
+        return texts.LINK_CHAT_BUSY
+    return exc.message or texts.LINK_CHAT_BUSY
+
+
+def _menu_if_linked(exc: BotApiError, settings: BotSettings) -> ReplyKeyboardMarkup | None:
+    # «Уже здесь» — значит, чат рабочий: сразу показать, что можно делать.
+    if exc.details.get("reason") == "already_here":
+        return keyboards.main_menu(settings)
+    return None

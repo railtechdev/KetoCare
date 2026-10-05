@@ -38,7 +38,7 @@ ISSUER_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN, UserRole.PARENT)
 
 
 def _require_issuer(user: PatientAccessDep) -> None:
-    """Код выдаёт ведущий специалист или сам родитель — и только из веб-кабинета.
+    """Код выдаёт ведущий специалист или сам родитель — из кабинета или Mini App.
 
     Роль проверяется здесь, а не зависимостью `require_roles`: администратор к
     клиническим данным доступа не имеет вовсе и до этой ручки не дойдёт.
@@ -49,11 +49,27 @@ def _require_issuer(user: PatientAccessDep) -> None:
             ErrorCode.FORBIDDEN,
             "Код доступа выдаёт лечащий врач, диетолог или родитель ребёнка.",
         )
-    if user.channel != "web":
-        # Сессии бота и Mini App сужены до одного ребёнка и живут 15 минут;
-        # выпуск через них означал бы, что временный доступ к чату умеет
-        # раздавать постоянный доступ к данным.
-        raise ApiError(ErrorCode.FORBIDDEN, "Код доступа выдаётся только в веб-кабинете.")
+    if user.channel == "bot":
+        # Бот — автоматика с сервисным токеном, а не человек: раздавать доступ
+        # к данным ребёнка ему незачем ни при каком сценарии.
+        raise ApiError(ErrorCode.FORBIDDEN, "Код доступа выдаётся в приложении или в веб-кабинете.")
+
+
+def _require_miniapp_invitation(user: PatientAccessDep, purpose: AccessCodePurpose) -> None:
+    """Из Mini App — только приглашение близкому и только родителем (ADR-0043).
+
+    Решение заказчика от 05.10.2026. Семья из Telegram кабинета не имеет, и без
+    этого пригласить бабушку ей было нечем. Риск чужого телефона в руках
+    закрывают видимость и отмена: остальные взрослые получают уведомление о
+    новом близком, а пригласивший, основной родитель и врач закрывают доступ
+    одной кнопкой. Код «свой чат» отсюда не выдаётся: приложение и так открыто
+    в Telegram этого человека, а такой код позволил бы чужому писать от его имени.
+    """
+
+    if user.channel != "miniapp":
+        return
+    if user.role is not UserRole.PARENT or purpose is not AccessCodePurpose.FAMILY_MEMBER:
+        raise ApiError(ErrorCode.FORBIDDEN, "Из приложения выдаётся только приглашение близкому.")
 
 
 def _purpose_for(user: PatientAccessDep, requested: AccessCodePurpose | None) -> AccessCodePurpose:
@@ -91,11 +107,13 @@ async def issue_access_code(
 
     _require_issuer(user)
     purpose = _purpose_for(user, body.purpose if body is not None else None)
+    _require_miniapp_invitation(user, purpose)
     return await service.issue(
         session,
         patient_id=patient_id,
         issuer=user,
         purpose=purpose,
+        channel=user.channel,
         ip=client_address(request),
     )
 

@@ -170,7 +170,8 @@ class TestLinkFlow:
         response = await _activate(client, "ZZZZZZZZ")
         assert response.status_code == 404
         assert response.json()["error"]["message"] == (
-            "Код недействителен или истёк. Попросите у врача новый код доступа."
+            "Код не подошёл: он истёк, уже использован или набран с ошибкой. "
+            "Попросите новый код у того, кто его прислал, — у врача или у родителя ребёнка."
         )
 
 

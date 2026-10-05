@@ -43,6 +43,8 @@ export interface TelegramWebApp {
   onEvent: (event: string, handler: () => void) => void;
   offEvent: (event: string, handler: () => void) => void;
   BackButton?: TelegramBackButton;
+  /** Открыть ссылку t.me внутри Telegram, не закрывая приложение. */
+  openTelegramLink?: (url: string) => void;
   safeAreaInset?: { top: number; bottom: number; left: number; right: number };
   contentSafeAreaInset?: {
     top: number;
@@ -178,4 +180,26 @@ export function showBackButton(onBack: () => void): () => void {
     button.offClick(onBack);
     button.hide();
   };
+}
+
+/**
+ * Окно Telegram «Переслать»: человек выбирает чат из своего списка, и туда
+ * уходит готовое сообщение со ссылкой (ADR-0043).
+ *
+ * Это тот же жест, которым он пересылает фотографии внукам, — ничего нового
+ * учить не нужно. Вне Telegram ссылка открывается в новой вкладке: там
+ * telegram.org предложит тот же выбор чата.
+ */
+export function shareToTelegram(url: string, text: string): void {
+  const target =
+    "https://t.me/share/url?url=" +
+    encodeURIComponent(url) +
+    "&text=" +
+    encodeURIComponent(text);
+  const open = webApp()?.openTelegramLink;
+  if (open !== undefined) {
+    open(target);
+    return;
+  }
+  window.open(target, "_blank", "noopener,noreferrer");
 }

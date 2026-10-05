@@ -181,6 +181,13 @@ class ParentPatient(Base, UUIDPkMixin, CreatedAtMixin):
     patient_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False
     )
+    #: Кто открыл этому взрослому доступ — автор кода, которым связь была
+    #: СОЗДАНА (ADR-0043). Пусто — доступ появился не по коду. От этого поля
+    #: зависит, кто вправе закрыть доступ, поэтому оно пишется один раз, при
+    #: создании связи, и не выводится задним числом из истории кодов.
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
 
 
 class DoctorPatient(Base, UUIDPkMixin, CreatedAtMixin):
