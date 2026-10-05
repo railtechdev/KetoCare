@@ -71,3 +71,80 @@ class TestFamilyJoined:
         ]
 
         assert joined_recipients(links, newcomer_id=grandma) == [1]
+
+
+class TestFamilyNudge:
+    """Просьба специалиста отметить дневник (ADR-0046, аудит блокеров C5)."""
+
+    def test_names_who_asks_and_nothing_else(self) -> None:
+        from worker.reminders.notify import nudge_notice
+
+        text = nudge_notice(specialist_name="Иванова Мария Петровна", specialist_role="doctor")
+
+        assert text.startswith("Врач Иванова Мария Петровна просит")
+        assert "дневник" in text
+        # Ни чисел (раздел 7.5 ТЗ), ни упоминания ребёнка.
+        assert re.search(r"\d", text) is None
+        assert "ребён" not in text.lower()
+
+    def test_role_in_words(self) -> None:
+        from worker.reminders.notify import nudge_notice
+
+        assert nudge_notice(specialist_name="А", specialist_role="dietitian").startswith(
+            "Диетолог А "
+        )
+        assert nudge_notice(specialist_name="А", specialist_role="other").startswith(
+            "Специалист А "
+        )
+
+    def test_recipients_are_live_chats_once(self) -> None:
+        from datetime import UTC, datetime
+        from types import SimpleNamespace
+
+        from worker.reminders.notify import nudge_recipients
+
+        links = [
+            SimpleNamespace(chat_id=1, revoked_at=None),
+            SimpleNamespace(chat_id=1, revoked_at=None),
+            SimpleNamespace(chat_id=2, revoked_at=datetime.now(UTC)),
+            SimpleNamespace(chat_id=3, revoked_at=None),
+        ]
+
+        assert nudge_recipients(links) == [1, 3]
+
+    async def test_sends_to_every_live_chat_without_the_child_name(self, monkeypatch) -> None:
+        import uuid
+        from contextlib import asynccontextmanager
+        from types import SimpleNamespace
+
+        from worker.reminders import notify
+
+        monkeypatch.setenv("BOT_TOKEN", "000000:test")
+
+        @asynccontextmanager
+        async def fake_session():
+            yield object()
+
+        monkeypatch.setattr(notify, "get_sessionmaker", lambda: fake_session)
+
+        async def links(session, patient_id):
+            return [
+                SimpleNamespace(chat_id=10, revoked_at=None),
+                SimpleNamespace(chat_id=20, revoked_at=None),
+            ]
+
+        monkeypatch.setattr(notify.telegram_repo, "list_links_for_patient", links)
+        sent: list[tuple[int, str]] = []
+
+        async def send(client, *, token, chat_id, text):
+            sent.append((chat_id, text))
+
+        monkeypatch.setattr(notify, "send_message", send)
+
+        delivered = await notify.notify_family_nudge(
+            {}, str(uuid.uuid4()), "Петров Пётр", "dietitian"
+        )
+
+        assert delivered == 2
+        assert [chat for chat, _ in sent] == [10, 20]
+        assert all(text.startswith("Диетолог Петров Пётр") for _, text in sent)

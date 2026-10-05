@@ -30,6 +30,7 @@ from ..schemas import (
     ColleagueRead,
     ExcludedProductRef,
     FamilyMemberRead,
+    FamilyNudgeRead,
     Page,
     PatientCreate,
     PatientDoctorAdd,
@@ -37,6 +38,7 @@ from ..schemas import (
     PatientUpdate,
 )
 from ..services import family as family_service
+from ..services import family_nudge as family_nudge_service
 
 CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 
@@ -270,6 +272,31 @@ async def list_patient_parents(
     """
 
     return await family_service.members(session, patient_id=patient_id, viewer=user)
+
+
+@router.post(
+    "/{patient_id}/family-nudge",
+    response_model=FamilyNudgeRead,
+    summary="Напомнить семье отметить дневник",
+    dependencies=[Depends(require_roles(*CARE_ROLES))],
+)
+async def nudge_family(
+    patient_id: Annotated[uuid.UUID, Path()],
+    request: Request,
+    session: SessionDep,
+    user: PatientAccessDep,
+) -> FamilyNudgeRead:
+    """Сообщение во все живые чаты Telegram ребёнка: кто просит и где отметить.
+
+    Только ведущему специалисту (ADR-0046): семья самой себе не напоминает, а
+    бот и Mini App работают от имени родителя. Не чаще раза в сутки на ребёнка —
+    повтор отвечает 409 со временем прежней просьбы. Ни одного чата — 200 с
+    `recipients = 0` и контактами семьи: отправлять некуда, предел не тратится.
+    """
+
+    return await family_nudge_service.nudge(
+        session, patient_id=patient_id, actor=user, ip=client_address(request)
+    )
 
 
 @router.delete(

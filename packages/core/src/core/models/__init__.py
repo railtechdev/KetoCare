@@ -3,6 +3,7 @@
 from .accounts import (
     AccessCode,
     DoctorPatient,
+    FamilyNudge,
     Invitation,
     ParentPatient,
     Patient,
@@ -57,6 +58,7 @@ __all__ = [
     "Patient",
     "ParentPatient",
     "DoctorPatient",
+    "FamilyNudge",
     "Invitation",
     "ReminderDelivery",
     "ReminderSettings",

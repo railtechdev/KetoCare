@@ -137,3 +137,69 @@ def joined_notice(*, newcomer_name: str, inviter_name: str | None) -> str:
         "Если вы не знаете этого человека, откройте приложение, раздел «Близкие», "
         "и закройте ему доступ — или скажите врачу."
     )
+
+
+async def notify_family_nudge(
+    ctx: dict[str, Any],
+    patient_id: str,
+    specialist_name: str,
+    specialist_role: str,
+) -> int:
+    """Специалист просит семью отметить дневник (ADR-0046).
+
+    Получают все живые чаты ребёнка — без повторов: у ребёнка может быть
+    несколько взрослых с Telegram, и просьба обращена к семье, а не к одному из
+    них. Возвращает число доставленных чатов.
+    """
+
+    settings = Settings()  # type: ignore[call-arg]
+    if not settings.bot_token:
+        return 0
+
+    text = nudge_notice(specialist_name=specialist_name, specialist_role=specialist_role)
+    sessionmaker = get_sessionmaker()
+    delivered = 0
+
+    async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
+        links = await telegram_repo.list_links_for_patient(session, uuid.UUID(patient_id))
+        for chat_id in nudge_recipients(links):
+            try:
+                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+            except TelegramSendError as exc:
+                logger.warning("family_nudge_not_delivered", patient_id=patient_id, reason=str(exc))
+                continue
+            delivered += 1
+
+    return delivered
+
+
+def nudge_recipients(links: list[Any]) -> list[int]:
+    """Живые чаты ребёнка без повторов."""
+
+    seen: list[int] = []
+    for link in links:
+        if link.revoked_at is None and link.chat_id not in seen:
+            seen.append(link.chat_id)
+    return seen
+
+
+#: Роль специалиста словами — так, как семья его знает.
+_ROLE_WORDS = {"doctor": "Врач", "dietitian": "Диетолог"}
+
+
+def nudge_notice(*, specialist_name: str, specialist_role: str) -> str:
+    """Текст просьбы.
+
+    Нейтральный намеренно (аудит блокеров, C5): кто просит, о чём и где это
+    сделать. Ни чисел, ни имени ребёнка, ни слова о том, что делать с ребёнком:
+    параметры назначения бот не показывает (раздел 7.5 ТЗ), а любой совет
+    семье — медицинский текст, и пишет его клиника. Кнопку «Приложение» текст
+    не обещает: её нет, пока Mini App не выложен. Незнакомая роль даёт
+    «Специалист», а не пустое место.
+    """
+
+    role = _ROLE_WORDS.get(specialist_role, "Специалист")
+    return (
+        f"{role} {specialist_name} просит отметить в дневнике, как прошли последние дни.\n\n"
+        "Записать можно кнопками в этом чате или в приложении."
+    )

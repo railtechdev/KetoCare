@@ -213,6 +213,21 @@ def _seizure_trend(recent: SeizureTotals, previous: SeizureTotals) -> SeizureTre
     )
 
 
+#: Порог затяжного приступа — 30 минут (ADR-0020, аудит блокеров C8).
+#:
+#: Граница шкалы длительности, подтверждённой клиникой: операциональное
+#: определение эпилептического статуса ILAE (t2, Trinka et al., 2015),
+#: воспроизведённое в клинических рекомендациях Минздрава РФ 2022. Порог
+#: поднимает флаг врачу и ничего не пишет семье: что делать при таком
+#: приступе — медицинский текст, и он за клиникой.
+PROLONGED_SEIZURE_SEC = 30 * 60
+
+#: Интервалы шкалы `seizure_duration`, нижняя граница которых не ниже порога.
+#: Границы в справочнике числом не хранятся — только кодом варианта, поэтому
+#: перечень явный; новый вариант шкалы добавляется сюда вместе с миграцией.
+PROLONGED_DURATION_CODES = ("dur_over_30min",)
+
+
 async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> PatientOverview:
     today = local_today()
     recent_window, previous_window = _trend_windows(today)
@@ -237,6 +252,15 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
 
     activated = await patients_repo.activated_ids(session, patient_ids=[patient_id])
 
+    prolonged_at = await overview_repo.latest_prolonged_seizure(
+        session,
+        patient_id=patient_id,
+        since=recent_window[0],
+        until=recent_window[1],
+        min_duration_sec=PROLONGED_SEIZURE_SEC,
+        option_codes=PROLONGED_DURATION_CODES,
+    )
+
     return PatientOverview(
         patient_id=patient_id,
         date=today,
@@ -251,4 +275,5 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         ),
         monitoring_phase=monitoring_phase(starts=therapy_starts, today=today),
         family_activated=patient_id in activated,
+        prolonged_seizure_at=prolonged_at,
     )
