@@ -23,6 +23,7 @@ from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
+from .. import login_throttle
 from ..client_address import client_address
 from ..cookies import clear_auth_cookies, set_auth_cookies
 from ..deps.auth import (
@@ -36,7 +37,13 @@ from ..deps.auth import (
 )
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
-from ..ratelimit import AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT, limiter
+from ..ratelimit import (
+    AUTH_RATE_LIMIT,
+    LOGIN_RATE_LIMIT,
+    REFRESH_RATE_LIMIT,
+    TELEGRAM_INIT_RATE_LIMIT,
+    limiter,
+)
 from ..schemas import (
     BackupCodes,
     BackupCodesRegenerate,
@@ -104,10 +111,20 @@ def _issue_tokens(user: User) -> TokenPair:
 
 
 @router.post("/login", response_model=LoginResponse, summary="Вход по паролю (+ TOTP)")
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(LOGIN_RATE_LIMIT)
 async def login(
     payload: LoginRequest, request: Request, response: Response, session: SessionDep
 ) -> LoginResponse:
+    # Порог неудач по учётной записи — до проверки пароля: иначе запертая
+    # учётная запись продолжала бы отвечать «верно / неверно» подбирающему.
+    # Ответ один и тот же для существующей и несуществующей почты.
+    if await login_throttle.is_locked(payload.email):
+        raise ApiError(
+            ErrorCode.RATE_LIMITED,
+            "Слишком много неудачных попыток входа. Подождите 15 минут или "
+            "попросите администратора выдать временный пароль.",
+        )
+
     user = await users_repo.get_by_email(session, payload.email)
 
     # Один и тот же 401 и одно и то же время ответа для «нет такого email»,
@@ -120,10 +137,12 @@ async def login(
     # оракул присутствия. Своё объяснение он получает в боте, где он и живёт.
     if user is None or user.password_hash is None:
         await waste_password_verification_async()
+        await login_throttle.record_failure(payload.email)
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
     password_ok = await verify_password_async(user.password_hash, payload.password)
     if not password_ok or not user.is_active:
+        await login_throttle.record_failure(payload.email)
         # Отдельная транзакция: запрос завершится исключением, и сессия ручки
         # будет откатана — обычная запись аудита пропала бы вместе с ней.
         await audit_repo.write_audit_log_independent(
@@ -201,6 +220,7 @@ async def login(
             not payload.totp_code
             or not verify_totp(user.totp_secret, payload.totp_code, user_id=user.id)
         ):
+            await login_throttle.record_failure(payload.email)
             await audit_repo.write_audit_log_independent(
                 user_id=user.id,
                 action="login_failed_totp",
@@ -222,6 +242,9 @@ async def login(
                 ip=client_address(request),
             )
 
+    # Пароль и второй фактор верны — прежние ошибки не были перебором.
+    await login_throttle.reset(payload.email)
+
     if user.password_change_required:
         # После проверки пароля и второго фактора, а не вместо них: временный
         # пароль сокращает путь до смены, но не отменяет ни одной проверки.
@@ -237,7 +260,7 @@ async def login(
         )
 
     tokens = _issue_tokens(user)
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
 
     await audit_repo.write_audit_log(
         session,
@@ -286,7 +309,7 @@ async def refresh(
         return await _reissue_scoped(session, user, claims, channel)
 
     tokens = _issue_tokens(user)
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
     return tokens
 
 
@@ -344,7 +367,7 @@ async def _reissue_scoped(
     response_model=MiniAppSession,
     summary="Вход в Mini App по подписи Telegram",
 )
-@limiter.limit(AUTH_RATE_LIMIT)
+@limiter.limit(TELEGRAM_INIT_RATE_LIMIT)
 async def telegram_init(
     payload: MiniAppInitRequest, request: Request, session: SessionDep
 ) -> MiniAppSession:
@@ -492,7 +515,7 @@ async def totp_verify(
         )
 
     tokens = _issue_tokens(db_user)
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
     return TotpEnabledResponse(tokens=tokens, backup_codes=codes)
 
 
@@ -939,5 +962,5 @@ async def set_password_after_reset(
     )
 
     tokens = _issue_tokens(db_user)
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
     return tokens

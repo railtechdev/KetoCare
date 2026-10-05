@@ -247,5 +247,5 @@ async def change_password(
             password_changed_at=me.password_changed_at,
         ),
     )
-    set_auth_cookies(response, tokens)
+    tokens = set_auth_cookies(response, tokens)
     return tokens

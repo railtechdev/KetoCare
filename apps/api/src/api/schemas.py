@@ -64,7 +64,9 @@ class LoginRequest(BaseModel):
 
 class TokenPair(BaseModel):
     access_token: str
-    refresh_token: str
+    #: Пусто в ответах веб-кабинету: там токен обновления живёт только в
+    #: httpOnly-куке (аудит блокеров, E5). Mini App получает его телом.
+    refresh_token: str | None = None
     token_type: str = "bearer"
 
 
