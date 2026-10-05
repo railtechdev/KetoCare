@@ -31,8 +31,11 @@ export function useDictionaryEntries(kind: DictionaryKind) {
 
       const { data, error } =
         kind === "seizure-types"
-          ? await api.GET("/api/v1/dictionaries/seizure-types", {
-              params,
+          ? // Администратор видит и выведенные типы (до ILAE 2025, ADR-0050):
+            // на них ссылаются записи, и пропажа из админки выглядела бы как
+            // удаление.
+            await api.GET("/api/v1/dictionaries/seizure-types", {
+              params: { query: { ...params.query, include_retired: true } },
             })
           : await api.GET("/api/v1/dictionaries/ketone-methods", {
               params,

@@ -36,6 +36,8 @@ from datetime import date
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import ScalarSelect
 
 from ..models import MedicalProfile, Prescription
@@ -146,3 +148,54 @@ async def start_sources(
     named, first_prescription = _sources(patient_id)
     row = (await session.execute(select(named, first_prescription))).one()
     return row[0], row[1]
+
+
+# --- завершение терапии (вопрос 18, ADR-0050) --------------------------------
+
+
+def therapy_ended(patient_id_column: InstrumentedAttribute[uuid.UUID]) -> ColumnElement[bool]:
+    """Условие «пациент завершил терапию» для любого запроса.
+
+    Одно условие на всех читателей — списки врача, рассылку напоминаний,
+    пометки. Копии условия разошлись бы при первой правке, и ребёнок, ушедший
+    из списка, продолжал бы получать напоминания.
+    """
+
+    return (
+        select(MedicalProfile.id)
+        .where(
+            MedicalProfile.patient_id == patient_id_column,
+            MedicalProfile.deleted_at.is_(None),
+            MedicalProfile.therapy_ended_on.is_not(None),
+        )
+        .exists()
+    )
+
+
+async def ended_on(session: AsyncSession, *, patient_id: uuid.UUID) -> date | None:
+    """Дата завершения терапии; `None` — ребёнок на терапии."""
+
+    result: date | None = await session.scalar(
+        select(MedicalProfile.therapy_ended_on).where(
+            MedicalProfile.patient_id == patient_id,
+            MedicalProfile.deleted_at.is_(None),
+        )
+    )
+    return result
+
+
+async def ended_map(
+    session: AsyncSession, *, patient_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, date]:
+    """Кто из перечисленных завершил терапию и когда — одним запросом на список."""
+
+    if not patient_ids:
+        return {}
+    rows = await session.execute(
+        select(MedicalProfile.patient_id, MedicalProfile.therapy_ended_on).where(
+            MedicalProfile.patient_id.in_(patient_ids),
+            MedicalProfile.deleted_at.is_(None),
+            MedicalProfile.therapy_ended_on.is_not(None),
+        )
+    )
+    return {row[0]: row[1] for row in rows if row[1] is not None}

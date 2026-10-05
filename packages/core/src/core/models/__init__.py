@@ -18,6 +18,7 @@ from .base import Base
 from .clinical import (
     AedDrug,
     ClinicalNote,
+    ControlVisit,
     IntakeOption,
     MedicalProfile,
     Medication,
@@ -67,6 +68,7 @@ __all__ = [
     "AccessCode",
     # clinical
     "AedDrug",
+    "ControlVisit",
     "IntakeOption",
     "MedicalProfile",
     "PatientIntake",

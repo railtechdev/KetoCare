@@ -125,6 +125,17 @@ export interface PatientFlags {
    * этом не пишет ничего: что делать при таком приступе — текст клиники.
    */
   prolongedSeizure: boolean;
+  /**
+   * Терапия завершена (вопрос 18, ADR-0050). Такой ребёнок в рабочем списке
+   * не стоит, а если врач открыл список завершивших — пометок наблюдения у
+   * него нет: «семья молчит» после окончания диеты — не сигнал, а норма.
+   */
+  therapyEnded: boolean;
+  /**
+   * Контрольный визит прошёл по дате и не отмечен состоявшимся (вопрос 17).
+   * Порога «просрочки» клиника не называла — это просто факт.
+   */
+  controlOverdue: boolean;
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -198,7 +209,25 @@ export function computePatientFlags(
     ? STRICT_NO_DATA_FLAG_DAYS
     : NO_DATA_FLAG_DAYS;
 
+  if ((overview.therapy_ended_on ?? null) !== null) {
+    return {
+      noPrescription: false,
+      familyNotActivated: false,
+      daysSinceLastReading,
+      strictMonitoring: false,
+      staleData: false,
+      nutritionOff: false,
+      seizuresGrew: false,
+      seizuresAppeared: false,
+      prolongedSeizure: false,
+      therapyEnded: true,
+      controlOverdue: false,
+    };
+  }
+
   return {
+    therapyEnded: false,
+    controlOverdue: overview.next_control?.overdue === true,
     noPrescription,
     familyNotActivated,
     daysSinceLastReading,
@@ -262,6 +291,9 @@ export function attentionRank(flags: PatientFlags | null): number {
     (flags.seizuresGrew ? 3 : 0) +
     (flags.seizuresAppeared ? 3 : 0) +
     (flags.staleData ? 2 : 0) +
+    // Пропущенный контроль — действие врача, как и назначение, но не срочнее
+    // молчания семьи: визит переносят, а данных за прошедшие дни уже не будет.
+    (flags.controlOverdue ? 2 : 0) +
     (flags.nutritionOff ? 1 : 0)
   );
 }

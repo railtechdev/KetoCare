@@ -62,7 +62,9 @@ function viewForFlags(flags: PatientFlags): PatientView {
  * есть», а нужно «кто требует действия сейчас».
  *
  * Двух блоков из предложения здесь нет, и это не забывчивость: «приёмы на
- * неделю» ждут графика наблюдения, которого в продукте пока нет, а «недавние
+ * неделю» — график визитов появился (ADR-0050), но пропущенный визит уже
+ * поднимает ребёнка в очереди пометкой, а отдельный блок ждёт решения
+ * клиники о расписании (вопрос 17 переспрошен), а «недавние
  * изменения» — серверной ленты событий; собирать её обходом дневников значило
  * бы шесть запросов на каждого пациента. Блок, за которым нет данных, — хуже
  * его отсутствия (правило П3 канона).
@@ -73,7 +75,9 @@ function viewForFlags(flags: PatientFlags): PatientView {
 export function DoctorHomePage() {
   const { t } = useTranslation("doctor");
 
-  const patients = usePatients();
+  // Рабочий список: завершившие терапию в очередь внимания не попадают
+  // (вопрос 18, ADR-0050) — их карты открываются из раздела «Пациенты».
+  const patients = usePatients("", "active");
   const items = useMemo(() => patients.data?.items ?? [], [patients.data]);
   const overviews = usePatientOverviews(
     useMemo(() => items.map((patient) => patient.id), [items]),

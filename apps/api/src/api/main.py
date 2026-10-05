@@ -34,6 +34,7 @@ from .routers import (
     staff,
     summaries,
     telegram,
+    therapy_course,
 )
 
 API_PREFIX = "/api/v1"
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     v1.include_router(reports.jobs_router)
     v1.include_router(summaries.router)
     v1.include_router(clinical.router)
+    v1.include_router(therapy_course.router)
     v1.include_router(intake.router)
     v1.include_router(dictionaries.router)
     v1.include_router(staff.router)

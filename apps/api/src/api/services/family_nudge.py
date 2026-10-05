@@ -27,6 +27,7 @@ from core.repositories import audit as audit_repo
 from core.repositories import family_nudges as nudges_repo
 from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
+from core.repositories import therapy as therapy_repo
 from core.repositories import users as users_repo
 
 from .. import after_commit
@@ -50,6 +51,16 @@ async def nudge(
     ip: str | None,
 ) -> FamilyNudgeRead:
     await nudges_repo.lock_patient(session, patient_id)
+
+    # Терапия завершена — просить семью отмечать дневник больше незачем
+    # (вопрос 18, ADR-0050). Отказ, а не молчаливый ноль: врач нажал кнопку и
+    # должен узнать, почему сообщение не ушло.
+    if await therapy_repo.ended_on(session, patient_id=patient_id) is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Терапия у этого ребёнка завершена — напоминание семье не отправляется.",
+            details={"reason": "therapy_ended"},
+        )
 
     now = _now()
     previous = await nudges_repo.last_since(

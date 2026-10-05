@@ -131,6 +131,20 @@ async def seizure_type_exists(session: AsyncSession, seizure_type_id: uuid.UUID)
     return found is not None
 
 
+async def seizure_type_is_retired(session: AsyncSession, seizure_type_id: uuid.UUID) -> bool:
+    """Тип выведен из употребления при переходе на ILAE 2025 (ADR-0050).
+
+    Новый приступ таким типом не записать, но прежняя запись, которую правят,
+    не обязана менять тип: смена типа задним числом — это суждение о начале
+    приступа, а не правка опечатки.
+    """
+
+    retired = await session.scalar(
+        select(SeizureType.retired).where(SeizureType.id == seizure_type_id)
+    )
+    return bool(retired)
+
+
 async def duration_option_is_usable(session: AsyncSession, option_id: uuid.UUID) -> bool:
     """Вариант длительности пригоден: он из шкалы `seizure_duration` и не выведен.
 

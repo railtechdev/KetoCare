@@ -4,8 +4,10 @@ import {
   ClipboardList,
   FileText,
   Gauge,
+  HeartPulse,
   MessageCircleQuestion,
   NotebookPen,
+  Ruler,
   StickyNote,
   UserRound,
   type LucideIcon,
@@ -62,6 +64,14 @@ const FamilyQuestionsView = lazy(() =>
     default: m.FamilyQuestionsView,
   })),
 );
+const TherapyCourseScreen = lazy(() =>
+  import("./TherapyCourseView").then((m) => ({
+    default: m.TherapyCourseView,
+  })),
+);
+const GrowthScreen = lazy(() =>
+  import("./GrowthView").then((m) => ({ default: m.GrowthView })),
+);
 const ProfileView = lazy(() =>
   import("./PatientProfileView").then((m) => ({
     default: m.PatientProfileView,
@@ -85,6 +95,8 @@ export const PATIENT_VIEWS = [
   "menu",
   "calculator",
   "diary",
+  "growth",
+  "course",
   "reports",
   "notes",
   "questions",
@@ -130,6 +142,10 @@ export const PATIENT_VIEW_SCREENS: Record<PatientView, PatientViewScreen> = {
   menu: (patient) => <MenuView patientId={patient.id} />,
   calculator: (patient) => <CalculatorView patientId={patient.id} />,
   diary: (patient) => <DiaryView patientId={patient.id} />,
+  growth: (patient) => <GrowthScreen patientId={patient.id} />,
+  course: (patient, role) => (
+    <TherapyCourseScreen patientId={patient.id} editable={isDoctor(role)} />
+  ),
   reports: (patient) => <ReportsView patientId={patient.id} />,
   notes: (patient) => <NotesView patientId={patient.id} />,
   // Врач и диетолог — оба: сервер отдаёт переписку обеим ролям (ADR-0022),
@@ -167,6 +183,8 @@ export const PATIENT_VIEW_WIDTH: Record<
   // построчно, а не сравнивают ряды.
   calculator: "content",
   diary: "wide",
+  growth: "wide",
+  course: "content",
   reports: "wide",
   notes: "content",
   // Переписку читают, как заметки.
@@ -185,6 +203,8 @@ export const PATIENT_VIEW_ICONS: Record<PatientView, LucideIcon> = {
   menu: CalendarDays,
   calculator: Calculator,
   diary: NotebookPen,
+  growth: Ruler,
+  course: HeartPulse,
   reports: FileText,
   notes: StickyNote,
   questions: MessageCircleQuestion,

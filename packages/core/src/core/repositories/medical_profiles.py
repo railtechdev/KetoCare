@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import MedicalProfile
+from ..models.enums import TherapyEndReason
 
 
 async def get_for_patient(session: AsyncSession, *, patient_id: uuid.UUID) -> MedicalProfile | None:
@@ -71,6 +72,9 @@ async def upsert(
     # первого назначения.
     profile.therapy_started_on = therapy_started_on
     profile.deleted_at = None
+    # Завершение терапии (`therapy_ended_on` и причина) здесь НЕ пишется: у него
+    # своя ручка с отдельной записью в журнал (ADR-0050). Правка диагноза не
+    # должна молча снимать или ставить завершение.
 
     await session.flush()
 
@@ -78,5 +82,35 @@ async def upsert(
     # подгружается ленивым запросом при первом обращении. В асинхронной сессии
     # ленивая подгрузка вне await'а падает (MissingGreenlet), а обращается к полю
     # уже сериализатор ответа — поэтому значение дочитывается здесь явно.
+    await session.refresh(profile)
+    return profile
+
+
+async def set_therapy_end(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    ended_on: date | None,
+    reason: TherapyEndReason | None,
+    note: str | None,
+) -> MedicalProfile:
+    """Ставит (или снимает при `ended_on=None`) завершение терапии (вопрос 18).
+
+    Профиля может ещё не быть: врач вправе завершить терапию ребёнку, которому
+    диагноз не заполняли. Тогда заводится пустой профиль — как у `upsert`,
+    вместе с возвратом мягко удалённой строки.
+    """
+
+    profile: MedicalProfile | None = await session.scalar(
+        select(MedicalProfile).where(MedicalProfile.patient_id == patient_id)
+    )
+    if profile is None:
+        profile = MedicalProfile(patient_id=patient_id)
+        session.add(profile)
+    profile.deleted_at = None
+    profile.therapy_ended_on = ended_on
+    profile.therapy_end_reason = reason
+    profile.therapy_end_note = note
+    await session.flush()
     await session.refresh(profile)
     return profile

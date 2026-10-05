@@ -39,6 +39,8 @@ export type DiaryLog =
 export interface NamedOption {
   id: string;
   name: string;
+  /** Выведен из справочника (типы приступов до ILAE 2025, ADR-0050). */
+  retired?: boolean;
 }
 
 export interface MedicationOption extends NamedOption {
@@ -203,11 +205,18 @@ export function useSeizureTypes() {
     queryFn: async (): Promise<NamedOption[]> => {
       const { data, error } = await api.GET(
         "/api/v1/dictionaries/seizure-types",
-        { params: { query: { limit: 200, offset: 0 } } },
+        // Вместе с выведенными: прежние записи подписаны ими (ADR-0050).
+        {
+          params: { query: { limit: 200, offset: 0, include_retired: true } },
+        },
       );
       if (error || !data)
         throw error ?? new Error("Empty seizure types response");
-      return data.items.map((item) => ({ id: item.id, name: item.name_ru }));
+      return data.items.map((item) => ({
+        id: item.id,
+        name: item.name_ru,
+        retired: item.retired ?? false,
+      }));
     },
   });
 }

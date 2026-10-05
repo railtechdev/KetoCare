@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
@@ -15,6 +15,7 @@ from core.repositories import access_codes as access_codes_repo
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
+from core.repositories import therapy as therapy_repo
 from core.repositories import users as users_repo
 
 from ..client_address import client_address
@@ -70,6 +71,7 @@ async def _read_many(session: SessionDep, patients: Sequence[Patient]) -> list[P
     activated = await patients_repo.activated_ids(
         session, patient_ids=[patient.id for patient in patients]
     )
+    ended = await therapy_repo.ended_map(session, patient_ids=[patient.id for patient in patients])
 
     result: list[PatientRead] = []
     for patient in patients:
@@ -92,6 +94,7 @@ async def _read_many(session: SessionDep, patients: Sequence[Patient]) -> list[P
                     ],
                     "allergy_labels": labels,
                     "family_activated": patient.id in activated,
+                    "therapy_ended_on": ended.get(patient.id),
                 }
             )
         )
@@ -113,6 +116,12 @@ async def list_patients(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     q: Annotated[str | None, Query(max_length=255, description="Поиск по имени")] = None,
+    therapy: Annotated[
+        Literal["active", "ended"] | None,
+        Query(
+            description="На терапии или завершившие её (вопрос 18); не задано — все",
+        ),
+    ] = None,
 ) -> Page[PatientRead]:
     """Область видимости целиком определяется зависимостью `accessible_patient_ids`
     (связи пользователя + сужение по patient_scope), а не логикой этой ручки.
@@ -122,7 +131,12 @@ async def list_patients(
     """
 
     items, total = await patients_repo.list_for_ids(
-        session, patient_ids=patient_ids, query=q, limit=limit, offset=offset
+        session,
+        patient_ids=patient_ids,
+        query=q,
+        therapy_ended=None if therapy is None else therapy == "ended",
+        limit=limit,
+        offset=offset,
     )
     return Page(items=await _read_many(session, items), total=total)
 

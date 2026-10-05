@@ -91,6 +91,17 @@ function Summary({ overview }: { overview: Overview }) {
 
   return (
     <div className="flex flex-col gap-block">
+      {/* Терапия завершена (вопрос 18, ADR-0050) — нейтрально и без причины:
+          её семье называет врач. Тот же текст, что в кабинете. */}
+      {(overview.therapy_ended_on ?? null) !== null && (
+        <Section title={t("home.therapyEnded.title")} density="compact">
+          <p className="m-0">
+            {t("home.therapyEnded.text", {
+              date: formatIsoDay(overview.therapy_ended_on ?? ""),
+            })}
+          </p>
+        </Section>
+      )}
       <Section title={t("home.prescription.title")} density="compact">
         {prescription === null || prescription === undefined ? (
           <p className="text-muted-foreground">{t("home.prescription.none")}</p>
@@ -190,4 +201,18 @@ function Reading({
       </dd>
     </div>
   );
+}
+
+/**
+ * «28 августа 2026 г.» из `YYYY-MM-DD` — по частям, а не через `new Date(…)`:
+ * такая строка читается как полночь UTC и западнее Гринвича съезжает на день.
+ */
+function formatIsoDay(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) return value;
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
 }

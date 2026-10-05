@@ -14,33 +14,23 @@
 
 from __future__ import annotations
 
-import calendar
 from collections.abc import Iterable
 from datetime import date
 
+# Календарный месяц живёт в ядре данных: от той же функции считается график
+# контрольных визитов (ADR-0050), и два определения «месяца от старта» у
+# наблюдения и у визитов разошлись бы.
+from core.control_schedule import add_months
+
 from ..schemas_overview import MonitoringPhase
+
+__all__ = ["STRICT_MONITORING_MONTHS", "add_months", "monitoring_phase"]
 
 #: Сколько календарных месяцев от начала терапии длится строгое наблюдение.
 #:
 #: TODO(med): вопрос 11. Клиника сказала «например, в течение месяца», и
 #: «например» оставляет число открытым — уточнение заведено.
 STRICT_MONITORING_MONTHS = 1
-
-
-def add_months(day: date, months: int) -> date:
-    """Та же дата через `months` календарных месяцев, прижатая к концу месяца.
-
-    «Месяц от начала диеты» — календарный: с 15 марта до 15 апреля. Если такого
-    числа в целевом месяце нет, берётся последний день: с 31 января — до 28
-    февраля (29-го в високосный год). Считать «30 дней» значило бы подменить
-    слово клиники своим числом.
-    """
-
-    month_index = day.month - 1 + months
-    year = day.year + month_index // 12
-    month = month_index % 12 + 1
-    last_day = calendar.monthrange(year, month)[1]
-    return date(year, month, min(day.day, last_day))
 
 
 def monitoring_phase(*, starts: Iterable[date | None], today: date) -> MonitoringPhase:

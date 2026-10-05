@@ -1,4 +1,4 @@
-import { AsyncSection, Columns } from "@ketocare/ui";
+import { AsyncSection, Columns, Section } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
@@ -71,6 +71,20 @@ export function HomePage({ patientId }: { patientId: string }) {
       >
         {data !== undefined && (
           <>
+            {/* Терапия завершена (вопрос 18, ADR-0050): нейтральная строка,
+                без причины — причину семье называет врач, а не продукт. */}
+            {(data.therapy_ended_on ?? null) !== null && (
+              <Section title={t("therapyEnded.title")} density="compact">
+                <p className="m-0">
+                  {t("therapyEnded.text", {
+                    date:
+                      formatOverviewDate(data.therapy_ended_on ?? "") ??
+                      data.therapy_ended_on,
+                  })}
+                </p>
+              </Section>
+            )}
+
             {/* Первым блоком и только в этот период: пока назначения нет,
                 остальная главная состоит из пустых карточек, и подсказка о
                 том, чего ждём и что уже можно делать, важнее их всех. */}

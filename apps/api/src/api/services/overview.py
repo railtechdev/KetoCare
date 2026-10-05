@@ -14,7 +14,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
-from core.models import KetoneLog, Menu, Prescription, WeightLog
+from core.control_schedule import purpose_for
+from core.models import ControlVisit, KetoneLog, Menu, Prescription, WeightLog
+from core.repositories import control_visits as control_visits_repo
 from core.repositories import menus as menus_repo
 from core.repositories import overview as overview_repo
 from core.repositories import patients as patients_repo
@@ -28,6 +30,7 @@ from ..schemas_overview import (
     DaySummary,
     DayTolerance,
     KetoneReading,
+    NextControl,
     PatientOverview,
     SeizuresToday,
     SeizureTrend,
@@ -252,6 +255,10 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
 
     activated = await patients_repo.activated_ids(session, patient_ids=[patient_id])
 
+    # Завершение терапии и ближайший контроль (вопросы 17 и 18, ADR-0050).
+    ended_on = await therapy_repo.ended_on(session, patient_id=patient_id)
+    next_visits = await control_visits_repo.next_open_map(session, patient_ids=[patient_id])
+
     prolonged_at = await overview_repo.latest_prolonged_seizure(
         session,
         patient_id=patient_id,
@@ -276,4 +283,18 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         monitoring_phase=monitoring_phase(starts=therapy_starts, today=today),
         family_activated=patient_id in activated,
         prolonged_seizure_at=prolonged_at,
+        therapy_ended_on=ended_on,
+        next_control=_next_control(next_visits.get(patient_id), today=today),
+    )
+
+
+def _next_control(visit: ControlVisit | None, *, today: date) -> NextControl | None:
+    """Ближайший несостоявшийся визит — для списка врача и шапки карты."""
+
+    if visit is None:
+        return None
+    return NextControl(
+        planned_on=visit.planned_on,
+        overdue=visit.planned_on < today,
+        purpose=purpose_for(visit.month_offset),
     )

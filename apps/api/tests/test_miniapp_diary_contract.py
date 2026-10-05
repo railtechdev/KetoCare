@@ -57,7 +57,12 @@ async def _open_miniapp(client, session, make_user, make_patient):
 
 
 async def _seizure_type(session) -> SeizureType:
-    found = await session.scalar(select(SeizureType).order_by(SeizureType.sort).limit(1))
+    found = await session.scalar(
+        select(SeizureType)
+        .where(SeizureType.retired.is_(False))
+        .order_by(SeizureType.sort)
+        .limit(1)
+    )
     if found is None:
         found = SeizureType(name_ru="Тонико-клонический", sort=0)
         session.add(found)
