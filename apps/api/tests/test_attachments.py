@@ -347,6 +347,22 @@ class TestDelete:
         )
         assert entry is not None and entry.before == {"uploaded_by": str(parent.id)}
 
+    async def test_specialist_who_does_not_lead_cannot_delete(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Право ведущего специалиста — только у ведущего: роль сама ничего не открывает."""
+        doctor, patient = await _linked_doctor(session, make_user, make_patient)
+        stranger = await make_user(UserRole.DOCTOR)
+        created = await client.post(
+            url(patient.id), files=upload(PNG), headers=auth_headers(doctor)
+        )
+
+        response = await client.delete(
+            f"{url(patient.id)}/{created.json()['id']}", headers=auth_headers(stranger)
+        )
+
+        assert response.status_code == 403
+
     async def test_family_cannot_remove_the_doctors_document(
         self, client, session, make_user, make_patient, auth_headers
     ):

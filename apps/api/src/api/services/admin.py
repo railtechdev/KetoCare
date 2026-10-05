@@ -193,7 +193,9 @@ async def transfer_care(
             "Принять пациентов может только активный врач или диетолог.",
         )
 
-    patient_ids = await patients_repo.list_led_patient_ids(session, doctor_id=source.id)
+    patient_ids = await patients_repo.list_led_patient_ids(
+        session, doctor_id=source.id, lock_with=target.id
+    )
     for patient_id in patient_ids:
         await patients_repo.link_doctor(session, doctor_id=target.id, patient_id=patient_id)
         await patients_repo.unlink_doctor(session, doctor_id=source.id, patient_id=patient_id)
@@ -203,19 +205,18 @@ async def transfer_care(
             session, patient_id=patient_id, issued_by=source.id
         )
 
-    await audit_repo.write_audit_log(
-        session,
-        user_id=actor.id,
-        action="transfer_care",
-        entity="doctor_patient",
-        entity_id=source.id,
-        ip=ip,
-        before={"from_user_id": str(source.id)},
-        after={
-            "to_user_id": str(target.id),
-            "patients": [str(pid) for pid in patient_ids],
-        },
-    )
+        # Запись на каждого ребёнка, с ним в `entity_id` — как у прочих записей
+        # ведения: стирание пациента (`erase_patient`) чистит журнал по нему.
+        await audit_repo.write_audit_log(
+            session,
+            user_id=actor.id,
+            action="transfer_care",
+            entity="doctor_patient",
+            entity_id=patient_id,
+            ip=ip,
+            before={"doctor_id": str(source.id)},
+            after={"doctor_id": str(target.id)},
+        )
     return len(patient_ids)
 
 

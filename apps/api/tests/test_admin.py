@@ -944,13 +944,17 @@ class TestCareTransfer:
         )
         assert deactivated.status_code == 200, deactivated.text
 
-        entry = await session.scalar(
-            select(AuditLog).where(
-                AuditLog.action == "transfer_care", AuditLog.entity_id == leaving.id
+        # Запись на каждого ребёнка, с ним в entity_id: стирание пациента
+        # чистит журнал по нему (замечание ревью).
+        for patient in (first, second):
+            entry = await session.scalar(
+                select(AuditLog).where(
+                    AuditLog.action == "transfer_care", AuditLog.entity_id == patient.id
+                )
             )
-        )
-        assert entry is not None and entry.user_id == admin.id
-        assert sorted(entry.after["patients"]) == sorted([str(first.id), str(second.id)])
+            assert entry is not None and entry.user_id == admin.id
+            assert entry.before == {"doctor_id": str(leaving.id)}
+            assert entry.after == {"doctor_id": str(colleague.id)}
 
     async def test_only_admin_may_transfer(
         self, client, session, make_user, make_patient, auth_headers
@@ -984,3 +988,74 @@ class TestCareTransfer:
 
         assert response.status_code == 422
         assert await patients_repo.list_doctor_ids(session, patient_id=patient.id) == [leaving.id]
+
+    async def test_self_transfer_and_bad_source(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        doctor = await make_user(UserRole.DOCTOR)
+        parent = await make_user(UserRole.PARENT)
+
+        to_self = await client.post(
+            f"{USERS_URL}/{doctor.id}/transfer-care",
+            json={"to_user_id": str(doctor.id)},
+            headers=auth_headers(admin),
+        )
+        from_parent = await client.post(
+            f"{USERS_URL}/{parent.id}/transfer-care",
+            json={"to_user_id": str(doctor.id)},
+            headers=auth_headers(admin),
+        )
+
+        assert to_self.status_code == 422
+        assert from_parent.status_code == 404
+
+    async def test_inactive_receiver_is_refused(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        admin = await make_user(UserRole.ADMIN)
+        leaving = await make_user(UserRole.DOCTOR)
+        gone = await make_user(UserRole.DOCTOR, is_active=False)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=leaving.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"{USERS_URL}/{leaving.id}/transfer-care",
+            json={"to_user_id": str(gone.id)},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422
+
+    async def test_shared_patient_keeps_exactly_one_lead_and_codes_die(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Общий ребёнок не дублируется; коды ушедшего гаснут."""
+        from core.models import AccessCode
+        from core.models.enums import AccessCodePurpose
+        from core.repositories import access_codes as codes_repo
+
+        admin = await make_user(UserRole.ADMIN)
+        leaving = await make_user(UserRole.DOCTOR)
+        colleague = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        for doctor in (leaving, colleague):
+            await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        code = await codes_repo.create(
+            session,
+            patient_id=patient.id,
+            issued_by=leaving.id,
+            purpose=AccessCodePurpose.FAMILY_MEMBER,
+        )
+
+        response = await client.post(
+            f"{USERS_URL}/{leaving.id}/transfer-care",
+            json={"to_user_id": str(colleague.id)},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        assert await patients_repo.list_doctor_ids(session, patient_id=patient.id) == [colleague.id]
+        stored = await session.get(AccessCode, code.code)
+        await session.refresh(stored)
+        assert stored.revoked_at is not None

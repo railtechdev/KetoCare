@@ -183,7 +183,7 @@ async def delete_attachment(
     if attachment.uploaded_by != user.id and user.role not in CARE_ROLES:
         raise ApiError(
             ErrorCode.FORBIDDEN,
-            "Удалить документ может тот, кто его загрузил, или лечащий врач.",
+            "Удалить документ может тот, кто его загрузил, или ведущий специалист.",
         )
 
     await attachments_repo.soft_delete(session, attachment=attachment)
