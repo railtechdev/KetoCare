@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from typing import Any
 
 from sqlalchemy import select
@@ -44,24 +44,46 @@ async def upsert(
     return settings
 
 
-async def list_active(session: AsyncSession) -> list[tuple[ReminderSettings, TelegramAccount]]:
-    """Кому вообще есть куда напоминать.
+def default_settings(patient_id: uuid.UUID) -> ReminderSettings:
+    """Настройки, которые действуют, пока семья их не меняла.
 
-    Настройки без живой привязки Telegram бесполезны: отправлять некуда.
-    Поэтому выборка сразу соединяет их с привязкой — иначе воркер перебирал бы
-    всех пациентов клиники, чтобы на каждом втором обнаружить, что чата нет.
+    Единственное включённое из коробки — мягкое «за сегодня нет записей» в
+    20:00 (раздел 7.4 ТЗ). Строка в базе не заводится: она заводится при первой
+    правке, иначе однажды разошлась бы с умолчанием при его смене.
+    """
+
+    return ReminderSettings(
+        patient_id=patient_id,
+        enabled=True,
+        ketones_at=None,
+        weight_at=None,
+        medications_at=None,
+        no_records_at=time(hour=DEFAULT_NO_RECORDS_HOUR),
+    )
+
+
+async def list_active(session: AsyncSession) -> list[tuple[ReminderSettings, TelegramAccount]]:
+    """Кому вообще есть куда напоминать: каждый живой чат и настройки его ребёнка.
+
+    Выборка идёт от привязок, а не от настроек: прежде она соединяла их
+    внутренним соединением, и семья, ни разу не открывавшая настройки — то есть
+    каждая семья из Telegram, у которой кабинета нет, — не получала даже
+    напоминания «из коробки» (аудит блокеров, 05.10.2026). Умолчание
+    существовало только в ответе экрану.
     """
 
     stmt = (
-        select(ReminderSettings, TelegramAccount)
-        .join(TelegramAccount, TelegramAccount.patient_id == ReminderSettings.patient_id)
-        .where(
-            ReminderSettings.enabled.is_(True),
-            TelegramAccount.revoked_at.is_(None),
-        )
+        select(TelegramAccount, ReminderSettings)
+        .outerjoin(ReminderSettings, ReminderSettings.patient_id == TelegramAccount.patient_id)
+        .where(TelegramAccount.revoked_at.is_(None))
     )
     rows = await session.execute(stmt)
-    return [(row[0], row[1]) for row in rows]
+    result: list[tuple[ReminderSettings, TelegramAccount]] = []
+    for link, settings in rows:
+        effective = settings if settings is not None else default_settings(link.patient_id)
+        if effective.enabled:
+            result.append((effective, link))
+    return result
 
 
 async def claim_delivery(
@@ -84,7 +106,7 @@ async def claim_delivery(
             sent_at=datetime.now(UTC),
             chat_id=chat_id,
         )
-        .on_conflict_do_nothing(index_elements=["patient_id", "kind", "sent_on"])
+        .on_conflict_do_nothing(index_elements=["patient_id", "kind", "sent_on", "chat_id"])
         .returning(ReminderDelivery.id)
     )
     return await session.scalar(stmt) is not None

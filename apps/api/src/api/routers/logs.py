@@ -18,6 +18,7 @@ from fastapi import APIRouter, Path, Response
 from core.models import KetoneLog, MealLog, MedicationLog, SeizureLog, SideEffectLog, WeightLog
 
 from ..deps.auth import PatientAccessDep, SessionDep
+from ..deps.idempotency import WriteAttemptDep
 from ..deps.query import PaginationDep, PeriodDep
 from ..schemas import Page
 from ..schemas_logs import (
@@ -72,9 +73,16 @@ async def create_seizure_log(
     payload: SeizureLogCreate,
     session: SessionDep,
     user: PatientAccessDep,
+    attempt: WriteAttemptDep,
 ) -> SeizureLogRead:
     return await logs_service.create_log(
-        session, SeizureLog, SeizureLogRead, patient_id=patient_id, payload=payload, author=user
+        session,
+        SeizureLog,
+        SeizureLogRead,
+        patient_id=patient_id,
+        payload=payload,
+        author=user,
+        attempt=attempt,
     )
 
 
@@ -128,9 +136,16 @@ async def create_ketone_log(
     payload: KetoneLogCreate,
     session: SessionDep,
     user: PatientAccessDep,
+    attempt: WriteAttemptDep,
 ) -> KetoneLogRead:
     return await logs_service.create_log(
-        session, KetoneLog, KetoneLogRead, patient_id=patient_id, payload=payload, author=user
+        session,
+        KetoneLog,
+        KetoneLogRead,
+        patient_id=patient_id,
+        payload=payload,
+        author=user,
+        attempt=attempt,
     )
 
 
@@ -179,9 +194,16 @@ async def create_weight_log(
     payload: WeightLogCreate,
     session: SessionDep,
     user: PatientAccessDep,
+    attempt: WriteAttemptDep,
 ) -> WeightLogRead:
     return await logs_service.create_log(
-        session, WeightLog, WeightLogRead, patient_id=patient_id, payload=payload, author=user
+        session,
+        WeightLog,
+        WeightLogRead,
+        patient_id=patient_id,
+        payload=payload,
+        author=user,
+        attempt=attempt,
     )
 
 
@@ -233,6 +255,7 @@ async def create_medication_log(
     payload: MedicationLogCreate,
     session: SessionDep,
     user: PatientAccessDep,
+    attempt: WriteAttemptDep,
 ) -> MedicationLogRead:
     return await logs_service.create_log(
         session,
@@ -241,6 +264,7 @@ async def create_medication_log(
         patient_id=patient_id,
         payload=payload,
         author=user,
+        attempt=attempt,
     )
 
 
@@ -298,9 +322,16 @@ async def create_meal_log(
     payload: MealLogCreate,
     session: SessionDep,
     user: PatientAccessDep,
+    attempt: WriteAttemptDep,
 ) -> MealLogRead:
     return await logs_service.create_log(
-        session, MealLog, MealLogRead, patient_id=patient_id, payload=payload, author=user
+        session,
+        MealLog,
+        MealLogRead,
+        patient_id=patient_id,
+        payload=payload,
+        author=user,
+        attempt=attempt,
     )
 
 
@@ -352,6 +383,7 @@ async def create_side_effect_log(
     payload: SideEffectLogCreate,
     session: SessionDep,
     user: PatientAccessDep,
+    attempt: WriteAttemptDep,
 ) -> SideEffectLogRead:
     return await logs_service.create_log(
         session,
@@ -360,6 +392,7 @@ async def create_side_effect_log(
         patient_id=patient_id,
         payload=payload,
         author=user,
+        attempt=attempt,
     )
 
 

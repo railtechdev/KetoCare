@@ -11,12 +11,14 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Request
 
 from core.models import Menu, MenuItem
+from core.repositories import audit as audit_repo
 from core.repositories import menus as menus_repo
 from core.repositories import products as products_repo
 
+from ..client_address import client_address
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import ProductRead
@@ -148,8 +150,9 @@ async def upsert_menu(
 @router.delete("", status_code=204, summary="Убрать план на день")
 async def delete_menu(
     patient_id: PatientIdPath,
+    request: Request,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
     menu_date: Annotated[date, Query(alias="date", description="Дата меню, YYYY-MM-DD")],
 ) -> None:
     """Возвращает день в состояние «не спланирован» (ADR-0018).
@@ -169,7 +172,34 @@ async def delete_menu(
         # Идемпотентно: «дня нет» — это ровно то состояние, которого добивались.
         return
 
+    # Отметка «съедено» — уже не план, а запись о том, что ребёнок ел, и по ней
+    # врач судит о выполнении (ADR-0041). Правило жило только на экране Mini
+    # App; удаление дня стирало отметки одним нажатием из любого канала
+    # (аудит блокеров, 05.10.2026).
+    items = await menus_repo.list_items(session, menu_id=menu.id)
+    eaten = sum(1 for item in items if item.eaten)
+    if eaten:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "В этом дне уже есть отметки «съедено» — это запись о том, что ребёнок ел. "
+            "Если день составлен по ошибке, сначала снимите отметки.",
+            details={"reason": "has_eaten_items", "eaten": eaten},
+        )
+
     await menus_repo.soft_delete(session, menu=menu)
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="menu_day_removed",
+        entity="menus",
+        entity_id=menu.id,
+        ip=client_address(request),
+        before={
+            "patient_id": str(patient_id),
+            "date": menu_date.isoformat(),
+            "items": len(items),
+        },
+    )
 
 
 @router.post(

@@ -26,7 +26,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Request
@@ -78,16 +77,9 @@ async def get_reminders(
     if settings is not None:
         return ReminderSettingsRead.model_validate(settings)
 
-    return ReminderSettingsRead(
-        patient_id=patient_id,
-        enabled=True,
-        ketones_at=None,
-        weight_at=None,
-        medications_at=None,
-        # Единственное включённое из коробки — мягкое «за сегодня нет записей»
-        # в 20:00 (раздел 7.4 ТЗ).
-        no_records_at=time(hour=reminders_repo.DEFAULT_NO_RECORDS_HOUR),
-    )
+    # Умолчание — одно на экран и на рассылку: прежде экран показывал «включено
+    # в 20:00», а рассылка его не знала и не присылала ничего.
+    return ReminderSettingsRead.model_validate(reminders_repo.default_settings(patient_id))
 
 
 @router.put(

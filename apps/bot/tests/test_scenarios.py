@@ -16,7 +16,7 @@ import pytest
 from aiogram.fsm.context import FSMContext
 
 from bot import deps, keyboards, texts
-from bot.api import BotApiError, LinkRevokedError
+from bot.api import TRANSPORT_ERROR, BotApiError, LinkRevokedError
 from bot.config import BotSettings
 from bot.handlers import fallback, scenarios, start
 
@@ -466,6 +466,64 @@ class TestCancelAndFailures:
 
         assert message.last == texts.API_UNAVAILABLE
         assert await linked_store.get(CHAT_ID) is not None
+
+    @pytest.mark.asyncio
+    async def test_no_connection_says_so_and_retry_reuses_the_key(self, api, linked_store, state):
+        """Обрыв связи — не молчание и не вторая запись (аудит блокеров, 05.10.2026).
+
+        Прежде обрыв уходил мимо обработчика, и родитель не получал ответа
+        вовсе. Повтор после «нет связи» идёт с тем же ключом попытки: если
+        первая запись всё-таки дошла, сервер вернёт её, а не заведёт вторую.
+        """
+
+        api.log_error = BotApiError(TRANSPORT_ERROR, "ConnectError", 0)
+        message = FakeMessage(text="18.4")
+        await state.set_state(scenarios.Weight.value)
+
+        await scenarios.weight_value(message, state, api, linked_store)
+        await answer_when_now(message, state, api, linked_store)
+
+        assert message.last == texts.NO_CONNECTION
+        assert await state.get_state() is not None, "введённое не теряется"
+
+        # Родитель нажимает ту же кнопку «Сейчас» ещё раз — она осталась под
+        # вопросом «Когда это было?».
+        api.log_error = None
+        callback = FakeCallback(data=keyboards.WHEN_NOW_DATA, message=message)
+        await scenarios.when_now(callback, state, api, linked_store, SETTINGS)
+
+        assert len(api.idempotency_keys) == 2
+        assert api.idempotency_keys[0] == api.idempotency_keys[1]
+        # И тело то же: «Сейчас» при повторе не подставляет новое время —
+        # иначе сервер отверг бы ключ как использованный для другого запроса.
+        assert api.attempt_bodies[0] == api.attempt_bodies[1]
+        assert len(api.logs) == 1
+
+    @pytest.mark.asyncio
+    async def test_server_refusal_ends_the_attempt(self, api, linked_store, state):
+        """Отказ сервера — не повод вечно повторять отвергнутое: дальше новая попытка."""
+
+        api.log_error = BotApiError("validation_error", "ключ", 422)
+        message = FakeMessage(text="18.4")
+        await state.set_state(scenarios.Weight.value)
+        await scenarios.weight_value(message, state, api, linked_store)
+        await answer_when_now(message, state, api, linked_store)
+
+        api.log_error = None
+        callback = FakeCallback(data=keyboards.WHEN_NOW_DATA, message=message)
+        await scenarios.when_now(callback, state, api, linked_store, SETTINGS)
+
+        assert api.idempotency_keys[0] != api.idempotency_keys[1]
+
+    @pytest.mark.asyncio
+    async def test_each_new_entry_gets_its_own_key(self, api, linked_store, state):
+        for value in ("18.4", "18.5"):
+            message = FakeMessage(text=value)
+            await state.set_state(scenarios.Weight.value)
+            await scenarios.weight_value(message, state, api, linked_store)
+            await answer_when_now(message, state, api, linked_store)
+
+        assert len(set(api.idempotency_keys)) == 2
 
 
 class TestWiring:

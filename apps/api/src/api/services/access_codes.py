@@ -466,6 +466,8 @@ async def activate_from_telegram(
         # которого у неё нет.
         peeked = await codes_repo.get(session, code)
         same_child = peeked is not None and peeked.patient_id == existing.patient_id
+        if same_child and peeked is not None and _is_live(peeked) and chat_id == telegram_user_id:
+            return await _rebind(session, existing=existing, ip=ip)
         raise ApiError(
             ErrorCode.CONFLICT,
             "Этот чат уже ведёт дневник этого ребёнка." if same_child else _CHAT_TAKEN,
@@ -509,6 +511,64 @@ async def activate_from_telegram(
         entity_id=link.id,
         ip=ip,
         after={"chat_id": link.chat_id, "patient_id": str(link.patient_id)},
+    )
+    return parent, patient, link, secret
+
+
+def _is_live(code: AccessCode) -> bool:
+    return code.used_at is None and code.revoked_at is None and code.expires_at > datetime.now(UTC)
+
+
+async def _rebind(
+    session: AsyncSession, *, existing: TelegramAccount, ip: str | None
+) -> tuple[User, Patient, TelegramAccount, str]:
+    """Новый секрет для уже привязанного чата — без новой связи и без погашения кода.
+
+    Секрет живёт в хранилище бота (ADR-0009), и после восстановления сервера или
+    потери хранилища бот не узнаёт чат, хотя привязка в базе жива. Прежде
+    повторный код отвечал «код не нужен», и семья оставалась без дневника до
+    ручного вмешательства врача — у всех семей разом (аудит блокеров, 05.10.2026).
+
+    Доступа это не добавляет: тот же человек (личный чат, `chat_id` совпадает с
+    `telegram_user_id`), тот же ребёнок, та же учётная запись. Код только
+    доказывает, что у человека на руках действующий ключ к этому ребёнку, и
+    поэтому не гасится — он остаётся тому, кому был выдан.
+    """
+
+    parent = await users_repo.get(session, existing.parent_id)
+    patient = await patients_repo.get(session, existing.patient_id)
+    # Связь взрослого с ребёнком проверяется явно, а не выводится из живой
+    # привязки: сегодня каждый путь отзыва доступа гасит и привязки, но новый
+    # путь, забывший об этом, иначе тихо продлевал бы секрет отрезанному
+    # взрослому (замечание ревью, 05.10.2026).
+    if (
+        parent is None
+        or patient is None
+        or not parent.is_active
+        or not await access_repo.user_has_patient_access(
+            session, user_id=parent.id, role=parent.role, patient_id=patient.id
+        )
+    ):
+        raise ApiError(ErrorCode.NOT_FOUND, _CODE_INVALID)
+
+    await telegram_repo.revoke(session, existing.id)
+    secret = telegram_repo.generate_binding_secret()
+    link = await telegram_repo.create_link(
+        session,
+        parent_id=existing.parent_id,
+        patient_id=existing.patient_id,
+        chat_id=existing.chat_id,
+        secret=secret,
+    )
+    await audit_repo.write_audit_log(
+        session,
+        user_id=parent.id,
+        action="telegram_rebind",
+        entity="telegram_accounts",
+        entity_id=link.id,
+        ip=ip,
+        before={"link_id": str(existing.id)},
+        after={"patient_id": str(link.patient_id)},
     )
     return parent, patient, link, secret
 

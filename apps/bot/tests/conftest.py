@@ -43,6 +43,10 @@ class FakeApi:
     #: Код, дошедший до API. None — обмена не было вовсе.
     verified_code: str | None = None
     log_error: Exception | None = None
+    #: Ключи попыток записи — по одному на вызов `create_log`.
+    idempotency_keys: list[str] = field(default_factory=list)
+    #: Тела попыток — повтор обязан слать то же самое, байт в байт.
+    attempt_bodies: list[dict[str, Any]] = field(default_factory=list)
     #: План дня для сценария «Еда»; None — меню не составлено.
     menu: dict[str, Any] | None = None
     menu_error: Exception | None = None
@@ -87,7 +91,10 @@ class FakeApi:
         patient_id: uuid.UUID,
         kind: str,
         payload: dict[str, Any],
+        idempotency_key: str,
     ) -> dict[str, Any]:
+        self.idempotency_keys.append(idempotency_key)
+        self.attempt_bodies.append(payload)
         if self.log_error is not None:
             raise self.log_error
         self.logs.append(

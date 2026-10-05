@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 
 from ..errors import ApiError, ErrorCode
 
@@ -46,3 +47,33 @@ async def idempotency_key(
 
 
 IdempotencyKeyDep = Annotated[str | None, Depends(idempotency_key)]
+
+
+@dataclass(frozen=True, slots=True)
+class WriteAttempt:
+    """Ключ попытки записи и отпечаток запроса — всё, что нужно сервису."""
+
+    key: str
+    fingerprint: str
+
+
+async def write_attempt(request: Request, key: IdempotencyKeyDep) -> WriteAttempt | None:
+    """Попытка записи с ключом — или `None`, если клиент ключа не прислал.
+
+    Отпечаток считается здесь, а не в каждом роутере: записей дневника шесть,
+    и шесть копий одной строки однажды разошлись бы.
+    """
+
+    if key is None:
+        return None
+    from ..services import idempotency
+
+    return WriteAttempt(
+        key=key,
+        fingerprint=idempotency.request_fingerprint(
+            request.method, request.url.path, await request.body()
+        ),
+    )
+
+
+WriteAttemptDep = Annotated[WriteAttempt | None, Depends(write_attempt)]

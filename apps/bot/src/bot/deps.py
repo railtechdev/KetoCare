@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -16,7 +17,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from . import keyboards, texts
-from .api import BotApi, BotApiError, LinkRevokedError
+from .api import TRANSPORT_ERROR, BotApi, BotApiError, LinkRevokedError
 from .config import BotSettings
 from .storage import Binding, BindingStore
 
@@ -81,8 +82,22 @@ async def submit_log(
 
     # Момент события задаёт семья: бот ставит «сейчас» только тогда, когда она
     # сама так ответила.
-    moment = occurred_at or datetime.now(UTC)
-    body = {"occurred_at": moment.isoformat(), **payload}
+    # Ключ попытки и тело живут в состоянии сценария до успешной записи:
+    # родитель, нажавший кнопку ещё раз после «нет связи», повторяет ТУ ЖЕ
+    # запись — тот же ключ и то же тело, байт в байт. Иначе ответ «Сейчас»
+    # давал бы новое `occurred_at`, сервер видел бы под старым ключом другой
+    # запрос и отказывал, а запись, уже дошедшую до базы, семья завела бы
+    # заново (находка ревью, 05.10.2026).
+    data = await state.get_data()
+    pending = data.get("pending_write")
+    if isinstance(pending, dict) and pending.get("kind") == kind:
+        key = str(pending["key"])
+        body = dict(pending["body"])
+    else:
+        moment = occurred_at or datetime.now(UTC)
+        key = str(uuid.uuid4())
+        body = {"occurred_at": moment.isoformat(), **payload}
+        await state.update_data(pending_write={"kind": kind, "key": key, "body": body})
     try:
         await api.create_log(
             link_id=binding.link_id,
@@ -90,6 +105,7 @@ async def submit_log(
             patient_id=binding.patient_id,
             kind=kind,
             payload=body,
+            idempotency_key=key,
         )
     except LinkRevokedError:
         await store.delete(message.chat.id)
@@ -100,6 +116,13 @@ async def submit_log(
         # Подробности — в лог, семье только «попробуйте ещё раз»: код ошибки ей
         # ничего не говорит, а тревоги добавляет.
         logger.warning("log_submit_failed", kind=kind, status=exc.status, code=exc.code)
+        if exc.code == TRANSPORT_ERROR:
+            # Попытка остаётся в состоянии: повтор отправит её же.
+            await message.answer(texts.NO_CONNECTION)
+            return
+        # Сервер ответил отказом — эта попытка закончена. Следующая будет новой
+        # записью с новым ключом, а не вечным повтором отвергнутой.
+        await state.update_data(pending_write=None)
         await message.answer(texts.API_UNAVAILABLE)
         return
 
