@@ -161,20 +161,26 @@ export function TrendChart({
         </LineChart>
       </ResponsiveContainer>
 
-      {/* Текстовая альтернатива: линию скринридер не прочитает, а данные нужны всем. */}
-      <table className="sr-only">
-        <caption>{caption}</caption>
-        <tbody>
-          {data.map((point) => (
-            <tr key={point.ts}>
-              <th scope="row">{formatDate(new Date(point.ts))}</th>
-              <td>
-                {formatMeasured(point.value)} {unit}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Текстовая альтернатива: линию скринридер не прочитает, а данные нужны всем.
+          `sr-only` — на обёртке, а не на самой таблице: таблица не сжимается
+          уже своего содержимого и ширину 1 px игнорирует, поэтому на 360 px
+          невидимая таблица из тридцати строк распирала экран до 401 px и
+          давала горизонтальную прокрутку (замер 05.10.2026, Mini App). */}
+      <div className="sr-only" data-testid="trend-text-alternative">
+        <table>
+          <caption>{caption}</caption>
+          <tbody>
+            {data.map((point) => (
+              <tr key={point.ts}>
+                <th scope="row">{formatDate(new Date(point.ts))}</th>
+                <td>
+                  {formatMeasured(point.value)} {unit}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }
