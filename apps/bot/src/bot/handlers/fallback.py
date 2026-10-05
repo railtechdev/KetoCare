@@ -9,9 +9,10 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.types import Message
 
-from .. import keyboards, texts
+from .. import texts
 from ..api import BotApi
 from ..config import BotSettings
+from ..deps import menu
 from ..storage import BindingStore
 from .start import handle_bare_code, looks_like_code
 
@@ -34,7 +35,8 @@ async def unknown(
     # переписавший код с экрана компьютера, иначе получил бы «я умею записывать
     # данные» в ответ на ровно то, что бот и просил прислать. И в привязанном
     # чате тоже: код молча игнорировался, и человек не понимал, сработал ли он.
-    # API ответит по существу — «этот ребёнок уже здесь» или «чат занят».
+    # API ответит по существу: «этот ребёнок уже здесь» — или добавит в чат
+    # ещё одного ребёнка (ADR-0048).
     if looks_like_code(text):
         await handle_bare_code(message, api=api, store=store, settings=settings)
         return
@@ -51,5 +53,5 @@ async def unknown(
     # приложение 📱» обещается только там, где кнопка приложения есть.
     await message.answer(
         texts.UNKNOWN_INPUT if settings.has_miniapp else texts.UNKNOWN_INPUT_NO_APP,
-        reply_markup=keyboards.main_menu(settings),
+        reply_markup=await menu(store, message.chat.id, settings),
     )

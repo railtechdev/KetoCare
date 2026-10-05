@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardMarkup
 
 from . import keyboards, texts
 from .api import TRANSPORT_ERROR, BotApi, BotApiError, LinkRevokedError
@@ -36,6 +36,59 @@ async def require_binding(message: Message, store: BindingStore) -> Binding | No
         await message.answer(texts.NOT_LINKED)
         return None
     return binding
+
+
+async def several_children(store: BindingStore, chat_id: int) -> bool:
+    """Ведёт ли чат двоих детей и больше (ADR-0048)."""
+
+    return len(await store.all(chat_id)) >= 2
+
+
+async def child_label(store: BindingStore, chat_id: int) -> str | None:
+    """Имя выбранного ребёнка — только когда чат ведёт нескольких.
+
+    У чата одного ребёнка имени в переписке нет, как и прежде: незачем, и
+    сообщения остаются такими же, какими их согласовывали. Когда детей двое,
+    без имени непонятно, про кого запись, — тогда имя, но только имя, без
+    фамилии (ADR-0048).
+    """
+
+    if not await several_children(store, chat_id):
+        return None
+    active = await store.get(chat_id)
+    return active.first_name if active is not None else None
+
+
+def named(text: str, child: str | None) -> str:
+    """Сообщение с именем ребёнка над ним — когда имя нужно (см. `child_label`)."""
+
+    return f"👶 {child}\n{text}" if child else text
+
+
+async def menu(store: BindingStore, chat_id: int, settings: BotSettings) -> ReplyKeyboardMarkup:
+    """Главное меню чата — с кнопкой выбора ребёнка, если детей несколько."""
+
+    return keyboards.main_menu(settings, child=await child_label(store, chat_id))
+
+
+async def link_revoked(
+    message: Message, state: FSMContext, store: BindingStore, binding: Binding
+) -> None:
+    """Привязку ребёнка отозвали: забыть её, закрыть сценарий, сказать, что дальше.
+
+    Забывается привязка ОДНОГО ребёнка: остальные дети чата живут дальше
+    (ADR-0048), и семье говорится, для кого теперь идут записи. Сценарий
+    закрывается — начатая запись была про ребёнка, к которому доступа больше нет.
+    """
+
+    await state.clear()
+    remaining = await store.forget(message.chat.id, binding.patient_id)
+    if remaining is None:
+        await message.answer(texts.LINK_REVOKED)
+        return
+    await message.answer(
+        texts.LINK_REVOKED_ONE.format(revoked=binding.first_name, active=remaining.first_name)
+    )
 
 
 def when_text(occurred_at: datetime | None, *, tz: str) -> str:
@@ -108,9 +161,7 @@ async def submit_log(
             idempotency_key=key,
         )
     except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await state.clear()
-        await message.answer(texts.LINK_REVOKED)
+        await link_revoked(message, state, store, binding)
         return
     except BotApiError as exc:
         # Подробности — в лог, семье только «попробуйте ещё раз»: код ошибки ей
@@ -127,9 +178,18 @@ async def submit_log(
         return
 
     await state.clear()
-    confirmation = (
-        texts.SAVED.format(summary=summary, when=when_text(occurred_at, tz=settings.tz))
-        if summary
-        else texts.SAVED_BARE
-    )
-    await message.answer(confirmation, reply_markup=keyboards.main_menu(settings))
+    when = when_text(occurred_at, tz=settings.tz)
+    # Когда чат ведёт двоих, эхо называет, кому ушла запись: иначе ошибку
+    # «записал не тому ребёнку» не заметить до приёма у врача (ADR-0048).
+    child = binding.first_name if await several_children(store, message.chat.id) else None
+    if child:
+        confirmation = (
+            texts.SAVED_FOR.format(child=child, summary=summary, when=when)
+            if summary
+            else texts.SAVED_BARE_FOR.format(child=child)
+        )
+    else:
+        confirmation = (
+            texts.SAVED.format(summary=summary, when=when) if summary else texts.SAVED_BARE
+        )
+    await message.answer(confirmation, reply_markup=await menu(store, message.chat.id, settings))

@@ -24,7 +24,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.api import BotApiError, LinkVerified
 from bot.config import BotSettings
 from bot.main import build_dispatcher
-from bot.storage import Binding
+from bot.storage import Binding, BindingStore, _to_json
 
 PATIENT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 LINK_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
@@ -168,20 +168,71 @@ class FakeApi:
         pass
 
 
-class FakeStore:
-    """Хранилище привязок в памяти с тем же интерфейсом, что у BindingStore."""
+class FakeRedis:
+    """Ровно те команды Redis, которыми пользуется `BindingStore`, — в памяти.
+
+    Хранилище в тестах настоящее (`BindingStore`), подделан только Redis: с
+    ADR-0048 в хранилище живёт логика — выбранный ребёнок, перенос старой
+    раскладки, что остаётся после отзыва, — и подделка самого хранилища
+    проверяла бы представления автора о ней, а не её.
+    """
 
     def __init__(self) -> None:
-        self._data: dict[int, Binding] = {}
+        self.hashes: dict[str, dict[str, str]] = {}
+        self.values: dict[str, str] = {}
 
-    async def get(self, chat_id: int) -> Binding | None:
-        return self._data.get(chat_id)
+    async def hgetall(self, key: str) -> dict[str, str]:
+        return dict(self.hashes.get(key, {}))
 
-    async def put(self, chat_id: int, binding: Binding) -> None:
-        self._data[chat_id] = binding
+    async def hset(
+        self,
+        key: str,
+        field: str | None = None,
+        value: str | None = None,
+        mapping: dict[str, str] | None = None,
+    ) -> int:
+        target = self.hashes.setdefault(key, {})
+        if field is not None and value is not None:
+            target[field] = value
+        target.update(mapping or {})
+        return 1
 
-    async def delete(self, chat_id: int) -> None:
-        self._data.pop(chat_id, None)
+    async def hdel(self, key: str, *fields: str) -> int:
+        target = self.hashes.get(key, {})
+        removed = sum(1 for name in fields if target.pop(name, None) is not None)
+        if not target:
+            self.hashes.pop(key, None)
+        return removed
+
+    async def get(self, key: str) -> str | None:
+        return self.values.get(key)
+
+    async def set(self, key: str, value: str, nx: bool = False) -> bool:
+        if nx and key in self.values:
+            return False
+        self.values[key] = value
+        return True
+
+    async def delete(self, *keys: str) -> int:
+        removed = 0
+        for key in keys:
+            removed += int(self.hashes.pop(key, None) is not None)
+            removed += int(self.values.pop(key, None) is not None)
+        return removed
+
+
+def FakeStore() -> BindingStore:  # noqa: N802 - прежнее имя фикстуры сохранено
+    return BindingStore(FakeRedis())  # type: ignore[arg-type]
+
+
+def put_binding(store: BindingStore, chat_id: int, binding: Binding) -> None:
+    """Кладёт привязку в хранилище синхронно — для синхронных фикстур."""
+
+    redis: FakeRedis = store._redis  # type: ignore[assignment]
+    redis.hashes.setdefault(f"bot:bindings:{chat_id}", {})[str(binding.patient_id)] = _to_json(
+        binding
+    )
+    redis.values[f"bot:active:{chat_id}"] = str(binding.patient_id)
 
 
 @pytest.fixture
@@ -199,14 +250,16 @@ def api() -> FakeApi:
 
 
 @pytest.fixture
-def store() -> FakeStore:
+def store() -> BindingStore:
     return FakeStore()
 
 
 @pytest.fixture
-def linked_store(store: FakeStore) -> FakeStore:
-    store._data[CHAT_ID] = Binding(
-        link_id=LINK_ID, secret=SECRET, patient_id=PATIENT_ID, patient_name=PATIENT_NAME
+def linked_store(store: BindingStore) -> BindingStore:
+    put_binding(
+        store,
+        CHAT_ID,
+        Binding(link_id=LINK_ID, secret=SECRET, patient_id=PATIENT_ID, patient_name=PATIENT_NAME),
     )
     return store
 

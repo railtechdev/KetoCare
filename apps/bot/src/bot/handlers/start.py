@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from aiogram import Router
+import uuid
+
+from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardMarkup
+from aiogram.types import CallbackQuery, InaccessibleMessage, Message, ReplyKeyboardMarkup
 
 from .. import keyboards, texts
 from ..api import BotApi, BotApiError, LinkVerified
 from ..config import BotSettings
+from ..deps import menu
 from ..storage import Binding, BindingStore
 
 router = Router(name="start")
@@ -53,18 +56,23 @@ async def start_without_code(
     message: Message, state: FSMContext, store: BindingStore, settings: BotSettings
 ) -> None:
     await state.clear()
+    bindings = await store.all(message.chat.id)
     binding = await store.get(message.chat.id)
-    if binding is not None:
-        await message.answer(
-            texts.START_ALREADY_LINKED.format(patient_name=binding.patient_name),
-            reply_markup=keyboards.main_menu(settings),
-        )
+    if binding is None:
+        await message.answer(texts.START_NEED_CODE)
         return
-    await message.answer(texts.START_NEED_CODE)
+    text = (
+        texts.START_ALREADY_LINKED_SEVERAL.format(
+            children=_names(bindings), active=binding.first_name
+        )
+        if len(bindings) >= 2
+        else texts.START_ALREADY_LINKED.format(patient_name=binding.patient_name)
+    )
+    await message.answer(text, reply_markup=await menu(store, message.chat.id, settings))
 
 
 @router.message(Command("help"))
-async def help_command(message: Message, settings: BotSettings) -> None:
+async def help_command(message: Message, settings: BotSettings, store: BindingStore) -> None:
     """Единственное место, где написано, что бот умеет.
 
     И ответы на вопросы, которые обязательно возникнут: «как исправить
@@ -78,7 +86,7 @@ async def help_command(message: Message, settings: BotSettings) -> None:
         return
     await message.answer(
         texts.HELP.format(app_line=texts.HELP_APP_LINE if settings.has_miniapp else ""),
-        reply_markup=keyboards.main_menu(settings),
+        reply_markup=await menu(store, message.chat.id, settings),
     )
 
 
@@ -124,7 +132,10 @@ async def _link(
         )
     except BotApiError as exc:
         if exc.status == 409:
-            await message.answer(_conflict_text(exc), reply_markup=_menu_if_linked(exc, settings))
+            await message.answer(
+                _conflict_text(exc),
+                reply_markup=await _menu_if_linked(exc, store, message, settings),
+            )
             return
         if exc.status == 404:
             await message.answer(texts.LINK_CODE_INVALID)
@@ -132,6 +143,8 @@ async def _link(
         await message.answer(texts.API_UNAVAILABLE)
         return
 
+    # Привязка ребёнка добавляется к уже имеющимся и становится выбранной: код
+    # только что прислан ради него (ADR-0048).
     await store.put(
         message.chat.id,
         Binding(
@@ -139,21 +152,34 @@ async def _link(
             secret=verified.secret,
             patient_id=verified.patient_id,
             patient_name=verified.patient_name,
+            patient_first_name=verified.patient_first_name,
         ),
     )
     await message.answer(
-        welcome(verified, settings),
-        reply_markup=keyboards.main_menu(settings),
+        welcome(verified, settings, children=await store.all(message.chat.id)),
+        reply_markup=await menu(store, message.chat.id, settings),
     )
 
 
-def welcome(verified: LinkVerified, settings: BotSettings) -> str:
+def welcome(
+    verified: LinkVerified, settings: BotSettings, *, children: list[Binding] | None = None
+) -> str:
     """Приветствие после привязки: что у семьи теперь есть и где.
 
     Строка про приложение — только когда кнопка приложения есть, как в /help.
     Строка про кабинет — всегда, но разная: семье от врача кабинет ещё надо
     включить, семья с кабинетом получает просто адрес.
+
+    Второй ребёнок в том же чате (ADR-0048) — другое приветствие: о приложении
+    и кабинете семья уже знает, а знать ей нужно одно — как переключаться.
     """
+
+    if children is not None and len(children) >= 2:
+        return texts.LINK_SUCCESS_SEVERAL.format(
+            patient_name=verified.patient_name,
+            children=_names(children),
+            switch=texts.BTN_CHILD_PREFIX,
+        )
 
     lines = [texts.LINK_SUCCESS.format(patient_name=verified.patient_name)]
     if settings.has_miniapp:
@@ -176,16 +202,84 @@ def _conflict_text(exc: BotApiError) -> str:
     сотрудника» — API называет сам, и его сообщение уже русское и конкретное.
     """
 
-    reason = exc.details.get("reason")
-    if reason == "already_here":
+    # «Чат занят другим ребёнком» больше не бывает: код другого ребёнка его
+    # добавляет (ADR-0048).
+    if exc.details.get("reason") == "already_here":
         return texts.LINK_ALREADY_HERE
-    if reason == "chat_taken":
-        return texts.LINK_CHAT_BUSY
-    return exc.message or texts.LINK_CHAT_BUSY
+    return exc.message or texts.API_UNAVAILABLE
 
 
-def _menu_if_linked(exc: BotApiError, settings: BotSettings) -> ReplyKeyboardMarkup | None:
+async def _menu_if_linked(
+    exc: BotApiError, store: BindingStore, message: Message, settings: BotSettings
+) -> ReplyKeyboardMarkup | None:
     # «Уже здесь» — значит, чат рабочий: сразу показать, что можно делать.
     if exc.details.get("reason") == "already_here":
-        return keyboards.main_menu(settings)
+        return await menu(store, message.chat.id, settings)
     return None
+
+
+def _names(bindings: list[Binding]) -> str:
+    return ", ".join(binding.first_name for binding in bindings)
+
+
+# --- Выбор ребёнка (ADR-0048) -------------------------------------------
+#
+# Обработчики живут в этом роутере, а не в сценариях: он подключён первым, и
+# кнопка выбора побеждает незаконченный ввод так же, как кнопки сценариев.
+# Выбор закрывает начатый сценарий: запись, начатая про одного ребёнка, не
+# должна уйти другому — шаги сценариев привязаны к состоянию, и после
+# `state.clear()` ни один из них не сработает.
+
+
+@router.message(F.text.startswith(texts.BTN_CHILD_PREFIX))
+async def child_menu(
+    message: Message, state: FSMContext, store: BindingStore, settings: BotSettings
+) -> None:
+    if message.chat.type != "private":
+        return
+    await state.clear()
+    bindings = await store.all(message.chat.id)
+    active = await store.get(message.chat.id)
+    if active is None:
+        await message.answer(texts.NOT_LINKED)
+        return
+    if len(bindings) < 2:
+        await message.answer(
+            texts.CHILD_ONLY_ONE.format(name=active.first_name),
+            reply_markup=await menu(store, message.chat.id, settings),
+        )
+        return
+    await message.answer(
+        texts.CHILD_ASK.format(active=active.first_name),
+        reply_markup=keyboards.children(
+            [(str(b.patient_id), b.first_name) for b in bindings], active=str(active.patient_id)
+        ),
+    )
+
+
+@router.callback_query(F.data.startswith(keyboards.CHILD_PREFIX))
+async def child_chosen(
+    callback: CallbackQuery, state: FSMContext, store: BindingStore, settings: BotSettings
+) -> None:
+    await callback.answer()
+    message = callback.message
+    # Исключением «недоступного», а не проверкой на `Message` — так же, как
+    # `scenarios._answerable`: иначе поддельное сообщение в тестах уводило бы
+    # обработчик в ранний возврат.
+    if message is None or isinstance(message, InaccessibleMessage):
+        return
+    await state.clear()
+    try:
+        patient_id = uuid.UUID((callback.data or "").removeprefix(keyboards.CHILD_PREFIX))
+    except ValueError:
+        return
+    chosen = await store.select(message.chat.id, patient_id)
+    if chosen is None:
+        await message.answer(
+            texts.CHILD_GONE, reply_markup=await menu(store, message.chat.id, settings)
+        )
+        return
+    await message.answer(
+        texts.CHILD_CHOSEN.format(name=chosen.first_name),
+        reply_markup=await menu(store, message.chat.id, settings),
+    )

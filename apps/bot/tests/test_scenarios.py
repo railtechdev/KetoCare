@@ -20,7 +20,7 @@ from bot.api import TRANSPORT_ERROR, BotApiError, LinkRevokedError
 from bot.config import BotSettings
 from bot.handlers import fallback, scenarios, start
 
-from .conftest import CHAT_ID, LINK_ID, PATIENT_ID, PATIENT_NAME, SECRET
+from .conftest import CHAT_ID, LINK_ID, PATIENT_ID, PATIENT_NAME, SECRET, FakeStore
 
 # Настройки нужны шагу «когда»: время вводится по местным часам семьи. Пояс
 # задан явно: `BotSettings` читает его из переменной `TZ`, и на машине с другим
@@ -184,17 +184,6 @@ class TestLinking:
         # Не только «у врача»: код мог прислать родитель ребёнка (ADR-0042).
         assert "родителя" in message.last
         assert await store.get(CHAT_ID) is None
-
-    @pytest.mark.asyncio
-    async def test_chat_with_another_child_explains_the_way_out(self, api, store):
-        """Один человек — один ребёнок в боте; второй — через кабинет, и это сказано."""
-        api.verify_error = BotApiError("conflict", "занято", 409, {"reason": "chat_taken"})
-        message = FakeMessage()
-
-        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
-
-        assert message.last == texts.LINK_CHAT_BUSY
-        assert "Вход в кабинет" in message.last
 
     @pytest.mark.asyncio
     async def test_code_for_the_same_child_is_not_an_error(self, api, store):
@@ -428,7 +417,7 @@ class TestCancelAndFailures:
         await state.set_state(scenarios.Ketones.value)
         callback = FakeCallback(data=keyboards.CANCEL_DATA)
 
-        await scenarios.cancel(callback, state, SETTINGS)
+        await scenarios.cancel(callback, state, SETTINGS, FakeStore())
 
         assert await state.get_state() is None
         assert callback.message.last == texts.CANCELLED
@@ -787,7 +776,7 @@ class TestMeal:
         await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
 
         callback = FakeCallback(data=keyboards.DONE_DATA, message=message)
-        await scenarios.meal_done(callback, state, SETTINGS)
+        await scenarios.meal_done(callback, state, SETTINGS, FakeStore())
 
         assert message.last == texts.MENU_PROMPT
         assert texts.CANCELLED not in message.last
@@ -1008,20 +997,20 @@ class TestHelp:
     @pytest.mark.asyncio
     async def test_help_promises_the_app_only_when_it_exists(self):
         message = FakeMessage(text="/help")
-        await start.help_command(message, SETTINGS)
+        await start.help_command(message, SETTINGS, FakeStore())
         assert "Приложение" not in message.last
 
         with_app = BotSettings(
             bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
         )
         message = FakeMessage(text="/help")
-        await start.help_command(message, with_app)
+        await start.help_command(message, with_app, FakeStore())
         assert "Приложение" in message.last
 
     @pytest.mark.asyncio
     async def test_help_is_silent_in_groups(self):
         message = FakeMessage(text="/help", chat=FakeChat(id=-100123, type="supergroup"))
-        await start.help_command(message, SETTINGS)
+        await start.help_command(message, SETTINGS, FakeStore())
         assert message.answers == []
 
 
@@ -1087,7 +1076,7 @@ class TestCancelOnOldMessage:
                 chat=Chat(id=CHAT_ID, type="private"), message_id=1, date=0
             ),
         )
-        await scenarios.cancel(callback, state, SETTINGS)
+        await scenarios.cancel(callback, state, SETTINGS, FakeStore())
 
         assert callback.answered
         assert await state.get_state() is None

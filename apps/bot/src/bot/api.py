@@ -71,6 +71,9 @@ class LinkVerified:
     #: Адрес кабинета и есть ли туда вход — для приветствия после привязки.
     web_url: str
     has_web_credentials: bool
+    #: Имя без фамилии — для переключателя и эха, когда детей в чате двое
+    #: (ADR-0048). Пусто у сервера до ADR-0048: тогда имя выводит `Binding`.
+    patient_first_name: str = ""
 
 
 @dataclass(slots=True)
@@ -123,6 +126,7 @@ class BotApi:
             secret=payload["secret"],
             web_url=payload["web_url"],
             has_web_credentials=bool(payload["has_web_credentials"]),
+            patient_first_name=str(payload.get("patient_first_name") or ""),
         )
 
     async def _token(self, *, link_id: uuid.UUID, secret: str) -> str:

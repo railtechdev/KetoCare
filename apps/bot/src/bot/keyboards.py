@@ -13,7 +13,7 @@ from . import texts
 from .config import BotSettings
 
 
-def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
+def main_menu(settings: BotSettings, *, child: str | None = None) -> ReplyKeyboardMarkup:
     """Главное меню (раздел 7.2 ТЗ).
 
     ReplyKeyboard, а не инлайновая: она всегда под рукой и не исчезает после
@@ -35,6 +35,11 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
     `tgWebAppVersion`, `tgWebAppPlatform`, `tgWebAppThemeParams` и ни одного
     `tgWebAppData`. Mini App живёт в кнопке меню рядом с полем ввода
     (`main._setup_menu_button`) — там подпись выдаётся.
+
+    `child` — имя выбранного ребёнка, когда чат ведёт нескольких (ADR-0048).
+    Тогда последней строкой стоит «👶 Ребёнок: Аня»: кнопка и показывает, чей
+    дневник ведётся, и открывает выбор. У чата одного ребёнка её нет — меню
+    остаётся тем, к которому семья привыкла.
     """
 
     keyboard = [
@@ -43,6 +48,8 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
         [KeyboardButton(text=texts.BTN_MEAL), KeyboardButton(text=texts.BTN_MEDICATION)],
         [KeyboardButton(text=texts.BTN_WELLBEING)],
     ]
+    if child:
+        keyboard.append([KeyboardButton(text=texts.BTN_CHILD.format(name=child))])
 
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
@@ -52,6 +59,23 @@ def main_menu(settings: BotSettings) -> ReplyKeyboardMarkup:
 
 
 CANCEL_DATA = "cancel"
+CHILD_PREFIX = "child:"
+
+
+def children(items: list[tuple[str, str]], *, active: str) -> InlineKeyboardMarkup:
+    """Кнопка на каждого ребёнка чата; выбранный помечен галочкой (ADR-0048)."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"✓ {name}" if patient_id == active else name,
+                    callback_data=f"{CHILD_PREFIX}{patient_id}",
+                )
+            ]
+            for patient_id, name in items
+        ]
+    )
 
 
 def _cancel_row() -> list[InlineKeyboardButton]:
