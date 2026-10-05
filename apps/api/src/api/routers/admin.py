@@ -31,6 +31,8 @@ from ..schemas_admin import (
     AdminUserRead,
     AdminUserUpdate,
     AuditLogRead,
+    CareTransfer,
+    CareTransferred,
     DictionaryEntryCreate,
     DictionaryEntryRead,
     DictionaryEntryUpdate,
@@ -140,6 +142,34 @@ async def update_user(
         ip=client_address(request),
     )
     return UserRead.model_validate(updated)
+
+
+@router.post(
+    "/users/{user_id}/transfer-care",
+    response_model=CareTransferred,
+    summary="Передать пациентов специалиста коллеге",
+)
+async def transfer_care(
+    user_id: Annotated[uuid.UUID, Path()],
+    payload: CareTransfer,
+    request: Request,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> CareTransferred:
+    """Все дети, которых ведёт этот специалист, переходят коллеге (ADR-0045).
+
+    Нужна, когда специалист ушёл: отключить его нельзя, пока у детей нет
+    другого ведущего. Клинические данные администратору не открываются.
+    """
+
+    transferred = await admin_service.transfer_care(
+        session,
+        actor=user,
+        from_user_id=user_id,
+        to_user_id=payload.to_user_id,
+        ip=client_address(request),
+    )
+    return CareTransferred(transferred=transferred)
 
 
 @router.post(

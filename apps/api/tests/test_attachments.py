@@ -13,7 +13,7 @@ from datetime import date
 import pytest
 from sqlalchemy import select
 
-from core.models import Product, ProductCategory
+from core.models import AuditLog, Product, ProductCategory
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
 
@@ -318,26 +318,66 @@ class TestDelete:
         listed = await client.get(url(patient.id), headers=auth_headers(doctor))
         assert listed.json() == []
 
-    async def test_another_specialist_cannot_delete(
+    async def test_leading_specialist_removes_a_misfiled_document(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        doctor, patient = await _linked_doctor(session, make_user, make_patient)
-        colleague = await make_user(UserRole.DOCTOR)
-        await patients_repo.link_doctor(session, doctor_id=colleague.id, patient_id=patient.id)
+        """Загрузившая семья ушла — ошибочный документ убирает ведущий врач (C7).
 
+        Прежде (ADR-0013) чужой документ не убирал никто, и выписка чужого
+        ребёнка, вложенная по ошибке, оставалась в карте до полного стирания.
+        """
+        doctor, patient = await _linked_doctor(session, make_user, make_patient)
+        parent = await make_user(UserRole.PARENT)
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        created = await client.post(
+            url(patient.id), files=upload(PNG), headers=auth_headers(parent)
+        )
+
+        response = await client.delete(
+            f"{url(patient.id)}/{created.json()['id']}", headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 204
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "delete",
+                AuditLog.entity == "attachments",
+                AuditLog.user_id == doctor.id,
+            )
+        )
+        assert entry is not None and entry.before == {"uploaded_by": str(parent.id)}
+
+    async def test_specialist_who_does_not_lead_cannot_delete(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Право ведущего специалиста — только у ведущего: роль сама ничего не открывает."""
+        doctor, patient = await _linked_doctor(session, make_user, make_patient)
+        stranger = await make_user(UserRole.DOCTOR)
         created = await client.post(
             url(patient.id), files=upload(PNG), headers=auth_headers(doctor)
         )
 
-        # Решение заказчика (ADR-0013): чужой документ из карты не убирает
-        # никто, даже другой ведущий специалист.
         response = await client.delete(
-            f"{url(patient.id)}/{created.json()['id']}", headers=auth_headers(colleague)
+            f"{url(patient.id)}/{created.json()['id']}", headers=auth_headers(stranger)
         )
+
         assert response.status_code == 403
 
-        listed = await client.get(url(patient.id), headers=auth_headers(colleague))
-        assert len(listed.json()) == 1
+    async def test_family_cannot_remove_the_doctors_document(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor, patient = await _linked_doctor(session, make_user, make_patient)
+        parent = await make_user(UserRole.PARENT)
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        created = await client.post(
+            url(patient.id), files=upload(PNG), headers=auth_headers(doctor)
+        )
+
+        response = await client.delete(
+            f"{url(patient.id)}/{created.json()['id']}", headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 403
 
     async def test_deleted_attachment_is_not_downloadable(
         self, client, session, make_user, make_patient, auth_headers

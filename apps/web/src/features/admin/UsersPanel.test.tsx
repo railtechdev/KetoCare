@@ -124,6 +124,55 @@ describe("отключение специалиста", () => {
     expect(await screen.findByText(/ведёт только он/)).toBeInTheDocument();
   });
 
+  it("передаёт детей ушедшего специалиста коллеге — выход из тупика (ADR-0045)", async () => {
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        items: [
+          ...USERS.items,
+          {
+            id: "u2",
+            full_name: "Иван Врач",
+            email: "ivan@example.com",
+            role: "doctor",
+            is_active: true,
+            created_at: "2026-08-01T10:00:00Z",
+            sole_patients: 0,
+          },
+        ],
+        total: 2,
+      },
+    });
+    (api.POST as Mock).mockResolvedValue({ data: { transferred: 2 } });
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Изменить" }))[0]!,
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Кому передать"),
+      "u2",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Передать пациентов" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Передать всех пациентов Ольга Диетолог — Иван Врач?",
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getAllByRole("button", { name: "Передать пациентов" }).at(-1)!,
+    );
+
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/admin/users/{user_id}/transfer-care",
+        { params: { path: { user_id: "u1" } }, body: { to_user_id: "u2" } },
+      ),
+    );
+  });
+
   it("панель временного пароля: фокус на «Скопировать», Enter её не закрывает", async () => {
     // Показать пароль второй раз нельзя. Кнопка закрытия стоит в шапке панели
     // первой, и фокус на ней превращал привычный Enter в потерю пароля.

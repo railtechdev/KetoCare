@@ -179,3 +179,17 @@ class AuditLogRead(BaseModel):
     payload_hidden: bool
     ip: str | None
     created_at: datetime
+
+
+class CareTransfer(BaseModel):
+    """Кому передать детей ушедшего специалиста (ADR-0045)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    to_user_id: uuid.UUID
+
+
+class CareTransferred(BaseModel):
+    """Сколько детей передано. Кого именно — администратору не показывается."""
+
+    transferred: int

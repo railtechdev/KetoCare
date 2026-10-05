@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import AuditLog, KetoneMethodDict, SeizureType, User
 from core.models.enums import UserRole
+from core.repositories import access_codes as access_codes_repo
 from core.repositories import audit as audit_repo
 from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import dictionaries as dictionaries_repo
@@ -138,8 +139,8 @@ async def update_user(
             raise ApiError(
                 ErrorCode.CONFLICT,
                 "У этого специалиста есть пациенты, которых больше никто не ведёт "
-                f"({orphans}). Сначала передайте их коллеге — это делает врач в "
-                "карте пациента.",
+                f"({orphans}). Сначала передайте их коллеге — кнопка «Передать "
+                "пациентов» рядом с учётной записью.",
             )
 
     before = _account_snapshot(user)
@@ -156,6 +157,67 @@ async def update_user(
         ip=ip,
     )
     return updated
+
+
+async def transfer_care(
+    session: AsyncSession,
+    *,
+    actor: CurrentUser,
+    from_user_id: uuid.UUID,
+    to_user_id: uuid.UUID,
+    ip: str | None,
+) -> int:
+    """Передать всех детей ушедшего специалиста коллеге (ADR-0045).
+
+    Прежде пациентов ушедшего, заболевшего или уволенного врача было некому
+    принять: снять последнего ведущего нельзя, отключить его учётную запись
+    администратор не мог (дети остались бы без ведущего), а добавить коллегу
+    мог только сам ушедший. Учётная запись оставалась живой с доступом к данным
+    детей (аудит блокеров, C1). Решение о доступе — наше, не медицинское.
+
+    Администратор клинических данных не видит и здесь: ответ — только число
+    детей. Видит их новый ведущий, в своём списке.
+    """
+
+    if from_user_id == to_user_id:
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Передать пациентов самому себе нельзя.")
+    source = await users_repo.get(session, from_user_id)
+    target = await users_repo.get(session, to_user_id)
+    if source is None or source.role not in _CARE_ROLES:
+        raise ApiError(
+            ErrorCode.NOT_FOUND, "Специалист, от которого передаются пациенты, не найден."
+        )
+    if target is None or not target.is_active or target.role not in _CARE_ROLES:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Принять пациентов может только активный врач или диетолог.",
+        )
+
+    patient_ids = await patients_repo.list_led_patient_ids(
+        session, doctor_id=source.id, lock_with=target.id
+    )
+    for patient_id in patient_ids:
+        await patients_repo.link_doctor(session, doctor_id=target.id, patient_id=patient_id)
+        await patients_repo.unlink_doctor(session, doctor_id=source.id, patient_id=patient_id)
+        # Коды, выданные ушедшим, гаснут: активировать их всё равно нельзя, а
+        # живыми в журнале они вводят в заблуждение нового ведущего.
+        await access_codes_repo.revoke_pending_of(
+            session, patient_id=patient_id, issued_by=source.id
+        )
+
+        # Запись на каждого ребёнка, с ним в `entity_id` — как у прочих записей
+        # ведения: стирание пациента (`erase_patient`) чистит журнал по нему.
+        await audit_repo.write_audit_log(
+            session,
+            user_id=actor.id,
+            action="transfer_care",
+            entity="doctor_patient",
+            entity_id=patient_id,
+            ip=ip,
+            before={"doctor_id": str(source.id)},
+            after={"doctor_id": str(target.id)},
+        )
+    return len(patient_ids)
 
 
 async def reset_totp(

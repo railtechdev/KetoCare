@@ -183,12 +183,12 @@ export const uz: Dict = {
     telegram: {
       eyebrow: "Telegram",
       h2: "Yozuv — to‘g‘ridan-to‘g‘ri messenjerdan",
-      lead: "Keton o‘lchovi — botga bitta xabar. Bot va mini-ilova — platformaning bir qismi: hammasi o‘sha kundalikka tushadi va shifokorga ko‘rinadi. Bot bosqichma-bosqich chiqarilmoqda, shuning uchun quyidagi stsenariylarning bir qismi allaqachon ishlaydi, bir qismi esa tayyorlanmoqda.",
+      lead: "Keton o‘lchovi — botga bitta xabar. Bot va mini-ilova — platformaning bir qismi: hammasi o‘sha kundalikka tushadi va shifokorga ko‘rinadi.",
       items: [
-        "Ketonlar, vazn va o‘zini his qilish — tugmalar bilan 2–4 marta bosib",
-        "Tayyorlanmoqda: ovqat erkin matn bilan — sun’iy intellekt tahlil qiladi, siz tasdiqlaysiz",
-        "Tayyorlanmoqda: o‘lchovlar va dorilar haqida eslatmalar",
-        "Tayyorlanmoqda: ota-ona kabineti Telegram ichidagi mini-ilova sifatida",
+        "Ketonlar, vazn, o‘zini his qilish va tutqanoqlar — tugmalar bilan 2–4 marta bosib",
+        "Ovqatni erkin matn bilan yozing — sun’iy intellekt tahlil qiladi, siz tasdiqlaysiz",
+        "O‘lchovlar va dorilar haqida eslatmalar — oiladagi barcha kattalarga",
+        "Telegram ichidagi mini-ilova: kun rejasi, kalkulyator, retseptlar, kundalik va «Yaqinlar»",
       ],
       botLabel: "bot",
       replay: "Yana bir bor",

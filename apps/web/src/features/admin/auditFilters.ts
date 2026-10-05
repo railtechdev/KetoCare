@@ -88,6 +88,7 @@ export const AUDIT_ACTIONS = [
   "erase_patient",
   "grant_patient_access",
   "revoke_patient_access",
+  "transfer_care",
   "link_parent",
   "unlink_parent",
   "menu_day_removed",

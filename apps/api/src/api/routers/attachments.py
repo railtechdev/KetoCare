@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
 from core.models import Attachment
-from core.models.enums import AttachmentDocKind, AttachmentOwnerKind
+from core.models.enums import AttachmentDocKind, AttachmentOwnerKind, UserRole
 from core.repositories import attachments as attachments_repo
 from core.repositories import audit as audit_repo
 
@@ -28,6 +28,9 @@ from ..errors import ApiError, ErrorCode
 from ..ratelimit import ATTACHMENT_RATE_LIMIT, limiter
 from ..schemas_attachments import AttachmentRead
 from ..services import attachments as files_service
+
+#: Кто отвечает за карту и потому убирает из неё ошибочный документ (C7).
+CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 
 router = APIRouter(prefix="/patients/{patient_id}/attachments", tags=["attachments"])
 
@@ -164,18 +167,23 @@ async def delete_attachment(
     session: SessionDep,
     user: PatientAccessDep,
 ) -> Response:
-    """Удаляет вложение, если его загрузил тот же человек.
+    """Удаляет вложение: загрузивший — своё, ведущий специалист — любое.
 
-    Решение заказчика (ADR-0013): родитель убирает свою ошибку, врач — свою,
-    чужой документ из карты не убирает никто. Удаление мягкое (правило 4).
+    Решение заказчика (ADR-0013) звучало «чужой документ из карты не убирает
+    никто». Это оставляло тупик: загрузивший ушёл (взрослому закрыли доступ,
+    специалиста сняли с пациента), и ошибочно вложенный документ — в том числе
+    выписку чужого ребёнка — не мог убрать никто, кроме полного стирания
+    пациента (аудит блокеров, C7). Ведущий специалист отвечает за карту и теперь
+    убирает такой документ сам. Семья чужие документы по-прежнему не трогает.
+    Удаление мягкое (правило 4), в журнале — кто загрузил.
     """
 
     attachment = await _owned_attachment(session, patient_id, attachment_id)
 
-    if attachment.uploaded_by != user.id:
+    if attachment.uploaded_by != user.id and user.role not in CARE_ROLES:
         raise ApiError(
             ErrorCode.FORBIDDEN,
-            "Удалить документ может только тот, кто его загрузил.",
+            "Удалить документ может тот, кто его загрузил, или ведущий специалист.",
         )
 
     await attachments_repo.soft_delete(session, attachment=attachment)
@@ -187,6 +195,7 @@ async def delete_attachment(
         entity="attachments",
         entity_id=attachment.id,
         ip=client_address(request),
+        before={"uploaded_by": str(attachment.uploaded_by)},
     )
     return Response(status_code=204)
 

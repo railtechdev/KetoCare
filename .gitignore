@@ -55,3 +55,6 @@ graphify-out/
 apps/e2e/test-results/
 apps/e2e/playwright-report/
 apps/e2e/.last-run.json
+
+# Рабочие копии агентов Claude Code (isolation: worktree) — не часть репозитория
+.claude/worktrees/

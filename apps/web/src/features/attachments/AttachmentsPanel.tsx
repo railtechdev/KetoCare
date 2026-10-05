@@ -185,7 +185,12 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
                 </span>
               )}
 
-              {item.uploaded_by === session?.userId && (
+              {/* Своё убирает загрузивший, любое — ведущий специалист
+                  (аудит блокеров, C7): иначе документ ушедшего взрослого
+                  оставался в карте навсегда. Правило — то же, что на сервере. */}
+              {(item.uploaded_by === session?.userId ||
+                session?.role === "doctor" ||
+                session?.role === "dietitian") && (
                 <ConfirmDialog
                   trigger={
                     <Button
