@@ -2,14 +2,14 @@ import {
   BookOpen,
   Bot,
   Calculator,
-  ChartLine,
   House,
+  NotebookPen,
   UtensilsCrossed,
 } from "lucide-react";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Skeleton } from "@ketocare/ui";
+import { Skeleton, Toaster } from "@ketocare/ui";
 import { TabBar, type TabBarItem } from "./components/TabBar";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { MenuScreen } from "./features/menu/MenuScreen";
@@ -18,8 +18,7 @@ import type { Session } from "./features/session/useSession";
 import { webApp } from "./lib/telegram";
 import { applyTelegramTheme, watchTelegramTheme } from "./lib/theme";
 
-type TabId =
-  "home" | "menu" | "calculator" | "recipes" | "charts" | "assistant";
+type TabId = "home" | "menu" | "calculator" | "recipes" | "diary" | "assistant";
 
 /**
  * Mini App: кабинет родителя внутри Telegram (раздел 9 ТЗ).
@@ -43,9 +42,9 @@ const CalculatorScreen = lazy(() =>
     default: m.CalculatorScreen,
   })),
 );
-const ChartsScreen = lazy(() =>
-  import("./features/charts/ChartsScreen").then((m) => ({
-    default: m.ChartsScreen,
+const DiaryScreen = lazy(() =>
+  import("./features/diary/DiaryScreen").then((m) => ({
+    default: m.DiaryScreen,
   })),
 );
 const RecipesScreen = lazy(() =>
@@ -75,6 +74,8 @@ export function App() {
   return (
     <div className="flex min-h-dvh flex-col bg-background pt-[var(--safe-top,0px)]">
       <SessionGate>{(session) => <Screens session={session} />}</SessionGate>
+      {/* Подтверждения действий («Запись исправлена») — тостами кита. */}
+      <Toaster position="top-center" />
     </div>
   );
 }
@@ -88,7 +89,9 @@ function Screens({ session }: { session: Session }) {
     { id: "menu", label: t("tabs.menu"), icon: UtensilsCrossed },
     { id: "calculator", label: t("tabs.calculator"), icon: Calculator },
     { id: "recipes", label: t("tabs.recipes"), icon: BookOpen },
-    { id: "charts", label: t("tabs.charts"), icon: ChartLine },
+    // Не новая вкладка, а прежняя «Динамика», ставшая дневником: седьмой
+    // в полосе места нет (ADR-0044).
+    { id: "diary", label: t("tabs.diary"), icon: NotebookPen },
     // Шестая и последняя: больше в нижнюю полосу не помещается — на 360 px
     // это по 60 px на вкладку, и подпись перестаёт читаться.
     { id: "assistant", label: t("tabs.assistant"), icon: Bot },
@@ -105,7 +108,7 @@ function Screens({ session }: { session: Session }) {
           {tab === "menu" && <MenuScreen session={session} />}
           {tab === "calculator" && <CalculatorScreen session={session} />}
           {tab === "recipes" && <RecipesScreen />}
-          {tab === "charts" && <ChartsScreen session={session} />}
+          {tab === "diary" && <DiaryScreen session={session} />}
           {tab === "assistant" && <AssistantScreen session={session} />}
         </Suspense>
       </div>
