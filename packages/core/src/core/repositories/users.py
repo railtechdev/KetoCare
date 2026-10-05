@@ -174,3 +174,20 @@ async def names_by_ids(
 
     rows = await session.execute(select(User.id, User.full_name).where(User.id.in_(list(user_ids))))
     return {row.id: row.full_name for row in rows}
+
+
+async def languages_by_ids(
+    session: AsyncSession, *, user_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, str | None]:
+    """Сохранённый язык каждого человека — одним запросом (ADR-0052).
+
+    Нужна рассылкам воркера: сообщение в чат уходит на языке взрослого, чей
+    это чат. `None` — язык не выбран; что из этого следует, решает вызывающий
+    (`core.languages.effective`).
+    """
+
+    if not user_ids:
+        return {}
+
+    rows = await session.execute(select(User.id, User.language).where(User.id.in_(list(user_ids))))
+    return {row.id: row.language for row in rows}

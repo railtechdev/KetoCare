@@ -69,7 +69,10 @@ export {
   formatDose,
   formatMeasured,
   formatWeight,
+  formatLocale,
+  setFormatLanguage,
 } from "./lib/format";
+export type { FormatLanguage } from "./lib/format";
 
 export { RatioBadge } from "./components/RatioBadge";
 export type { RatioBadgeProps } from "./components/RatioBadge";

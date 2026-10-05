@@ -31,7 +31,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 
-from .. import keyboards, texts
+from .. import i18n, keyboards, texts
 from ..api import BotApi, BotApiError, LinkRevokedError
 from ..config import BotSettings
 from ..deps import (
@@ -195,7 +195,7 @@ def _parse_number(raw: str) -> Decimal | None:
 # смена намерения, а не ошибка формата.
 
 
-@router.message(F.text == texts.BTN_SEIZURE)
+@router.message(F.text.in_(i18n.variants("BTN_SEIZURE")))
 async def seizure_start(
     message: Message,
     state: FSMContext,
@@ -245,7 +245,7 @@ async def seizure_start(
     )
 
 
-@router.message(F.text == texts.BTN_KETONES)
+@router.message(F.text.in_(i18n.variants("BTN_KETONES")))
 async def ketones_start(message: Message, state: FSMContext, store: BindingStore) -> None:
     await state.clear()
     if await begin_scenario(message, state, store) is None:
@@ -257,7 +257,7 @@ async def ketones_start(message: Message, state: FSMContext, store: BindingStore
     )
 
 
-@router.message(F.text == texts.BTN_WEIGHT)
+@router.message(F.text.in_(i18n.variants("BTN_WEIGHT")))
 async def weight_start(message: Message, state: FSMContext, store: BindingStore) -> None:
     await state.clear()
     if await begin_scenario(message, state, store) is None:
@@ -269,7 +269,7 @@ async def weight_start(message: Message, state: FSMContext, store: BindingStore)
     )
 
 
-@router.message(F.text == texts.BTN_MEDICATION)
+@router.message(F.text.in_(i18n.variants("BTN_MEDICATION")))
 async def medication_start(
     message: Message,
     state: FSMContext,
@@ -320,7 +320,7 @@ async def medication_start(
     )
 
 
-@router.message(F.text == texts.BTN_MEAL)
+@router.message(F.text.in_(i18n.variants("BTN_MEAL")))
 async def meal_start(
     message: Message,
     state: FSMContext,
@@ -356,7 +356,7 @@ async def meal_start(
     )
 
 
-@router.message(F.text == texts.BTN_WELLBEING)
+@router.message(F.text.in_(i18n.variants("BTN_WELLBEING")))
 async def wellbeing_start(message: Message, state: FSMContext, store: BindingStore) -> None:
     await state.clear()
     if await begin_scenario(message, state, store) is None:
@@ -736,7 +736,9 @@ def _seizure_count(data: dict[str, Any]) -> int:
 def _seizure_summary(data: dict[str, Any], duration: str) -> str:
     count = _seizure_count(data)
     return texts.SEIZURE_SAVED.format(
-        type=data.get("seizure_type_names", {}).get(data["seizure_type_id"], "приступ"),
+        type=data.get("seizure_type_names", {}).get(
+            data["seizure_type_id"], texts.SEIZURE_UNNAMED_TYPE
+        ),
         count=count,
         duration=texts.SEIZURE_SAVED_LONGEST.format(duration=duration) if count > 1 else duration,
     )
@@ -783,7 +785,8 @@ async def seizure_duration(callback: CallbackQuery, state: FSMContext) -> None:
             "count": _seizure_count(data),
         },
         summary=_seizure_summary(
-            data, data.get("seizure_duration_names", {}).get(option_id, "длительность указана")
+            data,
+            data.get("seizure_duration_names", {}).get(option_id, texts.SEIZURE_UNNAMED_DURATION),
         ),
     )
 
@@ -1068,7 +1071,9 @@ def _summary(items: list[dict[str, Any]]) -> str:
     """Состав одной строкой — для подтверждения записи."""
 
     return ", ".join(
-        f"{item.get('name_ru') or texts.MEAL_UNKNOWN_DISH} {_grams(item.get('grams'))} г"
+        texts.MEAL_TEXT_SUMMARY_ITEM.format(
+            name=item.get("name_ru") or texts.MEAL_UNKNOWN_DISH, grams=_grams(item.get("grams"))
+        )
         for item in items
     )
 

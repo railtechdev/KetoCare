@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   formatDose,
@@ -11,6 +11,10 @@ import {
   formatDayTime,
   formatRatio,
   formatWeight,
+  formatFactor,
+  formatMeasured,
+  formatLocale,
+  setFormatLanguage,
 } from "./format";
 
 describe("formatRatio", () => {
@@ -97,5 +101,64 @@ describe("formatDose", () => {
     expect(formatDose(0.125)).toBe("0,125");
     expect(formatDose(1500)).toBe("1500");
     expect(formatDose(300)).toBe("300");
+  });
+});
+
+describe("язык записи (ADR-0052)", () => {
+  afterEach(() => {
+    setFormatLanguage("ru");
+    vi.restoreAllMocks();
+  });
+
+  it("числа не зависят от языка: всегда русская запись", () => {
+    // Во встроенном браузере Telegram бывает `Intl` без данных для `uz`: он
+    // молча берёт локаль устройства и печатает «1,200» — «одна целая две
+    // десятых». Поэтому числа языка не берут вовсе — это и проверяется:
+    // ни один помощник не просит у `Intl` другой локали.
+    const numberFormat = vi.spyOn(Intl, "NumberFormat");
+    setFormatLanguage("uz");
+
+    const printed = [
+      formatKcal(1200),
+      formatGrams(3.2),
+      formatMass(50),
+      formatMeasured(3.2),
+      formatWeight(18.25),
+      formatFactor(1.5),
+      formatDose(0.125),
+      formatNumber(4, 1),
+    ];
+
+    expect(printed).toEqual([
+      "1\u00a0200",
+      "3,2",
+      "50",
+      "3,2",
+      "18,25",
+      "1,5",
+      "0,125",
+      "4,0",
+    ]);
+    expect(numberFormat.mock.calls.map((call) => call[0])).toEqual(
+      Array(printed.length).fill("ru-RU"),
+    );
+  });
+
+  it("цифровые даты — через точку на обоих языках", () => {
+    setFormatLanguage("uz");
+    expect(formatDayTime(new Date(2026, 9, 5, 14, 30))).toBe("05.10, 14:30");
+  });
+
+  it("локаль для дат с месяцем — узбекская латиница", () => {
+    setFormatLanguage("uz");
+    expect(formatLocale()).toBe("uz-Latn-UZ");
+    setFormatLanguage("ru");
+    expect(formatLocale()).toBe("ru-RU");
+  });
+
+  it("нет у среды узбекского — месяц по-русски, а не на языке устройства", () => {
+    vi.spyOn(Intl.DateTimeFormat, "supportedLocalesOf").mockReturnValue([]);
+    setFormatLanguage("uz");
+    expect(formatLocale()).toBe("ru-RU");
   });
 });

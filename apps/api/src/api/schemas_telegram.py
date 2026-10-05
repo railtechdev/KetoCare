@@ -7,6 +7,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.languages import Language
+
 
 class LinkVerified(BaseModel):
     """Ответ боту после успешной привязки по коду доступа (ADR-0040).
@@ -32,6 +34,9 @@ class LinkVerified(BaseModel):
     #: У бота своей переменной с адресом нет и не будет: адрес знает сервер.
     web_url: str
     has_web_credentials: bool
+    #: Язык человека после привязки (ADR-0052): сохранённый раньше или только
+    #: что принятый от бота. Бот говорит на нём, а не на своей догадке.
+    language: Language
 
 
 class BotSessionRequest(BaseModel):
@@ -112,6 +117,9 @@ class MiniAppSession(BaseModel):
     #: Признак приходит с сервера, потому что решает его ручка: экран, гадающий
     #: сам, однажды предложил бы то, что кончится отказом 409.
     has_web_credentials: bool
+    #: Язык интерфейса (ADR-0052): сохранённый у учётной записи, а если его
+    #: не было — язык Telegram из подписи запуска, тут же сохранённый.
+    language: Language
 
 
 class TelegramLinkRead(BaseModel):

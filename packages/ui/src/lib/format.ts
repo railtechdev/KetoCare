@@ -4,6 +4,63 @@
  * гранулярность fast refresh, а сами функции нужны и без React (тесты, расчёты).
  */
 
+/**
+ * Язык записи дат с названием месяца (ADR-0052).
+ *
+ * Mini App говорит по-русски или по-узбекски, кабинет — только по-русски. Язык
+ * ставит приложение — один раз при входе и при смене языка; помощники берут его
+ * отсюда, а не из параметра, который забыли бы в одном из сотни мест.
+ *
+ * **Числа языка не берут вовсе** — они всегда записываются локалью `ru-RU`
+ * (`NUMBER_LOCALE`). У узбекского те же разделители («12 345,6»), но во
+ * встроенном браузере Telegram бывает `Intl` без данных для `uz`: тогда он
+ * молча переходит на локаль устройства и печатает «1,200 kkal» и «3.2» —
+ * «1,200» читается как «одна целая две десятых». Для клинических чисел такой
+ * риск не окупается ничем.
+ */
+export type FormatLanguage = "ru" | "uz";
+
+/** BCP 47: узбекский — латиницей, как на посадочной странице (`uz-Latn-UZ`). */
+const LOCALE_TAGS: Record<FormatLanguage, string> = {
+  ru: "ru-RU",
+  uz: "uz-Latn-UZ",
+};
+
+/** Все числа — одной записью на обоих языках (см. выше). */
+const NUMBER_LOCALE = "ru-RU";
+
+let activeLanguage: FormatLanguage = "ru";
+
+export function setFormatLanguage(language: FormatLanguage): void {
+  activeLanguage = language;
+}
+
+/**
+ * Тег локали для `Intl` — только для дат с названием месяца.
+ *
+ * Нет у среды данных для узбекского — русский: месяц по-русски понятнее, чем
+ * месяц на языке устройства, который `Intl` подставил бы молча.
+ */
+export function formatLocale(): string {
+  const tag = LOCALE_TAGS[activeLanguage];
+  try {
+    return Intl.DateTimeFormat.supportedLocalesOf([tag]).length > 0
+      ? tag
+      : LOCALE_TAGS.ru;
+  } catch {
+    return LOCALE_TAGS.ru;
+  }
+}
+
+/**
+ * Цифровые даты («05.10.2026, 14:30») пишутся через точку на обоих языках.
+ *
+ * Узбекская локаль `Intl` даёт «05/10/2026», а в Узбекистане и в подсказках
+ * бота («29.08 21:00») дату пишут через точку. Даты с названием месяца берут
+ * язык (`formatLocale`): там разница настоящая — «5-oktabr» против «5 октября».
+ */
+const NUMERIC_DATE_LOCALE = "ru-RU";
+
 /** Формат раздела 8.2 ТЗ: «3.9 : 1». */
 export function formatRatio(ratio: number): string {
   return `${ratio.toFixed(1)} : 1`;
@@ -38,9 +95,9 @@ export function formatWeight(kg: number): string {
  * кетоны называет прямо; не звал их только код.
  */
 export function formatMeasured(value: number): string {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(
-    value,
-  );
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 /**
@@ -51,9 +108,9 @@ export function formatMeasured(value: number): string {
  * с соседним (два таких уже назывались `AMOUNT` и отличались точностью).
  */
 export function formatFactor(value: number): string {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(
-    value,
-  );
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 /**
@@ -64,7 +121,7 @@ export function formatFactor(value: number): string {
  * (правило П45 канона).
  */
 export function formatNumber(value: number, digits: number): string {
-  return new Intl.NumberFormat("ru-RU", {
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(value);
@@ -88,9 +145,9 @@ export function formatGrams(value: number): string {
  * список того, что взвесить, читают по одной строке, а не столбцом.
  */
 export function formatMass(value: number): string {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(
-    value,
-  );
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 /**
@@ -102,7 +159,7 @@ export function formatMass(value: number): string {
  * Строку «300 мг» для чтения собирает сервер (ADR-0049).
  */
 export function formatDose(value: number): string {
-  return new Intl.NumberFormat("ru-RU", {
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
     maximumFractionDigits: 3,
     useGrouping: false,
   }).format(value);
@@ -114,14 +171,14 @@ export function formatDose(value: number): string {
  * Суточная норма — четырёхзначная, и «1200 ккал» читается хуже, чем «1 200».
  */
 export function formatKcal(value: number): string {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(
-    value,
-  );
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 /** Дата и время записи дневника в локали пациента. */
 export function formatOccurredAt(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(NUMERIC_DATE_LOCALE, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -138,7 +195,7 @@ export function formatOccurredAt(value: Date): string {
  * функция на кабинет и Mini App: семья видит одну и ту же отметку в двух местах.
  */
 export function formatDayTime(value: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(NUMERIC_DATE_LOCALE, {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",

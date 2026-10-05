@@ -17,7 +17,6 @@ import structlog
 from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import (
-    BotCommand,
     MenuButtonDefault,
     MenuButtonWebApp,
     TelegramObject,
@@ -25,10 +24,11 @@ from aiogram.types import (
 )
 from redis.asyncio import Redis
 
-from . import texts
+from . import i18n, texts
 from .api import BotApi
 from .config import BotSettings, load_settings
 from .handlers import fallback, scenarios, start
+from .language import LanguageMiddleware, commands
 from .observability import init_sentry
 from .storage import BindingStore
 
@@ -69,6 +69,11 @@ def build_dispatcher(
     middleware = DepsMiddleware(api, store, settings)
     dp.message.middleware(middleware)
     dp.callback_query.middleware(middleware)
+    # Язык — после зависимостей и только для обновлений, которые кто-то
+    # обработает: молчание в группах не стоит запроса к API (ADR-0052).
+    language = LanguageMiddleware(api, store, settings)
+    dp.message.middleware(language)
+    dp.callback_query.middleware(language)
 
     # Порядок важен: fallback ловит всё подряд и обязан быть последним.
     dp.include_router(start.router)
@@ -78,11 +83,10 @@ def build_dispatcher(
 
 
 #: Команды синего меню Telegram. Без них меню пустое, и родителю негде увидеть,
-#: что здесь вообще есть /help.
-BOT_COMMANDS = [
-    BotCommand(command="start", description=texts.CMD_START_DESCRIPTION),
-    BotCommand(command="help", description=texts.CMD_HELP_DESCRIPTION),
-]
+#: что здесь вообще есть /help. Русские — по умолчанию; узбекские Telegram
+#: показывает тем, у кого узбекский интерфейс, а выбравшему язык кнопкой бот
+#: ставит их на его чат (`language.apply_chat_ui`).
+BOT_COMMANDS = commands()
 
 
 async def setup_bot_profile(bot: Bot, settings: BotSettings) -> None:
@@ -101,6 +105,20 @@ async def setup_bot_profile(bot: Bot, settings: BotSettings) -> None:
         await _setup_menu_button(bot, settings)
     except Exception as exc:  # noqa: BLE001 — косметика не должна ронять запуск
         logger.warning("bot_profile_setup_failed", reason=str(exc))
+        return
+
+    # Узбекский профиль — для клиентов Telegram с узбекским интерфейсом: экран
+    # «Что умеет этот бот?» они видят до первого сообщения, когда выбрать язык
+    # ещё негде (ADR-0052). Отдельной попыткой: его сбой русский не отменяет.
+    try:
+        with i18n.use("uz"):
+            await bot.set_my_commands(commands(), language_code="uz")
+            await bot.set_my_description(description=texts.BOT_DESCRIPTION, language_code="uz")
+            await bot.set_my_short_description(
+                short_description=texts.BOT_SHORT_DESCRIPTION, language_code="uz"
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("bot_profile_uz_setup_failed", reason=str(exc))
 
 
 async def _setup_menu_button(bot: Bot, settings: BotSettings) -> None:

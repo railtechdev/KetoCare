@@ -155,6 +155,29 @@ export function launchDiagnosis(): LaunchDiagnosis {
   };
 }
 
+/**
+ * Язык интерфейса Telegram (`user.language_code` в строке запуска) или `null`.
+ *
+ * Только умолчание до входа (ADR-0052): после входа язык приходит с сервера —
+ * он свойство человека, и выбор, сделанный в боте, сильнее настройки клиента.
+ * Строка не проверена подписью — для языка экрана это и не нужно: сервер
+ * проверяет ту же строку сам, прежде чем что-то из неё сохранить.
+ */
+export function telegramLanguageCode(): string | null {
+  const raw = launchData();
+  if (raw === null) return null;
+  try {
+    const user: unknown = JSON.parse(
+      new URLSearchParams(raw).get("user") ?? "",
+    );
+    if (typeof user !== "object" || user === null) return null;
+    const code = (user as { language_code?: unknown }).language_code;
+    return typeof code === "string" && code.length > 0 ? code : null;
+  } catch {
+    return null;
+  }
+}
+
 function firstNonEmpty(...values: (string | undefined)[]): string | null {
   for (const value of values) {
     if (value !== undefined && value.length > 0) return value;

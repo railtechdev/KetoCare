@@ -82,3 +82,31 @@ describe("строка запуска", () => {
     expect(await launchData()).toBeNull();
   });
 });
+
+describe("язык клиента Telegram (ADR-0052)", () => {
+  async function languageCode() {
+    const module = await import("./telegram");
+    return module.telegramLanguageCode();
+  }
+
+  it("берётся из пользователя в строке запуска", async () => {
+    const user = encodeURIComponent(
+      JSON.stringify({ id: 1, first_name: "Ona", language_code: "uz" }),
+    );
+    withAddress(`#tgWebAppData=${encodeURIComponent(`user=${user}&hash=x`)}`);
+
+    expect(await languageCode()).toBe("uz");
+  });
+
+  it("пусто, когда клиент языка не прислал или строки нет", async () => {
+    const user = encodeURIComponent(JSON.stringify({ id: 1 }));
+    withAddress(`#tgWebAppData=${encodeURIComponent(`user=${user}&hash=x`)}`);
+    expect(await languageCode()).toBeNull();
+
+    withAddress("");
+    retrieve.mockImplementation(() => {
+      throw new Error("not in Telegram");
+    });
+    expect(await languageCode()).toBeNull();
+  });
+});

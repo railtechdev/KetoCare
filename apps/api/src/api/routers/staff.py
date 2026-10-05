@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from core import languages
 from core.config import get_settings
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
@@ -28,6 +29,8 @@ from ..ratelimit import AUTH_RATE_LIMIT, limiter
 from ..schemas import (
     ColleagueRead,
     CredentialsCreate,
+    LanguageRead,
+    LanguageUpdate,
     MeUpdate,
     PasswordChange,
     PasswordResetViaTelegram,
@@ -103,6 +106,38 @@ async def read_me(user: CurrentUserDep, session: SessionDep) -> UserRead:
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
     return UserRead.model_validate(me)
+
+
+@router.get("/me/language", response_model=LanguageRead, summary="Свой язык в боте и приложении")
+async def read_my_language(user: CurrentUserDep, session: SessionDep) -> LanguageRead:
+    """Язык семейных каналов (ADR-0052).
+
+    Читают бот и Mini App: язык — свойство человека, и выбор, сделанный в
+    одном канале, обязан дойти до другого. Пусто — человек не выбирал.
+    """
+
+    me = await users_repo.get(session, user.id)
+    if me is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+    return LanguageRead(language=languages.known_or_none(me.language))
+
+
+@router.put("/me/language", response_model=LanguageRead, summary="Выбрать свой язык")
+async def update_my_language(
+    payload: LanguageUpdate, user: CurrentUserDep, session: SessionDep
+) -> LanguageRead:
+    """Сохранить язык бота, Mini App и сообщений в Telegram (ADR-0052).
+
+    Любая роль может сохранить себе язык, но читают его только семейные
+    каналы: кабинет в браузере остаётся русским. Аудита нет намеренно — это
+    предпочтение интерфейса, а не доступ и не клинические данные.
+    """
+
+    me = await users_repo.get(session, user.id)
+    if me is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+    updated = await users_repo.update(session, user=me, language=payload.language)
+    return LanguageRead(language=languages.known_or_none(updated.language))
 
 
 @router.patch("/me", response_model=UserRead, summary="Изменить свой профиль")

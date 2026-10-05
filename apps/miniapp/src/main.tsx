@@ -6,8 +6,12 @@ import "@ketocare/ui/styles.css";
 
 import { App } from "./App";
 import { watchConnectivity } from "./lib/connectivity";
-import "./lib/i18n";
+import { applyTelegramLanguage } from "./lib/i18n";
 import { createQueryClient } from "./lib/queryClient";
+
+// Экран входа — сразу на языке клиента Telegram (ADR-0052): «Ilova ochilmoqda…»
+// узбекской семье, а не русская строка до ответа сервера.
+applyTelegramLanguage();
 
 // До первого запроса: иначе он встал бы на паузу по стандартному источнику сети,
 // который во WebView Telegram может не узнать о её возвращении (ADR-0036).

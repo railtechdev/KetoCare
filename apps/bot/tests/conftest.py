@@ -66,6 +66,12 @@ class FakeApi:
     parse_error: Exception | None = None
     #: Фразы, дошедшие до разбора.
     parsed_texts: list[str] = field(default_factory=list)
+    #: Язык человека на сервере (ADR-0052) и что бот туда записал.
+    server_language: str | None = None
+    language_writes: list[str] = field(default_factory=list)
+    language_error: Exception | None = None
+    #: Язык, присланный ботом при привязке.
+    activation_language: str | None = None
 
     async def activate_access_code(
         self,
@@ -75,8 +81,10 @@ class FakeApi:
         telegram_user_id: int,
         first_name: str,
         last_name: str | None,
+        language: str | None = None,
     ) -> LinkVerified:
         self.verified_code = code
+        self.activation_language = language
         self.verified_telegram_user_id = telegram_user_id
         if self.verify_error is not None:
             raise self.verify_error
@@ -166,6 +174,17 @@ class FakeApi:
 
     def forget_session(self, link_id: uuid.UUID) -> None:  # pragma: no cover - не нужен тестам
         pass
+
+    async def get_language(self, *, link_id: uuid.UUID, secret: str) -> str | None:
+        if self.language_error is not None:
+            raise self.language_error
+        return self.server_language
+
+    async def set_language(self, *, link_id: uuid.UUID, secret: str, language: str) -> None:
+        if self.language_error is not None:
+            raise self.language_error
+        self.language_writes.append(language)
+        self.server_language = language
 
 
 class FakeRedis:

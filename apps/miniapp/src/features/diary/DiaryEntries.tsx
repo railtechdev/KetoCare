@@ -5,6 +5,7 @@ import {
   DiaryEntryCard,
   EmptyState,
   Section,
+  formatLocale,
   formatOccurredAt,
   toast,
 } from "@ketocare/ui";
@@ -45,11 +46,14 @@ const KIND_ICON: Record<DiaryLog["kind"], LucideIcon> = {
   "side-effects": HeartPulse,
 };
 
-const DAY_FORMAT = new Intl.DateTimeFormat("ru-RU", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
+/** «понедельник, 5 октября» / «dushanba, 5-oktabr» — на языке экрана (ADR-0052). */
+function dayFormat(): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(formatLocale(), {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
 
 /**
  * Записи дневника за две недели — все шесть видов одной лентой по дням.
@@ -317,5 +321,5 @@ function dayLabel(day: Date, t: (key: string) => string): string {
   const diff = Math.round((start.getTime() - day.getTime()) / 86_400_000);
   if (diff === 0) return t("diary.today");
   if (diff === 1) return t("diary.yesterday");
-  return DAY_FORMAT.format(day);
+  return dayFormat().format(day);
 }

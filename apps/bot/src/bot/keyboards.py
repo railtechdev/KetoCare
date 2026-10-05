@@ -9,7 +9,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-from . import texts
+from . import i18n, texts
 from .config import BotSettings
 
 
@@ -46,7 +46,9 @@ def main_menu(settings: BotSettings, *, child: str | None = None) -> ReplyKeyboa
         [KeyboardButton(text=texts.BTN_SEIZURE)],
         [KeyboardButton(text=texts.BTN_KETONES), KeyboardButton(text=texts.BTN_WEIGHT)],
         [KeyboardButton(text=texts.BTN_MEAL), KeyboardButton(text=texts.BTN_MEDICATION)],
-        [KeyboardButton(text=texts.BTN_WELLBEING)],
+        # «🌐 Til / Язык» — в каждом меню и на обоих языках сразу: человеку,
+        # который не читает языка бота, кнопка обязана быть узнаваема (ADR-0052).
+        [KeyboardButton(text=texts.BTN_WELLBEING), KeyboardButton(text=texts.BTN_LANGUAGE)],
     ]
     if child:
         keyboard.append([KeyboardButton(text=texts.BTN_CHILD.format(name=child))])
@@ -60,6 +62,28 @@ def main_menu(settings: BotSettings, *, child: str | None = None) -> ReplyKeyboa
 
 CANCEL_DATA = "cancel"
 CHILD_PREFIX = "child:"
+LANGUAGE_PREFIX = "lang:"
+
+
+def languages() -> InlineKeyboardMarkup:
+    """Языки — каждый подписан на самом себе, выбранный отмечен галочкой.
+
+    Без «Отмены»: выбор ничего не стирает, а сообщение с вопросом можно просто
+    оставить — меню под ним прежнее.
+    """
+
+    active = i18n.current()
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"✓ {label}" if code == active else label,
+                    callback_data=f"{LANGUAGE_PREFIX}{code}",
+                )
+                for code, label in i18n.LANGUAGE_LABELS.items()
+            ]
+        ]
+    )
 
 
 def children(items: list[tuple[str, str]], *, active: str) -> InlineKeyboardMarkup:

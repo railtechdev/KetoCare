@@ -131,6 +131,8 @@ class TestListUsers:
             "phone",
             "is_active",
             "created_at",
+            # Язык бота и Mini App (ADR-0052) — предпочтение интерфейса, не секрет.
+            "language",
         }
 
     async def test_pagination(self, client, session, make_user, auth_headers):

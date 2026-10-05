@@ -538,6 +538,8 @@ class TestWiring:
             texts.BTN_MEAL,
             texts.BTN_MEDICATION,
             texts.BTN_WELLBEING,
+            # Язык — в каждом меню (ADR-0052).
+            texts.BTN_LANGUAGE,
         }
 
 
@@ -1032,14 +1034,21 @@ class TestBotProfile:
                 self.description = None
                 self.short_description = None
 
-            async def set_my_commands(self, commands):
-                self.commands = commands
+            async def set_my_commands(self, commands, language_code=None):
+                if language_code is None:
+                    self.commands = commands
+                else:
+                    self.uz_commands = commands
 
-            async def set_my_description(self, *, description):
-                self.description = description
+            async def set_my_description(self, *, description, language_code=None):
+                if language_code is None:
+                    self.description = description
+                else:
+                    self.uz_description = description
 
-            async def set_my_short_description(self, *, short_description):
-                self.short_description = short_description
+            async def set_my_short_description(self, *, short_description, language_code=None):
+                if language_code is None:
+                    self.short_description = short_description
 
             async def set_chat_menu_button(self, *, menu_button):
                 self.menu_button = menu_button
@@ -1047,9 +1056,12 @@ class TestBotProfile:
         bot = FakeBot()
         await bot_main.setup_bot_profile(bot, SETTINGS)
 
-        assert {c.command for c in bot.commands} == {"start", "help"}
+        assert {c.command for c in bot.commands} == {"start", "help", "language"}
         assert all(c.description for c in bot.commands)
         assert bot.description and bot.short_description
+        # Узбекский профиль для клиентов с узбекским интерфейсом (ADR-0052).
+        assert {c.command for c in bot.uz_commands} == {"start", "help", "language"}
+        assert bot.uz_description != bot.description
 
     @pytest.mark.asyncio
     async def test_profile_failure_does_not_break_startup(self):

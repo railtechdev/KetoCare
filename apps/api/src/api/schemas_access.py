@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from core.languages import Language
 from core.models.enums import AccessCodePurpose
 
 from .schemas import NewPassword
@@ -121,3 +122,8 @@ class AccessCodeTelegramActivate(BaseModel):
     telegram_user_id: int
     first_name: str = Field(min_length=1, max_length=128)
     last_name: str | None = Field(default=None, max_length=128)
+    #: Язык, на котором бот уже говорит с человеком: выбранный кнопкой до
+    #: привязки или взятый из Telegram (ADR-0052). Сервер сохраняет его, только
+    #: если у учётной записи языка ещё нет, — выбор, сделанный раньше в Mini App,
+    #: не перетирается. Необязателен: бот до ADR-0052 его не присылает.
+    language: Language | None = None

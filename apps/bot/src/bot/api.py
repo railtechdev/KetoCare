@@ -74,6 +74,9 @@ class LinkVerified:
     #: Имя без фамилии — для переключателя и эха, когда детей в чате двое
     #: (ADR-0048). Пусто у сервера до ADR-0048: тогда имя выводит `Binding`.
     patient_first_name: str = ""
+    #: Язык человека после привязки (ADR-0052): сохранённый на сервере или
+    #: только что принятый от бота. Пусто у сервера до ADR-0052.
+    language: str | None = None
 
 
 @dataclass(slots=True)
@@ -98,6 +101,7 @@ class BotApi:
         telegram_user_id: int,
         first_name: str,
         last_name: str | None,
+        language: str | None = None,
     ) -> LinkVerified:
         """Гасит код доступа и получает привязку (ADR-0040).
 
@@ -117,6 +121,9 @@ class BotApi:
                 "telegram_user_id": telegram_user_id,
                 "first_name": first_name,
                 "last_name": last_name,
+                # Язык, на котором бот уже говорит с человеком: сервер сохранит
+                # его, только если у учётной записи языка ещё нет (ADR-0052).
+                **({"language": language} if language else {}),
             },
         )
         return LinkVerified(
@@ -127,6 +134,7 @@ class BotApi:
             web_url=payload["web_url"],
             has_web_credentials=bool(payload["has_web_credentials"]),
             patient_first_name=str(payload.get("patient_first_name") or ""),
+            language=payload.get("language"),
         )
 
     async def _token(self, *, link_id: uuid.UUID, secret: str) -> str:
@@ -161,6 +169,29 @@ class BotApi:
 
     def forget_session(self, link_id: uuid.UUID) -> None:
         self._sessions.pop(link_id, None)
+
+    # --- язык человека (ADR-0052) ---
+
+    async def get_language(self, *, link_id: uuid.UUID, secret: str) -> str | None:
+        """Язык взрослого за привязкой; None — он ещё не выбирал."""
+
+        token = await self._token(link_id=link_id, secret=secret)
+        body = await self._request(
+            "GET", "/api/v1/users/me/language", headers={"Authorization": f"Bearer {token}"}
+        )
+        value = body.get("language")
+        return str(value) if value else None
+
+    async def set_language(self, *, link_id: uuid.UUID, secret: str, language: str) -> None:
+        """Сохранить язык на сервере: его прочтут Mini App и рассылки воркера."""
+
+        token = await self._token(link_id=link_id, secret=secret)
+        await self._request(
+            "PUT",
+            "/api/v1/users/me/language",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"language": language},
+        )
 
     # --- дневники ---
 
