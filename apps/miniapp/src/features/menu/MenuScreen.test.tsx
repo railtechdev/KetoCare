@@ -13,6 +13,7 @@ import { NetworkError } from "@ketocare/api-client";
 import "../../lib/i18n";
 import { api } from "../../lib/api";
 import { MenuScreen } from "./MenuScreen";
+import { dayAt } from "./useMenu";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -78,10 +79,12 @@ function renderScreen() {
 }
 
 /** Сводка нужна экрану ради назначения: приёмы в дне и цели по рациону. */
-function overview(mealsPerDay: number | null = 4) {
+function overview(mealsPerDay: number | null = 4, day: unknown = null) {
   return {
     patient_id: SESSION.patientId,
-    date: "2026-08-31",
+    // Сводка — за сегодня: вердикт экран берёт, только если её дата совпадает
+    // с показанным днём.
+    date: dayAt(0),
     prescription:
       mealsPerDay === null
         ? null
@@ -93,7 +96,7 @@ function overview(mealsPerDay: number | null = 4) {
             carbs_limit_g: 12,
             ratio: 3.5,
           },
-    day: null,
+    day,
     seizures_today: { count: 0 },
     seizure_trend: { direction: "flat" },
     last_reading_on: null,
@@ -107,35 +110,54 @@ function respond(
     mealsPerDay?: number | null;
     recipes?: unknown[];
     dishes?: unknown[];
+    /** План по дате; дата, которой нет в словаре, — 404 «плана нет». */
+    menus?: Record<string, unknown>;
+    /** Итоги дня в сводке — с вердиктом сервера. */
+    overviewDay?: unknown;
   } = {},
 ) {
-  (api.GET as Mock).mockImplementation(async (path: string) => {
-    if (path.includes("/overview")) {
-      // `??` здесь был бы ошибкой: он считает null отсутствием значения, и
-      // «нет назначения» превращалось бы в четыре приёма.
-      const meals = "mealsPerDay" in options ? options.mealsPerDay : 4;
-      return {
-        data: overview(meals ?? null),
-        response: { status: 200 },
-      };
-    }
-    if (path.includes("/recipes")) {
-      return {
-        data: { items: options.recipes ?? [], total: 0 },
-        response: { status: 200 },
-      };
-    }
-    if (path.includes("/custom-dishes")) {
-      return {
-        data: { items: options.dishes ?? [], total: 0 },
-        response: { status: 200 },
-      };
-    }
+  (api.GET as Mock).mockImplementation(
+    async (path: string, init?: { params?: { query?: { date?: string } } }) => {
+      if (path.includes("/overview")) {
+        // `??` здесь был бы ошибкой: он считает null отсутствием значения, и
+        // «нет назначения» превращалось бы в четыре приёма.
+        const meals = "mealsPerDay" in options ? options.mealsPerDay : 4;
+        return {
+          data: overview(meals ?? null, options.overviewDay ?? null),
+          response: { status: 200 },
+        };
+      }
+      if (options.menus !== undefined && path.endsWith("/menus")) {
+        const planned = options.menus[init?.params?.query?.date ?? ""];
+        return planned === undefined
+          ? { data: undefined, response: { status: 404 } }
+          : { data: planned, response: { status: 200 } };
+      }
+      return respondOther(path, options);
+    },
+  );
+}
+
+function respondOther(
+  path: string,
+  options: { menu?: unknown; recipes?: unknown[]; dishes?: unknown[] },
+) {
+  if (path.includes("/recipes")) {
     return {
-      data: options.menu === undefined ? menu() : options.menu,
-      response: { status: options.menu === null ? 404 : 200 },
+      data: { items: options.recipes ?? [], total: 0 },
+      response: { status: 200 },
     };
-  });
+  }
+  if (path.includes("/custom-dishes")) {
+    return {
+      data: { items: options.dishes ?? [], total: 0 },
+      response: { status: 200 },
+    };
+  }
+  return {
+    data: options.menu === undefined ? menu() : options.menu,
+    response: { status: options.menu === null ? 404 : 200 },
+  };
 }
 
 beforeEach(() => {
@@ -673,9 +695,8 @@ describe("итоги дня рядом с целями назначения", ()
 
     expect(await screen.findByText("1 200 из 1 200 ккал")).toBeInTheDocument();
     expect(screen.getByText("10,0 из 12,0 г")).toBeInTheDocument();
-    // Соотношение — значком кита; вердикта о допуске экран не выносит: правило
-    // живёт одним куском в кабинете, и вторая его реализация означала бы, что
-    // одна семья слышит о своём ребёнке разное в разных каналах.
+    // Соотношение — значком кита. Вердикт о допуске — отдельным блоком ниже,
+    // правилом кита (`dayVerdict`), общим с кабинетом.
     expect(screen.getByText(/3\.5/)).toBeInTheDocument();
   });
 
@@ -697,5 +718,276 @@ describe("итоги дня рядом с целями назначения", ()
 
     expect(await screen.findByText(/Жиры/)).toBeInTheDocument();
     expect(screen.queryByText(/из .* ккал/)).not.toBeInTheDocument();
+  });
+});
+
+/** Даты запросов плана дня — по порядку обращений. */
+function menuDates(): string[] {
+  return (api.GET as Mock).mock.calls
+    .filter(([path]) => String(path).endsWith("/menus"))
+    .map(([, init]) => init.params.query.date);
+}
+
+/**
+ * Вчера — чтобы отметить съеденное задним числом и увидеть, что ребёнок ел:
+ * вечером отмечать некогда, а по отметкам врач судит, выполнялся ли план.
+ */
+describe("вчерашний день", () => {
+  it("открывается и отмечается", async () => {
+    respond({
+      menus: {
+        [dayAt(-1)]: menu({
+          date: dayAt(-1),
+          items: [{ ...menu().items[0], id: "y-1", title: "Вчерашний омлет" }],
+        }),
+      },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Вчера" }));
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Вчерашний омлет/ }),
+    );
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/menus/items/{item_id}/eaten",
+        expect.objectContaining({
+          params: { path: { patient_id: SESSION.patientId, item_id: "y-1" } },
+          body: { eaten: true },
+        }),
+      );
+    });
+    expect(menuDates()).toContain(dayAt(-1));
+    expect(screen.getByRole("button", { name: "Вчера" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+});
+
+/**
+ * «Как вчера» — только в пустой день. `PUT` задаёт день целиком, и перенос
+ * поверх непустого дня стёр бы отметки «съедено» у позиций, не совпавших по
+ * ключу.
+ */
+describe("«Как вчера»", () => {
+  const yesterdayPlan = menu({
+    date: dayAt(-1),
+    items: [
+      { ...menu().items[0], id: "y-1", recipe_id: "r-1", eaten: true },
+      {
+        ...menu().items[0],
+        id: "y-2",
+        meal_index: 3,
+        recipe_id: null,
+        custom_dish_id: "d-1",
+        portion_factor: 0.5,
+        title: "Суфле",
+      },
+    ],
+  });
+
+  it("переносит позиции предыдущего дня в пустой день — без отметок", async () => {
+    respond({ menus: { [dayAt(-1)]: yesterdayPlan } });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Как вчера" }));
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
+    expect(api.PUT).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/menus",
+      {
+        params: { path: { patient_id: SESSION.patientId } },
+        body: {
+          date: dayAt(0),
+          items: [
+            {
+              meal_index: 1,
+              recipe_id: "r-1",
+              custom_dish_id: null,
+              portion_factor: 1,
+            },
+            {
+              meal_index: 3,
+              recipe_id: null,
+              custom_dish_id: "d-1",
+              portion_factor: 0.5,
+            },
+          ],
+        },
+      },
+    );
+  });
+
+  it("на завтра переносится сегодняшний день", async () => {
+    respond({ menus: { [dayAt(0)]: { ...yesterdayPlan, date: dayAt(0) } } });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await screen.findByText("Суфле");
+    await user.click(screen.getByRole("button", { name: "Завтра" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Как сегодня" }),
+    );
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
+    expect((api.PUT as Mock).mock.calls[0]?.[1].body.date).toBe(dayAt(1));
+  });
+
+  it("непустому дню перенос не предлагается — и вчера не запрашивается", async () => {
+    respond({
+      menus: {
+        [dayAt(-1)]: yesterdayPlan,
+        [dayAt(0)]: menu({ items: [{ ...menu().items[0], eaten: true }] }),
+      },
+    });
+    renderScreen();
+
+    await screen.findByRole("checkbox", { name: /Омлет/ });
+
+    expect(
+      screen.queryByRole("button", { name: "Как вчера" }),
+    ).not.toBeInTheDocument();
+    expect(menuDates()).not.toContain(dayAt(-1));
+    expect(api.PUT).not.toHaveBeenCalled();
+  });
+
+  it("пока день не загружен, переноса нет", async () => {
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("/overview")) {
+        return { data: overview(4), response: { status: 200 } };
+      }
+      return new Promise(() => undefined);
+    });
+    renderScreen();
+
+    await waitFor(() => expect(api.GET).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: "Как вчера" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("предыдущий день пуст — так и сказано", async () => {
+    respond({ menus: {} });
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        "В предыдущий день плана не было — переносить нечего.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Как вчера" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("отказ переноса называется словами", async () => {
+    respond({ menus: { [dayAt(-1)]: yesterdayPlan } });
+    (api.PUT as Mock).mockResolvedValue({
+      error: { error: { code: "internal", message: "Сервер недоступен." } },
+      response: { status: 500 },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Как вчера" }));
+
+    expect(
+      await screen.findByText("Не удалось перенести день"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Сервер недоступен.")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Вердикт о допуске — то же правило, что в кабинете (`dayVerdict` кита):
+ * соотношение — предупреждение, калорийность — набор, у каждой из трёх причин
+ * отсутствия вердикта свой текст.
+ */
+describe("соответствие дня назначению", () => {
+  const totals = menu().totals;
+
+  function withVerdict(day: Record<string, unknown>) {
+    respond({ overviewDay: { totals, engine_version: "1.0.0", ...day } });
+  }
+
+  it("в допуске — так и сказано, а недобор калорий не тревога", async () => {
+    withVerdict({
+      tolerance: { ratio_within_tolerance: true, kcal_within_tolerance: false },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText("Кетосоотношение дня соответствует назначению."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Пока день не спланирован до конца/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Итоги дня расходятся с назначением"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("соотношение вне допуска — предупреждение", async () => {
+    withVerdict({
+      tolerance: { ratio_within_tolerance: false, kcal_within_tolerance: true },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText("Итоги дня расходятся с назначением"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Кетосоотношение дня соответствует назначению."),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["no_prescription", "Сравнивать итоги не с чем: активного назначения нет."],
+    ["engine_changed", /прежней версией расчётного ядра/],
+    ["engine_unknown", /не записана версия расчёта/],
+  ])("причина «%s» называется своими словами", async (gap, text) => {
+    withVerdict({ tolerance: null, tolerance_gap: gap });
+    renderScreen();
+
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(
+      screen.queryByText("Кетосоотношение дня соответствует назначению."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("без причины — нейтральный текст, а не «назначения нет»", async () => {
+    withVerdict({ tolerance: null });
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        "Соответствие назначению сейчас не показано — показаны сами показатели дня.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/активного назначения нет/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("для другого дня вердикт сегодняшнего не переносится", async () => {
+    withVerdict({
+      tolerance: { ratio_within_tolerance: true, kcal_within_tolerance: true },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("Кетосоотношение дня соответствует назначению.");
+
+    await user.click(screen.getByRole("button", { name: "Завтра" }));
+
+    expect(
+      await screen.findByText(/сервер сообщает только для сегодняшнего дня/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Кетосоотношение дня соответствует назначению."),
+    ).not.toBeInTheDocument();
   });
 });

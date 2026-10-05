@@ -13,11 +13,37 @@ import { errorMessageOf } from "../../lib/api";
 import { usePatientOverview } from "../home/useOverview";
 import type { Session } from "../session/useSession";
 import { ComposePanel } from "./ComposePanel";
-import { DayTotals, type DayTargets } from "./DayTotals";
-import { itemsOf, mealNumbers, withDish, withoutItem } from "./dayPlan";
+import { DayTotals, type DayTargets, type DayVerdictInput } from "./DayTotals";
+import {
+  copiedDay,
+  itemsOf,
+  mealNumbers,
+  withDish,
+  withoutItem,
+} from "./dayPlan";
 import type { Menu, MenuItem } from "./useMenu";
-import { today, tomorrow, useMarkEaten, useMenu } from "./useMenu";
+import { dayAt, useMarkEaten, useMenu } from "./useMenu";
 import { useSaveMenu } from "./useSaveMenu";
+
+/**
+ * Дни, между которыми переключается экран: вчера, сегодня, завтра.
+ *
+ * Вчера — чтобы отметить съеденное задним числом (вечером отмечать некогда, а
+ * по отметкам врач судит, выполнялся ли план) и посмотреть, что ребёнок ел.
+ * Завтра — план собирают вечером на завтра. Календаря нет: см. `dayAt`.
+ */
+const DAYS = [
+  { offset: -1, label: "menu.yesterday" },
+  { offset: 0, label: "menu.today" },
+  { offset: 1, label: "menu.tomorrow" },
+] as const;
+
+/** Подпись «Как вчера» с точки зрения выбранного дня. */
+const COPY_LABEL: Record<number, string> = {
+  [-1]: "menu.copy.asDayBeforeYesterday",
+  0: "menu.copy.asYesterday",
+  1: "menu.copy.asToday",
+};
 
 /**
  * Приёмы, которые есть в плане, в порядке дня.
@@ -58,10 +84,14 @@ export function MenuScreen({ session }: { session: Session }) {
   // «собрать вечером на завтра» это ровно про то время суток.
   const [dayOffset, setDayOffset] = useState(0);
   const [composing, setComposing] = useState(false);
-  const day = dayOffset === 0 ? today() : tomorrow();
+  const day = dayAt(dayOffset);
   const menu = useMenu(session.patientId, day);
   const mark = useMarkEaten(session.patientId, day);
   const save = useSaveMenu(session.patientId, day);
+  // Перенос дня — своей мутацией: её отказ называется у кнопки переноса, а
+  // отказ добавления блюда — в панели сборки. Одна общая мутация показала бы
+  // «не удалось перенести день» после неудачного добавления блюда.
+  const copy = useSaveMenu(session.patientId, day);
   // Число приёмов задаёт врач; без назначения раскладывать день не по чему.
   const overview = usePatientOverview(session.patientId);
   const prescription = overview.data?.prescription ?? null;
@@ -85,6 +115,32 @@ export function MenuScreen({ session }: { session: Session }) {
   // только успешный ответ, а не отсутствие данных.
   const planKnown = menu.isSuccess;
 
+  // «Как вчера» предлагается только достоверно ПУСТОМУ дню (см. `copiedDay`).
+  // Предыдущий день запрашивается только тогда: в непустой день переносить
+  // нельзя, и лишний запрос на каждое переключение дня был бы впустую.
+  const dayEmpty = planKnown && (menu.data?.items.length ?? 0) === 0;
+  const previous = useMenu(session.patientId, dayAt(dayOffset - 1), {
+    enabled: dayEmpty,
+  });
+  const copied =
+    dayEmpty && previous.isSuccess
+      ? copiedDay(previous.data ?? null, menu.data ?? null)
+      : null;
+
+  // Вердикт о допуске сервер считает только за сегодня и отдаёт в сводке.
+  // Пока сводка перезагружается после правки плана, вердикт относится к
+  // прежнему составу: лучше промолчать причиной «сейчас не показано», чем
+  // показать чужое (то же правило, что `useDayTolerance` кабинета). Дата
+  // сверяется со сводкой: у сервера свои сутки, и около полуночи «сегодня»
+  // телефона и сервера могут разойтись.
+  const verdictFresh =
+    overview.isSuccess && !overview.isFetching && overview.data.date === day;
+  const verdict: DayVerdictInput = {
+    otherDay: dayOffset !== 0,
+    tolerance: verdictFresh ? (overview.data.day?.tolerance ?? null) : null,
+    gap: verdictFresh ? (overview.data.day?.tolerance_gap ?? null) : null,
+  };
+
   const addDish = ({
     dish,
     mealIndex,
@@ -94,7 +150,7 @@ export function MenuScreen({ session }: { session: Session }) {
     mealIndex: number;
     portionFactor: number;
   }) => {
-    if (!planKnown) return;
+    if (!planKnown || copy.isPending) return;
     save.mutate(
       withDish(itemsOf(menu.data ?? null), dish, mealIndex, portionFactor),
       { onSuccess: () => setComposing(false) },
@@ -105,25 +161,27 @@ export function MenuScreen({ session }: { session: Session }) {
     <main className="flex flex-col gap-block p-block">
       <h1 className="text-page-title">{t("menu.title")}</h1>
 
-      {/* Сегодня и завтра: план собирают вечером на завтра, а отмечают
-          выполнение сегодня. Третьей даты нет намеренно — см. `tomorrow()`. */}
+      {/* Три дня, а не календарь (см. `DAYS`). Кнопки делят строку поровну:
+          на 360 px три подписи «Вчера / Сегодня / Завтра» помещаются в ряд, а
+          перенос одной из них на вторую строку читался бы как другой выбор. */}
       <div className="flex gap-field" role="group" aria-label={t("menu.day")}>
-        {[
-          { offset: 0, label: t("menu.today") },
-          { offset: 1, label: t("menu.tomorrow") },
-        ].map((option) => (
+        {DAYS.map((option) => (
           <Button
             key={option.offset}
             type="button"
             variant={dayOffset === option.offset ? "default" : "outline"}
-            className="min-h-touch"
+            className="min-h-touch min-w-0 flex-1 px-2"
             aria-pressed={dayOffset === option.offset}
             onClick={() => {
               setDayOffset(option.offset);
               setComposing(false);
+              // Отказ записи относится к дню, где её делали: на другом дне он
+              // говорил бы о плане, которого на экране нет.
+              save.reset();
+              copy.reset();
             }}
           >
-            {option.label}
+            {t(option.label)}
           </Button>
         ))}
       </div>
@@ -144,7 +202,7 @@ export function MenuScreen({ session }: { session: Session }) {
             <ComposePanel
               patientId={session.patientId}
               meals={meals}
-              saving={save.isPending}
+              saving={save.isPending || copy.isPending}
               saveError={save.isError ? save.error : null}
               onAdd={addDish}
               onCancel={() => setComposing(false)}
@@ -190,6 +248,41 @@ export function MenuScreen({ session }: { session: Session }) {
           // он приходит в сессии (`web_url`), и «там же» стало ссылкой.
           <div className="flex flex-col gap-field">
             <p className="m-0 text-muted-foreground">{t("menu.none")}</p>
+            {/* «Как вчера»: кето-меню повторяются, и собирать одинаковый день
+                заново по блюду — шесть поисков вместо одного нажатия. Только
+                в пустой день: перенос поверх непустого стёр бы отметки. */}
+            {copied !== null && (
+              <div className="flex flex-col gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch self-start"
+                  disabled={copy.isPending || save.isPending}
+                  aria-busy={copy.isPending || undefined}
+                  onClick={() => {
+                    if (!dayEmpty) return;
+                    copy.mutate(copied);
+                  }}
+                >
+                  {copy.isPending
+                    ? t("menu.copy.copying")
+                    : t(COPY_LABEL[dayOffset] ?? "menu.copy.asYesterday")}
+                </Button>
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t("menu.copy.hint")}
+                </p>
+              </div>
+            )}
+            {dayEmpty && previous.isSuccess && copied === null && (
+              <p className="m-0 text-sm text-muted-foreground">
+                {t("menu.copy.sourceEmpty")}
+              </p>
+            )}
+            {copy.isError && (
+              <WarningBanner level="danger" title={t("menu.copy.failed")}>
+                {errorMessageOf(copy.error) ?? t("menu.compose.failed")}
+              </WarningBanner>
+            )}
             <a
               className="text-primary underline underline-offset-4"
               href={session.webUrl}
@@ -213,6 +306,7 @@ export function MenuScreen({ session }: { session: Session }) {
             }}
             removing={save.isPending}
             targets={targets}
+            verdict={verdict}
             // Отказ записи называется словами под планом: «Убрать» нажимают при
             // закрытой панели, и её сообщение об ошибке туда не доходит —
             // кнопка просто включалась обратно, а позиция оставалась на месте.
@@ -238,6 +332,7 @@ function DayPlan({
   removing,
   saveFailed,
   targets,
+  verdict,
   pendingId,
   failedId,
   failure,
@@ -248,6 +343,7 @@ function DayPlan({
   removing: boolean;
   saveFailed: string | null;
   targets: DayTargets | null;
+  verdict: DayVerdictInput;
   pendingId: string | undefined;
   failedId: string | undefined;
   failure: string;
@@ -384,7 +480,7 @@ function DayPlan({
         );
       })}
 
-      <DayTotals menu={menu} targets={targets} />
+      <DayTotals menu={menu} targets={targets} verdict={verdict} />
     </div>
   );
 }
