@@ -354,6 +354,8 @@ async def _require_fresh_launch(session: SessionDep, raw: str, *, parent_id: uui
     if datetime.now(UTC) - launch.auth_date > _FRESH_LAUNCH:
         raise stale
     # Подпись — именно этого взрослого: личный чат с ботом, привязанный к нему.
-    link = await telegram_repo.get_active_link_by_chat(session, launch.user_id)
-    if link is None or link.parent_id != parent_id:
+    # Чат ведёт нескольких детей (ADR-0048), и привязки могут стоять за разными
+    # учётными записями; достаточно, чтобы хотя бы одна живая была его.
+    links = await telegram_repo.list_active_links_by_chat(session, launch.user_id)
+    if not any(link.parent_id == parent_id for link in links):
         raise stale

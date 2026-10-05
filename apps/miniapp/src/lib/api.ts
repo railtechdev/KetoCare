@@ -102,6 +102,17 @@ export function errorCodeOf(body: unknown): string | null {
   return typeof error?.code === "string" ? error.code : null;
 }
 
+/** `details` ошибки API — по ним экран различает отказы одного статуса. */
+export function errorDetailsOf(body: unknown): Record<string, unknown> | null {
+  if (typeof body !== "object" || body === null || !("error" in body))
+    return null;
+  const { error } = body as { error?: { details?: unknown } };
+  const details = error?.details;
+  return typeof details === "object" && details !== null
+    ? (details as Record<string, unknown>)
+    : null;
+}
+
 /**
  * Человеческое объяснение отказа: сообщение сервера (оно на русском) или, если
  * запрос до сервера не дошёл, «нет связи». Отказ сети назван здесь, а не в

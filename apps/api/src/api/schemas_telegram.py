@@ -20,6 +20,11 @@ class LinkVerified(BaseModel):
     patient_id: uuid.UUID
     # Имя ребёнка нужно боту для приветствия (раздел 7.1 ТЗ).
     patient_name: str
+    #: Имя без фамилии — им бот называет ребёнка в переключателе и в эхе
+    #: записей, когда чат ведёт двоих (ADR-0048). Отдельным полем, а не
+    #: разбором `patient_name` в боте: правило «что считать именем» одно на
+    #: бота и рассылки воркера.
+    patient_first_name: str
     secret: str
     #: Адрес веб-кабинета и есть ли туда вход. Нужны боту для приветствия:
     #: после привязки родитель обязан узнать, что кабинет существует и как его
@@ -60,6 +65,25 @@ class MiniAppInitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     init_data: str = Field(min_length=1, max_length=4096)
+    #: Какого ребёнка открыть, если чат ведёт нескольких (ADR-0048). Пусто —
+    #: первого привязанного. Ребёнок без живой привязки этого Telegram — 404 с
+    #: причиной `child_not_linked`, а не тихая подмена другим ребёнком.
+    patient_id: uuid.UUID | None = None
+
+
+class MiniAppSwitchRequest(BaseModel):
+    """Переключение Mini App на другого ребёнка того же чата (ADR-0048)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    patient_id: uuid.UUID
+
+
+class MiniAppChild(BaseModel):
+    """Ребёнок, которого ведёт этот Telegram: строка переключателя Mini App."""
+
+    patient_id: uuid.UUID
+    name: str
 
 
 class MiniAppSession(BaseModel):
@@ -76,6 +100,9 @@ class MiniAppSession(BaseModel):
     expires_in: int
     patient_id: uuid.UUID
     patient_name: str
+    #: Все дети, которых ведёт этот Telegram, включая открытого (ADR-0048).
+    #: Переключатель в Mini App показывается, только когда их два и больше.
+    children: list[MiniAppChild]
     #: Адрес веб-кабинета (`WEB_ORIGIN`). Приходит с сервера, а не из своей
     #: переменной сборки: у Mini App её никогда не было, и оттого пустое
     #: состояние вкладки «Меню» отправляло в кабинет, не давая туда пути.

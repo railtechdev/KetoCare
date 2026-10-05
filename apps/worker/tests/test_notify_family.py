@@ -136,6 +136,11 @@ class TestFamilyNudge:
             ]
 
         monkeypatch.setattr(notify.telegram_repo, "list_links_for_patient", links)
+
+        async def one_child_each(session, chat_ids):
+            return dict.fromkeys(chat_ids, 1)
+
+        monkeypatch.setattr(notify.telegram_repo, "children_per_chat", one_child_each)
         sent: list[tuple[int, str]] = []
 
         async def send(client, *, token, chat_id, text):
@@ -150,6 +155,54 @@ class TestFamilyNudge:
         assert delivered == 2
         assert [chat for chat, _ in sent] == [10, 20]
         assert all(text.startswith("Диетолог Петров Пётр") for _, text in sent)
+
+    async def test_names_the_child_only_in_a_chat_of_several(self, monkeypatch) -> None:
+        """ADR-0048: чат двоих детей получает имя ребёнка над текстом, остальные — нет."""
+
+        import uuid
+        from contextlib import asynccontextmanager
+        from types import SimpleNamespace
+
+        from worker.reminders import notify
+
+        monkeypatch.setenv("BOT_TOKEN", "000000:test")
+
+        @asynccontextmanager
+        async def fake_session():
+            yield object()
+
+        monkeypatch.setattr(notify, "get_sessionmaker", lambda: fake_session)
+
+        async def links(session, patient_id):
+            return [
+                SimpleNamespace(chat_id=10, revoked_at=None),
+                SimpleNamespace(chat_id=20, revoked_at=None),
+            ]
+
+        async def counts(session, chat_ids):
+            return {10: 2, 20: 1}
+
+        async def patient(session, patient_id):
+            return SimpleNamespace(full_name="Аня Иванова")
+
+        monkeypatch.setattr(notify.telegram_repo, "list_links_for_patient", links)
+        monkeypatch.setattr(notify.telegram_repo, "children_per_chat", counts)
+        from worker.reminders import children
+
+        monkeypatch.setattr(children.patients_repo, "get", patient)
+        sent: dict[int, str] = {}
+
+        async def send(client, *, token, chat_id, text):
+            sent[chat_id] = text
+
+        monkeypatch.setattr(notify, "send_message", send)
+
+        await notify.notify_family_nudge({}, str(uuid.uuid4()), "Петров Пётр", "dietitian")
+
+        # Только имя, без фамилии — и только там, где детей двое.
+        assert sent[10].startswith("👶 Аня\nДиетолог Петров Пётр")
+        assert "Иванова" not in sent[10]
+        assert sent[20].startswith("Диетолог Петров Пётр")
 
 
 class TestMenuComposed:

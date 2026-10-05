@@ -45,6 +45,9 @@ function renderGate() {
 
 afterEach(() => {
   vi.clearAllMocks();
+  // Выбранный ребёнок запоминается (ADR-0048) — тест не должен наследовать
+  // выбор предыдущего.
+  localStorage.clear();
 });
 
 describe("вход в Mini App", () => {

@@ -20,7 +20,7 @@ from bot.api import TRANSPORT_ERROR, BotApiError, LinkRevokedError
 from bot.config import BotSettings
 from bot.handlers import fallback, scenarios, start
 
-from .conftest import CHAT_ID, LINK_ID, PATIENT_ID, PATIENT_NAME, SECRET
+from .conftest import CHAT_ID, LINK_ID, PATIENT_ID, PATIENT_NAME, SECRET, FakeStore
 
 # Настройки нужны шагу «когда»: время вводится по местным часам семьи. Пояс
 # задан явно: `BotSettings` читает его из переменной `TZ`, и на машине с другим
@@ -186,17 +186,6 @@ class TestLinking:
         assert await store.get(CHAT_ID) is None
 
     @pytest.mark.asyncio
-    async def test_chat_with_another_child_explains_the_way_out(self, api, store):
-        """Один человек — один ребёнок в боте; второй — через кабинет, и это сказано."""
-        api.verify_error = BotApiError("conflict", "занято", 409, {"reason": "chat_taken"})
-        message = FakeMessage()
-
-        await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
-
-        assert message.last == texts.LINK_CHAT_BUSY
-        assert "Вход в кабинет" in message.last
-
-    @pytest.mark.asyncio
     async def test_code_for_the_same_child_is_not_an_error(self, api, store):
         """Повторный код в рабочем чате — не стена, а «всё уже готово»."""
         api.verify_error = BotApiError("conflict", "уже", 409, {"reason": "already_here"})
@@ -219,46 +208,46 @@ class TestLinking:
         assert message.last.startswith("Код больше не действует")
 
     @pytest.mark.asyncio
-    async def test_bare_code_is_treated_as_a_code_not_as_chatter(self, api, store):
+    async def test_bare_code_is_treated_as_a_code_not_as_chatter(self, api, store, state):
         """Родитель с компьютера переписывает код руками, а не жмёт ссылку."""
 
         message = FakeMessage(text="ABCD2345")
 
-        await fallback.unknown(message, api=api, store=store, settings=SETTINGS)
+        await fallback.unknown(message, state=state, api=api, store=store, settings=SETTINGS)
 
         assert PATIENT_NAME in message.last
         assert await store.get(CHAT_ID) is not None
 
     @pytest.mark.asyncio
-    async def test_chatter_gets_the_standard_answer(self, api, linked_store):
+    async def test_chatter_gets_the_standard_answer(self, api, linked_store, state):
         """Раздел 7.5: бот не поддерживает беседу и не отвечает на вопросы."""
 
         message = FakeMessage(text="а какое соотношение у моего ребёнка?")
 
-        await fallback.unknown(message, api=api, store=linked_store, settings=SETTINGS)
+        await fallback.unknown(message, state=state, api=api, store=linked_store, settings=SETTINGS)
 
         # SETTINGS без MINIAPP_URL: обещать «откройте приложение» нельзя —
         # кнопки приложения в меню нет.
         assert message.last == texts.UNKNOWN_INPUT_NO_APP
 
     @pytest.mark.asyncio
-    async def test_chatter_with_app_is_pointed_to_the_app(self, api, linked_store):
+    async def test_chatter_with_app_is_pointed_to_the_app(self, api, linked_store, state):
         with_app = BotSettings(
             bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
         )
         message = FakeMessage(text="что поесть?")
 
-        await fallback.unknown(message, api=api, store=linked_store, settings=with_app)
+        await fallback.unknown(message, state=state, api=api, store=linked_store, settings=with_app)
 
         assert message.last == texts.UNKNOWN_INPUT
 
     @pytest.mark.asyncio
-    async def test_unlinked_chatter_is_told_how_to_link(self, api, store):
+    async def test_unlinked_chatter_is_told_how_to_link(self, api, store, state):
         """Непривязанному — про привязку: его следующий шаг — код, а не кнопки."""
 
         message = FakeMessage(text="здравствуйте")
 
-        await fallback.unknown(message, api=api, store=store, settings=SETTINGS)
+        await fallback.unknown(message, state=state, api=api, store=store, settings=SETTINGS)
 
         assert message.last == texts.NOT_LINKED
 
@@ -273,12 +262,12 @@ class TestLinking:
         assert not start.looks_like_code("здравствуйте")
 
     @pytest.mark.asyncio
-    async def test_bare_code_in_a_linked_chat_gets_an_answer(self, api, linked_store):
+    async def test_bare_code_in_a_linked_chat_gets_an_answer(self, api, linked_store, state):
         """Раньше код в привязанном чате молча уходил в «я умею записывать данные»."""
         api.verify_error = BotApiError("conflict", "уже", 409, {"reason": "already_here"})
         message = FakeMessage(text="ABCD 2345")
 
-        await fallback.unknown(message, api=api, store=linked_store, settings=SETTINGS)
+        await fallback.unknown(message, state=state, api=api, store=linked_store, settings=SETTINGS)
 
         assert message.last == texts.LINK_ALREADY_HERE
 
@@ -337,7 +326,7 @@ class TestKetones:
         await scenarios.ketones_value(message, state)
 
         callback = FakeCallback(data=f"{keyboards.KETONE_METHOD_PREFIX}blood")
-        await scenarios.ketones_method(callback, state, api, linked_store)
+        await scenarios.ketones_method(callback, state, api, linked_store, SETTINGS)
         await answer_when_now(callback.message, state, api, linked_store)
 
         assert len(api.logs) == 1
@@ -364,7 +353,7 @@ class TestWeight:
         message = FakeMessage(text=raw)
         await state.set_state(scenarios.Weight.value)
 
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
 
         assert message.last == texts.WEIGHT_OUT_OF_RANGE
         assert not api.logs
@@ -374,7 +363,7 @@ class TestWeight:
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
 
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
         await answer_when_now(message, state, api, linked_store)
 
         assert api.logs[0]["kind"] == "weight"
@@ -391,7 +380,7 @@ class TestWellbeing:
         await scenarios.wellbeing_symptom(first, state)
 
         second = FakeMessage(text="после обеда")
-        await scenarios.wellbeing_note(second, state, api, linked_store)
+        await scenarios.wellbeing_note(second, state, api, linked_store, SETTINGS)
         await answer_when_now(second, state, api, linked_store)
 
         payload = api.logs[0]["payload"]
@@ -406,7 +395,7 @@ class TestWellbeing:
         await scenarios.wellbeing_symptom(first, state)
 
         callback = FakeCallback(data=keyboards.WELLBEING_SKIP_DATA)
-        await scenarios.wellbeing_skip_note(callback, state, api, linked_store)
+        await scenarios.wellbeing_skip_note(callback, state, api, linked_store, SETTINGS)
         await answer_when_now(callback.message, state, api, linked_store)
 
         assert "description" not in api.logs[0]["payload"]
@@ -428,7 +417,7 @@ class TestCancelAndFailures:
         await state.set_state(scenarios.Ketones.value)
         callback = FakeCallback(data=keyboards.CANCEL_DATA)
 
-        await scenarios.cancel(callback, state, SETTINGS)
+        await scenarios.cancel(callback, state, SETTINGS, FakeStore())
 
         assert await state.get_state() is None
         assert callback.message.last == texts.CANCELLED
@@ -446,7 +435,7 @@ class TestCancelAndFailures:
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
 
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
         await answer_when_now(message, state, api, linked_store)
 
         assert message.last == texts.LINK_REVOKED
@@ -461,7 +450,7 @@ class TestCancelAndFailures:
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
 
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
         await answer_when_now(message, state, api, linked_store)
 
         assert message.last == texts.API_UNAVAILABLE
@@ -480,7 +469,7 @@ class TestCancelAndFailures:
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
 
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
         await answer_when_now(message, state, api, linked_store)
 
         assert message.last == texts.NO_CONNECTION
@@ -506,7 +495,7 @@ class TestCancelAndFailures:
         api.log_error = BotApiError("validation_error", "ключ", 422)
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
         await answer_when_now(message, state, api, linked_store)
 
         api.log_error = None
@@ -520,7 +509,7 @@ class TestCancelAndFailures:
         for value in ("18.4", "18.5"):
             message = FakeMessage(text=value)
             await state.set_state(scenarios.Weight.value)
-            await scenarios.weight_value(message, state, api, linked_store)
+            await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
             await answer_when_now(message, state, api, linked_store)
 
         assert len(set(api.idempotency_keys)) == 2
@@ -645,7 +634,7 @@ class TestEventTimeStep:
 
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
 
         callback = FakeCallback(data=keyboards.WHEN_MANUAL_DATA, message=message)
         await scenarios.when_manual(callback, state)
@@ -667,7 +656,7 @@ class TestEventTimeStep:
     async def test_bad_time_is_re_asked_without_sending(self, api, linked_store, state):
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
         await scenarios.when_manual(
             FakeCallback(data=keyboards.WHEN_MANUAL_DATA, message=message), state
         )
@@ -685,7 +674,7 @@ class TestEventTimeStep:
 
         message = FakeMessage(text="18.4")
         await state.set_state(scenarios.Weight.value)
-        await scenarios.weight_value(message, state, api, linked_store)
+        await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
         await scenarios.when_manual(
             FakeCallback(data=keyboards.WHEN_MANUAL_DATA, message=message), state
         )
@@ -787,7 +776,7 @@ class TestMeal:
         await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
 
         callback = FakeCallback(data=keyboards.DONE_DATA, message=message)
-        await scenarios.meal_done(callback, state, SETTINGS)
+        await scenarios.meal_done(callback, state, SETTINGS, FakeStore())
 
         assert message.last == texts.MENU_PROMPT
         assert texts.CANCELLED not in message.last
@@ -939,7 +928,12 @@ class TestMenuAlwaysWins:
         await scenarios.weight_start(message, state, linked_store)
 
         assert await state.get_state() == scenarios.Weight.value.state
-        assert await state.get_data() == {}, "данные брошенного сценария забыты"
+        data = await state.get_data()
+        assert "value" not in data and "pending_kind" not in data, (
+            "данные брошенного сценария забыты"
+        )
+        # Остаётся только отметка, про какого ребёнка начат новый (ADR-0048).
+        assert data == {"scenario_patient_id": str(PATIENT_ID), "scenario_link_id": str(LINK_ID)}
 
 
 class TestGroupChats:
@@ -1008,20 +1002,20 @@ class TestHelp:
     @pytest.mark.asyncio
     async def test_help_promises_the_app_only_when_it_exists(self):
         message = FakeMessage(text="/help")
-        await start.help_command(message, SETTINGS)
+        await start.help_command(message, SETTINGS, FakeStore())
         assert "Приложение" not in message.last
 
         with_app = BotSettings(
             bot_token="t", bot_api_token="s", miniapp_url="https://tma.example.uz"
         )
         message = FakeMessage(text="/help")
-        await start.help_command(message, with_app)
+        await start.help_command(message, with_app, FakeStore())
         assert "Приложение" in message.last
 
     @pytest.mark.asyncio
     async def test_help_is_silent_in_groups(self):
         message = FakeMessage(text="/help", chat=FakeChat(id=-100123, type="supergroup"))
-        await start.help_command(message, SETTINGS)
+        await start.help_command(message, SETTINGS, FakeStore())
         assert message.answers == []
 
 
@@ -1087,7 +1081,7 @@ class TestCancelOnOldMessage:
                 chat=Chat(id=CHAT_ID, type="private"), message_id=1, date=0
             ),
         )
-        await scenarios.cancel(callback, state, SETTINGS)
+        await scenarios.cancel(callback, state, SETTINGS, FakeStore())
 
         assert callback.answered
         assert await state.get_state() is None

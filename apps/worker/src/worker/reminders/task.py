@@ -28,6 +28,7 @@ from core.models import KetoneLog, MedicationLog, WeightLog
 from core.repositories import diary as diary_repo
 from core.repositories import reminders as reminders_repo
 
+from .children import child_names, named
 from .telegram import TelegramSendError, send_message
 
 logger = structlog.get_logger(__name__)
@@ -108,12 +109,17 @@ async def reminders_cron(ctx: dict[str, Any]) -> dict[str, int]:
                     skipped += 1
                     continue
 
+                # Чат двоих детей получает имя над текстом: иначе «пора
+                # измерить кетоны» не говорит, кому (ADR-0048).
+                names = await child_names(
+                    session, patient_id=reminder.patient_id, chat_ids=[link.chat_id]
+                )
                 try:
                     await send_message(
                         client,
                         token=settings.bot_token,
                         chat_id=link.chat_id,
-                        text=TEXTS[kind],
+                        text=named(TEXTS[kind], names.get(link.chat_id)),
                     )
                 except TelegramSendError as exc:
                     # Чат мог быть заблокирован или удалён. Это не повод ронять

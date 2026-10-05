@@ -56,6 +56,10 @@ class CurrentUser:
     # токен бота не открывал то, что предназначено человеку: обновление сессии,
     # настройку второго фактора, выпуск новых кодов привязки.
     channel: Channel = "web"
+    # Привязка чата, по которой выдан токен бота или Mini App; у веба — None.
+    # Нужна переключению ребёнка в Mini App (ADR-0048): других детей ищут
+    # среди привязок ЭТОГО чата, а чат знает только привязка.
+    binding_id: uuid.UUID | None = None
 
 
 def bearer_token(request: Request) -> str:
@@ -101,6 +105,7 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
     patient_scope = uuid.UUID(scope_raw) if scope_raw else None
 
     channel = channel_of(payload)
+    binding_id: uuid.UUID | None = None
     if channel == "bot":
         # Единственная точка, через которую проходит любой пользовательский
         # токен, — здесь и стоит ограничение маршрутов для бота. Отдельная
@@ -112,13 +117,16 @@ async def get_current_user(request: Request, session: SessionDep) -> CurrentUser
         # доступ кончился сейчас, а не через пятнадцать минут. Ограничения
         # маршрутов у Mini App нет: там работает человек, вошедший в кабинет
         # ребёнка, а не автоматика по секрету (раздел 9 ТЗ).
-        await _assert_binding_alive(session, payload, user_id=user.id, patient_scope=patient_scope)
+        binding_id = await _assert_binding_alive(
+            session, payload, user_id=user.id, patient_scope=patient_scope
+        )
 
     return CurrentUser(
         id=user.id,
         role=user.role,
         patient_scope=patient_scope,
         channel=channel,
+        binding_id=binding_id,
     )
 
 
@@ -128,8 +136,8 @@ async def _assert_binding_alive(
     *,
     user_id: uuid.UUID,
     patient_scope: uuid.UUID | None,
-) -> None:
-    """Проверяет, что привязка, по которой выдан токен, ещё жива.
+) -> uuid.UUID:
+    """Проверяет, что привязка, по которой выдан токен, ещё жива, и называет её.
 
     Без этого отвязка не отвязывала: `revoke` ставит `revoked_at`, но уже
     выданный access-токен живёт пятнадцать минут и всё это время писал бы в
@@ -161,6 +169,7 @@ async def _assert_binding_alive(
     # изменение данных под выданным токеном — в обоих случаях отказ.
     if link.parent_id != user_id or link.patient_id != patient_scope:
         raise denied
+    return link.id
 
 
 def channel_of(payload: dict[str, Any]) -> Channel:

@@ -12,14 +12,16 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
+from core.models import TelegramAccount
 from core.models.enums import UserRole
+from core.repositories import access as access_repo
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
 from ..errors import ApiError, ErrorCode
-from ..schemas_telegram import BotSession, MiniAppSession
+from ..schemas_telegram import BotSession, MiniAppChild, MiniAppSession
 from ..security import ACCESS_TOKEN_TTL, TokenType, create_token
 from .telegram_initdata import InitDataError, parse_init_data
 
@@ -37,36 +39,61 @@ def build_deep_link(code: str) -> str | None:
     return f"https://t.me/{username}?start={code}"
 
 
-async def issue_miniapp_session(
-    session: AsyncSession, *, init_data: str, ip: str | None
-) -> MiniAppSession:
-    """Меняет подписанную строку запуска на сессию родителя, суженную до ребёнка.
+_NOT_LINKED = (
+    "Этот Telegram не привязан ни к одному ребёнку. "
+    "Пришлите боту код доступа от врача или родителя ребёнка."
+)
+_CHILD_NOT_LINKED = "Этот ребёнок не подключён к вашему Telegram."
 
-    Личность подтверждает Telegram своей подписью, а право на ребёнка — живая
-    привязка чата: Mini App не заводит третьего способа доступа, он показывает
-    то же, к чему семья уже привязала чат (раздел 9 ТЗ).
 
-    Чат ищется по идентификатору пользователя Telegram: привязка рождается в
-    личной переписке с ботом, где `chat_id` и есть идентификатор пользователя.
-    В группе бот привязку не заводит вовсе, так что второго случая нет.
+async def _openable_links(session: AsyncSession, chat_id: int) -> list[TelegramAccount]:
+    """Живые привязки чата, по которым действительно можно открыть сессию.
+
+    Привязка к отключённой учётной записи или к записи, ставшей сотрудником,
+    сессии не даёт (та же страховка от эскалации, что и у бота), и в
+    переключатель детей она не попадает: показать ребёнка, которого нельзя
+    открыть, значит пообещать отказ.
     """
 
-    settings = get_settings()
+    openable: list[TelegramAccount] = []
+    for link in await telegram_repo.list_active_links_by_chat(session, chat_id):
+        parent = await users_repo.get(session, link.parent_id)
+        if parent is None or not parent.is_active or parent.role is not UserRole.PARENT:
+            continue
+        # Связь взрослого с ребёнком проверяется явно, как в `_rebind`, а не
+        # выводится из живой привязки: сегодня каждый путь отзыва доступа гасит
+        # и привязки, но новый путь, забывший об этом, иначе открывал бы
+        # отрезанному взрослому ребёнка из переключателя (ревью ADR-0048).
+        if not await access_repo.user_has_patient_access(
+            session, user_id=parent.id, role=parent.role, patient_id=link.patient_id
+        ):
+            continue
+        openable.append(link)
+    return openable
 
-    try:
-        parsed = parse_init_data(init_data, bot_token=settings.bot_token)
-    except InitDataError as exc:
-        raise ApiError(ErrorCode.UNAUTHORIZED, "Telegram не подтвердил запуск.") from exc
 
-    link = await telegram_repo.get_active_link_by_chat(session, parsed.user_id)
-    if link is None:
-        # Отдельный код, а не «недостаточно прав»: приложению нужно показать
-        # инструкцию по привязке, а не сообщение об отказе (раздел 9 ТЗ).
-        raise ApiError(
-            ErrorCode.NOT_FOUND,
-            "Этот Telegram не привязан ни к одному ребёнку. "
-            "Пришлите боту код доступа от врача или родителя ребёнка.",
-        )
+async def _children(session: AsyncSession, links: list[TelegramAccount]) -> list[MiniAppChild]:
+    children: list[MiniAppChild] = []
+    for link in links:
+        patient = await patients_repo.get(session, link.patient_id)
+        if patient is not None:
+            children.append(MiniAppChild(patient_id=patient.id, name=patient.full_name))
+    return children
+
+
+async def _miniapp_session_for(
+    session: AsyncSession,
+    *,
+    link: TelegramAccount,
+    links: list[TelegramAccount],
+    action: str,
+    ip: str | None,
+) -> MiniAppSession:
+    """Пара токенов, суженная до ребёнка ОДНОЙ привязки, и список детей чата.
+
+    Токен несёт `binding_id` этой привязки: отзыв её гасит именно эту сессию, а
+    сессии других детей того же чата живут дальше (ADR-0048).
+    """
 
     parent = await users_repo.get(session, link.parent_id)
     if parent is None or not parent.is_active or parent.role is not UserRole.PARENT:
@@ -91,14 +118,15 @@ async def issue_miniapp_session(
         )
 
     # Вход — событие учётной записи (правило 7): по журналу видно, что сессия
-    # ребёнка открыта из Telegram, а не паролем в кабинете.
+    # ребёнка открыта из Telegram, а не паролем в кабинете, и к какому ребёнку.
     await audit_repo.write_audit_log(
         session,
         user_id=parent.id,
-        action="login_miniapp",
+        action=action,
         entity="telegram_accounts",
         entity_id=link.id,
         ip=ip,
+        after={"patient_id": str(link.patient_id)},
     )
 
     return MiniAppSession(
@@ -107,8 +135,88 @@ async def issue_miniapp_session(
         expires_in=int(ACCESS_TOKEN_TTL.total_seconds()),
         patient_id=link.patient_id,
         patient_name=patient.full_name,
+        children=await _children(session, links),
         web_url=get_settings().web_origin.rstrip("/"),
         has_web_credentials=parent.has_web_credentials,
+    )
+
+
+def _pick(links: list[TelegramAccount], patient_id: uuid.UUID) -> TelegramAccount:
+    for link in links:
+        if link.patient_id == patient_id:
+            return link
+    raise ApiError(ErrorCode.NOT_FOUND, _CHILD_NOT_LINKED, details={"reason": "child_not_linked"})
+
+
+async def issue_miniapp_session(
+    session: AsyncSession,
+    *,
+    init_data: str,
+    ip: str | None,
+    patient_id: uuid.UUID | None = None,
+) -> MiniAppSession:
+    """Меняет подписанную строку запуска на сессию родителя, суженную до ребёнка.
+
+    Личность подтверждает Telegram своей подписью, а право на ребёнка — живая
+    привязка чата: Mini App не заводит третьего способа доступа, он показывает
+    то же, к чему семья уже привязала чат (раздел 9 ТЗ).
+
+    Чат ищется по идентификатору пользователя Telegram: привязка рождается в
+    личной переписке с ботом, где `chat_id` и есть идентификатор пользователя.
+    В группе бот привязку не заводит вовсе, так что второго случая нет.
+
+    Чат может вести нескольких детей (ADR-0048). Открывается названный
+    (`patient_id`) или первый привязанный; сессия всё равно одна на ребёнка, а
+    остальные дети приходят списком для переключателя.
+    """
+
+    settings = get_settings()
+
+    try:
+        parsed = parse_init_data(init_data, bot_token=settings.bot_token)
+    except InitDataError as exc:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Telegram не подтвердил запуск.") from exc
+
+    links = await _openable_links(session, parsed.user_id)
+    if not links:
+        # Отдельный код, а не «недостаточно прав»: приложению нужно показать
+        # инструкцию по привязке, а не сообщение об отказе (раздел 9 ТЗ).
+        raise ApiError(ErrorCode.NOT_FOUND, _NOT_LINKED)
+
+    link = links[0] if patient_id is None else _pick(links, patient_id)
+    return await _miniapp_session_for(
+        session, link=link, links=links, action="login_miniapp", ip=ip
+    )
+
+
+async def switch_miniapp_child(
+    session: AsyncSession,
+    *,
+    binding_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    ip: str | None,
+) -> MiniAppSession:
+    """Новая сессия Mini App для другого ребёнка того же чата (ADR-0048).
+
+    Опора — привязка, по которой открыта текущая сессия (её живость уже
+    проверила `get_current_user`): другой ребёнок ищется среди живых привязок
+    ЭТОГО чата, и только там. Подпись Telegram здесь не нужна — она живёт час,
+    а семья переключает ребёнка и через два; доказательство того же уровня
+    уже есть: текущую сессию открыла подпись этого же чата.
+
+    Старая сессия при этом не отзывается: токены живут в памяти вкладки и
+    заменяются новыми, а каждый токен сужен до своего ребёнка — данные другого
+    ребёнка старым токеном не прочитать.
+    """
+
+    current = await telegram_repo.get_active_link(session, binding_id)
+    if current is None:
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Привязка отозвана, войдите заново.")
+
+    links = await _openable_links(session, current.chat_id)
+    link = _pick(links, patient_id)
+    return await _miniapp_session_for(
+        session, link=link, links=links, action="miniapp_switch_child", ip=ip
     )
 
 

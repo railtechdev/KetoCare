@@ -20,7 +20,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import TelegramAccount
@@ -45,13 +45,58 @@ def hash_secret(secret: str) -> str:
     return hashlib.sha256(secret.encode()).hexdigest()
 
 
-async def get_active_link_by_chat(session: AsyncSession, chat_id: int) -> TelegramAccount | None:
+async def list_active_links_by_chat(session: AsyncSession, chat_id: int) -> list[TelegramAccount]:
+    """Живые привязки чата — по одной на ребёнка (ADR-0048), раньше заведённые первыми.
+
+    Порядок постоянный, а не случайный: по нему Mini App выбирает ребёнка,
+    когда семья никого не выбирала, и список детей у переключателя не
+    перетасовывается от запуска к запуску.
+    """
+
+    stmt = (
+        select(TelegramAccount)
+        .where(
+            TelegramAccount.chat_id == chat_id,
+            TelegramAccount.revoked_at.is_(None),
+        )
+        .order_by(TelegramAccount.linked_at, TelegramAccount.id)
+    )
+    return list((await session.scalars(stmt)).all())
+
+
+async def get_active_link_for_child(
+    session: AsyncSession, *, chat_id: int, patient_id: uuid.UUID
+) -> TelegramAccount | None:
+    """Живая привязка этого чата к этому ребёнку — не более одной (частичный индекс)."""
+
     stmt = select(TelegramAccount).where(
         TelegramAccount.chat_id == chat_id,
+        TelegramAccount.patient_id == patient_id,
         TelegramAccount.revoked_at.is_(None),
     )
     link: TelegramAccount | None = await session.scalar(stmt)
     return link
+
+
+async def children_per_chat(session: AsyncSession, chat_ids: list[int]) -> dict[int, int]:
+    """Сколько детей ведёт каждый из чатов — по живым привязкам.
+
+    Нужна рассылкам: в чате одного ребёнка сообщение его не называет, в чате
+    двоих — называет по имени, иначе «пора измерить кетоны» не говорит, кому.
+    """
+
+    if not chat_ids:
+        return {}
+    stmt = (
+        select(TelegramAccount.chat_id, func.count(func.distinct(TelegramAccount.patient_id)))
+        .where(
+            TelegramAccount.chat_id.in_(chat_ids),
+            TelegramAccount.revoked_at.is_(None),
+        )
+        .group_by(TelegramAccount.chat_id)
+    )
+    rows = await session.execute(stmt)
+    return {int(chat_id): int(count) for chat_id, count in rows.all()}
 
 
 async def get_active_link(session: AsyncSession, link_id: uuid.UUID) -> TelegramAccount | None:
@@ -92,9 +137,10 @@ async def create_link(
 
     Существующая строка с тем же `chat_id` никогда не обновляется: обновление по
     несекретному ключу — это способ угнать чужую привязку, а заодно потеря
-    журнала о том, кому чат принадлежал раньше. Живая привязка чата снимается
-    только явным `revoke`, и уже после него частичный уникальный индекс
-    `uq_telegram_accounts_active_chat` пропустит новую строку.
+    журнала о том, кому чат принадлежал раньше. Живая привязка чата к ребёнку
+    снимается только явным `revoke`, и уже после него частичный уникальный
+    индекс `uq_telegram_accounts_active_chat_patient` пропустит новую строку.
+    Привязки того же чата к ДРУГИМ детям индекс не трогает (ADR-0048).
     """
 
     link = TelegramAccount(

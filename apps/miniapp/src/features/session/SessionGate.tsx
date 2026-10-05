@@ -1,5 +1,6 @@
 import { EmptyState, ErrorState } from "@ketocare/ui";
-import { type ReactNode, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { type ReactNode, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { onSessionExpired } from "../../lib/api";
@@ -18,11 +19,26 @@ import { useOpenSession } from "./useSession";
 export function SessionGate({
   children,
 }: {
-  children: (session: Session) => ReactNode;
+  children: (
+    session: Session,
+    actions: { switchChild: (patientId: string) => void },
+  ) => ReactNode;
 }) {
   const { t } = useTranslation();
   const open = useOpenSession();
   const { mutate } = open;
+  const queryClient = useQueryClient();
+
+  // Переключение ребёнка (ADR-0048) — новая сессия, а не фильтр: кэш прежнего
+  // ребёнка сбрасывается целиком, и экраны собираются заново под новым токеном.
+  // Иначе на мгновение были бы видны данные одного ребёнка под именем другого.
+  const switchChild = useCallback(
+    (patientId: string) => {
+      queryClient.clear();
+      mutate({ switchTo: patientId });
+    },
+    [mutate, queryClient],
+  );
 
   useEffect(() => {
     mutate();
@@ -99,5 +115,5 @@ export function SessionGate({
     );
   }
 
-  return <>{children(open.data)}</>;
+  return <>{children(open.data, { switchChild })}</>;
 }

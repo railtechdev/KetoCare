@@ -34,9 +34,17 @@ from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 from .. import keyboards, texts
 from ..api import BotApi, BotApiError, LinkRevokedError
 from ..config import BotSettings
-from ..deps import require_binding, submit_log
+from ..deps import (
+    begin_scenario,
+    child_label,
+    link_revoked,
+    menu,
+    named,
+    scenario_binding,
+    submit_log,
+)
 from ..event_time import TimeError, parse_moment
-from ..storage import BindingStore
+from ..storage import Binding, BindingStore
 
 logger = structlog.get_logger(__name__)
 
@@ -203,15 +211,14 @@ async def seizure_start(
     """
 
     await state.clear()
-    binding = await require_binding(message, store)
+    binding = await begin_scenario(message, state, store)
     if binding is None:
         return
 
     try:
         types = await api.seizure_types(link_id=binding.link_id, secret=binding.secret)
     except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await message.answer(texts.LINK_REVOKED)
+        await link_revoked(message, state, store, binding)
         return
     except BotApiError as exc:
         logger.warning("seizure_types_failed", status=exc.status, code=exc.code)
@@ -221,7 +228,9 @@ async def seizure_start(
     if not types:
         # Пустой справочник — не «попробуйте позже»: сам по себе он не
         # наполнится, и родителю нужно другое действие, а не повтор.
-        await message.answer(texts.SEIZURE_NO_TYPES, reply_markup=keyboards.main_menu(settings))
+        await message.answer(
+            texts.SEIZURE_NO_TYPES, reply_markup=await menu(store, message.chat.id, settings)
+        )
         return
 
     # `name_ru`, а не `name`: так называется поле в ответе API
@@ -230,25 +239,34 @@ async def seizure_start(
     buttons = [(str(item["id"]), str(item["name_ru"])) for item in types]
     await state.set_state(Seizure.type_choice)
     await state.update_data(seizure_type_names=dict(buttons))
-    await message.answer(texts.SEIZURE_ASK_TYPE, reply_markup=keyboards.seizure_types(buttons))
+    await message.answer(
+        named(texts.SEIZURE_ASK_TYPE, await child_label(store, message.chat.id)),
+        reply_markup=keyboards.seizure_types(buttons),
+    )
 
 
 @router.message(F.text == texts.BTN_KETONES)
 async def ketones_start(message: Message, state: FSMContext, store: BindingStore) -> None:
     await state.clear()
-    if await require_binding(message, store) is None:
+    if await begin_scenario(message, state, store) is None:
         return
     await state.set_state(Ketones.value)
-    await message.answer(texts.KETONES_ASK_VALUE, reply_markup=keyboards.cancel_only())
+    await message.answer(
+        named(texts.KETONES_ASK_VALUE, await child_label(store, message.chat.id)),
+        reply_markup=keyboards.cancel_only(),
+    )
 
 
 @router.message(F.text == texts.BTN_WEIGHT)
 async def weight_start(message: Message, state: FSMContext, store: BindingStore) -> None:
     await state.clear()
-    if await require_binding(message, store) is None:
+    if await begin_scenario(message, state, store) is None:
         return
     await state.set_state(Weight.value)
-    await message.answer(texts.WEIGHT_ASK_VALUE, reply_markup=keyboards.cancel_only())
+    await message.answer(
+        named(texts.WEIGHT_ASK_VALUE, await child_label(store, message.chat.id)),
+        reply_markup=keyboards.cancel_only(),
+    )
 
 
 @router.message(F.text == texts.BTN_MEDICATION)
@@ -261,7 +279,7 @@ async def medication_start(
 ) -> None:
     # Схему терапии ведёт врач в карте, семья по ней даёт препараты.
     await state.clear()
-    binding = await require_binding(message, store)
+    binding = await begin_scenario(message, state, store)
     if binding is None:
         return
 
@@ -274,8 +292,7 @@ async def medication_start(
             day=today,
         )
     except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await message.answer(texts.LINK_REVOKED)
+        await link_revoked(message, state, store, binding)
         return
     except BotApiError as exc:
         logger.warning("medications_fetch_failed", status=exc.status, code=exc.code)
@@ -283,7 +300,9 @@ async def medication_start(
         return
 
     if not items:
-        await message.answer(texts.MEDICATION_NONE, reply_markup=keyboards.main_menu(settings))
+        await message.answer(
+            texts.MEDICATION_NONE, reply_markup=await menu(store, message.chat.id, settings)
+        )
         return
 
     labels = {
@@ -296,7 +315,7 @@ async def medication_start(
     # подряд не вспомнить, что уже отмечено.
     await state.update_data(med_labels=labels)
     await message.answer(
-        texts.MEDICATION_ASK,
+        named(texts.MEDICATION_ASK, await child_label(store, message.chat.id)),
         reply_markup=keyboards.medications(list(labels.items())),
     )
 
@@ -313,11 +332,13 @@ async def meal_start(
     # 4: разбор «съел кашу с маслом» — это `POST /ai/parse`, а придуманная
     # ботом еда попадёт в итоги дня наравне с настоящей.
     await state.clear()
-    binding = await require_binding(message, store)
+    binding = await begin_scenario(message, state, store)
     if binding is None:
         return
 
-    pending = await _fetch_pending_meals(message, state, api=api, store=store, settings=settings)
+    pending = await _fetch_pending_meals(
+        message, state, api=api, store=store, settings=settings, binding=binding
+    )
     if pending is None:
         return
 
@@ -329,27 +350,37 @@ async def meal_start(
 
     await state.set_state(Meal.choice)
     await state.update_data(meal_labels=dict(pending))
-    await message.answer(texts.MEAL_ASK, reply_markup=keyboards.meal_items(pending))
+    await message.answer(
+        named(texts.MEAL_ASK, await child_label(store, message.chat.id)),
+        reply_markup=keyboards.meal_items(pending),
+    )
 
 
 @router.message(F.text == texts.BTN_WELLBEING)
 async def wellbeing_start(message: Message, state: FSMContext, store: BindingStore) -> None:
     await state.clear()
-    if await require_binding(message, store) is None:
+    if await begin_scenario(message, state, store) is None:
         return
     await state.set_state(Wellbeing.symptom)
-    await message.answer(texts.WELLBEING_ASK_SYMPTOM, reply_markup=keyboards.cancel_only())
+    await message.answer(
+        named(texts.WELLBEING_ASK_SYMPTOM, await child_label(store, message.chat.id)),
+        reply_markup=keyboards.cancel_only(),
+    )
 
 
 # --- Отмена: одна на все сценарии (раздел 7.3) ---
 
 
 @router.callback_query(F.data == keyboards.CANCEL_DATA)
-async def cancel(callback: CallbackQuery, state: FSMContext, settings: BotSettings) -> None:
+async def cancel(
+    callback: CallbackQuery, state: FSMContext, settings: BotSettings, store: BindingStore
+) -> None:
     await state.clear()
     message = _answerable(callback)
     if message is not None:
-        await message.answer(texts.CANCELLED, reply_markup=keyboards.main_menu(settings))
+        await message.answer(
+            texts.CANCELLED, reply_markup=await menu(store, message.chat.id, settings)
+        )
     await callback.answer()
 
 
@@ -382,9 +413,9 @@ async def _submit_pending(
     settings: BotSettings,
     occurred_at: datetime | None,
 ) -> None:
-    binding = await require_binding(message, store)
+    # Ребёнок — тот, про кого сценарий начат, а не выбранный сейчас (ADR-0048).
+    binding = await scenario_binding(message, state, store, settings)
     if binding is None:
-        await state.clear()
         return
 
     data = await state.get_data()
@@ -478,16 +509,18 @@ async def ketones_value(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(Ketones.method, F.data.startswith(keyboards.KETONE_METHOD_PREFIX))
 async def ketones_method(
-    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     await callback.answer()
     message = _answerable(callback)
     if message is None:
         return
 
-    binding = await require_binding(message, store)
-    if binding is None:
-        await state.clear()
+    if await scenario_binding(message, state, store, settings) is None:
         return
 
     method = (callback.data or "").removeprefix(keyboards.KETONE_METHOD_PREFIX)
@@ -509,7 +542,11 @@ async def ketones_method(
 
 @router.message(Weight.value)
 async def weight_value(
-    message: Message, state: FSMContext, api: BotApi, store: BindingStore
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     value = _parse_number(message.text or "")
     if value is None:
@@ -519,8 +556,7 @@ async def weight_value(
         await message.answer(texts.WEIGHT_OUT_OF_RANGE, reply_markup=keyboards.cancel_only())
         return
 
-    if await require_binding(message, store) is None:
-        await state.clear()
+    if await scenario_binding(message, state, store, settings) is None:
         return
 
     await ask_when(
@@ -593,7 +629,11 @@ async def seizure_count_more(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(Seizure.count, F.data.startswith(keyboards.SEIZURE_COUNT_PREFIX))
 async def seizure_count(
-    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     await callback.answer()
     message = _answerable(callback)
@@ -608,12 +648,16 @@ async def seizure_count(
         return
 
     await state.update_data(seizure_count=int(raw))
-    await _ask_seizure_duration(message, state, api=api, store=store)
+    await _ask_seizure_duration(message, state, api=api, store=store, settings=settings)
 
 
 @router.message(Seizure.count_exact)
 async def seizure_count_exact(
-    message: Message, state: FSMContext, api: BotApi, store: BindingStore
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     """Серия из пяти и больше — целым числом, в пределах 5-100.
 
@@ -635,11 +679,16 @@ async def seizure_count_exact(
         return
 
     await state.update_data(seizure_count=int(raw))
-    await _ask_seizure_duration(message, state, api=api, store=store)
+    await _ask_seizure_duration(message, state, api=api, store=store, settings=settings)
 
 
 async def _ask_seizure_duration(
-    message: Message, state: FSMContext, *, api: BotApi, store: BindingStore
+    message: Message,
+    state: FSMContext,
+    *,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     """Шкала длительности из справочника анкеты.
 
@@ -647,17 +696,14 @@ async def _ask_seizure_duration(
     статуса относятся к одному приступу (ADR-0020, дополнение 05.10.2026).
     """
 
-    binding = await require_binding(message, store)
+    binding = await scenario_binding(message, state, store, settings)
     if binding is None:
-        await state.clear()
         return
 
     try:
         options = await api.duration_options(link_id=binding.link_id, secret=binding.secret)
     except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await state.clear()
-        await message.answer(texts.LINK_REVOKED)
+        await link_revoked(message, state, store, binding)
         return
     except BotApiError as exc:
         logger.warning("duration_options_failed", status=exc.status, code=exc.code)
@@ -787,6 +833,7 @@ async def _fetch_pending_meals(
     api: BotApi,
     store: BindingStore,
     settings: BotSettings,
+    binding: Binding,
 ) -> list[tuple[str, str]] | None:
     """Неотмеченные позиции плана на сегодня, или None при отказе.
 
@@ -794,11 +841,6 @@ async def _fetch_pending_meals(
     сбой API) и продолжать сценарий не с чем. Пустой список — план есть и весь
     отмечен.
     """
-
-    binding = await require_binding(message, store)
-    if binding is None:
-        await state.clear()
-        return None
 
     today = datetime.now(ZoneInfo(settings.tz)).date()
     try:
@@ -809,9 +851,7 @@ async def _fetch_pending_meals(
             day=today,
         )
     except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await state.clear()
-        await message.answer(texts.LINK_REVOKED)
+        await link_revoked(message, state, store, binding)
         return None
     except BotApiError as exc:
         logger.warning("menu_fetch_failed", status=exc.status, code=exc.code)
@@ -860,9 +900,8 @@ async def meal_mark(
     if message is None:
         return
 
-    binding = await require_binding(message, store)
+    binding = await scenario_binding(message, state, store, settings)
     if binding is None:
-        await state.clear()
         return
 
     item_id = (callback.data or "").removeprefix(keyboards.MEAL_ITEM_PREFIX)
@@ -876,9 +915,7 @@ async def meal_mark(
             item_id=item_id,
         )
     except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await state.clear()
-        await message.answer(texts.LINK_REVOKED)
+        await link_revoked(message, state, store, binding)
         return
     except BotApiError as exc:
         logger.warning("meal_mark_failed", status=exc.status, code=exc.code)
@@ -890,21 +927,29 @@ async def meal_mark(
     # Список берётся заново с сервера: второй родитель мог отметить своё из
     # приложения, и показывать ему уже съеденное значило бы предложить съесть
     # дважды.
-    pending = await _fetch_pending_meals(message, state, api=api, store=store, settings=settings)
+    pending = await _fetch_pending_meals(
+        message, state, api=api, store=store, settings=settings, binding=binding
+    )
     if pending is None:
         return
 
     if not pending:
         await state.clear()
         await message.answer(
-            texts.MEAL_MARKED_LAST.format(title=marked_title),
-            reply_markup=keyboards.main_menu(settings),
+            named(
+                texts.MEAL_MARKED_LAST.format(title=marked_title),
+                await child_label(store, message.chat.id, binding),
+            ),
+            reply_markup=await menu(store, message.chat.id, settings),
         )
         return
 
     await state.update_data(meal_labels=dict(pending))
     await message.answer(
-        texts.MEAL_MARKED_MORE.format(title=marked_title),
+        named(
+            texts.MEAL_MARKED_MORE.format(title=marked_title),
+            await child_label(store, message.chat.id, binding),
+        ),
         reply_markup=keyboards.meal_items(pending, marked_any=True),
     )
 
@@ -942,9 +987,8 @@ async def meal_text_parse(
         await message.answer(texts.MEAL_TEXT_EMPTY, reply_markup=keyboards.cancel_only())
         return
 
-    binding = await require_binding(message, store)
+    binding = await scenario_binding(message, state, store, settings)
     if binding is None:
-        await state.clear()
         return
 
     await message.answer(texts.MEAL_TEXT_WORKING)
@@ -957,9 +1001,7 @@ async def meal_text_parse(
             text=text,
         )
     except LinkRevokedError:
-        await store.delete(message.chat.id)
-        await state.clear()
-        await message.answer(texts.LINK_REVOKED)
+        await link_revoked(message, state, store, binding)
         return
     except BotApiError as exc:
         logger.warning("meal_parse_failed", status=exc.status, code=exc.code)
@@ -969,7 +1011,7 @@ async def meal_text_parse(
         answer = (
             texts.MEAL_TEXT_LIMIT if exc.code == "rate_limited" else texts.MEAL_TEXT_UNAVAILABLE
         )
-        await message.answer(answer, reply_markup=keyboards.main_menu(settings))
+        await message.answer(answer, reply_markup=await menu(store, message.chat.id, settings))
         return
 
     items = ((parsed.get("meal") or {}).get("items")) or []
@@ -1061,9 +1103,8 @@ async def meal_text_confirm(
     if message is None:
         return
 
-    binding = await require_binding(message, store)
+    binding = await scenario_binding(message, state, store, settings)
     if binding is None:
-        await state.clear()
         return
 
     data = await state.get_data()
@@ -1071,7 +1112,7 @@ async def meal_text_confirm(
     if not job_id:
         await state.clear()
         await message.answer(
-            texts.MEAL_TEXT_UNAVAILABLE, reply_markup=keyboards.main_menu(settings)
+            texts.MEAL_TEXT_UNAVAILABLE, reply_markup=await menu(store, message.chat.id, settings)
         )
         return
 
@@ -1091,14 +1132,18 @@ async def meal_text_confirm(
 
 
 @router.callback_query(Meal.choice, F.data == keyboards.DONE_DATA)
-async def meal_done(callback: CallbackQuery, state: FSMContext, settings: BotSettings) -> None:
+async def meal_done(
+    callback: CallbackQuery, state: FSMContext, settings: BotSettings, store: BindingStore
+) -> None:
     """Выход из серии отметок. «Готово», а не «Отмена»: отметки уже сохранены,
     и ответ «Отменено.» заставил бы гадать, не отменились ли они."""
 
     await state.clear()
     message = _answerable(callback)
     if message is not None:
-        await message.answer(texts.MENU_PROMPT, reply_markup=keyboards.main_menu(settings))
+        await message.answer(
+            texts.MENU_PROMPT, reply_markup=await menu(store, message.chat.id, settings)
+        )
     await callback.answer()
 
 
@@ -1125,27 +1170,36 @@ async def wellbeing_symptom(message: Message, state: FSMContext) -> None:
 
 @router.message(Wellbeing.note)
 async def wellbeing_note(
-    message: Message, state: FSMContext, api: BotApi, store: BindingStore
+    message: Message,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
-    await _save_wellbeing(message, state, store=store, note=(message.text or "").strip())
+    await _save_wellbeing(
+        message, state, store=store, settings=settings, note=(message.text or "").strip()
+    )
 
 
 @router.callback_query(Wellbeing.note, F.data == keyboards.WELLBEING_SKIP_DATA)
 async def wellbeing_skip_note(
-    callback: CallbackQuery, state: FSMContext, api: BotApi, store: BindingStore
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
 ) -> None:
     await callback.answer()
     message = _answerable(callback)
     if message is None:
         return
-    await _save_wellbeing(message, state, store=store, note="")
+    await _save_wellbeing(message, state, store=store, settings=settings, note="")
 
 
 async def _save_wellbeing(
-    message: Message, state: FSMContext, *, store: BindingStore, note: str
+    message: Message, state: FSMContext, *, store: BindingStore, settings: BotSettings, note: str
 ) -> None:
-    if await require_binding(message, store) is None:
-        await state.clear()
+    if await scenario_binding(message, state, store, settings) is None:
         return
 
     data = await state.get_data()

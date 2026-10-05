@@ -60,7 +60,7 @@ async def _to_duration(api, store, state, count: int = 1) -> FakeMessage:
 
     await _to_count(api, store, state)
     callback = FakeCallback(data=f"{keyboards.SEIZURE_COUNT_PREFIX}{count}")
-    await scenarios.seizure_count(callback, state, api, store)
+    await scenarios.seizure_count(callback, state, api, store, SETTINGS)
     return callback.message
 
 
@@ -255,7 +255,7 @@ class TestSeriesCount:
         assert await state.get_state() == scenarios.Seizure.count_exact.state
 
         typed = FakeMessage(text=" 12 ")
-        await scenarios.seizure_count_exact(typed, state, ready, linked_store)
+        await scenarios.seizure_count_exact(typed, state, ready, linked_store, SETTINGS)
         assert typed.last == texts.SEIZURE_ASK_DURATION_SERIES
 
         exact = FakeCallback(data=keyboards.SEIZURE_EXACT_DATA)
@@ -280,7 +280,7 @@ class TestSeriesCount:
         )
 
         message = FakeMessage(text=raw)
-        await scenarios.seizure_count_exact(message, state, ready, linked_store)
+        await scenarios.seizure_count_exact(message, state, ready, linked_store, SETTINGS)
 
         assert message.last == texts.SEIZURE_COUNT_INVALID.format(low=5, high=100)
         assert await state.get_state() == scenarios.Seizure.count_exact.state
@@ -294,14 +294,14 @@ class TestSeriesCount:
             FakeCallback(data=keyboards.SEIZURE_COUNT_MORE_DATA), state
         )
         message = FakeMessage(text=raw)
-        await scenarios.seizure_count_exact(message, state, ready, linked_store)
+        await scenarios.seizure_count_exact(message, state, ready, linked_store, SETTINGS)
         assert await state.get_state() == scenarios.Seizure.duration.state
 
     @pytest.mark.asyncio
     async def test_forged_count_button_is_asked_again(self, ready, linked_store, state):
         await _to_count(ready, linked_store, state)
         callback = FakeCallback(data=f"{keyboards.SEIZURE_COUNT_PREFIX}9")
-        await scenarios.seizure_count(callback, state, ready, linked_store)
+        await scenarios.seizure_count(callback, state, ready, linked_store, SETTINGS)
 
         assert callback.message.last == texts.SEIZURE_ASK_COUNT
         assert await state.get_state() == scenarios.Seizure.count.state
