@@ -4,7 +4,7 @@
 пара `(chat_id, patient_id)`, а не один `chat_id`.
 
 Revision ID: b1c8a71a9a72
-Revises: c1853b706740
+Revises: 62f102316036
 Create Date: 2026-10-05 14:28:24.821703
 
 """
@@ -16,7 +16,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b1c8a71a9a72"
-down_revision: str | None = "c1853b706740"
+down_revision: str | None = "62f102316036"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -652,3 +652,50 @@ class TestReviewFindings:
             "/api/v1/auth/refresh", json={"refresh_token": body["refresh_token"]}
         )
         assert dead.status_code == 401
+
+    async def test_password_reset_from_a_chat_of_two_accounts(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Сброс пароля из Mini App, когда чат ведёт детей от двух учётных записей.
+
+        Цена из п. 2 ADR-0048: чат, подключённый кодом своего чата, кодом врача
+        на второго ребёнка получает вторую учётную запись. Подпись запуска
+        удостоверяет владельца, если хотя бы одна живая привязка чата — его.
+        """
+
+        mother = await make_user(UserRole.PARENT)
+        doctor = await make_user(UserRole.DOCTOR)
+        first = await make_patient("Аня Иванова")
+        second = await make_patient("Тимур Иванов")
+        await patients_repo.link_parent(session, parent_id=mother.id, patient_id=first.id)
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=second.id)
+        own_chat = await client.post(
+            f"/api/v1/patients/{first.id}/access-codes",
+            headers=auth_headers(mother),
+            json={"purpose": "own_chat"},
+        )
+        assert own_chat.status_code == 201, own_chat.text
+        assert (await _activate(client, str(own_chat.json()["code"]))).status_code == 201
+        second_link = await _activate(client, await _code(client, auth_headers, doctor, second))
+        assert second_link.status_code == 201, second_link.text
+        owners = {
+            link.parent_id
+            for link in await telegram_repo.list_active_links_by_chat(session, CHAT_ID)
+        }
+        assert len(owners) == 2 and mother.id in owners
+
+        opened = await client.post(
+            INIT,
+            json={"init_data": init_data(chat_id=CHAT_ID), "patient_id": str(first.id)},
+        )
+        assert opened.status_code == 200, opened.text
+        response = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers=_bearer(opened.json()["access_token"]),
+            json={
+                "password": "синий чайник на подоконнике",
+                "init_data": init_data(chat_id=CHAT_ID),
+            },
+        )
+
+        assert response.status_code == 204, response.text
