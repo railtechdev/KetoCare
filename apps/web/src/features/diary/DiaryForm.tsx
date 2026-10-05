@@ -5,17 +5,6 @@ import {
   WarningBanner,
   formatMeasured,
   formatWeight,
-} from "@ketocare/ui";
-import { Pill } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import { useForm } from "react-hook-form";
-import { useTranslation } from "react-i18next";
-
-import { Field, SelectField, TextAreaField } from "../../components/Field";
-import { FormError } from "../../components/FormError";
-import { errorMessageOf } from "../../lib/api";
-import type { DiaryBody, DiaryKind, DiaryLog } from "./diaryApi";
-import {
   OCCURRED_AT_FUTURE,
   KETONE_MAX_MMOL,
   KETONE_MIN_MMOL,
@@ -32,6 +21,7 @@ import {
   seizureSchema,
   sideEffectBody,
   sideEffectSchema,
+  toDateTimeLocalInput,
   weightBody,
   weightSchema,
   type KetoneValues,
@@ -40,8 +30,16 @@ import {
   type SeizureValues,
   type SideEffectValues,
   type WeightValues,
-} from "./schemas";
-import { toDateTimeLocalInput } from "./time";
+} from "@ketocare/ui";
+import { Pill } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+
+import { Field, SelectField, TextAreaField } from "../../components/Field";
+import { FormError } from "../../components/FormError";
+import { errorMessageOf } from "../../lib/api";
+import type { DiaryBody, DiaryKind, DiaryLog } from "./diaryApi";
 import type { DictionaryOption, MedicationOption } from "./useDiary";
 
 interface FormCallbacks {

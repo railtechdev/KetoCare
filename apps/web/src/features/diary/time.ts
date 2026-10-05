@@ -9,6 +9,18 @@
  * трактует их как местное время, — а наружу уходит ISO со смещением.
  */
 
+import { parseDateInput } from "@ketocare/ui";
+
+// Разбор полей ввода живёт в ките: дневник ведут и кабинет, и Mini App
+// (ADR-0044). Здесь он переэкспортируется, чтобы экраны кабинета не искали его
+// в двух местах.
+export {
+  fromDateTimeLocalInput,
+  parseDateInput,
+  toDateInput,
+  toDateTimeLocalInput,
+} from "@ketocare/ui";
+
 export type PeriodPreset = "week" | "month" | "custom";
 
 /** Границы периода в ISO со смещением, обе включительно. */
@@ -27,10 +39,6 @@ const PRESET_DAYS: Record<Exclude<PeriodPreset, "custom">, number> = {
   week: 7,
   month: 30,
 };
-
-function pad(value: number): string {
-  return String(value).padStart(2, "0");
-}
 
 export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -72,50 +80,6 @@ export function customRange(
   const to = parseDateInput(toInput);
   if (from === null || to === null || from > to) return null;
   return { from: from.toISOString(), to: endOfDay(to).toISOString() };
-}
-
-/** Дата из поля `date` (YYYY-MM-DD) как местная полночь. */
-export function parseDateInput(value: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (match === null) return null;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-
-  // Date нормализует переполнение (32 января -> 1 февраля), поэтому результат
-  // сверяется с исходными числами: иначе несуществующая дата прошла бы молча.
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-  return date;
-}
-
-export function toDateInput(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-export function toDateTimeLocalInput(date: Date): string {
-  return `${toDateInput(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/** Момент из поля `datetime-local` в ISO со смещением; null — если ввод не разобрать. */
-export function fromDateTimeLocalInput(value: string): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
-  if (match === null) return null;
-
-  const day = parseDateInput(`${match[1]}-${match[2]}-${match[3]}`);
-  const hours = Number(match[4]);
-  const minutes = Number(match[5]);
-  if (day === null || hours > 23 || minutes > 59) return null;
-
-  day.setHours(hours, minutes, 0, 0);
-  return day.toISOString();
 }
 
 /**

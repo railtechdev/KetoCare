@@ -17,8 +17,13 @@ import {
   sideEffectBody,
   weightBody,
   weightSchema,
-} from "./schemas";
-import { toDateTimeLocalInput } from "./time";
+  diaryFieldErrors,
+  DURATIONS_BOTH,
+  fromDateTimeLocalInput,
+  parseDateInput,
+  toDateInput,
+  toDateTimeLocalInput,
+} from "./diaryEntry";
 
 const OCCURRED_AT = "2026-03-01T07:45";
 
@@ -233,5 +238,45 @@ describe("тело запроса", () => {
     expect(
       ketoneBody({ occurredAt: "", value: "3.4", method: "blood" }),
     ).toBeNull();
+  });
+});
+
+describe("ошибки полей одной проверкой", () => {
+  it("называет поле и причину, а годные поля не трогает", () => {
+    const errors = diaryFieldErrors(seizureSchema, {
+      occurredAt: OCCURRED_AT,
+      seizureTypeId: "type",
+      durationSec: "90",
+      durationOptionId: "interval",
+      count: "1",
+      description: "",
+      triggers: "",
+    });
+
+    expect(errors).toEqual({ durationOptionId: DURATIONS_BOTH });
+  });
+
+  it("годная запись — без ошибок", () => {
+    expect(
+      diaryFieldErrors(ketoneSchema, {
+        occurredAt: OCCURRED_AT,
+        value: "2.5",
+        method: "blood",
+      }),
+    ).toEqual({});
+  });
+});
+
+describe("местное время полей ввода", () => {
+  it("несуществующая дата не разбирается", () => {
+    expect(parseDateInput("2026-02-30")).toBeNull();
+    expect(toDateInput(parseDateInput("2026-03-01")!)).toBe("2026-03-01");
+  });
+
+  it("момент из поля — местный, туда и обратно без сдвига", () => {
+    const iso = fromDateTimeLocalInput("2026-03-01T07:45");
+    expect(iso).not.toBeNull();
+    expect(toDateTimeLocalInput(new Date(iso!))).toBe("2026-03-01T07:45");
+    expect(fromDateTimeLocalInput("2026-03-01T25:00")).toBeNull();
   });
 });
