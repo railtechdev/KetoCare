@@ -15,6 +15,7 @@ import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { usePatients } from "../patients/usePatients";
+import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
 import { PatientViewLink } from "./PatientViewLink";
 import type { PatientView } from "./patientViews";
@@ -47,6 +48,8 @@ interface QueueRow {
  * известно, куда именно идти.
  */
 function viewForFlags(flags: PatientFlags): PatientView {
+  // Затяжной приступ врач смотрит в дневнике — там длительность и время.
+  if (flags.prolongedSeizure) return "diary";
   if (flags.noPrescription) return "prescription";
   return flags.staleData ? "diary" : "menu";
 }
@@ -197,6 +200,9 @@ export function DoctorHomePage() {
                       {row.patient.full_name}
                     </PatientViewLink>
                     <PatientFlagsView flags={row.flags} />
+                    {row.flags.staleData && (
+                      <NudgeFamilyButton patientId={row.patient.id} />
+                    )}
                   </li>
                 ))}
               </ul>

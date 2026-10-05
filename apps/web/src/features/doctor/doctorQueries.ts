@@ -13,6 +13,7 @@ import {
   type ClinicalNote,
   type Colleague,
   type FamilyMember,
+  type FamilyNudge,
   type Medication,
   type MedicalProfile,
   type PatientOverview,
@@ -300,6 +301,24 @@ export function useFamily(patientId: string) {
         { params: { path: { patient_id: patientId } } },
       );
       if (error || !data) throw error ?? new Error("Empty family response");
+      return data;
+    },
+  });
+}
+
+/**
+ * «Напомнить семье» (ADR-0046): сообщение в Telegram семьи от имени
+ * специалиста. Ничего в кэше не меняет — ни списка, ни сводки: просьба не
+ * данные ребёнка, а 409 на повтор сервер скажет сам.
+ */
+export function useFamilyNudge(patientId: string) {
+  return useMutation({
+    mutationFn: async (): Promise<FamilyNudge> => {
+      const { data, error } = await api.POST(
+        "/api/v1/patients/{patient_id}/family-nudge",
+        { params: { path: { patient_id: patientId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty nudge response");
       return data;
     },
   });

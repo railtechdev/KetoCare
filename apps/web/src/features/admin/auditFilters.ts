@@ -99,6 +99,8 @@ export const AUDIT_ACTIONS = [
   "telegram_link",
   "telegram_rebind",
   "telegram_unlink",
+  // Специалист попросил семью отметить дневник (ADR-0046).
+  "family_nudge",
 ] as const;
 
 const UUID_PATTERN =

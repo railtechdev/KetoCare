@@ -15,6 +15,7 @@ export type MedicationBody = Schemas["MedicationWrite"];
 export type ClinicalNote = Schemas["ClinicalNoteRead"];
 export type Colleague = Schemas["ColleagueRead"];
 export type FamilyMember = Schemas["FamilyMemberRead"];
+export type FamilyNudge = Schemas["FamilyNudgeRead"];
 export type Attachment = Schemas["AttachmentRead"];
 
 /**

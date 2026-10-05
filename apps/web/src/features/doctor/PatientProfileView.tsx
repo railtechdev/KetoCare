@@ -255,8 +255,13 @@ export function PatientProfileView({
 
       {/* Анкета — рядом с медицинским профилем: врачебная часть анамнеза и
           часть, заполненная семьёй, читаются вместе. Доступ к ней даёт сам
-          доступ к пациенту, поэтому диетолог её тоже видит. */}
-      <IntakeView patientId={patient.id} />
+          доступ к пациенту, поэтому диетолог её тоже видит — и, как врач,
+          заполняет на приёме за семью из Telegram (ADR-0046). */}
+      <IntakeView
+        patientId={patient.id}
+        childName={patient.full_name}
+        editable={clinicalAllowed}
+      />
 
       {clinicalAllowed && (
         <MedicalProfilePanel
