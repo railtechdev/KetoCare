@@ -23,14 +23,16 @@ class TestNoticeText:
         # Формулировка раздела 5.4 ТЗ: «Врач обновил назначение».
         assert "назначение" in NOTICE.lower()
 
-    def test_sends_the_family_to_the_cabinet(self) -> None:
+    def test_sends_the_family_to_the_app(self) -> None:
         """Без этого сообщение читается как справка, а не как повод действовать.
 
-        Цифры лежат в кабинете — и только там их можно показать.
+        В приложение, а не в кабинет: у взрослых из Telegram кабинета чаще
+        всего нет, а план дня собирается в приложении (ADR-0041).
         """
 
-        assert "кабинет" in NOTICE.lower()
-        assert "пересчитать" in NOTICE.lower()
+        assert "приложени" in NOTICE.lower()
+        assert "кабинет" not in NOTICE.lower()
+        assert "план питания" in NOTICE.lower()
 
     def test_carries_no_names(self) -> None:
         """Чат привязан к одному ребёнку — называть его по имени незачем."""

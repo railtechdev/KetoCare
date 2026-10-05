@@ -185,19 +185,22 @@ export function MenuScreen({ session }: { session: Session }) {
         onRetry={() => void menu.refetch()}
         isEmpty={menu.data === null}
         empty={
-          // Пустое состояние отправляло в кабинет, не давая туда пути: адреса
-          // кабинета у Mini App не было ни одной переменной сборки. С этапа Б
-          // он приходит в сессии (`web_url`), и «там же» стало ссылкой.
+          // Главный выход — собрать день здесь же (ADR-0041). Ссылка на
+          // кабинет — только тем, у кого он включён: у взрослого из Telegram
+          // кабинета чаще всего нет, и ссылка вела бы на форму входа, войти в
+          // которую ему нечем.
           <div className="flex flex-col gap-field">
             <p className="m-0 text-muted-foreground">{t("menu.none")}</p>
-            <a
-              className="text-primary underline underline-offset-4"
-              href={session.webUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {t("menu.openWeb")}
-            </a>
+            {session.hasWebCredentials && (
+              <a
+                className="text-primary underline underline-offset-4"
+                href={session.webUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("menu.openWeb")}
+              </a>
+            )}
           </div>
         }
       >

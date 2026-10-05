@@ -131,7 +131,7 @@ describe("истечение сессии посреди работы", () => {
     renderGate();
 
     expect(
-      await screen.findByText("Не удалось открыть кабинет"),
+      await screen.findByText("Не удалось открыть приложение"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Повторить" }),

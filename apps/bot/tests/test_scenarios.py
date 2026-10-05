@@ -974,16 +974,36 @@ class TestGroupChats:
 
 class TestHelp:
     def test_help_answers_the_two_inevitable_questions(self):
-        """«Как исправить запись» и «как отключить устройство» — оба ответа названы.
-
-        Второй — двумя путями: в кабинете и у врача. Родитель из Telegram
-        кабинета не имеет, и один только кабинетный ответ был бы для него тупиком.
+        """«Как исправить запись», «где напоминания» и «как отключить
+        устройство» — ответы названы, и все ведут туда, где взрослый из
+        Telegram может это сделать: в приложение или к тому, кто выдаёт коды.
+        Кабинета у него чаще всего нет, и кабинетный ответ был бы тупиком.
         """
 
-        assert "исправить" in texts.HELP.lower()
-        assert "закрыть доступ" in texts.HELP.lower()
-        assert "врача" in texts.HELP.lower()
-        assert "дневники" in texts.HELP.lower()
+        help_text = texts.HELP.lower()
+        assert "исправить" in help_text
+        assert "раздел «дневник»" in help_text
+        assert "блок «напоминания»" in help_text
+        assert "закрыть доступ" in help_text
+        assert "врача" in help_text
+        assert "настраиваются в кабинете" not in help_text
+        assert "исправить можно в кабинете" not in help_text
+
+    def test_cabinet_is_not_promised_the_menu(self):
+        """План дня живёт в приложении: «кабинет — меню, настройки» уводил
+        взрослого без кабинета от того, что у него уже есть."""
+
+        for text in (texts.HELP, texts.LINK_SUCCESS_CABINET_ON, texts.LINK_SUCCESS_CABINET_OFF):
+            assert "меню, отчёты" not in text.lower()
+            assert "отчёты к приёму" in text.lower()
+
+    def test_texts_do_not_send_to_the_cabinet_for_everyday_things(self):
+        """Отзыв доступа, исчерпанный разбор и пустой справочник — ни один
+        из этих ответов не должен вести в кабинет."""
+
+        for text in (texts.LINK_REVOKED, texts.MEAL_TEXT_LIMIT, texts.SEIZURE_NO_TYPES):
+            assert "кабинет" not in text.lower()
+        assert "код" in texts.LINK_REVOKED
 
     @pytest.mark.asyncio
     async def test_help_promises_the_app_only_when_it_exists(self):

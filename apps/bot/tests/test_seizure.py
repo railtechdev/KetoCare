@@ -44,14 +44,23 @@ def ready(api):
     return api
 
 
-async def _to_duration(api, store, state) -> FakeMessage:
-    """Довести сценарий до выбора длительности."""
+async def _to_count(api, store, state) -> FakeMessage:
+    """Довести сценарий до вопроса «сколько приступов»."""
 
     start = FakeMessage(text=texts.BTN_SEIZURE)
     await scenarios.seizure_start(start, state, api, store, SETTINGS)
 
     callback = FakeCallback(data=f"{keyboards.SEIZURE_TYPE_PREFIX}{TYPE_ID}")
-    await scenarios.seizure_type(callback, state, api, store)
+    await scenarios.seizure_type(callback, state)
+    return callback.message
+
+
+async def _to_duration(api, store, state, count: int = 1) -> FakeMessage:
+    """Довести сценарий до выбора длительности."""
+
+    await _to_count(api, store, state)
+    callback = FakeCallback(data=f"{keyboards.SEIZURE_COUNT_PREFIX}{count}")
+    await scenarios.seizure_count(callback, state, api, store)
     return callback.message
 
 
@@ -180,13 +189,143 @@ class TestConfirmation:
 
         assert "Тонико-клонический" in callback.message.last
         assert "От 10 до 30 минут" in callback.message.last
+        assert "приступов: 1" in callback.message.last
+
+    @pytest.mark.asyncio
+    async def test_echo_of_a_series_names_the_count_and_the_longest(
+        self, ready, linked_store, state
+    ):
+        await _to_duration(ready, linked_store, state, count=3)
+        callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
+        await scenarios.seizure_duration(callback, state)
+        await answer_when_now(callback.message, state, ready, linked_store)
+
+        assert "приступов: 3" in callback.message.last
+        assert "самый долгий — От 10 до 30 минут" in callback.message.last
+
+
+class TestSeriesCount:
+    """Серия приступов (вопрос 35): у ребёнка со спазмами десять подряд — это
+    десять, а не один, и число приступов — главная величина для врача."""
+
+    @pytest.mark.asyncio
+    async def test_count_is_asked_right_after_the_type(self, ready, linked_store, state):
+        message = await _to_count(ready, linked_store, state)
+
+        assert message.last == texts.SEIZURE_ASK_COUNT
+        labels = [b.text for row in message.last_markup.inline_keyboard for b in row]
+        assert labels[:4] == ["1", "2", "3", "4"]
+        assert texts.BTN_SEIZURE_COUNT_MORE in labels
+        assert texts.BTN_CANCEL in labels
+        assert await state.get_state() == scenarios.Seizure.count.state
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("count", [1, 2, 4])
+    async def test_button_count_is_saved(self, ready, linked_store, state, count):
+        await _to_duration(ready, linked_store, state, count=count)
+        callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
+        await scenarios.seizure_duration(callback, state)
+        await answer_when_now(callback.message, state, ready, linked_store)
+
+        payload = ready.logs[0]["payload"]
+        assert payload["count"] == count
+        assert payload["duration_option_id"] == OPTION_ID
+        assert "duration_sec" not in payload
+
+    @pytest.mark.asyncio
+    async def test_single_seizure_asks_the_usual_duration(self, ready, linked_store, state):
+        message = await _to_duration(ready, linked_store, state, count=1)
+        assert message.last == texts.SEIZURE_ASK_DURATION
+
+    @pytest.mark.asyncio
+    async def test_series_asks_for_the_longest_one(self, ready, linked_store, state):
+        """Пороги статуса — про один приступ: сумма серии их бы размыла."""
+
+        message = await _to_duration(ready, linked_store, state, count=2)
+        assert message.last == texts.SEIZURE_ASK_DURATION_SERIES
+        # Подсказка про границы интервалов остаётся и у серии.
+        assert "на границе" in message.last
+
+    @pytest.mark.asyncio
+    async def test_five_or_more_is_typed_and_saved(self, ready, linked_store, state):
+        await _to_count(ready, linked_store, state)
+        more = FakeCallback(data=keyboards.SEIZURE_COUNT_MORE_DATA)
+        await scenarios.seizure_count_more(more, state)
+        assert more.message.last == texts.SEIZURE_ASK_COUNT_EXACT
+        assert await state.get_state() == scenarios.Seizure.count_exact.state
+
+        typed = FakeMessage(text=" 12 ")
+        await scenarios.seizure_count_exact(typed, state, ready, linked_store)
+        assert typed.last == texts.SEIZURE_ASK_DURATION_SERIES
+
+        exact = FakeCallback(data=keyboards.SEIZURE_EXACT_DATA)
+        await scenarios.seizure_duration_exact_ask(exact, state)
+        assert exact.message.last == texts.SEIZURE_ASK_EXACT_SERIES
+        seconds = FakeMessage(text="40")
+        await scenarios.seizure_duration_exact(seconds, state)
+        await answer_when_now(seconds, state, ready, linked_store)
+
+        payload = ready.logs[0]["payload"]
+        assert payload["count"] == 12
+        assert payload["duration_sec"] == 40
+        assert "duration_option_id" not in payload
+        assert "приступов: 12" in seconds.last
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("raw", ["4", "0", "101", "много", "７", "5.5", "-6", ""])
+    async def test_bad_typed_count_is_asked_again(self, ready, linked_store, state, raw):
+        await _to_count(ready, linked_store, state)
+        await scenarios.seizure_count_more(
+            FakeCallback(data=keyboards.SEIZURE_COUNT_MORE_DATA), state
+        )
+
+        message = FakeMessage(text=raw)
+        await scenarios.seizure_count_exact(message, state, ready, linked_store)
+
+        assert message.last == texts.SEIZURE_COUNT_INVALID.format(low=5, high=100)
+        assert await state.get_state() == scenarios.Seizure.count_exact.state
+        assert ready.logs == []
+
+    @pytest.mark.parametrize("raw", ["5", "100"])
+    @pytest.mark.asyncio
+    async def test_typed_count_bounds_are_inclusive(self, ready, linked_store, state, raw):
+        await _to_count(ready, linked_store, state)
+        await scenarios.seizure_count_more(
+            FakeCallback(data=keyboards.SEIZURE_COUNT_MORE_DATA), state
+        )
+        message = FakeMessage(text=raw)
+        await scenarios.seizure_count_exact(message, state, ready, linked_store)
+        assert await state.get_state() == scenarios.Seizure.duration.state
+
+    @pytest.mark.asyncio
+    async def test_forged_count_button_is_asked_again(self, ready, linked_store, state):
+        await _to_count(ready, linked_store, state)
+        callback = FakeCallback(data=f"{keyboards.SEIZURE_COUNT_PREFIX}9")
+        await scenarios.seizure_count(callback, state, ready, linked_store)
+
+        assert callback.message.last == texts.SEIZURE_ASK_COUNT
+        assert await state.get_state() == scenarios.Seizure.count.state
+
+    @pytest.mark.asyncio
+    async def test_state_from_before_the_count_step_saves_one(self, ready, linked_store, state):
+        """Сценарий, начатый до выката шага, доходит до записи с единицей —
+        так бот писал всегда, и запись важнее нового поля."""
+
+        await state.set_state(scenarios.Seizure.duration)
+        await state.update_data(seizure_type_id=TYPE_ID, seizure_duration_names={})
+        callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
+        await scenarios.seizure_duration(callback, state)
+        await answer_when_now(callback.message, state, ready, linked_store)
+
+        assert ready.logs[0]["payload"]["count"] == 1
 
 
 class TestWhenThingsGoWrong:
     @pytest.mark.asyncio
-    async def test_empty_dictionary_sends_to_the_cabinet(self, api, linked_store, state):
+    async def test_empty_dictionary_tells_whom_to_tell(self, api, linked_store, state):
         """Пустой справочник сам не наполнится: «попробуйте позже» здесь —
-        совет в никуда."""
+        совет в никуда. И кабинет не выход: без типа он приступ тоже не
+        сохранит, а у семьи из Telegram кабинета нет вовсе."""
 
         api.seizure_type_items = []
         message = FakeMessage(text=texts.BTN_SEIZURE)
@@ -194,6 +333,8 @@ class TestWhenThingsGoWrong:
         await scenarios.seizure_start(message, state, api, linked_store, SETTINGS)
 
         assert message.last == texts.SEIZURE_NO_TYPES
+        assert "кабинет" not in message.last
+        assert "врачу" in message.last
         assert await state.get_state() is None
 
     @pytest.mark.asyncio

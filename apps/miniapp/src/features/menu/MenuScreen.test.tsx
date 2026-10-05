@@ -65,7 +65,7 @@ function menu(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderScreen() {
+function renderScreen(session = SESSION) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -74,7 +74,7 @@ function renderScreen() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<MenuScreen session={SESSION} />, { wrapper: Wrapper });
+  return render(<MenuScreen session={session} />, { wrapper: Wrapper });
 }
 
 /** Сводка нужна экрану ради назначения: приёмы в дне и цели по рациону. */
@@ -288,11 +288,30 @@ describe("план дня в Mini App", () => {
     expect(
       await screen.findByText(/Плана на этот день нет/),
     ).toBeInTheDocument();
-    // И выход отсюда есть: до этого пустое состояние отправляло в кабинет,
-    // не давая туда пути — адреса кабинета у Mini App не было вовсе.
+    // Выход отсюда — собрать день здесь же; у кого кабинет включён, тому
+    // ещё и ссылка на него.
+    expect(screen.getByText(/«Собрать день»/)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Открыть кабинет" }),
+      screen.getByRole("button", { name: "Собрать день" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Открыть кабинет/ }),
     ).toHaveAttribute("href", SESSION.webUrl);
+  });
+
+  it("без кабинета пустой план не ведёт в кабинет", async () => {
+    // У взрослого из Telegram кабинета нет: ссылка вела бы на форму входа,
+    // войти в которую ему нечем.
+    (api.GET as Mock).mockResolvedValue({ response: { status: 404 } });
+    renderScreen({ ...SESSION, hasWebCredentials: false });
+
+    expect(
+      await screen.findByText(/Плана на этот день нет/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /кабинет/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/кабинет/i)).not.toBeInTheDocument();
   });
 
   it("называет исключённые ребёнку продукты в плане", async () => {
