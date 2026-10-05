@@ -13,7 +13,7 @@ import uuid
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.models import AiJob, MealLog
+from core.models import AiJob, MealLog, SeizureLog
 from core.models.enums import AiJobKind, AiJobStatus, DiarySource
 from core.repositories import ai_jobs as ai_jobs_repo
 from core.repositories import diary as diary_repo
@@ -168,6 +168,11 @@ async def update_log[M: DiaryLog, R: BaseModel](
             fields.get("menu_item_id", log.menu_item_id),
             fields.get("free_text", log.free_text),
         )
+    if isinstance(log, SeizureLog):
+        _check_one_duration_after_update(
+            fields.get("duration_sec", log.duration_sec),
+            fields.get("duration_option_id", log.duration_option_id),
+        )
     await _check_references(session, patient_id=patient_id, fields=fields)
 
     updated = await diary_repo.update(session, log=log, fields=fields)
@@ -243,6 +248,24 @@ def _check_meal_content(menu_item_id: uuid.UUID | None, free_text: str | None) -
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
             "Укажите позицию меню или опишите еду текстом.",
+        )
+
+
+def _check_one_duration_after_update(
+    duration_sec: int | None, duration_option_id: uuid.UUID | None
+) -> None:
+    """Секунды или интервал — и после частичной правки тоже (ADR-0020).
+
+    Схема изменения видит только переданные поля: `{"duration_sec": 90}` у
+    записи, где уже стоит интервал со слов, она пропускала, и в базе
+    оказывались оба ответа об одной величине — догадка рядом с измерением.
+    Проверять приходится итог слияния, а он известен только здесь.
+    """
+
+    if duration_sec is not None and duration_option_id is not None:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Укажите либо точную длительность в секундах, либо интервал со слов — но не оба сразу.",
         )
 
 
