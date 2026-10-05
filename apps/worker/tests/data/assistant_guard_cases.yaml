@@ -39,6 +39,21 @@ must_block:
   - kind: symptom_reading
     text: Сонливость, скорее всего, из-за высоких кетонов
     why: связывание симптома с причиной
+  - kind: unreadable
+    text: Ketonlarni «Ketonlar» tugmasi bilan yozing, keyin natijani shifokorga ko‘rsating.
+    why: ответ по-узбекски латиницей — правила его не читают (ADR-0021, дополнение)
+  - kind: unreadable
+    text: Depakinni kuniga 300 mg dan, kechqurun yarim tabletka bering.
+    why: доза по-узбекски — ровно то, что русские правила пропустили бы
+  - kind: unreadable
+    text: Ketonlarni «Кетоны» tugmasi orqali, vaznni «Вес» tugmasi orqali yozasiz, natijani «Дневник» bo‘limida ko‘rasiz.
+    why: русские подписи кнопок внутри узбекского ответа не делают его русским
+  - kind: unreadable
+    text: Кетонларни «Кетоны» тугмаси орқали ёзинг, кейин шифокорга кўрсатинг.
+    why: узбекская кириллица — буквы «қ» и «ў» в русском не встречаются
+  - kind: unreadable
+    text: Give half a tablet at night and skip the evening snack.
+    why: ответ по-английски
 
 must_pass:
   - text: Кетоны записываются кнопкой «Кетоны» в чате с ботом или в разделе «Дневник».
@@ -59,3 +74,9 @@ must_pass:
     why: про поля формы
   - text: Что означает конкретное значение кетонов — вопрос к лечащему врачу.
     why: сам шаблонный отказ обязан проходить фильтр
+  - text: Кетоны в крови вводятся в ммоль/л, вес ребёнка — в кг, а единицы мг/кг в карточке препарата заполняет врач.
+    why: русские единицы без числа и без указания — не доза и не другой язык
+  - text: Кетоны на экране показаны в mmol/L, вес — в kg, как на глюкометре и весах [[kb:diary]].
+    why: латинские единицы и ссылка на статью не делают русский ответ чужим
+  - text: Откройте Mini App кнопкой «Приложение» в Telegram, раздел «Дневник».
+    why: названия KetoCare, Telegram, Mini App законны в русском ответе
