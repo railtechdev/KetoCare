@@ -122,6 +122,7 @@ async def upsert(
     totals: dict[str, Any] | None = None,
     engine_version: str | None = None,
     created_by: uuid.UUID | None,
+    updated_by: uuid.UUID | None = None,
 ) -> Menu:
     """Меню дня одно: `unique(patient_id, date)` (раздел 4.2 ТЗ).
 
@@ -132,6 +133,8 @@ async def upsert(
     `deleted_at` сбрасывается, потому что уникальность мягкое удаление не
     учитывает: иначе однажды удалённый день нельзя было бы составить заново.
     `created_by` при конфликте не трогаем — автором остаётся тот, кто завёл день.
+    `updated_by` — наоборот, всегда последний сохранивший: день составляют и
+    семья, и специалист, и обоим нужно видеть, чей это план сейчас (ADR-0047).
 
     Итоги необязательны: они считаются по снимкам уже сохранённых позиций, то
     есть после `replace_items`, и проставляются `set_totals` в той же
@@ -146,11 +149,13 @@ async def upsert(
             totals=totals,
             engine_version=engine_version,
             created_by=created_by,
+            updated_by=updated_by,
         )
         .on_conflict_do_update(
             constraint="uq_menu_patient_date",
             set_={
                 "totals": totals,
+                "updated_by": updated_by,
                 "engine_version": engine_version,
                 "deleted_at": None,
                 # `onupdate` к ON CONFLICT-обновлению не применяется — время правки
@@ -200,6 +205,9 @@ async def set_totals(
     menu.totals = totals
     menu.engine_version = engine_version
     await session.flush()
+    # `updated_at` выставляет база (`onupdate`), и после flush атрибут истёк:
+    # ленивое чтение в async-сессии — ошибка, а ответ ручки время правки отдаёт.
+    await session.refresh(menu, attribute_names=["updated_at"])
     return menu
 
 
@@ -225,11 +233,7 @@ async def replace_items(
     сохранение дня его берёт.
     """
 
-    reusable: dict[_ItemKey, deque[MenuItem]] = defaultdict(deque)
-    for stored in await list_items(session, menu_id=menu.id):
-        reusable[_item_key(stored.meal_index, stored.recipe_id, stored.custom_dish_id)].append(
-            stored
-        )
+    reusable = _reuse_buckets(await list_items(session, menu_id=menu.id))
 
     for spec in items:
         bucket = reusable.get(_item_key(spec.meal_index, spec.recipe_id, spec.custom_dish_id))
@@ -261,6 +265,40 @@ async def replace_items(
 
     await session.flush()
     return await list_items(session, menu_id=menu.id)
+
+
+def _reuse_buckets(stored: Sequence[MenuItem]) -> dict[_ItemKey, deque[MenuItem]]:
+    """Сохранённые позиции по ключу совпадения — съеденные в начале корзины.
+
+    Две одинаковые позиции в одном приёме (два одинаковых перекуса) различаются
+    только отметкой. Если новый план оставил одну из них, уцелеть должна
+    отмеченная: иначе пересохранение дня стёрло бы запись о том, что ребёнок ел,
+    оставив неотмеченного двойника.
+    """
+
+    buckets: dict[_ItemKey, deque[MenuItem]] = defaultdict(deque)
+    for item in sorted(stored, key=lambda item: not item.eaten):
+        buckets[_item_key(item.meal_index, item.recipe_id, item.custom_dish_id)].append(item)
+    return buckets
+
+
+def eaten_left_out(stored: Sequence[MenuItem], items: Sequence[MenuItemSpec]) -> list[MenuItem]:
+    """Съеденные позиции, которые новый состав дня удалил бы.
+
+    То же совпадение, что у `replace_items`: позиция уцелеет, только если в
+    новом плане есть позиция с тем же приёмом и блюдом. Отметка «съедено» —
+    уже не план, а запись о еде ребёнка (ADR-0041), и сохранение дня не должно
+    стирать её ни из какого канала — ни у семьи, ни у специалиста (ADR-0047).
+    """
+
+    wanted: dict[_ItemKey, int] = defaultdict(int)
+    for spec in items:
+        wanted[_item_key(spec.meal_index, spec.recipe_id, spec.custom_dish_id)] += 1
+
+    lost: list[MenuItem] = []
+    for key, bucket in _reuse_buckets(stored).items():
+        lost.extend(item for item in list(bucket)[wanted[key] :] if item.eaten)
+    return lost
 
 
 async def set_eaten(session: AsyncSession, *, item: MenuItem, eaten: bool) -> MenuItem:

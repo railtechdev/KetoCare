@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Query, Request
 
 from core.models import Menu, MenuItem
+from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import menus as menus_repo
 from core.repositories import products as products_repo
@@ -28,6 +29,10 @@ from ..services import menus as menus_service
 router = APIRouter(prefix="/patients/{patient_id}/menus", tags=["menus"])
 
 PatientIdPath = Annotated[uuid.UUID, Path()]
+
+#: Кто составляет день за семью (ADR-0047). Сохранение специалистом — повод
+#: сказать семье: план, по которому кормят ребёнка, поменял другой человек.
+SPECIALIST_ROLES = frozenset({UserRole.DOCTOR, UserRole.DIETITIAN})
 
 
 async def _read(session: SessionDep, menu: Menu) -> MenuRead:
@@ -109,6 +114,7 @@ async def recent_products(
 async def upsert_menu(
     patient_id: PatientIdPath,
     payload: MenuWrite,
+    request: Request,
     session: SessionDep,
     user: PatientAccessDep,
 ) -> MenuRead:
@@ -129,21 +135,43 @@ async def upsert_menu(
         patient_id=patient_id,
         menu_date=payload.date,
         created_by=user.id,
+        updated_by=user.id,
     )
+    specs = [
+        menus_service.to_spec(item, snapshot)
+        for item, snapshot in zip(payload.items, snapshots, strict=True)
+    ]
+
+    # Отметка «съедено» — запись о том, что ребёнок ел, а не часть плана
+    # (ADR-0041). Сохранение дня целиком, без позиции, которую уже отметили,
+    # стёрло бы её молча — а день теперь составляет и специалист, не видящий,
+    # что семья успела съесть с утра (ADR-0047). Отказ — тот же, что у удаления
+    # дня: сначала снимается отметка.
+    lost = menus_repo.eaten_left_out(await menus_repo.list_items(session, menu_id=menu.id), specs)
+    if lost:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "В новом плане нет блюда, которое уже отмечено съеденным, — это запись о том, "
+            "что ребёнок ел. Оставьте его в плане или сначала снимите отметку.",
+            details={"reason": "drops_eaten_items", "eaten": len(lost)},
+        )
+
     items = await menus_repo.replace_items(
-        session,
-        menu=menu,
-        patient_id=patient_id,
-        items=[
-            menus_service.to_spec(item, snapshot)
-            for item, snapshot in zip(payload.items, snapshots, strict=True)
-        ],
-        created_by=user.id,
+        session, menu=menu, patient_id=patient_id, items=specs, created_by=user.id
     )
     totals, engine_version = menus_service.totals_from_items(items)
     menu = await menus_repo.set_totals(
         session, menu=menu, totals=totals, engine_version=engine_version
     )
+
+    if user.role in SPECIALIST_ROLES:
+        await menus_service.tell_family_about_plan(
+            session,
+            menu=menu,
+            composer_id=user.id,
+            items=len(items),
+            ip=client_address(request),
+        )
     return await menus_service.to_read(session, menu, items)
 
 
