@@ -1127,6 +1127,13 @@ class TestReadingCommandsThatRunOrWrite:
             "git grep -iO ratio docs/medical",
             "git grep --open-files-in-pager=vim ratio docs/medical",
             "git grep --open ratio docs/medical",
+            # находки ревью: `-e`/`-f` забирают `--`, и -O стоит уже после него
+            "git grep -e -- '-Orm -f' ratio docs/medical",
+            "git grep -e -- -Ovim ratio docs/medical",
+            "git grep -f -- -O ratio docs/medical",
+            # uniq через xargs получает оба файла из ввода
+            "ls docs/medical/reference-cases | xargs uniq",
+            "ls docs/medical | xargs -n 2 uniq",
         ],
     )
     def test_writing_blocked(self, command: str) -> None:

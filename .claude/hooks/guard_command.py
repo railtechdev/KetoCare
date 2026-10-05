@@ -595,7 +595,9 @@ def segment_is_read_only(segment: str) -> bool:
     args = command_tokens(segment)[1:]
 
     if name == "uniq":
-        return _uniq_is_read_only(args)
+        # Через `xargs` аргументы приходят из ввода, и сколько их, не видно:
+        # `ls каталог | xargs uniq` перезапишет второй файл первым.
+        return not runs_through_xargs(segment) and _uniq_is_read_only(args)
 
     if name == "sed":
         return _sed_is_read_only(args)
@@ -641,9 +643,11 @@ def _git_grep_is_read_only(args: list[str]) -> bool:
     по однозначному началу (`--open`), поэтому проверка нарочно грубая.
     """
 
+    # `--` не обрывает проверку: `-e` и `-f` забирают следующее слово, даже если
+    # это `--`, и `git grep -e -- -Ovim …` открывает найденное программой.
     for arg in args:
         if arg == "--":
-            break
+            continue
         if arg.startswith("--op"):
             return False
         if arg.startswith("-") and not arg.startswith("--") and "O" in arg:
