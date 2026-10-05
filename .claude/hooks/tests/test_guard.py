@@ -890,3 +890,178 @@ class TestEngineVersionMustActuallyGrow:
 
         verdict = self._verdict(tmp_path, self.BEFORE, "VERSION = '1.1.0'\n")
         assert verdict != "bumped"
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+
+class TestMigrationFreezesWhenItReachesMain:
+    """ТЗ §0.3: «никаких правок старых миграций после их попадания в main».
+
+    Хук замораживал миграцию уже при `git add`: ревизию, закоммиченную в ветке,
+    нельзя было поправить по замечанию ревью без участия человека, хотя правило
+    этого не запрещает. Теперь граница — `origin/main`; без неё (нет удалённой
+    ветки) — по-прежнему индекс, то есть строже, а не слабее.
+    """
+
+    VERSIONS = "packages/core/migrations/versions"
+    MERGED = f"{VERSIONS}/aaaa1111_merged.py"
+    BRANCH = f"{VERSIONS}/bbbb2222_on_branch.py"
+
+    @pytest.fixture
+    def repo_with_origin(self, tmp_path: Path) -> Path:
+        origin = tmp_path / "origin.git"
+        _git(tmp_path, "init", "--bare", "-b", "main", str(origin))
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git(repo, "init", "-b", "main")
+        _git(repo, "config", "user.email", "t@example.com")
+        _git(repo, "config", "user.name", "t")
+        (repo / self.VERSIONS).mkdir(parents=True)
+        (repo / self.MERGED).write_text("x = 1\n", encoding="utf-8")
+        _git(repo, "add", self.MERGED)
+        _git(repo, "commit", "-m", "merged migration")
+        _git(repo, "remote", "add", "origin", str(origin))
+        _git(repo, "push", "origin", "main")
+        _git(repo, "fetch", "origin")
+        _git(repo, "switch", "-c", "feat/x")
+        (repo / self.BRANCH).write_text("x = 2\n", encoding="utf-8")
+        _git(repo, "add", self.BRANCH)
+        _git(repo, "commit", "-m", "branch migration")
+        return repo
+
+    def test_migration_in_main_is_frozen(self, repo_with_origin: Path) -> None:
+        payload = {"tool_input": {"file_path": self.MERGED}}
+        assert run_guard("file", payload, cwd=repo_with_origin) == BLOCK
+        assert check_command(f"sed -i '' 's/1/9/' {self.MERGED}", cwd=repo_with_origin) == BLOCK
+        assert check_command(f"rm {self.MERGED}", cwd=repo_with_origin) == BLOCK
+
+    def test_committed_but_unmerged_migration_is_editable(self, repo_with_origin: Path) -> None:
+        payload = {"tool_input": {"file_path": self.BRANCH}}
+        assert run_guard("file", payload, cwd=repo_with_origin) == ALLOW
+        assert check_command(f"sed -i '' 's/2/3/' {self.BRANCH}", cwd=repo_with_origin) == ALLOW
+
+    def test_without_origin_main_the_index_still_protects(self, repo_on_main: Path) -> None:
+        committed = f"{self.VERSIONS}/cccc3333_committed.py"
+        (repo_on_main / self.VERSIONS).mkdir(parents=True)
+        (repo_on_main / committed).write_text("x = 1\n", encoding="utf-8")
+        _git(repo_on_main, "add", committed)
+        _git(repo_on_main, "commit", "-m", "committed migration")
+
+        payload = {"tool_input": {"file_path": committed}}
+        assert run_guard("file", payload, cwd=repo_on_main) == BLOCK
+        fresh = {"tool_input": {"file_path": f"{self.VERSIONS}/dddd4444_fresh.py"}}
+        assert run_guard("file", fresh, cwd=repo_on_main) == ALLOW
+
+
+class TestReadingFormsAreReading:
+    """Ложные блокировки чтения — и обратная сторона: «читающие» команды, которые пишут.
+
+    `sed -n` и `awk` читали защищённые файлы только через человека, хотя ничего
+    не пишут. Строка с `\\"` внутри двойных кавычек резалась посередине. При
+    этом `env rm …`, `find … -delete`, `yq -i` и `sort -o` проходили как чтение:
+    имя команды стояло в списке читающих.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "sed -n '1,40p' docs/medical/reference-cases/a.yaml",
+            "sed -n -e '/ratio/p' docs/medical/reference-cases/a.yaml",
+            "sed -nE '/^ratio:/,$p' docs/medical/reference-cases/a.yaml",
+            "sed -n '$p' .env",
+            "awk '{print $1}' docs/medical/reference-cases/a.yaml",
+            "awk -F: '{print $2}' .env",
+            'grep -rn "a\\"; b" docs/medical/reference-cases/',
+            "env LC_ALL=C grep -rn ratio docs/medical/",
+            "yq '.expected.ratio' docs/medical/reference-cases/a.yaml",
+            "find docs/medical -name '*.yaml' -print",
+        ],
+    )
+    def test_reading_allowed(self, command: str) -> None:
+        assert check_command(command) == ALLOW, f"чтение заблокировано: {command}"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            # sed: на месте, командой `w`, без `-n`, перенаправлением
+            "sed -i -n '1p' docs/medical/reference-cases/a.yaml",
+            "sed -ni '1p' docs/medical/reference-cases/a.yaml",
+            "sed -n 'w docs/medical/x.md' /tmp/a",
+            "sed -n '1p;w docs/medical/x.md' /tmp/a",
+            "sed 's/a/b/w docs/medical/x.md' /tmp/a",
+            "sed -n '1p' docs/medical/a.yaml > docs/medical/b.yaml",
+            "sed -n -f /tmp/script.sed docs/medical/a.yaml",
+            # awk: перенаправление, конвейер и system() внутри программы, gawk -i
+            "awk '{print > \"docs/medical/x.md\"}' /tmp/a",
+            "awk '{print | \"tee docs/medical/x.md\"}' /tmp/a",
+            "awk 'BEGIN{system(\"rm docs/medical/x.md\")}'",
+            "gawk -i inplace '{print}' docs/medical/reference-cases/a.yaml",
+            # env — обёртка, а не чтение
+            "env rm docs/medical/reference-cases/a.yaml",
+            "env -u HOME FOO=1 rm .env",
+            # «читающие» команды с пишущими флагами
+            "yq -i '.a = 1' docs/medical/reference-cases/a.yaml",
+            "find docs/medical -name '*.yaml' -delete",
+            "find docs/medical -name '*.yaml' -exec rm {} \\;",
+            "sort -o docs/medical/a.yaml docs/medical/a.yaml",
+            # экранированная кавычка не прячет запись
+            'echo "a\\"b" > docs/medical/x.md',
+            'cat "a\\"" ; rm docs/medical/x.md',
+        ],
+    )
+    def test_writing_blocked(self, command: str) -> None:
+        assert check_command(command) == BLOCK, f"запись пропущена: {command}"
+
+
+class TestGitGlobalOptionsDoNotHideTheVerb:
+    """`git -C <каталог> commit` и `git -c k=v commit` — тоже коммиты.
+
+    Подкомандой считалось первое слово без дефиса — то есть каталог или `k=v`,
+    и коммит в main проходил мимо правила.
+    """
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'git -C . commit -m "x"',
+            'git -c user.name=x commit -m "x"',
+            "git -c core.editor=true -C . commit --amend",
+            "git -C . push origin main",
+            "git --git-dir=.git -c a.b=c merge feat/x",
+        ],
+    )
+    def test_blocked_on_main(self, command: str, repo_on_main: Path) -> None:
+        assert check_command(command, cwd=repo_on_main) == BLOCK, f"пропущено на main: {command}"
+
+    def test_dash_c_into_the_project_from_elsewhere(
+        self, repo_on_main: Path, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "elsewhere"
+        outside.mkdir()
+        command = f'cd {outside} && git -C {repo_on_main} commit -m "x"'
+        assert check_command(command, cwd=repo_on_main) == BLOCK
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git -C . log --oneline -3",
+            "git -c color.ui=false status --short",
+            "git -C packages/core log --oneline -- migrations/versions",
+        ],
+    )
+    def test_reading_allowed_on_main(self, command: str, repo_on_main: Path) -> None:
+        assert check_command(command, cwd=repo_on_main) == ALLOW, f"ложное срабатывание: {command}"
+
+    def test_commit_allowed_on_feature_branch(self, repo_on_main: Path) -> None:
+        _git(repo_on_main, "switch", "-c", "feat/x")
+        assert check_command('git -C . commit -m "x"', cwd=repo_on_main) == ALLOW
+        assert check_command('git -c user.name=x commit -m "x"', cwd=repo_on_main) == ALLOW
+
+    def test_dash_c_into_a_foreign_repo_allowed(self, repo_on_main: Path, tmp_path: Path) -> None:
+        foreign = tmp_path / "foreign"
+        foreign.mkdir()
+        _git(foreign, "init", "-b", "main")
+        command = f'git -C {foreign} commit --allow-empty -m "x"'
+        assert check_command(command, cwd=repo_on_main) == ALLOW
