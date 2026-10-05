@@ -4,6 +4,7 @@ import {
   ClipboardList,
   FileText,
   Gauge,
+  MessageCircleQuestion,
   NotebookPen,
   StickyNote,
   UserRound,
@@ -56,6 +57,11 @@ const CalculatorView = lazy(() =>
     default: m.CalculatorView,
   })),
 );
+const FamilyQuestionsView = lazy(() =>
+  import("./FamilyQuestionsView").then((m) => ({
+    default: m.FamilyQuestionsView,
+  })),
+);
 const ProfileView = lazy(() =>
   import("./PatientProfileView").then((m) => ({
     default: m.PatientProfileView,
@@ -66,7 +72,8 @@ const ProfileView = lazy(() =>
  * Порядок — это порядок работы врача, а не алфавит: сводка отвечает «что
  * сейчас», назначение — единственное, что врач здесь МЕНЯЕТ, дальше идёт то,
  * чем он проверяет назначение (питание, калькулятор, дневники, отчёт), и
- * последним — паспорт с анамнезом, за которым приходят реже всего.
+ * затем вопросы семьи к помощнику и последним — паспорт с анамнезом, за
+ * которым приходят реже всего.
  *
  * Калькулятор стоит сразу за питанием, потому что отвечает на его вопрос:
  * «выполнимо ли назначение из того, что ребёнку можно». В общем меню он тоже
@@ -80,6 +87,7 @@ export const PATIENT_VIEWS = [
   "diary",
   "reports",
   "notes",
+  "questions",
   "profile",
 ] as const;
 
@@ -124,6 +132,9 @@ export const PATIENT_VIEW_SCREENS: Record<PatientView, PatientViewScreen> = {
   diary: (patient) => <DiaryView patientId={patient.id} />,
   reports: (patient) => <ReportsView patientId={patient.id} />,
   notes: (patient) => <NotesView patientId={patient.id} />,
+  // Врач и диетолог — оба: сервер отдаёт переписку обеим ролям (ADR-0022),
+  // и семье сказано, что её видит лечащий врач.
+  questions: (patient) => <FamilyQuestionsView patientId={patient.id} />,
   // Два разных права, а не одно: диетолог анамнез ЧИТАЕТ (ответ клиники
   // 09.09.2026, вопросы 7 и 31), но не правит. Сервер разводит их так же —
   // `GET /medical-profile` открыт обеим ролям, `PUT` только врачу.
@@ -158,6 +169,8 @@ export const PATIENT_VIEW_WIDTH: Record<
   diary: "wide",
   reports: "wide",
   notes: "content",
+  // Переписку читают, как заметки.
+  questions: "content",
   profile: "content",
 };
 
@@ -174,6 +187,7 @@ export const PATIENT_VIEW_ICONS: Record<PatientView, LucideIcon> = {
   diary: NotebookPen,
   reports: FileText,
   notes: StickyNote,
+  questions: MessageCircleQuestion,
   profile: UserRound,
 };
 

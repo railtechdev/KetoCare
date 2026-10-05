@@ -14,6 +14,7 @@ import {
   CircleHelp,
   ClipboardList,
   KeyRound,
+  Siren,
   TriangleAlert,
 } from "lucide-react";
 import { Fragment } from "react";
@@ -49,6 +50,9 @@ const BADGE =
  * же порядке, в каком они двигают строку вверх.
  */
 export const FLAG_KEYS = [
+  // Первым: возможный эпилептический статус важнее всего остального, и вес в
+  // `attentionRank` у него наибольший.
+  "prolonged-seizure",
   "no-prescription",
   "seizures-grew",
   "seizures-appeared",
@@ -75,6 +79,12 @@ const LOOK: Record<
     description: string;
   }
 > = {
+  "prolonged-seizure": {
+    icon: Siren,
+    tone: "danger",
+    label: "flags.prolongedSeizure",
+    description: "flags.legend.prolongedSeizure",
+  },
   "no-prescription": {
     icon: ClipboardList,
     tone: "danger",
@@ -179,7 +189,8 @@ export function PatientFlagsView({
   // Здесь решается только, ГОРИТ ли пометка. Подпись берётся из `LOOK` —
   // общего с легендой ключа словаря.
   const shown: Record<FlagKey, boolean> = {
-    // Первой: это не отклонение в наблюдении, а отсутствие самого наблюдения.
+    "prolonged-seizure": flags.prolongedSeizure,
+    // Это не отклонение в наблюдении, а отсутствие самого наблюдения.
     "no-prescription": flags.noPrescription,
     "family-not-activated": flags.familyNotActivated,
     // Приступы — выше молчания семьи и питания: ухудшение течения болезни

@@ -643,6 +643,30 @@ class FamilyMemberRead(BaseModel):
     can_remove: bool = False
 
 
+class FamilyContact(BaseModel):
+    """Телефон и почта взрослого семьи — запасной путь, когда Telegram нет."""
+
+    full_name: str
+    phone: str | None
+    email: str | None
+
+
+class FamilyNudgeRead(BaseModel):
+    """Итог просьбы «Напомнить семье» (ADR-0046).
+
+    Потребитель — кабинет специалиста (`NudgeFamilyButton`): по `recipients`
+    он решает, что сказать врачу, а при нуле показывает `contacts`.
+    """
+
+    #: Сколько чатов семьи получат сообщение. Ноль — Telegram у семьи не
+    #: подключён, ничего не отправлено и предел не потрачен.
+    recipients: int
+    #: Когда просьба записана; пусто, если отправлять было некуда.
+    sent_at: datetime | None
+    #: Контакты семьи — только при `recipients == 0`, и только у кого они есть.
+    contacts: list[FamilyContact]
+
+
 class ColleagueRead(BaseModel):
     """Специалист в справочнике персонала.
 

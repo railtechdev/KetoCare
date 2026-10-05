@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -10,7 +11,7 @@ import { IntakeView } from "./IntakeView";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
-  return { ...actual, api: { GET: vi.fn() } };
+  return { ...actual, api: { GET: vi.fn(), PUT: vi.fn() } };
 });
 
 i18n.addResourceBundle("ru", "intake", intakeRu, true, true);
@@ -244,5 +245,69 @@ describe("исходная частота приступов", () => {
     expect(
       screen.queryByText(intakeRu.fields.baselineFrequency),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Анкету на приёме заполняет специалист (ADR-0046, аудит блокеров C11): семья
+ * из Telegram веб-кабинета не имеет, и анкета у неё оставалась пустой.
+ */
+describe("анкета, которую заполняет специалист", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("без права правки кнопки нет", async () => {
+    mockGet("missing");
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    await screen.findByText("Анкета не заполнена");
+    expect(
+      screen.queryByRole("button", { name: intakeRu.specialist.fill }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("пустую анкету заполняет той же формой, что у семьи", async () => {
+    mockGet("missing");
+    (api.PUT as Mock).mockResolvedValue({ data: INTAKE, error: undefined });
+    const user = userEvent.setup();
+    render(<IntakeView patientId={PATIENT_ID} childName="Амина" editable />, {
+      wrapper,
+    });
+
+    expect(
+      await screen.findByText(intakeRu.empty.specialistDescription),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: intakeRu.specialist.fill }),
+    );
+
+    expect(
+      await screen.findByText(intakeRu.specialist.sheetTitle),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: intakeRu.next }));
+    // Подсказка «врачебные поля заполняет врач» — для семьи; специалисту она
+    // ни к чему: эти поля у него в медицинском профиле рядом.
+    expect(
+      screen.queryByText(intakeRu.doctorFieldsHint),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: intakeRu.next }));
+    await user.click(screen.getByRole("button", { name: intakeRu.submit }));
+
+    expect(api.PUT).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/intake",
+      expect.objectContaining({
+        params: { path: { patient_id: PATIENT_ID } },
+      }),
+    );
+  });
+
+  it("заполненную предлагает изменить", async () => {
+    mockGet(INTAKE);
+    render(<IntakeView patientId={PATIENT_ID} childName="Амина" editable />, {
+      wrapper,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: intakeRu.specialist.edit }),
+    ).toBeInTheDocument();
   });
 });

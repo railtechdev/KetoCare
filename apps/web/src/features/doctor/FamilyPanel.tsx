@@ -20,6 +20,7 @@ import {
   useTelegramLinks,
 } from "../telegram/useTelegramLinks";
 import { useFamily, useRemoveFamilyMember } from "./doctorQueries";
+import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { LinesSkeleton } from "./skeletons";
 import { isCareRole } from "./types";
 
@@ -80,10 +81,17 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
       density="compact"
       action={
         canGrant && (
-          <Button type="button" onClick={() => setInviteOpen(true)}>
-            <UserPlus aria-hidden="true" />
-            {t(`family.${voice}.grantAccess`)}
-          </Button>
+          <div className="flex flex-wrap items-center gap-field">
+            {/* Связаться с семьёй из Telegram, у которой нет ни телефона, ни
+                почты (ADR-0046): прежде здесь стояло одно имя. */}
+            {isSpecialist && (family.data ?? []).length > 0 && (
+              <NudgeFamilyButton patientId={patientId} size="default" />
+            )}
+            <Button type="button" onClick={() => setInviteOpen(true)}>
+              <UserPlus aria-hidden="true" />
+              {t(`family.${voice}.grantAccess`)}
+            </Button>
+          </div>
         )
       }
     >

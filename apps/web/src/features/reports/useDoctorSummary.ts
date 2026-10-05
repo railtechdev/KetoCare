@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
-import { api } from "../../lib/api";
+import { api, errorCodeOf, type ApiErrorBody } from "../../lib/api";
 import type { ReportRange } from "./useReports";
 
 export type DoctorSummary = components["schemas"]["SummaryRead"];
@@ -99,6 +99,8 @@ export function useApproveSummaryMutation(
     mutationFn: async (input: {
       summaryId: string;
       approvedMd: string;
+      /** Врач видел предупреждения о СВОИХ предложениях и утверждает как есть. */
+      acknowledged?: boolean;
     }): Promise<DoctorSummary> => {
       const { data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/summaries/{summary_id}/approve",
@@ -106,7 +108,10 @@ export function useApproveSummaryMutation(
           params: {
             path: { patient_id: patientId, summary_id: input.summaryId },
           },
-          body: { approved_md: input.approvedMd },
+          body: {
+            approved_md: input.approvedMd,
+            acknowledged_findings: input.acknowledged ?? false,
+          },
         },
       );
       if (error || !data) throw error ?? new Error("Empty approve response");
@@ -119,4 +124,35 @@ export function useApproveSummaryMutation(
       });
     },
   });
+}
+
+/** Находка постфильтра в отказе утверждения: чья фраза — модели, врача, сбой. */
+export interface ApprovalFinding extends SummaryCheck {
+  origin: "draft" | "doctor" | "guard";
+}
+
+export interface ApprovalRejection {
+  findings: ApprovalFinding[];
+  /**
+   * Все находки — в словах самого врача, и он может утвердить текст как есть.
+   * `false` — в тексте осталось предложение черновика модели без изменений или
+   * фильтр не сработал: такое утвердить нельзя никаким подтверждением.
+   */
+  acknowledgeable: boolean;
+}
+
+/**
+ * Отказ постфильтра из ответа ручки утверждения (дополнение к ADR-0023).
+ *
+ * `null` — это другой отказ (связь, права, черновик не готов): его экран
+ * показывает обычным сообщением.
+ */
+export function approvalRejectionOf(error: unknown): ApprovalRejection | null {
+  if (errorCodeOf(error) !== "validation_error") return null;
+  const details = (error as ApiErrorBody).error.details;
+  if (!details || !Array.isArray(details.findings)) return null;
+  return {
+    findings: details.findings as ApprovalFinding[],
+    acknowledgeable: details.acknowledgeable === true,
+  };
 }

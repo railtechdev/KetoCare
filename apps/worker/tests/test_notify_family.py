@@ -73,3 +73,136 @@ class TestFamilyJoined:
         ]
 
         assert joined_recipients(links, newcomer_id=grandma) == [1]
+
+
+class TestFamilyNudge:
+    """Просьба специалиста отметить дневник (ADR-0046, аудит блокеров C5)."""
+
+    def test_names_who_asks_and_nothing_else(self) -> None:
+        from worker.reminders.notify import nudge_notice
+
+        text = nudge_notice(specialist_name="Иванова Мария Петровна", specialist_role="doctor")
+
+        assert text.startswith("Врач Иванова Мария Петровна просит")
+        assert "дневник" in text
+        # Ни чисел (раздел 7.5 ТЗ), ни упоминания ребёнка.
+        assert re.search(r"\d", text) is None
+        assert "ребён" not in text.lower()
+
+    def test_role_in_words(self) -> None:
+        from worker.reminders.notify import nudge_notice
+
+        assert nudge_notice(specialist_name="А", specialist_role="dietitian").startswith(
+            "Диетолог А "
+        )
+        assert nudge_notice(specialist_name="А", specialist_role="other").startswith(
+            "Специалист А "
+        )
+
+    def test_recipients_are_live_chats_once(self) -> None:
+        from datetime import UTC, datetime
+        from types import SimpleNamespace
+
+        from worker.reminders.notify import nudge_recipients
+
+        links = [
+            SimpleNamespace(chat_id=1, revoked_at=None),
+            SimpleNamespace(chat_id=1, revoked_at=None),
+            SimpleNamespace(chat_id=2, revoked_at=datetime.now(UTC)),
+            SimpleNamespace(chat_id=3, revoked_at=None),
+        ]
+
+        assert nudge_recipients(links) == [1, 3]
+
+    async def test_sends_to_every_live_chat_without_the_child_name(self, monkeypatch) -> None:
+        import uuid
+        from contextlib import asynccontextmanager
+        from types import SimpleNamespace
+
+        from worker.reminders import notify
+
+        monkeypatch.setenv("BOT_TOKEN", "000000:test")
+
+        @asynccontextmanager
+        async def fake_session():
+            yield object()
+
+        monkeypatch.setattr(notify, "get_sessionmaker", lambda: fake_session)
+
+        async def links(session, patient_id):
+            return [
+                SimpleNamespace(chat_id=10, revoked_at=None),
+                SimpleNamespace(chat_id=20, revoked_at=None),
+            ]
+
+        monkeypatch.setattr(notify.telegram_repo, "list_links_for_patient", links)
+        sent: list[tuple[int, str]] = []
+
+        async def send(client, *, token, chat_id, text):
+            sent.append((chat_id, text))
+
+        monkeypatch.setattr(notify, "send_message", send)
+
+        delivered = await notify.notify_family_nudge(
+            {}, str(uuid.uuid4()), "Петров Пётр", "dietitian"
+        )
+
+        assert delivered == 2
+        assert [chat for chat, _ in sent] == [10, 20]
+        assert all(text.startswith("Диетолог Петров Пётр") for _, text in sent)
+
+
+class TestMenuComposed:
+    """Уведомление о плане дня от специалиста (ADR-0047)."""
+
+    def test_names_the_specialist_role_and_date(self) -> None:
+        from datetime import date
+
+        from worker.reminders.notify import menu_composed_notice
+
+        text = menu_composed_notice(
+            composer_name="Анна Петровна", composer_role="dietitian", menu_date=date(2026, 10, 6)
+        )
+        assert text == (
+            "Анна Петровна, диетолог, составил(а) план питания на 06.10. "
+            "Откройте приложение, вкладка «Меню»."
+        )
+
+    def test_doctor_and_unknown_role(self) -> None:
+        from datetime import date
+
+        from worker.reminders.notify import menu_composed_notice
+
+        day = date(2026, 10, 6)
+        doctor = menu_composed_notice(composer_name="И", composer_role="doctor", menu_date=day)
+        other = menu_composed_notice(composer_name="И", composer_role="admin", menu_date=day)
+        assert ", врач," in doctor
+        assert ", специалист," in other
+
+    def test_carries_no_grams_ratio_or_child(self) -> None:
+        """Только дата — никаких граммов и соотношения (раздел 7.5 ТЗ)."""
+        from datetime import date
+
+        from worker.reminders.notify import menu_composed_notice
+
+        text = menu_composed_notice(
+            composer_name="Анна", composer_role="doctor", menu_date=date(2026, 10, 6)
+        )
+        assert re.findall(r"\d+", text) == ["06", "10"]
+        assert " г " not in text and ":" not in text
+        assert "ребён" not in text.lower()
+
+    def test_goes_to_live_chats_once(self) -> None:
+        import uuid
+        from datetime import UTC, datetime
+        from types import SimpleNamespace
+
+        from worker.reminders.notify import live_chats
+
+        links = [
+            SimpleNamespace(parent_id=uuid.uuid4(), chat_id=1, revoked_at=None),
+            SimpleNamespace(parent_id=uuid.uuid4(), chat_id=1, revoked_at=None),
+            SimpleNamespace(parent_id=uuid.uuid4(), chat_id=2, revoked_at=datetime.now(UTC)),
+            SimpleNamespace(parent_id=uuid.uuid4(), chat_id=3, revoked_at=None),
+        ]
+        assert live_chats(links) == [1, 3]

@@ -60,6 +60,7 @@ async def list_conversations(
                 updated_at=item.updated_at,
                 messages_count=len(item.messages or []),
                 preview=_preview(item),
+                refused_count=_refused_count(item),
             )
             for item in items
         ],
@@ -115,3 +116,20 @@ def _preview(conversation: object) -> str:
         if message.role == "user" and message.text:
             return message.text[:120]
     return ""
+
+
+def _refused_count(conversation: object) -> int:
+    """Ответы помощника, в которых ответа по существу не было.
+
+    Два признака, как у `isRefusal` в ките: воркер помечает свои отказы
+    `blocked`, а ручка, у которой задача не встала в очередь, пишет «помощник
+    недоступен» только со `status == "failed"` (ADR-0035). Ожидание отказом не
+    считается: ответ ещё может прийти.
+    """
+
+    messages = conversations_repo.messages_of(conversation)  # type: ignore[arg-type]
+    return sum(
+        1
+        for message in messages
+        if message.role == "assistant" and (message.blocked or message.status == "failed")
+    )

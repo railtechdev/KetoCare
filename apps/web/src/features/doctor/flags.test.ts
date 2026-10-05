@@ -265,6 +265,7 @@ describe("attentionRank", () => {
         nutritionOff: false,
         seizuresGrew: false,
         seizuresAppeared: false,
+        prolongedSeizure: false,
       }),
     ).toBeGreaterThan(
       attentionRank({
@@ -276,6 +277,7 @@ describe("attentionRank", () => {
         nutritionOff: true,
         seizuresGrew: false,
         seizuresAppeared: false,
+        prolongedSeizure: false,
       }),
     );
   });
@@ -440,6 +442,7 @@ describe("доступ семьи не активирован (ADR-0040)", () =>
     nutritionOff: false,
     seizuresGrew: false,
     seizuresAppeared: false,
+    prolongedSeizure: false,
   };
 
   it("молчание не считается, пока семья не вошла", () => {
@@ -481,5 +484,50 @@ describe("доступ семьи не активирован (ADR-0040)", () =>
     const silent = attentionRank({ ...CALM, staleData: true });
 
     expect(notActivated).toBeLessThan(silent);
+  });
+});
+
+describe("затяжной приступ (ADR-0046, аудит C8)", () => {
+  const CALM = {
+    noPrescription: false,
+    familyNotActivated: false,
+    daysSinceLastReading: 1,
+    strictMonitoring: false,
+    staleData: false,
+    nutritionOff: false,
+    seizuresGrew: false,
+    seizuresAppeared: false,
+    prolongedSeizure: false,
+  };
+
+  it("горит, когда сервер назвал время затяжного приступа", () => {
+    const flags = computePatientFlags(
+      overview({ prolonged_seizure_at: "2026-08-27T09:00:00Z" }),
+    );
+
+    expect(flags?.prolongedSeizure).toBe(true);
+  });
+
+  it("молчит без поля и при null — старый ответ API не тревога", () => {
+    expect(computePatientFlags(overview())?.prolongedSeizure).toBe(false);
+    expect(
+      computePatientFlags(overview({ prolonged_seizure_at: null }))
+        ?.prolongedSeizure,
+    ).toBe(false);
+  });
+
+  it("поднимает строку выше любого набора остальных пометок", () => {
+    const prolonged = attentionRank({ ...CALM, prolongedSeizure: true });
+    const everythingElse = attentionRank({
+      ...CALM,
+      noPrescription: true,
+      familyNotActivated: true,
+      staleData: true,
+      nutritionOff: true,
+      seizuresGrew: true,
+      seizuresAppeared: true,
+    });
+
+    expect(prolonged).toBeGreaterThan(everythingElse);
   });
 });

@@ -16,9 +16,11 @@ import { useTranslation } from "react-i18next";
 import { TextAreaField } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
 import {
+  approvalRejectionOf,
   useApproveSummaryMutation,
   useDoctorSummaries,
   useRequestSummaryMutation,
+  type ApprovalRejection,
   type DoctorSummary,
   type SummaryCheck,
 } from "./useDoctorSummary";
@@ -148,6 +150,10 @@ function Draft({
   const approved = summary.approved_md !== null;
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [confirmingAnyway, setConfirmingAnyway] = useState(false);
+  // Отказ постфильтра относится к присланному тексту: правка его снимает, иначе
+  // под новым текстом висели бы находки старого.
+  const [rejection, setRejection] = useState<ApprovalRejection | null>(null);
   const [text, setText] = useState(
     summary.approved_md ?? summary.draft_md ?? "",
   );
@@ -157,20 +163,34 @@ function Draft({
   useEffect(() => {
     setText(summary.approved_md ?? summary.draft_md ?? "");
     setEditing(false);
+    setRejection(null);
   }, [summary.id, summary.draft_md, summary.approved_md]);
 
   const noticeId = `summary-notice-${summary.id}`;
 
-  function submit() {
+  /**
+   * Утверждение. Постфильтр стоит против выдумок модели, а не против врача
+   * (дополнение к ADR-0023): находка в предложении черновика, оставленном как
+   * есть, запрещает утверждение, а находка в словах самого врача приходит
+   * предупреждением — и врач утверждает повторно, уже с подтверждением.
+   */
+  function submit(acknowledged = false) {
     approve.mutate(
-      { summaryId: summary.id, approvedMd: text },
+      { summaryId: summary.id, approvedMd: text, acknowledged },
       {
         onSuccess: () => {
           setEditing(false);
+          setRejection(null);
           toast.success(t("summary.approved"));
         },
-        onError: (error) =>
-          toast.error(errorMessageOf(error) ?? t("common:errors.unexpected")),
+        onError: (error) => {
+          const rejected = approvalRejectionOf(error);
+          if (rejected) {
+            setRejection(rejected);
+            return;
+          }
+          toast.error(errorMessageOf(error) ?? t("common:errors.unexpected"));
+        },
       },
     );
   }
@@ -208,8 +228,18 @@ function Draft({
             rows={18}
             value={text}
             aria-describedby={approved ? undefined : noticeId}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              setText(event.target.value);
+              setRejection(null);
+            }}
           />
+          {rejection && (
+            <Rejection
+              rejection={rejection}
+              pending={approve.isPending}
+              onApproveAnyway={() => setConfirmingAnyway(true)}
+            />
+          )}
           <FormFooter
             submitLabel={t("summary.approve")}
             pendingLabel={t("summary.approving")}
@@ -232,7 +262,20 @@ function Draft({
             confirmLabel={t("summary.approve")}
             cancelLabel={t("common:actions.cancel")}
             destructive={false}
-            onConfirm={submit}
+            onConfirm={() => submit()}
+          />
+          {/* Второе подтверждение — отдельное: врач соглашается не с текстом
+              вообще, а с тем, что отмеченные фразы его, и это попадает в
+              журнал аудита. */}
+          <ConfirmDialog
+            open={confirmingAnyway}
+            onOpenChange={setConfirmingAnyway}
+            title={t("summary.rejected.confirmTitle")}
+            description={t("summary.rejected.confirmDescription")}
+            confirmLabel={t("summary.rejected.anyway")}
+            cancelLabel={t("common:actions.cancel")}
+            destructive={false}
+            onConfirm={() => submit(true)}
           />
         </form>
       ) : (
@@ -262,6 +305,84 @@ function Draft({
         <Checks checks={summary.checks} />
       )}
     </div>
+  );
+}
+
+/**
+ * Отказ утверждения: что именно не прошло и можно ли утвердить как есть.
+ *
+ * Два случая и два разных ответа. Предложение черновика модели, оставленное
+ * без изменений, утвердить нельзя ничем — кнопки нет, есть объяснение. Если
+ * все находки в словах самого врача, это предупреждение, и рядом с ним стоит
+ * «Утвердить всё равно» (через подтверждение).
+ */
+function Rejection({
+  rejection,
+  pending,
+  onApproveAnyway,
+}: {
+  rejection: ApprovalRejection;
+  pending: boolean;
+  onApproveAnyway: () => void;
+}) {
+  const { t } = useTranslation("reports");
+  const { acknowledgeable } = rejection;
+
+  return (
+    <WarningBanner
+      level={acknowledgeable ? "warning" : "danger"}
+      title={
+        acknowledgeable
+          ? t("summary.rejected.warningTitle")
+          : t("summary.rejected.title")
+      }
+    >
+      <div className="flex flex-col gap-field">
+        <p className="m-0">
+          {acknowledgeable
+            ? t("summary.rejected.warning")
+            : t("summary.rejected.blocking")}
+        </p>
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {rejection.findings.map((finding, index) => (
+            <li key={`${finding.kind}-${index}`} className="text-sm">
+              <span className="font-medium">
+                {t(`summary.checks.kind.${finding.kind}`, {
+                  defaultValue: t("summary.checks.kind.other"),
+                })}
+              </span>
+              {finding.origin !== "guard" && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  (
+                  {finding.origin === "doctor"
+                    ? t("summary.rejected.fromDoctor")
+                    : t("summary.rejected.fromDraft")}
+                  )
+                </span>
+              )}
+              {finding.fragment && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  — «{finding.fragment}»
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        {acknowledgeable && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch self-start"
+            disabled={pending}
+            onClick={onApproveAnyway}
+          >
+            {t("summary.rejected.anyway")}
+          </Button>
+        )}
+      </div>
+    </WarningBanner>
   );
 }
 

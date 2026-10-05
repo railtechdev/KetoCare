@@ -61,13 +61,21 @@ export function useLatestConversationId(patientId: string) {
 export function useConversation(
   patientId: string,
   conversationId: string | null,
+  options: { reader?: boolean } = {},
 ) {
+  // Специалист читает чужую переписку, и каждое чтение пишется в журнал
+  // аудита. Опрос и перечитывание при возврате на вкладку плодили бы записи
+  // без конца, пока ответ не дописан (находка ревью, 05.10.2026), поэтому
+  // читателю переписка не обновляется сама — только по кнопке.
+  const reader = options.reader === true;
   return useQuery({
     queryKey: ["assistant", patientId, conversationId],
     enabled: conversationId !== null,
+    refetchOnWindowFocus: !reader,
     // Пока ответ не дописан, переписка перечитывается; как только дописан —
     // опрос прекращается сам.
     refetchInterval: (query) => {
+      if (reader) return false;
       const messages = (query.state.data ?? []) as AssistantMessage[];
       return messages.some((message) => message.status === "pending")
         ? POLL_MS

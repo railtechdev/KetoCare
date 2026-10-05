@@ -1167,3 +1167,95 @@ class TestMonitoringPhase:
 
         assert "therapy_started_on" not in str(body)
         assert "2026-03-15" not in str(body)
+
+
+class TestProlongedSeizure:
+    """Затяжной приступ — флаг врачу (ADR-0046, аудит блокеров C8).
+
+    30 минут — граница шкалы, подтверждённой клиникой (ADR-0020). Потребитель
+    поля — кабинет специалиста (`flags.ts`, пометка «Затяжной приступ»).
+    """
+
+    @staticmethod
+    def _at(days_ago: int) -> datetime:
+        return datetime.combine(_local_today() - timedelta(days=days_ago), time(12), tzinfo=TZ)
+
+    async def _get(self, client, auth_headers, parent, patient) -> Any:
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["prolonged_seizure_at"]
+
+    async def _option(self, session, code: str):
+        from core.models import IntakeOption
+        from core.models.enums import IntakeScale
+
+        option = await session.scalar(
+            select(IntakeOption).where(
+                IntakeOption.scale == IntakeScale.SEIZURE_DURATION, IntakeOption.code == code
+            )
+        )
+        if option is None:
+            option = IntakeOption(scale=IntakeScale.SEIZURE_DURATION, code=code, name_ru=code)
+            session.add(option)
+            await session.flush()
+        return option
+
+    async def test_measured_half_hour_raises_it(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        log = await _seizure(session, patient=patient, occurred_at=self._at(2))
+        log.duration_sec = 30 * 60
+        await session.flush()
+
+        value = await self._get(client, auth_headers, parent, patient)
+
+        assert value is not None
+        assert datetime.fromisoformat(value) == self._at(2)
+
+    async def test_shorter_measured_does_not(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        log = await _seizure(session, patient=patient, occurred_at=self._at(1))
+        log.duration_sec = 30 * 60 - 1
+        await session.flush()
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_interval_from_words_raises_it(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Семья не засекала, но отметила «30 минут и дольше» — флаг тот же."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        log = await _seizure(session, patient=patient, occurred_at=self._at(0))
+        log.duration_option_id = (await self._option(session, "dur_over_30min")).id
+        await session.flush()
+
+        assert await self._get(client, auth_headers, parent, patient) is not None
+
+    async def test_lower_interval_does_not(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        log = await _seizure(session, patient=patient, occurred_at=self._at(0))
+        log.duration_option_id = (await self._option(session, "dur_10_30min")).id
+        await session.flush()
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_older_than_a_week_and_deleted_are_ignored(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        old = await _seizure(session, patient=patient, occurred_at=self._at(_TREND_WINDOW_DAYS))
+        old.duration_sec = 3600
+        deleted = await _seizure(session, patient=patient, occurred_at=self._at(1))
+        deleted.duration_sec = 3600
+        deleted.deleted_at = datetime.now(UTC)
+        await session.flush()
+
+        assert await self._get(client, auth_headers, parent, patient) is None

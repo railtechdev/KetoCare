@@ -1,159 +1,52 @@
-import { AsyncSection, Badge, EmptyState, Section } from "@ketocare/ui";
-import { CalendarOff } from "lucide-react";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { errorMessageOf } from "../../lib/api";
-import { DayNavigator } from "../menu/DayNavigator";
-import { DayTotalsPanel } from "../menu/DayTotalsPanel";
-import { todayIso } from "../menu/dates";
-import { itemDishKey, useMenuItemTitles } from "../menu/useDishCatalog";
-import {
-  ExcludedProductsNotice,
-  WithdrawnProductsNotice,
-} from "../menu/WithdrawnProductsNotice";
-import { withdrawnByItem } from "../menu/withdrawn";
-import {
-  plannedMealIndexes,
-  useDayTargets,
-  useDayTolerance,
-  useMenuQuery,
-} from "../menu/useMenu";
+import { SubPageHeader } from "../../components/SubPageHeader";
 import { MyDishesPanel } from "../dishes/MyDishesPanel";
-import { LinesSkeleton } from "./skeletons";
+import { DayComposer } from "../menu/DayComposer";
 
 /**
- * План питания пациента глазами специалиста — только на чтение.
+ * План питания пациента у специалиста — составляется здесь же (ADR-0047).
  *
- * Врач назначает кетосоотношение, но не видел, из чего оно набирается: в карте
- * был дневник «Питание» (что семья записала съеденным) и итоги дня числами, а
- * самого плана — какие блюда и по сколько граммов — не было нигде.
+ * До решения заказчика G2 (05.10.2026) раздел был только на чтение: «меню
+ * составляет семья». Но семьи с низкой цифровой грамотностью не справлялись с
+ * тем, чтобы собрать день в соотношение, а диетолог, умеющий это, мог только
+ * смотреть. Теперь врач и диетолог собирают день тем же экраном, что и семья, —
+ * `DayComposer`, а не копией: сервер хранит те же правила для всех (съеденное
+ * не стирается, совпавшие позиции сохраняют отметки), и экран показывает день
+ * одинаково обеим сторонам.
  *
- * Именно на чтение: меню составляет и правит семья, она же отмечает съеденное.
- * Сервер правку специалисту не запрещает, но менять план семьи за её спиной —
- * не работа врача; расхождение между тем, что семья видит на кухне, и тем, что
- * кто-то поправил из кабинета, — клинический риск.
+ * Два отличия от экрана семьи, оба про ответственность, а не про вид:
+ * - отметку «съедено» специалист не ставит — это запись семьи о том, что
+ *   ребёнок ел, и он её только видит;
+ * - сохранение специалистом сервер подписывает его именем и пишет семье в
+ *   Telegram: план, по которому кормят ребёнка, поменял другой человек.
  *
  * Под планом — блюда ребёнка. Специалист передаёт ему раскладку из калькулятора
- * («Передать пациенту»), и до этого списка увидеть переданное в карте было
- * негде: блюдо сохранялось, семья находила его при сборке меню, а тот, кто его
- * передал, — нет. Обещание «блюдо появится у ребёнка» обязано иметь место, где
- * его видно.
+ * («Передать пациенту») и сразу может положить её в день.
  */
 export function PatientMenuTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
-  const [date, setDate] = useState(todayIso);
-
-  const menu = useMenuQuery(patientId, date);
-  const dayTolerance = useDayTolerance(patientId, date);
-  const targets = useDayTargets(patientId, date);
-
-  const items = menu.data?.items ?? [];
-  const titles = useMenuItemTitles(patientId, items);
-  // Тот же баннер, что у семьи: врач смотрит на те же итоги дня и должен
-  // видеть то же основание им не доверять.
-  const withdrawn = withdrawnByItem(menu.data?.withdrawn_products);
 
   return (
     <div className="flex flex-col gap-block">
-      <Section title={t("menu.dayTitle")} density="compact">
-        <DayNavigator date={date} onChange={setDate} />
-      </Section>
+      <DayComposer patientId={patientId} canMarkEaten={false}>
+        {({ actions, content }) => (
+          <>
+            {/* Заголовок страницы — раздел карты («Питание»); действиям над днём
+                нужно своё место, и оно — шапка содержимого. */}
+            <SubPageHeader
+              title={t("menu.title")}
+              intro={t("menu.intro")}
+              actions={actions}
+            />
+            {content}
+          </>
+        )}
+      </DayComposer>
 
-      <AsyncSection
-        loading={menu.isPending}
-        skeleton={<LinesSkeleton label={t("menu.loading")} lines={5} />}
-        error={
-          menu.isError
-            ? {
-                title: t("menu.loadError"),
-                description:
-                  errorMessageOf(menu.error) ?? t("common:errors.unexpected"),
-              }
-            : null
-        }
-        retryLabel={t("common:actions.retry")}
-        onRetry={() => void menu.refetch()}
-        // Меню на день не составлено — сервер отвечает 404, запрос отдаёт
-        // `null`. Это обычное пустое состояние, а не сбой.
-        isEmpty={items.length === 0}
-        empty={
-          <EmptyState
-            icon={CalendarOff}
-            title={t("menu.empty")}
-            description={t("menu.emptyDescription")}
-          />
-        }
-      >
-        <ExcludedProductsNotice excluded={menu.data?.excluded_products} />
-
-        <WithdrawnProductsNotice withdrawn={menu.data?.withdrawn_products} />
-
-        {/* Только занятые приёмы: экран на чтение, добавлять сюда нечего, и
-            пустая строка «Блюд пока нет» врачу ничего не сообщает. Поэтому
-            число назначенных приёмов здесь и не спрашивается — в отличие от
-            экрана семьи, где приём надо показать, чтобы в него можно было
-            положить блюдо (ADR-0029). */}
-        {plannedMealIndexes(items).map((mealIndex) => {
-          const mealItems = items.filter(
-            (item) => item.meal_index === mealIndex,
-          );
-
-          return (
-            <Section
-              key={mealIndex}
-              title={t("menu.meal", { index: mealIndex })}
-              level={3}
-              density="compact"
-            >
-              <ul className="m-0 flex list-none flex-col gap-field p-0">
-                {mealItems.map((item) => {
-                  const key = itemDishKey(item);
-                  return (
-                    <li
-                      key={item.id}
-                      className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
-                    >
-                      <span className="min-w-0 flex-1 break-words">
-                        {(key === null ? undefined : titles[key]) ??
-                          t("menu.unknownDish")}
-                      </span>
-                      <span className="text-sm text-muted-foreground tabular-nums">
-                        {t("menu.portion", { value: item.portion_factor })}
-                      </span>
-                      {/* Отметка семьи — то, что отличает план от выполнения:
-                          без неё врач видит намерение и принимает его за факт. */}
-                      <Badge variant={item.eaten ? "secondary" : "outline"}>
-                        {item.eaten ? t("menu.eaten") : t("menu.notEaten")}
-                      </Badge>
-
-                      {(withdrawn[item.id]?.length ?? 0) > 0 && (
-                        <p className="m-0 w-full text-sm text-warning">
-                          {t("menu:withdrawn.inItem", {
-                            list: (withdrawn[item.id] ?? []).join(", "),
-                          })}
-                        </p>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </Section>
-          );
-        })}
-
-        <DayTotalsPanel
-          totals={menu.data?.totals ?? null}
-          engineVersion={menu.data?.engine_version ?? null}
-          tolerance={dayTolerance.tolerance}
-          toleranceGap={dayTolerance.gap}
-          targets={targets}
-        />
-      </AsyncSection>
-
-      {/* Вне `AsyncSection` дня: блюда ребёнка не зависят от того, составлен ли
-          план на выбранную дату, и прятать их за загрузкой меню значило бы
-          терять их в самый частый момент — когда плана ещё нет. */}
+      {/* Вне дня: блюда ребёнка не зависят от того, составлен ли план на
+          выбранную дату, и прятать их за загрузкой меню значило бы терять их в
+          самый частый момент — когда плана ещё нет. */}
       <MyDishesPanel patientId={patientId} openIn="card" />
     </div>
   );

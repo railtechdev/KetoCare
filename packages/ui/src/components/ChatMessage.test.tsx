@@ -26,6 +26,24 @@ describe("ChatMessage", () => {
     expect(screen.queryByText("Не заменяет врача")).not.toBeInTheDocument();
   });
 
+  it("время реплики стоит над ней — и у вопроса, и у ответа", () => {
+    // Специалист читает чужую переписку и без времени не поймёт, о каком дне
+    // вопрос; у отказа время нужно так же, как у ответа.
+    render(
+      <>
+        <ChatMessage role="user" meta="05.10, 09:12">
+          можно ли сыр
+        </ChatMessage>
+        <ChatMessage role="assistant" refusal meta="05.10, 09:13">
+          Этот вопрос нужно обсудить с лечащим врачом.
+        </ChatMessage>
+      </>,
+    );
+
+    expect(screen.getByText("05.10, 09:12")).toBeInTheDocument();
+    expect(screen.getByText("05.10, 09:13")).toBeInTheDocument();
+  });
+
   it("ожидание показывается скелетоном, а не словом «загрузка»", () => {
     const { container } = render(<ChatMessage role="assistant" pending />);
 

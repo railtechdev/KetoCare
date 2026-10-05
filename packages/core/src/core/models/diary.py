@@ -164,6 +164,15 @@ class Menu(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id")
     )
+    #: Кто последним сохранил состав дня (ADR-0047).
+    #:
+    #: `created_by` отвечает «кто завёл день» и при пересохранении не меняется,
+    #: а семье и врачу нужно другое — чей это план сейчас: день составляет и
+    #: семья, и специалист. Отметка «съедено» сюда не пишет — она про еду, а не
+    #: про план. Пусто у дней, сохранённых до появления столбца.
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
 
 
 class MenuItem(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMixin):

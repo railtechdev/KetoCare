@@ -187,6 +187,32 @@ class TestPatientIntake:
         assert fetched.json()["developmental_delay"] is True
         assert fetched.json()["last_seizure_on"] == "2026-05-20"
 
+    @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.DIETITIAN])
+    async def test_specialist_fills_it_on_the_visit(
+        self, role, client, session, make_user, make_patient, auth_headers
+    ):
+        """Семья из Telegram анкету в кабинете не заполнит — её заполняет
+        специалист на приёме (ADR-0046, аудит блокеров C11). Потребитель —
+        раздел «Профиль» карты пациента (`IntakeSection`)."""
+
+        specialist = await make_user(role)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=specialist.id, patient_id=patient.id)
+        url = f"/api/v1/patients/{patient.id}/intake"
+        body = {
+            "last_seizure_on": date(2026, 5, 20).isoformat(),
+            "seizure_frequency_id": await _option_id(session, IntakeScale.SEIZURE_FREQUENCY),
+            "meals_regular": True,
+        }
+
+        saved = await client.put(url, json=body, headers=auth_headers(specialist))
+        assert saved.status_code == 200, saved.text
+
+        fetched = await client.get(url, headers=auth_headers(specialist))
+        assert fetched.status_code == 200
+        assert fetched.json()["meals_regular"] is True
+        assert fetched.json()["last_seizure_on"] == "2026-05-20"
+
     async def test_put_is_upsert_not_second_row(
         self, client, session, make_user, make_patient, auth_headers
     ):

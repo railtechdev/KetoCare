@@ -114,3 +114,19 @@ export function formatOccurredAt(value: Date): string {
     minute: "2-digit",
   }).format(value);
 }
+
+/**
+ * «Когда правили» без года: «05.10, 14:30».
+ *
+ * Для отметок о недавнем действии — кто и когда составил план дня (ADR-0047).
+ * Год рядом с днём, который и так стоит на экране, только удлиняет строку. Одна
+ * функция на кабинет и Mini App: семья видит одну и ту же отметку в двух местах.
+ */
+export function formatDayTime(value: Date): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+}

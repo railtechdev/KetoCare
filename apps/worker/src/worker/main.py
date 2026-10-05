@@ -24,7 +24,12 @@ from .ai.content import content_draft
 from .ai.parse import parse_free_text
 from .ai.summary import doctor_summary
 from .maintenance import close_stuck_ai_jobs, purge_files, purge_idempotency_keys
-from .reminders.notify import notify_family, notify_family_joined
+from .reminders.notify import (
+    notify_family,
+    notify_family_joined,
+    notify_family_menu_composed,
+    notify_family_nudge,
+)
 from .reminders.task import reminders_cron
 from .reports.task import render_report
 
@@ -41,6 +46,8 @@ class WorkerSettingsARQ:
         render_report,
         notify_family,
         notify_family_joined,
+        notify_family_nudge,
+        notify_family_menu_composed,
         parse_free_text,
         assistant_reply,
         doctor_summary,

@@ -23,6 +23,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { usePatients } from "../patients/usePatients";
+import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
 import { ageInMonths } from "./dates";
 import { usePatientOverviews } from "./doctorQueries";
@@ -150,11 +151,18 @@ export function PatientsListView() {
         enableSorting: false,
         // Пока сводка не пришла, в ячейке скелетон, а не прочерк: прочерк
         // читается как «замечаний нет», и это разные утверждения.
+        // У молчащей семьи рядом с пометкой — следующий шаг (ADR-0046):
+        // прежде флаг заканчивался констатацией.
         cell: ({ row }) => (
-          <PatientFlagsView
-            flags={row.original.flags}
-            pending={overviews.pending}
-          />
+          <div className="flex flex-wrap items-center gap-field">
+            <PatientFlagsView
+              flags={row.original.flags}
+              pending={overviews.pending}
+            />
+            {row.original.flags?.staleData === true && (
+              <NudgeFamilyButton patientId={row.original.patient.id} />
+            )}
+          </div>
         ),
       },
     ],

@@ -27,6 +27,7 @@ const EVERYTHING: PatientFlags = {
   nutritionOff: true,
   seizuresGrew: true,
   seizuresAppeared: true,
+  prolongedSeizure: true,
 };
 
 /** Значок lucide подписывает себя классом `lucide-<имя>`. */
@@ -69,6 +70,7 @@ const TONE_PAIRS: Record<string, string> = {
  * «возобновились» они одинаковые.
  */
 const EXPECTED_LABEL: Record<string, string> = {
+  "prolonged-seizure": doctorRu.flags.prolongedSeizure,
   "no-prescription": doctorRu.flags.noPrescription,
   "seizures-grew": doctorRu.flags.seizuresGrew,
   "seizures-appeared": doctorRu.flags.seizuresAppeared,
@@ -171,8 +173,10 @@ describe("пометки строки и легенда говорят одно 
       nutritionOff: false,
       seizuresGrew: false,
       seizuresAppeared: false,
+      prolongedSeizure: false,
     };
     const ONLY: Record<string, PatientFlags> = {
+      "prolonged-seizure": { ...QUIET, prolongedSeizure: true },
       "no-prescription": { ...QUIET, noPrescription: true },
       "seizures-grew": { ...QUIET, seizuresGrew: true },
       "seizures-appeared": { ...QUIET, seizuresAppeared: true },
@@ -200,6 +204,7 @@ describe("пометки строки и легенда говорят одно 
           nutritionOff: false,
           seizuresGrew: false,
           seizuresAppeared: false,
+          prolongedSeizure: false,
         }}
       />,
     );
@@ -236,6 +241,7 @@ describe("пометки строки и легенда говорят одно 
           nutritionOff: false,
           seizuresGrew: false,
           seizuresAppeared: false,
+          prolongedSeizure: false,
         }}
       />,
     );

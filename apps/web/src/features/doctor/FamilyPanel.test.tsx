@@ -491,3 +491,115 @@ describe("кто ведёт ребёнка дома", () => {
     Reflect.deleteProperty(navigator, "share");
   });
 });
+
+/**
+ * «Напомнить семье в Telegram» (ADR-0046, аудит блокеров C5): у семьи из
+ * Telegram нет ни телефона, ни почты, и флаг «семья молчит» заканчивался
+ * констатацией.
+ */
+describe("напомнить семье", () => {
+  const TELEGRAM_ONLY = [
+    { id: "p1", full_name: "Мама", phone: null, email: null },
+  ];
+
+  function answerNudge(result: { data?: unknown; error?: unknown }) {
+    (api.POST as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/auth/refresh") {
+        return { data: { access_token: token }, error: undefined };
+      }
+      if (path === "/api/v1/patients/{patient_id}/family-nudge") {
+        return { data: result.data, error: result.error };
+      }
+      return { data: undefined, error: undefined };
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    token = tokenFor("doctor");
+    (api.GET as Mock).mockResolvedValue({
+      data: TELEGRAM_ONLY,
+      error: undefined,
+    });
+  });
+
+  it("отправляет и говорит, сколько чатов получат", async () => {
+    answerNudge({
+      data: { recipients: 2, sent_at: "2026-10-05T10:00:00Z", contacts: [] },
+    });
+    const user = userEvent.setup();
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    await user.click(
+      await screen.findByRole("button", { name: doctorRu.nudge.action }),
+    );
+
+    expect(
+      await screen.findByText("Напоминание отправлено в 2 чата семьи"),
+    ).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/family-nudge",
+      { params: { path: { patient_id: PATIENT_ID } } },
+    );
+  });
+
+  it("без Telegram называет контакты вместо ошибки", async () => {
+    answerNudge({
+      data: {
+        recipients: 0,
+        sent_at: null,
+        contacts: [{ full_name: "Папа", phone: "+998901112233", email: null }],
+      },
+    });
+    const user = userEvent.setup();
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    await user.click(
+      await screen.findByRole("button", { name: doctorRu.nudge.action }),
+    );
+
+    expect(
+      await screen.findByText(doctorRu.nudge.noTelegram),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Связаться можно напрямую: Папа, +998901112233"),
+    ).toBeInTheDocument();
+  });
+
+  it("на повтор в течение суток называет время прежней просьбы", async () => {
+    answerNudge({
+      error: {
+        error: {
+          code: "conflict",
+          message: "Семье уже напоминали за последние сутки.",
+          details: {
+            reason: "nudged_recently",
+            previous_at: "2026-10-05T10:00:00Z",
+            next_at: "2026-10-06T10:00:00Z",
+          },
+        },
+      },
+    });
+    const user = userEvent.setup();
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    await user.click(
+      await screen.findByRole("button", { name: doctorRu.nudge.action }),
+    );
+
+    expect(
+      await screen.findByText(/Семье уже напоминали \d{2}\.10\.2026/),
+    ).toBeInTheDocument();
+  });
+
+  it("у родителя кнопки нет — семья самой себе не напоминает", async () => {
+    token = tokenFor("parent");
+    answerNudge({ data: undefined });
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    expect(await screen.findByText("Мама")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: doctorRu.nudge.action }),
+    ).not.toBeInTheDocument();
+  });
+});

@@ -15,11 +15,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from ..models import SeizureLog
+from ..models import IntakeOption, SeizureLog
+from ..models.enums import IntakeScale
 from .diary import DiaryLog
 
 
@@ -99,3 +100,41 @@ async def count_seizures_by_window(
         SeizureTotals(entries=int(row[index * 2]), count=int(row[index * 2 + 1]))
         for index in range(len(windows))
     ]
+
+
+async def latest_prolonged_seizure(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    since: datetime,
+    until: datetime,
+    min_duration_sec: int,
+    option_codes: Sequence[str],
+) -> datetime | None:
+    """Время последнего затяжного приступа в окне [since, until) — или None.
+
+    Затяжной — либо измеренная длительность не меньше `min_duration_sec`, либо
+    интервал со слов из шкалы, чья нижняя граница не ниже порога
+    (`option_codes`). Обе ветви нужны: семья, не засекавшая секундомером,
+    отмечает интервал, и пропустить его значило бы промолчать как раз там, где
+    приступ длился дольше всего.
+    """
+
+    prolonged = or_(
+        SeizureLog.duration_sec >= min_duration_sec,
+        SeizureLog.duration_option_id.in_(
+            select(IntakeOption.id).where(
+                IntakeOption.scale == IntakeScale.SEIZURE_DURATION,
+                IntakeOption.code.in_(list(option_codes)),
+            )
+        ),
+    )
+    stmt = select(func.max(SeizureLog.occurred_at)).where(
+        SeizureLog.patient_id == patient_id,
+        SeizureLog.deleted_at.is_(None),
+        SeizureLog.occurred_at >= since,
+        SeizureLog.occurred_at < until,
+        prolonged,
+    )
+    latest: datetime | None = await session.scalar(stmt)
+    return latest
