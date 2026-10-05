@@ -112,7 +112,7 @@ export function ChildPage() {
       actions={
         <Button type="button" onClick={() => setTab("add")}>
           <Plus aria-hidden="true" />
-          {t("child.add")}
+          {t("child.addByCode")}
         </Button>
       }
     >
@@ -152,7 +152,7 @@ export function ChildPage() {
             action={
               <Button type="button" onClick={() => setTab("add")}>
                 <Plus aria-hidden="true" />
-                {t("child.add")}
+                {t("child.addByCode")}
               </Button>
             }
           />
