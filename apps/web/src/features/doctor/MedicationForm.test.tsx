@@ -39,6 +39,8 @@ describe("порядок полей формы препарата", () => {
       ),
     ).map((input) => input.name);
 
-    expect(inputs).toEqual([...FIELD_ORDER]);
+    // Доза словами и доза числом стоят на одном месте попеременно (ADR-0049):
+    // у новой записи единица не выбрана, и на экране — число.
+    expect(inputs).toEqual(FIELD_ORDER.filter((name) => name !== "doseText"));
   });
 });

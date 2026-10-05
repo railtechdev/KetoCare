@@ -117,6 +117,37 @@ describe("анкета глазами специалиста", () => {
     expect(screen.getAllByText("Прежняя шкала частоты")).toHaveLength(2);
   });
 
+  it.each([
+    ["month", "2026-03-01", "март 2026"],
+    ["year", "2025-01-01", "2025"],
+  ])(
+    "неточную дату печатает с той точностью, с какой помнят (%s)",
+    async (precision, on, expected) => {
+      // Вопрос 48, ADR-0049: «март 2026» — ответ семьи, а «01.03.2026» —
+      // способ хранения. Напечатать второе значит выдать догадку за число.
+      mockGet({
+        ...INTAKE,
+        last_seizure_on: on,
+        last_seizure_precision: precision,
+      });
+      render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+      expect(screen.queryByText(/^01\.0[13]\./)).not.toBeInTheDocument();
+    },
+  );
+
+  it("«не помню» называет словами", async () => {
+    mockGet({
+      ...INTAKE,
+      last_seizure_on: null,
+      last_seizure_precision: "unknown",
+    });
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    expect(await screen.findByText("Семья не помнит")).toBeInTheDocument();
+  });
+
   it("неотвеченный вопрос называет словами, а не прочерком", async () => {
     mockGet(INTAKE);
     render(<IntakeView patientId={PATIENT_ID} />, { wrapper });

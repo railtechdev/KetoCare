@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..clock import local_today
 from ..models import AedDrug, IntakeOption, PatientIntake
-from ..models.enums import IntakeScale
+from ..models.enums import IntakeScale, LastSeizurePrecision
 from . import therapy as therapy_repo
 
 
@@ -84,6 +84,7 @@ async def upsert(
     developmental_delay: bool | None,
     meals_regular: bool | None,
     current_aed_ids: list[uuid.UUID],
+    last_seizure_precision: LastSeizurePrecision | None = None,
 ) -> PatientIntake:
     intake = await get_for_patient(session, patient_id=patient_id)
     if intake is None:
@@ -91,6 +92,10 @@ async def upsert(
         session.add(intake)
 
     intake.last_seizure_on = last_seizure_on
+    # Полная дата без указанной точности — точная (так писали до ADR-0049).
+    intake.last_seizure_precision = last_seizure_precision or (
+        LastSeizurePrecision.DAY if last_seizure_on is not None else None
+    )
     intake.onset_age_id = onset_age_id
     intake.seizure_frequency_id = seizure_frequency_id
 

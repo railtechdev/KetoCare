@@ -13,7 +13,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.models.enums import IntakeScale
+from core.models.enums import IntakeScale, LastSeizurePrecision
 
 
 class IntakeOptionRead(BaseModel):
@@ -64,8 +64,15 @@ class PatientIntakeWrite(BaseModel):
 
     last_seizure_on: date | None = Field(
         default=None,
-        description="Дата последнего приступа на момент анкеты; дальше считается по дневнику",
+        description=(
+            "Дата последнего приступа на момент анкеты; дальше считается по дневнику. "
+            "При точности month/year — первый день месяца или года"
+        ),
     )
+    #: Насколько точно семья помнит дату (вопрос 48, ADR-0049): день, месяц,
+    #: год или «не помню» (`unknown`, тогда даты нет). Пусто при заданной дате —
+    #: дата точная.
+    last_seizure_precision: LastSeizurePrecision | None = None
     onset_age_id: uuid.UUID | None = None
     seizure_frequency_id: uuid.UUID | None = None
     seizure_duration_id: uuid.UUID | None = None
@@ -83,6 +90,7 @@ class PatientIntakeRead(BaseModel):
     id: uuid.UUID
     patient_id: uuid.UUID
     last_seizure_on: date | None
+    last_seizure_precision: LastSeizurePrecision | None
     onset_age_id: uuid.UUID | None
     seizure_frequency_id: uuid.UUID | None
     #: Частота ДО начала диеты: записывается один раз и не перезаписывается
