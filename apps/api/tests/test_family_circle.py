@@ -471,9 +471,11 @@ class TestBotRefusalsSayWhy:
         assert response.status_code == 409
         assert response.json()["error"]["details"] == {"reason": "already_here"}
 
-    async def test_chat_with_another_child(
+    async def test_chat_with_another_child_takes_it_too(
         self, client, session, make_user, make_patient, auth_headers
     ):
+        """ADR-0048: второй ребёнок — не «чат занят», а вторая привязка того же чата."""
+
         mother = await make_user(UserRole.PARENT)
         first = await make_patient("Первый")
         second = await make_patient("Второй")
@@ -501,8 +503,9 @@ class TestBotRefusalsSayWhy:
             },
         )
 
-        assert response.status_code == 409
-        assert response.json()["error"]["details"] == {"reason": "chat_taken"}
+        assert response.status_code == 201, response.text
+        live = await telegram_repo.list_active_links_by_chat(session, 771_600_300)
+        assert {link.patient_id for link in live} == {first.id, second.id}
 
 
 class TestChatOwnersAreNamed:

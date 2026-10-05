@@ -70,6 +70,8 @@ export const AUDIT_ACTIONS = [
   "accept_access_code",
   "login",
   "login_miniapp",
+  // Mini App переключён на другого ребёнка того же чата (ADR-0048).
+  "miniapp_switch_child",
   "login_failed",
   "login_failed_totp",
   "totp_setup_requested",

@@ -70,6 +70,7 @@
       "login_failed": "Неудачный вход",
       "login_failed_totp": "Неверный код второго фактора",
       "login_miniapp": "Вход через Mini App",
+      "miniapp_switch_child": "Mini App: переключение на другого ребёнка",
       "login_with_backup_code": "Вход резервным кодом",
       "merge": "Объединение",
       "password_change_failed": "Неудачная смена пароля",

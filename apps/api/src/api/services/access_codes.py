@@ -429,8 +429,11 @@ async def activate_for_user(
     return await _attach_parent(session, code=claimed, parent=parent, ip=ip)
 
 
-#: Занятый чат отвечает одинаково и до погашения кода, и на гонке вставки.
-_CHAT_TAKEN = "Этот чат уже привязан. Сначала отвяжите его в кабинете."
+#: Этот ребёнок уже ведётся из этого чата — и до погашения кода, и на гонке
+#: двух одинаковых `/start` (ADR-0048: другой ребёнок чат больше не «занимает»).
+_ALREADY_HERE = "Этот чат уже ведёт дневник этого ребёнка."
+#: Чужой чат: добавить в него ребёнка может только его владелец (см. ниже).
+_CHAT_TAKEN = "Этот чат уже привязан к другому человеку."
 
 
 async def activate_from_telegram(
@@ -450,29 +453,48 @@ async def activate_from_telegram(
     удостоверяет `telegram_user_id`, а веб он включает сам и потом
     (`POST /users/me/credentials`).
 
-    Порядок шагов — тот же, что был у кода привязки: занятость чата
-    проверяется ДО погашения, иначе чужая привязка сжигала бы код семьи, и она
-    получала бы отказ, ничего не сделав неправильно.
+    Чат, уже ведущий одного ребёнка, кодом на ДРУГОГО ребёнка получает и его
+    (ADR-0048): у семьи бывает двое детей на диете, у бабушки — двое внуков.
+    Прежде это был отказ «чат занят», и второго ребёнка вели только в кабинете,
+    которого у семьи из Telegram нет. Правила при этом те же, что у первой
+    привязки: чья учётная запись стоит за Telegram, решает
+    `_parent_behind_telegram`, Telegram сотрудника отказывается, код своего
+    чата привязывает к выдавшему.
+
+    Порядок шагов прежний: проверка «этот ребёнок уже здесь» идёт ДО погашения,
+    иначе повторный код сжигался бы, и семья получала бы отказ, ничего не
+    сделав неправильно.
 
     Возвращает то же, из чего собирается `LinkVerified`: бот не должен
     различать, каким кодом родитель пришёл.
     """
 
-    existing = await telegram_repo.get_active_link_by_chat(session, chat_id)
-    if existing is not None:
-        # Бот подбирает текст по причине: «этот ребёнок уже здесь» и «чат занят
-        # другим ребёнком» — разные ситуации с разным следующим шагом, а одна
-        # формулировка на обе отправляла бабушку отвязывать чат в кабинете,
-        # которого у неё нет.
-        peeked = await codes_repo.get(session, code)
-        same_child = peeked is not None and peeked.patient_id == existing.patient_id
-        if same_child and peeked is not None and _is_live(peeked) and chat_id == telegram_user_id:
-            return await _rebind(session, existing=existing, ip=ip)
-        raise ApiError(
-            ErrorCode.CONFLICT,
-            "Этот чат уже ведёт дневник этого ребёнка." if same_child else _CHAT_TAKEN,
-            details={"reason": "already_here" if same_child else "chat_taken"},
+    peeked = await codes_repo.get(session, code)
+    existing = (
+        await telegram_repo.get_active_link_for_child(
+            session, chat_id=chat_id, patient_id=peeked.patient_id
         )
+        if peeked is not None
+        else None
+    )
+    if existing is not None and peeked is not None:
+        # Бот подбирает текст по причине: «этот ребёнок уже здесь» ведёт сразу
+        # в меню, а не в отказ. Живой код того же человека — восстановление
+        # секрета (дополнение к ADR-0009), без новой связи и без погашения.
+        if _is_live(peeked) and chat_id == telegram_user_id:
+            return await _rebind(session, existing=existing, ip=ip)
+        raise ApiError(ErrorCode.CONFLICT, _ALREADY_HERE, details={"reason": "already_here"})
+
+    if chat_id != telegram_user_id and await telegram_repo.list_active_links_by_chat(
+        session, chat_id
+    ):
+        # Чат добавляет ребёнка, только если это личный чат самого человека
+        # (`chat_id` совпадает с `telegram_user_id`): тогда все прежние
+        # привязки этого чата заведены им же. Иначе чужой Telegram, назвавшись
+        # чужим чатом, подвесил бы к нему своего ребёнка — и семья вела бы
+        # дневник не того ребёнка. Бот привязывает только в личной переписке,
+        # так что честный запрос сюда не попадает; проверка — до погашения кода.
+        raise ApiError(ErrorCode.CONFLICT, _CHAT_TAKEN, details={"reason": "chat_taken"})
 
     claimed = await _claim_or_refuse(session, code)
     await _require_live_issuer(session, claimed)
@@ -498,10 +520,13 @@ async def activate_from_telegram(
             secret=secret,
         )
     except IntegrityError as exc:
-        # Проверка занятости и вставка — не одна операция: два запроса с разными
-        # кодами на один чат оба пройдут проверку. Частичный уникальный индекс их
-        # разведёт, но без перехвата второй получил бы 500 вместо объяснения.
-        raise ApiError(ErrorCode.CONFLICT, _CHAT_TAKEN) from exc
+        # Проверка и вставка — не одна операция: два кода на одного ребёнка,
+        # присланные в один чат одновременно, оба пройдут проверку. Частичный
+        # уникальный индекс их разведёт, но без перехвата второй получил бы 500
+        # вместо объяснения.
+        raise ApiError(
+            ErrorCode.CONFLICT, _ALREADY_HERE, details={"reason": "already_here"}
+        ) from exc
 
     await audit_repo.write_audit_log(
         session,
@@ -627,8 +652,12 @@ async def _parent_behind_telegram(
         # Цена отказа: родитель с кабинетом, активировавший позже код врача на
         # второго ребёнка прямо в боте, получит вторую учётную запись. Это видно
         # врачу (в карте два родителя) и поправимо, а тихий доступ к чужим
-        # клиническим данным — нет. Второго ребёнка такой родитель добавляет в
-        # кабинете (`POST /users/me/access-codes/activate`).
+        # клиническим данным — нет. Чат при этом ведёт обоих детей (ADR-0048),
+        # просто от двух учётных записей; объединить их в одну родитель может,
+        # добавив второго ребёнка в кабинете (`POST /users/me/access-codes/activate`).
+        # По той же причине чат, уже привязанный кодом своего чата, не
+        # передаёт свою учётную запись новому коду: привязка удостоверяет чат,
+        # а не человека за ним.
         return issuer
 
     try:
@@ -643,9 +672,15 @@ async def _parent_behind_telegram(
         )
     except IntegrityError as exc:
         # Два `/start` с разными кодами из одного нового Telegram: проверка выше
-        # и вставка здесь — не одна операция. Частичный уникальный индекс их
-        # разведёт, но без перехвата второй получил бы 500.
-        raise ApiError(ErrorCode.CONFLICT, _CHAT_TAKEN) from exc
+        # и вставка здесь — не одна операция. Уникальный индекс по
+        # `telegram_user_id` их разведёт, но без перехвата второй получил бы 500.
+        # Повтор того же сообщения через секунду найдёт уже заведённую учётную
+        # запись (случай 1).
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Код уже обрабатывается — отправьте его ещё раз через несколько секунд.",
+            details={"reason": "retry"},
+        ) from exc
     await audit_repo.write_audit_log(
         session,
         user_id=parent.id,

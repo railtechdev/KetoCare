@@ -65,7 +65,7 @@ from ..schemas import (
     UserRead,
 )
 from ..schemas_access import AccessCodeActivate
-from ..schemas_telegram import MiniAppInitRequest, MiniAppSession
+from ..schemas_telegram import MiniAppInitRequest, MiniAppSession, MiniAppSwitchRequest
 from ..security import (
     Channel,
     auth_challenge,
@@ -391,7 +391,37 @@ async def telegram_init(
     """
 
     return await telegram_service.issue_miniapp_session(
-        session, init_data=payload.init_data, ip=client_address(request)
+        session,
+        init_data=payload.init_data,
+        patient_id=payload.patient_id,
+        ip=client_address(request),
+    )
+
+
+@router.post(
+    "/miniapp/switch",
+    response_model=MiniAppSession,
+    summary="Переключить Mini App на другого ребёнка",
+)
+async def miniapp_switch_child(
+    payload: MiniAppSwitchRequest, request: Request, user: CurrentUserDep, session: SessionDep
+) -> MiniAppSession:
+    """Новая пара токенов, суженная до другого ребёнка того же чата (ADR-0048).
+
+    Только для сессии Mini App: у кабинета ребёнок выбирается адресом, а не
+    токеном, а боту переключение не нужно — у него по секрету на ребёнка.
+    Ребёнок без живой привязки ЭТОГО чата — 404 `child_not_linked`: сессия не
+    расширяется на детей, которых чат не ведёт, даже если учётная запись
+    связана с ними другим путём.
+    """
+
+    if user.channel != "miniapp" or user.binding_id is None:
+        raise ApiError(ErrorCode.FORBIDDEN, "Переключение ребёнка доступно только в приложении.")
+    return await telegram_service.switch_miniapp_child(
+        session,
+        binding_id=user.binding_id,
+        patient_id=payload.patient_id,
+        ip=client_address(request),
     )
 
 

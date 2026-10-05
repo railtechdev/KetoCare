@@ -31,6 +31,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Request
 
 from core.config import get_settings
+from core.names import first_name
 from core.repositories import audit as audit_repo
 from core.repositories import reminders as reminders_repo
 from core.repositories import telegram as telegram_repo
@@ -212,6 +213,7 @@ async def activate_access_code_from_telegram(
         link_id=link.id,
         patient_id=link.patient_id,
         patient_name=patient.full_name,
+        patient_first_name=first_name(patient.full_name),
         secret=secret,
         web_url=get_settings().web_origin.rstrip("/"),
         has_web_credentials=parent.has_web_credentials,
