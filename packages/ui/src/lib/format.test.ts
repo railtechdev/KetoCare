@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatDose,
   formatGrams,
   formatKcal,
   formatMass,
@@ -87,5 +88,14 @@ describe("запись чисел (правило П45)", () => {
   it("кетосоотношение остаётся английским намеренно", () => {
     // Это пропорция из раздела 8.2 ТЗ, а не измерение.
     expect(formatRatio(3.9)).toBe("3.9 : 1");
+  });
+});
+
+describe("formatDose", () => {
+  it("до трёх знаков, запятая, без дописанных нулей и разрядов", () => {
+    expect(formatDose(2.5)).toBe("2,5");
+    expect(formatDose(0.125)).toBe("0,125");
+    expect(formatDose(1500)).toBe("1500");
+    expect(formatDose(300)).toBe("300");
   });
 });

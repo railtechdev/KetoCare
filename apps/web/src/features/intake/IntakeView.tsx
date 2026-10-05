@@ -11,9 +11,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
-import { formatIsoDate } from "../doctor/dates";
 import { LinesSkeleton } from "../doctor/skeletons";
 import { IntakeForm } from "./IntakeForm";
+import { formatLastSeizure } from "./lastSeizure";
 import {
   useAedDrugs,
   useIntakeOptions,
@@ -170,9 +170,14 @@ function Answers({
         [t("fields.onsetAge"), named(intake.onset_age_id)],
         [
           t("fields.lastSeizureOn"),
-          intake.last_seizure_on === null
-            ? null
-            : formatIsoDate(intake.last_seizure_on),
+          // С той точностью, с какой помнят: «март 2026», а не «01.03.2026»
+          // (вопрос 48, ADR-0049). «Не помню» — тоже ответ, не прочерк.
+          intake.last_seizure_precision === "unknown"
+            ? t("fields.lastSeizureUnknown")
+            : formatLastSeizure(
+                intake.last_seizure_on,
+                intake.last_seizure_precision,
+              ),
         ],
         [t("fields.frequency"), named(intake.seizure_frequency_id)],
         // Исходная частота — то, с чем сравнивают: эффект терапии измеряют

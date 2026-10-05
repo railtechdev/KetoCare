@@ -73,16 +73,19 @@ async def put_intake(
             session, option_id=getattr(payload, field), scale=scale, field=field
         )
     await intake_service.check_known_drugs(session, payload.current_aed_ids)
-    await intake_service.check_last_seizure_known(
+    precision = await intake_service.check_last_seizure_known(
         session,
         seizure_frequency_id=payload.seizure_frequency_id,
         last_seizure_on=payload.last_seizure_on,
+        precision=payload.last_seizure_precision,
+        previous=await intake_repo.get_for_patient(session, patient_id=patient_id),
     )
 
     intake = await intake_repo.upsert(
         session,
         patient_id=patient_id,
         last_seizure_on=payload.last_seizure_on,
+        last_seizure_precision=precision,
         onset_age_id=payload.onset_age_id,
         seizure_frequency_id=payload.seizure_frequency_id,
         seizure_duration_id=payload.seizure_duration_id,

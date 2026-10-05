@@ -36,7 +36,8 @@ PROFILE = {
 
 MEDICATION = {
     "drug_name": "Вальпроевая кислота",
-    "dose": "300 мг",
+    "dose_value": 300,
+    "dose_unit": "mg",
     "frequency_code": "twice_daily",
     "frequency": "утром и на ночь",
     "started_at": TODAY.isoformat(),
@@ -440,7 +441,7 @@ class TestMedications:
         created = await client.post(url, json=MEDICATION, headers=auth_headers(doctor))
         updated = await client.put(
             f"{url}/{created.json()['id']}",
-            json={**MEDICATION, "dose": "500 мг"},
+            json={**MEDICATION, "dose_value": 500},
             headers=auth_headers(colleague),
         )
         assert updated.json()["author_id"] == str(doctor.id), "автор — назначивший врач"
@@ -456,7 +457,9 @@ class TestMedications:
             )
         )
         assert entry is not None and entry.user_id == colleague.id
-        assert entry.before["dose"] == MEDICATION["dose"]
+        assert entry.before["dose"] == "300 мг"
+        assert entry.before["dose_value"] == 300
+        assert updated.json()["dose"] == "500 мг"
 
     async def test_delete_is_soft(self, client, session, make_user, make_patient, auth_headers):
         doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
@@ -490,7 +493,7 @@ class TestMedications:
 
         response = await client.put(
             f"/api/v1/patients/{patient.id}/medications/{medication_id}",
-            json={**MEDICATION, "dose": "999 мг"},
+            json={**MEDICATION, "dose_value": 999},
             headers=auth_headers(doctor),
         )
         assert response.status_code == 404, "чужая запись не должна быть достижима"
@@ -506,7 +509,20 @@ class TestMedications:
         [
             {**MEDICATION, "stopped_at": (TODAY - timedelta(days=1)).isoformat()},
             {**MEDICATION, "drug_name": ""},
-            {**MEDICATION, "dose": ""},
+            # Доза — числом с единицей из списка (ADR-0049).
+            {key: value for key, value in MEDICATION.items() if key != "dose_unit"},
+            {key: value for key, value in MEDICATION.items() if key != "dose_value"},
+            {**MEDICATION, "dose_value": 0},
+            {**MEDICATION, "dose_value": -5},
+            {**MEDICATION, "dose_value": 0.0001},
+            {**MEDICATION, "dose_unit": "mg/kg"},
+            # Строкой доза больше не принимается: её собирает сервер.
+            {**MEDICATION, "dose": "300 мг"},
+            # Слова — только у «другой единицы», и там обязательны.
+            {**MEDICATION, "dose_text": "по схеме"},
+            {**MEDICATION, "dose_unit": "other", "dose_value": None},
+            {**MEDICATION, "dose_unit": "other", "dose_value": None, "dose_text": "  "},
+            {**MEDICATION, "dose_unit": "other", "dose_text": "2,5 мг/кг/сут"},
             {**MEDICATION, "started_at": "не дата"},
             # Кратность — из списка (ADR-0033): без кода и с чужим кодом нельзя.
             {key: value for key, value in MEDICATION.items() if key != "frequency_code"},
@@ -558,6 +574,56 @@ class TestMedications:
         assert response.status_code == 201, response.text
         assert response.json()["frequency"] == "через два дня на третий"
 
+    @pytest.mark.parametrize(
+        ("value", "unit", "expected"),
+        [
+            (300, "mg", "300 мг"),
+            (2.5, "ml", "2,5 мл"),
+            (0.5, "tablet", "0,5 табл."),
+            (1500, "iu", "1\u00a0500 МЕ"),
+            (0.125, "mg", "0,125 мг"),
+        ],
+    )
+    async def test_dose_is_composed_from_value_and_unit(
+        self, client, session, make_user, make_patient, auth_headers, value, unit, expected
+    ):
+        """Строку дозы собирает сервер — её читают отчёт, дневник и бот (ADR-0049)."""
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/medications",
+            json={**MEDICATION, "dose_value": value, "dose_unit": unit},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["dose"] == expected
+        assert body["dose_value"] == value
+        assert body["dose_unit"] == unit
+
+    async def test_other_unit_keeps_the_doctors_words(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/medications",
+            json={
+                **MEDICATION,
+                "dose_value": None,
+                "dose_unit": "other",
+                "dose_text": " 2,5 мг/кг/сут ",
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["dose"] == "2,5 мг/кг/сут"
+        assert body["dose_value"] is None
+        assert body["dose_unit"] == "other"
+
     async def test_record_from_before_the_list_keeps_its_words(
         self, client, session, make_user, make_patient, auth_headers
     ):
@@ -582,6 +648,59 @@ class TestMedications:
         [item] = response.json()["items"]
         assert item["frequency_code"] is None
         assert item["frequency"] == "утром и на ночь"
+        # Доза строкой — как была: в число и единицу её не переводят без врача.
+        assert item["dose"] == "250 мг"
+        assert item["dose_value"] is None
+        assert item["dose_unit"] is None
+
+    async def test_editing_a_legacy_dose_asks_for_a_unit(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Строку дозы до списка в число переводит врач, а не разбор строки."""
+        doctor, patient = await _attached(session, make_user, make_patient, UserRole.DOCTOR)
+        legacy = Medication(
+            patient_id=patient.id,
+            drug_name="Топирамат",
+            dose="по 1/2 таб. на ночь",
+            frequency_code="once_daily",
+            started_at=TODAY,
+            author_id=doctor.id,
+        )
+        session.add(legacy)
+        await session.flush()
+        url = f"/api/v1/patients/{patient.id}/medications/{legacy.id}"
+        without_unit = {
+            key: value
+            for key, value in MEDICATION.items()
+            if key not in ("dose_value", "dose_unit")
+        }
+
+        rejected = await client.put(url, json=without_unit, headers=auth_headers(doctor))
+        assert rejected.status_code == 422
+        assert [error["field"] for error in rejected.json()["error"]["details"]["fields"]] == [
+            "dose_unit"
+        ]
+        await session.refresh(legacy)
+        assert legacy.dose == "по 1/2 таб. на ночь", "отказ не трогает прежнюю строку"
+
+        response = await client.put(
+            url,
+            json={**without_unit, "dose_value": 0.5, "dose_unit": "tablet"},
+            headers=auth_headers(doctor),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["dose"] == "0,5 табл."
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "medications",
+                AuditLog.action == "update",
+                AuditLog.entity_id == legacy.id,
+            )
+        )
+        assert entry is not None
+        assert entry.before["dose"] == "по 1/2 таб. на ночь"
+        assert entry.before["dose_unit"] is None
 
     async def test_editing_a_record_from_before_the_list_asks_for_a_code(
         self, client, session, make_user, make_patient, auth_headers

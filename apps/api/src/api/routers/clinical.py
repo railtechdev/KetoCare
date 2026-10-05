@@ -47,6 +47,7 @@ from ..schemas_clinical import (
 )
 from ..services import intake as intake_service
 from ..services import therapy as therapy_service
+from ..services.medication_dose import describe_dose
 
 router = APIRouter(prefix="/patients/{patient_id}", tags=["clinical"])
 
@@ -191,7 +192,9 @@ async def create_medication(
         session,
         patient_id=patient_id,
         drug_name=payload.drug_name,
-        dose=payload.dose,
+        dose=describe_dose(payload.dose_value, payload.dose_unit, payload.dose_text),
+        dose_value=payload.dose_value,
+        dose_unit=payload.dose_unit,
         frequency_code=payload.frequency_code,
         frequency=payload.frequency,
         started_at=payload.started_at,
@@ -241,7 +244,9 @@ async def update_medication(
         session,
         medication=medication,
         drug_name=payload.drug_name,
-        dose=payload.dose,
+        dose=describe_dose(payload.dose_value, payload.dose_unit, payload.dose_text),
+        dose_value=payload.dose_value,
+        dose_unit=payload.dose_unit,
         frequency_code=payload.frequency_code,
         frequency=payload.frequency,
         started_at=payload.started_at,

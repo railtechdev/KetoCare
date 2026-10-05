@@ -19,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 
-from core.models.enums import MedicationFrequency
+from core.models.enums import MedicationDoseUnit, MedicationFrequency
 
 from .schemas import RequiredLongText, RequiredName
 
@@ -85,7 +85,18 @@ class MedicationWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     drug_name: RequiredName
-    dose: RequiredName
+    #: Разовая доза числом (ADR-0049, вопрос 44; FHIR `doseQuantity.value`).
+    #: Обязательна при любой единице, кроме «другой».
+    dose_value: Annotated[float, Field(gt=0, le=100_000)] | None = None
+    #: Единица из списка — обязательна у каждой новой записи и у каждой правки,
+    #: как кратность: запись до списка при правке получает единицу, и выбирает
+    #: её врач, а не разбор строки.
+    dose_unit: MedicationDoseUnit
+    #: Доза словами — только у «другой единицы» («2,5 мг/кг/сут»), и там
+    #: обязательна. Строку дозы для чтения сервер собирает сам.
+    dose_text: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = (
+        None
+    )
     #: Кратность — из списка (ADR-0033, вопрос 45). Обязательна у каждой новой
     #: записи и у каждой правки: запись, заведённая до списка, при правке
     #: получает код, и выбирает его врач, а не разбор строки.
@@ -99,7 +110,7 @@ class MedicationWrite(BaseModel):
         default=None, description="Последний день приёма; пусто — препарат принимается"
     )
 
-    @field_validator("frequency")
+    @field_validator("frequency", "dose_text")
     @classmethod
     def _blank_note_is_none(cls, value: str | None) -> str | None:
         # Пустое уточнение — это «уточнения нет», а не строка из пробелов в карте.
@@ -110,6 +121,26 @@ class MedicationWrite(BaseModel):
         # «Другая схема» без слов не говорит, как давать препарат.
         if self.frequency_code is MedicationFrequency.OTHER and self.frequency is None:
             raise ValueError("Для «Другой схемы» опишите кратность приёма словами.")
+        return self
+
+    @model_validator(mode="after")
+    def _check_dose(self) -> MedicationWrite:
+        # Ровно один способ записать дозу: числом с единицей или словами у
+        # «другой единицы». Два сразу разошлись бы — какому верить?
+        if self.dose_unit is MedicationDoseUnit.OTHER:
+            if self.dose_text is None:
+                raise ValueError("Для «другой единицы» опишите дозу словами.")
+            if self.dose_value is not None:
+                raise ValueError(
+                    "У «другой единицы» доза пишется словами; число укажите вместе с единицей."
+                )
+            return self
+        if self.dose_value is None:
+            raise ValueError("Укажите дозу числом.")
+        if self.dose_text is not None:
+            raise ValueError("Доза словами — только для «другой единицы».")
+        if round(self.dose_value, 3) != self.dose_value:
+            raise ValueError("Доза — не больше трёх знаков после запятой.")
         return self
 
     @model_validator(mode="after")
@@ -127,7 +158,12 @@ class MedicationRead(BaseModel):
     id: uuid.UUID
     patient_id: uuid.UUID
     drug_name: str
+    #: Доза для чтения: «300 мг», слова у «другой единицы» или строка записи,
+    #: заведённой до списка (тогда `dose_unit` пуст).
     dose: str
+    dose_value: float | None
+    #: Пусто только у записей, заведённых до списка: их доза — строкой в `dose`.
+    dose_unit: MedicationDoseUnit | None
     #: Пусто только у записей, заведённых до списка: их кратность — в `frequency`.
     frequency_code: MedicationFrequency | None
     frequency: str | None
