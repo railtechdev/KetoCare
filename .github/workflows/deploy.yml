@@ -1,6 +1,6 @@
 name: Deploy
 
-# Автодеплой пред-прода: main → VPS (docs/DEPLOY.md).
+# Автодеплой test-стенда: main → VPS (docs/DEPLOY.md).
 #
 # Запускается ПОСЛЕ зелёного CI, а не по самому push: событие push приходит
 # раньше, чем известен результат тестов, и деплой по нему выкатывал бы
@@ -43,12 +43,12 @@ on:
 # оборванный посреди `rsync --delete` деплой оставит пустой /var/www, то есть
 # белый экран вместо кабинета.
 concurrency:
-  group: deploy-preprod
+  group: deploy-test
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Выкатка на пред-прод
+    name: Выкатка на test
     runs-on: ubuntu-latest
     # Четыре условия, а не одно: успех прогона, событие push (а не
     # pull_request), ветка main И тот же репозиторий — иначе форк с веткой

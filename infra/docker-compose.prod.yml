@@ -1,4 +1,4 @@
-# Пред-прод / прод: postgres, redis, api, bot, worker. Веб-кабинет и посадочная —
+# Test-стенд / прод: postgres, redis, api, bot, worker. Веб-кабинет и посадочная —
 # статика у host-nginx (infra/nginx/), в compose их нет. Запуск — из корня репо:
 #
 #   docker compose --env-file .env -f infra/docker-compose.prod.yml up -d

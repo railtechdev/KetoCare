@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Первичная настройка VPS под пред-прод. Запускается ОТ ROOT, один раз:
+# Первичная настройка VPS под test-стенд. Запускается ОТ ROOT, один раз:
 #
 #   scp infra/scripts/bootstrap-server.sh root@<адрес>:/tmp/
 #   ssh root@<адрес> "bash /tmp/bootstrap-server.sh"
