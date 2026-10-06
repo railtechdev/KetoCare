@@ -268,6 +268,7 @@ describe("attentionRank", () => {
         prolongedSeizure: false,
         therapyEnded: false,
         controlOverdue: false,
+        growthDrop: false,
       }),
     ).toBeGreaterThan(
       attentionRank({
@@ -282,6 +283,7 @@ describe("attentionRank", () => {
         prolongedSeizure: false,
         therapyEnded: false,
         controlOverdue: false,
+        growthDrop: false,
       }),
     );
   });
@@ -449,6 +451,7 @@ describe("доступ семьи не активирован (ADR-0040)", () =>
     prolongedSeizure: false,
     therapyEnded: false,
     controlOverdue: false,
+    growthDrop: false,
   };
 
   it("молчание не считается, пока семья не вошла", () => {
@@ -506,6 +509,7 @@ describe("затяжной приступ (ADR-0046, аудит C8)", () => {
     prolongedSeizure: false,
     therapyEnded: false,
     controlOverdue: false,
+    growthDrop: false,
   };
 
   it("горит, когда сервер назвал время затяжного приступа", () => {
@@ -534,9 +538,31 @@ describe("затяжной приступ (ADR-0046, аудит C8)", () => {
       nutritionOff: true,
       seizuresGrew: true,
       seizuresAppeared: true,
+      controlOverdue: true,
+      growthDrop: true,
     });
 
     expect(prolonged).toBeGreaterThan(everythingElse);
+  });
+});
+
+describe("снижение роста и веса по ВОЗ (вопрос 15)", () => {
+  it("горит, только когда сервер сказал «да»", () => {
+    // `null` — сервер не считал (сводку читает семья) или сравнивать не с
+    // чем; это не «снижения нет», но и не пометка.
+    expect(
+      computePatientFlags(overview({ growth_significant_drop: true }))
+        ?.growthDrop,
+    ).toBe(true);
+    expect(
+      computePatientFlags(overview({ growth_significant_drop: false }))
+        ?.growthDrop,
+    ).toBe(false);
+    expect(
+      computePatientFlags(overview({ growth_significant_drop: null }))
+        ?.growthDrop,
+    ).toBe(false);
+    expect(computePatientFlags(overview())?.growthDrop).toBe(false);
   });
 });
 

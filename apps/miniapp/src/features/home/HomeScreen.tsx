@@ -5,6 +5,7 @@ import {
   MacroBar,
   RatioBadge,
   Section,
+  WarningBanner,
   formatOccurredAt,
   formatMeasured,
   formatWeight,
@@ -108,6 +109,22 @@ function Summary({ overview }: { overview: Overview }) {
             })}
           </p>
         </Section>
+      )}
+      {/* Вчерашний недобор — ответ клиники на вопрос 9. Решает сервер
+          (`yesterday_shortfall`): что съедено, какая норма действовала вчера и
+          вышел ли недобор за допуск ядра. Нет поля — сказать нечего. Тот же
+          текст, что в кабинете. */}
+      {(overview.yesterday_shortfall ?? null) !== null && (
+        <WarningBanner
+          level="warning"
+          title={t("home.yesterdayShortfall.title")}
+        >
+          {t("home.yesterdayShortfall.text", {
+            value: formatKcal(
+              overview.yesterday_shortfall?.shortfall_kcal ?? 0,
+            ),
+          })}
+        </WarningBanner>
       )}
       <Section title={t("home.prescription.title")} density="compact">
         {prescription === null || prescription === undefined ? (

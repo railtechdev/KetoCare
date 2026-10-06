@@ -215,7 +215,11 @@ describe("MenuPage", () => {
     // СРАВНИВАЮТ, а для этого класса П45 требует фиксированный знак
     // (`formatGrams`). Прежние «3 г» писались своим `Intl.NumberFormat` в этом
     // файле — и те же итоги в Mini App, написанные по канону, выглядели иначе.
-    expect(await screen.findByText("осталось 400 ккал")).toBeVisible();
+    expect(
+      await screen.findByText(
+        "Чтобы набрать суточную норму, добавьте ещё 400 ккал",
+      ),
+    ).toBeVisible();
     expect(screen.getByText("осталось 3,0 г")).toBeVisible();
   });
 

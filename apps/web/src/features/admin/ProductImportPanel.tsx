@@ -8,6 +8,7 @@ import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { SubPageHeader } from "../../components/SubPageHeader";
+import { anomalyDetail } from "./productAnomalyText";
 import { useImportProductsMutation } from "./useAdminProducts";
 import type { ImportRowError } from "./types";
 
@@ -221,6 +222,30 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* Строки, которые импортируются, но стоит сверить (ответ клиники на
+              вопрос 1): предупреждение, а не ошибка — запись не
+              останавливают. */}
+          {report.warnings.length > 0 && (
+            <WarningBanner
+              level="warning"
+              title={t("products.import.warnings.title", {
+                value: report.warnings.length,
+              })}
+            >
+              <ul className="m-0 list-disc pl-5">
+                {report.warnings.map((warning) => (
+                  <li key={`${warning.line}-${warning.kind}`}>
+                    {t("products.import.warnings.row", {
+                      line: warning.line,
+                      name: warning.name_ru,
+                      detail: anomalyDetail(t, warning),
+                    })}
+                  </li>
+                ))}
+              </ul>
+            </WarningBanner>
           )}
 
           {report.dry_run ? (

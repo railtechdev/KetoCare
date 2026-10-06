@@ -21,6 +21,8 @@ export const RECIPE_CATEGORIES = [
   "snack",
   "dessert",
   "drink",
+  "bakery",
+  "bread",
 ] as const satisfies readonly RecipeCategory[];
 
 /**

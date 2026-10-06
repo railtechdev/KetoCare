@@ -34,6 +34,12 @@ export interface ConfirmDialogProps {
   cancelLabel: string;
   /** Оформлять подтверждение как опасное действие */
   destructive?: boolean;
+  /**
+   * Что именно подтверждается — подробностями под заголовком: перечень,
+   * таблица. Отдельно от `description`, потому что описание кита — абзац, и
+   * перечень внутри него был бы невалидной разметкой (`dl` в `p`).
+   */
+  children?: ReactNode;
   onConfirm: () => void;
 }
 
@@ -57,6 +63,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   destructive = true,
+  children,
   onConfirm,
 }: ConfirmDialogProps) {
   return (
@@ -74,6 +81,7 @@ export function ConfirmDialog({
             </AlertDialogDescription>
           )}
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction

@@ -101,7 +101,9 @@ test("семья из Telegram собирает завтрашний день и
   await expect(
     page.getByText(new RegExp(`из ${targets.kcalPerDay.toLocaleString("ru")}`)),
   ).toBeVisible();
-  await expect(page.getByText(/осталось .* ккал/)).toBeVisible();
+  await expect(
+    page.getByText(/Чтобы набрать суточную норму, добавьте ещё .* ккал/),
+  ).toBeVisible();
 
   // --- отметка «съедено» ----------------------------------------------------
   // `click`, а не `check`: у `check` своё короткое ожидание, а отметка живёт на

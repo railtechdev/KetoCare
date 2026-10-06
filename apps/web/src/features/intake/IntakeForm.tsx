@@ -17,6 +17,7 @@ import {
   LAST_SEIZURE_PRECISIONS,
   isLastSeizureComplete,
   isLastSeizurePrecision,
+  LEGACY_UNKNOWN_PRECISION,
   lastSeizureFromIntake,
   lastSeizureToBody,
   monthName,
@@ -140,8 +141,9 @@ export function IntakeForm({
   // сервере (`services/intake.check_last_seizure_known`), здесь оно только
   // видимо заранее — иначе семья узнавала бы о нём отказом после «Сохранить».
   //
-  // Дата бывает частичной — месяц с годом или один год, — а «не помню» тоже
-  // ответ (вопрос 48, ADR-0049). Требуется она только при НОВОМ ответе:
+  // Дата бывает частичной — месяц с годом или один год (вопрос 48,
+  // ADR-0049); «не помню» новым ответом больше не принимается (вопрос 19,
+  // дополнение к ADR-0049). Требуется она только при НОВОМ ответе:
   // анкета, где «Приступов нет» уже стояло без даты, сохраняется как была, —
   // правило появилось позже её, и сервер её щадит так же.
   const current = values ?? EMPTY;
@@ -154,7 +156,19 @@ export function IntakeForm({
     loaded.seizure_frequency_id === current.seizureFrequencyId &&
     (loaded.last_seizure_on ?? null) === null &&
     (loaded.last_seizure_precision ?? null) === null;
+  // Прежнее «не помню» сохраняется, только пока ответ о частоте тот же —
+  // правило сервера (`services/intake._unknown_kept`), видимое заранее.
+  const legacyUnknown = loaded?.last_seizure_precision === "unknown";
+  const unknownNoLongerAccepted =
+    current.lastSeizure.precision === "unknown" &&
+    !(
+      legacyUnknown &&
+      loaded?.seizure_frequency_id === current.seizureFrequencyId
+    );
+  // Частоте без «Приступов нет» дата не нужна: прежнее «не помню» сервер
+  // тогда сохранит как «не отвечено», и упираться в поле незачем.
   const lastSeizureMissing =
+    (unknownNoLongerAccepted && noSeizuresChosen) ||
     !isLastSeizureComplete(current.lastSeizure) ||
     (noSeizuresChosen &&
       current.lastSeizure.precision === "" &&
@@ -255,6 +269,7 @@ export function IntakeForm({
               />
               <LastSeizureField
                 values={values.lastSeizure}
+                legacyUnknown={legacyUnknown}
                 error={
                   lastSeizureMissing
                     ? t("errors.lastSeizureRequired")
@@ -476,7 +491,8 @@ const YEARS_BACK = 20;
 
 /**
  * Дата последнего приступа с той точностью, с какой её помнят (вопрос 48,
- * ADR-0049): число, месяц с годом, один год или «не помню».
+ * ADR-0049): число, месяц с годом или один год. «Не помню» предлагается только
+ * анкете, где оно уже сохранено (вопрос 19, дополнение к ADR-0049).
  *
  * Сначала — насколько точно помнят, потом — сама дата: иначе семья, помнящая
  * только «весной прошлого года», выбирала бы между пустым полем и выдуманным
@@ -484,10 +500,13 @@ const YEARS_BACK = 20;
  */
 function LastSeizureField({
   values,
+  legacyUnknown,
   error,
   onChange,
 }: {
   values: LastSeizureValues;
+  /** В сохранённой анкете стоит прежнее «не помню» — его можно оставить. */
+  legacyUnknown: boolean;
   error?: string;
   onChange: (change: Partial<LastSeizureValues>) => void;
 }) {
@@ -508,7 +527,11 @@ function LastSeizureField({
         width="wide"
         label={t("fields.lastSeizureOn")}
         hint={t("fields.lastSeizureHint")}
-        error={values.precision === "" ? error : undefined}
+        error={
+          values.precision === "" || values.precision === "unknown"
+            ? error
+            : undefined
+        }
         value={values.precision}
         onChange={(event) => {
           const value = event.target.value;
@@ -521,6 +544,11 @@ function LastSeizureField({
             {t(`lastSeizurePrecision.${precision}`)}
           </option>
         ))}
+        {legacyUnknown && (
+          <option value={LEGACY_UNKNOWN_PRECISION}>
+            {t("lastSeizurePrecision.unknown")}
+          </option>
+        )}
       </SelectField>
 
       {values.precision === "day" && (

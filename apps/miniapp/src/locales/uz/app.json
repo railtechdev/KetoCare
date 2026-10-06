@@ -39,6 +39,10 @@
     "cancel": "Bekor qilish"
   },
   "home": {
+    "yesterdayShortfall": {
+      "title": "Kechagi kun",
+      "text": "Kecha bola sutkalik me’yordan {{value}} kkal kam yedi — bu uning ahvoliga ta’sir qilishi mumkin. Agar bu tez-tez takrorlansa, shifokor bilan maslahatlashing."
+    },
     "loadError": "Umumiy holatni yuklab bo‘lmadi",
     "loadErrorHint": "Aloqani tekshiring.",
     "prescription": {
@@ -125,7 +129,7 @@
     "targets": {
       "kcalLabel": "Kaloriya",
       "kcalOfTarget": "{{value}} / {{target}} kkal",
-      "kcalLeft": "{{value}} kkal qoldi",
+      "kcalLeft": "Sutkalik me’yorni to‘ldirish uchun yana {{value}} kkal qo‘shing",
       "kcalOver": "me’yordan {{value}} kkal ortiq",
       "carbsLabel": "Uglevodlar",
       "carbsOfLimit": "{{value}} / {{limit}} g",
@@ -140,8 +144,8 @@
       "body": "Kunning keto nisbati tayinlangandan ruxsat etilganidan ko‘proq farq qiladi. Ovqatlanishlar tarkibini yoki porsiya ko‘paytuvchilarini o‘zgartiring."
     },
     "ratioUnknown": "Kunning keto nisbati aniqlanmadi: taomlarda na oqsil, na tolasiz uglevodlar bor — u aynan ulardan hisoblanadi. Tayinlov bilan solishtiradigan narsa yo‘q; kunning o‘z ko‘rsatkichlari yuqorida.",
-    "kcalBelowTarget": "To‘plandi: {{value}} kkal, tayinlov bo‘yicha — {{target}} kkal. Kun oxirigacha rejalashtirilmaguncha bu farq emas: sutkalik me’yor bilan tayyor kunni solishtirish ma’noli.",
-    "kcalBelowTargetPlain": "Kunning kaloriyasi tayinlovdagi sutkalik me’yordan past. Kun oxirigacha rejalashtirilmaguncha bu farq emas.",
+    "kcalBelowTarget": "To‘plandi: {{value}} kkal, me’yor — {{target}} kkal. Sutkalik me’yorni to‘ldirish uchun yana {{left}} kkal qo‘shing.",
+    "kcalBelowTargetPlain": "Kunning kaloriyasi hozircha sutkalik me’yordan past. Uni to‘ldirish uchun qolgan ovqatlanishlarga taomlar qo‘shing.",
     "noPrescription": "Yakunlarni solishtiradigan narsa yo‘q: amaldagi tayinlov yo‘q.",
     "engineChanged": "Kun hisoblash yadrosining oldingi versiyasida hisoblangan, shuning uchun tayinlovga mosligi ko‘rsatilmaydi. O‘shandan beri hisoblash qoidasi o‘zgargan, yuqoridagi raqamlar esa o‘sha kuni qanday hisoblangan bo‘lsa, shundayligicha qolgan.",
     "engineUnknown": "Bu kun uchun hisoblash versiyasi yozilmagan, shuning uchun tayinlovga mosligi ko‘rsatilmaydi. Ko‘rsatkichlarning o‘zi o‘sha kuni qanday hisoblangan bo‘lsa, shundayligicha qolgan.",
@@ -363,6 +367,18 @@
     }
   },
   "recipes": {
+    "category": "Bo‘lim",
+    "allCategories": "Barcha bo‘limlar",
+    "categories": {
+      "breakfast": "Nonushta",
+      "lunch": "Tushlik",
+      "dinner": "Kechki ovqat",
+      "snack": "Yengil tamaddi",
+      "dessert": "Desert",
+      "drink": "Ichimlik",
+      "bakery": "Pishiriqlar",
+      "bread": "Non"
+    },
     "title": "Retseptlar",
     "search": "Retseptni toping",
     "nothingFound": "Hech narsa topilmadi",

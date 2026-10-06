@@ -183,4 +183,43 @@ describe("главная родителя", () => {
       screen.queryByRole("heading", { name: homeRu.waiting.title }),
     ).not.toBeInTheDocument();
   });
+
+  it("говорит о вчерашнем недоборе, когда сервер его назвал, и молчит без него", async () => {
+    // Ответ клиники на вопрос 9: «предупреждать, когда день завершён: что не
+    // доели и это может сказаться на состоянии ребёнка». Считает сервер.
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        ...overview(PRESCRIPTION),
+        yesterday_shortfall: {
+          date: "2026-08-30",
+          eaten_kcal: 450,
+          target_kcal: 1200,
+          shortfall_kcal: 750,
+        },
+      },
+      error: undefined,
+    });
+
+    const { unmount } = renderHome();
+
+    expect(
+      await screen.findByText(
+        "Вчера ребёнок недобрал 750 ккал от суточной нормы — это может сказаться на его самочувствии. Если так бывает часто, обсудите с врачом.",
+      ),
+    ).toBeInTheDocument();
+    unmount();
+
+    (api.GET as Mock).mockResolvedValue({
+      data: { ...overview(PRESCRIPTION), yesterday_shortfall: null },
+      error: undefined,
+    });
+    renderHome();
+
+    expect(
+      await screen.findByRole("heading", { name: homeRu.day.title }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Вчера ребёнок недобрал/),
+    ).not.toBeInTheDocument();
+  });
 });

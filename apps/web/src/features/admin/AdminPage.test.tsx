@@ -119,6 +119,7 @@ const DRY_RUN_REPORT = {
     { line: 3, column: "fat_100g", message: "Ожидалось число." },
     { line: 3, column: "verified_at", message: "Ожидалась дата." },
   ],
+  warnings: [],
   dry_run: true,
 };
 
@@ -128,6 +129,7 @@ const IMPORT_REPORT = {
   updated: 0,
   updates: [],
   errors: [{ line: 5, column: "name_ru", message: "Продукт уже есть в базе." }],
+  warnings: [],
   dry_run: false,
 };
 
@@ -306,6 +308,7 @@ describe("AdminPage — обновляющий импорт", () => {
       },
     ],
     errors: [],
+    warnings: [],
     dry_run: true,
   };
 
@@ -389,5 +392,49 @@ describe("AdminPage — превью импорта", () => {
     await user.click(screen.getByRole("button", { name: "Проверить файл" }));
 
     expect(await screen.findByText(/будет заведено: 3/)).toBeInTheDocument();
+  });
+
+  it("предупреждает о калорийности, не сходящейся с составом, не отменяя импорт", async () => {
+    // Ответ клиники на вопрос 1: расхождение с 9 — 4 — 4 больше 5 ккал —
+    // «нужно предупреждать». Строка импортируется; администратор сверяет её.
+    const user = userEvent.setup();
+    (api.POST as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/auth/refresh")
+        return Promise.resolve({ data: { access_token: ACCESS_TOKEN } });
+      if (path === "/api/v1/products/import") {
+        return Promise.resolve({
+          data: {
+            ...DRY_RUN_REPORT,
+            imported: 3,
+            errors: [],
+            warnings: [
+              {
+                line: 2,
+                name_ru: "Масло",
+                kind: "kcal_mismatch",
+                values: { declared: 717, expected: 734 },
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`Unexpected POST ${path}`);
+    });
+
+    renderPage("products");
+    await user.click(await screen.findByRole("button", { name: "Импорт CSV" }));
+    const file = new File(["name_ru,category\n"], "products.csv", {
+      type: "text/csv",
+    });
+    await user.upload(screen.getByLabelText("Файл CSV"), file);
+    await user.click(screen.getByRole("button", { name: "Проверить файл" }));
+
+    expect(
+      await screen.findByText("Сверьте с источником строк: 1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Строка 2, «Масло»: заявлено 717 ккал/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Импортировать" })).toBeEnabled();
   });
 });

@@ -968,9 +968,12 @@ describe("соответствие дня назначению", () => {
     expect(
       await screen.findByText("Кетосоотношение дня соответствует назначению."),
     ).toBeInTheDocument();
+    // Недобор в середине дня — подсказка «добавьте ещё N» (ответ клиники на
+    // вопрос 9), и одна: полоса калорийности её уже печатает, строка вердикта
+    // не повторяет.
     expect(
-      screen.getByText(/Пока день не спланирован до конца/),
-    ).toBeInTheDocument();
+      screen.getAllByText(/Чтобы набрать суточную норму, добавьте ещё/),
+    ).toHaveLength(1);
     expect(
       screen.queryByText("Итоги дня расходятся с назначением"),
     ).not.toBeInTheDocument();

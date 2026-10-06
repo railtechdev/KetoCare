@@ -11,6 +11,7 @@ export { mealTargetsFrom } from "./lib/mealTargets";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
 export {
   dayVerdict,
+  kcalToTarget,
   TOLERANCE_GAP_KEY,
   TOLERANCE_GAP_UNKNOWN_KEY,
   toleranceGapKey,

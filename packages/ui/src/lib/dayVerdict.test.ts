@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   dayVerdict,
+  kcalToTarget,
   TOLERANCE_GAP_KEY,
   TOLERANCE_GAP_UNKNOWN_KEY,
   toleranceGapKey,
@@ -130,5 +131,14 @@ describe("причина отсутствия вердикта и неизвес
 
     expect(within.ratioUnknown).toBe(false);
     expect(off.ratioUnknown).toBe(false);
+  });
+});
+
+describe("kcalToTarget", () => {
+  it("называет остаток до суточной нормы и не уходит в минус", () => {
+    // Вопрос 9: «в середине дня предупреждать, что вам надо добрать … ккал».
+    // Перебор — не «добавьте −50»: о нём говорит своя строка.
+    expect(kcalToTarget(401, 1200)).toBe(799);
+    expect(kcalToTarget(1250, 1200)).toBe(0);
   });
 });

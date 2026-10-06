@@ -2,6 +2,7 @@ import {
   WarningBanner,
   dayVerdict,
   formatKcal,
+  kcalToTarget,
   toleranceGapKey,
   type DayTolerance,
   type ToleranceGap,
@@ -28,12 +29,19 @@ export function DayVerdictNote({
   otherDay = false,
   kcal,
   targetKcal,
+  kcalHint = true,
 }: {
   tolerance: DayTolerance | null | undefined;
   gap: ToleranceGap | null | undefined;
   otherDay?: boolean;
   kcal: number;
   targetKcal: number | null;
+  /**
+   * Говорить ли «добавьте ещё N ккал». Нет там, где ту же подсказку уже
+   * печатает полоса калорийности (`DayTotals`): одна фраза дважды подряд —
+   * шум, а не забота.
+   */
+  kcalHint?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -70,13 +78,14 @@ export function DayVerdictNote({
         </p>
       )}
 
-      {verdict.kcalBelowTarget && (
+      {verdict.kcalBelowTarget && kcalHint && (
         <p className="m-0 text-sm text-muted-foreground">
           {targetKcal === null
             ? t("verdict.kcalBelowTargetPlain")
             : t("verdict.kcalBelowTarget", {
                 value: formatKcal(kcal),
                 target: formatKcal(targetKcal),
+                left: formatKcal(kcalToTarget(kcal, targetKcal)),
               })}
         </p>
       )}

@@ -27,6 +27,7 @@ from keto_engine import DishResult, Targets, within_tolerance
 
 from ..schemas import DishComputed, PrescriptionRead
 from ..schemas_overview import (
+    DayShortfall,
     DaySummary,
     DayTolerance,
     KetoneReading,
@@ -37,6 +38,8 @@ from ..schemas_overview import (
     ToleranceGap,
     WeightReading,
 )
+from . import growth as growth_service
+from . import menus as menus_service
 from .clock import local_today
 from .engine_version import comparable_to_current
 from .monitoring import monitoring_phase
@@ -231,7 +234,90 @@ PROLONGED_SEIZURE_SEC = 30 * 60
 PROLONGED_DURATION_CODES = ("dur_over_30min",)
 
 
-async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> PatientOverview:
+async def _yesterday_shortfall(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    today: date,
+    ended_on: date | None,
+) -> DayShortfall | None:
+    """Вчера съедено меньше суточной нормы сильнее допуска ядра — или `None`.
+
+    Ответ клиники от 09.09.2026 на вопрос 9: «Предупреждать, когда день
+    завершён: что не доели и это может сказаться на состоянии ребёнка».
+    Признака «день завершён» в продукте нет, поэтому завершённым считается
+    прошедший день — вчерашний.
+
+    **Судим только о полностью отмеченном дне.** Съеденное — позиции плана,
+    отмеченные «съедено», посчитанные ядром по снимкам (`menus.day_dish`).
+    Если хоть одна позиция плана осталась без отметки, сказать нечего: семья
+    могла не доесть, а могла забыть отметить, и «недобрал 900 ккал» про
+    отмеченный завтрак и забытые обед с ужином было бы ложной тревогой — а она
+    обесценивает настоящие. Молчим и тогда, когда вчера записана еда не по плану
+    (свободным текстом в боте или в дневнике): её калорий в плане нет. То есть
+    предупреждение говорит о дне, где ребёнок съел весь план, а план не дотянул
+    до нормы. Недоедание внутри плана по одним отметкам неотличимо от
+    забывчивости — это ограничение записано в вопросе 9.
+
+    **Норма — назначение, действовавшее вчера**, а не сегодняшнее: смена
+    назначения утром не должна задним числом делать вчерашний день недобором.
+    «Действовавшее» — последнее созданное до сегодняшней полуночи, по общему
+    правилу «активное — последнее созданное»: если врач сменил назначение
+    вчера вечером, весь вчерашний день сверяется с новой версией.
+
+    **Порог — допуск ядра** (`within_tolerance`, `KCAL_TOLERANCE_FRACTION`):
+    тот же, по которому день сверяется с назначением везде. Своего числа здесь
+    нет. Говорится только о недоборе: о переборе клиника не спрашивала.
+    """
+
+    yesterday = today - timedelta(days=1)
+    if ended_on is not None and ended_on <= yesterday:
+        return None
+
+    menu = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=yesterday)
+    if menu is None:
+        return None
+    items = await menus_repo.list_items(session, menu_id=menu.id)
+    if not items or not all(item.eaten for item in items):
+        return None
+
+    yesterday_start, today_start = _day_bounds(yesterday)
+    if await overview_repo.has_meals_outside_plan(
+        session, patient_id=patient_id, since=yesterday_start, until=today_start
+    ):
+        return None
+
+    prescription = await prescriptions_repo.get_active_before(
+        session, patient_id=patient_id, before=today_start
+    )
+    if prescription is None:
+        return None
+
+    dish = menus_service.day_dish(items)
+    target = float(prescription.kcal_per_day)
+    _, kcal_ok = within_tolerance(dish, Targets(ratio=float(prescription.ratio), kcal=target))
+    if kcal_ok or dish.kcal >= target:
+        return None
+
+    return DayShortfall(
+        date=yesterday,
+        eaten_kcal=round(dish.kcal),
+        target_kcal=prescription.kcal_per_day,
+        shortfall_kcal=round(target - dish.kcal),
+    )
+
+
+async def build_overview(
+    session: AsyncSession, *, patient_id: uuid.UUID, clinical: bool = False
+) -> PatientOverview:
+    """Сводка на один экран.
+
+    `clinical` — читает ли сводку специалист. Только тогда считается оценка
+    роста по ВОЗ (`growth_significant_drop`): это интерпретация для врача
+    (ответ клиники на вопрос 15), семье поле не отдаётся вовсе, а не прячется
+    экраном.
+    """
+
     today = local_today()
     recent_window, previous_window = _trend_windows(today)
 
@@ -259,6 +345,15 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
     ended_on = await therapy_repo.ended_on(session, patient_id=patient_id)
     next_visits = await control_visits_repo.next_open_map(session, patient_ids=[patient_id])
 
+    shortfall = await _yesterday_shortfall(
+        session, patient_id=patient_id, today=today, ended_on=ended_on
+    )
+
+    growth_drop: bool | None = None
+    if clinical:
+        growth = await growth_service.assess_patient(session, patient_id=patient_id)
+        growth_drop = None if growth is None else growth_service.has_significant_drop(growth)
+
     prolonged_at = await overview_repo.latest_prolonged_seizure(
         session,
         patient_id=patient_id,
@@ -285,6 +380,8 @@ async def build_overview(session: AsyncSession, *, patient_id: uuid.UUID) -> Pat
         prolonged_seizure_at=prolonged_at,
         therapy_ended_on=ended_on,
         next_control=_next_control(next_visits.get(patient_id), today=today),
+        yesterday_shortfall=shortfall,
+        growth_significant_drop=growth_drop,
     )
 
 

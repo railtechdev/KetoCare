@@ -133,6 +133,7 @@ export function DayTotals({
         otherDay={verdict.otherDay}
         kcal={totals.kcal}
         targetKcal={targets?.kcalPerDay ?? null}
+        kcalHint={targets === null}
       />
     </Section>
   );

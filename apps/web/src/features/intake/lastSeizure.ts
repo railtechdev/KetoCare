@@ -32,17 +32,32 @@ export const LAST_SEIZURE_EMPTY: LastSeizureValues = {
   year: "",
 };
 
+/**
+ * Точности, из которых выбирают в НОВОМ ответе.
+ *
+ * «Не помню» (`unknown`) сюда не входит с 06.10.2026: клиника ответила на
+ * вопрос 19, что при «Приступов нет» дата обязательна, а «не помню» делало её
+ * необязательной другими словами (дополнение к ADR-0049). Самая грубая
+ * точность — год. Уже сохранённое «не помню» форма показывает и сохраняет
+ * обратно, пока ответ о частоте прежний, — так же, как сервер.
+ */
 export const LAST_SEIZURE_PRECISIONS = [
   "day",
   "month",
   "year",
-  "unknown",
 ] as const satisfies readonly LastSeizurePrecision[];
+
+/** Прежний ответ «не помню» — читается и сохраняется, но не выбирается заново. */
+export const LEGACY_UNKNOWN_PRECISION =
+  "unknown" as const satisfies LastSeizurePrecision;
 
 export function isLastSeizurePrecision(
   value: string,
 ): value is LastSeizurePrecision {
-  return (LAST_SEIZURE_PRECISIONS as readonly string[]).includes(value);
+  return (
+    (LAST_SEIZURE_PRECISIONS as readonly string[]).includes(value) ||
+    value === LEGACY_UNKNOWN_PRECISION
+  );
 }
 
 /** Ответ из сохранённой анкеты — в поля формы. */

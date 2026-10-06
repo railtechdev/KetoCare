@@ -1,6 +1,12 @@
 import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -160,6 +166,13 @@ describe("форма назначения", () => {
       screen.getByRole("button", { name: "Сохранить назначение" }),
     );
 
+    // Ответ клиники на вопрос 5: сохранение открывает окно подтверждения, и
+    // до него ничего не отправлено.
+    expect(api.POST).not.toHaveBeenCalled();
+    await user.click(
+      await screen.findByRole("button", { name: "Подтвердить назначение" }),
+    );
+
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/prescriptions",
       expect.objectContaining({
@@ -178,6 +191,47 @@ describe("форма назначения", () => {
     // Номер версии берётся из обновлённой истории, а не из «было плюс один»,
     // и сообщается тостом, а не зелёной строкой в потоке страницы.
     expect(await screen.findByText("Создана версия 3")).toBeInTheDocument();
+  });
+
+  it("перед записью показывает значения и прежние рядом с изменёнными, а отмена ничего не пишет", async () => {
+    // Ответ клиники на вопрос 5: «после назначения врача можно сделать окно:
+    // подтвердите подпись или назначение». Назначение append-only — отменить
+    // записанное можно только новой версией, поэтому проверка до записи.
+    const user = userEvent.setup();
+    renderView();
+
+    const field = () =>
+      screen.getByLabelText<HTMLInputElement>("Кетосоотношение");
+    await waitFor(() => expect(field().value).toBe("4"));
+    fireEvent.change(field(), { target: { value: "3.5" } });
+    await user.click(
+      screen.getByRole("button", { name: "Сохранить назначение" }),
+    );
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Подтвердить новую версию назначения?",
+    });
+    const summary = within(dialog).getByLabelText(
+      "Значения новой версии назначения",
+    );
+    // Изменённое — с прежним значением рядом, неизменённое — одно.
+    expect(within(summary).getByText("3.5 : 1")).toBeInTheDocument();
+    expect(within(summary).getByText("(было 4.0 : 1)")).toBeInTheDocument();
+    expect(within(summary).getByText("1 200 ккал")).toBeInTheDocument();
+    expect(within(summary).queryByText(/было 1 200/)).not.toBeInTheDocument();
+    expect(within(summary).getByText("26 г")).toBeInTheDocument();
+    expect(within(summary).getByText("10 г")).toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Вернуться к форме" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(api.POST).not.toHaveBeenCalled();
+    // Форма осталась с введённым — врач правит дальше, а не набирает заново.
+    expect(field().value).toBe("3.5");
   });
 
   it("держит диету и схему препаратов в одном разделе", async () => {

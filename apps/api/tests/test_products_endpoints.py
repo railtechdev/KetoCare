@@ -673,6 +673,36 @@ class TestCsvImportEndpoint:
         )
         assert response.status_code == 403
 
+    async def test_preview_warns_about_kcal_off_by_more_than_five(
+        self, client, make_user, auth_headers
+    ):
+        """Ответ клиники на вопрос 1 — предупреждение, а не отказ.
+
+        Масло USDA SR28: 717 ккал заявлено, по 9 — 4 — 4 выходит 733,9.
+        Строка импортируется (в превью она среди «будет заведено»), но
+        администратор видит, что её стоит сверить. Потребитель —
+        `features/admin/ProductImportPanel.tsx`.
+        """
+
+        admin = await make_user(UserRole.ADMIN)
+        response = await client.post(
+            "/api/v1/products/import",
+            files=self._file(
+                "Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01",
+                "Масло 82,Жиры,748,82.5,0.5,0.8,0,USDA,SR Legacy,2026-01-01",
+            ),
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["errors"] == []
+        assert body["imported"] == 2
+        assert [(item["line"], item["kind"]) for item in body["warnings"]] == [(2, "kcal_mismatch")]
+        warning = body["warnings"][0]
+        assert warning["name_ru"].startswith("Масло ")
+        assert warning["values"] == {"declared": 717.0, "expected": 734.0}
+
     async def test_dry_run_is_default_and_writes_nothing(
         self, client, session, make_user, auth_headers
     ):
@@ -1330,3 +1360,69 @@ class TestLeadingMacroFilter:
 
         assert response.status_code == 200, response.text
         assert response.json()["items"] == [], "курица жировой не является"
+
+
+class TestCheckProductValues:
+    """`POST /products/check` — проверка значений до сохранения (вопрос 1).
+
+    Потребитель — карточка продукта в кабинете (`features/admin/ProductForm.tsx`).
+    """
+
+    async def test_reports_the_kcal_mismatch(self, client, make_user, auth_headers):
+        dietitian = await make_user(UserRole.DIETITIAN)
+
+        response = await client.post(
+            "/api/v1/products/check",
+            json={
+                "kcal_100g": 717,
+                "fat_100g": 81.1,
+                "protein_100g": 0.9,
+                "carbs_100g": 0.1,
+                "fiber_100g": 0,
+            },
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json() == [
+            {
+                "kind": "kcal_mismatch",
+                "values": {"declared": 717.0, "expected": 734.0},
+                "field": "",
+            }
+        ]
+
+    async def test_consistent_values_have_no_findings(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.post(
+            "/api/v1/products/check",
+            json={"kcal_100g": 748, "fat_100g": 82.5, "protein_100g": 0.5, "carbs_100g": 0.8},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json() == []
+
+    async def test_parent_is_forbidden(self, client, make_user, auth_headers):
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/products/check",
+            json={"kcal_100g": 748, "fat_100g": 82.5, "protein_100g": 0.5, "carbs_100g": 0.8},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 403
+
+    async def test_negative_value_is_a_validation_error(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.post(
+            "/api/v1/products/check",
+            json={"kcal_100g": -1, "fat_100g": 82.5, "protein_100g": 0.5, "carbs_100g": 0.8},
+            headers=auth_headers(admin),
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"

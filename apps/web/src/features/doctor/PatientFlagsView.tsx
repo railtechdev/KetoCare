@@ -17,6 +17,7 @@ import {
   ClipboardList,
   KeyRound,
   Siren,
+  TrendingDown,
   TriangleAlert,
 } from "lucide-react";
 import { Fragment } from "react";
@@ -60,6 +61,7 @@ export const FLAG_KEYS = [
   "seizures-appeared",
   "stale",
   "control-overdue",
+  "growth-drop",
   "nutrition",
   // Последним: это состояние, а не сигнал, и порядок в строке обязан совпадать
   // с порядком по вниманию (`attentionRank`).
@@ -102,6 +104,14 @@ const LOOK: Record<
     tone: "warning",
     label: "flags.controlOverdue",
     description: "flags.legend.controlOverdue",
+  },
+  // Рост и вес по ВОЗ (вопрос 15): тренд месяцев, а не событие дня —
+  // предупреждение, а не тревога.
+  "growth-drop": {
+    icon: TrendingDown,
+    tone: "warning",
+    label: "flags.growthDrop",
+    description: "flags.legend.growthDrop",
   },
   "therapy-ended": {
     icon: CircleStop,
@@ -217,6 +227,7 @@ export function PatientFlagsView({
     stale: flags.staleData,
     nutrition: flags.nutritionOff,
     "control-overdue": flags.controlOverdue,
+    "growth-drop": flags.growthDrop,
     "therapy-ended": flags.therapyEnded,
   };
 

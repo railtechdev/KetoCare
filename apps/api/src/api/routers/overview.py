@@ -27,7 +27,11 @@ async def get_overview(
     session: SessionDep,
     user: PatientAccessDep,
 ) -> PatientOverview:
-    overview = await overview_service.build_overview(session, patient_id=patient_id)
+    overview = await overview_service.build_overview(
+        session,
+        patient_id=patient_id,
+        clinical=user.role in (UserRole.DOCTOR, UserRole.DIETITIAN),
+    )
     if user.role is UserRole.PARENT and overview.next_control is not None:
         # Цель визита («оценка эффективности», «решение о продолжении») семье не
         # отдаётся: о ней говорит врач, а не продукт (ADR-0050). Дата визита —

@@ -25,7 +25,17 @@ from api.routers.overview import router as overview_router
 from api.services.monitoring import add_months
 from api.services.overview import _TREND_WINDOW_DAYS
 from core.config import get_settings
-from core.models import KetoneLog, Menu, SeizureLog, SeizureType, WeightLog
+from core.growth import who
+from core.models import (
+    KetoneLog,
+    MealLog,
+    Menu,
+    MenuItem,
+    Prescription,
+    SeizureLog,
+    SeizureType,
+    WeightLog,
+)
 from core.models.enums import DiarySource, KetoneMethod, UserRole
 from core.repositories import medical_profiles as medical_profiles_repo
 from core.repositories import patients as patients_repo
@@ -1264,3 +1274,247 @@ class TestProlongedSeizure:
         await session.flush()
 
         assert await self._get(client, auth_headers, parent, patient) is None
+
+
+# --- вчерашний недобор (вопрос 9) -------------------------------------------------
+
+
+def _fat_item(menu: Menu, *, kcal: float, eaten: bool, meal_index: int = 1) -> MenuItem:
+    """Позиция дня из чистого жира на `kcal` ккал — со снимком, как сохраняет меню."""
+
+    return MenuItem(
+        menu_id=menu.id,
+        patient_id=menu.patient_id,
+        meal_index=meal_index,
+        portion_factor=1,
+        eaten=eaten,
+        snapshot={
+            "title": "Масло",
+            "servings": 1,
+            "ingredients": [
+                {
+                    "product_id": str(uuid.uuid4()),
+                    "name_ru": "Масло",
+                    "grams": kcal / 9,
+                    "kcal_100g": 900,
+                    "fat_100g": 100,
+                    "protein_100g": 0,
+                    "carbs_100g": 0,
+                    "fiber_100g": 0,
+                }
+            ],
+            "engine_version": ENGINE_VERSION,
+        },
+    )
+
+
+async def _yesterday(session, *, patient, items: list[tuple[float, bool]]) -> Menu:
+    menu = await _menu(
+        session, patient=patient, day=_local_today() - timedelta(days=1), totals=None
+    )
+    for index, (kcal, eaten) in enumerate(items, start=1):
+        session.add(_fat_item(menu, kcal=kcal, eaten=eaten, meal_index=index))
+    await session.flush()
+    return menu
+
+
+async def _prescribed_earlier(session, *, patient, author, kcal: int = 1200, days_ago: int = 2):
+    """Назначение, созданное до вчерашнего дня: о вчера судят по тогдашней норме."""
+
+    # Строка вставляется с датой создания сразу: назначения append-only, и
+    # UPDATE `created_at` запрещён на уровне модели (правило 4).
+    prescription = Prescription(
+        patient_id=patient.id,
+        ratio=3.0,
+        kcal_per_day=kcal,
+        protein_g=30.0,
+        carbs_limit_g=10.0,
+        meals_per_day=4,
+        author_id=author.id,
+        effective_from=_local_today() - timedelta(days=days_ago),
+        created_at=_local_midnight() - timedelta(days=days_ago),
+    )
+    session.add(prescription)
+    await session.flush()
+    return prescription
+
+
+class TestYesterdayShortfall:
+    """`yesterday_shortfall` — ответ клиники на вопрос 9.
+
+    Потребители — главная семьи в кабинете (`features/home`) и в Mini App
+    (`features/home/HomeScreen.tsx`): они подставляют `shortfall_kcal` в текст и
+    ничего не считают сами.
+    """
+
+    async def _get(self, client, auth_headers, user, patient) -> dict[str, Any] | None:
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(user)
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["yesterday_shortfall"]
+
+    async def test_eaten_below_the_norm_is_reported(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescribed_earlier(session, patient=patient, author=parent)
+        # План на 600 при норме 1200 — съеден целиком, и всё равно недобор.
+        await _yesterday(session, patient=patient, items=[(300, True), (300, True)])
+
+        shortfall = await self._get(client, auth_headers, parent, patient)
+
+        assert shortfall == {
+            "date": (_local_today() - timedelta(days=1)).isoformat(),
+            "eaten_kcal": 600,
+            "target_kcal": 1200,
+            "shortfall_kcal": 600,
+        }
+
+    async def test_within_the_engine_tolerance_says_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Порог — допуск ядра (5 % от нормы, 60 ккал на 1200), а не своё число."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescribed_earlier(session, patient=patient, author=parent)
+        await _yesterday(session, patient=patient, items=[(1150, True)])
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_a_plan_without_eaten_marks_says_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ничего не отмечено — неизвестно, что ели. «Недобрал 1200» было бы
+        ложной тревогой про день, о котором семья просто не записала."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescribed_earlier(session, patient=patient, author=parent)
+        await _yesterday(session, patient=patient, items=[(1200, False)])
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_a_partly_marked_day_says_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Отмечен завтрак, обед и ужин без отметок: не доели или забыли
+        отметить — по отметкам не различить, и тревога была бы ложной."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescribed_earlier(session, patient=patient, author=parent)
+        await _yesterday(session, patient=patient, items=[(300, True), (900, False)])
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_food_recorded_outside_the_plan_says_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Еда, записанная словами, в итоги плана не входит — по одному плану
+        судить о съеденном за день нельзя."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescribed_earlier(session, patient=patient, author=parent)
+        await _yesterday(session, patient=patient, items=[(600, True)])
+        session.add(
+            MealLog(
+                patient_id=patient.id,
+                occurred_at=_local_midnight() - timedelta(hours=10),
+                source=DiarySource.WEB,
+                free_text="Сырники со сметаной",
+            )
+        )
+        await session.flush()
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_a_day_without_a_plan_says_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescribed_earlier(session, patient=patient, author=parent)
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_yesterday_is_judged_by_yesterdays_prescription(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Врач поднял норму сегодня — вчерашний день недобором от этого не стал."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        await _prescribed_earlier(session, patient=patient, author=parent, kcal=800)
+        await _prescription(session, patient=patient, author=parent, kcal=1600)
+        await _yesterday(session, patient=patient, items=[(790, True)])
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+    async def test_no_prescription_yesterday_says_nothing(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        # Назначение есть, но только сегодняшнее: вчера сверять было не с чем.
+        await _prescription(session, patient=patient, author=parent)
+        await _yesterday(session, patient=patient, items=[(300, True)])
+
+        assert await self._get(client, auth_headers, parent, patient) is None
+
+
+# --- снижение роста и веса по ВОЗ (вопрос 15) -------------------------------------
+
+
+def _weight_for_z(age_days: int, z: float) -> float:
+    lms = who.lms_at("wfa", "m", age_days)
+    assert lms is not None
+    return round(lms.m * (1 + lms.l * lms.s * z) ** (1 / lms.l), 2)
+
+
+class TestGrowthDropFlag:
+    """`growth_significant_drop` — пометка списка пациентов (вопрос 15).
+
+    Потребитель — `features/doctor/flags.ts`. Считает та же функция, что раздел
+    «Рост и вес» карты; семье поле не отдаётся вовсе.
+    """
+
+    async def _weigh_drop(self, session, patient, *, z_later: float) -> None:
+        for on, z in ((date(2025, 4, 20), 0.0), (date(2026, 4, 20), z_later)):
+            session.add(
+                WeightLog(
+                    patient_id=patient.id,
+                    occurred_at=datetime.combine(on, time(12, 0), tzinfo=UTC),
+                    source=DiarySource.WEB,
+                    weight_kg=_weight_for_z((on - patient.birth_date).days, z),
+                )
+            )
+        await session.flush()
+
+    async def test_doctor_sees_the_drop_and_family_does_not(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        await self._weigh_drop(session, patient, z_later=-1.2)
+
+        for_doctor = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(doctor)
+        )
+        for_family = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+
+        assert for_doctor.json()["growth_significant_drop"] is True
+        # Интерпретация — врачу: семье поле не считается и не отдаётся.
+        assert for_family.json()["growth_significant_drop"] is None
+
+    async def test_a_smaller_drop_is_not_flagged(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        await self._weigh_drop(session, patient, z_later=-0.8)
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(doctor)
+        )
+
+        assert response.json()["growth_significant_drop"] is False

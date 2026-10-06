@@ -1,30 +1,13 @@
 import { AsyncSection, EmptyState, Section, Skeleton } from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../../lib/api";
 import { SectionLink } from "../../components/SectionLink";
+import { anomalyDetail, anomalyKind } from "./productAnomalyText";
 
 type Anomalies = components["schemas"]["ProductWithAnomalies"];
-type Anomaly = components["schemas"]["ProductAnomalyRead"];
-
-/**
- * Пояснение к находке: класс и числа приходят с сервера, фраза собирается из
- * словаря (правило 8 CLAUDE.md).
- */
-function detailOf(t: TFunction<"admin">, item: Anomaly): string {
-  return t(`products.anomalies.detail.${item.kind}`, {
-    ...item.values,
-    field: item.field
-      ? t(`products.anomalies.field.${item.field}`, {
-          defaultValue: item.field,
-        })
-      : "",
-    defaultValue: "",
-  });
-}
 
 const PAGE_SIZE = 50;
 
@@ -117,14 +100,12 @@ export function ProductAnomaliesPanel() {
                       className="text-sm text-muted-foreground"
                     >
                       <span className="text-warning">
-                        {t(`products.anomalies.kind.${item.kind}`, {
-                          defaultValue: t("products.anomalies.kind.other"),
-                        })}
+                        {anomalyKind(t, item.kind)}
                       </span>
                       {" — "}
                       {/* Фраза собирается здесь из чисел: сервер отдаёт класс и
                           значения, а текст живёт в словаре (правило 8). */}
-                      {detailOf(t, item)}
+                      {anomalyDetail(t, item)}
                     </li>
                   ))}
                 </ul>

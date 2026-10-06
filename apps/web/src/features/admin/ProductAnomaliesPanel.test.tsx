@@ -74,9 +74,7 @@ describe("проверка базы продуктов", () => {
     expect(
       screen.getByText(adminRu.products.anomalies.kind.kcal_mismatch),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/по макронутриентам выходит 748/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/\(9 — 4 — 4\) выходит 748/)).toBeInTheDocument();
   });
 
   it("неизвестный класс находки не оставляет строку без подписи", async () => {

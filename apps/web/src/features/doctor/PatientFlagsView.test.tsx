@@ -30,6 +30,7 @@ const EVERYTHING: PatientFlags = {
   prolongedSeizure: true,
   therapyEnded: true,
   controlOverdue: true,
+  growthDrop: true,
 };
 
 /** Значок lucide подписывает себя классом `lucide-<имя>`. */
@@ -80,6 +81,7 @@ const EXPECTED_LABEL: Record<string, string> = {
   nutrition: doctorRu.flags.nutritionOff,
   "family-not-activated": doctorRu.flags.familyNotActivated,
   "control-overdue": doctorRu.flags.controlOverdue,
+  "growth-drop": doctorRu.flags.growthDrop,
   "therapy-ended": doctorRu.flags.therapyEnded,
 };
 
@@ -180,6 +182,7 @@ describe("пометки строки и легенда говорят одно 
       prolongedSeizure: false,
       therapyEnded: false,
       controlOverdue: false,
+      growthDrop: false,
     };
     const ONLY: Record<string, PatientFlags> = {
       "prolonged-seizure": { ...QUIET, prolongedSeizure: true },
@@ -190,6 +193,7 @@ describe("пометки строки и легенда говорят одно 
       nutrition: { ...QUIET, nutritionOff: true },
       "family-not-activated": { ...QUIET, familyNotActivated: true },
       "control-overdue": { ...QUIET, controlOverdue: true },
+      "growth-drop": { ...QUIET, growthDrop: true },
       "therapy-ended": { ...QUIET, therapyEnded: true },
     };
     const weights = shown.map((key) => attentionRank(ONLY[key] ?? QUIET));
@@ -215,6 +219,7 @@ describe("пометки строки и легенда говорят одно 
           prolongedSeizure: false,
           therapyEnded: false,
           controlOverdue: false,
+          growthDrop: false,
         }}
       />,
     );
@@ -254,6 +259,7 @@ describe("пометки строки и легенда говорят одно 
           prolongedSeizure: false,
           therapyEnded: false,
           controlOverdue: false,
+          growthDrop: false,
         }}
       />,
     );

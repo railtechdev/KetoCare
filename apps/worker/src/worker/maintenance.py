@@ -9,9 +9,13 @@
 
 - **Отчёты** — ссылка протухла (`REPORT_LINK_TTL_HOURS`), PDF пересобирается из
   базы в любой момент, поэтому держать его незачем.
-- **Вложения** — документ удалили, и с тех пор прошло `ATTACHMENT_PURGE_DAYS`.
-  Отсрочка здесь не оптимизация, а страховка: выписка из стационара существует
-  в одном экземпляре, а удаляется одним нажатием.
+- **Фото рецептов** — фото удалили, и с тех пор прошло `ATTACHMENT_PURGE_DAYS`.
+
+**Документы пациента не убираются вовсе** (06.10.2026, ответ клиники на вопрос
+25: «удалять не надо… для архива и статистики можно оставить», дополнение к
+ADR-0013). Удалённый документ скрыт из списка, но его байты остаются на диске;
+снять их физически может только `python -m core.tools.erase_patient`. Выписка
+из стационара существует в одном экземпляре, а удаляется одним нажатием.
 
 Строки в обоих случаях остаются. По ним видно, что отчёт заказывали и что
 документ был, — правило 4 отменяется только `erase_patient`, и только по
@@ -28,6 +32,7 @@ from typing import Any
 
 from core.config import Settings
 from core.db import get_sessionmaker
+from core.models.enums import AttachmentOwnerKind
 from core.repositories import ai_jobs as ai_jobs_repo
 from core.repositories import attachments as attachments_repo
 from core.repositories import idempotency as idempotency_repo
@@ -64,7 +69,7 @@ def _remove(directory: str, names: list[str]) -> int:
 
 
 async def purge_files(ctx: dict[str, Any]) -> dict[str, int]:
-    """Снять с диска просроченные отчёты и убранные вложения.
+    """Снять с диска просроченные отчёты и удалённые фото рецептов.
 
     Возвращает счётчики — их видно в журнале ARQ, и по ним понятно, работает
     задача или молча ничего не находит.
@@ -85,7 +90,9 @@ async def purge_files(ctx: dict[str, Any]) -> dict[str, int]:
             await jobs_repo.mark_file_removed(session, job=job)
 
         deadline = now - timedelta(days=settings.attachment_purge_days)
-        purgeable = await attachments_repo.list_purgeable(session, before=deadline)
+        purgeable = await attachments_repo.list_purgeable(
+            session, before=deadline, owner_kind=AttachmentOwnerKind.RECIPE
+        )
         files = await asyncio.to_thread(
             _remove,
             settings.attachments_dir,

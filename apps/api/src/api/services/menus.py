@@ -26,7 +26,7 @@ from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
 from core.repositories.menus import MenuItemSpec
-from keto_engine import ENGINE_VERSION, Ingredient, scale, verify
+from keto_engine import ENGINE_VERSION, DishResult, Ingredient, scale, verify
 
 from .. import after_commit
 from ..errors import ApiError, ErrorCode
@@ -439,6 +439,17 @@ def totals_from_items(items: Sequence[MenuItem]) -> tuple[dict[str, Any], str]:
     строк, и день не меняется от того, что кто-то поправил рецепт.
     """
 
+    return composition_service.totals_of(day_dish(items)), ENGINE_VERSION
+
+
+def day_dish(items: Sequence[MenuItem]) -> DishResult:
+    """Показатели набора позиций дня одним блюдом — расчётом ядра по снимкам.
+
+    Тот же путь, что у итогов дня, но набор позиций выбирает вызывающий: для
+    итогов — весь план, для «вчера недобрали» — только отмеченное съеденным
+    (ответ клиники на вопрос 9).
+    """
+
     scaled: list[tuple[Ingredient, float]] = []
     for item in items:
         snapshot = item.snapshot
@@ -450,7 +461,7 @@ def totals_from_items(items: Sequence[MenuItem]) -> tuple[dict[str, Any], str]:
         portion = scale(dish, float(item.portion_factor) / int(snapshot["servings"]))
         scaled.extend((amount.ingredient, amount.grams) for amount in portion.items)
 
-    return composition_service.totals_of(verify(scaled)), ENGINE_VERSION
+    return verify(scaled)
 
 
 def _snapshot_ingredient(row: dict[str, Any]) -> Ingredient:
