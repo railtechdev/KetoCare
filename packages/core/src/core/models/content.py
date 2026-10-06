@@ -72,6 +72,15 @@ class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     source_version: Mapped[str] = mapped_column(String(64), nullable=False)
     verified_at: Mapped[date] = mapped_column(Date, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Участвует ли продукт в расчёте (ADR-0054, ответ клиники на вопрос 16).
+    #:
+    #: Соль, перец и подобные приправы стоят в составе ради рецепта и списка
+    #: «что взвесить», но в соотношение, калорийность и лимит углеводов не
+    #: входят. По умолчанию — участвует: какие продукты считать приправами,
+    #: решает диетолог отметкой в карточке, а не миграция.
+    counts_in_calculation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
 
 
 class ProductRevision(Base, UUIDPkMixin):

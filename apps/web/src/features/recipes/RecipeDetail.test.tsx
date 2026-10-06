@@ -151,6 +151,44 @@ describe("карточка рецепта", () => {
     expect(marks[0]?.parentElement).toHaveTextContent("Масло льняное");
   });
 
+  it("помечает приправу по списку из сохранённого расчёта", async () => {
+    // ADR-0054: пометка говорит о числах рядом, поэтому берётся из того же
+    // расчёта, а не из живой отметки продукта — расчёт задним числом не
+    // пересчитывается.
+    (api.GET as Mock).mockImplementation(
+      async (_path: string, init: unknown) => {
+        const options = init as {
+          params?: { path?: { product_id?: string } };
+        };
+        const id = options?.params?.path?.product_id;
+        if (id === BUTTER || id === FLAX) {
+          return {
+            data: product(
+              id,
+              id === BUTTER ? "Масло сливочное" : "Перец",
+              true,
+            ),
+            response: { status: 200 },
+          };
+        }
+        return {
+          data: {
+            ...RECIPE,
+            computed: { ...RECIPE.computed, uncounted_product_ids: [FLAX] },
+          },
+          response: { status: 200 },
+        };
+      },
+    );
+    renderDetail();
+
+    const mark = await screen.findByText(recipesRu.detail.uncounted as string);
+    expect(mark.parentElement).toHaveTextContent("Перец");
+    expect(
+      screen.getAllByText(recipesRu.detail.uncounted as string),
+    ).toHaveLength(1);
+  });
+
   it("удалённый продукт так и называется — удалённым", async () => {
     // 404 — это ответ справочника «такого продукта нет», а не сбой связи.
     // Смешать их значило бы обещать имя, которое никогда не придёт.

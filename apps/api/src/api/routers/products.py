@@ -769,6 +769,8 @@ _IMPORT_FIELDS = (
     "source",
     "source_version",
     "verified_at",
+    # Только когда колонка в файле есть и ячейка не пуста (`product_import`).
+    "counts_in_calculation",
 )
 
 
@@ -802,6 +804,9 @@ def _format_value(value: object) -> str:
 
     if value is None:
         return ""
+    if isinstance(value, bool):
+        # Отметка «учитывается в расчёте» — словами, как её и пишут в файле.
+        return "да" if value else "нет"
     if isinstance(value, Decimal | float | int) and not isinstance(value, bool):
         return f"{float(value):g}"
     return str(value)

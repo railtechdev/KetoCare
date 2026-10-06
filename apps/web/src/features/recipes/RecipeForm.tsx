@@ -333,16 +333,24 @@ export function RecipeForm({
                         сервера, тем же компонентом кита, что в калькуляторе и
                         в Mini App: своё округление здесь означало бы, что одно
                         и то же блюдо выглядит по-разному. */}
-                    {contribution && (
+                    {computed.uncounted.has(field.productId) ? (
                       <MacroFacts
                         className="w-full"
                         label={t("form.contribution", { name: label })}
-                        kcal={contribution.kcal}
-                        fatG={contribution.fat_g}
-                        proteinG={contribution.protein_g}
-                        carbsG={contribution.carbs_g}
-                        stale={computed.stale}
+                        uncounted={t("form.uncounted")}
                       />
+                    ) : (
+                      contribution && (
+                        <MacroFacts
+                          className="w-full"
+                          label={t("form.contribution", { name: label })}
+                          kcal={contribution.kcal}
+                          fatG={contribution.fat_g}
+                          proteinG={contribution.protein_g}
+                          carbsG={contribution.carbs_g}
+                          stale={computed.stale}
+                        />
+                      )
                     )}
                   </li>
                 );

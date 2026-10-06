@@ -23,6 +23,7 @@ const VALID: ProductFormValues = {
   sourceVersion: " SR Legacy 2018 ",
   verifiedAt: "2026-03-01",
   isActive: true,
+  seasoning: false,
 };
 
 describe("productFormSchema", () => {
@@ -92,6 +93,13 @@ describe("toProductCreateBody", () => {
 });
 
 describe("toProductUpdateBody", () => {
+  it("отметка приправы уходит обратным counts_in_calculation (ADR-0054)", () => {
+    expect(toProductCreateBody(VALID).counts_in_calculation).toBe(true);
+    expect(
+      toProductCreateBody({ ...VALID, seasoning: true }).counts_in_calculation,
+    ).toBe(false);
+  });
+
   it("добавляет флаг активности к тем же полям", () => {
     expect(toProductUpdateBody({ ...VALID, isActive: false })).toMatchObject({
       name_ru: "Масло сливочное",
@@ -117,6 +125,7 @@ describe("toProductFormValues", () => {
       source_version: "SR Legacy 2018",
       verified_at: "2026-03-01",
       is_active: false,
+      counts_in_calculation: false,
       // Считается сервером на чтении: 81.1 / (0.9 + 0.1).
       ratio: 81.1,
     };
@@ -126,6 +135,8 @@ describe("toProductFormValues", () => {
     // Отсутствующее название не должно превращаться в строку "null" в поле.
     expect(values.nameUz).toBe("");
     expect(values.isActive).toBe(false);
+    // Форма спрашивает «это приправа?» — обратное `counts_in_calculation`.
+    expect(values.seasoning).toBe(true);
     expect(productFormSchema.safeParse(values).success).toBe(true);
   });
 });

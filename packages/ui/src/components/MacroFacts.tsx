@@ -1,11 +1,7 @@
 import { formatGrams, formatKcal } from "../lib/format";
 import { cn } from "../lib/cn";
 
-export interface MacroFactsProps {
-  kcal: number;
-  fatG: number;
-  proteinG: number;
-  carbsG: number;
+interface MacroFactsCommon {
   /**
    * Что именно описывают числа — «Вклад продукта „Масло сливочное“ в блюдо».
    * Приходит из словаря приложения: название продукта знает экран, а не кит.
@@ -15,6 +11,28 @@ export interface MacroFactsProps {
   stale?: boolean;
   className?: string;
 }
+
+interface CountedFacts extends MacroFactsCommon {
+  uncounted?: undefined;
+  kcal: number;
+  fatG: number;
+  proteinG: number;
+  carbsG: number;
+}
+
+interface UncountedFacts extends MacroFactsCommon {
+  /**
+   * Позиция в расчёт не входит — приправа (ADR-0054). Вместо чисел строка
+   * говорит это словами из словаря приложения: «не учитывается в расчёте».
+   *
+   * Чисел у такой позиции нет вовсе, а не нули: «0 ккал» у перца — неправда,
+   * у него 251 ккал на 100 г, просто их не считают. Сервер её вклада и не
+   * присылает — ядро приправу не видит.
+   */
+  uncounted: string;
+}
+
+export type MacroFactsProps = CountedFacts | UncountedFacts;
 
 /**
  * Показатели одной позиции состава: калории и макронутриенты на её массу.
@@ -37,15 +55,21 @@ export interface MacroFactsProps {
  * именно их. Глазу — сокращения «Ж · Б · У», как в подсказке поиска продукта;
  * вспомогательной технологии — полные названия.
  */
-export function MacroFacts({
-  kcal,
-  fatG,
-  proteinG,
-  carbsG,
-  label,
-  stale = false,
-  className,
-}: MacroFactsProps) {
+export function MacroFacts(props: MacroFactsProps) {
+  const { label, stale = false, className } = props;
+
+  // Одно место на оба канала: и кабинет, и Mini App показывают приправу этой
+  // строкой, а не своей копией с другим словом или с нулями.
+  if (props.uncounted !== undefined) {
+    return (
+      <p className={cn("m-0 text-sm text-muted-foreground", className)}>
+        <span className="sr-only">{`${label}: `}</span>
+        {props.uncounted}
+      </p>
+    );
+  }
+
+  const { kcal, fatG, proteinG, carbsG } = props;
   return (
     <div
       role="group"

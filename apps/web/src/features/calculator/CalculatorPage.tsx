@@ -251,7 +251,16 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
    * одинарной раскладкой.
    */
   const solvedItems = solve.data?.dish.items;
-  const scaledItems = scale.data?.dish.items;
+  // Приправы (ADR-0054) ядро не видит, но порция меняет и их массу: сервер
+  // присылает её отдельно, и в состав она уезжает вместе с остальными. При
+  // подборе приправ в ответе нет — их масса остаётся той, что ввёл человек.
+  const scaledItems = useMemo(
+    () =>
+      scale.data === undefined
+        ? undefined
+        : [...scale.data.dish.items, ...(scale.data.uncounted_items ?? [])],
+    [scale.data],
+  );
   const resultItems = solvedItems ?? scaledItems;
 
   // Перенос — во время рендера, а не в эффекте. Обновление из пассивного
@@ -296,6 +305,13 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
     () =>
       new Map(
         (verify.data?.dish.items ?? []).map((item) => [item.product_id, item]),
+      ),
+    [verify.data],
+  );
+  const uncounted = useMemo(
+    () =>
+      new Set(
+        (verify.data?.uncounted_items ?? []).map((item) => item.product_id),
       ),
     [verify.data],
   );
@@ -492,6 +508,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
         <DishRows
           rows={rows}
           contributions={contributions}
+          uncounted={uncounted}
           stale={stale}
           onChangeGrams={(productId, grams) => {
             setRows((current) =>

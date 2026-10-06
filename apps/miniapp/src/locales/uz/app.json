@@ -84,6 +84,7 @@
     "unknownDish": "Nomsiz taom",
     "composition": "Nimani tortish kerak",
     "grams": "{{value}} g",
+    "uncounted": "ziravor, hisobga kirmaydi",
     "changedSinceSaved": "Reja saqlangan kundan beri retsept o‘zgargan.",
     "totals": "Kun yakunlari",
     "excluded": "Rejada bolaga taqiqlangan mahsulotlar bor",
@@ -296,6 +297,7 @@
     "gramsTooMuch": "{{max}} g dan oshmasin — kattaroq massa bilan hisob ishlamaydi.",
     "remove": "Olib tashlash: {{name}}",
     "contribution": "«{{name}}» mahsulotining taomdagi ulushi",
+    "uncounted": "Ziravor — hisobga kirmaydi",
     "empty": "Mahsulotlar qo‘shing — hisob shu yerda paydo bo‘ladi.",
     "calc": "Hisob",
     "ratio": "Keto nisbati",
@@ -398,6 +400,7 @@
     "nameUnavailable": "nomi yuklanmadi",
     "grams": "{{value}} g",
     "withdrawn": "muomaladan chiqarilgan",
+    "uncounted": "ziravor, hisobga kirmaydi",
     "withdrawnTitle": "Tarkibda muomaladan chiqarilgan mahsulot bor",
     "withdrawnBody": "Muomaladan chiqarilganlar: {{list}}. Retsept avvalgidek hisoblanadi — orqaga qarab hech narsa almashtirilmaydi. Lekin mahsulot odatda raqamlari noto‘g‘ri chiqqani uchun chiqariladi: tayyorlashdan oldin tarkibni tekshiring."
   },

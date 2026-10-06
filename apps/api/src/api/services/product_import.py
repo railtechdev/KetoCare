@@ -30,6 +30,15 @@ REQUIRED_COLUMNS = (
 
 OPTIONAL_COLUMNS = ("name_uz", "name_en")
 
+#: Необязательная колонка отметки «приправа — не учитывается в расчёте»
+#: (ADR-0054). Пустая ячейка или отсутствие колонки — значение не задано:
+#: новый продукт считается, у существующего обновляющий импорт отметку не
+#: трогает. Иначе файл старого образца молча возвращал бы соль в расчёт.
+COUNTS_COLUMN = "counts_in_calculation"
+
+_TRUE_WORDS = frozenset({"да", "1", "true", "yes", "ha"})
+_FALSE_WORDS = frozenset({"нет", "0", "false", "no", "yo'q", "yoq"})
+
 # Физиологичные границы значений на 100 г — отсекают явные ошибки ввода
 # (перепутанные колонки, значения в кДж вместо ккал). 100 г макронутриентов на
 # 100 г продукта — верхняя граница по определению; предел калорийности опирается
@@ -263,6 +272,21 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
                 RowError(line_no, column, f"Значение {number:g} превышает допустимое ({limit:g}).")
             )
         parsed[column] = number
+
+    raw_counts = (row.get(COUNTS_COLUMN) or "").strip().casefold()
+    if raw_counts in _TRUE_WORDS:
+        parsed[COUNTS_COLUMN] = True
+    elif raw_counts in _FALSE_WORDS:
+        parsed[COUNTS_COLUMN] = False
+    elif raw_counts:
+        errors.append(
+            RowError(
+                line_no,
+                COUNTS_COLUMN,
+                f"Ожидалось «да» или «нет», получено: {raw_counts!r}. «Нет» — приправа, "
+                "которая не учитывается в расчёте; пустая ячейка — продукт учитывается.",
+            )
+        )
 
     raw_date = (row.get("verified_at") or "").strip()
     try:

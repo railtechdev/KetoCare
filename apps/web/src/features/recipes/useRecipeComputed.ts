@@ -20,6 +20,8 @@ export interface RecipeComputed {
   dish: DishView | null;
   /** Вклад каждой позиции: сколько даёт именно этот продукт */
   contributions: Map<string, ItemContribution>;
+  /** Продукты состава, которые сервер не взял в расчёт, — приправы (ADR-0054) */
+  uncounted: Set<string>;
   /**
    * Показанное посчитано не по тому, что сейчас в полях.
    *
@@ -151,9 +153,14 @@ export function useRecipeComputed(rows: CompositionRow[]): RecipeComputed {
     (query.data?.dish.items ?? []).map((item) => [item.product_id, item]),
   );
 
+  const uncounted = new Set(
+    (query.data?.uncounted_items ?? []).map((item) => item.product_id),
+  );
+
   return {
     dish: query.data?.dish ?? null,
     contributions,
+    uncounted,
     // Пока состав правят, показанное относится к прежнему набору. Незавершённый
     // состав (пустая строка, ноль граммов, ещё не полученная карточка) — тоже
     // «устарело»: сказать о таком блюде нечего.

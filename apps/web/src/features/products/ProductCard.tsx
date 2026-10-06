@@ -113,6 +113,15 @@ export function ProductCard({
               </WarningBanner>
             )}
 
+            {/* Приправа (ADR-0054): числа на 100 г показываются — они правда
+                такие, — но в расчёт блюда не идут. Сказать это надо там, где
+                на них смотрят. */}
+            {!data.counts_in_calculation && (
+              <WarningBanner level="info" title={t("card.uncountedTitle")}>
+                {t("card.uncountedBody")}
+              </WarningBanner>
+            )}
+
             <Section title={t("card.nutrition")} description={t("card.per100")}>
               <p className="m-0 text-page-title font-semibold tabular-nums">
                 {t("card.kcal", { value: formatKcal(data.kcal_100g) })}

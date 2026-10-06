@@ -147,6 +147,9 @@ function formatValue(
   if (field === "is_active") {
     return value === true ? t("revisions.active") : t("revisions.withdrawn");
   }
+  if (field === "counts_in_calculation") {
+    return value === false ? t("revisions.uncounted") : t("revisions.counted");
+  }
   if (value === null || value === undefined || value === "") {
     return t("revisions.empty.value");
   }

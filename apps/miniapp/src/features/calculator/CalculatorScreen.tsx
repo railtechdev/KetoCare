@@ -142,7 +142,16 @@ export function CalculatorScreen({ session }: { session: Session }) {
    * из результата вёл один выход — принять как есть.
    */
   const solvedItems = solve.data?.dish.items;
-  const scaledItems = scale.data?.dish.items;
+  // Приправы (ADR-0054) ядро не видит, но порция меняет и их массу: сервер
+  // присылает её отдельно. При подборе приправ в ответе нет — их масса
+  // остаётся той, что ввела семья.
+  const scaledItems = useMemo(
+    () =>
+      scale.data === undefined
+        ? undefined
+        : [...scale.data.dish.items, ...(scale.data.uncounted_items ?? [])],
+    [scale.data],
+  );
 
   useEffect(() => {
     const items = solvedItems ?? scaledItems;
@@ -206,6 +215,13 @@ export function CalculatorScreen({ session }: { session: Session }) {
     () =>
       new Map(
         (verify.data?.dish.items ?? []).map((item) => [item.product_id, item]),
+      ),
+    [verify.data],
+  );
+  const uncounted = useMemo(
+    () =>
+      new Set(
+        (verify.data?.uncounted_items ?? []).map((item) => item.product_id),
       ),
     [verify.data],
   );
@@ -457,17 +473,26 @@ export function CalculatorScreen({ session }: { session: Session }) {
                       кабинете: по вкладу видно, что менять, когда блюдо мимо
                       цели, а два своих оформления означали бы два округления
                       одного клинического числа. */}
-                  {contribution !== undefined && (
+                  {uncounted.has(row.product.id) ? (
                     <MacroFacts
                       label={t("calculator.contribution", {
                         name: row.product.name,
                       })}
-                      kcal={contribution.kcal}
-                      fatG={contribution.fat_g}
-                      proteinG={contribution.protein_g}
-                      carbsG={contribution.carbs_g}
-                      stale={stale}
+                      uncounted={t("calculator.uncounted")}
                     />
+                  ) : (
+                    contribution !== undefined && (
+                      <MacroFacts
+                        label={t("calculator.contribution", {
+                          name: row.product.name,
+                        })}
+                        kcal={contribution.kcal}
+                        fatG={contribution.fat_g}
+                        proteinG={contribution.protein_g}
+                        carbsG={contribution.carbs_g}
+                        stale={stale}
+                      />
+                    )
                   )}
                 </li>
               );

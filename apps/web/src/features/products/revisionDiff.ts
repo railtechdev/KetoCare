@@ -21,6 +21,7 @@ export const REVISION_FIELDS = [
   "source_version",
   "verified_at",
   "is_active",
+  "counts_in_calculation",
 ] as const;
 
 export type RevisionField = (typeof REVISION_FIELDS)[number];
@@ -46,12 +47,25 @@ export function changedFields(
   if (previous === null) return [];
 
   return REVISION_FIELDS.filter(
-    (field) => !sameValue(snapshot[field], previous[field]),
+    (field) => !sameValue(valueOf(snapshot, field), valueOf(previous, field)),
   ).map((field) => ({
     field,
-    before: previous[field],
-    after: snapshot[field],
+    before: valueOf(previous, field),
+    after: valueOf(snapshot, field),
   }));
+}
+
+/**
+ * Значение поля снимка с умолчанием для полей, которых раньше не было.
+ *
+ * Отметки «приправа» (ADR-0054) нет в снимках, записанных до неё, а продукт
+ * тогда считался всегда. Без умолчания первая же правка после её появления
+ * показала бы в истории «изменение», которого никто не делал.
+ */
+function valueOf(snapshot: Record<string, unknown>, field: RevisionField) {
+  const value = snapshot[field];
+  if (field === "counts_in_calculation" && value === undefined) return true;
+  return value;
 }
 
 /**

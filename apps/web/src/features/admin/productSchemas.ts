@@ -33,6 +33,13 @@ export const productFormSchema = z.object({
   /** `<input type="date">` отдаёт ISO-дату; пустое поле не проходит проверку */
   verifiedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   isActive: z.boolean(),
+  /**
+   * Приправа: стоит в составе, но в расчёт не входит (ADR-0054, ответ клиники
+   * на вопрос 16 — «соль, перец не учитываются в расчётах»). В форме — прямой
+   * вопрос «это приправа?», а не «учитывать в расчёте?»: так его и задаёт
+   * клиника. В теле запроса — обратное `counts_in_calculation`.
+   */
+  seasoning: z.boolean(),
 });
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -51,6 +58,9 @@ export const EMPTY_PRODUCT_FORM_VALUES: DefaultValues<ProductFormValues> = {
   sourceVersion: "",
   verifiedAt: "",
   isActive: true,
+  // Какие продукты приправы, решает тот, кто заводит карточку: по умолчанию
+  // продукт считается.
+  seasoning: false,
 };
 
 export function toProductFormValues(product: Product): ProductFormValues {
@@ -68,6 +78,7 @@ export function toProductFormValues(product: Product): ProductFormValues {
     sourceVersion: product.source_version,
     verifiedAt: product.verified_at,
     isActive: product.is_active,
+    seasoning: !product.counts_in_calculation,
   };
 }
 
@@ -96,6 +107,7 @@ export function toProductCreateBody(
     source: values.source.trim(),
     source_version: values.sourceVersion.trim(),
     verified_at: values.verifiedAt,
+    counts_in_calculation: !values.seasoning,
   };
 }
 

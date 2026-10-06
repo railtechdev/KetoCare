@@ -1746,4 +1746,54 @@ describe("калькулятор в Mini App", () => {
     await screen.findByText(/Добавьте продукты/);
     expect(api.POST).not.toHaveBeenCalled();
   });
+
+  it("приправа в составе говорит, что она вне расчёта, вместо вклада", async () => {
+    // ADR-0054: какие продукты приправы, сервер знает из справочника. В
+    // кабинете семья видит то же самое тем же компонентом кита.
+    respond({
+      "/calc/verify": verifyResponse({
+        dish: { ...verifyResponse().dish, items: [] },
+        uncounted_items: [
+          { product_id: "p1", name_ru: "Масло сливочное", grams: 30 },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    expect(
+      await screen.findByText("Приправа — не учитывается в расчёте"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: /Вклад продукта/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("пересчёт порций переносит в состав и массу приправы", async () => {
+    respond({
+      "/calc/scale": scaleResponse({
+        dish: { ...scaleResponse().dish, items: [] },
+        uncounted_items: [
+          { product_id: "p1", name_ru: "Масло сливочное", grams: 60 },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    const factor = screen.getByLabelText("Умножить на");
+    await user.clear(factor);
+    await user.type(factor, "2");
+    await user.click(
+      screen.getByRole("button", { name: "Пересчитать порции" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+        "60",
+      ),
+    );
+  });
 });

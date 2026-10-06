@@ -33,6 +33,7 @@ _SNAPSHOT_FIELDS = (
     "source_version",
     "verified_at",
     "is_active",
+    "counts_in_calculation",
 )
 
 

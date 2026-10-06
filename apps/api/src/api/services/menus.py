@@ -166,6 +166,7 @@ def _snapshot_ingredients(item: MenuItem) -> list[MenuItemIngredient]:
             product_id=uuid.UUID(str(row["product_id"])),
             name_ru=str(row.get("name_ru", "")),
             grams=float(row["grams"]) * scale,
+            counts_in_calculation=composition_service.snapshot_row_counts(row),
         )
         for row in item.snapshot.get("ingredients", [])
     ]
@@ -250,6 +251,7 @@ def _changed_since_saved(item: MenuItem, live: list[tuple[uuid.UUID, float, Prod
             float(row["protein_100g"]),
             float(row["carbs_100g"]),
             float(row["fiber_100g"]),
+            composition_service.snapshot_row_counts(row),
         )
         for row in snapshot["ingredients"]
     ]
@@ -262,6 +264,9 @@ def _changed_since_saved(item: MenuItem, live: list[tuple[uuid.UUID, float, Prod
             float(product.protein_100g),
             float(product.carbs_100g),
             float(product.fiber_100g),
+            # Отметку «приправа» поставили или сняли — блюдо считается иначе,
+            # и семье надо об этом знать так же, как о правке чисел продукта.
+            composition_service.counts_in_calculation(product),
         )
         for product_id, grams, product in live
     ]
@@ -399,15 +404,17 @@ async def build_snapshots(
                 "protein_100g": float(products[product_id].protein_100g),
                 "carbs_100g": float(products[product_id].carbs_100g),
                 "fiber_100g": float(products[product_id].fiber_100g),
+                # Отметка замораживается вместе с числами: снимок обязан
+                # считаться через год так же, как в день сохранения, даже если
+                # диетолог с тех пор передумал, считать ли продукт приправой.
+                "counts_in_calculation": composition_service.counts_in_calculation(
+                    products[product_id]
+                ),
             }
             for product_id, grams in composition
         ]
-        dish = verify(
-            [
-                (composition_service.to_ingredient(products[pid]), grams)
-                for pid, grams in composition
-            ]
-        )
+        counted, _ = composition_service.split((products[pid], grams) for pid, grams in composition)
+        dish = verify(counted)
         title = (
             recipes[item.recipe_id].title
             if item.recipe_id is not None
@@ -455,8 +462,14 @@ def day_dish(items: Sequence[MenuItem]) -> DishResult:
         snapshot = item.snapshot
         if snapshot is None:
             continue
+        # Приправы снимка (ADR-0054) на вход ядра не идут — так же, как при
+        # сохранении позиции: итог дня обязан совпасть с итогами её снимка.
         dish = verify(
-            [(_snapshot_ingredient(row), float(row["grams"])) for row in snapshot["ingredients"]]
+            [
+                (_snapshot_ingredient(row), float(row["grams"]))
+                for row in snapshot["ingredients"]
+                if composition_service.snapshot_row_counts(row)
+            ]
         )
         portion = scale(dish, float(item.portion_factor) / int(snapshot["servings"]))
         scaled.extend((amount.ingredient, amount.grams) for amount in portion.items)

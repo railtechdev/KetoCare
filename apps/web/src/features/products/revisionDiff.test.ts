@@ -52,4 +52,14 @@ describe("разница между ревизиями", () => {
     // справочник ради строки истории — лишний запрос.
     expect(changedFields({ ...BASE, category_id: "c2" }, BASE)).toEqual([]);
   });
+
+  it("снимок до отметки «приправа» не выдаёт её появление за правку", () => {
+    // ADR-0054: в старых снимках ключа нет, а продукт тогда считался всегда.
+    expect(
+      changedFields({ ...BASE, counts_in_calculation: true }, BASE),
+    ).toEqual([]);
+    expect(
+      changedFields({ ...BASE, counts_in_calculation: false }, BASE),
+    ).toEqual([{ field: "counts_in_calculation", before: true, after: false }]);
+  });
 });
