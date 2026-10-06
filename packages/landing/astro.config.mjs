@@ -18,7 +18,7 @@ const env = loadEnv(process.env.NODE_ENV ?? "development", rootDir, [
 
 /**
  * Домен нужен на сборке: из него собираются canonical, hreflang, og:url и
- * sitemap. Временный домен пред-прода задан значением по умолчанию, при
+ * sitemap. Временный домен test-стенда задан значением по умолчанию, при
  * передаче клиенту меняется переменной окружения, а не правкой кода.
  */
 const site = process.env.LANDING_SITE_URL ?? "https://ketocare.railtech.uz";
