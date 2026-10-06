@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  ConfirmDialog,
   DataTable,
   EmptyState,
   RatioBadge,
@@ -13,6 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
+import { PrescriptionConfirm } from "./PrescriptionConfirm";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { useCreatePrescription } from "./doctorMutations";
@@ -20,6 +22,7 @@ import { activePrescriptionOf, usePrescriptionHistory } from "./doctorQueries";
 import {
   prescriptionFormValues,
   toPrescriptionBody,
+  type PrescriptionFormValues,
 } from "./prescriptionSchema";
 import { TableSkeleton } from "./skeletons";
 import { canWritePrescriptions, type PrescriptionVersion } from "./types";
@@ -41,6 +44,12 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   // обновлённой истории, иначе пришлось бы считать «было плюс один», а пока
   // врач заполнял форму, версию мог создать коллега.
   const [createdId, setCreatedId] = useState<string | null>(null);
+
+  // Значения, ждущие подтверждения врача (ответ клиники на вопрос 5). Пока
+  // окно открыто, ничего не отправлено: назначение append-only, и отменить
+  // записанное можно только новой версией.
+  const [pendingValues, setPendingValues] =
+    useState<PrescriptionFormValues | null>(null);
 
   const versions = useMemo(() => history.data?.versions ?? [], [history.data]);
   const active = activePrescriptionOf(history.data);
@@ -159,12 +168,34 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
             defaultValues={prescriptionFormValues(active, new Date())}
             pending={create.isPending}
             error={create.error}
-            onSubmit={(values) =>
-              create.mutate(toPrescriptionBody(values), {
-                onSuccess: (created) => setCreatedId(created.id),
-              })
-            }
+            onSubmit={setPendingValues}
           />
+          <ConfirmDialog
+            open={pendingValues !== null}
+            onOpenChange={(open) => {
+              if (!open) setPendingValues(null);
+            }}
+            title={
+              active === null
+                ? t("prescription.confirm.titleFirst")
+                : t("prescription.confirm.title")
+            }
+            description={t("prescription.confirm.description")}
+            confirmLabel={t("prescription.confirm.action")}
+            cancelLabel={t("prescription.confirm.cancel")}
+            destructive={false}
+            onConfirm={() => {
+              if (pendingValues === null) return;
+              create.mutate(toPrescriptionBody(pendingValues), {
+                onSuccess: (created) => setCreatedId(created.id),
+              });
+              setPendingValues(null);
+            }}
+          >
+            {pendingValues !== null && (
+              <PrescriptionConfirm values={pendingValues} previous={active} />
+            )}
+          </ConfirmDialog>
         </Section>
       )}
 

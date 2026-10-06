@@ -812,6 +812,21 @@ class ImportRowUpdate(BaseModel):
     changes: list[ImportFieldChange]
 
 
+class ImportRowWarning(BaseModel):
+    """Строка файла, которая импортируется, но требует сверки с источником.
+
+    Не ошибка: импорт её не останавливает. Сейчас это одна находка —
+    калорийность расходится с расчётом по 9 — 4 — 4 больше чем на 5 ккал
+    (ответ клиники на вопрос 1). Класс и числа — кодами, фраза собирается в
+    словаре кабинета, как у списка подозрительных продуктов.
+    """
+
+    line: int
+    name_ru: str
+    kind: str
+    values: dict[str, float]
+
+
 class ProductImportReport(BaseModel):
     total_rows: int
     imported: int
@@ -820,6 +835,8 @@ class ProductImportReport(BaseModel):
     #: Что именно меняется — до записи и после неё.
     updates: list[ImportRowUpdate] = []
     errors: list[ImportRowError]
+    #: Что импортируется, но стоит сверить (вопрос 1). Запись не останавливает.
+    warnings: list[ImportRowWarning] = []
     dry_run: bool
 
 

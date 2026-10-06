@@ -37,6 +37,9 @@ class RecipeCategory(enum.StrEnum):
     SNACK = "snack"
     DESSERT = "dessert"
     DRINK = "drink"
+    # Ответ клиники от 09.09.2026, вопрос 28: «…десерты, напитки, выпечка, хлеб».
+    BAKERY = "bakery"
+    BREAD = "bread"
 
 
 class RecipeStatus(enum.StrEnum):

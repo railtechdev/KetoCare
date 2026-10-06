@@ -81,9 +81,17 @@ async def check_last_seizure_known(
 
     Вопрос 48 (решение команды разработки по стандарту, ADR-0049): семья не
     всегда помнит число. Дата бывает частичной, как `date` в HL7 FHIR, — до
-    месяца или до года, и тогда приходит первым днём месяца или года; бывает
-    «не помню» — это тоже ответ, и с ним дата не нужна. Угаданная дата была бы
-    неотличима от точной, а врач судит по ней о длительности ремиссии.
+    месяца или до года, и тогда приходит первым днём месяца или года.
+    Угаданная дата была бы неотличима от точной, а врач судит по ней о
+    длительности ремиссии.
+
+    **«Не помню» в новых ответах больше не принимается** (дополнение к
+    ADR-0049 от 06.10.2026). Клиника ответила на вопрос 19 прямо: при выборе
+    «Приступов нет» — «обязательное поле „Дата последнего приступа“».
+    «Не помню» делало его необязательным другими словами. Остался год как
+    самая грубая точность. Уже сохранённое «не помню» читается как было и
+    сохраняется дальше, пока семья не меняет ответ о частоте: правило
+    появилось позже её ответа.
 
     Обязательность — только при новом ответе. Анкета, в которой «Приступов
     нет» уже стояло без даты, сохраняется дальше: правило появилось позже
@@ -102,8 +110,20 @@ async def check_last_seizure_known(
 
     if precision is LastSeizurePrecision.UNKNOWN and last_seizure_on is not None:
         raise invalid("Ответ «не помню» даты не содержит — уберите дату или выберите точность.")
+    if precision is LastSeizurePrecision.UNKNOWN and not _unknown_kept(
+        previous, seizure_frequency_id
+    ):
+        # Прежнее «не помню» при частоте, которой дата не нужна, — то же, что
+        # «не отвечено»: семья сменила частоту, и упираться в поле, которое
+        # теперь необязательно, ей незачем.
+        if not await _is_no_seizures(session, seizure_frequency_id):
+            return None
+        raise invalid(
+            "Укажите дату последнего приступа — хотя бы год. Вариант «не помню» "
+            "больше не принимается: клиника просит дату."
+        )
     if precision in _DATED and last_seizure_on is None:
-        raise invalid("Укажите дату последнего приступа или выберите «не помню».")
+        raise invalid("Укажите дату последнего приступа.")
     if last_seizure_on is not None:
         if precision is LastSeizurePrecision.MONTH and last_seizure_on.day != 1:
             raise invalid("Месяц последнего приступа передаётся первым днём месяца.")
@@ -136,17 +156,40 @@ async def check_last_seizure_known(
     if grandfathered:
         return precision
 
+    if await _is_no_seizures(session, seizure_frequency_id):
+        raise invalid(
+            "При ответе «Приступов нет» укажите дату последнего приступа — хотя бы "
+            "месяц или год: свобода от приступов измеряется сроком."
+        )
+    return precision
+
+
+async def _is_no_seizures(session: AsyncSession, seizure_frequency_id: uuid.UUID | None) -> bool:
+    """Выбран ли вариант «Приступов нет» — по коду, а не по названию."""
+
+    if seizure_frequency_id is None:
+        return False
     options = await intake_repo.list_options(
         session, scale=IntakeScale.SEIZURE_FREQUENCY, include_retired=True
     )
     chosen = next((option for option in options if option.id == seizure_frequency_id), None)
-    if chosen is not None and chosen.code == _NO_SEIZURES_CODE:
-        raise invalid(
-            "При ответе «Приступов нет» укажите дату последнего приступа — хотя бы "
-            "месяц или год — или выберите «не помню»: свобода от приступов "
-            "измеряется сроком."
-        )
-    return precision
+    return chosen is not None and chosen.code == _NO_SEIZURES_CODE
+
+
+def _unknown_kept(previous: PatientIntake | None, seizure_frequency_id: uuid.UUID | None) -> bool:
+    """«Не помню» сохранено раньше и ответ о частоте не меняется.
+
+    Только так оно проходит после ответа клиники на вопрос 19: PUT заменяет
+    анкету целиком, и семья, правя совсем другое поле, присылает прежнее «не
+    помню» обратно. Новый ответ о частоте — новый ответ, и на него правило
+    действует целиком.
+    """
+
+    return (
+        previous is not None
+        and previous.last_seizure_precision is LastSeizurePrecision.UNKNOWN
+        and previous.seizure_frequency_id == seizure_frequency_id
+    )
 
 
 async def check_known_drugs(session: AsyncSession, drug_ids: list[uuid.UUID]) -> None:

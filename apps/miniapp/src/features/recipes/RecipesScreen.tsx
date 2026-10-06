@@ -14,13 +14,15 @@ import {
   useDebouncedValue,
 } from "@ketocare/ui";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { showBackButton } from "../../lib/telegram";
 import {
+  RECIPE_CATEGORIES,
   type Recipe,
+  type RecipeCategory,
   useProductNames,
   useRecipe,
   useRecipeSearch,
@@ -50,8 +52,10 @@ export function RecipesScreen() {
 function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<RecipeCategory | "">("");
+  const categoryId = useId();
   const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
-  const recipes = useRecipeSearch(debounced);
+  const recipes = useRecipeSearch(debounced, category);
   // Пока набор не устоялся, выдача относится к прежним буквам: `debounced`
   // отстаёт на задержку. «Ничего не нашлось» в эту паузу — ответ не о том, что
   // человек набрал (та же правка, что в поиске продукта).
@@ -70,6 +74,38 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
           setQuery(event.target.value);
         }}
       />
+
+      {/* Разделы — по ответу клиники на вопрос 28: семья выбирает перекус или
+          выпечку, а не листает всё подряд. Список, а не полоса кнопок: восемь
+          разделов на 360 px в одну строку не встают. */}
+      <div className="flex items-center gap-field">
+        <label
+          className="shrink-0 text-sm text-muted-foreground"
+          htmlFor={categoryId}
+        >
+          {t("recipes.category")}
+        </label>
+        <select
+          id={categoryId}
+          value={category}
+          onChange={(event) => {
+            const value = event.target.value;
+            setCategory(
+              (RECIPE_CATEGORIES as readonly string[]).includes(value)
+                ? (value as RecipeCategory)
+                : "",
+            );
+          }}
+          className="min-h-(--spacing-touch) min-w-0 flex-1 rounded-xl border border-border bg-card px-3"
+        >
+          <option value="">{t("recipes.allCategories")}</option>
+          {RECIPE_CATEGORIES.map((value) => (
+            <option key={value} value={value}>
+              {t(`recipes.categories.${value}`)}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* НАД списком, а не под ним. Замер при ширине потока 390 px и списке из
           двадцати рецептов: сообщение стояло на 1142 px, тогда как под липкой

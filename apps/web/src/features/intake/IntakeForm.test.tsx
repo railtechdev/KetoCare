@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -355,22 +355,37 @@ describe("дата последнего приступа с той точнос�
     expect(body.last_seizure_precision).toBe("year");
   });
 
-  it("«не помню» — ответ без даты, и он пускает дальше при «Приступов нет»", async () => {
+  it("«не помню» новым ответом не предлагается", async () => {
+    // Ответ клиники на вопрос 19: при «Приступов нет» дата обязательна;
+    // «не помню» делало её необязательной другими словами.
+    renderForm();
+
+    const field = await screen.findByLabelText(intakeRu.fields.lastSeizureOn);
+    expect(
+      within(field).queryByRole("option", {
+        name: intakeRu.lastSeizurePrecision.unknown,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("сохранённое раньше «не помню» остаётся и уходит обратно, пока частота та же", async () => {
+    saved = {
+      id: "i1",
+      patient_id: "p1",
+      last_seizure_on: null,
+      last_seizure_precision: "unknown",
+      seizure_frequency_id: "o-freq-none",
+      current_aed_ids: [],
+    };
     const user = userEvent.setup();
     renderForm();
 
-    await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.frequency),
-      "o-freq-none",
-    );
-    await user.selectOptions(
-      screen.getByLabelText(intakeRu.fields.lastSeizureOn),
-      intakeRu.lastSeizurePrecision.unknown,
-    );
+    const field = await screen.findByLabelText(intakeRu.fields.lastSeizureOn);
+    expect(field).toHaveValue("unknown");
 
     const body = await finish(user);
-    expect(body.last_seizure_on).toBeNull();
     expect(body.last_seizure_precision).toBe("unknown");
+    expect(body.last_seizure_on).toBeNull();
   });
 
   it("выбранная точность без даты не пускает дальше", async () => {

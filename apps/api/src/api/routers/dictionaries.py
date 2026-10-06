@@ -106,7 +106,7 @@ async def list_intake_options(
 @router.get(
     "/aed-drugs",
     response_model=Page[AedDrugRead],
-    summary="Противоэпилептические препараты",
+    summary="Противоприступные препараты (ASM)",
 )
 async def list_aed_drugs(
     session: SessionDep,

@@ -175,7 +175,16 @@ class TestProductAnomalies:
         self, client, session, make_user, auth_headers
     ):
         admin = await make_user(UserRole.ADMIN)
-        await _product(session, name_ru="Масло сливочное эталонное")
+        # Значения шаблона импорта: 748 ккал заявлено, по 9 — 4 — 4 выходит
+        # 747,7. Расхождение меньше пяти килокалорий — не находка (вопрос 1).
+        await _product(
+            session,
+            name_ru="Масло сливочное эталонное",
+            kcal_100g=748,
+            fat_100g=82.5,
+            protein_100g=0.5,
+            carbs_100g=0.8,
+        )
 
         response = await client.get("/api/v1/products/anomalies", headers=auth_headers(admin))
 
@@ -224,8 +233,12 @@ class TestProductAnomalies:
 
         response = await client.get("/api/v1/products/anomalies", headers=auth_headers(admin))
 
-        names = {item["name_ru"] for item in response.json()["items"]}
-        assert "Масло льняное" not in names
+        # Расхождение калорийности здесь есть (900 по составу против 884) и
+        # помечается своим классом — проверяется, что сумма макронутриентов
+        # находкой не стала.
+        found = {item["name_ru"]: item for item in response.json()["items"]}
+        kinds = {check["kind"] for check in found.get("Масло льняное", {}).get("anomalies", [])}
+        assert "macro_sum" not in kinds
 
     async def test_kilojoules_written_as_kilocalories_are_reported(
         self, client, session, make_user, auth_headers
@@ -240,6 +253,40 @@ class TestProductAnomalies:
         found = {item["name_ru"]: item for item in response.json()["items"]}
         kinds = {check["kind"] for check in found["Масло в килоджоулях"]["anomalies"]}
         assert "kcal_mismatch" in kinds
+
+    @pytest.mark.parametrize(
+        ("kcal", "flagged"),
+        [
+            # Масло 82,5 / 0,5 / 0,8 даёт 747,7 ккал по 9 — 4 — 4.
+            (752.7, False),  # ровно 5 ккал — «более 5» не выполнено
+            (753.0, True),  # 5,3 ккал сверху
+            (742.0, True),  # 5,7 ккал снизу — расхождение в любую сторону
+            (744.0, False),
+        ],
+    )
+    async def test_kcal_off_by_more_than_five_is_reported(
+        self, client, session, make_user, auth_headers, kcal, flagged
+    ):
+        """Ответ клиники на вопрос 1: «более 5 ккал например — нужно предупреждать»."""
+
+        admin = await make_user(UserRole.ADMIN)
+        name = f"Масло на пороге {uuid.uuid4().hex[:6]}"
+        await _product(
+            session,
+            name_ru=name,
+            kcal_100g=kcal,
+            fat_100g=82.5,
+            protein_100g=0.5,
+            carbs_100g=0.8,
+        )
+
+        response = await client.get(
+            "/api/v1/products/anomalies?limit=200", headers=auth_headers(admin)
+        )
+
+        found = {item["name_ru"]: item for item in response.json()["items"]}
+        kinds = {check["kind"] for check in found.get(name, {}).get("anomalies", [])}
+        assert ("kcal_mismatch" in kinds) is flagged
 
     async def test_the_whole_base_is_scanned_not_just_the_page(
         self, client, session, make_user, auth_headers

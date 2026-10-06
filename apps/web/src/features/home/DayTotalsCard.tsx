@@ -4,6 +4,7 @@ import {
   WarningBanner,
   dayVerdict,
   formatKcal,
+  kcalToTarget,
   toleranceGapKey,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
@@ -103,6 +104,7 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
             {t("day.kcalBelowTarget", {
               value: formatKcal(totals.kcal),
               target: formatKcal(targetKcal),
+              left: formatKcal(kcalToTarget(totals.kcal, targetKcal)),
             })}
           </p>
         )}

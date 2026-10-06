@@ -12,19 +12,15 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated, Any
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Path, Request, Response
 
-from core.config import get_settings
 from core.control_schedule import PERIODIC_LABS, WEEKLY_LABS, schedule_from
-from core.models import ControlVisit, MedicalProfile, WeightLog
-from core.models.enums import Sex, UserRole
+from core.models import ControlVisit, MedicalProfile
+from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import control_visits as visits_repo
-from core.repositories import diary as diary_repo
 from core.repositories import medical_profiles as profiles_repo
-from core.repositories import patients as patients_repo
 from core.repositories import therapy as therapy_repo
 
 from ..client_address import client_address
@@ -169,31 +165,10 @@ async def get_growth(
     показывает врач (ответ клиники: «врачу показать оба»).
     """
 
-    patient = await patients_repo.get(session, patient_id)
-    if patient is None:
+    growth = await growth_service.assess_patient(session, patient_id=patient_id)
+    if growth is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
-    logs, _total = await diary_repo.list_for_patient(
-        session, WeightLog, patient_id=patient_id, limit=GROWTH_POINTS_LIMIT
-    )
-    tz = ZoneInfo(get_settings().tz)
-    return growth_service.assess(
-        sex="m" if patient.sex is Sex.M else "f",
-        birth_date=patient.birth_date,
-        therapy_started_on=await therapy_repo.started_on(session, patient_id=patient_id),
-        measurements=[
-            growth_service.Measurement(
-                measured_on=log.occurred_at.astimezone(tz).date(),
-                weight_kg=float(log.weight_kg),
-                height_cm=float(log.height_cm) if log.height_cm is not None else None,
-            )
-            for log in logs
-        ],
-    )
-
-
-#: Сколько последних взвешиваний оценивать. Взвешивание раз в неделю — это
-#: десять лет наблюдения; длиннее ряд экран не покажет.
-GROWTH_POINTS_LIMIT = 500
+    return growth
 
 
 # --- контрольные визиты ------------------------------------------------------

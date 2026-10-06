@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,6 +53,26 @@ async def get_active(session: AsyncSession, *, patient_id: uuid.UUID) -> Prescri
     stmt = (
         select(Prescription)
         .where(Prescription.patient_id == patient_id)
+        .order_by(desc(Prescription.created_at))
+        .limit(1)
+    )
+    result: Prescription | None = await session.scalar(stmt)
+    return result
+
+
+async def get_active_before(
+    session: AsyncSession, *, patient_id: uuid.UUID, before: datetime
+) -> Prescription | None:
+    """Назначение, действовавшее на момент `before`, — последнее созданное раньше.
+
+    Нужно там, где о прошедшем дне судят по ТОГДАШНЕЙ норме: врач, сменивший
+    назначение сегодня утром, не должен задним числом сделать вчерашний день
+    недобором или перебором.
+    """
+
+    stmt = (
+        select(Prescription)
+        .where(Prescription.patient_id == patient_id, Prescription.created_at < before)
         .order_by(desc(Prescription.created_at))
         .limit(1)
     )

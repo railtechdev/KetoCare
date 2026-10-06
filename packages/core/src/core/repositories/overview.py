@@ -19,7 +19,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from ..models import IntakeOption, SeizureLog
+from ..models import IntakeOption, MealLog, SeizureLog
 from ..models.enums import IntakeScale
 from .diary import DiaryLog
 
@@ -138,3 +138,26 @@ async def latest_prolonged_seizure(
     )
     latest: datetime | None = await session.scalar(stmt)
     return latest
+
+
+async def has_meals_outside_plan(
+    session: AsyncSession, *, patient_id: uuid.UUID, since: datetime, until: datetime
+) -> bool:
+    """Записана ли за период еда не по плану дня (без `menu_item_id`).
+
+    Такая еда — свободным текстом в боте или в дневнике — в итоги плана не
+    входит, и судить по одним отметкам «съедено», сколько ребёнок съел, нельзя.
+    """
+
+    found = await session.scalar(
+        select(MealLog.id)
+        .where(
+            MealLog.patient_id == patient_id,
+            MealLog.deleted_at.is_(None),
+            MealLog.menu_item_id.is_(None),
+            MealLog.occurred_at >= since,
+            MealLog.occurred_at < until,
+        )
+        .limit(1)
+    )
+    return found is not None

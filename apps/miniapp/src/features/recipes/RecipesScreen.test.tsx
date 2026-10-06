@@ -84,6 +84,30 @@ const PRODUCT_NAMES: Record<string, string> = {
 };
 
 describe("рецепты в Mini App", () => {
+  it("раздел сужает выдачу — и выпечка с хлебом в нём есть", async () => {
+    // Ответ клиники на вопрос 28: «завтрак, обед, ужин, перекус, десерты,
+    // напитки, выпечка, хлеб — и в каждый из этих разделов заложить рецепты».
+    const user = userEvent.setup();
+    renderScreen();
+
+    const section = await screen.findByLabelText("Раздел");
+    expect(screen.getByRole("option", { name: "Выпечка" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Хлеб" })).toBeInTheDocument();
+
+    await user.selectOptions(section, "bread");
+
+    await vi.waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/recipes",
+        expect.objectContaining({
+          params: {
+            query: expect.objectContaining({ category: "bread" }),
+          },
+        }),
+      ),
+    );
+  });
+
   it("первый поиск без сети говорит о связи один раз", async () => {
     // На первом поиске о паузе говорит ветка ожидания кита, на следующих —
     // своя строка. Если условия разойдутся, обе скажут одно и то же подряд

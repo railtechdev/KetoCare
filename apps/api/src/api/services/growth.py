@@ -19,12 +19,22 @@ z-балл). Снижение соответствующего z-балла на
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
+from zoneinfo import ZoneInfo
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.config import get_settings
 from core.growth import who
+from core.models import WeightLog
+from core.models.enums import Sex
+from core.repositories import diary as diary_repo
+from core.repositories import patients as patients_repo
+from core.repositories import therapy as therapy_repo
 
 from ..schemas_growth import GrowthIndicatorRead, GrowthPointRead, GrowthRead, GrowthScore
 
@@ -37,6 +47,47 @@ class Measurement:
     measured_on: date
     weight_kg: float
     height_cm: float | None
+
+
+#: Сколько последних взвешиваний оценивать. Взвешивание раз в неделю — это
+#: десять лет наблюдения; длиннее ряд экран не покажет.
+GROWTH_POINTS_LIMIT = 500
+
+
+async def assess_patient(session: AsyncSession, *, patient_id: uuid.UUID) -> GrowthRead | None:
+    """Оценка ребёнка по нормам ВОЗ из его дневника веса; `None` — пациента нет.
+
+    Одна дорога для раздела «Рост и вес» карты и для пометки в списке
+    пациентов: пометка, посчитанная иначе, чем раздел, на который она ведёт,
+    однажды разошлась бы с ним.
+    """
+
+    patient = await patients_repo.get(session, patient_id)
+    if patient is None:
+        return None
+    logs, _total = await diary_repo.list_for_patient(
+        session, WeightLog, patient_id=patient_id, limit=GROWTH_POINTS_LIMIT
+    )
+    tz = ZoneInfo(get_settings().tz)
+    return assess(
+        sex="m" if patient.sex is Sex.M else "f",
+        birth_date=patient.birth_date,
+        therapy_started_on=await therapy_repo.started_on(session, patient_id=patient_id),
+        measurements=[
+            Measurement(
+                measured_on=log.occurred_at.astimezone(tz).date(),
+                weight_kg=float(log.weight_kg),
+                height_cm=float(log.height_cm) if log.height_cm is not None else None,
+            )
+            for log in logs
+        ],
+    )
+
+
+def has_significant_drop(growth: GrowthRead) -> bool:
+    """Хотя бы один показатель снизился от исходного на порог клиники (≥ 1,0 SD)."""
+
+    return any(indicator.significant_drop for indicator in growth.indicators)
 
 
 def _score(

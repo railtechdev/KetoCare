@@ -72,11 +72,14 @@ class TestPurgeFiles:
 
         old_name = f"{uuid.uuid4().hex}.png"
         fresh_name = f"{uuid.uuid4().hex}.png"
+        old_document = f"{uuid.uuid4().hex}.png"
+        recipe_id = uuid.uuid4()
         expired_report = f"{uuid.uuid4().hex}.pdf"
         live_report = f"{uuid.uuid4().hex}.pdf"
         for name, directory in (
             (old_name, files_dir),
             (fresh_name, files_dir),
+            (old_document, files_dir),
             (expired_report, reports_dir),
             (live_report, reports_dir),
         ):
@@ -100,10 +103,14 @@ class TestPurgeFiles:
                 sex=Sex.M,
             )
 
-            def attachment(stored: str, deleted_at: datetime) -> Attachment:
+            def attachment(
+                stored: str,
+                deleted_at: datetime,
+                owner_kind: AttachmentOwnerKind = AttachmentOwnerKind.RECIPE,
+            ) -> Attachment:
                 return Attachment(
-                    owner_kind=AttachmentOwnerKind.PATIENT,
-                    owner_id=patient.id,
+                    owner_kind=owner_kind,
+                    owner_id=recipe_id if owner_kind is AttachmentOwnerKind.RECIPE else patient.id,
                     filename="выписка.png",
                     stored_name=stored,
                     mime="image/png",
@@ -115,6 +122,9 @@ class TestPurgeFiles:
 
             session.add(attachment(old_name, long_ago))
             session.add(attachment(fresh_name, now - timedelta(days=1)))
+            # Документ пациента, удалённый давно: ответ клиники на вопрос 25 —
+            # «удалять не надо». Уборщик его не трогает ни в какой срок.
+            session.add(attachment(old_document, long_ago, AttachmentOwnerKind.PATIENT))
 
             def job(file_name: str, expires_at: datetime) -> ReportJob:
                 return ReportJob(
@@ -144,6 +154,9 @@ class TestPurgeFiles:
             assert (files_dir / fresh_name).exists()
             assert (reports_dir / live_report).exists()
 
+            # 3. Документ пациента остаётся на диске при любой давности удаления.
+            assert (files_dir / old_document).exists()
+
             assert result["attachments"] >= 1
             assert result["reports"] >= 1
 
@@ -156,20 +169,23 @@ class TestPurgeFiles:
                 rows = {
                     row.stored_name: row
                     for row in await session.scalars(
-                        select(Attachment).where(Attachment.owner_id == patient_id)
+                        select(Attachment).where(Attachment.owner_id.in_((patient_id, recipe_id)))
                     )
                 }
                 assert rows[old_name].purged_at is not None
                 assert rows[fresh_name].purged_at is None
+                assert rows[old_document].purged_at is None
                 # Строки остаются: по ним видно, что документ был (правило 4).
-                assert len(rows) == 2
+                assert len(rows) == 3
 
-            # 3. Повторный прогон не находит того же второй раз.
+            # 4. Повторный прогон не находит того же второй раз.
             again = await purge_files({})
             assert again == {"reports": 0, "attachments": 0}
         finally:
             async with get_sessionmaker()() as session:
-                await session.execute(delete(Attachment).where(Attachment.owner_id == patient_id))
+                await session.execute(
+                    delete(Attachment).where(Attachment.owner_id.in_((patient_id, recipe_id)))
+                )
                 await session.execute(delete(ReportJob).where(ReportJob.patient_id == patient_id))
                 await session.execute(delete(Patient).where(Patient.id == patient_id))
                 await session.execute(delete(User).where(User.id == author_id))
@@ -177,6 +193,7 @@ class TestPurgeFiles:
             for name, directory in (
                 (old_name, files_dir),
                 (fresh_name, files_dir),
+                (old_document, files_dir),
                 (expired_report, reports_dir),
                 (live_report, reports_dir),
             ):

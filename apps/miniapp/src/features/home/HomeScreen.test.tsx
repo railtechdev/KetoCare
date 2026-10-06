@@ -123,7 +123,66 @@ describe("сводка в Mini App", () => {
     expect(
       await screen.findByText("Кетосоотношение дня соответствует назначению."),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Набрано 600 из 1 200 ккал/)).toBeInTheDocument();
+    // Середина дня — подсказка, сколько добрать (ответ клиники на вопрос 9).
+    expect(
+      screen.getByText(
+        "Набрано 600 из 1 200 ккал. Чтобы набрать суточную норму, добавьте ещё 600 ккал.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("говорит о вчерашнем недоборе словами клиники, когда сервер его назвал", async () => {
+    // Ответ клиники на вопрос 9: «предупреждать, когда день завершён: что не
+    // доели и это может сказаться на состоянии ребёнка». Решает сервер.
+    serveOverview({
+      data: {
+        patient_id: SESSION.patientId,
+        date: "2026-10-05",
+        prescription: null,
+        day: null,
+        seizures_today: { count: 0 },
+        seizure_trend: { direction: "flat" },
+        last_reading_on: null,
+        yesterday_shortfall: {
+          date: "2026-10-04",
+          eaten_kcal: 600,
+          target_kcal: 1200,
+          shortfall_kcal: 600,
+        },
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        "Вчера ребёнок недобрал 600 ккал от суточной нормы — это может сказаться на его самочувствии. Если так бывает часто, обсудите с врачом.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("без вчерашнего недобора о вчера молчит", async () => {
+    serveOverview({
+      data: {
+        patient_id: SESSION.patientId,
+        date: "2026-10-05",
+        prescription: null,
+        day: null,
+        seizures_today: { count: 0 },
+        seizure_trend: { direction: "flat" },
+        last_reading_on: null,
+        yesterday_shortfall: null,
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        "Назначения пока нет — его задаёт врач. Дневник вести можно уже сейчас.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Вчера ребёнок недобрал/),
+    ).not.toBeInTheDocument();
   });
 
   it("день, посчитанный прежним ядром, объясняется своей причиной", async () => {

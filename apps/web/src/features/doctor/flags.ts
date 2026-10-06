@@ -136,6 +136,15 @@ export interface PatientFlags {
    * Порога «просрочки» клиника не называла — это просто факт.
    */
   controlOverdue: boolean;
+  /**
+   * z-балл роста или веса по ВОЗ снизился от исходного на 1,0 SD и больше.
+   *
+   * Ответ клиники от 09.09.2026 на вопрос 15: «Снижение соответствующего
+   * z-балла на ≥ 1,0 SD от исходного значения считать значимым и выводить
+   * врачу». Считает сервер той же функцией, что раздел «Рост и вес» карты
+   * (`growth_significant_drop` сводки), здесь только читается.
+   */
+  growthDrop: boolean;
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -222,6 +231,7 @@ export function computePatientFlags(
       prolongedSeizure: false,
       therapyEnded: true,
       controlOverdue: false,
+      growthDrop: false,
     };
   }
 
@@ -261,6 +271,9 @@ export function computePatientFlags(
     seizuresAppeared: overview.seizure_trend?.appeared === true,
     // Отсутствие поля (старый ответ API) — «нечего сказать», как у тренда.
     prolongedSeizure: (overview.prolonged_seizure_at ?? null) !== null,
+    // Строго `=== true`: `null` — сервер не считал (сводку читает не
+    // специалист) или сравнивать не с чем, и это не «роста нет».
+    growthDrop: overview.growth_significant_drop === true,
   };
 }
 
@@ -276,7 +289,8 @@ export function attentionRank(flags: PatientFlags | null): number {
     // Затяжной приступ — выше всего, и вес больше суммы всех остальных: это
     // возможный эпилептический статус, и строка с ним обязана стоять первой,
     // какие бы пометки ни набрала соседняя.
-    (flags.prolongedSeizure ? 16 : 0) +
+    // 32, а не 16: с пометками контроля и роста сумма остальных дошла до 18.
+    (flags.prolongedSeizure ? 32 : 0) +
     // Назначение — выше всего остального: пока его нет, остальные флаги не о чем судить,
     // и это единственное действие, которое врач обязан сделать сам.
     (flags.noPrescription ? 4 : 0) +
@@ -294,6 +308,10 @@ export function attentionRank(flags: PatientFlags | null): number {
     // Пропущенный контроль — действие врача, как и назначение, но не срочнее
     // молчания семьи: визит переносят, а данных за прошедшие дни уже не будет.
     (flags.controlOverdue ? 2 : 0) +
+    // Замедление роста — главный долгосрочный риск кетотерапии у детей
+    // (вопрос 15), но это тренд месяцев, а не событие дня: наравне с
+    // пропущенным контролем, ниже молчания семьи не ставится.
+    (flags.growthDrop ? 2 : 0) +
     (flags.nutritionOff ? 1 : 0)
   );
 }

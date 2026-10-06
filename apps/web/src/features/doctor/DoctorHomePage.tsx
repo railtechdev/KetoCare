@@ -51,7 +51,11 @@ function viewForFlags(flags: PatientFlags): PatientView {
   // Затяжной приступ врач смотрит в дневнике — там длительность и время.
   if (flags.prolongedSeizure) return "diary";
   if (flags.noPrescription) return "prescription";
-  return flags.staleData ? "diary" : "menu";
+  if (flags.staleData) return "diary";
+  // Снижение роста или веса смотрят в разделе «Рост и вес» — если день не
+  // требует внимания сам.
+  if (flags.growthDrop && !flags.nutritionOff) return "growth";
+  return "menu";
 }
 
 /**

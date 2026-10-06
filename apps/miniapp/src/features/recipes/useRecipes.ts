@@ -10,11 +10,30 @@ export type Recipe = components["schemas"]["RecipeRead"];
 /** Сколько рецептов приходит за раз. Больше на телефоне всё равно не пролистают. */
 export const PAGE_SIZE = 20;
 
-export function useRecipeSearch(query: string) {
+export type RecipeCategory = Recipe["category"];
+
+/**
+ * Разделы рецептов — ответ клиники от 09.09.2026 на вопрос 28: «завтрак, обед,
+ * ужин, перекус, десерты, напитки, выпечка, хлеб — и в каждый из этих разделов
+ * заложить рецепты». `satisfies` связывает список с OpenAPI: новая категория
+ * сервера без строки здесь не скомпилируется.
+ */
+export const RECIPE_CATEGORIES = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "snack",
+  "dessert",
+  "drink",
+  "bakery",
+  "bread",
+] as const satisfies readonly RecipeCategory[];
+
+export function useRecipeSearch(query: string, category: RecipeCategory | "") {
   const trimmed = query.trim();
 
   return useQuery({
-    queryKey: ["recipes", "search", trimmed],
+    queryKey: ["recipes", "search", trimmed, category],
     // Прошлая выдача держится, пока грузится новая: иначе список мигает
     // пустотой на каждой набранной букве.
     placeholderData: keepPreviousData,
@@ -23,6 +42,7 @@ export function useRecipeSearch(query: string) {
         params: {
           query: {
             q: trimmed === "" ? undefined : trimmed,
+            category: category === "" ? undefined : category,
             limit: PAGE_SIZE,
             offset: 0,
           },

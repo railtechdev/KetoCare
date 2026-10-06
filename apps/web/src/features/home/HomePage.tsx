@@ -13,6 +13,7 @@ import { QuickActions } from "./QuickActions";
 import { SeizuresCard } from "./SeizuresCard";
 import { NewPrescriptionNotice } from "./NewPrescriptionNotice";
 import { WaitingForPrescription } from "./WaitingForPrescription";
+import { YesterdayShortfallNotice } from "./YesterdayShortfallNotice";
 import { formatOverviewDate } from "./date";
 
 /**
@@ -96,6 +97,12 @@ export function HomePage({ patientId }: { patientId: string }) {
                 prescription={prescription}
               />
             )}
+
+            {/* Вчерашний недобор (вопрос 9) — до быстрых действий: это
+                итог прошедшего дня, и сегодняшний план собирают с ним в уме. */}
+            <YesterdayShortfallNotice
+              shortfall={data.yesterday_shortfall ?? null}
+            />
 
             <QuickActions />
 

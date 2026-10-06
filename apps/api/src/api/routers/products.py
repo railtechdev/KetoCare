@@ -20,7 +20,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
 from core.models import Product, ProductCategory
@@ -37,6 +37,7 @@ from ..schemas import (
     ImportFieldChange,
     ImportRowError,
     ImportRowUpdate,
+    ImportRowWarning,
     Page,
     ProductCategoryMerge,
     ProductCategoryMergeResult,
@@ -306,6 +307,34 @@ class ProductAnomalyRead(BaseModel):
     field: str
 
 
+class ProductValuesCheck(BaseModel):
+    """Пищевая ценность на 100 г — то, по чему считаются проверки."""
+
+    kcal_100g: Annotated[float, Field(ge=0, le=10000)]
+    fat_100g: Annotated[float, Field(ge=0, le=1000)]
+    protein_100g: Annotated[float, Field(ge=0, le=1000)]
+    carbs_100g: Annotated[float, Field(ge=0, le=1000)]
+    fiber_100g: Annotated[float, Field(ge=0, le=1000)] = 0
+
+
+def _anomalies_of(values: ProductValuesCheck | dict[str, Any]) -> list[ProductAnomalyRead]:
+    """Находки по значениям — одна дорога для списка, карточки и импорта."""
+
+    raw = values.model_dump() if isinstance(values, BaseModel) else values
+    return [
+        ProductAnomalyRead(kind=item.kind.value, values=item.values, field=item.field)
+        for item in product_checks.check(
+            product_checks.Values(
+                kcal=float(raw["kcal_100g"]),
+                fat=float(raw["fat_100g"]),
+                protein=float(raw["protein_100g"]),
+                carbs=float(raw["carbs_100g"]),
+                fiber=float(raw.get("fiber_100g") or 0),
+            )
+        )
+    ]
+
+
 class ProductWithAnomalies(BaseModel):
     product_id: uuid.UUID
     name_ru: str
@@ -343,22 +372,19 @@ async def list_anomalies(
             product_id=row.id,
             name_ru=row.name_ru,
             is_active=row.is_active,
-            anomalies=[
-                ProductAnomalyRead(kind=item.kind.value, values=item.values, field=item.field)
-                for item in anomalies
-            ],
+            anomalies=anomalies,
         )
         for row, anomalies in (
             (
                 row,
-                product_checks.check(
-                    product_checks.Values(
-                        kcal=row.kcal_100g,
-                        fat=row.fat_100g,
-                        protein=row.protein_100g,
-                        carbs=row.carbs_100g,
-                        fiber=row.fiber_100g,
-                    )
+                _anomalies_of(
+                    {
+                        "kcal_100g": row.kcal_100g,
+                        "fat_100g": row.fat_100g,
+                        "protein_100g": row.protein_100g,
+                        "carbs_100g": row.carbs_100g,
+                        "fiber_100g": row.fiber_100g,
+                    }
                 ),
             )
             for row in rows
@@ -366,6 +392,27 @@ async def list_anomalies(
         if anomalies
     ]
     return Page(items=found[offset : offset + limit], total=len(found))
+
+
+@router.post(
+    "/check",
+    response_model=list[ProductAnomalyRead],
+    summary="Проверить значения продукта до сохранения",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def check_product_values(
+    payload: ProductValuesCheck, _: CurrentUserDep
+) -> list[ProductAnomalyRead]:
+    """Те же проверки, что у списка подозрительных, — по значениям из формы.
+
+    Потребитель — карточка продукта в кабинете (`features/admin/ProductForm.tsx`):
+    она показывает предупреждение по мере ввода, не дожидаясь сохранения.
+    Предупреждение, а не запрет: ответ клиники на вопрос 1 — «нужно
+    предупреждать». Коэффициенты 9 — 4 — 4 живут в ядре, и копии в браузере
+    нет. Ничего не сохраняет и в журнал не пишет.
+    """
+
+    return _anomalies_of(payload)
 
 
 @router.get("/{product_id}", response_model=ProductRead, summary="Карточка продукта")
@@ -580,6 +627,26 @@ async def import_products(
     matched = [row for row in report.valid_rows if _key(row) in existing]
     report.valid_rows = [row for row in report.valid_rows if _key(row) not in existing]
 
+    # Калорийность, не сходящаяся с составом (ответ клиники на вопрос 1), —
+    # предупреждение в превью, а не ошибка: строка импортируется. Считается по
+    # новым строкам и — при обновляющем импорте — по обновляющим: те и другие
+    # станут значениями справочника. Дубли без обновления отбрасываются, и
+    # предупреждать о них незачем.
+    warnings = [
+        ImportRowWarning(
+            line=row.line,
+            name_ru=str(row.values["name_ru"]),
+            kind=anomaly.kind,
+            values=anomaly.values,
+        )
+        for row in sorted(
+            [*report.valid_rows, *(matched if update_existing else [])],
+            key=lambda item: item.line,
+        )
+        for anomaly in _anomalies_of(row.values)
+        if anomaly.kind == product_checks.Anomaly.KCAL_MISMATCH
+    ]
+
     updates: list[ImportRowUpdate] = []
     if update_existing:
         for row in matched:
@@ -631,6 +698,7 @@ async def import_products(
             updated=len(updates),
             updates=updates,
             errors=errors,
+            warnings=warnings,
             dry_run=dry_run,
         )
 
@@ -683,6 +751,7 @@ async def import_products(
         updated=updated,
         updates=updates,
         errors=errors,
+        warnings=warnings,
         dry_run=False,
     )
 

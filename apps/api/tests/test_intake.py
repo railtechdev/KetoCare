@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from api.services import intake as intake_service
 from core.clock import local_today
 from core.models import PatientIntake
-from core.models.enums import IntakeScale, UserRole
+from core.models.enums import IntakeScale, LastSeizurePrecision, UserRole
 from core.repositories import intake as intake_repo
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
@@ -397,7 +397,6 @@ class TestPatientIntake:
                 "2025-01-01",
                 "year",
             ),
-            ({"last_seizure_on": None, "last_seizure_precision": "unknown"}, None, "unknown"),
             (
                 {"last_seizure_on": "2026-03-17", "last_seizure_precision": "day"},
                 "2026-03-17",
@@ -407,7 +406,7 @@ class TestPatientIntake:
             ({"last_seizure_on": "2026-03-17"}, "2026-03-17", "day"),
         ],
     )
-    async def test_no_seizures_accepts_a_partial_date_or_dont_remember(
+    async def test_no_seizures_accepts_a_partial_date(
         self,
         client,
         session,
@@ -418,7 +417,7 @@ class TestPatientIntake:
         expected_on,
         expected_precision,
     ):
-        """Месяц с годом, один год или «не помню» — тоже ответы (вопрос 48)."""
+        """Месяц с годом или один год — тоже ответы (вопрос 48)."""
 
         parent, patient = await _parent_with_child(session, make_user, make_patient)
         options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
@@ -458,6 +457,89 @@ class TestPatientIntake:
 
         assert response.status_code == 422, response.text
         assert response.json()["error"]["code"] == "validation_error"
+
+    async def test_dont_remember_is_refused_as_a_new_answer_and_kept_as_an_old_one(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Ответ клиники на вопрос 19: при «Приступов нет» дата обязательна.
+
+        «Не помню» делало её необязательной другими словами и с 06.10.2026 в
+        новых ответах не принимается (дополнение к ADR-0049). Сохранённое
+        раньше остаётся: семья, правя другое поле, присылает его обратно, и
+        упираться в правило, появившееся позже её ответа, она не должна. Новый
+        ответ о частоте — уже новый ответ.
+
+        Потребитель — анкета кабинета (`features/intake/IntakeForm.tsx`).
+        """
+
+        parent, patient = await _parent_with_child(session, make_user, make_patient)
+        url = f"/api/v1/patients/{patient.id}/intake"
+        options = await intake_repo.list_options(session, scale=IntakeScale.SEIZURE_FREQUENCY)
+        none_option = next(option for option in options if option.code == "freq_none")
+        other_option = next(option for option in options if option.code != "freq_none")
+
+        fresh = await client.put(
+            url,
+            json={
+                "seizure_frequency_id": str(none_option.id),
+                "last_seizure_precision": "unknown",
+            },
+            headers=auth_headers(parent),
+        )
+        assert fresh.status_code == 422, fresh.text
+        assert fresh.json()["error"]["details"]["field"] == "last_seizure_on"
+
+        # Анкета из прошлого: «Приступов нет» и «не помню».
+        await intake_repo.upsert(
+            session,
+            patient_id=patient.id,
+            last_seizure_on=None,
+            last_seizure_precision=LastSeizurePrecision.UNKNOWN,
+            onset_age_id=None,
+            seizure_frequency_id=none_option.id,
+            seizure_duration_id=None,
+            meals_per_day_id=None,
+            developmental_delay=None,
+            meals_regular=None,
+            current_aed_ids=[],
+        )
+
+        kept = await client.put(
+            url,
+            json={
+                "seizure_frequency_id": str(none_option.id),
+                "last_seizure_precision": "unknown",
+                "developmental_delay": True,
+            },
+            headers=auth_headers(parent),
+        )
+        assert kept.status_code == 200, kept.text
+        assert kept.json()["last_seizure_precision"] == "unknown"
+
+        # Сменили частоту на ту, где дата не нужна: прежнее «не помню»
+        # становится «не отвечено», а не отказом в поле, которое уже
+        # необязательно.
+        changed = await client.put(
+            url,
+            json={
+                "seizure_frequency_id": str(other_option.id),
+                "last_seizure_precision": "unknown",
+            },
+            headers=auth_headers(parent),
+        )
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["last_seizure_precision"] is None
+
+        # А заново выбранное «Приступов нет» с «не помню» уже не проходит.
+        again = await client.put(
+            url,
+            json={
+                "seizure_frequency_id": str(none_option.id),
+                "last_seizure_precision": "unknown",
+            },
+            headers=auth_headers(parent),
+        )
+        assert again.status_code == 422, again.text
 
     async def test_future_date_is_a_typo_not_an_answer(
         self, client, session, make_user, make_patient, auth_headers

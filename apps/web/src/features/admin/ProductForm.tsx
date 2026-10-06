@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FormFooter } from "@ketocare/ui";
+import { FormFooter, WarningBanner } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,9 @@ import {
   type FormErrorSummaryItem,
 } from "../../components/FormErrorSummary";
 import { SubPageHeader } from "../../components/SubPageHeader";
+import { anomalyDetail } from "./productAnomalyText";
 import { productFormSchema, type ProductFormValues } from "./productSchemas";
+import { useProductValuesCheck } from "./useProductValuesCheck";
 import type { ProductCategory } from "./types";
 
 interface Props {
@@ -86,6 +88,7 @@ export function ProductForm({
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, submitCount },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -97,6 +100,12 @@ export function ProductForm({
   });
 
   const activeId = `${ids}-active`;
+
+  // Проверка значений по мере ввода (ответ клиники на вопрос 1): предупреждение,
+  // а не запрет — сохранить карточку можно и с ним, если источник так и пишет.
+  const [kcal, fat, protein, carbs, fiber] = watch(NUTRIENTS);
+  const check = useProductValuesCheck({ kcal, fat, protein, carbs, fiber });
+  const findings = check.data ?? [];
 
   function fieldId(name: keyof ProductFormValues) {
     const spec = VALIDATED.find((field) => field.name === name);
@@ -209,6 +218,21 @@ export function ProductForm({
               {...register(nutrient, { valueAsNumber: true })}
             />
           ))}
+          {findings.length > 0 && (
+            <WarningBanner
+              level="warning"
+              title={t("products.form.checkTitle")}
+            >
+              <ul className="m-0 list-disc pl-5">
+                {findings.map((item, index) => (
+                  <li key={`${item.kind}-${index}`}>
+                    {anomalyDetail(t, item)}
+                  </li>
+                ))}
+              </ul>
+              <p className="m-0 mt-1">{t("products.form.checkHint")}</p>
+            </WarningBanner>
+          )}
         </div>
       </fieldset>
 
