@@ -176,7 +176,17 @@ export function MealGroup({
                           key={line.product_id}
                           className="flex flex-wrap justify-between gap-field"
                         >
-                          <span>{line.name_ru}</span>
+                          <span>
+                            {line.name_ru}
+                            {/* Взвесить приправу надо, а в итогах дня её нет
+                                (ADR-0054) — иначе граммы перца выглядели бы
+                                частью посчитанного. */}
+                            {line.counts_in_calculation === false && (
+                              <span className="ml-2 text-muted-foreground">
+                                {t("item.uncounted")}
+                              </span>
+                            )}
+                          </span>
                           <span className="text-muted-foreground tabular-nums">
                             {t("item.grams", {
                               value: formatMass(line.grams),

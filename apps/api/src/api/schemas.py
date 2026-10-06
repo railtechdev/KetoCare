@@ -335,6 +335,19 @@ class ProductBase(BaseModel):
     source: RequiredName
     source_version: RequiredShortText
     verified_at: date
+    #: Приправа — продукт стоит в составе, но в расчёт не входит (ADR-0054,
+    #: ответ клиники на вопрос 16: «соль, перец не учитываются в расчётах»).
+    #:
+    #: По умолчанию `true`: продукт считается. Пропущенное поле при правке
+    #: возвращает продукт в расчёт — это безопасная сторона: лишний учёт виден
+    #: в числах, а пропавший — нет.
+    counts_in_calculation: bool = Field(
+        default=True,
+        description=(
+            "false — приправа (соль, перец): остаётся в составе и в списке "
+            "«что взвесить», но не входит в соотношение, калорийность и лимит углеводов"
+        ),
+    )
 
     @model_validator(mode="after")
     def _macros_are_physically_possible(self) -> ProductBase:
@@ -862,6 +875,10 @@ class DishComputed(BaseModel):
     carbs: float
     fiber: float
     ratio: float | None
+    #: Продукты состава, не вошедшие в эти числа, — приправы на момент расчёта
+    #: (ADR-0054). У итогов дня меню всегда пусто: позиции дня описывают свои
+    #: приправы сами (`MenuItemIngredient.counts_in_calculation`).
+    uncounted_product_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class CustomDishRead(BaseModel):

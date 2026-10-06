@@ -8,12 +8,18 @@
 Продукты всегда берутся из базы по идентификаторам, а не из тела запроса: иначе
 клиент прислал бы произвольные макронутриенты и получил «правильный» расчёт по
 выдуманным данным — а по нему кормят ребёнка.
+
+Здесь же состав делится на учитываемое и приправы (`split`, ADR-0054): приправа
+остаётся в составе, но на вход ядра не идёт. Делит одна функция на все пути —
+рецепт, своё блюдо, снимок дня, калькулятор, — иначе путь, забывший про
+отметку, считал бы соль в соотношение, а соседний нет.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +45,84 @@ def to_ingredient(product: Product) -> Ingredient:
         carbs=float(product.carbs_100g),
         fiber=float(product.fiber_100g),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class UncountedItem:
+    """Позиция состава, которая в расчёт не входит: приправа и её масса."""
+
+    product_id: uuid.UUID
+    name_ru: str
+    grams: float
+
+
+def counts_in_calculation(product: Product) -> bool:
+    """Входит ли продукт в расчёт (ADR-0054).
+
+    `None` — у объекта, собранного в памяти до записи в базу, умолчание
+    колонки ещё не применено, — читается как «входит»: так же решает база.
+    """
+
+    return product.counts_in_calculation is not False
+
+
+def snapshot_row_counts(row: Mapping[str, Any]) -> bool:
+    """То же для строки снимка позиции меню.
+
+    Снимки, сохранённые до отметки, ключа не несут и читаются как
+    «входит» — ровно так их и считали, когда сохраняли.
+    """
+
+    return row.get("counts_in_calculation", True) is not False
+
+
+def split(
+    rows: Iterable[tuple[Product, float]],
+) -> tuple[list[tuple[Ingredient, float]], list[UncountedItem]]:
+    """Состав → (вход ядра, приправы).
+
+    Единственное место, где решается, что из состава уходит в расчёт. Приправа
+    не превращается в `Ingredient` вовсе: ядро её не видит, и ни соотношение,
+    ни калорийность, ни лимит углеводов от неё не зависят. Порядок позиций в
+    обоих списках — порядок состава.
+    """
+
+    counted: list[tuple[Ingredient, float]] = []
+    uncounted: list[UncountedItem] = []
+    for product, grams in rows:
+        if counts_in_calculation(product):
+            counted.append((to_ingredient(product), grams))
+        else:
+            uncounted.append(
+                UncountedItem(product_id=product.id, name_ru=product.name_ru, grams=grams)
+            )
+    return counted, uncounted
+
+
+async def uncounted_products(
+    session: AsyncSession, *, product_ids: Iterable[str]
+) -> dict[str, Product]:
+    """Какие из идентификаторов `/calc` — приправы, по справочнику.
+
+    `/calc` получает значения продуктов в теле запроса, но отметку берёт из
+    базы: клиент, не знающий о ней или забывший её передать, иначе считал бы
+    соль в соотношение. Идентификатор не из справочника приправой быть не
+    может — такой продукт считается, как и раньше.
+    """
+
+    parsed: dict[uuid.UUID, str] = {}
+    for raw in product_ids:
+        try:
+            parsed[uuid.UUID(raw)] = raw
+        except ValueError:
+            continue
+
+    products = await products_repo.get_by_ids(session, product_ids=list(parsed))
+    return {
+        parsed[pid]: product
+        for pid, product in products.items()
+        if not counts_in_calculation(product)
+    }
 
 
 def totals_of(dish: DishResult) -> dict[str, Any]:
@@ -74,13 +158,13 @@ async def load_products(
 
 async def load_items(
     session: AsyncSession, *, composition: Composition
-) -> list[tuple[Ingredient, float]]:
-    """Состав в виде пар (Ingredient, граммы) — вход `verify()`/`scale()`."""
+) -> tuple[list[tuple[Ingredient, float]], list[UncountedItem]]:
+    """Состав → (вход `verify()`/`scale()`, приправы вне расчёта)."""
 
     products = await load_products(
         session, product_ids=[product_id for product_id, _ in composition]
     )
-    return [(to_ingredient(products[product_id]), grams) for product_id, grams in composition]
+    return split((products[product_id], grams) for product_id, grams in composition)
 
 
 async def compute(session: AsyncSession, *, composition: Composition) -> tuple[dict[str, Any], str]:
@@ -90,8 +174,15 @@ async def compute(session: AsyncSession, *, composition: Composition) -> tuple[d
     сказать, каким кодом посчитан сохранённый результат.
     """
 
-    items = await load_items(session, composition=composition)
-    return totals_of(verify(items)), ENGINE_VERSION
+    items, uncounted = await load_items(session, composition=composition)
+    computed = totals_of(verify(items))
+    # Какие позиции в эти числа не вошли — рядом с самими числами (ADR-0054).
+    # Карточка рецепта показывает пометку «приправа» по этому списку, а не по
+    # живой отметке продукта: сохранённый расчёт задним числом не
+    # пересчитывается, и пометка по живой отметке утверждала бы о числах то,
+    # чего в них нет.
+    computed["uncounted_product_ids"] = [str(item.product_id) for item in uncounted]
+    return computed, ENGINE_VERSION
 
 
 async def compute_optional(

@@ -103,3 +103,24 @@ describe("карточка продукта: проверка значений �
     ).not.toBeInTheDocument();
   });
 });
+
+describe("карточка продукта: приправа (ADR-0054)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.POST as Mock).mockResolvedValue({ data: [] });
+  });
+
+  it("отметка снята по умолчанию и объясняет, что значит", async () => {
+    renderForm({ kcal: 0, fat: 0, protein: 0, carbs: 0, fiber: 0 });
+
+    const seasoning = screen.getByRole("checkbox", {
+      name: adminRu.products.form.seasoning,
+    });
+    expect(seasoning).not.toBeChecked();
+    // Пояснение связано с флажком: читающий с экрана слышит его вместе с ним.
+    expect(seasoning).toHaveAccessibleDescription(
+      adminRu.products.form.seasoningHint,
+    );
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+  });
+});

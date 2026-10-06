@@ -346,6 +346,16 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
                   {t("recipes.withdrawn")}
                 </span>
               )}
+              {/* По списку из сохранённого расчёта, а не по живой отметке
+                  продукта: пометка говорит о показателях рецепта, а они
+                  посчитаны так, как там записано (ADR-0054). */}
+              {recipe.computed?.uncounted_product_ids?.includes(
+                ingredient.product_id,
+              ) && (
+                <span className="ml-2 text-sm text-muted-foreground">
+                  {t("recipes.uncounted")}
+                </span>
+              )}
             </span>
             <span className="text-muted-foreground tabular-nums">
               {t("recipes.grams", { value: formatMass(ingredient.grams) })}

@@ -296,6 +296,40 @@ describe("план дня в Mini App", () => {
     expect(screen.getByText("50 г")).toBeInTheDocument();
   });
 
+  it("приправу взвешивают, но строка говорит, что в итогах дня её нет", async () => {
+    // ADR-0054: граммы перца без пометки выглядели бы частью посчитанного.
+    (api.GET as Mock).mockResolvedValue({
+      data: menu({
+        items: [
+          {
+            ...menu().items[0],
+            ingredients: [
+              { product_id: "prod-1", name_ru: "Яйцо куриное", grams: 50 },
+              {
+                product_id: "prod-9",
+                name_ru: "Перец чёрный",
+                grams: 1,
+                counts_in_calculation: false,
+              },
+            ],
+          },
+        ],
+      }),
+      response: { status: 200 },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByText("Что взвесить"));
+
+    expect(await screen.findByText("Перец чёрный")).toHaveTextContent(
+      "приправа, не в расчёте",
+    );
+    expect(screen.getByText("Яйцо куриное")).not.toHaveTextContent(
+      "не в расчёте",
+    );
+  });
+
   it("позиция без снимка не предлагает пустого раскрытия", async () => {
     renderScreen();
 

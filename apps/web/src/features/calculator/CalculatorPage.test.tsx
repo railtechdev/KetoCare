@@ -1912,3 +1912,104 @@ describe("оболочка экрана", () => {
     expect(container.querySelectorAll("h1")).toHaveLength(0);
   });
 });
+
+describe("приправы в калькуляторе (ADR-0054)", () => {
+  const PEPPER = "44444444-4444-4444-8444-444444444444";
+
+  beforeEach(() => {
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path.includes("overview")
+        ? { data: OVERVIEW, error: undefined }
+        : {
+            data: {
+              items: [
+                ...PRODUCTS.items,
+                {
+                  id: PEPPER,
+                  name_ru: "Перец чёрный",
+                  kcal_100g: 251,
+                  fat_100g: 3.26,
+                  protein_100g: 10.39,
+                  carbs_100g: 63.95,
+                  fiber_100g: 25.3,
+                },
+              ],
+              total: 2,
+            },
+            error: undefined,
+          },
+    );
+    (api.POST as Mock).mockImplementation(async (path: string) => ({
+      data: path.includes("scale")
+        ? {
+            dish: {
+              ...VERIFIED.dish,
+              items: [{ ...VERIFIED.dish.items[0], grams: 100 }],
+            },
+            uncounted_items: [
+              { product_id: PEPPER, name_ru: "Перец чёрный", grams: 4 },
+            ],
+          }
+        : {
+            ...VERIFIED,
+            uncounted_items: [
+              { product_id: PEPPER, name_ru: "Перец чёрный", grams: 50 },
+            ],
+          },
+      error: undefined,
+    }));
+  });
+
+  async function addPepper(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(await screen.findByLabelText(/Добавить продукт/), "перец");
+    await user.click(await screen.findByRole("option", { name: /Перец/ }));
+  }
+
+  it("строка приправы говорит, что она вне расчёта, вместо вклада", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await addPepper(user);
+
+    expect(
+      await screen.findByText(
+        "Приправа — не учитывается в расчёте",
+        undefined,
+        {
+          timeout: AUTO_CALC_TIMEOUT_MS,
+        },
+      ),
+    ).toBeInTheDocument();
+    // Вклад остаётся только у посчитанного продукта: у перца чисел нет вовсе,
+    // ни своих, ни нулей.
+    expect(
+      screen.getByRole("group", { name: /Вклад продукта «Масло сливочное»/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: /Вклад продукта «Перец чёрный»/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("пересчёт порций переносит в состав и массу приправы", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+    await addPepper(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Пересчитать порции/ }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(/Масса продукта «Перец чёрный»/),
+      ).toHaveValue(4),
+    );
+    expect(
+      screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+    ).toHaveValue(100);
+  });
+});

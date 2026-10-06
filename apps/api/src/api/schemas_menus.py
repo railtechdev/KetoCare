@@ -102,6 +102,9 @@ class MenuItemIngredient(BaseModel):
     product_id: uuid.UUID
     name_ru: str
     grams: float
+    #: `false` — приправа (ADR-0054): взвесить её надо, но в итогах дня её нет.
+    #: Берётся из снимка; у снимков до отметки — `true`, как их и считали.
+    counts_in_calculation: bool = True
 
 
 class MenuItemRead(BaseModel):

@@ -26,6 +26,11 @@ interface Props {
    * показывает нули.
    */
   contributions?: ReadonlyMap<string, ItemContribution>;
+  /**
+   * Продукты состава, которые сервер не взял в расчёт, — приправы (ADR-0054).
+   * Строка такой позиции говорит «не учитывается в расчёте» вместо вклада.
+   */
+  uncounted?: ReadonlySet<string>;
   /** Показанный вклад посчитан не по тому, что сейчас в полях */
   stale?: boolean;
 }
@@ -49,6 +54,7 @@ export function DishRows({
   onRemove,
   readOnlyGrams,
   contributions,
+  uncounted,
   stale = false,
 }: Props) {
   const { t } = useTranslation("calculator");
@@ -153,15 +159,22 @@ export function DishRows({
                 Пока пересчёт не догнал правку, числа тускнеют вместе с итогом
                 блюда, но остаются: гасить их совсем значит очищать строку, по
                 которой человек и правит граммовку. */}
-            {contribution !== undefined && (
+            {uncounted?.has(row.product.id) ? (
               <MacroFacts
                 label={t("contribution.label", { name: row.product.name })}
-                kcal={contribution.kcal}
-                fatG={contribution.fat_g}
-                proteinG={contribution.protein_g}
-                carbsG={contribution.carbs_g}
-                stale={stale}
+                uncounted={t("contribution.uncounted")}
               />
+            ) : (
+              contribution !== undefined && (
+                <MacroFacts
+                  label={t("contribution.label", { name: row.product.name })}
+                  kcal={contribution.kcal}
+                  fatG={contribution.fat_g}
+                  proteinG={contribution.protein_g}
+                  carbsG={contribution.carbs_g}
+                  stale={stale}
+                />
+              )
             )}
           </li>
         );

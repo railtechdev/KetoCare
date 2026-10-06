@@ -90,6 +90,28 @@ class ExcludedProductOut(BaseModel):
     name_ru: str | None = None
 
 
+class UncountedProductOut(BaseModel):
+    """Продукт набора, который в расчёт не входит: приправа (ADR-0054).
+
+    Отметку ставит диетолог в справочнике, и сервер берёт её оттуда, а не из
+    тела запроса: клиент, не знающий о ней, иначе считал бы соль в соотношение.
+    """
+
+    product_id: str
+    name_ru: str
+
+
+class UncountedItemOut(UncountedProductOut):
+    """Позиция состава вне расчёта: приправа и её масса.
+
+    Вклада у неё нет и не показывается — строка состава говорит «не
+    учитывается в расчёте». Масса нужна: приправу всё равно взвешивают, а при
+    пересчёте порций она меняется вместе с остальным составом.
+    """
+
+    grams: float
+
+
 class ItemOut(BaseModel):
     """Позиция состава и её вклад в показатели блюда.
 
@@ -163,6 +185,9 @@ class VerifyResponse(BaseModel):
     #: вопрос медицинской команды (вопрос 29 в OPEN_QUESTIONS.md); до ответа
     #: предупреждение.
     excluded: list[ExcludedProductOut] = []
+    #: Позиции состава, не вошедшие в расчёт (приправы, ADR-0054). В
+    #: `dish.items` их нет: там только то, что посчитало ядро.
+    uncounted_items: list[UncountedItemOut] = []
 
 
 class SolveRequest(BaseModel):
@@ -188,6 +213,9 @@ class SolveResponse(BaseModel):
     #: Молчаливое исключение было бы не лучше молчаливого включения: человек
     #: должен видеть, что решатель работал не со всем набором.
     excluded: list[ExcludedProductOut] = []
+    #: Приправы набора (ADR-0054): решатель их не подбирает, и их масса
+    #: остаётся той, что ввёл человек. В `dish.items` их нет.
+    uncounted: list[UncountedProductOut] = []
 
 
 class ScaleRequest(BaseModel):
@@ -200,3 +228,6 @@ class ScaleRequest(BaseModel):
 
 class ScaleResponse(BaseModel):
     dish: DishOut
+    #: Приправы состава с массой, пересчитанной на тот же коэффициент: соль
+    #: двойной порции — двойная, хотя в расчёт она не входит (ADR-0054).
+    uncounted_items: list[UncountedItemOut] = []

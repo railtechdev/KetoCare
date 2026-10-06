@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+from core.models import Product
 from keto_engine import DishResult, Ingredient, Targets
 
-from ..schemas_calc import DishOut, IngredientIn, ItemIn, ItemOut, TargetsIn
+from ..schemas_calc import DishOut, IngredientIn, ItemIn, ItemOut, TargetsIn, UncountedItemOut
 
 
 def to_ingredients(raw: list[IngredientIn]) -> dict[str, Ingredient]:
@@ -32,6 +35,30 @@ def to_items(
     вызывающий роутер превращает это в validation_error."""
 
     return [(ingredients[item.product_id], item.grams) for item in raw]
+
+
+def split_items(
+    items: list[tuple[Ingredient, float]], uncounted: Mapping[str, Product]
+) -> tuple[list[tuple[Ingredient, float]], list[UncountedItemOut]]:
+    """Состав `/calc` → (вход ядра, приправы).
+
+    Что приправа, решает справочник (`composition.uncounted_products`), а не
+    тело запроса; здесь состав только раскладывается по готовому ответу.
+    """
+
+    counted: list[tuple[Ingredient, float]] = []
+    skipped: list[UncountedItemOut] = []
+    for ingredient, grams in items:
+        product = uncounted.get(ingredient.product_id)
+        if product is None:
+            counted.append((ingredient, grams))
+        else:
+            skipped.append(
+                UncountedItemOut(
+                    product_id=ingredient.product_id, name_ru=product.name_ru, grams=grams
+                )
+            )
+    return counted, skipped
 
 
 def to_targets(raw: TargetsIn) -> Targets:

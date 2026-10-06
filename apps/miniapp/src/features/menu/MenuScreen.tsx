@@ -476,6 +476,13 @@ function DayPlan({
                           >
                             <span className="min-w-0 break-words">
                               {line.name_ru}
+                              {/* Приправу взвешивают, но в итогах дня её нет
+                                  (ADR-0054). */}
+                              {line.counts_in_calculation === false && (
+                                <span className="ml-2 text-muted-foreground">
+                                  {t("menu.uncounted")}
+                                </span>
+                              )}
                             </span>
                             <span className="text-muted-foreground tabular-nums">
                               {t("menu.grams", {

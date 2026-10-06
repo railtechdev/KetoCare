@@ -28,10 +28,13 @@ from ..schemas_calc import (
     ScaleResponse,
     SolveRequest,
     SolveResponse,
+    UncountedItemOut,
+    UncountedProductOut,
     VerifyRequest,
     VerifyResponse,
 )
 from ..services import calc as calc_service
+from ..services import composition as composition_service
 
 router = APIRouter(prefix="/calc", tags=["calc"])
 
@@ -110,8 +113,18 @@ async def verify_dish(
         session, user, payload.patient_id, [item.product_id for item in payload.items]
     )
 
-    dish = verify(items)
-    response = VerifyResponse(dish=calc_service.to_dish_out(dish), excluded=excluded)
+    # Приправы (ADR-0054) остаются в составе, но на вход ядра не идут.
+    # Исключения выше проверены по ВСЕМУ составу: аллергия на приправу —
+    # такая же аллергия.
+    uncounted = await composition_service.uncounted_products(
+        session, product_ids=[item.product_id for item in payload.items]
+    )
+    counted, skipped = calc_service.split_items(items, uncounted)
+
+    dish = verify(counted)
+    response = VerifyResponse(
+        dish=calc_service.to_dish_out(dish), excluded=excluded, uncounted_items=skipped
+    )
 
     if payload.targets is not None:
         ratio_ok, kcal_ok = within_tolerance(dish, calc_service.to_targets(payload.targets))
@@ -145,6 +158,27 @@ async def solve_dish(
             details={"excluded": [entry.product_id for entry in excluded]},
         )
 
+    # Приправы решатель не подбирает (ADR-0054): в расчёт они не входят, и
+    # переменной задачи у них нет. Их масса остаётся той, что ввёл человек, —
+    # клиент переносит в состав только массы из `dish.items`.
+    uncounted = await composition_service.uncounted_products(
+        session, product_ids=list(ingredients.keys())
+    )
+    skipped = [
+        UncountedProductOut(product_id=pid, name_ru=product.name_ru)
+        for pid, product in uncounted.items()
+    ]
+    for pid in uncounted:
+        ingredients.pop(pid, None)
+
+    if not ingredients:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "В наборе только приправы, которые не учитываются в расчёте, — подбирать "
+            "не из чего. Добавьте продукты, из которых составляется блюдо.",
+            details={"uncounted": [entry.product_id for entry in skipped]},
+        )
+
     try:
         # solve() синхронный и вычислительно тяжёлый (LP через HiGHS, а при
         # неразрешимости ещё несколько LP для диагностики). В event loop он
@@ -158,11 +192,14 @@ async def solve_dish(
         ratio_within_tolerance=result.ratio_within_tolerance,
         kcal_within_tolerance=result.kcal_within_tolerance,
         excluded=excluded,
+        uncounted=skipped,
     )
 
 
 @router.post("/scale", response_model=ScaleResponse, summary="Пересчитать блюдо на порцию")
-async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
+async def scale_dish(
+    payload: ScaleRequest, _: CurrentUserDep, session: SessionDep
+) -> ScaleResponse:
     ingredients = calc_service.to_ingredients(payload.ingredients)
     try:
         items = calc_service.to_items(ingredients, payload.items)
@@ -195,5 +232,22 @@ async def scale_dish(payload: ScaleRequest, _: CurrentUserDep) -> ScaleResponse:
             details={"max_grams": CALC_GRAMS_MAX},
         )
 
-    scaled = scale(verify(items), payload.factor)
-    return ScaleResponse(dish=calc_service.to_dish_out(scaled))
+    # Приправа масштабируется вместе с порцией, но мимо ядра (ADR-0054): её
+    # масса умножается на коэффициент, а в показатели блюда она не входит.
+    uncounted = await composition_service.uncounted_products(
+        session, product_ids=[item.product_id for item in payload.items]
+    )
+    counted, skipped = calc_service.split_items(items, uncounted)
+
+    scaled = scale(verify(counted), payload.factor)
+    return ScaleResponse(
+        dish=calc_service.to_dish_out(scaled),
+        uncounted_items=[
+            UncountedItemOut(
+                product_id=entry.product_id,
+                name_ru=entry.name_ru,
+                grams=entry.grams * payload.factor,
+            )
+            for entry in skipped
+        ],
+    )

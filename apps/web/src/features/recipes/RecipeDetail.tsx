@@ -382,6 +382,16 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                       {t("detail.withdrawn")}
                     </span>
                   )}
+                  {/* По списку из сохранённого расчёта, а не по живой отметке
+                      продукта: пометка говорит о числах рядом, а они
+                      посчитаны так, как там записано (ADR-0054). */}
+                  {computed?.uncounted_product_ids?.includes(
+                    ingredient.product_id,
+                  ) && (
+                    <span className="ml-2 text-sm text-muted-foreground">
+                      {t("detail.uncounted")}
+                    </span>
+                  )}
                 </span>
                 <span className="text-muted-foreground tabular-nums">
                   {t("detail.grams", {

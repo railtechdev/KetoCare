@@ -69,4 +69,22 @@ describe("MacroFacts", () => {
     expect(group).toHaveAttribute("aria-busy", "true");
     expect(group).toHaveTextContent("100");
   });
+
+  it("у приправы говорит словами, что она вне расчёта, и не рисует нулей", () => {
+    // ADR-0054: перец в составе есть, но его 251 ккал на 100 г не считают.
+    // «0 ккал» в строке было бы неправдой о продукте, а не о расчёте.
+    render(
+      <MacroFacts
+        label="Вклад продукта «Перец чёрный» в блюдо"
+        uncounted="не учитывается в расчёте"
+      />,
+    );
+
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    const note = screen.getByText("не учитывается в расчёте");
+    expect(note.closest("p")).toHaveTextContent(
+      "Вклад продукта «Перец чёрный» в блюдо: не учитывается в расчёте",
+    );
+    expect(note.closest("p")).not.toHaveTextContent("ккал");
+  });
 });

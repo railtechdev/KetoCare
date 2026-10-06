@@ -197,14 +197,26 @@ export function ProductsPanel({
       {
         accessorKey: "is_active",
         header: t("products.columns.status"),
-        cell: ({ row }) =>
-          row.original.is_active ? (
-            <span className="text-success">{t("products.status.active")}</span>
-          ) : (
-            <span className="text-muted-foreground italic">
-              {t("products.status.inactive")}
-            </span>
-          ),
+        cell: ({ row }) => (
+          <span className="flex flex-col">
+            {row.original.is_active ? (
+              <span className="text-success">
+                {t("products.status.active")}
+              </span>
+            ) : (
+              <span className="text-muted-foreground italic">
+                {t("products.status.inactive")}
+              </span>
+            )}
+            {/* Приправа (ADR-0054) — рядом со статусом: диетолог ищет
+                глазами, что из справочника не идёт в расчёт. */}
+            {!row.original.counts_in_calculation && (
+              <span className="text-sm text-muted-foreground">
+                {t("products.status.uncounted")}
+              </span>
+            )}
+          </span>
+        ),
       },
       {
         id: "actions",

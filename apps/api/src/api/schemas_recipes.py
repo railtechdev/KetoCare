@@ -60,6 +60,12 @@ class RecipeComputed(BaseModel):
     carbs: float
     fiber: float
     ratio: float | None
+    #: Продукты состава, не вошедшие в эти числа, — приправы на момент расчёта
+    #: (ADR-0054). Пусто у рецептов, посчитанных до отметки: тогда в расчёт
+    #: входило всё. Пометку «не в расчёте» карточка ставит по этому списку, а
+    #: не по живой отметке продукта: числа рядом посчитаны так, как здесь
+    #: записано, и пересчитываются при следующей записи рецепта.
+    uncounted_product_ids: list[uuid.UUID] = Field(default_factory=list)
 
     def per_serving(self, servings: int) -> RecipeComputed:
         """Доля одной порции.
@@ -79,6 +85,7 @@ class RecipeComputed(BaseModel):
             carbs=self.carbs / servings,
             fiber=self.fiber / servings,
             ratio=self.ratio,
+            uncounted_product_ids=self.uncounted_product_ids,
         )
 
 

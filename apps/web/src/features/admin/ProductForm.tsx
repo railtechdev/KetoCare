@@ -100,6 +100,7 @@ export function ProductForm({
   });
 
   const activeId = `${ids}-active`;
+  const seasoningId = `${ids}-seasoning`;
 
   // Проверка значений по мере ввода (ответ клиники на вопрос 1): предупреждение,
   // а не запрет — сохранить карточку можно и с ним, если источник так и пишет.
@@ -218,6 +219,29 @@ export function ProductForm({
               {...register(nutrient, { valueAsNumber: true })}
             />
           ))}
+          {/* Рядом с пищевой ценностью, а не в происхождении: отметка решает,
+              пойдут ли эти числа в расчёт ребёнку (ADR-0054). */}
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor={seasoningId}
+              className="flex min-h-touch items-center gap-field text-sm font-medium"
+            >
+              <input
+                id={seasoningId}
+                type="checkbox"
+                className="size-5 accent-primary"
+                aria-describedby={`${seasoningId}-hint`}
+                {...register("seasoning")}
+              />
+              {t("products.form.seasoning")}
+            </label>
+            <p
+              id={`${seasoningId}-hint`}
+              className="m-0 text-sm text-muted-foreground"
+            >
+              {t("products.form.seasoningHint")}
+            </p>
+          </div>
           {findings.length > 0 && (
             <WarningBanner
               level="warning"
