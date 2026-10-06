@@ -43,7 +43,10 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         await after_commit.run_deferred(session)
 
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# `scope="function"`: коммит — до отправки ответа. По умолчанию FastAPI закрывает
+# зависимость с `yield` уже после ответа, и клиент, получивший 201, успевал
+# перечитать данные без своей записи (test_commit_before_response.py).
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 
 
 @dataclass(frozen=True, slots=True)
