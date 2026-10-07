@@ -1,11 +1,14 @@
 import {
   AsyncSection,
+  Button,
   Section,
   StatusNote,
   TrendChart,
   WarningBanner,
   formatDayMonth,
 } from "@ketocare/ui";
+import { Plus } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
@@ -16,6 +19,7 @@ import {
   useTrend,
 } from "../charts/useTrend";
 import type { Session } from "../session/useSession";
+import { AddEntry } from "./AddEntry";
 import { DiaryEntries } from "./DiaryEntries";
 import { useDiaryEntries } from "./useDiary";
 
@@ -28,11 +32,13 @@ const KINDS: readonly TrendKind[] = ["ketones", "weight", "seizures"];
  * смены назначения: без них скачок показателя читается как ухудшение состояния,
  * хотя это следствие изменённой терапии. Под ними — записи, которые семья
  * может исправить: прежде вкладка показывала только линии, и ошибочный замер,
- * видный на графике, было нечем убрать.
+ * видный на графике, было нечем убрать. Новую запись добавляет первичное
+ * действие экрана (дополнение к ADR-0044 от 07.10.2026).
  */
 export function DiaryScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
   const markers = usePrescriptionMarkers(session.patientId);
+  const [adding, setAdding] = useState(false);
   const entries = useDiaryEntries(session.patientId);
   // Оба запроса живут здесь, а не в блоках: без сети они встают на паузу
   // одновременно, и блок сказал бы «нет связи» дважды подряд — одна и та же
@@ -56,6 +62,17 @@ export function DiaryScreen({ session }: { session: Session }) {
       <p className="text-muted-foreground">
         {t("charts.period", { days: TREND_DAYS })}
       </p>
+      {/* Первичное действие экрана — над графиками: записывают чаще, чем
+          рассматривают линии, и кнопка внизу, под тридцатью днями графиков,
+          оставалась бы за сгибом. */}
+      <Button
+        type="button"
+        className="min-h-touch w-full"
+        onClick={() => setAdding(true)}
+      >
+        <Plus aria-hidden="true" className="size-5" />
+        {t("diary.add.action")}
+      </Button>
 
       {markers.isError && (
         // Молча остаться без черт нельзя — см. `usePrescriptionMarkers`.
@@ -80,7 +97,11 @@ export function DiaryScreen({ session }: { session: Session }) {
         />
       ))}
 
-      <DiaryEntries session={session} />
+      <DiaryEntries session={session} onAdd={() => setAdding(true)} />
+
+      {adding && (
+        <AddEntry session={session} onClose={() => setAdding(false)} />
+      )}
     </main>
   );
 }

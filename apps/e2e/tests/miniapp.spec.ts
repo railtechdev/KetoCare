@@ -137,6 +137,53 @@ test("семья из Telegram собирает вчерашний день и �
   await expect(page.getByRole("checkbox")).toHaveCount(0);
 });
 
+test("семья добавляет замер кетонов прямо в дневнике", async ({ page }) => {
+  // До 07.10.2026 записи заводил только бот, а пустой дневник отправлял туда
+  // же (дополнение к ADR-0044). Здесь проходит настоящая запись: форма кита,
+  // ключ попытки, сессия Mini App и лента, перечитанная с сервера.
+  const parentPage = await page.context().newPage();
+  await loginAsParent(parentPage);
+  const patient = await patientId(parentPage.request);
+  await parentPage.close();
+
+  const doctorPage = await page.context().newPage();
+  await loginAsDoctor(doctorPage);
+  await ensureTelegramLink(doctorPage.request, patient);
+  await doctorPage.close();
+  await flushRateLimits();
+
+  await page.goto(launchUrl(signedInitData()));
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "Дневник" }).click();
+
+  const diary = page.locator('[data-tab="diary"]');
+  // Прошлые прогоны оставляют свои замеры в общей базе: сверяется прирост, а
+  // не наличие.
+  const entry = diary.getByText("Кетоны: 1,9 ммоль/л");
+  // Лента загружена: либо пустое состояние, либо заголовок первого дня.
+  await expect(
+    diary
+      .getByText("За две недели записей нет")
+      .or(diary.getByRole("heading", { level: 3 }).first()),
+  ).toBeVisible();
+  const before = await entry.count();
+
+  await diary.getByRole("button", { name: "Добавить запись" }).first().click();
+  await page.getByRole("button", { name: "Кетоны" }).click();
+  await page.getByLabel("Кетоны, ммоль/л").fill("1.9");
+  await page.getByRole("button", { name: "Сохранить" }).click();
+
+  await expect(page.getByText("Запись добавлена")).toBeVisible();
+  await expect(entry).toHaveCount(before + 1);
+
+  // Запись живёт на сервере, а не в памяти вкладки.
+  await page.reload();
+  await page.getByRole("button", { name: "Дневник" }).click();
+  await expect(
+    page.locator('[data-tab="diary"]').getByText("Кетоны: 1,9 ммоль/л"),
+  ).toHaveCount(before + 1);
+});
+
 test("без подписи приложение объясняет, как привязать чат, а не отказывает", async ({
   page,
 }) => {

@@ -128,11 +128,15 @@ export function AssistantScreen({ session }: { session: Session }) {
                       note: (
                         <>
                           {t("assistant.disclaimer")}
-                          {message.sources.length > 0 && (
+                          {/* Заголовки статей, а не имена файлов:
+                              «how-to-plan-the-day» читается как поломка. */}
+                          {message.source_articles.length > 0 && (
                             <>
                               {" "}
                               {t("assistant.sources", {
-                                list: message.sources.join(", "),
+                                list: message.source_articles
+                                  .map((article) => article.title)
+                                  .join(", "),
                               })}
                             </>
                           )}

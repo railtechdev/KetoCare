@@ -289,6 +289,69 @@ async function patchEntry(
   if (error) throw error;
 }
 
+/**
+ * Виды, которые Mini App записывает сам.
+ *
+ * Еды здесь нет: свободным текстом её Mini App не записывает — выдуманное
+ * блюдо вошло бы в итоги дня наравне с настоящим, — а съеденное отмечают в
+ * плане дня (дополнение к ADR-0044 от 07.10.2026).
+ */
+export type CreatableKind = Exclude<DiaryEntryKind, "meals">;
+export type CreatableEntryBody = Exclude<DiaryEntryBody, { kind: "meals" }>;
+
+/**
+ * Новая запись с ключом попытки (`Idempotency-Key`, ADR-0035).
+ *
+ * Ответ мог потеряться по дороге — запись уже лежит на сервере, а человек
+ * видит отказ и нажимает «Сохранить» ещё раз. С тем же ключом и тем же телом
+ * сервер отдаёт прежний ответ, а не заводит второй приступ: два приступа
+ * вместо одного — это неверная частота, по которой врач судит о терапии.
+ */
+async function createEntry(
+  patientId: string,
+  input: CreatableEntryBody,
+  idempotencyKey: string,
+): Promise<void> {
+  const params = {
+    path: { patient_id: patientId },
+    header: { "Idempotency-Key": idempotencyKey },
+  };
+  let error: unknown;
+  switch (input.kind) {
+    case "seizures":
+      ({ error } = await api.POST(
+        "/api/v1/patients/{patient_id}/logs/seizures",
+        { params, body: input.body },
+      ));
+      break;
+    case "ketones":
+      ({ error } = await api.POST(
+        "/api/v1/patients/{patient_id}/logs/ketones",
+        { params, body: input.body },
+      ));
+      break;
+    case "weight":
+      ({ error } = await api.POST("/api/v1/patients/{patient_id}/logs/weight", {
+        params,
+        body: input.body,
+      }));
+      break;
+    case "medications":
+      ({ error } = await api.POST(
+        "/api/v1/patients/{patient_id}/logs/medications",
+        { params, body: input.body },
+      ));
+      break;
+    case "side-effects":
+      ({ error } = await api.POST(
+        "/api/v1/patients/{patient_id}/logs/side-effects",
+        { params, body: input.body },
+      ));
+      break;
+  }
+  if (error) throw error;
+}
+
 /** Мягкое удаление: запись остаётся в базе с `deleted_at` (правило 4). */
 async function deleteEntry(
   patientId: string,
@@ -339,7 +402,7 @@ async function deleteEntry(
 }
 
 /**
- * Правка и удаление записи.
+ * Новая запись, правка и удаление.
  *
  * Сбрасываются и записи, и графики, и сводка: исправленный замер обязан
  * исчезнуть из всех трёх мест сразу, иначе на главной стоял бы «последний
@@ -357,6 +420,12 @@ export function useEntryMutations(patientId: string) {
     );
   };
 
+  const create = useMutation({
+    mutationFn: (input: { body: CreatableEntryBody; idempotencyKey: string }) =>
+      createEntry(patientId, input.body, input.idempotencyKey),
+    onSuccess: invalidate,
+  });
+
   const update = useMutation({
     mutationFn: (input: { logId: string; body: DiaryEntryBody }) =>
       patchEntry(patientId, input.logId, input.body),
@@ -369,5 +438,5 @@ export function useEntryMutations(patientId: string) {
     onSuccess: invalidate,
   });
 
-  return { update, remove };
+  return { create, update, remove };
 }

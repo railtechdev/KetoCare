@@ -29,9 +29,8 @@ import { MenuScreen } from "./features/menu/MenuScreen";
 import { ChildSwitcher } from "./features/session/ChildSwitcher";
 import { SessionGate } from "./features/session/SessionGate";
 import type { Session } from "./features/session/useSession";
+import { OpenTabContext, type TabId } from "./lib/tabs";
 import { TabVisibleContext } from "./lib/useTelegram";
-
-type TabId = "home" | "menu" | "calculator" | "recipes" | "diary" | "assistant";
 
 /**
  * Mini App: кабинет родителя внутри Telegram (раздел 9 ТЗ).
@@ -165,29 +164,31 @@ export function Screens({
       {/* Над экранами, а не на одной вкладке: какой ребёнок открыт, важно на
           каждой — запись в дневник уходит именно ему (ADR-0048). */}
       <ChildSwitcher session={session} onSwitch={onSwitchChild} />
-      <div className="flex-1">
-        {/* Пока чанк вкладки едет — скелетон, а не пустота: в Telegram
+      <OpenTabContext value={select}>
+        <div className="flex-1">
+          {/* Пока чанк вкладки едет — скелетон, а не пустота: в Telegram
             приложение открывается поверх чата, и мигание пустым экраном
             читается как «не загрузилось». */}
-        {tabs
-          .filter(({ id }) => visited.has(id))
-          .map(({ id }) => {
-            const Screen = SCREENS[id];
-            return (
-              // `hidden` убирает скрытую вкладку и из дерева доступности: её
-              // заголовок и поля не мешают программе чтения с экрана.
-              <div key={id} hidden={id !== tab} data-tab={id}>
-                <TabVisibleContext value={id === tab}>
-                  {/* Своя граница ожидания у каждой вкладки: чанк новой
+          {tabs
+            .filter(({ id }) => visited.has(id))
+            .map(({ id }) => {
+              const Screen = SCREENS[id];
+              return (
+                // `hidden` убирает скрытую вкладку и из дерева доступности: её
+                // заголовок и поля не мешают программе чтения с экрана.
+                <div key={id} hidden={id !== tab} data-tab={id}>
+                  <TabVisibleContext value={id === tab}>
+                    {/* Своя граница ожидания у каждой вкладки: чанк новой
                       вкладки не должен прятать уже открытые за скелетоном. */}
-                  <Suspense fallback={<TabSkeleton />}>
-                    <Screen session={session} />
-                  </Suspense>
-                </TabVisibleContext>
-              </div>
-            );
-          })}
-      </div>
+                    <Suspense fallback={<TabSkeleton />}>
+                      <Screen session={session} />
+                    </Suspense>
+                  </TabVisibleContext>
+                </div>
+              );
+            })}
+        </div>
+      </OpenTabContext>
       <TabBar items={tabs} active={tab} onSelect={select} />
     </>
   );

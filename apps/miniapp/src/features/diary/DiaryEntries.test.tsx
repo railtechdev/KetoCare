@@ -18,7 +18,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   };
 });
 
-function renderEntries() {
+function renderEntries(onAdd: () => void = () => undefined) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -30,7 +30,9 @@ function renderEntries() {
       </QueryClientProvider>
     );
   }
-  return render(<DiaryEntries session={SESSION} />, { wrapper: Wrapper });
+  return render(<DiaryEntries session={SESSION} onAdd={onAdd} />, {
+    wrapper: Wrapper,
+  });
 }
 
 beforeEach(() => {
@@ -286,13 +288,19 @@ describe("записи дневника в Mini App", () => {
     ).toBeInTheDocument();
   });
 
-  it("без записей объясняет, откуда они берутся", async () => {
+  it("без записей ведёт к добавлению, а не в бот", async () => {
+    // Прежде пустой дневник отправлял в бот — тупик для того, кто открыл
+    // приложение, а не чат (дополнение к ADR-0044 от 07.10.2026).
     (api.GET as Mock).mockImplementation(fakeGet({}));
-    renderEntries();
+    const onAdd = vi.fn();
+    const user = userEvent.setup();
+    renderEntries(onAdd);
 
     expect(
       await screen.findByText("За две недели записей нет"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/кнопки в боте/)).toBeInTheDocument();
+    expect(screen.queryByText(/в боте/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Добавить запись" }));
+    expect(onAdd).toHaveBeenCalledTimes(1);
   });
 });
