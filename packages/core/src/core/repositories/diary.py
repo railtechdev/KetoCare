@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -81,6 +82,39 @@ async def list_for_patient[M: DiaryLog](
     items: list[M] = list(await session.scalars(stmt))
     total = await session.scalar(select(func.count()).select_from(model).where(*conditions))
     return items, int(total or 0)
+
+
+async def has_entry_between(
+    session: AsyncSession,
+    models: Sequence[type[DiaryLog]],
+    *,
+    patient_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> bool:
+    """Есть ли хоть одна живая запись любой из `models` в полуинтервале [start, end).
+
+    Полуинтервал, а не `<=`, как у `list_for_patient`: границы здесь — две
+    соседние полуночи, и запись ровно в полночь принадлежит одним суткам, а не
+    обоим. Один запрос на модель с `exists`, без подсчёта: вопрос — «есть ли».
+    """
+
+    for model in models:
+        found = await session.scalar(
+            select(
+                select(model.id)
+                .where(
+                    model.patient_id == patient_id,
+                    model.deleted_at.is_(None),
+                    model.occurred_at >= start,
+                    model.occurred_at < end,
+                )
+                .exists()
+            )
+        )
+        if found:
+            return True
+    return False
 
 
 @dataclass(frozen=True, slots=True)

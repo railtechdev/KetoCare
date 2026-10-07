@@ -336,6 +336,32 @@ async def set_eaten(session: AsyncSession, *, item: MenuItem, eaten: bool) -> Me
     return item
 
 
+async def has_eaten_on(session: AsyncSession, *, patient_id: uuid.UUID, day: date) -> bool:
+    """Отмечено ли «съедено» хоть у одной позиции плана на дату `day`.
+
+    Отметка — тоже запись о дне: семья, отметившая завтрак и обед в плане,
+    дневник за сегодня вела. Дата — дата плана (`menus.date`, местная), а не
+    момент отметки: «съедено» задним числом за вчера сегодняшний день не делает
+    заполненным.
+    """
+
+    found = await session.scalar(
+        select(
+            select(MenuItem.id)
+            .join(Menu, Menu.id == MenuItem.menu_id)
+            .where(
+                Menu.patient_id == patient_id,
+                Menu.date == day,
+                Menu.deleted_at.is_(None),
+                MenuItem.deleted_at.is_(None),
+                MenuItem.eaten.is_(True),
+            )
+            .exists()
+        )
+    )
+    return bool(found)
+
+
 async def get_recipes_by_ids(
     session: AsyncSession, *, recipe_ids: Sequence[uuid.UUID]
 ) -> dict[uuid.UUID, Recipe]:

@@ -303,6 +303,7 @@
     "title": "Eslatmalar",
     "intro": "Agar kun uchun hali yozuv bo‘lmasa, bot shu vaqtda eslatadi. Bo‘sh vaqt — bu eslatma o‘chirilgan.",
     "enabled": "Eslatmalarni yuborish",
+    "enabledHint": "Bu tugma botning barcha eslatmalarini, shu jumladan shifokorga nazorat tashrifi haqidagisini ham to‘xtatadi.",
     "submit": "Saqlash",
     "saving": "Saqlanmoqda…",
     "saved": "Eslatmalar saqlandi",
@@ -320,7 +321,7 @@
       "ketones": "Odatda ertalab, nonushtadan oldin.",
       "medications": "Shifokor belgilagan sxema bo‘yicha.",
       "weight": "Bir necha kunda bir marta yetarli — eslatma faqat kun uchun yozuv bo‘lmasa keladi.",
-      "no_records": "Kechqurun bitta yumshoq eslatma. Faqat kun davomida hech narsa yozilmagan bo‘lsa keladi."
+      "no_records": "Kechqurun bitta yumshoq eslatma. Faqat kun davomida kundalikda birorta ham yozuv — o‘lchov, xuruj, o‘zini his qilish yoki ovqat — bo‘lmasa va kun rejasida hech narsa yeyilgan deb belgilanmagan bo‘lsa keladi."
     },
     "statusOn": "Eslatmalar yoqilgan",
     "statusOff": "Eslatmalar o‘chirilgan",

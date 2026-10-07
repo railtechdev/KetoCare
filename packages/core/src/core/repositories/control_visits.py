@@ -12,11 +12,11 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..control_schedule import PlannedPoint
-from ..models import ControlVisit, Patient, TelegramAccount
+from ..models import ControlVisit, Patient, ReminderSettings, TelegramAccount
 from . import therapy as therapy_repo
 
 
@@ -159,12 +159,20 @@ async def due_for_family_notice(
 
     Ребёнок, завершивший терапию, напоминаний не получает (вопрос 18): визит,
     оставшийся в его графике, больше не план.
+
+    Выключатель «Присылать напоминания» действует и здесь. Прежде визит
+    напоминал о себе мимо него, и семья, выключившая напоминания, всё равно
+    получала сообщение от бота — при том что экран обещал тишину. Строки
+    настроек может не быть вовсе (семья их не открывала): тогда действует
+    умолчание — включено, как у `reminders.list_active`.
     """
 
     rows = await session.execute(
         select(ControlVisit, TelegramAccount)
         .join(TelegramAccount, TelegramAccount.patient_id == ControlVisit.patient_id)
+        .outerjoin(ReminderSettings, ReminderSettings.patient_id == ControlVisit.patient_id)
         .where(
+            func.coalesce(ReminderSettings.enabled, True).is_(True),
             ControlVisit.planned_on == planned_on,
             ControlVisit.deleted_at.is_(None),
             ControlVisit.completed_on.is_(None),

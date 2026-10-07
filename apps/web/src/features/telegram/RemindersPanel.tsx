@@ -91,17 +91,28 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
               });
             }}
           >
-            <label className="flex min-h-touch items-center gap-field">
-              <input
-                type="checkbox"
-                className="size-5 accent-primary"
-                checked={form.enabled}
-                onChange={(event) =>
-                  setForm({ ...form, enabled: event.target.checked })
-                }
-              />
-              <span>{t("reminders.enabled")}</span>
-            </label>
+            <div className="flex flex-col gap-1">
+              <label className="flex min-h-touch items-center gap-field">
+                <input
+                  type="checkbox"
+                  className="size-5 accent-primary"
+                  checked={form.enabled}
+                  aria-describedby={`${ids}-enabled-hint`}
+                  onChange={(event) =>
+                    setForm({ ...form, enabled: event.target.checked })
+                  }
+                />
+                <span>{t("reminders.enabled")}</span>
+              </label>
+              {/* Визит к врачу своего поля не имеет, но выключатель действует и
+                  на него: без подписи семья не узнала бы, что замолчит и он. */}
+              <p
+                id={`${ids}-enabled-hint`}
+                className="m-0 text-sm text-muted-foreground"
+              >
+                {t("reminders.enabledHint")}
+              </p>
+            </div>
 
             <div className="grid gap-section @sm:grid-cols-2">
               {KINDS.map((kind) => (

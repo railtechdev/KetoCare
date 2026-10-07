@@ -35,11 +35,15 @@ from core.textguard import normalize as _normalize
 
 from .lexicons import (
     ABOUT_THE_CHILD,
+    ASK_MODALS,
     CHANGE_VERBS,
     DIAGNOSES,
     DOSE_FORMS,
     DOSE_UNITS,
+    GIVE_VERBS,
     INTERPRETATION,
+    MEDICINE_FORMS,
+    MEDICINES,
     PRESCRIPTIVE,
     SCHEDULE,
     SOFT_UNITS,
@@ -73,6 +77,18 @@ PASSED = Verdict(blocked=False)
 _NUMBER_UNIT = re.compile(
     r"\b\d+[\d.,]*\s*(?:" + "|".join(DOSE_UNITS) + r")\b",
     re.IGNORECASE,
+)
+
+
+#: «Можно ли дать», «стоит ли ребёнку давать», «нужно ли ему на ночь принять».
+#: Между «ли» и глаголом — до трёх слов: кому и когда вставляются именно туда.
+#: Текст к этому моменту нормализован — нижний регистр, без знаков.
+_ASKS_TO_GIVE = re.compile(
+    r"\b(?:"
+    + "|".join(ASK_MODALS)
+    + r")\s+ли\s+(?:\S+\s+){0,3}?(?:"
+    + "|".join(GIVE_VERBS)
+    + r")\b"
 )
 
 
@@ -222,11 +238,23 @@ def _dosing(text: str) -> Verdict:
     if match is not None:
         return Verdict(True, Kind.DOSING, "число + единица дозы", match.group(0))
 
+    asked = _ASKS_TO_GIVE.search(text)
+    if asked is not None:
+        medicine = _any(text, MEDICINES)
+        if medicine is not None:
+            return Verdict(
+                True, Kind.DOSING, "вопрос-разрешение + лекарство", f"{asked.group(0)} + {medicine}"
+            )
+
     form = _any(text, DOSE_FORMS + SOFT_UNITS)
     if form is None:
         return PASSED
 
-    instruction = _any(text, PRESCRIPTIVE) or _any(text, SCHEDULE)
+    instruction = (
+        _any(text, PRESCRIPTIVE)
+        or _any(text, SCHEDULE)
+        or (asked.group(0) if asked is not None else None)
+    )
     if instruction is not None:
         return Verdict(True, Kind.DOSING, "форма выпуска + указание", f"{form} + {instruction}")
     return PASSED
@@ -239,7 +267,8 @@ def _therapy_change(text: str) -> Verdict:
     if verb is None:
         return PASSED
 
-    obj = _any(text, THERAPY_OBJECTS)
+    # Лекарство называют и формой выпуска: «можно ли отменить сироп».
+    obj = _any(text, THERAPY_OBJECTS) or _any(text, MEDICINE_FORMS)
     if obj is None:
         return PASSED
     return Verdict(True, Kind.THERAPY_CHANGE, "изменение назначенного", f"{verb} + {obj}")
