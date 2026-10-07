@@ -2,6 +2,7 @@ import {
   AsyncSection,
   ChatComposer,
   ChatMessage,
+  chatReadersList,
   isRefusal,
   Section,
   useFrozenAttempt,
@@ -11,6 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { useCareTeam } from "../doctor/doctorQueries";
 import {
   useAskAssistant,
   useConversation,
@@ -48,6 +50,15 @@ export function AssistantPage({ patientId }: { patientId: string }) {
 
   const conversation = useConversation(patientId, conversationId);
   const ask = useAskAssistant(patientId);
+  // Те же люди, кого сервер пускает к переписке (ADR-0022). Пока имена не
+  // пришли или не пришли вовсе, строка говорит о ролях — молчать о том, что
+  // вопрос прочтут, нельзя ни в одном состоянии.
+  const careTeam = useCareTeam(patientId);
+  const readers = chatReadersList(
+    careTeam.data,
+    (role) => t(`audience.role.${role}`, { defaultValue: role }),
+    "ru",
+  );
 
   const messages = conversation.data ?? [];
   const limited = errorCodeOf(ask.error) === "rate_limited";
@@ -133,6 +144,11 @@ export function AssistantPage({ patientId }: { patientId: string }) {
           sendLabel={t("send")}
           sendingLabel={t("sending")}
           hint={t("hint")}
+          audience={
+            readers === null
+              ? t("audience.roles")
+              : t("audience.named", { list: readers })
+          }
           pending={ask.isPending}
           disabled={limited}
         />

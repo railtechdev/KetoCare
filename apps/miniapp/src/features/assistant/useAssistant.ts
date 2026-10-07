@@ -111,3 +111,27 @@ export function useAskAssistant(patientId: string) {
     },
   });
 }
+
+/**
+ * Кто ведёт ребёнка — они же читают переписку с помощником (ADR-0022).
+ *
+ * Ручку `GET /patients/{id}/doctors` семья читала и раньше («Кто ведёт» в
+ * кабинете, ADR-0011): имена специалистов ей не новость, и показ их под полем
+ * вопроса не расширяет того, что семья видит. Список нужен ради честности
+ * предупреждения: «видит ваш врач» без имени читается как «где-то кто-то».
+ */
+export function useCareTeam(patientId: string) {
+  return useQuery({
+    queryKey: ["patient", patientId, "doctors"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/doctors",
+        { params: { path: { patient_id: patientId } } },
+      );
+      if (error || !Array.isArray(data))
+        throw error ?? new Error("Malformed care team response");
+      return data;
+    },
+  });
+}

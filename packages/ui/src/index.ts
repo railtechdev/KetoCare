@@ -18,6 +18,8 @@ export {
 } from "./lib/dayVerdict";
 export type { DayTolerance, DayVerdict, ToleranceGap } from "./lib/dayVerdict";
 export { isRefusal } from "./lib/assistantAnswer";
+export { chatReadersList } from "./lib/chatAudience";
+export type { ChatReader } from "./lib/chatAudience";
 export type { AssistantMessageSignals } from "./lib/assistantAnswer";
 export {
   DURATIONS_BOTH,

@@ -356,10 +356,13 @@ describe("помощник в кабинете", () => {
 
     // Один запрос — за СПИСКОМ переписок: без него экран не знает, был ли
     // разговор раньше. За телом переписки не ходим: её идентификатора нет.
-    expect(api.GET).toHaveBeenCalledTimes(1);
-    expect((api.GET as Mock).mock.calls[0]?.[0]).toBe(
+    // Перечень ведущих специалистов (кто прочтёт вопрос) — другая ручка.
+    const conversationCalls = (api.GET as Mock).mock.calls
+      .map(([path]) => path as string)
+      .filter((path) => path.includes("ai-conversations"));
+    expect(conversationCalls).toEqual([
       "/api/v1/patients/{patient_id}/ai-conversations",
-    );
+    ]);
   });
 
   it("открывается на последней переписке, а не с чистого листа", async () => {
@@ -391,5 +394,40 @@ describe("помощник в кабинете", () => {
     renderPage();
 
     expect(await screen.findByText("куда записать кетоны")).toBeInTheDocument();
+  });
+});
+
+describe("кто прочтёт вопрос (ADR-0022)", () => {
+  function withCareTeam(team: unknown) {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.endsWith("/doctors")
+        ? Promise.resolve({ data: team })
+        : Promise.resolve({ data: { items: [], total: 0 } }),
+    );
+  }
+
+  it("называет специалистов, которые ведут ребёнка, по именам", async () => {
+    withCareTeam([
+      { id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" },
+      { id: "d2", role: "dietitian", full_name: "Петров Борис" },
+    ]);
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        /видят специалисты, которые ведут вашего ребёнка: Иванова Анна Сергеевна \(врач\) и Петров Борис \(диетолог\)/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("без имён говорит о ролях, а не молчит", async () => {
+    // Список пуст или не пришёл — предупреждение остаётся: семья не должна
+    // узнавать о читателе по тому, ответила ли ручка.
+    withCareTeam([]);
+    renderPage();
+
+    expect(
+      await screen.findByText(/видят специалисты.*— врач и диетолог/),
+    ).toBeInTheDocument();
   });
 });
