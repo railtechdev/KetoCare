@@ -890,6 +890,30 @@ def _meal_buttons(items: list[dict[str, Any]]) -> list[tuple[str, str]]:
     ]
 
 
+async def _show_changed_plan(
+    message: Message,
+    state: FSMContext,
+    *,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+    binding: Binding,
+) -> None:
+    pending = await _fetch_pending_meals(
+        message, state, api=api, store=store, settings=settings, binding=binding
+    )
+    if pending is None:
+        return
+    if not pending:
+        await state.clear()
+        await message.answer(
+            texts.MEAL_PLAN_CHANGED_EMPTY, reply_markup=await menu(store, message.chat.id, settings)
+        )
+        return
+    await state.update_data(meal_labels=dict(pending))
+    await message.answer(texts.MEAL_PLAN_CHANGED, reply_markup=keyboards.meal_items(pending))
+
+
 @router.callback_query(Meal.choice, F.data.startswith(keyboards.MEAL_ITEM_PREFIX))
 async def meal_mark(
     callback: CallbackQuery,
@@ -922,6 +946,14 @@ async def meal_mark(
         return
     except BotApiError as exc:
         logger.warning("meal_mark_failed", status=exc.status, code=exc.code)
+        if exc.status in (404, 409):
+            # Позиции больше нет: план в ту же минуту пересохранили без неё
+            # (409 `plan_changed`, Н10) или убрали раньше. Это не «сервис
+            # недоступен» — семье показывается план, какой он теперь.
+            await _show_changed_plan(
+                message, state, api=api, store=store, settings=settings, binding=binding
+            )
+            return
         await message.answer(texts.API_UNAVAILABLE)
         return
 

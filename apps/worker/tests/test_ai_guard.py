@@ -142,3 +142,25 @@ class TestLanguage:
         monkeypatch.setattr(guard, "_russian", boom)
 
         assert guard.check_answer("Кетоны записываются кнопкой").kind == Kind.INTERNAL
+
+    def test_foreign_list_item_on_its_own_line_is_blocked(self) -> None:
+        """Пункт списка с новой строки — то же предложение, что после точки (Н3)."""
+
+        answer = "Записывайте кетоны каждый день в разделе «Дневник»\n- Dori bering"
+
+        verdict = check_answer(answer)
+
+        assert verdict.kind == Kind.UNREADABLE
+        assert verdict.rule == "предложение не на русском"
+
+    def test_short_latin_name_alone_does_not_vote(self) -> None:
+        """Одинокое название пунктом списка короче порога — не предложение."""
+
+        assert not check_answer("Кетоны записываются в разделе «Дневник».\n- Fit.").blocked
+
+    def test_sentence_threshold_is_not_above_the_answer_threshold(self) -> None:
+        """В одном предложении латинское название весит больше, чем в ответе."""
+
+        from worker.ai.guard import SENTENCE_RUSSIAN_SHARE_MIN
+
+        assert SENTENCE_RUSSIAN_SHARE_MIN <= RUSSIAN_SHARE_MIN

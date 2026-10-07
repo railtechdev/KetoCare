@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 from typing import Any
 
 import httpx
@@ -152,6 +153,22 @@ async def _setup_menu_button(bot: Bot, settings: BotSettings) -> None:
     )
 
 
+#: Сколько живёт незаконченный сценарий в Redis (Н11, SECURITY_REVIEW). В
+#: данных сценария лежит то, что семья успела ввести: свободный текст еды,
+#: подробности приступа, черновик записи с ключом повтора. Без срока брошенный
+#: сценарий держал бы их вечно. Сутки — тот же срок, что у ключей повтора на
+#: сервере (`purge_idempotency_keys`): позже повтор с прежним ключом сервер уже
+#: не узнает, и держать черновик ради него незачем. Срок продлевается каждым
+#: шагом сценария — aiogram ставит его при каждой записи состояния и данных.
+FSM_TTL = timedelta(hours=24)
+
+
+def build_storage(redis: Redis) -> RedisStorage:
+    """Хранилище сценариев со сроком жизни и состояния, и данных."""
+
+    return RedisStorage(redis, state_ttl=FSM_TTL, data_ttl=FSM_TTL)
+
+
 async def main() -> None:
     settings = load_settings()
 
@@ -164,7 +181,7 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token)
 
     dp = build_dispatcher(
-        storage=RedisStorage(redis),
+        storage=build_storage(redis),
         api=BotApi(http, service_token=settings.bot_api_token),
         store=BindingStore(redis),
         settings=settings,

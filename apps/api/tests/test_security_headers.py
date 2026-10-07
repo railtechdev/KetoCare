@@ -10,8 +10,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from core.config import get_settings
 from core.models.enums import UserRole
 
 from .conftest import TEST_PASSWORD
@@ -108,3 +111,48 @@ class TestSurface:
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
+
+
+class TestCors:
+    """CORS с учётными данными открыт только кабинету (Н18).
+
+    Mini App ходит в API своим хостом и CORS не нуждается; разрешение его
+    источнику к хосту кабинета давало бы скрипту, внедрённому в Mini App, читать
+    данные кабинета того же браузера — `tma.` и `app.` один сайт для cookie `lax`.
+    """
+
+    @staticmethod
+    async def _preflight(client, origin: str):
+        return await client.options(
+            "/api/v1/users/me",
+            headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+        )
+
+    async def test_cabinet_origin_is_allowed_with_credentials(self, client):
+        origin = get_settings().web_origin
+
+        response = await self._preflight(client, origin)
+
+        assert response.headers.get("access-control-allow-origin") == origin
+        assert response.headers.get("access-control-allow-credentials") == "true"
+
+    async def test_miniapp_origin_is_not_allowed(self, client):
+        origin = get_settings().miniapp_origin
+        assert origin != get_settings().web_origin
+
+        preflight = await self._preflight(client, origin)
+        simple = await client.get("/health", headers={"Origin": origin})
+
+        assert "access-control-allow-origin" not in preflight.headers
+        assert "access-control-allow-origin" not in simple.headers
+
+    def test_miniapp_calls_the_api_on_its_own_host(self):
+        """Основание решения: клиент Mini App ходит относительным адресом. Станет
+        абсолютным на другой хост — CORS придётся вернуть, и этот тест скажет об
+        этом раньше, чем Mini App перестанет открываться."""
+
+        source = (
+            Path(__file__).resolve().parents[3] / "apps" / "miniapp" / "src" / "lib" / "api.ts"
+        ).read_text(encoding="utf-8")
+
+        assert 'baseUrl: ""' in source

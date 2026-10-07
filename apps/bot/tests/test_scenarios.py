@@ -772,6 +772,27 @@ class TestMeal:
         assert await state.get_state() is None
 
     @pytest.mark.asyncio
+    async def test_plan_changed_shows_the_plan_as_it_is_now(self, api, linked_store, state):
+        """409 `plan_changed` (Н10): специалист в ту же минуту пересохранил день
+        без этого блюда. Это не «сервис недоступен» — семье показывается план,
+        какой он теперь, без убранного блюда."""
+
+        api.menu = self.menu()
+        message = FakeMessage(text=texts.BTN_MEAL)
+        await scenarios.meal_start(message, state, api, linked_store, SETTINGS)
+
+        api.menu["items"] = [i for i in api.menu["items"] if i["id"] != "item-1"]
+        api.eaten_error = BotApiError("conflict", "План изменили", 409, {"reason": "plan_changed"})
+        callback = FakeCallback(data=f"{keyboards.MEAL_ITEM_PREFIX}item-1", message=message)
+        await scenarios.meal_mark(callback, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.MEAL_PLAN_CHANGED
+        buttons = [b.text for row in message.answers[-1][1].inline_keyboard for b in row]
+        assert "Приём 2: Суп со сливками" in buttons
+        assert all("Омлет" not in text for text in buttons)
+        assert await state.get_state() == scenarios.Meal.choice.state
+
+    @pytest.mark.asyncio
     async def test_done_ends_the_series_without_the_word_cancel(self, api, linked_store, state):
         api.menu = self.menu()
         message = FakeMessage(text=texts.BTN_MEAL)

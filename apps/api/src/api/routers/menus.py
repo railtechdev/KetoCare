@@ -148,6 +148,11 @@ async def upsert_menu(
     # стёрло бы её молча — а день теперь составляет и специалист, не видящий,
     # что семья успела съесть с утра (ADR-0047). Отказ — тот же, что у удаления
     # дня: сначала снимается отметка.
+    #
+    # Позиции читаются ПОСЛЕ `upsert`: он держит строку дня под блокировкой до
+    # коммита, а отметка «съедено» берёт ту же блокировку (`lock_menu`). Поэтому
+    # отметка, поставленная в ту же секунду, либо уже видна здесь (и даёт 409),
+    # либо ждёт этого сохранения и затем видит, что позиции больше нет (Н10).
     stored = await menus_repo.list_items(session, menu_id=menu.id)
     # Снимок до замены: `replace_items` правит сохранённые позиции на месте.
     plan_before = _plan_of(stored)
@@ -201,7 +206,11 @@ async def delete_menu(
     сохранении `deleted_at` сбрасывается.
     """
 
-    menu = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=menu_date)
+    # Под блокировкой строки дня: отметка «съедено», поставленная между проверкой
+    # ниже и удалением, иначе ушла бы вместе с днём мимо отказа (Н10).
+    menu = await menus_repo.get_by_date(
+        session, patient_id=patient_id, menu_date=menu_date, lock=True
+    )
     if menu is None:
         # Идемпотентно: «дня нет» — это ровно то состояние, которого добивались.
         return
@@ -271,5 +280,19 @@ async def mark_item_eaten(
             "Отметку «съедено» ставит семья: это её запись о том, что ребёнок ел.",
         )
     item = await _owned_item(session, item_id, patient_id)
+
+    # Отметка ждёт сохранения или удаления дня, идущего в эту секунду, и
+    # перечитывает позицию после него (Н10). Без этого семья отмечала позицию,
+    # которую сохранение специалиста уже решило убрать, и отметка уходила вместе
+    # с ней молча — мимо отказа 409, ради которого он и существует.
+    menu = await menus_repo.lock_menu(session, menu_id=item.menu_id)
+    await session.refresh(item)
+    if menu is None or menu.deleted_at is not None or item.deleted_at is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "План дня только что изменили, и этого блюда в нём больше нет. "
+            "Обновите план и отметьте съеденное заново.",
+            details={"reason": "plan_changed"},
+        )
     updated = await menus_repo.set_eaten(session, item=item, eaten=payload.eaten)
     return MenuItemRead.model_validate(updated)

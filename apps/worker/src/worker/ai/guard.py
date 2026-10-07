@@ -131,6 +131,30 @@ _NOT_PROSE = re.compile(
 )
 
 
+#: Граница предложения или пункта списка. Запятая — не граница: перечисление
+#: латинских названий через запятую не должно рваться на «предложения» из
+#: одного слова.
+_SENTENCE_BREAK = re.compile(r"[.!?;…\n]+")
+
+#: Предложение короче этого не голосует: «Ok.» или одинокое название в пункте
+#: списка. Шесть, а не двенадцать, как предлагал разбор: «Dori bering.» («дайте
+#: лекарство») — десять букв, и именно короткое указание опасно.
+SENTENCE_LETTERS_MIN = 6
+
+#: Предложение, в котором русских букв меньше половины, — чужое. Ниже порога
+#: ответа (0,6): в одном предложении латинское название весит больше, чем в
+#: ответе целиком, — «Откройте раздел Profile» даёт 0,67.
+SENTENCE_RUSSIAN_SHARE_MIN = 0.5
+
+#: Три латинских слова подряд — чужая фраза внутри русского предложения
+#: («…, kechqurun yarim tabletka bering»). Законная латиница русского ответа
+#: (названия, единицы) уже вынута `_NOT_PROSE` и сюда не доходит. Запятая
+#: между словами — тот же разделитель («yarim, tabletka, bering»): иначе
+#: вставку обходили бы пунктуацией. Две латинских подряд проходят — остаток,
+#: названный в ADR-0021.
+_LATIN_RUN = re.compile(r"[a-z][a-z'‘’ʻ-]*(?:[\s,]+[a-z][a-z'‘’ʻ-]*){2,}")
+
+
 def _russian(text: str) -> Verdict:
     prose = _NOT_PROSE.sub(" ", text.lower())
     letters = [char for char in prose if char.isalpha()]
@@ -142,11 +166,37 @@ def _russian(text: str) -> Verdict:
     if len(foreign) > NON_RUSSIAN_CYRILLIC_MAX:
         return Verdict(True, Kind.UNREADABLE, "кириллица не русская", "".join(foreign[:5]))
 
-    russian = sum(1 for char in letters if "а" <= char <= "я" or char == "ё")
-    share = russian / len(letters)
+    share = _russian_share(letters)
     if share < RUSSIAN_SHARE_MIN:
         return Verdict(True, Kind.UNREADABLE, "ответ не на русском", f"доля {share:.2f}")
+
+    # Доля по ответу целиком прячет одно чужое предложение среди русских, а
+    # опасна именно такая вставка: «Kechqurun yarim tabletka bering.» в
+    # русском абзаце проходила при доле 0,8 (Н3, SECURITY_REVIEW). Поэтому
+    # тот же вопрос задаётся каждому предложению отдельно.
+    for sentence in _SENTENCE_BREAK.split(prose):
+        sentence_letters = [char for char in sentence if char.isalpha()]
+        if len(sentence_letters) < SENTENCE_LETTERS_MIN:
+            continue
+        sentence_share = _russian_share(sentence_letters)
+        if sentence_share < SENTENCE_RUSSIAN_SHARE_MIN:
+            return Verdict(
+                True,
+                Kind.UNREADABLE,
+                "предложение не на русском",
+                f"доля {sentence_share:.2f}: {sentence.strip()[:60]}",
+            )
+
+    # Чужая вставка без точки — внутри русского предложения, после запятой.
+    run = _LATIN_RUN.search(prose)
+    if run is not None:
+        return Verdict(True, Kind.UNREADABLE, "вставка не на русском", run.group(0)[:60])
     return PASSED
+
+
+def _russian_share(letters: list[str]) -> float:
+    russian = sum(1 for char in letters if "а" <= char <= "я" or char == "ё")
+    return russian / len(letters)
 
 
 def _check(text: str) -> Verdict:

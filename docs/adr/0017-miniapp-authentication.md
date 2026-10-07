@@ -78,3 +78,17 @@ Telegram; кто чей родитель, Telegram не знает.
 - Смена токена бота (`BOT_TOKEN`) обесценивает все выданные `initData`: вход в
   Mini App перестаёт работать до перезапуска приложения у семьи. Это то же
   свойство, что и у самого бота.
+
+## Дополнение от 07.10.2026: Mini App не в CORS
+
+Раздел 11 ТЗ называет в CORS «домены web и miniapp». Mini App ходит в API своим
+же хостом: относительный адрес в `apps/miniapp/src/lib/api.ts` (`baseUrl: ""`),
+`location /api/` в `infra/nginx/ketocare-miniapp.conf`, прокси vite при
+разработке. Разрешение его источника с `allow_credentials` ничего ему не давало,
+но `tma.` и `app.` — один сайт для cookie `lax`, и скрипт, внедрённый в Mini
+App, читал бы данные кабинета того же браузера (`docs/SECURITY_REVIEW.md`, Н18).
+Решение: CORS открыт только кабинету (`api/main.py`). Если Mini App когда-нибудь
+пойдёт в API чужим хостом, источник возвращается в CORS — тест
+`test_security_headers.py::TestCors` держит основание (относительный адрес
+клиента) и скажет об этом раньше, чем Mini App перестанет открываться. Строка
+§11 — в `docs/TZ_RECONCILIATION.md`.

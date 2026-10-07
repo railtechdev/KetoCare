@@ -210,6 +210,8 @@ MEAL_MARKED = "Belgilandi ✓ {title}"
 MEAL_MARKED_MORE = "Belgilandi ✓ {title}\n\nBugungi rejada yana:"
 MEAL_MARKED_LAST = "Belgilandi ✓ {title}. Bu bugungi rejadagi oxirgisi edi."
 MEAL_UNKNOWN_DISH = "Taom"
+MEAL_PLAN_CHANGED = "Bugungi reja hozirgina o‘zgartirildi. Unda hozir quyidagilar bor:"
+MEAL_PLAN_CHANGED_EMPTY = "Bugungi reja hozirgina o‘zgartirildi — unda belgilanmagan taom yo‘q."
 BTN_DONE = "Tayyor"
 
 

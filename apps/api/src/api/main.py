@@ -68,10 +68,15 @@ def create_app() -> FastAPI:
     register_unhandled_error_middleware(app)
     register_rate_limiting(app)
 
-    # CORS только для доменов web и miniapp (раздел 11 ТЗ)
+    # CORS — только кабинету. Раздел 11 ТЗ называет ещё Mini App, но Mini App
+    # ходит в API своим же хостом (`tma.…/api`, относительный адрес в
+    # `apps/miniapp/src/lib/api.ts`, прокси vite при разработке), и разрешение
+    # ему ничего не давало, кроме риска: `tma.` и `app.` — один сайт, cookie
+    # `lax` уходят и туда, и скрипт, внедрённый в Mini App, читал бы данные
+    # кабинета того же браузера (Н18, SECURITY_REVIEW; TZ_RECONCILIATION, §11).
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.web_origin, settings.miniapp_origin],
+        allow_origins=[settings.web_origin],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

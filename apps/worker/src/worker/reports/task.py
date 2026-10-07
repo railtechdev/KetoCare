@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -77,5 +78,11 @@ async def render_report(ctx: dict[str, Any], job_id: str, report: dict[str, Any]
         if job is not None:
             await jobs_repo.mark_done(session, job=job, file_name=file_name, expires_at=expires_at)
             await session.commit()
+            return file_name
 
-    return file_name
+    # Строки задачи нет: пациента стёрли (`erase_patient`), пока отчёт
+    # собирался. Файл с ФИО и клиническими данными без строки не нашла бы
+    # ни ночная очистка (она ищет по строкам), ни стирание — снимаем сами
+    # (находка ревью к Н4).
+    await asyncio.to_thread(target.unlink, missing_ok=True)
+    return ""

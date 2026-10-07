@@ -42,14 +42,41 @@ class MenuItemSpec:
 
 
 async def get_by_date(
-    session: AsyncSession, *, patient_id: uuid.UUID, menu_date: date
+    session: AsyncSession, *, patient_id: uuid.UUID, menu_date: date, lock: bool = False
 ) -> Menu | None:
+    """День пациента. `lock` — взять строку дня под блокировку до конца транзакции.
+
+    Блокировка строки дня — то, что упорядочивает все изменения его состава и
+    отметок «съедено» между собой (Н10, SECURITY_REVIEW): сохранение дня берёт
+    её через `upsert`, удаление дня — здесь, отметка — `lock_menu`.
+    """
+
+    stmt = select(Menu).where(
+        Menu.patient_id == patient_id,
+        Menu.date == menu_date,
+        Menu.deleted_at.is_(None),
+    )
+    if lock:
+        stmt = stmt.with_for_update(key_share=True).execution_options(populate_existing=True)
+    menu: Menu | None = await session.scalar(stmt)
+    return menu
+
+
+async def lock_menu(session: AsyncSession, *, menu_id: uuid.UUID) -> Menu | None:
+    """Взять строку дня под блокировку (`FOR NO KEY UPDATE`) и перечитать её.
+
+    Отметка «съедено» меняет позицию, а не день, и прежде не пересекалась с
+    сохранением дня ни на одной блокировке: специалист сохранял день, семья в ту
+    же секунду отмечала позицию, и отметка уходила вместе с позицией, мимо
+    отказа 409, ради которого он и существует (Н10). `upsert` держит строку дня
+    той же блокировкой до коммита — здесь отметка ждёт его конца.
+    """
+
     menu: Menu | None = await session.scalar(
-        select(Menu).where(
-            Menu.patient_id == patient_id,
-            Menu.date == menu_date,
-            Menu.deleted_at.is_(None),
-        )
+        select(Menu)
+        .where(Menu.id == menu_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
     )
     return menu
 

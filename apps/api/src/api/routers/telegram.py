@@ -41,7 +41,13 @@ from ..client_address import client_address
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..deps.bot import verify_bot_service_token
 from ..errors import ApiError, ErrorCode
-from ..ratelimit import BOT_RATE_LIMIT, limiter
+from ..ratelimit import (
+    BOT_ACTIVATE_PER_USER_LIMIT,
+    BOT_RATE_LIMIT,
+    BOT_SESSION_PER_LINK_LIMIT,
+    hit_bot_bucket,
+    limiter,
+)
 from ..schemas import ReminderSettingsRead, ReminderSettingsWrite
 from ..schemas_access import AccessCodeTelegramActivate
 from ..schemas_telegram import (
@@ -201,6 +207,9 @@ async def activate_access_code_from_telegram(
     равно, чьим кодом пришёл родитель.
     """
 
+    # Своё ведро у каждого человека Telegram (Н13): общий потолок по адресу —
+    # один на весь бот, и прежде один человек выбирал его за всех.
+    hit_bot_bucket(BOT_ACTIVATE_PER_USER_LIMIT, "activate-telegram", str(payload.telegram_user_id))
     parent, patient, link, secret = await access_codes_service.activate_from_telegram(
         session,
         code=payload.code,
@@ -239,6 +248,7 @@ async def create_bot_session(
     к чату не превращается в тридцатидневную сессию родителя.
     """
 
+    hit_bot_bucket(BOT_SESSION_PER_LINK_LIMIT, "bot-session", str(payload.link_id))
     token = await telegram_service.issue_bot_session(
         session, link_id=payload.link_id, secret=payload.secret
     )

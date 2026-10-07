@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "../../lib/api";
+import { api, errorCodeOf } from "../../lib/api";
 import type { DayItem } from "./dayPlan";
 import { menuKey } from "./useMenu";
 
@@ -53,6 +53,17 @@ export function useSaveMenu(patientId: string, day: string) {
       void queryClient.invalidateQueries({
         queryKey: ["patient", patientId, "overview"],
       });
+    },
+    // 409 — день на сервере уже не тот, что на экране: кто-то в ту же минуту
+    // отметил съеденным блюдо, которого в новом составе нет (Н10). Экран
+    // перечитывает день, чтобы следующее действие строилось от настоящего
+    // состава, а не от устаревшего; объяснение отказа приходит от сервера.
+    onError: (error) => {
+      if (errorCodeOf(error) === "conflict") {
+        void queryClient.invalidateQueries({
+          queryKey: menuKey(patientId, day),
+        });
+      }
     },
   });
 }
