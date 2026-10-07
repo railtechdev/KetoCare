@@ -1,5 +1,6 @@
 import { formatGrams } from "../lib/format";
 import { cn } from "../lib/cn";
+import { useKitLabels } from "../lib/kitLabels";
 
 export interface MacroBarProps {
   fatG: number;
@@ -57,17 +58,18 @@ export function MacroBar({
   showGrams = true,
   className,
 }: MacroBarProps) {
+  const { macros } = useKitLabels();
   const segments: Segment[] = [
-    { key: "fat", label: "Жиры", grams: fatG, color: SEGMENT_COLORS.fat },
+    { key: "fat", label: macros.fat, grams: fatG, color: SEGMENT_COLORS.fat },
     {
       key: "protein",
-      label: "Белки",
+      label: macros.protein,
       grams: proteinG,
       color: SEGMENT_COLORS.protein,
     },
     {
       key: "carbs",
-      label: "Углеводы",
+      label: macros.carbs,
       grams: carbsG,
       color: SEGMENT_COLORS.carbs,
     },
@@ -81,7 +83,7 @@ export function MacroBar({
         className="flex h-3 overflow-hidden rounded-full bg-border"
         role="img"
         aria-label={segments
-          .map((s) => `${s.label} ${formatGrams(s.grams)} г`)
+          .map((s) => `${s.label} ${formatGrams(s.grams)} ${macros.gramsUnit}`)
           .join(", ")}
       >
         {total > 0 &&
@@ -109,7 +111,7 @@ export function MacroBar({
             <span>{segment.label}</span>
             {showGrams && (
               <span className="text-muted-foreground tabular-nums">
-                {formatGrams(segment.grams)} г
+                {formatGrams(segment.grams)} {macros.gramsUnit}
               </span>
             )}
           </li>
@@ -121,7 +123,9 @@ export function MacroBar({
       {netCarbs !== undefined && (
         <p className="mt-1 mb-0 text-sm text-muted-foreground">
           {netCarbs.label}{" "}
-          <span className="tabular-nums">{formatGrams(netCarbs.grams)} г</span>
+          <span className="tabular-nums">
+            {formatGrams(netCarbs.grams)} {macros.gramsUnit}
+          </span>
           {netCarbs.note !== undefined && ` — ${netCarbs.note}`}
         </p>
       )}

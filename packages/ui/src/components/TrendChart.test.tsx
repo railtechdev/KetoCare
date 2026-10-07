@@ -44,6 +44,38 @@ describe("TrendChart", () => {
     expect(dates).toEqual(["2026-03-01", "2026-03-02", "2026-03-03"]);
   });
 
+  it("две записи одной минуты — две строки и без повторяющихся ключей", () => {
+    // Ключом было время: React ругался на одинаковые ключи (семь раз на
+    // экране), а после правки одной из записей строк становилось не столько.
+    const errors: unknown[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args);
+    };
+    try {
+      render(
+        <TrendChart
+          points={[
+            { id: "a", at: new Date("2026-03-01T08:00:00Z"), value: 2.8 },
+            { id: "b", at: new Date("2026-03-01T08:00:00Z"), value: 3.1 },
+          ]}
+          unit="ммоль/л"
+          caption="Кетоны"
+          emptyState="Нет измерений"
+          formatDate={formatDate}
+        />,
+      );
+    } finally {
+      console.error = original;
+    }
+
+    const rows = screen
+      .getByRole("table", { name: "Кетоны" })
+      .querySelectorAll("tr");
+    expect(rows).toHaveLength(2);
+    expect(String(errors)).not.toMatch(/same key/);
+  });
+
   it("прячет таблицу обёрткой, а не классом на самой таблице", () => {
     // Таблица ширину 1 px игнорирует и растёт по содержимому: «невидимая»
     // таблица из тридцати строк давала Mini App горизонтальную прокрутку на

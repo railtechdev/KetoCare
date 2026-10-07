@@ -76,7 +76,7 @@ export function SetPasswordPanel({ resetToken }: { resetToken: string }) {
         <CardContent>
           <form
             noValidate
-            className="flex flex-col gap-block"
+            className="flex flex-col gap-section"
             onSubmit={handleSubmit((values) => setPassword.mutate(values))}
           >
             <Field

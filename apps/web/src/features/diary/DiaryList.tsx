@@ -5,11 +5,9 @@ import {
   EmptyState,
   Skeleton,
   Tiles,
-  formatMeasured,
-  formatWeight,
+  describeDiaryEntry,
 } from "@ketocare/ui";
 import { NotebookPen } from "lucide-react";
-import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -97,7 +95,7 @@ export function DiaryListSkeleton({ label }: { label: string }) {
     >
       {[0, 1, 2].map((row) => (
         <div key={row} className="rounded-xl bg-card p-4 shadow-kc">
-          <div className="flex items-baseline justify-between gap-block">
+          <div className="flex items-baseline justify-between gap-section">
             <Skeleton className="h-5 w-40 max-w-[60%]" />
             <Skeleton className="h-4 w-24" />
           </div>
@@ -107,37 +105,6 @@ export function DiaryListSkeleton({ label }: { label: string }) {
       ))}
     </Tiles>
   );
-}
-
-/**
- * Строка длительности приступа — из того источника, который заполнен.
- *
- * Измеренная и со слов — разные величины, и показываются они по-разному:
- * «Длительность: 90 с» против «Длительность: от 10 до 30 минут». Пересчитать
- * интервал в секунды нельзя даже ради единообразия показа — получилось бы
- * число, неотличимое от засечённого секундомером (ADR-0020).
- */
-function durationLine(
-  entry: DiaryLog & { kind: "seizures" },
-  optionNames: Map<string, string>,
-  t: TFunction<"diary">,
-): string | null {
-  if (entry.duration_sec !== null) {
-    return t("seizures.durationValue", {
-      value: formatMeasured(entry.duration_sec),
-    });
-  }
-  if (entry.duration_option_id !== null) {
-    return t("seizures.durationInterval", {
-      // Названия варианта может не оказаться, если справочник не загрузился.
-      // Тогда честнее сказать «указана словами», чем не сказать ничего: врач
-      // должен видеть, что ответ семьи есть.
-      value:
-        optionNames.get(entry.duration_option_id) ??
-        t("seizures.durationUnnamed"),
-    });
-  }
-  return null;
 }
 
 interface DiaryEntryProps {
@@ -163,79 +130,17 @@ function DiaryEntry({
 }: DiaryEntryProps) {
   const { t } = useTranslation("diary");
 
-  function describe(entry: DiaryLog): {
-    title: string;
-    lines: (string | null)[];
-  } {
-    switch (entry.kind) {
-      case "seizures":
-        return {
-          title:
-            seizureTypeNames.get(entry.seizure_type_id) ??
-            t("seizures.unknownType"),
-          lines: [
-            // Длительность приходит одним из двух способов и никогда обоими:
-            // измеренная — числом секунд, со слов семьи — вариантом шкалы
-            // (ADR-0020). Интервал не пересчитывается в секунды даже для
-            // показа: «10–30 минут», выведенные как «600 с», читались бы как
-            // измерение.
-            durationLine(entry, durationOptionNames, t),
-            t("seizures.countValue", { value: entry.count }),
-            entry.description,
-            entry.triggers === null
-              ? null
-              : t("seizures.triggersValue", { value: entry.triggers }),
-          ],
-        };
-      case "ketones":
-        return {
-          title: t("ketones.cardTitle", { value: formatMeasured(entry.value) }),
-          lines: [
-            t(
-              entry.method === "blood"
-                ? "ketones.methodBlood"
-                : "ketones.methodUrine",
-            ),
-          ],
-        };
-      case "weight":
-        return {
-          title: t("weight.cardTitle", {
-            value: formatWeight(entry.weight_kg),
-          }),
-          lines: [
-            entry.height_cm === null
-              ? null
-              : t("weight.heightValue", {
-                  value: formatMeasured(entry.height_cm),
-                }),
-          ],
-        };
-      case "medications":
-        return {
-          title:
-            medicationNames.get(entry.medication_id) ??
-            t("medications.unknownDrug"),
-          lines: [
-            t(entry.taken ? "medications.taken" : "medications.notTaken"),
-          ],
-        };
-      case "meals":
-        return {
-          title: t("meals.cardTitle"),
-          lines: [
-            entry.free_text,
-            entry.menu_item_id === null ? null : t("meals.fromMenu"),
-          ],
-        };
-      case "side-effects":
-        return { title: entry.symptom, lines: [entry.description] };
-    }
-  }
-
-  const { title, lines } = describe(log);
-  const details = lines.filter(
-    (line): line is string => line !== null && line !== "",
+  // Описание записи — из кита, общее с Mini App: какой источник
+  // длительности приступа показывать (ADR-0020), решается одним местом.
+  // Слова — свои, из словаря кабинета (`entry.*`).
+  const { title, lines: details } = describeDiaryEntry(
+    log,
+    {
+      seizureTypes: seizureTypeNames,
+      durationOptions: durationOptionNames,
+      medications: medicationNames,
+    },
+    (key, values) => t(key as "entry.meal", values),
   );
   const occurredAt = new Date(log.occurred_at);
 

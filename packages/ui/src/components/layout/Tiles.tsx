@@ -81,7 +81,7 @@ export function Tiles({
       // jsdom этого не моделирует, поэтому тестом не ловится.
       role={as === "ul" ? "list" : undefined}
       className={cn(
-        "grid gap-block",
+        "grid gap-section",
         MIN_WIDTH[columns][min],
         as === "ul" && "m-0 list-none p-0",
         className,

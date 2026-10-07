@@ -99,7 +99,7 @@ export function AcceptInvitePage() {
           );
         })}
         noValidate
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
       >
         <AccountFields register={register} errors={errors} idPrefix="invite" />
 

@@ -163,20 +163,29 @@ async def journal(
                 if user is not None:
                     names[user_id] = user.full_name
 
-    return [
-        AccessCodeRead(
-            code=_visible_code(code, viewer_id=viewer_id),
-            status=_status(code, now=now),
-            expires_at=code.expires_at,
-            created_at=code.created_at,
-            used_at=code.used_at,
-            revoked_at=code.revoked_at,
-            purpose=code.purpose,
-            issued_by_name=names.get(code.issued_by),
-            used_by_name=names.get(code.used_by) if code.used_by is not None else None,
+    rows: list[AccessCodeRead] = []
+    for code in codes:
+        visible = _visible_code(code, viewer_id=viewer_id)
+        status = _status(code, now=now)
+        # Ссылки — только у живого и видимого кода: погашенный, отозванный или
+        # чужой код своего чата ссылкой не открывается и не отдаётся.
+        live = visible if status == "pending" else None
+        rows.append(
+            AccessCodeRead(
+                code=visible,
+                status=status,
+                expires_at=code.expires_at,
+                created_at=code.created_at,
+                used_at=code.used_at,
+                revoked_at=code.revoked_at,
+                purpose=code.purpose,
+                issued_by_name=names.get(code.issued_by),
+                used_by_name=names.get(code.used_by) if code.used_by is not None else None,
+                deep_link=telegram_service.build_deep_link(live) if live else None,
+                join_url=_join_url(live) if live else None,
+            )
         )
-        for code in codes
-    ]
+    return rows
 
 
 async def revoke(

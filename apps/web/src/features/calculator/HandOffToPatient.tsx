@@ -71,7 +71,7 @@ export function HandOffToPatient({
       level={2}
     >
       <form
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         onSubmit={(event) => {
           event.preventDefault();
           // Та же причина, что выключает кнопку, — и для отправки в обход неё.

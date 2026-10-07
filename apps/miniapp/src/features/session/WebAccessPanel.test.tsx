@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import "../../lib/i18n";
-import type { Session } from "./useSession";
+import { type Session, SessionUpdateContext } from "./useSession";
 import { WebAccessPanel } from "./WebAccessPanel";
 
 const post = vi.hoisted(() => vi.fn());
@@ -126,5 +126,36 @@ describe("вход в кабинет из Mini App", () => {
       "Эта почта уже занята.",
     );
     expect(screen.getByLabelText("Почта")).toHaveValue("taken@example.com");
+  });
+
+  it("после включения сессия знает о кабинете — без перезапуска", async () => {
+    // Сессия — ответ входа. Пока она не обновлялась, приложение до
+    // перезапуска считало, что кабинета нет: ссылки на кабинет в плане дня не
+    // было, а этот блок после смены вкладки снова предлагал включить сделанное.
+    post.mockResolvedValue({ data: { email: "aigul@example.com" } });
+    const update = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <SessionUpdateContext value={update}>
+          <WebAccessPanel session={session} />
+        </SessionUpdateContext>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText("Почта"), "aigul@example.com");
+    await userEvent.type(
+      screen.getByLabelText(/Пароль/),
+      "очень-длинный-пароль",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Включить кабинет" }),
+    );
+
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledWith({ hasWebCredentials: true });
+    });
   });
 });

@@ -95,7 +95,7 @@ export function PrescriptionForm({
     <form
       noValidate
       onSubmit={handleSubmit(onSubmit)}
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
     >
       <FormErrorSummary
         title={t("prescription.errorSummary")}
@@ -106,7 +106,7 @@ export function PrescriptionForm({
       {/* Две колонки — исключение для парных числовых показателей назначения:
           врач сверяет их между собой на одном экране. На узком экране колонка
           одна (правило П6 канона). */}
-      <div className="grid gap-block sm:grid-cols-2">
+      <div className="grid gap-section sm:grid-cols-2">
         {/* Список, а не свободное число: врач мыслит «4 : 1», а поле
             показывало «4». Значения те же, что уже разрешены схемой (шаг 0,5
             от 1 до 5), новых состояний не появляется — меняется только способ

@@ -25,8 +25,54 @@ export function useFamily(patientId: string) {
   });
 }
 
+function codesKey(patientId: string) {
+  return ["patient", patientId, "access-codes"] as const;
+}
+
+/**
+ * Уже выданное и ещё живое приглашение близкому — из журнала кодов.
+ *
+ * Прежде каждое нажатие «Пригласить» выпускало новый код: у ребёнка копились
+ * действующие неделю коды, каждый — дверь к его данным, а родитель, открывший
+ * приложение снова, не видел уже отправленного. Теперь живое приглашение
+ * показывается, и новое выпускается, только когда живого нет.
+ */
+export function useActiveInvitation(patientId: string) {
+  return useQuery({
+    queryKey: codesKey(patientId),
+    queryFn: async (): Promise<Invitation | null> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/access-codes",
+        { params: { path: { patient_id: patientId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty codes response");
+      const now = Date.now();
+      const live = data
+        .filter(
+          (row) =>
+            row.purpose === "family_member" &&
+            row.status === "pending" &&
+            row.code !== null &&
+            row.join_url != null &&
+            new Date(row.expires_at).getTime() > now,
+        )
+        // Свежий — последним выданный: у него и срок дольше.
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      return live === undefined || live.code === null || live.join_url == null
+        ? null
+        : {
+            code: live.code,
+            expires_at: live.expires_at,
+            deep_link: live.deep_link ?? null,
+            join_url: live.join_url,
+          };
+    },
+  });
+}
+
 /** Приглашение близкому: код с назначением «другой взрослый» (ADR-0042). */
 export function useInvite(patientId: string) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (): Promise<Invitation> => {
       const { data, error } = await api.POST(
@@ -38,6 +84,9 @@ export function useInvite(patientId: string) {
       );
       if (error || !data) throw error ?? new Error("Empty invite response");
       return data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: codesKey(patientId) });
     },
   });
 }

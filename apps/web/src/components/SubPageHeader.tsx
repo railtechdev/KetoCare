@@ -22,7 +22,7 @@ export function SubPageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-block">
+    <div className="flex flex-wrap items-start justify-between gap-section">
       <div className="min-w-0">
         {/* Как у `PageLayout`: колонка в `min-w-0` сжимается, но переносить
             слово без пробелов сама не умеет. */}

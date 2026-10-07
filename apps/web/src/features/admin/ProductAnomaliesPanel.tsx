@@ -73,7 +73,7 @@ export function ProductAnomaliesPanel() {
               })}
             </p>
           )}
-          <ul className="m-0 flex list-none flex-col gap-block p-0">
+          <ul className="m-0 flex list-none flex-col gap-section p-0">
             {rows.map((row) => (
               <li key={row.product_id} className="flex flex-col gap-field">
                 <p className="m-0 flex flex-wrap items-baseline gap-field">
@@ -99,7 +99,7 @@ export function ProductAnomaliesPanel() {
                       key={`${item.kind}-${index}`}
                       className="text-sm text-muted-foreground"
                     >
-                      <span className="text-warning">
+                      <span className="text-warning-strong">
                         {anomalyKind(t, item.kind)}
                       </span>
                       {" — "}

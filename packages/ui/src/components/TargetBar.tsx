@@ -59,7 +59,7 @@ export function TargetBar({
 
   return (
     <div className={cn("min-w-0", className)}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-block gap-y-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-section gap-y-1">
         <span className="text-sm text-muted-foreground">{label}</span>
         <span className="font-medium tabular-nums">{valueText}</span>
       </div>

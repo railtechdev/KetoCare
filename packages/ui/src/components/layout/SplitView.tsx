@@ -77,7 +77,7 @@ export function SplitView({
           Ориентир назван, иначе на экране оказывается два безымянных `nav`. */}
       <nav
         aria-label={railLabel}
-        className="sticky top-20 flex min-w-0 flex-col gap-block"
+        className="sticky top-20 flex min-w-0 flex-col gap-section"
       >
         {rail}
       </nav>

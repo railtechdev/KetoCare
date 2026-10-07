@@ -1,4 +1,10 @@
-import { Button, StatusNote, WarningBanner } from "@ketocare/ui";
+import {
+  Button,
+  FieldShell,
+  NativeSelect,
+  StatusNote,
+  WarningBanner,
+} from "@ketocare/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -97,23 +103,23 @@ export function AddToPlan({
         ))}
       </div>
 
-      <label className="flex flex-col gap-1">
-        <span>{t("calculator.plan.meal")}</span>
-        <select
-          className="min-h-(--spacing-touch) rounded-xl border border-border bg-card px-3"
-          value={chosenMeal}
-          onChange={(event) => {
-            setMealIndex(Number(event.target.value));
-            reset();
-          }}
-        >
-          {meals.map((index) => (
-            <option key={index} value={index}>
-              {t("menu.meal", { index })}
-            </option>
-          ))}
-        </select>
-      </label>
+      <FieldShell label={t("calculator.plan.meal")}>
+        {() => (
+          <NativeSelect
+            value={chosenMeal}
+            onChange={(event) => {
+              setMealIndex(Number(event.target.value));
+              reset();
+            }}
+          >
+            {meals.map((index) => (
+              <option key={index} value={index}>
+                {t("menu.meal", { index })}
+              </option>
+            ))}
+          </NativeSelect>
+        )}
+      </FieldShell>
 
       {menu.isError ? (
         <WarningBanner level="danger" title={t("calculator.plan.loadError")}>

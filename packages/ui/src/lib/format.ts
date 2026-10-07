@@ -188,6 +188,19 @@ export function formatOccurredAt(value: Date): string {
 }
 
 /**
+ * День и месяц цифрами: «05.10». Для подписей оси графика за месяц — год там
+ * шум, а места на телефоне мало. Цифры через точку на обоих языках, как и у
+ * остальных цифровых дат (см. `NUMERIC_DATE_LOCALE`): `toLocaleDateString` на
+ * месте брал бы локаль устройства или языка и печатал «05/10».
+ */
+export function formatDayMonth(value: Date): string {
+  return new Intl.DateTimeFormat(NUMERIC_DATE_LOCALE, {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(value);
+}
+
+/**
  * «Когда правили» без года: «05.10, 14:30».
  *
  * Для отметок о недавнем действии — кто и когда составил план дня (ADR-0047).

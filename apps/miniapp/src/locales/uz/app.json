@@ -27,6 +27,10 @@
     "failed": {
       "title": "Ilovani ochib bo‘lmadi",
       "description": "Aloqani tekshirib, yana urinib ko‘ring. Yordam bermasa — ilovani yoping va bot chatidan qaytadan oching."
+    },
+    "relaunch": {
+      "title": "Ilovani yoping va chatdan qayta oching",
+      "description": "Telegram ilova ishga tushirilishini cheklangan vaqtga tasdiqlaydi va bu vaqt tugadi. Ilovani yoping va bot bilan chatdagi «Ilova» tugmasi orqali qayta oching — yozilganlarning hammasi saqlangan."
     }
   },
   "errors": {
@@ -60,7 +64,10 @@
       "ketones": "Ketonlar",
       "weight": "Vazn",
       "weightValue": "{{value}} kg",
-      "none": "yozuvlar yo‘q"
+      "none": "yozuvlar yo‘q",
+      "ketonesValue": "{{value}} mmol/l",
+      "ketonesBlood": "qon bo‘yicha",
+      "ketonesUrine": "siydik bo‘yicha"
     },
     "therapyEnded": {
       "title": "Davolash yakunlandi",
@@ -124,8 +131,12 @@
       "prescriptionUnknown": "Tayinlov yuklanmoqda — kunda nechta ovqatlanish bo‘lishi unga bog‘liq.",
       "removeFailed": "Rejani o‘zgartirib bo‘lmadi",
       "kcal": "{{value}} kkal",
-      "portionsHintRecipe_one": "Retsept {{count}} porsiyaga mo‘ljallangan. Bitta porsiya — bu 1.",
-      "portionsHintRecipe_other": "Retsept {{count}} porsiyaga mo‘ljallangan. Bitta porsiya — bu 1."
+      "portionsHintRecipe_one": "Retsept {{count}} porsiyaga mo‘ljallangan: 1 — butun porsiya, 0,5 — yarmi.",
+      "portionsHintRecipe_other": "Retsept {{count}} porsiyaga mo‘ljallangan. 1 — bitta porsiya, 0,5 — yarmi.",
+      "removeTitle": "«{{title}}» rejadan olib tashlansinmi?",
+      "removeBody": "Taom shu kun rejasidan olib tashlanadi. Uni «Kunni tuzish» tugmasi orqali qayta qo‘shish mumkin.",
+      "removeAria": "«{{title}}»ni olib tashlash",
+      "keep": "Qoldirish"
     },
     "targets": {
       "kcalLabel": "Kaloriya",
@@ -136,7 +147,8 @@
       "carbsOfLimit": "{{value}} / {{limit}} g",
       "carbsLeft": "{{value}} g qoldi",
       "carbsOver": "chegaradan {{value}} g ortiq"
-    }
+    },
+    "tomorrowNoEaten": "«Yedi» belgisini bola ovqatlangan kuni qo‘yish mumkin."
   },
   "verdict": {
     "withinTolerance": "Kunning keto nisbati tayinlovga mos.",
@@ -233,9 +245,9 @@
       "occurredAtFuture": "Bu vaqt hali kelmagan — sana va vaqtni tekshiring.",
       "seizureType": "Qanday xuruj",
       "durationSec": "Qancha davom etdi, soniyalarda",
-      "durationHint": "Soniyalar — agar vaqtni o‘lchagan bo‘lsangiz. Aks holda «taxminan»ni tanlang. Ikkisidan bittasi, ikkalasi emas.",
+      "durationHint": "Faqat soat bilan o‘lchagan bo‘lsangiz — aks holda «So‘z bilan, taxminan»ni tanlang.",
       "durationSecInvalid": "Butun soniyalar soni.",
-      "durationChoice": "Yoki taxminan",
+      "durationChoice": "Taxminan",
       "durationChoiceNone": "Ko‘rsatilmagan",
       "durationBoth": "Yo soniyalar, yo «taxminan» — ikkalasi birdan emas.",
       "count": "Necha marta",
@@ -259,7 +271,10 @@
       "symptom": "Nima bezovta qilyapti",
       "symptomRequired": "Nima bezovta qilayotganini yozing.",
       "sideDescription": "Batafsil",
-      "unknownOption": "Avval qanday yozilgan bo‘lsa"
+      "unknownOption": "Avval qanday yozilgan bo‘lsa",
+      "durationMode": "Xuruj qancha davom etdi",
+      "durationMeasured": "Soat bilan o‘lchadik",
+      "durationEstimated": "So‘z bilan, taxminan"
     },
     "next": "Keyingi",
     "back": "Orqaga"
@@ -286,10 +301,13 @@
       "medications": "Shifokor belgilagan sxema bo‘yicha.",
       "weight": "Bir necha kunda bir marta yetarli — eslatma faqat kun uchun yozuv bo‘lmasa keladi.",
       "no_records": "Kechqurun bitta yumshoq eslatma. Faqat kun davomida hech narsa yozilmagan bo‘lsa keladi."
-    }
+    },
+    "statusOn": "Eslatmalar yoqilgan",
+    "statusOff": "Eslatmalar o‘chirilgan",
+    "edit": "O‘zgartirish"
   },
   "calculator": {
-    "title": "Kalkulyator",
+    "title": "Hisob",
     "composition": "Taom tarkibi",
     "search": "Mahsulotni toping",
     "nothingFound": "Hech narsa topilmadi",
@@ -366,7 +384,8 @@
       "failed": "Rejaga qo‘shib bo‘lmadi",
       "noPrescription": "Hozircha tayinlov yo‘q, demak kundagi ovqatlanishlar ham yo‘q: ularni shifokor belgilaydi.",
       "prescriptionUnknown": "Tayinlov yuklanmoqda — kunda nechta ovqatlanish bo‘lishi unga bog‘liq."
-    }
+    },
+    "searchFailed": "Mahsulotlarni topib bo‘lmadi. Aloqani tekshiring va qaytaring."
   },
   "recipes": {
     "category": "Bo‘lim",
@@ -426,7 +445,8 @@
     "limited": "Bugun yordamchiga boshqa savol berib bo‘lmaydi — ertaga yana paydo bo‘ladi.",
     "sendFailed": "Savolni yuborib bo‘lmadi. Yana bir bor urinib ko‘ring.",
     "loadFailed": "Suhbatni yuklab bo‘lmadi",
-    "loadFailedHint": "Aloqani tekshirib, qaytaring."
+    "loadFailedHint": "Aloqani tekshirib, qaytaring.",
+    "slow": "Javob odatdagidan uzoqroq tayyorlanmoqda. Uni shu yerda kutish yoki keyinroq qaytish mumkin — u yozishmada saqlanadi. Bir necha daqiqadan keyin ham javob bo‘lmasa, savolni qayta bering."
   },
   "webAccess": {
     "title": "Kabinetga kirish",
@@ -470,5 +490,33 @@
     "trust": "Faqat bolaga g‘amxo‘rlik qilishni ishonib topshiradigan odamga yuboring. Uni shu yerda ko‘rasiz va kirishni istalgan vaqtda yopish mumkin.",
     "messageTelegram": "Sizni men bilan birga KetoCare’da bola kundaligini yuritishga taklif qilaman.\n\n1. Yuqoridagi havolani bosing — Telegram ochiladi.\n2. «Запустить» (yoki «Start», «Boshlash») tugmasini bosing.\nVassalom — bot hammasini o‘zi ulaydi.\n\nAgar havola ochilmasa, botga shu kodni yuboring: {{code}}\nTaklif {{date}} gacha amal qiladi.",
     "messageWeb": "Sizni men bilan birga KetoCare’da bola kundaligini yuritishga taklif qilaman.\n\nYuqoridagi havolani oching va qisqa shaklni to‘ldiring — kod allaqachon kiritilgan: {{code}}\nTaklif {{date}} gacha amal qiladi."
+  },
+  "kit": {
+    "macros": {
+      "fat": "Yog‘lar",
+      "protein": "Oqsillar",
+      "carbs": "Uglevodlar",
+      "kcalFull": "Kaloriya, kkal",
+      "fatFull": "Yog‘lar, g",
+      "proteinFull": "Oqsillar, g",
+      "carbsFull": "Uglevodlar, g",
+      "fatShort": "Y",
+      "proteinShort": "O",
+      "carbsShort": "U",
+      "gramsUnit": "g",
+      "kcalUnit": "kkal"
+    },
+    "ratio": {
+      "unknown": "Nisbat aniqlanmagan",
+      "plain": "Nisbat {{value}}",
+      "within": "Nisbat {{value}}, tayinlovga mos",
+      "off": "Nisbat {{value}}, tayinlovdan farq qiladi"
+    },
+    "diarySource": {
+      "web": "Veb",
+      "bot": "Bot",
+      "miniapp": "Ilova",
+      "ai_parsed": "Sun’iy intellekt ajratdi"
+    }
   }
 }

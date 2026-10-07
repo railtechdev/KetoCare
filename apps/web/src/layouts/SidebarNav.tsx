@@ -58,7 +58,7 @@ export function SidebarNav({
                   section={section}
                   title={iconsOnly ? label : undefined}
                   className={cn(
-                    "flex min-h-touch items-center gap-block rounded-lg px-3 text-sm font-medium",
+                    "flex min-h-touch items-center gap-section rounded-lg px-3 text-sm font-medium",
                     "text-sidebar-foreground/80 no-underline transition-colors",
                     "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     labels === "never" && "justify-center px-0",

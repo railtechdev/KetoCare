@@ -58,6 +58,13 @@ export type {
   SideEffectValues,
   WeightValues,
 } from "./lib/diaryEntry";
+export { DIARY_ENTRY_KEYS, describeDiaryEntry } from "./lib/describeDiaryEntry";
+export type {
+  DescribableDiaryEntry,
+  DiaryEntryDescription,
+  DiaryEntryNames,
+  DiaryEntryTranslate,
+} from "./lib/describeDiaryEntry";
 export { productNameState } from "./lib/productName";
 export type { ProductName, ProductNameInput } from "./lib/productName";
 export {
@@ -67,6 +74,7 @@ export {
   formatNumber,
   formatOccurredAt,
   formatDayTime,
+  formatDayMonth,
   formatRatio,
   formatFactor,
   formatDose,
@@ -77,6 +85,13 @@ export {
 } from "./lib/format";
 export type { FormatLanguage } from "./lib/format";
 
+export {
+  DEFAULT_KIT_LABELS,
+  kitLabelsFrom,
+  useKitLabels,
+} from "./lib/kitLabels";
+export { KitLabelsProvider } from "./components/KitLabelsProvider";
+export type { KitLabels, KitTranslate } from "./lib/kitLabels";
 export { RatioBadge } from "./components/RatioBadge";
 export type { RatioBadgeProps } from "./components/RatioBadge";
 
@@ -95,7 +110,7 @@ export type {
   WarningLevel,
 } from "./components/WarningBanner";
 
-export { ChatMessage } from "./components/ChatMessage";
+export { CHAT_SLOW_AFTER_MS, ChatMessage } from "./components/ChatMessage";
 export type { ChatMessageProps } from "./components/ChatMessage";
 
 export { ChatComposer } from "./components/ChatComposer";
@@ -145,6 +160,7 @@ export type { SectionProps } from "./components/Section";
 export { TabsBar } from "./components/TabsBar";
 export type { TabsBarProps, TabsBarItem } from "./components/TabsBar";
 
+export { FieldShell, NativeSelect } from "./components/FieldShell";
 export { FormSheet } from "./components/FormSheet";
 export type { FormSheetProps } from "./components/FormSheet";
 

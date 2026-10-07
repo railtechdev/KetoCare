@@ -73,6 +73,13 @@ class AccessCodeRead(BaseModel):
     #: идентификаторами: журнал читает человек, и вопрос у него — «кто».
     issued_by_name: str | None = None
     used_by_name: str | None = None
+    #: Ссылки живого кода — те же, что при выдаче. Только у кода, который ещё
+    #: можно погасить и который читающему виден: по ним Mini App показывает
+    #: уже выданное приглашение близкому, а не выпускает новый код на каждое
+    #: нажатие «Пригласить» (каждый — ещё одна действующая неделю дверь к
+    #: данным ребёнка). Потребитель — `FamilyBlock` Mini App.
+    deep_link: str | None = None
+    join_url: str | None = None
 
 
 class AccessCodeActivate(BaseModel):

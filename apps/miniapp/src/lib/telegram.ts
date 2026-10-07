@@ -6,12 +6,11 @@
  * вовсе. Без единой точки каждый экран проверял бы это сам, а забытая проверка
  * роняет приложение целиком — в чужом браузере, у семьи на телефоне.
  *
- * Строку запуска достаёт `@telegram-apps/sdk-react` (раздел 2.3 ТЗ): Telegram
- * передаёт её по-разному — в адресе, в хеше, в хранилище клиента после
- * перезапуска, — и разбирать эти источники руками значит однажды не найти
- * строку там, где она есть. Цвета и безопасную зону берём из
- * `window.Telegram.WebApp`: это те же значения, но без монтирования сигналов
- * ради двух чисел.
+ * Строку запуска читаем сами из адреса (`tgWebAppData`), SDK
+ * `@telegram-apps/sdk-react` и `window.Telegram.WebApp` — запасные (см.
+ * `launchData`). Цвета, безопасная зона, кнопка «Назад», подтверждение
+ * закрытия и внешние ссылки — через `window.Telegram.WebApp`: у каждого
+ * вызова здесь есть поведение вне Telegram, и экраны о нём не знают.
  */
 
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
@@ -34,6 +33,13 @@ export interface TelegramBackButton {
   offClick: (handler: () => void) => void;
 }
 
+export interface Inset {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 export interface TelegramWebApp {
   initData: string;
   colorScheme: "light" | "dark";
@@ -45,13 +51,18 @@ export interface TelegramWebApp {
   BackButton?: TelegramBackButton;
   /** Открыть ссылку t.me внутри Telegram, не закрывая приложение. */
   openTelegramLink?: (url: string) => void;
-  safeAreaInset?: { top: number; bottom: number; left: number; right: number };
-  contentSafeAreaInset?: {
-    top: number;
-    bottom: number;
-    left: number;
-    right: number;
-  };
+  /** Открыть внешнюю ссылку во внешнем браузере, не закрывая приложение. */
+  openLink?: (url: string) => void;
+  /** Bot API 6.2: спросить «закрыть?» перед закрытием приложения. */
+  enableClosingConfirmation?: () => void;
+  disableClosingConfirmation?: () => void;
+  /** Bot API 7.7: жест вниз сворачивает приложение — выключается на время ввода. */
+  disableVerticalSwipes?: () => void;
+  enableVerticalSwipes?: () => void;
+  /** Зона системы: чёлка, домашняя полоса (Bot API 8.0). */
+  safeAreaInset?: Inset;
+  /** Зона самого Telegram поверх приложения: его шапка в полноэкранном режиме. */
+  contentSafeAreaInset?: Inset;
 }
 
 declare global {
@@ -186,6 +197,28 @@ function firstNonEmpty(...values: (string | undefined)[]): string | null {
 }
 
 /**
+ * Запуск: `ready` убирает заставку Telegram, `expand` разворачивает окно на
+ * всю высоту. Без первого приложение открывается в полупустом окне поверх
+ * спиннера клиента. Зовёт `main.tsx` до первой отрисовки.
+ */
+export function initTelegram(): void {
+  const app = webApp();
+  app?.ready();
+  app?.expand();
+}
+
+/**
+ * Обработчики «Назад» стопкой: срабатывает только верхний.
+ *
+ * Вложенные состояния бывают вложены друг в друга — подтверждение удаления
+ * поверх панели сборки дня поверх плана. У Telegram кнопка одна, и все
+ * подписанные обработчики сработали бы разом: одно нажатие закрыло бы и
+ * подтверждение, и панель. Стопка закрывает ровно то, что сверху.
+ */
+const backStack: (() => void)[] = [];
+let backListener: (() => void) | null = null;
+
+/**
  * Кнопка «Назад» самого Telegram на время жизни вложенного экрана.
  *
  * Без неё аппаратная «Назад» на Android закрывает весь Mini App: родитель,
@@ -197,12 +230,73 @@ export function showBackButton(onBack: () => void): () => void {
   const button = webApp()?.BackButton;
   if (button === undefined) return () => undefined;
 
-  button.onClick(onBack);
+  backStack.push(onBack);
+  if (backListener === null) {
+    const listener = () => {
+      backStack.at(-1)?.();
+    };
+    backListener = listener;
+    button.onClick(listener);
+  }
   button.show();
   return () => {
-    button.offClick(onBack);
-    button.hide();
+    const index = backStack.lastIndexOf(onBack);
+    if (index !== -1) backStack.splice(index, 1);
+    if (backStack.length === 0 && backListener !== null) {
+      button.offClick(backListener);
+      backListener = null;
+      button.hide();
+    }
   };
+}
+
+let unsavedCount = 0;
+
+/**
+ * На время незаконченного ввода: Telegram спрашивает «закрыть?», а жест вниз
+ * не сворачивает приложение.
+ *
+ * Жест вниз по форме — обычная прокрутка, и до этого он сворачивал Mini App
+ * вместе с наполовину записанным приступом. Выключается только на время ввода:
+ * в остальное время свернуть приложение жестом — привычное поведение Telegram.
+ * Счётчик, а не флаг: две открытые формы не должны снимать защиту друг у друга.
+ */
+export function guardUnsavedInput(): () => void {
+  const app = webApp();
+  if (app === null) return () => undefined;
+
+  unsavedCount += 1;
+  if (unsavedCount === 1) {
+    app.enableClosingConfirmation?.();
+    app.disableVerticalSwipes?.();
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    unsavedCount -= 1;
+    if (unsavedCount === 0) {
+      app.disableClosingConfirmation?.();
+      app.enableVerticalSwipes?.();
+    }
+  };
+}
+
+/**
+ * Внешняя ссылка (кабинет в браузере) — через Telegram.
+ *
+ * Обычный переход внутри Mini App открыл бы кабинет в окне приложения, где
+ * человек не вошёл и откуда не вернуться в план дня. `openLink` уводит во
+ * внешний браузер и оставляет приложение открытым. Вне Telegram — новая
+ * вкладка.
+ */
+export function openExternalLink(url: string): void {
+  const open = webApp()?.openLink;
+  if (open !== undefined) {
+    open(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 /**

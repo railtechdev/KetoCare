@@ -73,7 +73,7 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
         {form !== null && (
           <form
             noValidate
-            className="flex flex-col gap-block"
+            className="flex flex-col gap-section"
             onSubmit={(event) => {
               event.preventDefault();
               update.mutate(form, {
@@ -93,7 +93,7 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
               <span>{t("reminders.enabled")}</span>
             </label>
 
-            <div className="grid gap-block sm:grid-cols-2">
+            <div className="grid gap-section sm:grid-cols-2">
               {KINDS.map((kind) => (
                 <Field
                   key={kind}

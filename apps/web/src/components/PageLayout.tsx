@@ -78,7 +78,7 @@ export function PageLayout({
         // все.
         className={cn("flex flex-col gap-screen", WIDTH[width])}
       >
-        <header className="flex flex-col gap-block">
+        <header className="flex flex-col gap-section">
           {onBack && (
             <Button
               type="button"
@@ -92,7 +92,7 @@ export function PageLayout({
             </Button>
           )}
 
-          <div className="flex flex-wrap items-start justify-between gap-block">
+          <div className="flex flex-wrap items-start justify-between gap-section">
             <div className="min-w-0">
               {/* `break-words`: заголовок часто несёт имя ребёнка или название
                   продукта из базы, а слово без пробелов длиннее экрана 360 px

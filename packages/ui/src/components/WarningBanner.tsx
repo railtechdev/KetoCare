@@ -53,7 +53,7 @@ const ICON_BY_LEVEL: Record<WarningLevel, typeof Info> = {
 
 const ICON_COLOR_BY_LEVEL: Record<WarningLevel, string> = {
   info: "text-primary",
-  warning: "text-warning",
+  warning: "text-warning-strong",
   danger: "text-destructive",
 };
 

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   argumentOf,
+  calledKeys,
   goesThroughHelper,
   rawNumbersNextToUnits,
   unitVariables,
@@ -83,6 +84,43 @@ describe("сырое число рядом с единицей измерени�
 
     expect(found.map((item) => `${item.file}:${item.expression}`)).toEqual([
       "Raw.tsx:child.height_cm",
+    ]);
+  });
+
+  it("видит обе ветви условного ключа", () => {
+    // `t(delta > 0 ? "above" : "below", { value: Math.abs(delta) })` — число
+    // одно на оба шаблона; калькулятор печатал его сырым («на 1200 ккал»).
+    expect(calledKeys('delta > 0 ? "calc.above" : "calc.below"')).toEqual([
+      "calc.above",
+      "calc.below",
+    ]);
+    expect(calledKeys('"ns:card.height"')).toEqual(["card.height"]);
+    expect(calledKeys("`charts.${kind}.unit`")).toEqual([]);
+
+    const root = mkdtempSync(join(tmpdir(), "ketocare-numbers-"));
+    mkdirSync(join(root, "locales/ru"), { recursive: true });
+    writeFileSync(
+      join(root, "locales/ru/app.json"),
+      JSON.stringify({
+        calc: {
+          above: "на {{value}} ккал больше",
+          below: "на {{value}} ккал меньше",
+        },
+      }),
+    );
+    writeFileSync(
+      join(root, "Delta.tsx"),
+      `<p>{t(delta > 0 ? "calc.above" : "calc.below", { value: Math.abs(delta) })}</p>\n`,
+    );
+
+    const found = rawNumbersNextToUnits({
+      localesDir: join(root, "locales/ru"),
+      sourceDir: root,
+    });
+
+    // Место одно — и в списке оно одно, под первым из ключей.
+    expect(found.map((item) => `${item.file}:${item.expression}`)).toEqual([
+      "Delta.tsx:Math.abs(delta)",
     ]);
   });
 });

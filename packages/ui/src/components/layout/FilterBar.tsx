@@ -41,7 +41,7 @@ export function FilterBar({
       // строке он превращается в разъезд по вертикали, потому что выравнивание
       // идёт по низу, и соседи равняются на край отступа, а не поля.
       className={cn(
-        "flex flex-wrap items-end gap-block [&_[data-slot=field]]:mb-0",
+        "flex flex-wrap items-end gap-section [&_[data-slot=field]]:mb-0",
         className,
       )}
     >

@@ -75,7 +75,7 @@ export function UserAccountForm({
   return (
     <form
       noValidate
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
       onSubmit={handleSubmit((values) =>
         onSubmit({ role: values.role, is_active: values.isActive }),
       )}

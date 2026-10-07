@@ -2,6 +2,7 @@ import {
   AsyncSection,
   Button,
   Input,
+  NativeSelect,
   RatioBadge,
   SEARCH_DELAY_MS,
   Section,
@@ -14,11 +15,11 @@ import {
   useDebouncedValue,
 } from "@ketocare/ui";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
-import { showBackButton } from "../../lib/telegram";
+import { useTelegramBack } from "../../lib/useTelegram";
 import {
   RECIPE_CATEGORIES,
   type Recipe,
@@ -62,7 +63,7 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
   const settling = query.trim() !== debounced.trim();
 
   return (
-    <main className="flex flex-col gap-block p-block">
+    <main className="flex flex-col gap-section p-section">
       <h1 className="text-page-title">{t("recipes.title")}</h1>
 
       <Input
@@ -85,7 +86,7 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
         >
           {t("recipes.category")}
         </label>
-        <select
+        <NativeSelect
           id={categoryId}
           value={category}
           onChange={(event) => {
@@ -96,7 +97,7 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
                 : "",
             );
           }}
-          className="min-h-(--spacing-touch) min-w-0 flex-1 rounded-xl border border-border bg-card px-3"
+          className="flex-1"
         >
           <option value="">{t("recipes.allCategories")}</option>
           {RECIPE_CATEGORIES.map((value) => (
@@ -104,7 +105,7 @@ function RecipeList({ onOpen }: { onOpen: (id: string) => void }) {
               {t(`recipes.categories.${value}`)}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       {/* НАД списком, а не под ним. Замер при ширине потока 390 px и списке из
@@ -190,10 +191,10 @@ function RecipeCard({
   // Кнопка «Назад» самого Telegram: без неё аппаратный «Назад» на Android
   // закрывает весь Mini App, и родитель из карточки попадает в чат, а не к
   // списку (находка М8 аудита). Вне Telegram остаётся внутренняя кнопка.
-  useEffect(() => showBackButton(onBack), [onBack]);
+  useTelegramBack(onBack);
 
   return (
-    <main className="flex flex-col gap-block p-block">
+    <main className="flex flex-col gap-section p-section">
       <Button variant="ghost" className="self-start" onClick={onBack}>
         <ArrowLeft aria-hidden className="size-4" />
         {t("recipes.back")}
@@ -243,7 +244,7 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
   const portion = recipe.per_portion;
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {/* Название рецепта из базы бывает длинным словом без пробелов. */}
       <h1 className="break-words text-page-title">{recipe.title}</h1>
 
@@ -342,7 +343,7 @@ function Ingredients({ recipe }: { recipe: Recipe }) {
             <span className="min-w-0 break-words">
               {productName(names.stateOf(ingredient.product_id), t)}
               {names.withdrawn[ingredient.product_id] !== undefined && (
-                <span className="ml-2 text-sm text-warning">
+                <span className="ml-2 text-sm text-warning-strong">
                   {t("recipes.withdrawn")}
                 </span>
               )}

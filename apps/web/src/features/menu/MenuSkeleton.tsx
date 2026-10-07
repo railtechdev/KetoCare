@@ -15,7 +15,7 @@ export function MenuSkeleton() {
 
   return (
     <div
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
       role="status"
       aria-busy="true"
       aria-label={t("common:app.loading")}

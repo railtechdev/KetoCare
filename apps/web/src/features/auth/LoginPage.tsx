@@ -138,7 +138,7 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-screen">
-      <div className="flex w-full max-w-form flex-col gap-block">
+      <div className="flex w-full max-w-form flex-col gap-section">
         {/* Знак продукта и одна строка о том, что это: человек приходит сюда по
             ссылке из письма и должен понять, куда попал, до того как введёт
             почту. Тот же значок стоит в шапке кабинета — вход не должен
@@ -172,7 +172,7 @@ export function LoginPage() {
             <form
               onSubmit={onSubmit}
               noValidate
-              className="flex flex-col gap-block"
+              className="flex flex-col gap-section"
             >
               <Field
                 id="email"

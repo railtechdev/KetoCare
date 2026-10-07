@@ -200,7 +200,7 @@ export function RecipesPage() {
           />
 
           <TabsContent value="recipes" className="pt-screen">
-            <div className="flex flex-col gap-block">
+            <div className="flex flex-col gap-section">
               <RecipeFiltersPanel
                 filters={filters}
                 rangeInvalid={rangeInvalid}
@@ -257,7 +257,7 @@ export function RecipesPage() {
           </TabsContent>
         </Tabs>
       ) : (
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           <RecipeFiltersPanel
             filters={filters}
             rangeInvalid={rangeInvalid}

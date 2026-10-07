@@ -11,8 +11,15 @@ import {
 
 import { cn } from "../lib/cn";
 import { formatMeasured } from "../lib/format";
+import { dayAxis, valueDomain } from "../lib/trendAxes";
 
 export interface TrendPoint {
+  /**
+   * Идентификатор записи — ключ строки. Время ключом не годится: две записи
+   * одной минуты давали повторяющиеся ключи, и после правки одной из них
+   * таблица-альтернатива показывала не то число строк.
+   */
+  id?: string;
   /** Момент измерения */
   at: Date;
   value: number;
@@ -70,8 +77,14 @@ export function TrendChart({
 
   // Recharts работает с числами: даты переводим в миллисекунды и форматируем на осях.
   const data = points
-    .map((point) => ({ ts: point.at.getTime(), value: point.value }))
+    .map((point, index) => ({
+      key: point.id ?? `${point.at.getTime()}-${index}`,
+      ts: point.at.getTime(),
+      value: point.value,
+    }))
     .sort((a, b) => a.ts - b.ts);
+  const xAxis = dayAxis(data.map((point) => point.ts));
+  const yDomain = valueDomain(data.map((point) => point.value));
 
   return (
     // `min-w-0` обязателен: график стоит в колонке (`flex flex-col`), а у
@@ -103,7 +116,10 @@ export function TrendChart({
           <XAxis
             dataKey="ts"
             type="number"
-            domain={["dataMin", "dataMax"]}
+            // Целыми днями и по делению на день: ось времени сама ставила
+            // несколько делений в одни сутки, и подписи повторялись.
+            domain={xAxis.domain}
+            ticks={xAxis.ticks}
             scale="time"
             tickFormatter={(ts: number) => formatDate(new Date(ts))}
             stroke="var(--color-muted-foreground)"
@@ -113,6 +129,8 @@ export function TrendChart({
             stroke="var(--color-muted-foreground)"
             fontSize={12}
             width={48}
+            // С запасом: верх оси, равный единственному значению, срезал точку.
+            domain={yDomain}
             tickFormatter={(value: number) => formatMeasured(value)}
             label={{
               value: unit,
@@ -171,7 +189,7 @@ export function TrendChart({
           <caption>{caption}</caption>
           <tbody>
             {data.map((point) => (
-              <tr key={point.ts}>
+              <tr key={point.key}>
                 <th scope="row">{formatDate(new Date(point.ts))}</th>
                 <td>
                   {formatMeasured(point.value)} {unit}

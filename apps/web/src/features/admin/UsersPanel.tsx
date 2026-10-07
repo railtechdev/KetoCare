@@ -233,7 +233,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   );
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {chrome === "tab" ? (
         <SubPageHeader
           title={t("users.title")}
@@ -263,7 +263,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         title={t("users.temporaryPasswordTitle")}
         description={t("users.temporaryPasswordBody", { name: issued?.name })}
       >
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           <p className="m-0 rounded-lg border border-border px-3 py-2 text-center font-mono text-lg tracking-wider">
             {issued?.password}
           </p>
@@ -315,7 +315,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         title={t("users.editTitle")}
       >
         {editing !== null && (
-          <div className="flex flex-col gap-block">
+          <div className="flex flex-col gap-section">
             <UserAccountForm
               // Форма пересоздаётся при выборе другой учётной записи: react-hook-form
               // читает defaultValues только при монтировании, и без этого в ней
@@ -352,7 +352,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         title={t("users.filters.legend")}
         titleHidden
         density="compact"
-        contentClassName="flex flex-wrap items-end gap-block"
+        contentClassName="flex flex-wrap items-end gap-section"
       >
         <Field
           id="users-search"

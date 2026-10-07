@@ -111,22 +111,30 @@ export function AssistantPage({ patientId }: { patientId: string }) {
             {messages.map((message) => (
               <ChatMessage
                 key={message.id}
-                role={message.role}
-                pending={message.status === "pending"}
-                refusal={isRefusal(message)}
-                note={
-                  message.role === "assistant" ? (
-                    <>
-                      {t("disclaimer")}
-                      {message.sources.length > 0 && (
+                {...(message.role === "assistant"
+                  ? {
+                      role: "assistant" as const,
+                      note: (
                         <>
-                          {" "}
-                          {t("sources", { list: message.sources.join(", ") })}
+                          {t("disclaimer")}
+                          {message.sources.length > 0 && (
+                            <>
+                              {" "}
+                              {t("sources", {
+                                list: message.sources.join(", "),
+                              })}
+                            </>
+                          )}
                         </>
-                      )}
-                    </>
-                  ) : undefined
-                }
+                      ),
+                    }
+                  : { role: "user" as const })}
+                pending={message.status === "pending"}
+                // Ответа нет дольше обычного — сказать словами, а не ждать
+                // молча: при остановленном обработчике ожидание шло бы вечно.
+                slowNote={t("slow")}
+                pendingSince={new Date(message.created_at)}
+                refusal={isRefusal(message)}
               >
                 {message.text}
               </ChatMessage>
@@ -153,7 +161,7 @@ export function AssistantPage({ patientId }: { patientId: string }) {
           disabled={limited}
         />
         {limited && (
-          <p className="m-0 text-sm text-warning">
+          <p className="m-0 text-sm text-warning-strong">
             {errorMessageOf(ask.error) ?? t("limited")}
           </p>
         )}

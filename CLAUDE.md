@@ -46,7 +46,7 @@ KetoCare — платформа сопровождения кетогенной 
 - Экраны раздела 8.3: калькулятор, продукты, главная родителя, меню, дневники (6 видов), рецепты, кабинет врача, админка. Плюс сверх ТЗ: свой профиль, настройки с профилями детей, приглашения, витрина `/dev/ui`.
 - `apps/api` — `/logs`, `/menus`, `/overview`, `/recipes`, `/custom-dishes`, `/clinical`, `/admin`, `/dictionaries`, `/users` (свой профиль, смена пароля, справочник персонала), ведение пациента специалистом.
 
-Тестов на 16.09.2026: **1835 pytest** (`apps/api` 1075, `apps/worker` 166, `infra` 155, `.claude/hooks` 131, `apps/bot` 112, `packages/core` 102, `packages/keto_engine` 94) и **986 vitest** (`apps/web` 661, `packages/ui` 161, `apps/miniapp` 145, `packages/api-client` 10, `packages/landing` 9). Единственный пропуск — рендер PDF без системных pango и cairo.
+Тестов на 16.09.2026: **1835 pytest** (`apps/api` 1075, `apps/worker` 166, `infra` 155, `.claude/hooks` 131, `apps/bot` 112, `packages/core` 102, `packages/keto_engine` 94); vitest на 07.10.2026 — **1275** (`apps/web` 717, `apps/miniapp` 283, `packages/ui` 256, `packages/api-client` 10, `packages/landing` 9). Единственный пропуск — рендер PDF без системных pango и cairo.
 `make seed-demo` наполняет локальную БД демо-данными (три роли, продукты, две недели дневника).
 
 Сверх ТЗ, по материалам заказчика от 29.08.2026 ([ADR-0007](docs/adr/0007-patient-intake-and-seizure-diary.md)):
@@ -852,7 +852,7 @@ Python-часть — **uv workspace** (`apps/api`, `apps/bot`, `apps/worker`, `
 - **`apps/api`** — FastAPI, префикс `/api/v1`, структура `src/{routers,deps,services}`. В роутерах бизнес-логики нет; БД — только через репозитории `core`; `/calc/*` — тонкие обёртки над keto_engine, ответы включают `engine_version`.
 - **`apps/bot`** — aiogram 3, FSM-сценарии дневников. Собственного доступа к БД нет — только вызовы API по сервисному токену `BOT_API_TOKEN`.
 - **`apps/worker`** — ARQ + Redis: AI-задачи, PDF-отчёты (jinja2 → weasyprint), напоминания по cron, `notify_family`.
-- **`apps/web`** (React 19 + Vite + TanStack Router/Query/Table) и **`apps/miniapp`** (Telegram Mini App) — оба поверх `packages/ui` (Tailwind 4 + shadcn/ui) и `packages/api-client`. У Mini App нет роутера и cookie: экран один, а токены живут в памяти вкладки и приходят заголовком (раздел 5.2 ТЗ). Всё, что приложение знает о Telegram, — в `apps/miniapp/src/lib/{telegram,theme}.ts`: вне Telegram оно тоже открывается, и забытая проверка роняет его целиком.
+- **`apps/web`** (React 19 + Vite + TanStack Router/Query/Table) и **`apps/miniapp`** (Telegram Mini App) — оба поверх `packages/ui` (Tailwind 4 + shadcn/ui) и `packages/api-client`. У Mini App нет роутера и cookie: экран один, а токены живут в памяти вкладки и приходят заголовком (раздел 5.2 ТЗ). Всё, что приложение знает о Telegram, — в `apps/miniapp/src/lib/{telegram,theme}.ts`: вне Telegram оно тоже открывается, и забытая проверка роняет его целиком. Цвета клиента берутся, только если проходят контраст 4.5:1; посещённые вкладки остаются смонтированными (скрытыми); вложенные состояния закрываются кнопкой «Назад» Telegram (`useTelegramBack`, подтверждения — только `TelegramConfirmDialog`), незаконченный ввод держит `useUnsavedGuard`.
 - **`packages/api-client`** — TypeScript-клиент, **генерируется** из OpenAPI (`make openapi`). Ручных `fetch` во фронтенде быть не должно.
 
 Поток данных всегда однонаправленный: канал (web/bot/miniapp) → API → репозитории `core` → БД, а расчёты — API → keto_engine. Бот и Mini App не имеют привилегий помимо API.
@@ -1020,8 +1020,16 @@ directory`. Защита при этом выглядит настроенной
   `muted-foreground`, `border`, `destructive`; сверх него наши `warning`, `success` и
   `--spacing-touch`. Значения — только в `packages/ui/src/styles/tokens.css`.
   Ссылки на выбывшие имена ловит `tokens.test.ts`, контраст — `contrast.test.ts`.
+  **`warning` — подложка, а не цвет текста** (янтарь на белом — 2:1): текстом
+  предупреждение пишется `text-warning-strong`, `text-warning` запрещён
+  `warningText.test.ts` во всех трёх фронтендах.
+- **Подписи предметных компонентов кита — из словаря приложения**
+  (`KitLabelsProvider` + `kitLabelsFrom`, ключи `kit.*`): `MacroBar`, `MacroFacts`,
+  `RatioBadge`, `DiaryEntryCard` стоят и в узбекском Mini App (ADR-0052). Описание
+  записи дневника — `describeDiaryEntry` кита (слова — `entry.*` словаря), поле
+  Mini App — `FieldShell`/`NativeSelect` кита.
 - **Шкалы, а не глазомер**: `text-page-title` / `text-section-title` / `text-card-title`,
-  `gap-screen` / `gap-block` / `gap-field`. Ширина — **роль страницы**, а не класс на месте:
+  `gap-screen` / `gap-section` / `gap-field`. Ширина — **роль страницы**, а не класс на месте:
   `PageLayout width` = `form` / `content` / `wide` / `full` (правило П34). Класс
   `max-w-content` вне `PageLayout` запрещён и ловится тестом.
 - **Колонки — только примитивами кита** (`packages/ui/src/components/layout`): `Columns`

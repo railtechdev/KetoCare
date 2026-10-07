@@ -110,3 +110,98 @@ describe("язык клиента Telegram (ADR-0052)", () => {
     expect(await languageCode()).toBeNull();
   });
 });
+
+describe("кнопка «Назад», закрытие и ссылки Telegram", () => {
+  function fakeApp() {
+    const handlers = new Set<() => void>();
+    const app = {
+      initData: "",
+      ready: vi.fn(),
+      expand: vi.fn(),
+      openLink: vi.fn(),
+      enableClosingConfirmation: vi.fn(),
+      disableClosingConfirmation: vi.fn(),
+      disableVerticalSwipes: vi.fn(),
+      enableVerticalSwipes: vi.fn(),
+      BackButton: {
+        show: vi.fn(),
+        hide: vi.fn(),
+        onClick: (handler: () => void) => void handlers.add(handler),
+        offClick: (handler: () => void) => void handlers.delete(handler),
+      },
+    };
+    (window as { Telegram?: unknown }).Telegram = { WebApp: app };
+    const press = () => {
+      for (const handler of handlers) handler();
+    };
+    return { app, press, handlers };
+  }
+
+  it("запуск — `ready` и `expand` одним вызовом", async () => {
+    const { app } = fakeApp();
+    const module = await import("./telegram");
+
+    module.initTelegram();
+
+    expect(app.ready).toHaveBeenCalled();
+    expect(app.expand).toHaveBeenCalled();
+  });
+
+  it("«Назад» закрывает только верхнее вложенное состояние", async () => {
+    // Подтверждение поверх панели: одно нажатие закрывало бы обе разом.
+    const { app, press, handlers } = fakeApp();
+    const module = await import("./telegram");
+    const panel = vi.fn();
+    const dialog = vi.fn();
+
+    const closePanel = module.showBackButton(panel);
+    const closeDialog = module.showBackButton(dialog);
+    press();
+    expect(dialog).toHaveBeenCalledTimes(1);
+    expect(panel).not.toHaveBeenCalled();
+
+    closeDialog();
+    press();
+    expect(panel).toHaveBeenCalledTimes(1);
+    expect(app.BackButton.hide).not.toHaveBeenCalled();
+
+    closePanel();
+    expect(app.BackButton.hide).toHaveBeenCalled();
+    expect(handlers.size).toBe(0);
+  });
+
+  it("незаконченный ввод: защита держится, пока жив последний", async () => {
+    const { app } = fakeApp();
+    const module = await import("./telegram");
+
+    const first = module.guardUnsavedInput();
+    const second = module.guardUnsavedInput();
+    expect(app.enableClosingConfirmation).toHaveBeenCalledTimes(1);
+    expect(app.disableVerticalSwipes).toHaveBeenCalledTimes(1);
+
+    first();
+    first();
+    expect(app.disableClosingConfirmation).not.toHaveBeenCalled();
+    second();
+    expect(app.disableClosingConfirmation).toHaveBeenCalledTimes(1);
+    expect(app.enableVerticalSwipes).toHaveBeenCalledTimes(1);
+  });
+
+  it("внешняя ссылка — через Telegram, а вне его — новой вкладкой", async () => {
+    const { app } = fakeApp();
+    const module = await import("./telegram");
+
+    module.openExternalLink("https://ketocare.example");
+    expect(app.openLink).toHaveBeenCalledWith("https://ketocare.example");
+
+    delete (window as { Telegram?: unknown }).Telegram;
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    module.openExternalLink("https://ketocare.example");
+    expect(open).toHaveBeenCalledWith(
+      "https://ketocare.example",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+});

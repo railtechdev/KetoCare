@@ -122,7 +122,7 @@ export function ChildPage() {
         loading={patients.isLoading}
         skeleton={
           <div
-            className="flex flex-col gap-block"
+            className="flex flex-col gap-section"
             role="status"
             aria-busy="true"
           >
@@ -158,11 +158,11 @@ export function ChildPage() {
           />
         }
       >
-        <ul className="m-0 flex list-none flex-col gap-block p-0">
+        <ul className="m-0 flex list-none flex-col gap-section p-0">
           {children.map((child) => (
             <li key={child.id}>
               <Card>
-                <CardContent className="flex flex-wrap items-center gap-block">
+                <CardContent className="flex flex-wrap items-center gap-section">
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="font-semibold">{child.full_name}</span>
                     <span className="text-sm text-muted-foreground">
@@ -287,7 +287,7 @@ function AddChild({ onDone }: { onDone: () => void }) {
   return (
     <PageLayout title={t("claim.title")} width="form" onBack={onDone}>
       <form
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         noValidate
         onSubmit={(event) => {
           event.preventDefault();

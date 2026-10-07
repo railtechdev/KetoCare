@@ -88,7 +88,7 @@ export interface ColumnsProps {
  * Исключение — `asideFirst`: приставное содержимое, подводящее итог основному
  * (итоги дня над составом меню), обязано читаться раньше и на телефоне тоже.
  *
- * Ниже точки расхождения это обычный столбец блоков — те же `gap-block`, что и
+ * Ниже точки расхождения это обычный столбец блоков — те же `gap-section`, что и
  * у `PageLayout`, так что вложение не меняет вертикальный ритм.
  */
 export function Columns({
@@ -105,7 +105,7 @@ export function Columns({
   // справа от плана оставался пустой столбец шириной с сам план (правило П27).
   if (aside === null || aside === undefined || aside === false) {
     return (
-      <div className={cn("flex flex-col gap-block", className)}>{main}</div>
+      <div className={cn("flex flex-col gap-section", className)}>{main}</div>
     );
   }
 
@@ -113,7 +113,7 @@ export function Columns({
     <div
       key="main"
       className={cn(
-        "flex min-w-0 flex-col gap-block",
+        "flex min-w-0 flex-col gap-section",
         asideFirst && MAIN_SECOND_AT[from],
       )}
     >
@@ -126,7 +126,7 @@ export function Columns({
       key="aside"
       aria-label={asideLabel}
       className={cn(
-        "flex min-w-0 flex-col gap-block",
+        "flex min-w-0 flex-col gap-section",
         asideFirst && ASIDE_FIRST_AT[from],
         asideSticky && STICKY_AT[from],
       )}
@@ -137,7 +137,7 @@ export function Columns({
 
   return (
     <div
-      className={cn("grid items-start gap-block", SPLIT_AT[from], className)}
+      className={cn("grid items-start gap-section", SPLIT_AT[from], className)}
     >
       {asideFirst ? [asideColumn, mainColumn] : [mainColumn, asideColumn]}
     </div>

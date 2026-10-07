@@ -1,5 +1,6 @@
 import { formatGrams, formatKcal } from "../lib/format";
 import { cn } from "../lib/cn";
+import { useKitLabels } from "../lib/kitLabels";
 
 interface MacroFactsCommon {
   /**
@@ -57,6 +58,7 @@ export type MacroFactsProps = CountedFacts | UncountedFacts;
  */
 export function MacroFacts(props: MacroFactsProps) {
   const { label, stale = false, className } = props;
+  const { macros } = useKitLabels();
 
   // Одно место на оба канала: и кабинет, и Mini App показывают приправу этой
   // строкой, а не своей копией с другим словом или с нулями.
@@ -82,14 +84,26 @@ export function MacroFacts(props: MacroFactsProps) {
       )}
     >
       <Cell
-        full="Калорийность, ккал"
-        short="ккал"
+        full={macros.kcalFull}
+        short={macros.kcalUnit}
         value={formatKcal(kcal)}
         after
       />
-      <Cell full="Жиры, г" short="Ж" value={formatGrams(fatG)} />
-      <Cell full="Белки, г" short="Б" value={formatGrams(proteinG)} />
-      <Cell full="Углеводы, г" short="У" value={formatGrams(carbsG)} />
+      <Cell
+        full={macros.fatFull}
+        short={macros.fatShort}
+        value={formatGrams(fatG)}
+      />
+      <Cell
+        full={macros.proteinFull}
+        short={macros.proteinShort}
+        value={formatGrams(proteinG)}
+      />
+      <Cell
+        full={macros.carbsFull}
+        short={macros.carbsShort}
+        value={formatGrams(carbsG)}
+      />
     </div>
   );
 }

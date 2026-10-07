@@ -1,9 +1,11 @@
 import {
   AsyncSection,
   Button,
-  ConfirmDialog,
   DiaryEntryCard,
   EmptyState,
+  describeDiaryEntry,
+  type DiaryEntryDescription,
+  type DiaryEntryNames,
   Section,
   formatLocale,
   formatOccurredAt,
@@ -20,12 +22,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+
+import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
 
 import { errorMessageOf } from "../../lib/api";
 import { useFamily } from "../family/useFamily";
 import type { Session } from "../session/useSession";
-import { describeEntry, type EntryNames } from "./describeEntry";
 import { EntryEditSheet } from "./EntryEditSheet";
 import {
   type DiaryLog,
@@ -45,6 +49,17 @@ const KIND_ICON: Record<DiaryLog["kind"], LucideIcon> = {
   meals: UtensilsCrossed,
   "side-effects": HeartPulse,
 };
+
+/** Описание записи — кит, общий с кабинетом; слова — `diary.entry.*` (ADR-0044). */
+function describeEntry(
+  entry: DiaryLog,
+  names: DiaryEntryNames,
+  t: TFunction,
+): DiaryEntryDescription {
+  return describeDiaryEntry(entry, names, (key, values) =>
+    t(`diary.${key}`, values),
+  );
+}
 
 /** «понедельник, 5 октября» / «dushanba, 5-oktabr» — на языке экрана (ADR-0052). */
 function dayFormat(): Intl.DateTimeFormat {
@@ -77,7 +92,7 @@ export function DiaryEntries({ session }: { session: Session }) {
   const { update, remove } = useEntryMutations(session.patientId);
   const [editing, setEditing] = useState<DiaryLog | null>(null);
 
-  const names: EntryNames = useMemo(
+  const names: DiaryEntryNames = useMemo(
     () => ({
       seizureTypes: toMap(seizureTypes.data),
       durationOptions: toMap(durationOptions.data),
@@ -123,7 +138,7 @@ export function DiaryEntries({ session }: { session: Session }) {
           />
         }
       >
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           {groups.map((group) => (
             <section key={group.key} className="flex flex-col gap-field">
               <h3 className="m-0 text-card-title first-letter:uppercase">
@@ -199,7 +214,7 @@ function Entry({
   onDelete,
 }: {
   entry: DiaryLog;
-  names: EntryNames;
+  names: DiaryEntryNames;
   own: boolean;
   author: string | undefined;
   deleting: boolean;
@@ -233,7 +248,7 @@ function Entry({
             >
               {t("diary.edit")}
             </Button>
-            <ConfirmDialog
+            <TelegramConfirmDialog
               trigger={
                 <Button
                   type="button"

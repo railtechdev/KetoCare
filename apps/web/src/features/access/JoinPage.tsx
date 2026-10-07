@@ -113,7 +113,7 @@ export function JoinPage() {
           join.mutate(values, { onSuccess: () => setDone(true) });
         })}
         noValidate
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
       >
         <Field
           id="join-code"

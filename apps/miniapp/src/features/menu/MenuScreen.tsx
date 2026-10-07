@@ -10,6 +10,8 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ExternalLink } from "../../components/ExternalLink";
+import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
 import { errorMessageOf } from "../../lib/api";
 import { usePatientOverview } from "../home/useOverview";
 import type { Session } from "../session/useSession";
@@ -159,7 +161,7 @@ export function MenuScreen({ session }: { session: Session }) {
   };
 
   return (
-    <main className="flex flex-col gap-block p-block">
+    <main className="flex flex-col gap-section p-section">
       <h1 className="text-page-title">{t("menu.title")}</h1>
 
       {/* Три дня, а не календарь (см. `DAYS`). Кнопки делят строку поровну:
@@ -286,14 +288,12 @@ export function MenuScreen({ session }: { session: Session }) {
               </WarningBanner>
             )}
             {session.hasWebCredentials && (
-              <a
+              <ExternalLink
                 className="text-primary underline underline-offset-4"
                 href={session.webUrl}
-                target="_blank"
-                rel="noopener noreferrer"
               >
                 {t("menu.openWeb")}
-              </a>
+              </ExternalLink>
             )}
           </div>
         }
@@ -301,6 +301,7 @@ export function MenuScreen({ session }: { session: Session }) {
         {menu.data != null && (
           <DayPlan
             menu={menu.data}
+            canMarkEaten={dayOffset <= 0}
             onToggle={(item) =>
               mark.mutate({ itemId: item.id, eaten: !item.eaten })
             }
@@ -340,6 +341,7 @@ export function MenuScreen({ session }: { session: Session }) {
 
 function DayPlan({
   menu,
+  canMarkEaten,
   onToggle,
   onRemove,
   removing,
@@ -351,6 +353,12 @@ function DayPlan({
   failure,
 }: {
   menu: Menu;
+  /**
+   * Ставится ли отметка «съедено». На завтра — нет: съесть будущий день нельзя,
+   * а флажок у завтрашнего плана читался бы как «отметьте заранее» — и
+   * отметка ушла бы врачу как съеденное (так же в кабинете, `DayComposer`).
+   */
+  canMarkEaten: boolean;
   onToggle: (item: MenuItem) => void;
   onRemove: (item: MenuItem) => void;
   removing: boolean;
@@ -364,7 +372,12 @@ function DayPlan({
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
+      {!canMarkEaten && menu.items.length > 0 && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("menu.tomorrowNoEaten")}
+        </p>
+      )}
       {saveFailed !== null && (
         <WarningBanner level="danger" title={t("menu.compose.removeFailed")}>
           {saveFailed}
@@ -410,47 +423,70 @@ function DayPlan({
             <ul className="flex flex-col gap-field">
               {items.map((item) => (
                 <li key={item.id}>
-                  <label className="flex items-start gap-field">
-                    <input
-                      type="checkbox"
-                      className="mt-1 size-5 shrink-0 accent-primary"
-                      checked={item.eaten}
-                      disabled={pendingId === item.id}
-                      aria-describedby={
-                        failedId === item.id ? markFailedId(item.id) : undefined
-                      }
-                      onChange={() => {
-                        onToggle(item);
-                      }}
-                    />
-                    <span className="min-w-0 break-words">
-                      {item.title ?? t("menu.unknownDish")}
-                      {item.changed_since_saved && (
-                        // День от правки рецепта не меняется — в том и смысл
-                        // снимка, — но семье решать, пересобрать его или нет.
-                        <span className="block text-muted-foreground">
-                          {t("menu.changedSinceSaved")}
-                        </span>
-                      )}
-                    </span>
-                  </label>
+                  <div className="flex items-start justify-between gap-section">
+                    {/* На будущем дне флажок остаётся только у уже отмеченной
+                        позиции — чтобы снять ошибочную отметку: иначе
+                        позицию нельзя было бы ни снять, ни убрать. */}
+                    {canMarkEaten || item.eaten ? (
+                      // Вся строка — цель касания не ниже 44 px, а не квадрат
+                      // 20 px флажка: отмечают на ходу, одной рукой.
+                      <label className="flex min-h-touch min-w-0 flex-1 cursor-pointer items-center gap-field py-1">
+                        <input
+                          type="checkbox"
+                          className="size-6 shrink-0 accent-primary"
+                          checked={item.eaten}
+                          disabled={pendingId === item.id}
+                          aria-describedby={
+                            failedId === item.id
+                              ? markFailedId(item.id)
+                              : undefined
+                          }
+                          onChange={() => {
+                            onToggle(item);
+                          }}
+                        />
+                        <DishTitle item={item} />
+                      </label>
+                    ) : (
+                      <p className="m-0 flex min-h-touch min-w-0 flex-1 items-center py-1">
+                        <DishTitle item={item} />
+                      </p>
+                    )}
 
-                  {/* Убрать можно только неотмеченное. Съеденное блюдо — это
-                      уже не план, а запись о том, что ребёнок ел: снять её
-                      одним нажатием значило бы потерять клинические данные
-                      мимо чьего-либо решения. Сначала снимается отметка. */}
-                  {!item.eaten && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-1 ml-9 min-h-touch"
-                      disabled={removing}
-                      onClick={() => onRemove(item)}
-                    >
-                      {t("menu.compose.remove")}
-                    </Button>
-                  )}
+                    {/* Убрать можно только неотмеченное. Съеденное блюдо — это
+                        уже не план, а запись о том, что ребёнок ел: снять её
+                        одним нажатием значило бы потерять клинические данные
+                        мимо чьего-либо решения. Сначала снимается отметка.
+
+                        Справа и с подтверждением: кнопка стояла в 4 px под
+                        флажком, и промах при отметке «съедено» убирал блюдо
+                        из плана без вопроса. */}
+                    {!item.eaten && (
+                      <TelegramConfirmDialog
+                        trigger={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="min-h-touch shrink-0 text-muted-foreground"
+                            disabled={removing}
+                            aria-label={t("menu.compose.removeAria", {
+                              title: item.title ?? t("menu.unknownDish"),
+                            })}
+                          >
+                            {t("menu.compose.remove")}
+                          </Button>
+                        }
+                        title={t("menu.compose.removeTitle", {
+                          title: item.title ?? t("menu.unknownDish"),
+                        })}
+                        description={t("menu.compose.removeBody")}
+                        confirmLabel={t("menu.compose.remove")}
+                        cancelLabel={t("menu.compose.keep")}
+                        onConfirm={() => onRemove(item)}
+                      />
+                    )}
+                  </div>
 
                   {/* Отказ отметки называется словами и стоит под той
                       позицией, которую не приняли: без сети отметка отказывает
@@ -462,7 +498,7 @@ function DayPlan({
                       id={markFailedId(item.id)}
                       level="danger"
                       title={t("menu.markFailed")}
-                      className="mt-1 ml-9 w-auto"
+                      className="mt-1 ml-8 w-auto"
                     >
                       {failure}
                     </WarningBanner>
@@ -473,7 +509,7 @@ function DayPlan({
                       Граммы приходят с сервера уже на эту позицию (М1):
                       доумножать их здесь нечем — числа порций клиент не видит. */}
                   {(item.ingredients ?? []).length > 0 && (
-                    <details className="pl-9 text-sm">
+                    <details className="pl-8 text-sm">
                       <summary className="min-h-(--spacing-touch) cursor-pointer py-1 text-muted-foreground">
                         {t("menu.composition")}
                       </summary>
@@ -512,5 +548,22 @@ function DayPlan({
 
       <DayTotals menu={menu} targets={targets} verdict={verdict} />
     </div>
+  );
+}
+
+/** Название позиции и пометка о правке рецепта после сохранения дня. */
+function DishTitle({ item }: { item: MenuItem }) {
+  const { t } = useTranslation();
+  return (
+    <span className="min-w-0 break-words">
+      {item.title ?? t("menu.unknownDish")}
+      {item.changed_since_saved && (
+        // День от правки рецепта не меняется — в том и смысл снимка, — но
+        // семье решать, пересобрать его или нет.
+        <span className="block text-sm text-muted-foreground">
+          {t("menu.changedSinceSaved")}
+        </span>
+      )}
+    </span>
   );
 }

@@ -104,7 +104,7 @@ export function AccessCodePanel({
   }
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <Section
         title={voice("title")}
         description={voice("intro")}

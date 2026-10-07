@@ -49,7 +49,7 @@ export function SaveDishForm({
   return (
     <Section title={t("save.action")} description={t("save.description")}>
       <form
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         onSubmit={(event) => {
           event.preventDefault();
           // Выключенная кнопка — не единственная защита: форма — последняя

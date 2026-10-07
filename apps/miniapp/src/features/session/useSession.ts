@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { createContext, useContext } from "react";
 
 import { api, errorDetailsOf, setTokens } from "../../lib/api";
 import { applyLanguage, currentLanguage, knownLanguage } from "../../lib/i18n";
@@ -24,13 +25,36 @@ export interface Session {
   hasWebCredentials: boolean;
 }
 
+/**
+ * Поправить открытую сессию тем, что изменилось на сервере после входа.
+ *
+ * Сессия — ответ входа, и сама она не обновляется: родитель включил вход в
+ * кабинет, а приложение до перезапуска продолжало считать, что кабинета нет, —
+ * после перехода между вкладками снова предлагало его включить (и получало
+ * 409), а ссылки на кабинет в плане дня не было. Ставит `SessionGate`.
+ */
+export const SessionUpdateContext = createContext<
+  (patch: Partial<Pick<Session, "hasWebCredentials">>) => void
+>(() => undefined);
+
+export function useUpdateSession() {
+  return useContext(SessionUpdateContext);
+}
+
 /** Почему приложение не открылось. Каждое состояние ведёт к своему экрану. */
 export type SessionProblem =
   /** Открыто не из Telegram: строки запуска нет. */
   | "outside_telegram"
   /** Telegram есть, привязки нет — нужен код из кабинета. */
   | "not_linked"
-  /** Подпись не сошлась или сервер недоступен. */
+  /**
+   * Сервер не принял подпись запуска (401). Почти всегда — она устарела:
+   * Telegram подписывает запуск на ограниченное время, а приложение висело
+   * открытым дольше. Повтор с той же подписью не поможет — только новый запуск
+   * из чата, и экран говорит именно это.
+   */
+  | "relaunch"
+  /** Сервер недоступен или ответил иначе. */
   | "failed";
 
 /** Что открыть: по умолчанию — ребёнка, выбранного в прошлый раз. */
@@ -135,7 +159,11 @@ async function launch(initData: string, patientId?: string): Promise<Session> {
     // 404 — привязки нет. Отличается от прочих отказов тем, что семья
     // может это исправить сама, и приложение должно сказать как.
     throw (
-      response.status === 404 ? "not_linked" : "failed"
+      response.status === 404
+        ? "not_linked"
+        : response.status === 401
+          ? "relaunch"
+          : "failed"
     ) satisfies SessionProblem;
   }
 

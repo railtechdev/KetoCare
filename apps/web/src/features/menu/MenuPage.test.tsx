@@ -206,6 +206,23 @@ describe("MenuPage", () => {
     );
   });
 
+  it("на будущий день флажка «съедено» нет — съесть его нельзя", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(
+      await screen.findByLabelText(
+        "Отметить «Каша на кокосовом масле» съеденным",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Следующий день" }));
+
+    expect(
+      await screen.findByText("Каша на кокосовом масле"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
   it("показывает, сколько осталось до норм назначения", async () => {
     renderPage();
 

@@ -11,7 +11,7 @@ import { PrescriptionTab } from "./PrescriptionTab";
  */
 export function PrescriptionView({ patientId }: { patientId: string }) {
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <PrescriptionTab patientId={patientId} />
       <MedicationsTab patientId={patientId} />
     </div>

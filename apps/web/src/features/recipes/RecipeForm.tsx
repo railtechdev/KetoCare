@@ -155,11 +155,11 @@ export function RecipeForm({
         className="flex flex-col gap-screen"
       >
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-card-title font-semibold">
+          <legend className="mb-section text-card-title font-semibold">
             {t("form.basics")}
           </legend>
 
-          <div className="flex flex-col gap-block">
+          <div className="flex flex-col gap-section">
             <Field
               id={`${ids}-title`}
               label={t("form.title")}
@@ -191,11 +191,11 @@ export function RecipeForm({
         </fieldset>
 
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-card-title font-semibold">
+          <legend className="mb-section text-card-title font-semibold">
             {t("form.portion")}
           </legend>
 
-          <div className="grid gap-block sm:grid-cols-2">
+          <div className="grid gap-section sm:grid-cols-2">
             <Field
               id={`${ids}-yield`}
               width="narrow"
@@ -222,7 +222,7 @@ export function RecipeForm({
         </fieldset>
 
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-card-title font-semibold">
+          <legend className="mb-section text-card-title font-semibold">
             {t("form.composition")}
           </legend>
 
@@ -258,10 +258,10 @@ export function RecipeForm({
               icon={CookingPot}
               title={t("form.emptyCompositionTitle")}
               description={t("form.emptyComposition")}
-              className="mt-block"
+              className="mt-section"
             />
           ) : (
-            <ul className="mt-block mb-0 flex list-none flex-col gap-field p-0">
+            <ul className="mt-section mb-0 flex list-none flex-col gap-field p-0">
               {ingredients.fields.map((field, index) => {
                 const gramsId = `${ids}-grams-${field.id}`;
                 const gramsError = errors.ingredients?.[index]?.grams;
@@ -280,7 +280,7 @@ export function RecipeForm({
                 return (
                   <li
                     key={field.id}
-                    className="flex flex-wrap items-center gap-block"
+                    className="flex flex-wrap items-center gap-section"
                   >
                     <span className="min-w-0 flex-1 break-words">{label}</span>
 
@@ -382,11 +382,11 @@ export function RecipeForm({
               // относятся к прежнему составу.
               aria-busy={computed.pending}
               className={cn(
-                "mt-block flex flex-col gap-field",
+                "mt-section flex flex-col gap-field",
                 computed.stale && "opacity-60 transition-opacity",
               )}
             >
-              <div className="flex flex-wrap items-center gap-block">
+              <div className="flex flex-wrap items-center gap-section">
                 <RatioBadge ratio={computed.dish.ratio} />
                 <span className="tabular-nums">
                   {t("form.computedKcal", {
@@ -423,20 +423,26 @@ export function RecipeForm({
               без карточки расчёт не уйдёт никогда, и форма показывала бы
               пустоту вместо чисел, не назвав причины. */}
           {computed.hasMissingProduct && (
-            <p role="status" className="mt-field mb-0 text-sm text-warning">
+            <p
+              role="status"
+              className="mt-field mb-0 text-sm text-warning-strong"
+            >
               {t("form.missingProduct")}
             </p>
           )}
 
           {computed.isError && !computed.hasMissingProduct && (
-            <p role="status" className="mt-field mb-0 text-sm text-warning">
+            <p
+              role="status"
+              className="mt-field mb-0 text-sm text-warning-strong"
+            >
               {t("form.computedFailed")}
             </p>
           )}
         </fieldset>
 
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-block text-card-title font-semibold">
+          <legend className="mb-section text-card-title font-semibold">
             {t("form.cooking")}
           </legend>
 
@@ -527,7 +533,11 @@ function DraftChecks({ checks }: { checks: DraftCheck[] }) {
       <ul className="m-0 flex list-none flex-col gap-field p-0">
         {checks.map((check, index) => (
           <li key={`${check.kind}-${index}`} className="text-sm">
-            <span className={check.hard ? "text-destructive" : "text-warning"}>
+            <span
+              className={
+                check.hard ? "text-destructive" : "text-warning-strong"
+              }
+            >
               {t(`form.draft.kind.${check.kind}`, {
                 defaultValue: t("form.draft.kind.other"),
               })}

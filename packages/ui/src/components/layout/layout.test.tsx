@@ -210,7 +210,7 @@ describe("плотность", () => {
     // Признак плотного блока — уменьшенные отступы карточки. Правило П26 канона
     // требует их на служебных экранах, и до контекста их приходилось помнить в
     // каждом блоке: из тридцати служебных блоков помнили в трёх.
-    expect(container.firstElementChild?.className).toContain("py-block");
+    expect(container.firstElementChild?.className).toContain("py-section");
   });
 
   it("явный выбор блока сильнее наследованного", () => {
@@ -222,7 +222,7 @@ describe("плотность", () => {
       </DensityProvider>,
     );
 
-    expect(container.firstElementChild?.className).not.toContain("py-block");
+    expect(container.firstElementChild?.className).not.toContain("py-section");
   });
 });
 

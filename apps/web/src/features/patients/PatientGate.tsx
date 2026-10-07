@@ -37,7 +37,7 @@ export function PatientGate({
   if (isPending) {
     return (
       <div
-        className="flex max-w-form flex-col gap-block"
+        className="flex max-w-form flex-col gap-section"
         role="status"
         aria-busy="true"
       >

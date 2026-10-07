@@ -1,11 +1,13 @@
-import { Button, Input, Section, toast } from "@ketocare/ui";
+import { Button, FieldShell, Input, Section, toast } from "@ketocare/ui";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { BreakableUrl, ExternalLink } from "../../components/ExternalLink";
 import { api, errorMessageOf } from "../../lib/api";
 import { launchData } from "../../lib/telegram";
-import type { Session } from "./useSession";
+import { useTelegramBack, useUnsavedGuard } from "../../lib/useTelegram";
+import { type Session, useUpdateSession } from "./useSession";
 
 /**
  * «Вход в кабинет» — включение веба родителю, пришедшему из Telegram (ADR-0040).
@@ -24,6 +26,8 @@ export function WebAccessPanel({ session }: { session: Session }) {
   const [done, setDone] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const updateSession = useUpdateSession();
+  useUnsavedGuard(!done && (email !== "" || password !== ""));
 
   const enable = useMutation({
     mutationFn: async () => {
@@ -36,29 +40,32 @@ export function WebAccessPanel({ session }: { session: Session }) {
     },
     onSuccess: () => {
       setDone(true);
+      // Сессия знает о кабинете сразу, а не после перезапуска: иначе другие
+      // экраны (ссылка на кабинет в плане дня) и этот же блок после смены
+      // ребёнка снова предлагали бы включить сделанное.
+      updateSession({ hasWebCredentials: true });
       toast.success(t("webAccess.done"));
     },
   });
 
-  if (session.hasWebCredentials) return <WebPasswordReset session={session} />;
-
   // После включения блок не исчезает молча, а говорит, куда идти дальше:
   // «включено» без адреса — поручение без места назначения (аудит пути,
-  // 02.10.2026).
+  // 02.10.2026). Проверка до `hasWebCredentials`: сессия уже знает о кабинете,
+  // но подсказку «куда идти» человек должен успеть прочесть.
   if (done)
     return (
       <Section title={t("webAccess.title")} density="compact">
         <p className="m-0">{t("webAccess.doneHint")}</p>
-        <a
-          className="break-all underline underline-offset-4"
+        <ExternalLink
+          className="underline underline-offset-4"
           href={session.webUrl}
-          target="_blank"
-          rel="noopener noreferrer"
         >
-          {session.webUrl}
-        </a>
+          <BreakableUrl url={session.webUrl} />
+        </ExternalLink>
       </Section>
     );
+
+  if (session.hasWebCredentials) return <WebPasswordReset session={session} />;
 
   return (
     <Section title={t("webAccess.title")} density="compact">
@@ -71,35 +78,39 @@ export function WebAccessPanel({ session }: { session: Session }) {
           enable.mutate();
         }}
       >
-        <label className="flex flex-col gap-1">
-          <span>{t("webAccess.email")}</span>
-          <Input
-            type="email"
-            required
-            autoComplete="email"
-            className="min-h-touch"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </label>
+        <FieldShell label={t("webAccess.email")}>
+          {() => (
+            <Input
+              type="email"
+              required
+              autoComplete="email"
+              className="min-h-touch"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          )}
+        </FieldShell>
 
-        <label className="flex flex-col gap-1">
-          <span>{t("webAccess.password")}</span>
-          <Input
-            type="password"
-            required
-            minLength={12}
-            autoComplete="new-password"
-            className="min-h-touch"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          {/* Требование к длине называется до отправки, а не в отказе: оно
-              одно и то же во всех трёх дверях в кабинет. */}
-          <span className="text-sm text-muted-foreground">
-            {t("webAccess.passwordHint")}
-          </span>
-        </label>
+        {/* Требование к длине называется до отправки, а не в отказе: оно
+            одно и то же во всех трёх дверях в кабинет. Пояснением рядом с
+            полем, а не внутри подписи — иначе оно читалось бы как имя поля. */}
+        <FieldShell
+          label={t("webAccess.password")}
+          hint={t("webAccess.passwordHint")}
+        >
+          {({ describedBy }) => (
+            <Input
+              type="password"
+              required
+              minLength={12}
+              autoComplete="new-password"
+              className="min-h-touch"
+              aria-describedby={describedBy}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          )}
+        </FieldShell>
 
         {enable.isError && (
           <p role="alert" className="m-0 text-destructive">
@@ -107,8 +118,10 @@ export function WebAccessPanel({ session }: { session: Session }) {
           </p>
         )}
 
+        {/* Второстепенное на главной: громкая кнопка одна на экран (П31). */}
         <Button
           type="submit"
+          variant="outline"
           className="min-h-touch self-start"
           disabled={enable.isPending}
         >
@@ -118,14 +131,12 @@ export function WebAccessPanel({ session }: { session: Session }) {
 
       <p className="m-0 text-sm text-muted-foreground">
         {t("webAccess.where")}{" "}
-        <a
+        <ExternalLink
           className="underline underline-offset-4"
           href={session.webUrl}
-          target="_blank"
-          rel="noopener noreferrer"
         >
-          {session.webUrl}
-        </a>
+          <BreakableUrl url={session.webUrl} />
+        </ExternalLink>
       </p>
     </Section>
   );
@@ -162,18 +173,29 @@ function WebPasswordReset({ session }: { session: Session }) {
     },
   });
 
+  // Открытая форма сброса — вложенное состояние: «Назад» Telegram её
+  // сворачивает, а не закрывает приложение; набранный пароль бережёт
+  // подтверждение закрытия.
+  useTelegramBack(
+    open && !reset.isPending
+      ? () => {
+          setOpen(false);
+          setPassword("");
+        }
+      : null,
+  );
+  useUnsavedGuard(open && password !== "");
+
   return (
     <Section title={t("webAccess.title")} density="compact">
       <p className="m-0 text-sm text-muted-foreground">
         {t("webAccess.where")}{" "}
-        <a
-          className="break-all underline underline-offset-4"
+        <ExternalLink
+          className="underline underline-offset-4"
           href={session.webUrl}
-          target="_blank"
-          rel="noopener noreferrer"
         >
-          {session.webUrl}
-        </a>
+          <BreakableUrl url={session.webUrl} />
+        </ExternalLink>
       </p>
 
       {!open ? (
@@ -196,21 +218,23 @@ function WebPasswordReset({ session }: { session: Session }) {
           <p className="m-0 text-sm text-muted-foreground">
             {t("webAccess.reset.intro")}
           </p>
-          <label className="flex flex-col gap-1">
-            <span>{t("webAccess.reset.password")}</span>
-            <Input
-              type="password"
-              required
-              minLength={12}
-              autoComplete="new-password"
-              className="min-h-touch"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <span className="text-sm text-muted-foreground">
-              {t("webAccess.passwordHint")}
-            </span>
-          </label>
+          <FieldShell
+            label={t("webAccess.reset.password")}
+            hint={t("webAccess.passwordHint")}
+          >
+            {({ describedBy }) => (
+              <Input
+                type="password"
+                required
+                minLength={12}
+                autoComplete="new-password"
+                className="min-h-touch"
+                aria-describedby={describedBy}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            )}
+          </FieldShell>
           {reset.isError && (
             <p role="alert" className="m-0 text-destructive">
               {errorMessageOf(reset.error) ?? t("webAccess.failed")}
@@ -218,6 +242,7 @@ function WebPasswordReset({ session }: { session: Session }) {
           )}
           <Button
             type="submit"
+            variant="outline"
             className="min-h-touch self-start"
             disabled={reset.isPending}
           >

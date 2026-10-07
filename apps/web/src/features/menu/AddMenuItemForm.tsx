@@ -82,7 +82,7 @@ export function AddMenuItemForm({
       aria-label={t("meal.addTo", {
         meal: t("meal.name", { index: mealIndex }),
       })}
-      className="flex flex-col gap-block rounded-lg border border-border p-4"
+      className="flex flex-col gap-section rounded-lg border border-border p-4"
     >
       <DishPicker
         patientId={patientId}

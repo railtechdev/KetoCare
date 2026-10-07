@@ -25,7 +25,7 @@ export function BackupCodesPanel({
   const { t } = useTranslation("auth");
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {/* Заголовок баннера — предупреждение, а не повтор названия экрана:
           два одинаковых заголовка подряд читаются как сбой вёрстки. */}
       <WarningBanner level="warning" title={t("backupCodes.warningTitle")}>

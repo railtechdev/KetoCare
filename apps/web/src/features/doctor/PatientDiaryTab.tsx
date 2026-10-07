@@ -58,7 +58,7 @@ export function PatientDiaryTab({ patientId }: { patientId: string }) {
   );
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <SelectField
         id={selectId}
         label={t("diary.tabsLabel")}
@@ -126,11 +126,19 @@ function DiaryKindView({
     () =>
       items.flatMap((log) => {
         if (log.kind === "ketones") {
-          return [{ at: new Date(log.occurred_at), value: log.value }];
+          return [
+            { id: log.id, at: new Date(log.occurred_at), value: log.value },
+          ];
         }
         if (log.kind === "weight") {
-          // weight:raw — точка графика: подпись оси форматирует сама ось.
-          return [{ at: new Date(log.occurred_at), value: log.weight_kg }];
+          return [
+            {
+              id: log.id,
+              at: new Date(log.occurred_at),
+              // weight:raw — точка графика: подпись оси форматирует сама ось.
+              value: log.weight_kg,
+            },
+          ];
         }
         return [];
       }),
@@ -182,7 +190,7 @@ function DiaryKindView({
   );
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <PeriodPicker
         preset={preset}
         onPresetChange={setPreset}
@@ -211,7 +219,7 @@ function DiaryKindView({
       {/* Молча остаться без маркеров нельзя: скачок показателя после смены
           назначения без вертикальной черты читается как ухудшение состояния. */}
       {withChart && prescriptions.isError && (
-        <p className="m-0 text-sm text-warning">
+        <p className="m-0 text-sm text-warning-strong">
           {t("diary.markersUnavailable")}
         </p>
       )}

@@ -61,7 +61,7 @@ export function ChildForm({
     <form
       onSubmit={handleSubmit(onSubmit)}
       noValidate
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
     >
       <Field
         id={`${ids}-name`}

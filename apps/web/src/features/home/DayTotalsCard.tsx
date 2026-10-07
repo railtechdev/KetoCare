@@ -49,8 +49,8 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
 
   return (
     <Panel title={t("day.title")}>
-      <div className="flex flex-col gap-block">
-        <div className="flex flex-wrap items-center gap-block">
+      <div className="flex flex-col gap-section">
+        <div className="flex flex-wrap items-center gap-section">
           <RatioBadge
             ratio={totals.ratio}
             withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}

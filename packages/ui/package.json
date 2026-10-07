@@ -9,7 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./styles.css": "./src/styles/tokens.css",
-    "./testing": "./src/testing/dictionaryNumbers.ts"
+    "./testing": "./src/testing/index.ts"
   },
   "scripts": {
     "test": "vitest run",

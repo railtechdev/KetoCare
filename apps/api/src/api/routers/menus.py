@@ -14,6 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Query, Request
 
+from core.clock import local_today
 from core.models import Menu, MenuItem
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
@@ -293,6 +294,16 @@ async def mark_item_eaten(
             "План дня только что изменили, и этого блюда в нём больше нет. "
             "Обновите план и отметьте съеденное заново.",
             details={"reason": "plan_changed"},
+        )
+    # Будущий день съеденным не отмечается: съесть его нельзя, а отметка
+    # ушла бы врачу как факт. Запрет здесь, а не только в интерфейсе — бот и
+    # любой клиент ходят в ту же ручку. Снять ошибочную отметку можно всегда.
+    if payload.eaten and menu.date > local_today():
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Этот день ещё не наступил — отметить блюдо съеденным можно в тот "
+            "день, когда ребёнок его ел.",
+            details={"reason": "future_day"},
         )
     updated = await menus_repo.set_eaten(session, item=item, eaten=payload.eaten)
     return MenuItemRead.model_validate(updated)

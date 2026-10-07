@@ -34,7 +34,12 @@ describe("ChatMessage", () => {
         <ChatMessage role="user" meta="05.10, 09:12">
           можно ли сыр
         </ChatMessage>
-        <ChatMessage role="assistant" refusal meta="05.10, 09:13">
+        <ChatMessage
+          role="assistant"
+          refusal
+          meta="05.10, 09:13"
+          note="Не заменяет врача"
+        >
           Этот вопрос нужно обсудить с лечащим врачом.
         </ChatMessage>
       </>,
@@ -49,6 +54,37 @@ describe("ChatMessage", () => {
 
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(screen.queryByText(/загруз/i)).not.toBeInTheDocument();
+  });
+
+  it("ожидание дольше обычного объясняется словами, а не длится молча", () => {
+    // Без обработчика ответ не придёт никогда, а скелетон выглядел как «думает».
+    render(
+      <ChatMessage
+        role="assistant"
+        pending
+        slowNote="Ответ готовится дольше обычного"
+        pendingSince={new Date(Date.now() - 60_000)}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Ответ готовится дольше обычного",
+    );
+  });
+
+  it("свежее ожидание — без слов «дольше обычного»", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        pending
+        slowNote="Ответ готовится дольше обычного"
+        pendingSince={new Date()}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Ответ готовится дольше обычного"),
+    ).not.toBeInTheDocument();
   });
 
   it("у ожидания не показывается подпись", () => {
@@ -75,12 +111,19 @@ describe("ChatMessage", () => {
     // Отказ показывается репликой, а не ошибкой (ADR-0022): прячется подпись,
     // а не сообщение.
     const { container } = render(
-      <ChatMessage role="assistant" refusal>
+      <ChatMessage role="assistant" refusal note="Не заменяет врача">
         Помощник сейчас недоступен.
       </ChatMessage>,
     );
 
     expect(container.querySelector('[aria-busy="true"]')).toBeNull();
     expect(screen.getByText("Помощник сейчас недоступен.")).toBeInTheDocument();
+  });
+
+  it("ответ помощника без подписи не компилируется", () => {
+    // Проверка типов: `@ts-expect-error` падает, если ошибки нет.
+    // @ts-expect-error — у ответа помощника подпись обязательна (раздел 10.4 ТЗ)
+    const answer = <ChatMessage role="assistant">ответ</ChatMessage>;
+    expect(answer).toBeTruthy();
   });
 });

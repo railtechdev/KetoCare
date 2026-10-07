@@ -135,9 +135,10 @@ describe("записи дневника в Mini App", () => {
     expect(api.PATCH).not.toHaveBeenCalled();
   });
 
-  it("у приступа секунды и интервал вместе не принимаются", async () => {
-    // Измеренное и со слов — разные величины (ADR-0020): форма говорит об
-    // этом до отправки, а не ответом сервера.
+  it("у приступа длительность — выбор «засекали / со слов», а не два поля", async () => {
+    // Измеренное и со слов — разные величины (ADR-0020). Прежде на шаге
+    // стояли оба поля и подсказка «не оба сразу»; теперь выбор делается
+    // словами, и переключение очищает второе значение.
     const user = userEvent.setup();
     renderEntries();
 
@@ -146,16 +147,44 @@ describe("записи дневника в Mini App", () => {
         name: "Исправить запись «Приступ: Тонико-клонический»",
       }),
     );
-    await user.type(
-      await screen.findByLabelText(/Сколько длился, секунды/),
-      "90",
-    );
-    await user.click(screen.getByRole("button", { name: "Далее" }));
+    // Запись со слов: открыт интервал, поля секунд нет вовсе.
+    expect(await screen.findByLabelText(/^Примерно/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Сколько длился, секунды/)).toBeNull();
 
-    expect(
-      await screen.findByText("Либо секунды, либо «примерно» — не оба сразу."),
-    ).toBeInTheDocument();
-    expect(api.PATCH).not.toHaveBeenCalled();
+    await user.click(screen.getByLabelText("Засекали по часам"));
+    expect(screen.queryByLabelText(/^Примерно/)).toBeNull();
+    await user.type(screen.getByLabelText(/Сколько длился, секунды/), "90");
+    await user.click(screen.getByRole("button", { name: "Далее" }));
+    await user.click(await screen.findByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(api.PATCH).toHaveBeenCalledTimes(1));
+    expect(api.PATCH).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/logs/seizures/{log_id}",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          duration_sec: 90,
+          duration_option_id: null,
+        }) as object,
+      }),
+    );
+  });
+
+  it("на шаге приступа не больше трёх полей", async () => {
+    // Правило семьи: не больше трёх полей на экран формы (раздел 8.2 ТЗ).
+    const user = userEvent.setup();
+    renderEntries();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Исправить запись «Приступ: Тонико-клонический»",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await screen.findByLabelText(/^Примерно/);
+    const fields = dialog.querySelectorAll(
+      'input:not([type="radio"]), select, textarea',
+    );
+    expect(fields.length).toBeLessThanOrEqual(3);
   });
 
   it("приступ сохраняется в два шага и с интервалом, а не секундами", async () => {

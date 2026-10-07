@@ -46,7 +46,7 @@ export function MetricRow({
   return (
     <dl
       aria-label={label}
-      className={cn("m-0 grid gap-block", MIN_WIDTH[min], className)}
+      className={cn("m-0 grid gap-section", MIN_WIDTH[min], className)}
     >
       {children}
     </dl>

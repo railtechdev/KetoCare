@@ -1,15 +1,12 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@ui/lib/cn";
 import { Skeleton } from "./ui/skeleton";
 
-export interface ChatMessageProps {
-  role: "user" | "assistant";
+interface ChatMessageCommon {
   children?: ReactNode;
   /** Ответ ещё не пришёл: на его месте ожидание, а не пустота */
   pending?: boolean;
-  /** Строка под ответом: дисклеймер, список статей. Только у помощника */
-  note?: ReactNode;
   /** Ответа не было: отказ, шаблон или недоступность — подпись не ставится */
   refusal?: boolean;
   /**
@@ -18,8 +15,51 @@ export interface ChatMessageProps {
    * разговора знает, а врачу без него не понять, о каком дне вопрос.
    */
   meta?: ReactNode;
+  /**
+   * Что сказать, если ответа нет дольше обычного, — словами приложения.
+   *
+   * Ожидание без конца выглядит как «думает»: при остановленном обработчике
+   * скелетон стоял часами, и семья ждала ответа, которого не будет. Через
+   * `slowAfterMs` от `pendingSince` (момент вопроса) под ожиданием появляется
+   * этот текст — со статусом, чтобы его услышала программа чтения с экрана.
+   */
+  slowNote?: ReactNode;
+  /** Когда задан вопрос; без него отсчёт идёт от появления ожидания на экране. */
+  pendingSince?: Date;
+  /** Порог «дольше обычного»; по умолчанию 45 секунд. */
+  slowAfterMs?: number;
   className?: string;
 }
+
+/** Обычный ответ приходит за 5–20 секунд; 45 — с запасом на очередь. */
+export const CHAT_SLOW_AFTER_MS = 45_000;
+
+/**
+ * Реплика помощника обязана нести подпись — на уровне типов.
+ *
+ * Дисклеймер под КАЖДЫМ ответом — требование раздела 10.4 ТЗ, и необязательный
+ * проп позволял его забыть: экран компилировался и показывал ответ о здоровье
+ * ребёнка без слов «не заменяет врача». Без подписи допустимо только
+ * ожидание-скелетон (`pending`), под которым подписи и не бывает.
+ */
+export type ChatMessageProps = ChatMessageCommon &
+  (
+    | {
+        role: "user";
+        /** У реплики семьи подписи нет; переданная — не показывается. */
+        note?: ReactNode;
+      }
+    | {
+        role: "assistant";
+        pending: true;
+        note?: ReactNode;
+      }
+    | {
+        role: "assistant";
+        /** Строка под ответом: дисклеймер, список статей. */
+        note: ReactNode;
+      }
+  );
 
 /**
  * Сообщение переписки.
@@ -43,9 +83,17 @@ export function ChatMessage({
   note,
   refusal = false,
   meta,
+  slowNote,
+  pendingSince,
+  slowAfterMs = CHAT_SLOW_AFTER_MS,
   className,
 }: ChatMessageProps) {
   const own = role === "user";
+  const slow = useSlow(
+    pending && slowNote !== undefined,
+    pendingSince?.getTime(),
+    slowAfterMs,
+  );
 
   return (
     <div
@@ -66,6 +114,11 @@ export function ChatMessage({
           <span aria-busy="true" className="flex flex-col gap-1 py-1">
             <Skeleton className="h-3 w-40" />
             <Skeleton className="h-3 w-24" />
+            {slow && (
+              <span role="status" className="text-xs">
+                {slowNote}
+              </span>
+            )}
           </span>
         ) : (
           <span className="whitespace-pre-wrap break-words">{children}</span>
@@ -77,4 +130,28 @@ export function ChatMessage({
       </div>
     </div>
   );
+}
+
+/** Ожидание длится дольше порога — с учётом того, сколько уже прошло. */
+function useSlow(
+  active: boolean,
+  since: number | undefined,
+  afterMs: number,
+): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setSlow(false);
+      return undefined;
+    }
+    const left = afterMs - (since === undefined ? 0 : Date.now() - since);
+    if (left <= 0) {
+      setSlow(true);
+      return undefined;
+    }
+    setSlow(false);
+    const timer = window.setTimeout(() => setSlow(true), left);
+    return () => window.clearTimeout(timer);
+  }, [active, since, afterMs]);
+  return slow;
 }

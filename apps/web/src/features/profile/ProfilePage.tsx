@@ -90,7 +90,7 @@ export function ProfilePage() {
         loading={me.isLoading}
         skeleton={
           <div
-            className="flex flex-col gap-block"
+            className="flex flex-col gap-section"
             role="status"
             aria-busy="true"
           >
@@ -126,7 +126,7 @@ export function ProfilePage() {
                 );
               })}
               noValidate
-              className="flex flex-col gap-block"
+              className="flex flex-col gap-section"
             >
               <Field
                 id="profile-name"

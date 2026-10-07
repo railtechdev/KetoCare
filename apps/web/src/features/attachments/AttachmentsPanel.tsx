@@ -222,8 +222,8 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
         </FormError>
       )}
 
-      <div className="flex flex-col gap-field border-t border-border pt-block">
-        <div className="flex flex-wrap gap-block">
+      <div className="flex flex-col gap-field border-t border-border pt-section">
+        <div className="flex flex-wrap gap-section">
           <SelectField
             id={`${ids}-kind`}
             width="medium"
