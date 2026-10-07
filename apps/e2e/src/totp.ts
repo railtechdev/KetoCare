@@ -8,8 +8,10 @@ import { createHmac } from "node:crypto";
  * двенадцать лет не менялся, а сервер использует ровно эти параметры —
  * `pyotp.TOTP(secret)` по умолчанию.
  */
+export const TOTP_STEP_SECONDS = 30;
+
 export function totp(secret: string, at: number = Date.now()): string {
-  const counter = Math.floor(at / 1000 / 30);
+  const counter = Math.floor(at / 1000 / TOTP_STEP_SECONDS);
   const message = Buffer.alloc(8);
   message.writeBigUInt64BE(BigInt(counter));
 

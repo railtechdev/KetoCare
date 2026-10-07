@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 
 import {
   DOCTOR_EMAIL,
@@ -6,7 +6,7 @@ import {
   PARENT_EMAIL,
   PASSWORD,
 } from "./env";
-import { totp } from "./totp";
+import { TOTP_STEP_SECONDS, totp } from "./totp";
 
 /**
  * Вход в кабинет через API, а не через форму.
@@ -46,13 +46,18 @@ export async function loginAsParent(page: Page): Promise<void> {
  * побочным действием каждого входа.
  */
 export async function loginAsDoctor(page: Page): Promise<void> {
-  const response = await page.request.post("/api/v1/auth/login", {
-    data: {
-      email: DOCTOR_EMAIL,
-      password: PASSWORD,
-      totp_code: totp(DOCTOR_TOTP_SECRET),
-    },
-  });
+  let response = await postDoctorLogin(page);
+  // Страховка на случай, когда отметка шага в памяти потеряна (Playwright
+  // перезапустил процесс после упавшего теста): сервер сам говорит, что шаг
+  // занят, и ждать нужно ровно до следующего — не дольше 30 секунд.
+  for (
+    let attempt = 0;
+    attempt < 2 && (await isReusedCode(response));
+    attempt++
+  ) {
+    await waitForNextStep();
+    response = await postDoctorLogin(page);
+  }
   if (!response.ok()) {
     // Тело отказа безопасно: токенов в нём нет, а без него «401» не говорит
     // ничего. Подсказка про переменную — потому что первая же причина
@@ -70,6 +75,45 @@ export async function loginAsDoctor(page: Page): Promise<void> {
   if (body.status !== "ok") {
     throw new Error(`Вход врача не дал сессию: ${String(body.status)}`);
   }
+}
+
+/**
+ * Шаг TOTP, которым врач входил последним в этом процессе.
+ *
+ * Код одноразовый (RFC 6238 §5.2, находка Н8): сервер запоминает принятый шаг
+ * и второй вход тем же кодом отвергает. Сценарии входят врачом по нескольку
+ * раз за полминуты, поэтому перед входом ждём, пока шаг сменится. Процесс один
+ * (`workers: 1` в playwright.config.ts), и отметки в памяти достаточно; на
+ * случай перезапуска процесса есть повтор по `totp_reused` выше.
+ */
+let lastDoctorStep = -1;
+
+function currentStep(): number {
+  return Math.floor(Date.now() / 1000 / TOTP_STEP_SECONDS);
+}
+
+async function waitForNextStep(): Promise<void> {
+  const next = (currentStep() + 1) * TOTP_STEP_SECONDS * 1000;
+  // Полсекунды сверху — на расхождение часов прогона и сервера в одну сторону.
+  await new Promise((resolve) => setTimeout(resolve, next - Date.now() + 500));
+}
+
+async function postDoctorLogin(page: Page): Promise<APIResponse> {
+  if (currentStep() <= lastDoctorStep) await waitForNextStep();
+  lastDoctorStep = currentStep();
+  return page.request.post("/api/v1/auth/login", {
+    data: {
+      email: DOCTOR_EMAIL,
+      password: PASSWORD,
+      totp_code: totp(DOCTOR_TOTP_SECRET),
+    },
+  });
+}
+
+async function isReusedCode(response: APIResponse): Promise<boolean> {
+  if (response.status() !== 401) return false;
+  const body = await response.json().catch(() => null);
+  return body?.error?.details?.reason === "totp_reused";
 }
 
 /** Идентификатор ребёнка, доступного вошедшему пользователю. */

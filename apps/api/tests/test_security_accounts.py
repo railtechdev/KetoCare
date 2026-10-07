@@ -455,8 +455,28 @@ class TestTotpReplay:
 
         assert first.status_code == 200, first.text
         assert first.json()["status"] == "ok"
+        # Верный, но уже принятый код — 401 со своей причиной: потребитель —
+        # форма входа кабинета (показывает текст сервера) и вход врача в
+        # apps/e2e (ждёт следующего шага по `totp_reused`).
         assert replay.status_code == 401, replay.text
-        assert replay.json()["error"]["message"] == "Неверный код подтверждения."
+        error = replay.json()["error"]
+        assert error["message"] == (
+            "Этот код уже использован. Дождитесь следующего кода в приложении."
+        )
+        assert error["details"] == {"reason": "totp_reused"}
+
+    async def test_wrong_code_is_still_just_wrong(self, client, make_user):
+        secret = pyotp.random_base32()
+        doctor = await make_user(UserRole.DOCTOR, totp_secret=secret)
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": doctor.email, "password": TEST_PASSWORD, "totp_code": "000000"},
+        )
+
+        assert response.status_code == 401
+        assert response.json()["error"]["message"] == "Неверный код подтверждения."
+        assert response.json()["error"]["details"] != {"reason": "totp_reused"}
 
     async def test_previous_window_after_the_current_one_is_a_replay(
         self, client, session, make_user

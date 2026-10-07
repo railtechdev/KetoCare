@@ -246,7 +246,8 @@ async def login(
                 session, user_id=user.id, code=payload.backup_code
             )
 
-        if not by_backup and not await _consume_totp_code(session, user, payload.totp_code):
+        outcome = "ok" if by_backup else await _consume_totp_code(session, user, payload.totp_code)
+        if outcome != "ok":
             await login_throttle.record_failure(payload.email, client_address(request))
             await audit_repo.write_audit_log_independent(
                 user_id=user.id,
@@ -254,7 +255,18 @@ async def login(
                 entity="users",
                 entity_id=user.id,
                 ip=client_address(request),
+                after={"reason": "totp_reused"} if outcome == "reused" else None,
             )
+            if outcome == "reused":
+                # Своё сообщение, а не «неверный код»: код верный, но уже
+                # открыл сессию, и человеку нужно знать, что ждать следующего,
+                # а не перепроверять цифры. Оракула здесь нет — до этой строки
+                # доходит только тот, кто уже предъявил верный пароль.
+                raise ApiError(
+                    ErrorCode.UNAUTHORIZED,
+                    TOTP_REUSED_MESSAGE,
+                    details={"reason": "totp_reused"},
+                )
             raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
 
         if by_backup:
@@ -300,20 +312,27 @@ async def login(
     return LoginResponse(status="ok", tokens=tokens)
 
 
-async def _consume_totp_code(session: AsyncSession, user: User, code: str | None) -> bool:
+#: Повтор кода, уже открывшего сессию (находка Н8, RFC 6238 §5.2).
+TOTP_REUSED_MESSAGE = "Этот код уже использован. Дождитесь следующего кода в приложении."
+
+
+async def _consume_totp_code(
+    session: AsyncSession, user: User, code: str | None
+) -> Literal["ok", "invalid", "reused"]:
     """Код верен И его шаг ещё не принимался (находка Н8).
 
-    Повтор кода, уже открывшего сессию, отвечает тем же «неверным кодом»: для
-    подсмотревшего пароль и код это именно отказ, а владелец, вошедший первым,
-    этого ответа не увидит.
+    `reused` — код верный, но его шаг (или более поздний) уже открыл сессию:
+    врач во второй вкладке в ту же полминуты или подсмотревший пароль и код.
     """
 
     if not code:
-        return False
+        return "invalid"
     step = totp_matched_step(user.totp_secret, code, user_id=user.id)
     if step is None:
-        return False
-    return await users_repo.claim_totp_step(session, user_id=user.id, step=step)
+        return "invalid"
+    if await users_repo.claim_totp_step(session, user_id=user.id, step=step):
+        return "ok"
+    return "reused"
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Обновить пару токенов")
