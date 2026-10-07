@@ -25,6 +25,7 @@ from .ai.parse import parse_free_text
 from .ai.summary import doctor_summary
 from .maintenance import close_stuck_ai_jobs, purge_files, purge_idempotency_keys
 from .reminders.notify import (
+    notify_account_security,
     notify_family,
     notify_family_joined,
     notify_family_menu_composed,
@@ -49,6 +50,7 @@ class WorkerSettingsARQ:
         notify_family_joined,
         notify_family_nudge,
         notify_password_changed,
+        notify_account_security,
         notify_family_menu_composed,
         parse_free_text,
         assistant_reply,

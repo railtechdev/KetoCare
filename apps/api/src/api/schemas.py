@@ -61,12 +61,22 @@ class Page[T](BaseModel):
 # --- auth -----------------------------------------------------------------
 
 
+#: Верхняя граница предъявляемого пароля (находка Н17). Новый пароль — до 128
+#: знаков, но предъявляемый проверяется argon2, и без границы тело в мегабайты
+#: становилось часом работы процессора за двадцать запросов в минуту. Запас
+#: вдвое — на пароли, заданные до политики E7, если такие найдутся.
+PRESENTED_PASSWORD_MAX = 256
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
-    totp_code: str | None = Field(default=None, description="Обязателен для admin/doctor/dietitian")
+    password: str = Field(max_length=PRESENTED_PASSWORD_MAX)
+    totp_code: str | None = Field(
+        default=None, max_length=16, description="Обязателен для admin/doctor/dietitian"
+    )
     backup_code: str | None = Field(
         default=None,
+        max_length=64,
         description="Резервный код вместо кода приложения, когда телефон недоступен",
     )
 
@@ -595,6 +605,27 @@ class UserRead(BaseModel):
     language: Language | None = None
 
 
+AccountNoticeKind = Literal[
+    "password_reset", "totp_reset", "role_changed", "care_received", "care_handed_over"
+]
+
+
+class AccountNotice(BaseModel):
+    """Что администратор сделал с учётной записью (находка Н5).
+
+    * `password_reset` — выдан временный пароль;
+    * `totp_reset` — сброшен второй фактор;
+    * `role_changed` — сменена роль;
+    * `care_received` / `care_handed_over` — переданы пациенты: этой учётной
+      записи или от неё. `count` — сколько детей; кого именно, видно в своём
+      списке пациентов, а сообщению это знать незачем.
+    """
+
+    kind: AccountNoticeKind
+    at: datetime
+    count: int | None = None
+
+
 class LanguageRead(BaseModel):
     """Язык человека в боте, Mini App и сообщениях Telegram (ADR-0052).
 
@@ -669,7 +700,7 @@ class PasswordChange(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    current_password: str = Field(min_length=1, max_length=128)
+    current_password: str = Field(min_length=1, max_length=PRESENTED_PASSWORD_MAX)
     new_password: NewPassword
 
 

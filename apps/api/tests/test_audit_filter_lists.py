@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import get_args
 
 from api.services.admin import create_dictionary_entry
+from core.repositories.diary import DiaryLog
 
 REPO = Path(__file__).resolve().parents[3]
 SOURCES = (
@@ -78,8 +80,18 @@ def test_filter_knows_every_written_action() -> None:
     assert listed - written == set(), "фильтр журнала предлагает действия, которых никто не пишет"
 
 
+def _diary_entities() -> frozenset[str]:
+    """Записи дневника: сущность журнала — имя таблицы вида (`services/logs.py`).
+
+    Виды берутся из объединения `DiaryLog` репозитория, по которому параметризованы
+    правка и удаление: новый вид дневника попадёт в проверку сам.
+    """
+
+    return frozenset(model.__tablename__ for model in get_args(DiaryLog))
+
+
 def test_filter_knows_every_written_entity() -> None:
-    written = _written("entity") | _dictionary_entities()
+    written = _written("entity") | _dictionary_entities() | _diary_entities()
     listed = _filter_list("AUDIT_ENTITIES")
 
     assert written - listed == set(), "API пишет сущности, которых нет в фильтре журнала"

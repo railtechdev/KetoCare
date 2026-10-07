@@ -67,6 +67,18 @@ RU: Final[dict[str, str]] = {
         "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство, "
         "а администратор клиники выдаст вам временный пароль."
     ),
+    # --- безопасность учётной записи (находки Н2 и Н7 security-прохода)
+    "device_linked": (
+        "К вашей учётной записи KetoCare подключён ещё один Telegram — кодом "
+        "«Подключить свой Telegram».\n\n"
+        "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство. "
+        "Первые сутки с нового устройства нельзя задать вход в кабинет."
+    ),
+    "web_credentials_set": (
+        "Для вашей учётной записи KetoCare включён вход в веб-кабинет по почте и паролю.\n\n"
+        "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство, "
+        "а администратор клиники выдаст вам временный пароль."
+    ),
     # --- контрольный визит (ADR-0050)
     "visit": "Напоминание: {when} — контрольный визит к врачу 🗓",
     "visit_date": "{day} {month}",
@@ -110,6 +122,19 @@ UZ: Final[dict[str, str]] = {
     "role_other_lower": "mutaxassis",
     "password_changed": (
         "KetoCare kabineti paroli Telegramdagi ilova orqali o‘zgartirildi.\n\n"
+        "Agar buni siz qilmagan bo‘lsangiz, darhol shifokorga xabar bering: u "
+        "begona qurilmani o‘chiradi, klinika administratori esa sizga vaqtinchalik "
+        "parol beradi."
+    ),
+    "device_linked": (
+        "KetoCare hisobingizga yana bitta Telegram ulandi — «O‘z Telegramimni "
+        "ulash» kodi orqali.\n\n"
+        "Agar buni siz qilmagan bo‘lsangiz, darhol shifokorga xabar bering: u "
+        "begona qurilmani o‘chiradi. Yangi qurilmadan birinchi sutka davomida "
+        "kabinetga kirishni sozlab bo‘lmaydi."
+    ),
+    "web_credentials_set": (
+        "KetoCare hisobingiz uchun veb-kabinetga pochta va parol bilan kirish yoqildi.\n\n"
         "Agar buni siz qilmagan bo‘lsangiz, darhol shifokorga xabar bering: u "
         "begona qurilmani o‘chiradi, klinika administratori esa sizga vaqtinchalik "
         "parol beradi."

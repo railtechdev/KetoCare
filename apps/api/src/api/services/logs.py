@@ -9,6 +9,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.models import AiJob, MealLog, SeizureLog
 from core.models.enums import AiJobKind, AiJobStatus, DiarySource
 from core.repositories import ai_jobs as ai_jobs_repo
+from core.repositories import audit as audit_repo
 from core.repositories import diary as diary_repo
 from core.repositories.diary import DiaryLog
 
@@ -157,8 +161,10 @@ async def update_log[M: DiaryLog, R: BaseModel](
     patient_id: uuid.UUID,
     log_id: uuid.UUID,
     payload: LogUpdate,
+    actor: CurrentUser,
 ) -> R:
     log = await _owned_log(session, model, log_id=log_id, patient_id=patient_id)
+    _require_author(log, actor)
 
     # exclude_unset: не переданное поле остаётся как есть, а явный null очищает
     # обнуляемое поле. Для NOT NULL-полей null отклоняют схемы (см. schemas_logs).
@@ -180,17 +186,84 @@ async def update_log[M: DiaryLog, R: BaseModel](
         current_seizure_type_id=log.seizure_type_id if isinstance(log, SeizureLog) else None,
     )
 
+    before = {key: _jsonable(getattr(log, key)) for key in fields}
     updated = await diary_repo.update(session, log=log, fields=fields)
+    await audit_repo.write_audit_log(
+        session,
+        user_id=actor.id,
+        action="diary_entry_updated",
+        entity=model.__tablename__,
+        entity_id=updated.id,
+        before=before,
+        after={key: _jsonable(value) for key, value in fields.items()},
+    )
     return read.model_validate(updated)
 
 
 async def delete_log[M: DiaryLog](
-    session: AsyncSession, model: type[M], *, patient_id: uuid.UUID, log_id: uuid.UUID
+    session: AsyncSession,
+    model: type[M],
+    *,
+    patient_id: uuid.UUID,
+    log_id: uuid.UUID,
+    actor: CurrentUser,
 ) -> None:
     """Мягкое удаление: дневниковые записи физически не удаляются (правило 4 CLAUDE.md)."""
 
     log = await _owned_log(session, model, log_id=log_id, patient_id=patient_id)
+    _require_author(log, actor)
     await diary_repo.soft_delete(session, log=log)
+    await audit_repo.write_audit_log(
+        session,
+        user_id=actor.id,
+        action="diary_entry_deleted",
+        entity=model.__tablename__,
+        entity_id=log.id,
+    )
+
+
+#: Отказ чужой записи. Пишется словами экрана: кнопок «Исправить» и «Удалить»
+#: у чужой записи нет ни в кабинете, ни в Mini App, и сюда приходит только
+#: устаревший экран или запрос мимо интерфейса.
+NOT_AUTHOR_MESSAGE = (
+    "Исправить или удалить запись дневника может только тот, кто её сделал. "
+    "Если в чужой записи ошибка, попросите автора её исправить."
+)
+
+
+def _require_author(log: DiaryLog, actor: CurrentUser) -> None:
+    """Запись правит и удаляет только её автор (ADR-0044, п. 2; находка Н1).
+
+    Запись бабушки — её свидетельство: что она видела и когда. Правило жило
+    только в интерфейсе, и любой из «Близких» или ведущий специалист запросом
+    мимо экрана переписывал чужой приступ, не оставив следа. Исключения для
+    специалиста нет: ADR-0044 называет правило «как в кабинете», а в кабинете
+    врача кнопок у чужой записи нет. Ошибка в записи семьи — повод для
+    разговора с ней, а не для правки свидетельства за неё.
+
+    Запись без автора (`created_by` пуст — учётная запись автора стёрта) не
+    правит никто: приписать её себе нельзя.
+
+    403, а не 404: запись не скрыта — её видит каждый, кто видит дневник, и
+    молчать о её существовании незачем; честный отказ объясняет, что делать.
+    """
+
+    if log.created_by is None or log.created_by != actor.id:
+        raise ApiError(ErrorCode.FORBIDDEN, NOT_AUTHOR_MESSAGE)
+
+
+def _jsonable(value: object) -> object:
+    """Значение поля для `audit_log` (JSONB): идентификаторы и время — строками."""
+
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, Enum):
+        return value.value
+    return value
 
 
 async def _owned_log[M: DiaryLog](

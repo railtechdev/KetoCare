@@ -11,9 +11,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.security import decode_token
@@ -689,13 +690,30 @@ class TestReviewFindings:
             json={"init_data": init_data(chat_id=CHAT_ID), "patient_id": str(first.id)},
         )
         assert opened.status_code == 200, opened.text
+        body = {
+            "password": "синий чайник на подоконнике",
+            "init_data": init_data(chat_id=CHAT_ID),
+        }
+
+        # Чат подключён кодом своего чата только что: код могли переслать, и
+        # первые сутки сбросить с него пароль нельзя (находка Н2).
+        fresh = await client.post(
+            "/api/v1/users/me/credentials/reset",
+            headers=_bearer(opened.json()["access_token"]),
+            json=body,
+        )
+        assert fresh.status_code == 403, fresh.text
+        assert fresh.json()["error"]["details"] == {"reason": "new_device"}
+
+        await session.execute(
+            update(TelegramAccount)
+            .where(TelegramAccount.chat_id == CHAT_ID)
+            .values(linked_at=datetime.now(UTC) - timedelta(days=2))
+        )
         response = await client.post(
             "/api/v1/users/me/credentials/reset",
             headers=_bearer(opened.json()["access_token"]),
-            json={
-                "password": "синий чайник на подоконнике",
-                "init_data": init_data(chat_id=CHAT_ID),
-            },
+            json=body,
         )
 
         assert response.status_code == 204, response.text

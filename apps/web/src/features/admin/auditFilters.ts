@@ -51,6 +51,14 @@ export const AUDIT_ENTITIES = [
   "access_codes",
   "attachments",
   "leads",
+  // Записи дневника: правка и удаление пишутся с именем таблицы вида
+  // (`services/logs.py`, находка Н1).
+  "seizure_logs",
+  "ketone_logs",
+  "weight_logs",
+  "medication_logs",
+  "meal_logs",
+  "side_effect_logs",
 ] as const;
 
 /** Значения `audit_log.action`, которые пишет API. */
@@ -112,6 +120,12 @@ export const AUDIT_ACTIONS = [
   // Завершение терапии и его снятие (вопрос 18, ADR-0050).
   "therapy_ended",
   "therapy_resumed",
+  // Правка и удаление записи дневника её автором (ADR-0044, находка Н1).
+  "diary_entry_updated",
+  "diary_entry_deleted",
+  // Правка своего профиля и языка (находка Н14).
+  "profile_updated",
+  "language_changed",
 ] as const;
 
 const UUID_PATTERN =

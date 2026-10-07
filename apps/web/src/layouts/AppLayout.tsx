@@ -14,6 +14,7 @@ import { Activity, Menu, X } from "lucide-react";
 import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AccountNotices } from "../features/auth/AccountNotices";
 import { SECTIONS_BY_ROLE } from "../features/auth/roles";
 import { NAV } from "./navWidth";
 import { useSession } from "../features/auth/useSession";
@@ -148,6 +149,7 @@ export function AppLayout() {
           </header>
 
           <main className="p-4 sm:p-6 xl:px-8">
+            <AccountNotices userId={session.userId} />
             <Outlet />
           </main>
         </div>

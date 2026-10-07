@@ -94,7 +94,7 @@ async def update_seizure_log(
     log_id: LogIdPath,
     payload: SeizureLogUpdate,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> SeizureLogRead:
     return await logs_service.update_log(
         session,
@@ -103,14 +103,17 @@ async def update_seizure_log(
         patient_id=patient_id,
         log_id=log_id,
         payload=payload,
+        actor=user,
     )
 
 
 @router.delete("/seizures/{log_id}", status_code=204, summary="Удалить запись о приступе")
 async def delete_seizure_log(
-    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, _: PatientAccessDep
+    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, user: PatientAccessDep
 ) -> Response:
-    await logs_service.delete_log(session, SeizureLog, patient_id=patient_id, log_id=log_id)
+    await logs_service.delete_log(
+        session, SeizureLog, patient_id=patient_id, log_id=log_id, actor=user
+    )
     return Response(status_code=204)
 
 
@@ -157,18 +160,26 @@ async def update_ketone_log(
     log_id: LogIdPath,
     payload: KetoneLogUpdate,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> KetoneLogRead:
     return await logs_service.update_log(
-        session, KetoneLog, KetoneLogRead, patient_id=patient_id, log_id=log_id, payload=payload
+        session,
+        KetoneLog,
+        KetoneLogRead,
+        patient_id=patient_id,
+        log_id=log_id,
+        payload=payload,
+        actor=user,
     )
 
 
 @router.delete("/ketones/{log_id}", status_code=204, summary="Удалить запись о кетонах")
 async def delete_ketone_log(
-    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, _: PatientAccessDep
+    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, user: PatientAccessDep
 ) -> Response:
-    await logs_service.delete_log(session, KetoneLog, patient_id=patient_id, log_id=log_id)
+    await logs_service.delete_log(
+        session, KetoneLog, patient_id=patient_id, log_id=log_id, actor=user
+    )
     return Response(status_code=204)
 
 
@@ -213,18 +224,26 @@ async def update_weight_log(
     log_id: LogIdPath,
     payload: WeightLogUpdate,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> WeightLogRead:
     return await logs_service.update_log(
-        session, WeightLog, WeightLogRead, patient_id=patient_id, log_id=log_id, payload=payload
+        session,
+        WeightLog,
+        WeightLogRead,
+        patient_id=patient_id,
+        log_id=log_id,
+        payload=payload,
+        actor=user,
     )
 
 
 @router.delete("/weight/{log_id}", status_code=204, summary="Удалить запись о весе")
 async def delete_weight_log(
-    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, _: PatientAccessDep
+    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, user: PatientAccessDep
 ) -> Response:
-    await logs_service.delete_log(session, WeightLog, patient_id=patient_id, log_id=log_id)
+    await logs_service.delete_log(
+        session, WeightLog, patient_id=patient_id, log_id=log_id, actor=user
+    )
     return Response(status_code=204)
 
 
@@ -278,7 +297,7 @@ async def update_medication_log(
     log_id: LogIdPath,
     payload: MedicationLogUpdate,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> MedicationLogRead:
     return await logs_service.update_log(
         session,
@@ -287,6 +306,7 @@ async def update_medication_log(
         patient_id=patient_id,
         log_id=log_id,
         payload=payload,
+        actor=user,
     )
 
 
@@ -294,9 +314,11 @@ async def update_medication_log(
     "/medications/{log_id}", status_code=204, summary="Удалить отметку о приёме препарата"
 )
 async def delete_medication_log(
-    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, _: PatientAccessDep
+    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, user: PatientAccessDep
 ) -> Response:
-    await logs_service.delete_log(session, MedicationLog, patient_id=patient_id, log_id=log_id)
+    await logs_service.delete_log(
+        session, MedicationLog, patient_id=patient_id, log_id=log_id, actor=user
+    )
     return Response(status_code=204)
 
 
@@ -341,18 +363,26 @@ async def update_meal_log(
     log_id: LogIdPath,
     payload: MealLogUpdate,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> MealLogRead:
     return await logs_service.update_log(
-        session, MealLog, MealLogRead, patient_id=patient_id, log_id=log_id, payload=payload
+        session,
+        MealLog,
+        MealLogRead,
+        patient_id=patient_id,
+        log_id=log_id,
+        payload=payload,
+        actor=user,
     )
 
 
 @router.delete("/meals/{log_id}", status_code=204, summary="Удалить запись о еде")
 async def delete_meal_log(
-    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, _: PatientAccessDep
+    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, user: PatientAccessDep
 ) -> Response:
-    await logs_service.delete_log(session, MealLog, patient_id=patient_id, log_id=log_id)
+    await logs_service.delete_log(
+        session, MealLog, patient_id=patient_id, log_id=log_id, actor=user
+    )
     return Response(status_code=204)
 
 
@@ -406,7 +436,7 @@ async def update_side_effect_log(
     log_id: LogIdPath,
     payload: SideEffectLogUpdate,
     session: SessionDep,
-    _: PatientAccessDep,
+    user: PatientAccessDep,
 ) -> SideEffectLogRead:
     return await logs_service.update_log(
         session,
@@ -415,12 +445,15 @@ async def update_side_effect_log(
         patient_id=patient_id,
         log_id=log_id,
         payload=payload,
+        actor=user,
     )
 
 
 @router.delete("/side-effects/{log_id}", status_code=204, summary="Удалить запись о самочувствии")
 async def delete_side_effect_log(
-    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, _: PatientAccessDep
+    patient_id: PatientIdPath, log_id: LogIdPath, session: SessionDep, user: PatientAccessDep
 ) -> Response:
-    await logs_service.delete_log(session, SideEffectLog, patient_id=patient_id, log_id=log_id)
+    await logs_service.delete_log(
+        session, SideEffectLog, patient_id=patient_id, log_id=log_id, actor=user
+    )
     return Response(status_code=204)
