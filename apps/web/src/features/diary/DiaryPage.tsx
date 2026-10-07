@@ -18,6 +18,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
@@ -140,7 +141,13 @@ export function DiaryPage({ patientId }: { patientId: string }) {
         {/* Radix монтирует только активную вкладку: запросы соседних видов
             записей не уходят, пока родитель их не открыл. */}
         {DIARY_KINDS.map((value) => (
-          <TabsContent key={value} value={value} className="pt-section">
+          <TabsContent
+            key={value}
+            value={value}
+            // Панель вкладки получает фокус с клавиатуры (Radix ставит
+            // tabIndex=0), а кит гасит рамку — без своей её не видно.
+            className="pt-section rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
             <DiaryTab
               kind={value}
               patientId={patientId}
@@ -420,6 +427,23 @@ function DiaryTab({
                 icon={Pill}
                 title={t("medications.noneTitle")}
                 description={t("medications.none")}
+              />
+            ) : kind === "meals" ? (
+              // Отметки «съедено» живут в плане дня, а не в этом списке: здесь
+              // — только еда, записанная словами. Без объяснения семья,
+              // отметившая весь день, читала «записей нет» и решала, что
+              // отметки пропали.
+              <EmptyState
+                icon={NotebookPen}
+                title={t("list.emptyTitle")}
+                description={t("meals.emptyBody")}
+                action={
+                  <Button asChild variant="outline">
+                    <SectionLink section="menu">
+                      {t("meals.toPlan")}
+                    </SectionLink>
+                  </Button>
+                }
               />
             ) : (
               <EmptyState

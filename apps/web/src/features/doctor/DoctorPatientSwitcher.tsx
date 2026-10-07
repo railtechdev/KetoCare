@@ -38,7 +38,10 @@ export function DoctorPatientSwitcher({
       className="border-transparent shadow-none"
       trigger={
         <span className="font-medium">
-          {current.data?.full_name ?? t("workspace.switcher.loading")}
+          {current.data?.full_name ??
+            (current.isError
+              ? t("workspace.switcher.unknown")
+              : t("workspace.switcher.loading"))}
         </span>
       }
       onSelect={(patient) => {

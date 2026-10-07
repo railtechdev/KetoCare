@@ -62,7 +62,7 @@ describe("buildSeizureGrid", () => {
     );
 
     expect(grid.total).toBe(5);
-    expect(formatCell(grid.rows[0]!.cells.morning)).toBe("5A");
+    expect(formatCell(grid.rows[0]!.cells.morning)).toBe("5 × A");
   });
 
   it("складывает одинаковые типы в одной клетке и разделяет разные", () => {
@@ -75,7 +75,7 @@ describe("buildSeizureGrid", () => {
       TYPES,
     );
 
-    expect(formatCell(grid.rows[0]!.cells.morning)).toBe("5A 1TC");
+    expect(formatCell(grid.rows[0]!.cells.morning)).toBe("5 × A, 1 × TC");
   });
 
   it("тип без кода подписывается названием, а не пропадает", () => {
@@ -86,7 +86,7 @@ describe("buildSeizureGrid", () => {
       TYPES,
     );
 
-    expect(formatCell(grid.rows[0]!.cells.morning)).toBe("1Атонический");
+    expect(formatCell(grid.rows[0]!.cells.morning)).toBe("1 × Атонический");
   });
 
   it("дни без приступов в сетку не попадают", () => {

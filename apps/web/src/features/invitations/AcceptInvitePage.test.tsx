@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -84,5 +85,32 @@ describe("приглашение по ссылке", () => {
       screen.getByRole("button", { name: /Перейти ко входу/ }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/Пароль ещё раз/)).toBeNull();
+  });
+
+  it("после создания ведёт на вход с уже подставленной почтой", async () => {
+    search = { token: "tok" };
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.endsWith("/preview")
+        ? { data: { email: "doc@example.com" } }
+        : { data: { email: "doc@example.com", role: "doctor" } },
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await screen.findByLabelText(/Имя и фамилия/), "Врач");
+    await user.type(screen.getByLabelText(/^Пароль$/), "очень-длинный-пароль");
+    await user.type(
+      screen.getByLabelText(/Пароль ещё раз/),
+      "очень-длинный-пароль",
+    );
+    await user.click(screen.getByRole("button", { name: /Создать/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Перейти ко входу/ }),
+    );
+
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/login",
+      search: { email: "doc@example.com" },
+    });
   });
 });

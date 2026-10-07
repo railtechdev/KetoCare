@@ -292,4 +292,32 @@ describe("состояния, которые не врут", () => {
       onlineManager.setOnline(true);
     }
   });
+
+  it("пустая «Еда» объясняет, где отметки плана, и ведёт к нему", async () => {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(respond(path)),
+    );
+    renderPage({ kind: "meals" });
+
+    expect(await screen.findByText(/отмечается в меню/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Открыть план дня" }),
+    ).toHaveAttribute("href", expect.stringContaining("/app/menu"));
+  });
+
+  it("тип приступа и интервал в форме — во всю ширину панели", async () => {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(respond(path)),
+    );
+    const user = userEvent.setup();
+    renderPage({ kind: "seizures" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Добавить запись" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Новая запись" });
+    const type = await within(dialog).findByLabelText(/Тип приступа/);
+    // Узкая ширина обрезала выбранное значение: «Выберите ин…».
+    expect(type.className).not.toMatch(/max-w-field/);
+  });
 });

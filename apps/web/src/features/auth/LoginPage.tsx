@@ -31,7 +31,12 @@ import { loginSchema, type LoginValues } from "./schemas";
 import { useSession } from "./useSession";
 import { useLoginMutation } from "./useAuthMutations";
 
-export function LoginPage() {
+export function LoginPage({
+  initialEmail,
+}: {
+  /** Почта только что заведённой учётной записи (`/login?email=`). */
+  initialEmail?: string;
+} = {}) {
   const { t } = useTranslation("auth");
   const { signIn } = useSession();
   const login = useLoginMutation();
@@ -68,7 +73,10 @@ export function LoginPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
+  } = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: initialEmail ?? "" },
+  });
 
   // Шаг входа истёк — назад к форме: сервер выдаст новый токен шага.
   const restart = () => {

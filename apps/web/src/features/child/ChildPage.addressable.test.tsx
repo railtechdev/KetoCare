@@ -81,6 +81,8 @@ describe("подэкраны раздела «Ребёнок» живут в а�
 
   it("по умолчанию — список детей", async () => {
     renderPage({});
+    // Дата рождения — по-русски, а не «2019-04-12».
+    expect(await screen.findByText(/12\.04\.2019/)).toBeInTheDocument();
 
     expect(await screen.findByText("Аня Иванова")).toBeInTheDocument();
   });

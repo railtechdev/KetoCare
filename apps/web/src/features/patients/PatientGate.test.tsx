@@ -27,11 +27,13 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 const CHILD = { id: "c1", full_name: "Аня" };
 
-function renderGate(client: QueryClient) {
+function renderGate(client: QueryClient, search: { patient?: string } = {}) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <SectionRouter section="menu">{children}</SectionRouter>
+        <SectionRouter section="menu" search={search}>
+          {children}
+        </SectionRouter>
       </QueryClientProvider>
     );
   }
@@ -78,5 +80,24 @@ describe("PatientGate", () => {
       await screen.findByRole("button", { name: "Повторить" }),
     ).toBeInTheDocument();
     expect(screen.getByText("экран ребёнка c1")).toBeInTheDocument();
+  });
+
+  it("ребёнок из ссылки, которого нет среди своих, назван ненайденным", async () => {
+    // Прежде экран молча просил «выберите ребёнка», как будто ссылка верная.
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        items: [CHILD, { id: "c2", full_name: "Боря" }],
+        total: 2,
+      },
+    });
+    renderGate(
+      new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+      { patient: "чужой" },
+    );
+
+    expect(
+      await screen.findByText("Ребёнок по ссылке не найден"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Аня" })).toBeInTheDocument();
   });
 });

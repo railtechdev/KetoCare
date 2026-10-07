@@ -117,7 +117,15 @@ export function buildSeizureGrid(
   return { rows, total };
 }
 
-/** Клетка в записи бумажного дневника: «5A», «2TC 1M», пусто. */
+/**
+ * Клетка сетки: «5 × A», «2 × ГТКП, 1 × М», пусто.
+ *
+ * Бумажный дневник пишет слитно — «5A», — но там коды из одной латинской
+ * буквы. Справочник клиники даёт коды в несколько кириллических букв и
+ * названия, и слитное «1ГТКП» или «1Атонический» читалось как одно слово.
+ */
 export function formatCell(cell: GridCell): string {
-  return cell.byType.map((entry) => `${entry.count}${entry.label}`).join(" ");
+  return cell.byType
+    .map((entry) => `${entry.count} × ${entry.label}`)
+    .join(", ");
 }

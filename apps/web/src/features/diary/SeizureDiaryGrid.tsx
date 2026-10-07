@@ -43,16 +43,17 @@ export function SeizureDiaryGrid({
   const { t } = useTranslation("diary");
   const grid = useMemo(() => buildSeizureGrid(logs, types), [logs, types]);
 
-  // Прежние типы (до ILAE 2025) попадают в легенду, только если ими подписан
-  // хоть один приступ на сетке: иначе легенда перечисляла бы справочник,
-  // от которого клиника отказалась (ADR-0050).
+  // В легенде — только типы, которые есть на сетке: она объясняет коды в
+  // клетках, а не перечисляет справочник. Полный перечень из двух десятков
+  // типов под сеткой с одним приступом прятал нужную строку. Прежние типы
+  // (до ILAE 2025) подписаны как прежние (ADR-0050).
   const used = new Set(
     logs.flatMap((log) =>
       log.kind === "seizures" ? [log.seizure_type_id] : [],
     ),
   );
   const legend = types
-    .filter((type) => type.code && (!type.retired || used.has(type.id)))
+    .filter((type) => type.code && used.has(type.id))
     .map((type) =>
       type.retired
         ? `${type.code} — ${t("grid.retiredType", { name: type.name })}`

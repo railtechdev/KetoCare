@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import ColumnElement, Float, cast, func, select
+from sqlalchemy import ColumnElement, Float, cast, func, or_, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +42,23 @@ async def get(session: AsyncSession, recipe_id: uuid.UUID) -> Recipe | None:
     return await session.get(Recipe, recipe_id)
 
 
+def _title_matches(q: str) -> ColumnElement[bool]:
+    """Совпадение по названию: словоформы ИЛИ подстрока — как у продуктов.
+
+    Полнотекст ищет целыми лексемами: «кур» не находило «Курица с маслом», и
+    поиск в «Добавить блюдо» оживал только на полностью набранном слове.
+    Подстрока покрывает набор по мере ввода. `%` и `_` экранируются — это
+    подстановочные знаки LIKE, а не буквы. `websearch_to_tsquery` принимает
+    любой ввод (у `to_tsquery` синтаксис, и `&` из формы ронял бы запрос).
+    """
+
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return or_(
+        Recipe.title.ilike(f"%{escaped}%", escape="\\"),
+        func.to_tsvector("russian", Recipe.title).op("@@")(func.websearch_to_tsquery("russian", q)),
+    )
+
+
 async def search(
     session: AsyncSession,
     *,
@@ -69,9 +86,7 @@ async def search(
     if ratio_max is not None:
         conditions.append(_ratio_column() <= ratio_max)
     if q:
-        conditions.append(
-            func.to_tsvector("russian", Recipe.title).op("@@")(func.plainto_tsquery("russian", q))
-        )
+        conditions.append(_title_matches(q))
 
     stmt = (
         select(Recipe)

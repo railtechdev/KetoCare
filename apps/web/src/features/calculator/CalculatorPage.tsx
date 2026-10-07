@@ -590,6 +590,11 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           kcal={kcal}
           suggested={suggested}
           prescription={prescription}
+          scaledBy={
+            scale.data !== undefined && scale.variables !== undefined
+              ? scale.variables.factor
+              : null
+          }
           onChange={(next) => {
             touched.current = true;
             setRatio(next.ratio);
@@ -891,12 +896,15 @@ function GoalFields({
   kcal,
   suggested,
   prescription,
+  scaledBy,
   onChange,
 }: {
   ratio: number | null;
   kcal: number | null;
   suggested: TargetsInput | null;
   prescription: { kcal_per_day: number; meals_per_day: number } | null;
+  /** Состав пересчитан на столько порций; `null` — не пересчитан. */
+  scaledBy: number | null;
   onChange: (next: { ratio: number | null; kcal: number | null }) => void;
 }) {
   const { t } = useTranslation("calculator");
@@ -980,6 +988,15 @@ function GoalFields({
           подставить своё число и объявить блюдо не попавшим в него. */}
       {(ratio === null || kcal === null) && (
         <p className="m-0 text-sm text-muted-foreground">{t("goal.none")}</p>
+      )}
+
+      {/* После «Пересчитать порции» калорийность блюда выросла (или упала)
+          во столько же раз, а цель осталась на один приём: без строки
+          объяснения «Цель не достигнута» читалась как ошибка пересчёта. */}
+      {scaledBy !== null && scaledBy !== 1 && kcal !== null && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("goal.scaled", { factor: formatMass(scaledBy) })}
+        </p>
       )}
     </div>
   );

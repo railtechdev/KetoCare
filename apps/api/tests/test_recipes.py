@@ -760,6 +760,35 @@ class TestSearch:
         assert omelette["id"] in ids
         assert soup["id"] not in ids
 
+    @pytest.mark.parametrize("q", ["к", "кур", "КУРИ", "урицей"])
+    async def test_searches_as_you_type(self, client, make_user, auth_headers, make_recipe, q):
+        """Потребитель — поиск блюда в «Добавить блюдо» кабинета и Mini App.
+
+        Полнотекст ищет целыми лексемами: «кур» не находило «Суп с курицей»,
+        и поиск оживал только на полностью набранном слове.
+        """
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        soup = await make_recipe(author=dietitian, title="Суп с курицей")
+
+        response = await client.get(
+            "/api/v1/recipes", params={"q": q, "limit": 200}, headers=auth_headers(dietitian)
+        )
+        assert response.status_code == 200, response.text
+        assert soup["id"] in [item["id"] for item in response.json()["items"]]
+
+    async def test_search_wildcards_are_letters(self, client, make_user, auth_headers, make_recipe):
+        """`%` и `_` — буквы запроса, а не подстановочные знаки LIKE."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        await make_recipe(author=dietitian, title="Суп с курицей")
+
+        response = await client.get(
+            "/api/v1/recipes", params={"q": "%", "limit": 200}, headers=auth_headers(dietitian)
+        )
+        assert response.status_code == 200
+        assert all("%" in item["title"] for item in response.json()["items"])
+
     async def test_pagination(self, client, make_user, auth_headers, make_recipe):
         dietitian = await make_user(UserRole.DIETITIAN)
         baseline = await client.get("/api/v1/recipes?limit=1", headers=auth_headers(dietitian))

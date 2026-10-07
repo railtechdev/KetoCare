@@ -30,6 +30,7 @@ export function PatientGate({
     patientId,
     patients: available,
     needsChoice,
+    requestedMissing,
     select,
   } = useSelectedPatient();
   const patients = usePatients();
@@ -70,6 +71,7 @@ export function PatientGate({
         patientId={patientId}
         available={available}
         needsChoice={needsChoice}
+        requestedMissing={requestedMissing}
         select={select}
         render={render}
       />
@@ -81,12 +83,14 @@ function Chosen({
   patientId,
   available,
   needsChoice,
+  requestedMissing,
   select,
   render,
 }: {
   patientId: string | null;
   available: readonly { id: string; full_name: string }[];
   needsChoice: boolean;
+  requestedMissing: boolean;
   select: (patientId: string) => void;
   render: (patientId: string) => ReactElement;
 }) {
@@ -108,8 +112,16 @@ function Chosen({
         // родитель попадает сюда первым делом после входа.
         headingLevel={1}
         icon={Users}
-        title={t("patientGate.chooseTitle")}
-        description={t("patientGate.chooseBody")}
+        title={
+          requestedMissing
+            ? t("patientGate.missingTitle")
+            : t("patientGate.chooseTitle")
+        }
+        description={
+          requestedMissing
+            ? t("patientGate.missingBody")
+            : t("patientGate.chooseBody")
+        }
         action={
           <ul className="m-0 flex list-none flex-wrap justify-center gap-field p-0">
             {available.map((patient) => (

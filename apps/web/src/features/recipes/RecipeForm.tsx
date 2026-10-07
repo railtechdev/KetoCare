@@ -387,7 +387,16 @@ export function RecipeForm({
               )}
             >
               <div className="flex flex-wrap items-center gap-section">
-                <RatioBadge ratio={computed.dish.ratio} />
+                {/* Без белка и углеводов соотношения нет: «— : 1» читалось как
+                    число с потерянной первой частью. */}
+                {computed.dish.ratio === null ? (
+                  <span className="tabular-nums">
+                    <span aria-hidden="true">—</span>
+                    <span className="sr-only">{t("form.ratioUndefined")}</span>
+                  </span>
+                ) : (
+                  <RatioBadge ratio={computed.dish.ratio} />
+                )}
                 <span className="tabular-nums">
                   {t("form.computedKcal", {
                     value: formatKcal(computed.dish.kcal),

@@ -96,6 +96,8 @@ export function AcceptInvitePage() {
     );
   }
 
+  const signedUpEmail = accept.data?.email ?? email;
+
   if (done) {
     return (
       <Shell
@@ -106,7 +108,15 @@ export function AcceptInvitePage() {
             : t("accept.doneBodyEmail", { email })
         }
       >
-        <Button type="button" onClick={() => void navigate({ to: "/login" })}>
+        <Button
+          type="button"
+          onClick={() =>
+            void navigate({
+              to: "/login",
+              search: signedUpEmail === null ? {} : { email: signedUpEmail },
+            })
+          }
+        >
           {t("accept.toLogin")}
         </Button>
       </Shell>

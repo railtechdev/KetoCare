@@ -40,6 +40,7 @@ import { useUpdateChildMutation, type Patient } from "../patients/useChildren";
 import { allergyNames } from "../patients/allergies";
 import { usePatients } from "../patients/usePatients";
 import { queryState } from "../../lib/queryState";
+import { formatIsoDate } from "../doctor/dates";
 
 /**
  * Подэкраны раздела. Живут в адресе, а не в состоянии (правило П30 канона).
@@ -167,7 +168,10 @@ export function ChildPage() {
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="font-semibold">{child.full_name}</span>
                     <span className="text-sm text-muted-foreground">
-                      {t("children.birthDate", { date: child.birth_date })}
+                      {t("children.birthDate", {
+                        date:
+                          formatIsoDate(child.birth_date) ?? child.birth_date,
+                      })}
                     </span>
                     <span className="text-sm text-muted-foreground">
                       {child.height_cm === null

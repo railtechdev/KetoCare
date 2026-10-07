@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { api } from "../../lib/api";
+import { api, errorCodeOf } from "../../lib/api";
 import type { Patient } from "../doctor/types";
 
 export function patientKey(patientId: string) {
@@ -22,6 +22,11 @@ export function patientKey(patientId: string) {
 export function usePatient(patientId: string) {
   return useQuery({
     queryKey: patientKey(patientId),
+    // «Нет такой карты» и «нет доступа» повтором не лечатся.
+    retry: (failures, error) => {
+      const code = errorCodeOf(error);
+      return code !== "not_found" && code !== "forbidden" && failures < 1;
+    },
     queryFn: async (): Promise<Patient> => {
       const { data, error } = await api.GET("/api/v1/patients/{patient_id}", {
         params: { path: { patient_id: patientId } },

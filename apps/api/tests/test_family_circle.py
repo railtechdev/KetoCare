@@ -242,6 +242,37 @@ class TestRemoval:
 
         assert response.status_code == 204, response.text
 
+    async def test_only_adult_cannot_leave(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Единственный взрослый не «выходит» одним нажатием.
+
+        Потребители — кнопка «Выйти» в `FamilyPanel` кабинета и в «Близких»
+        Mini App: обе читают `can_remove`. Ребёнок остался бы без семьи в
+        продукте, а вернуть доступ можно только новым кодом с приёма. Отказ —
+        409 со словами о том, что делать; специалиста правило не касается.
+        """
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient("Единственный")
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        mother = await make_user(UserRole.PARENT)
+        await patients_repo.link_parent(session, parent_id=mother.id, patient_id=patient.id)
+
+        listed = await client.get(parents_url(patient.id), headers=auth_headers(mother))
+        assert listed.status_code == 200, listed.text
+        assert _by_id(listed.json())[str(mother.id)]["can_remove"] is False
+
+        response = await client.delete(
+            parents_url(patient.id, mother.id), headers=auth_headers(mother)
+        )
+        assert response.status_code == 409, response.text
+        assert "единственный взрослый" in response.json()["error"]["message"]
+
+        # Специалист закрывает доступ осознанно и сам выдаёт новый код.
+        by_doctor = await client.get(parents_url(patient.id), headers=auth_headers(doctor))
+        assert _by_id(by_doctor.json())[str(mother.id)]["can_remove"] is True
+
     async def test_specialist_removes_anyone(
         self, client, session, make_user, make_patient, auth_headers
     ):

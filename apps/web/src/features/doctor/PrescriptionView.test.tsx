@@ -1,4 +1,4 @@
-import { Toaster } from "@ketocare/ui";
+import { formatGrams, formatKcal, Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -232,6 +232,20 @@ describe("форма назначения", () => {
     expect(api.POST).not.toHaveBeenCalled();
     // Форма осталась с введённым — врач правит дальше, а не набирает заново.
     expect(field().value).toBe("3.5");
+  });
+
+  it("история пишет числа по-русски: «1 200», а не «1200»", async () => {
+    renderView();
+
+    const table = await screen.findByRole("table");
+    expect(
+      within(table).getAllByText(formatKcal(1200), { normalizer: (t) => t })
+        .length,
+    ).toBeGreaterThan(0);
+    expect(within(table).queryByText("1200")).toBeNull();
+    expect(within(table).getAllByText(formatGrams(26)).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("без истории формы нет — новая версия строится от действующей", async () => {

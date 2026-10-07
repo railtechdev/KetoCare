@@ -3,6 +3,8 @@ import {
   ConfirmDialog,
   DataTable,
   EmptyState,
+  formatGrams,
+  formatKcal,
   RatioBadge,
   Section,
   toast,
@@ -106,7 +108,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         header: t("fields.kcal"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.prescription.kcal_per_day}
+            {formatKcal(row.original.prescription.kcal_per_day)}
           </span>
         ),
       },
@@ -116,7 +118,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         header: t("fields.protein"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.prescription.protein_g}
+            {formatGrams(row.original.prescription.protein_g)}
           </span>
         ),
       },
@@ -126,7 +128,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         header: t("fields.carbsLimit"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.prescription.carbs_limit_g}
+            {formatGrams(row.original.prescription.carbs_limit_g)}
           </span>
         ),
       },
