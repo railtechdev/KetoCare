@@ -113,9 +113,18 @@ describe("вкладки Mini App", () => {
     renderScreens();
 
     await user.click(tab("Расчёт"));
-    await user.type(await screen.findByLabelText("Найдите продукт"), "масло");
+    // Вкладка грузится по требованию, а поиск ждёт паузы в наборе: на
+    // загруженном раннере CI это дольше секунды по умолчанию у findBy*.
+    await user.type(
+      await screen.findByLabelText("Найдите продукт", {}, { timeout: 5000 }),
+      "масло",
+    );
     await user.click(
-      await screen.findByRole("button", { name: "Масло сливочное" }),
+      await screen.findByRole(
+        "button",
+        { name: "Масло сливочное" },
+        { timeout: 5000 },
+      ),
     );
     await user.type(
       await screen.findByLabelText(/Масло сливочное, граммы/),
