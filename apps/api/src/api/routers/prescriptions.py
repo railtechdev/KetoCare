@@ -17,11 +17,11 @@ from core.repositories import audit as audit_repo
 from core.repositories import prescriptions as prescriptions_repo
 from keto_engine import max_non_fat_grams
 
+from .. import after_commit
 from ..deps.auth import PatientAccessDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page, PrescriptionCreate, PrescriptionRead
-from ..services import queue as queue_service
 
 logger = structlog.get_logger(__name__)
 
@@ -113,14 +113,10 @@ async def create_prescription(
     # Семья узнаёт о новом назначении в тот же день (раздел 5.4 ТЗ): сутки
     # готовки по старому кетосоотношению — это сутки не той терапии.
     #
-    # Отказ очереди не отменяет назначение: оно уже записано и уже действует.
-    # Уронить ручку значит потерять запись врача из-за недоступного Redis.
-    try:
-        # В задачу уходит только ребёнок: сами цифры боту не нужны и по разделу
-        # 7.5 ТЗ ему запрещены — он зовёт открыть кабинет, а не пересказывает
-        # назначение.
-        await queue_service.enqueue("notify_family", str(patient_id))
-    except Exception as exc:  # noqa: BLE001 — причина не важна, важно не потерять назначение
-        logger.warning("notify_family_not_queued", patient_id=str(patient_id), reason=str(exc))
+    # Только после коммита: иначе откатившееся назначение успело бы позвать
+    # семью открыть то, чего нет. Отказ очереди назначение не отменяет —
+    # `run_deferred` это проглатывает и пишет в журнал. В задачу уходит только
+    # ребёнок: сами цифры боту по разделу 7.5 ТЗ запрещены.
+    after_commit.defer(session, "notify_family", str(patient_id))
 
     return PrescriptionRead.model_validate(prescription)
