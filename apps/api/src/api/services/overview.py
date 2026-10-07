@@ -351,8 +351,9 @@ async def build_overview(
 
     growth_drop: bool | None = None
     if clinical:
-        growth = await growth_service.assess_patient(session, patient_id=patient_id)
-        growth_drop = None if growth is None else growth_service.has_significant_drop(growth)
+        growth_drop = await growth_service.significant_drop_for_patient(
+            session, patient_id=patient_id
+        )
 
     prolonged_at = await overview_repo.latest_prolonged_seizure(
         session,

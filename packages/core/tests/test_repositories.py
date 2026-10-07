@@ -4,17 +4,19 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import event
 
-from core.models import Product, ProductCategory
+from core.models import Product, ProductCategory, WeightLog
 from core.models.clinical import AppendOnlyViolationError
-from core.models.enums import Sex, UserRole
+from core.models.enums import DiarySource, Sex, UserRole
 from core.repositories import (
     access,
     audit,
+    diary,
     medical_profiles,
     patients,
     prescriptions,
@@ -635,3 +637,35 @@ class TestLeadingMacroSearch:
 
         assert total == 1, "отбор строкой вернул пусто — сравнение членов перечисления сломано"
         assert found[0].name_ru.startswith("Масло")
+
+
+class TestWeightSeries:
+    """Ряд для оценки роста: те же записи и тот же порядок, что выдача дневника."""
+
+    async def test_matches_the_diary_listing(self, session):
+        patient = await _make_patient(session)
+        start = datetime(2026, 1, 1, 9, tzinfo=UTC)
+        for day in range(6):
+            session.add(
+                WeightLog(
+                    patient_id=patient.id,
+                    occurred_at=start + timedelta(days=day),
+                    source=DiarySource.WEB,
+                    weight_kg=20 + day,
+                    height_cm=110 if day % 2 == 0 else None,
+                    deleted_at=start if day == 4 else None,
+                )
+            )
+        await session.flush()
+
+        series = await diary.weight_series(session, patient_id=patient.id, limit=3)
+        listed, _total = await diary.list_for_patient(
+            session, WeightLog, patient_id=patient.id, limit=3
+        )
+
+        assert [(p.occurred_at, p.weight_kg, p.height_cm) for p in series] == [
+            (log.occurred_at, log.weight_kg, log.height_cm) for log in listed
+        ]
+        # Удалённое (день 4) пропущено, предел оставляет самые свежие.
+        assert [p.weight_kg for p in series] == [Decimal(25), Decimal(23), Decimal(22)]
+        assert [p.height_cm for p in series] == [None, None, Decimal(110)]

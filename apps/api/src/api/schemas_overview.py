@@ -248,6 +248,7 @@ class PatientOverview(BaseModel):
     #:
     #: `None` — не считалось: оценка по ВОЗ — интерпретация, её видят врач и
     #: диетолог (раздел «Рост и вес» карты), и семье поле не отдаётся. Считает
-    #: та же функция, что раздел карты (`services.growth.assess_patient`).
+    #: тот же ряд и тот же выбор исходного значения, что раздел карты
+    #: (`services.growth.significant_drop_for_patient` рядом с `assess_patient`).
     #: Потребитель — пометки списка пациентов (`features/doctor/flags.ts`).
     growth_significant_drop: bool | None = None
