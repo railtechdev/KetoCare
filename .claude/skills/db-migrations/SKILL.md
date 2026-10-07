@@ -6,34 +6,70 @@ description: Изменение схемы PostgreSQL через Alembic в pack
 # Миграции БД — процедура
 
 Alembic живёт в `packages/core`: конфиг `packages/core/alembic.ini`
-(`script_location = migrations`), ревизии — `packages/core/migrations/versions/`.
+(`script_location = migrations`), окружение — `packages/core/migrations/env.py`,
+ревизии — `packages/core/migrations/versions/`.
 
 ## Порядок
 
 1. Правь модели в `packages/core/src/core/models/` (не сырой SQL).
 2. `make makemigration m="краткое описание"` (под капотом —
-   `cd packages/core && uv run alembic revision --autogenerate -m "..."`).
-3. Открой сгенерированный файл и проверь руками: enum-типы, server_default,
-   naming convention индексов, отсутствие случайных drop.
-4. `make migrate` на чистой БД И на БД с сидами — оба прогона должны пройти.
-5. Повторный autogenerate не должен давать нового диффа (пустая ревизия = модели и
-   схема сошлись). Пустую ревизию удали. Состав PostgreSQL-enum autogenerate не
-   видит: новое значение закрытого перечисления — ручной `ALTER TYPE … ADD VALUE`
-   в ревизии (пример — `82861bb2d318`), а не «пустой дифф, значит всё сошлось».
-6. **Две ветки — две головы.** Если параллельная ветка добавила ревизию от того же
-   родителя, после слияния `alembic heads` покажет две головы. Сводит их отдельная
-   ревизия слияния (`uv run alembic merge -m "merge …" <head1> <head2>`) с пустыми
-   `upgrade`/`downgrade` и докстрокой, какие работы она сводит (пример —
-   `c1853b706740`). Править чужую ревизию ради одной головы нельзя.
+   `cd packages/core && uv run --project ../.. alembic revision --autogenerate -m "..."`).
+3. **Доведи содержимое ревизии до коммита** (см. «Запрещено»): открой файл и
+   проверь руками enum-типы, `server_default`, имена индексов и ограничений,
+   отсутствие случайных `drop`. В докстроке — зачем ревизия и ссылка на ADR.
+4. `make migrate` на чистой БД И на БД с данными — оба прогона должны пройти.
+5. Повторный autogenerate не должен давать диффа (в CI это `alembic check`;
+   `env.py` включает `compare_type` и `compare_server_default`). Пустую
+   ревизию удали.
+6. **Откат обязан работать.** CI гоняет `alembic downgrade base` →
+   `alembic upgrade head` на пустой базе, так что `downgrade` пишется всегда.
+
+## Чего autogenerate не видит — пишется руками
+
+- **Состав PostgreSQL-enum.** Новое значение закрытого перечисления —
+  `ALTER TYPE … ADD VALUE IF NOT EXISTS '…' AFTER '…'` (`82861bb2d318`,
+  `f739fbebd238`). «Пустой дифф» тут ничего не доказывает.
+- **Убрать значение из enum** можно только пересозданием типа: `RENAME` старого →
+  `CREATE TYPE` с новым составом → `ALTER COLUMN … TYPE … USING col::text::новый` →
+  `DROP TYPE` старого (`801c8afc64d3`). Строки со снимаемым значением сначала
+  переводятся в безопасное значение (там — `reviewed` → `draft`), и докстрока
+  объясняет, почему это не потеря.
+- **CHECK-ограничения.** Alembic их не сравнивает: `CheckConstraint` в модели
+  дублируется `op.create_check_constraint(...)` в ревизии (пример —
+  `8efa7badda3a`, `users_language_known`).
+
+## Откат, который потерял бы данные, отказывает
+
+Если `downgrade` сужает тип или убирает колонку, а в базе есть строки, которые
+при этом потеряют смысл, — посчитай их и `raise RuntimeError("Откат невозможен:
+N … Сначала …")` до любой правки схемы (`f739fbebd238`, `82861bb2d318`). Не
+выполнять откат частично и не переписывать клинические строки молча. На пустой
+базе CI такой откат проходит.
+
+## Головы ревизий
+
+Голова должна быть одна (`uv run --project ../.. alembic heads` из
+`packages/core`): `upgrade head` при двух головах падает. Если параллельная
+ветка добавила ревизию от того же родителя, после слияния сводит их отдельная
+ревизия слияния (`uv run --project ../.. alembic merge -m "merge …" <head1>
+<head2>`) с пустыми `upgrade`/`downgrade` и докстрокой, какие работы она
+сводит (пример — `c1853b706740`). Править чужую ревизию ради одной головы нельзя.
 
 ## Инварианты схемы (ТЗ §4)
 
-- PK — uuid (`gen_random_uuid()`); везде `created_at timestamptz not null default now()`.
-- Клинические/дневниковые таблицы: `deleted_at` (мягкое удаление) + `source` (web|bot|miniapp|ai_parsed).
-- `prescriptions` — append-only: в репозитории нет update/delete-методов; не добавляй их.
-- `products` — каждая правка пишет снапшот в `product_revisions`.
-- Денормализованные расчёты (recipes.computed, menus.totals) хранятся только вместе с `engine_version`.
-- Индексы: все FK; `(patient_id, occurred_at)` на дневниках; GIN russian tsvector на products.name_ru и recipes.title.
+- PK — uuid (`UUIDPkMixin`, `gen_random_uuid()`); `created_at timestamptz not null
+  default now()` (`CreatedAtMixin`), где нужно — `UpdatedAtMixin`.
+- Дневниковые таблицы: `deleted_at` (мягкое удаление) + `source`
+  (`DiarySource`: web | bot | miniapp | ai_parsed).
+- `prescriptions` — append-only: в `repositories/prescriptions.py` только
+  `create` и чтения; update/delete не добавляй.
+- `products` — каждая правка пишет снимок в `product_revisions` (репозиторий
+  `products.py`).
+- Денормализованные расчёты (`recipes.computed`, `custom_dishes.computed`,
+  `menus.totals`) хранятся только вместе с `engine_version`.
+- Индексы: FK; `(patient_id, occurred_at)` на дневниках (общий миксин в
+  `models/diary.py`); GIN `to_tsvector('russian', …)`
+  на `products.name_ru` и `recipes.title`.
 - Строки связей доступа (`parent_patient`, `doctor_patient`) удаляются физически —
   это закрытие доступа, а не клиническая запись (ADR-0043, ADR-0045); аудит пишет сервис.
 
@@ -45,17 +81,33 @@ Alembic живёт в `packages/core`: конфиг `packages/core/alembic.ini`
 кто пригласил взрослого), сид нового закрытого справочника вместе с его таблицей.
 Условия:
 
-- в докстроке ревизии написано, что заполняется, по какому правилу и что
-  остаётся пустым, если правило не находит ответа;
-- заполнение детерминировано и не зависит от времени запуска;
+- в докстроке написано, что заполняется, по какому правилу и что остаётся
+  пустым, если правило не находит ответа (или почему заполнять нечем —
+  `8efa7badda3a`);
+- заполнение детерминировано и не зависит от времени запуска (пояс соединения
+  задаёт `env.py`, не ревизия);
 - откат описан: что теряется при `downgrade`;
 - клинические данные не удаляются и не переписываются по смыслу — только
   выводятся недостающие поля.
 
+## Тесты на отдельной базе
+
+Прогоняя pytest ветки с миграцией на своей базе, задавай **обе** переменные
+одним адресом: `TEST_DATABASE_URL="$U" DATABASE_URL="$U" uv run pytest …`.
+Фикстуры берут `TEST_DATABASE_URL`, а код, открывающий сессию сам
+(`get_sessionmaker()`, например `test_erase_patient.py`), — `DATABASE_URL` из
+настроек; с одной переменной половина теста пишет в базу разработки без новой
+колонки. Корневой `conftest.py` лишь подставляет `DATABASE_URL` в
+`TEST_DATABASE_URL`, когда второй не задан, — не наоборот.
+
 ## Запрещено
 
-- Править миграцию, **попавшую в `main`**: хук сверяется с `origin/main` и
-  заблокирует и Edit/Write, и запись через shell (без `origin/main` — с индексом,
-  то есть строже). Ревизию своей ветки до слияния править можно — например, по
-  замечанию ревью.
+- Править миграцию, **попавшую в `origin/main`**: хук `guard_command.py`
+  сверяется с `git ls-tree origin/main` (по имени файла) и блокирует и
+  Edit/Write, и запись через shell. Без `origin/main` он сверяется с индексом —
+  тогда заморожено всё закоммиченное и добавленное. Ревизию своей ветки до
+  слияния править можно; сделай `git fetch`, чтобы сверка шла с актуальной main.
+- Хук разбирает команду по тексту: `cd` в каталог ревизий, переменные с путём
+  к нему, `python -c` считаются записью. Читай ревизии `Read`-ом или
+  `grep`/`cat` с буквальным путём.
 - Физическое удаление клинических данных где-либо, кроме `core.tools.erase_patient`.
