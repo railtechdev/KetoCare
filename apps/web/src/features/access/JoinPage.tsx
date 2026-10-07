@@ -16,9 +16,14 @@ import { z } from "zod";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { api, errorMessageOf } from "../../lib/api";
 import {
   AccountFields,
+  useAccountErrorEntries,
   accountShape,
   withPasswordMatch,
 } from "../auth/accountFields";
@@ -76,7 +81,7 @@ export function JoinPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<JoinValues>({
     resolver: zodResolver(joinSchema),
     defaultValues: {
@@ -88,6 +93,10 @@ export function JoinPage() {
       phone: "",
     },
   });
+
+  const codeError = errors.code && t("join.codeRequired");
+  const emailError = errors.email && t("invitations:errors.email");
+  const accountErrors = useAccountErrorEntries(errors, "join");
 
   if (done !== null) {
     return (
@@ -124,13 +133,21 @@ export function JoinPage() {
         noValidate
         className="flex flex-col gap-section"
       >
+        <FormErrorSummary
+          items={errorSummaryItems(submitCount, [
+            ["join-code", codeError],
+            ["join-email", emailError],
+            ...accountErrors,
+          ])}
+          focusKey={submitCount}
+        />
         <Field
           id="join-code"
           width="medium"
           autoComplete="one-time-code"
           label={t("join.code")}
           hint={t("join.codeHint")}
-          error={errors.code && t("join.codeRequired")}
+          error={codeError}
           {...register("code")}
         />
         <Field
@@ -138,7 +155,7 @@ export function JoinPage() {
           type="email"
           autoComplete="username"
           label={t("invitations:fields.email")}
-          error={errors.email && t("invitations:errors.email")}
+          error={emailError}
           {...register("email")}
         />
 

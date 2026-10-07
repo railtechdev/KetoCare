@@ -20,7 +20,12 @@ import { Field, SelectField } from "../../components/Field";
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { api, errorMessageOf } from "../../lib/api";
-import { useSectionItem, useSectionQuery } from "../../routes/useSectionTab";
+import {
+  useAddressPatch,
+  useAddressState,
+  useSectionItem,
+  useSectionQuery,
+} from "../../routes/useSectionTab";
 import { useProductCategories } from "../admin/useAdminProducts";
 import { ProductCard } from "./ProductCard";
 import { queryState } from "../../lib/queryState";
@@ -64,7 +69,13 @@ export function ProductsPage() {
   // переслать и открыть заново, а возврат в список — обычная кнопка «назад»
   // шаблона, а не «найдите продукт ещё раз».
   const [openId, setOpenId] = useSectionItem();
-  const [categoryId, setCategoryId] = useState("");
+  // Категория — в адресе по той же причине, что и строка поиска: открытая из
+  // отобранного списка карточка «Назад» возвращала ко всем продуктам.
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const categoryId = address.category ?? "";
+  const setCategoryId = (value: string) =>
+    patchAddress({ category: value === "" ? undefined : value });
   const [page, setPage] = useState(0);
   const categories = useProductCategories();
 

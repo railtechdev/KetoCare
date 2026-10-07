@@ -8,6 +8,10 @@ import { FormFooter, formatDose } from "@ketocare/ui";
 
 import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import { parseDateInput, toDateInput } from "../diary/time";
 import { useAedDrugs } from "../intake/useIntake";
@@ -81,7 +85,8 @@ const medicationSchema = z
 type MedicationFormValues = z.infer<typeof medicationSchema>;
 
 /**
- * Порядок полей на экране — он же порядок, в котором ищется первая ошибка.
+ * Порядок полей на экране — он же порядок строк сводки ошибок: первая строка
+ * ведёт в первое незаполненное поле.
  *
  * Список явный, потому что вывести его неоткуда: `react-hook-form` знает
  * порядок регистрации (у `Controller` он другой), а zod — порядок объявления
@@ -175,14 +180,13 @@ export function MedicationForm({
     register,
     control,
     handleSubmit,
-    setFocus,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<MedicationFormValues>({
     resolver: zodResolver(medicationSchema),
-    // Свой фокус вместо встроенного: встроенный обходит поля в порядке
-    // РЕГИСТРАЦИИ и отрабатывает ПОСЛЕ обработчика ошибок, то есть
-    // перебивает его. Порядок регистрации здесь не совпадает с экранным —
-    // поле препарата идёт через `Controller` и регистрируется позже соседей.
+    // Фокус после неудачной отправки забирает сводка ошибок (правило П8), а
+    // её строки идут в порядке `FIELD_ORDER`. Встроенный фокус обходит поля в
+    // порядке РЕГИСТРАЦИИ — поле препарата идёт через `Controller` и
+    // регистрируется позже соседей, — и только мелькнул бы не на том поле.
     shouldFocusError: false,
     defaultValues: {
       drugName: medication?.drug_name ?? suggestedDrugName ?? "",
@@ -202,27 +206,48 @@ export function MedicationForm({
     },
   });
 
+  const drugError = errors.drugName && t("medications.errors.required");
+  const doseTextError = errors.doseText && t("medications.errors.doseText");
+  const doseValueError = errors.doseValue && t("medications.errors.doseValue");
+  const doseUnitError = errors.doseUnit && t("medications.errors.doseUnit");
+  const frequencyCodeError =
+    errors.frequencyCode && t("medications.errors.frequencyCode");
+  const frequencyError =
+    errors.frequency && t("medications.errors.frequencyNote");
+  const startedError = errors.startedAt && t("medications.errors.date");
+  const stoppedError = errors.stoppedAt && t("medications.errors.stoppedAt");
+
+  const summaryEntries: Record<
+    (typeof FIELD_ORDER)[number],
+    readonly [string, string | undefined]
+  > = {
+    drugName: [`${ids}-drug`, drugError],
+    doseValue: [`${ids}-dose-value`, doseValueError],
+    doseText: [`${ids}-dose-text`, doseTextError],
+    doseUnit: [`${ids}-dose-unit`, doseUnitError],
+    frequencyCode: [`${ids}-frequency-code`, frequencyCodeError],
+    frequency: [`${ids}-frequency`, frequencyError],
+    startedAt: [`${ids}-started`, startedError],
+    stoppedAt: [`${ids}-stopped`, stoppedError],
+  };
+
   const doseUnit = useWatch({ control, name: "doseUnit" });
 
   return (
     <form
       noValidate
-      onSubmit={handleSubmit(
-        (values) => onSubmit(toBody(values)),
-        // Фокус — на ПЕРВОЕ незаполненное поле формы, а не на первое, до
-        // которого дошёл react-hook-form. Он обходит поля в порядке
-        // РЕГИСТРАЦИИ, а поле препарата регистрируется через `Controller`, то
-        // есть позже соседей: на пустой форме фокус вставал на дозу, и человек
-        // с клавиатуры узнавал не о той ошибке. Порядок берётся у схемы —
-        // zod отдаёт ошибки в порядке объявления полей.
-        (invalid) => {
-          const first = FIELD_ORDER.find((field) => field in invalid);
-          if (first !== undefined) setFocus(first);
-        },
-      )}
-      className="flex flex-col gap-section"
+      onSubmit={handleSubmit((values) => onSubmit(toBody(values)))}
+      className="@container flex flex-col gap-section"
     >
-      <div className="grid gap-section sm:grid-cols-2">
+      <FormErrorSummary
+        items={errorSummaryItems(
+          submitCount,
+          FIELD_ORDER.map((name) => summaryEntries[name]),
+        )}
+        focusKey={submitCount}
+      />
+
+      <div className="grid gap-section @sm:grid-cols-2">
         {/* Поле остаётся текстовым: справочник неполон, и закрывать список
             нельзя — врач назначает и то, чего в нём нет. */}
         <Controller
@@ -233,7 +258,7 @@ export function MedicationForm({
               id={`${ids}-drug`}
               name={field.name}
               label={t("medications.fields.drugName")}
-              error={errors.drugName && t("medications.errors.required")}
+              error={drugError}
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
@@ -256,7 +281,7 @@ export function MedicationForm({
             label={t("medications.fields.doseText")}
             placeholder={t("medications.doseTextPlaceholder")}
             hint={t("medications.doseTextHint")}
-            error={errors.doseText && t("medications.errors.doseText")}
+            error={doseTextError}
             {...register("doseText")}
           />
         ) : (
@@ -267,7 +292,7 @@ export function MedicationForm({
             autoComplete="off"
             label={t("medications.fields.doseValue")}
             hint={t("medications.doseHint")}
-            error={errors.doseValue && t("medications.errors.doseValue")}
+            error={doseValueError}
             {...register("doseValue")}
           />
         )}
@@ -280,7 +305,7 @@ export function MedicationForm({
               ? t("medications.doseLegacyHint", { dose: medication.dose })
               : undefined
           }
-          error={errors.doseUnit && t("medications.errors.doseUnit")}
+          error={doseUnitError}
           {...register("doseUnit")}
         >
           <option value="">{t("medications.doseUnitNotSet")}</option>
@@ -297,7 +322,7 @@ export function MedicationForm({
           id={`${ids}-frequency-code`}
           label={t("medications.fields.frequency")}
           hint={legacy ? t("medications.frequencyLegacyHint") : undefined}
-          error={errors.frequencyCode && t("medications.errors.frequencyCode")}
+          error={frequencyCodeError}
           {...register("frequencyCode")}
         >
           <option value="">{t("medications.frequencyNotSet")}</option>
@@ -313,7 +338,7 @@ export function MedicationForm({
           label={t("medications.fields.frequencyNote")}
           placeholder={t("medications.frequencyNotePlaceholder")}
           hint={t("medications.frequencyNoteHint")}
-          error={errors.frequency && t("medications.errors.frequencyNote")}
+          error={frequencyError}
           {...register("frequency")}
         />
         <Field
@@ -321,7 +346,7 @@ export function MedicationForm({
           width="date"
           type="date"
           label={t("medications.fields.startedAt")}
-          error={errors.startedAt && t("medications.errors.date")}
+          error={startedError}
           {...register("startedAt")}
         />
         <Field
@@ -331,7 +356,7 @@ export function MedicationForm({
           optional
           label={t("medications.fields.stoppedAt")}
           hint={t("medications.stoppedHint")}
-          error={errors.stoppedAt && t("medications.errors.stoppedAt")}
+          error={stoppedError}
           {...register("stoppedAt")}
         />
       </div>

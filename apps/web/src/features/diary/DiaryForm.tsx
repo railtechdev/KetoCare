@@ -38,6 +38,11 @@ import { useTranslation } from "react-i18next";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+  type FormErrorSummaryItem,
+} from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import type { DiaryBody, DiaryKind, DiaryLog } from "./diaryApi";
 import type { DictionaryOption, MedicationOption } from "./useDiary";
@@ -166,12 +171,18 @@ function numberInput(value: number | null): string {
  */
 function FormShell({
   description,
+  summary,
+  focusKey,
   error,
   onSubmit,
   children,
   footer,
 }: {
   description?: ReactNode;
+  /** Сводка ошибок после неудачной отправки (правило П8) */
+  summary: readonly FormErrorSummaryItem[];
+  /** Счётчик отправок: по нему сводка забирает фокус */
+  focusKey: number;
   error: unknown;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   children: ReactNode;
@@ -184,6 +195,8 @@ function FormShell({
       {description && (
         <p className="m-0 text-sm text-muted-foreground">{description}</p>
       )}
+
+      <FormErrorSummary items={summary} focusKey={focusKey} />
 
       {children}
 
@@ -238,6 +251,12 @@ function SeizureForm({
 }) {
   const { t } = useTranslation("diary");
   const [step, setStep] = useState(1);
+  /**
+   * Неудачные попытки перейти ко второму шагу. Переход проверяет поля через
+   * `trigger`, а не через отправку, и `submitCount` его не считает — без этого
+   * счётчика сводка ошибок первого шага не появлялась бы никогда.
+   */
+  const [stepAttempts, setStepAttempts] = useState(0);
 
   const defaults = (): SeizureValues => ({
     occurredAt: editing ? occurredInput(editing.occurred_at) : nowInput(),
@@ -254,11 +273,19 @@ function SeizureForm({
     handleSubmit,
     trigger,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<SeizureValues>({
     resolver: zodResolver(seizureSchema),
     defaultValues: defaults(),
   });
+
+  const occurredAtError =
+    errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
+  const typeError = errors.seizureTypeId && t("seizures.typeRequired");
+  const durationError = errors.durationSec && t("seizures.durationInvalid");
+  const durationOptionError =
+    errors.durationOptionId && t("seizures.durationBothInvalid");
+  const countError = errors.count && t("seizures.countInvalid");
 
   // Тип приступа приходит из справочника, а справочник семье пока не отдаётся.
   // Придумать идентификатор нельзя, поэтому новая запись недоступна; уже
@@ -290,6 +317,7 @@ function SeizureForm({
   async function goToSecondStep() {
     const valid = await trigger(["occurredAt", "seizureTypeId", "durationSec"]);
     if (valid) setStep(2);
+    else setStepAttempts((current) => current + 1);
   }
 
   // Подвал у обоих шагов один и тот же (FormFooter отправляет форму), поэтому
@@ -305,6 +333,14 @@ function SeizureForm({
 
   return (
     <FormShell
+      summary={errorSummaryItems(submitCount + stepAttempts, [
+        ["seizure-occurred-at", occurredAtError],
+        ["seizure-type", typeError],
+        ["seizure-duration", durationError],
+        ["seizure-duration-option", durationOptionError],
+        ["seizure-count", countError],
+      ])}
+      focusKey={submitCount + stepAttempts}
       description={t("form.step", { current: step, total: 2 })}
       error={error}
       onSubmit={handleFormSubmit}
@@ -335,10 +371,7 @@ function SeizureForm({
           width="medium"
           type="datetime-local"
           label={t("form.occurredAt")}
-          error={
-            errors.occurredAt &&
-            t(occurredAtErrorKey(errors.occurredAt.message))
-          }
+          error={occurredAtError}
           {...register("occurredAt")}
         />
 
@@ -349,7 +382,7 @@ function SeizureForm({
             // средней ширине выбранное значение обрезалось на полуслове.
             width="full"
             label={t("seizures.type")}
-            error={errors.seizureTypeId && t("seizures.typeRequired")}
+            error={typeError}
             {...register("seizureTypeId")}
           >
             <option value="">{t("seizures.typePlaceholder")}</option>
@@ -379,7 +412,7 @@ function SeizureForm({
           optional
           label={t("seizures.duration")}
           hint={t("seizures.durationHint")}
-          error={errors.durationSec && t("seizures.durationInvalid")}
+          error={durationError}
           {...register("durationSec")}
         />
 
@@ -392,7 +425,7 @@ function SeizureForm({
           width="full"
           optional
           label={t("seizures.durationChoice")}
-          error={errors.durationOptionId && t("seizures.durationBothInvalid")}
+          error={durationOptionError}
           {...register("durationOptionId")}
         >
           <option value="">{t("seizures.durationChoicePlaceholder")}</option>
@@ -413,7 +446,7 @@ function SeizureForm({
           min={SEIZURE_COUNT_MIN}
           step={1}
           label={t("seizures.count")}
-          error={errors.count && t("seizures.countInvalid")}
+          error={countError}
           {...register("count")}
         />
         <TextAreaField
@@ -456,11 +489,20 @@ function KetoneForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<KetoneValues>({
     resolver: zodResolver(ketoneSchema),
     defaultValues: defaults(),
   });
+
+  const occurredAtError =
+    errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
+  const valueError =
+    errors.value &&
+    t("ketones.valueInvalid", {
+      min: formatMeasured(KETONE_MIN_MMOL),
+      max: formatMeasured(KETONE_MAX_MMOL),
+    });
 
   const submit = handleSubmit((values) => {
     const body = ketoneBody(values);
@@ -470,6 +512,11 @@ function KetoneForm({
 
   return (
     <FormShell
+      summary={errorSummaryItems(submitCount, [
+        ["ketone-occurred-at", occurredAtError],
+        ["ketone-value", valueError],
+      ])}
+      focusKey={submitCount}
       error={error}
       onSubmit={submit}
       footer={
@@ -485,9 +532,7 @@ function KetoneForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={
-          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
-        }
+        error={occurredAtError}
         {...register("occurredAt")}
       />
       <Field
@@ -499,13 +544,7 @@ function KetoneForm({
         max={KETONE_MAX_MMOL}
         step={0.1}
         label={t("ketones.value")}
-        error={
-          errors.value &&
-          t("ketones.valueInvalid", {
-            min: formatMeasured(KETONE_MIN_MMOL),
-            max: formatMeasured(KETONE_MAX_MMOL),
-          })
-        }
+        error={valueError}
         {...register("value")}
       />
       <SelectField
@@ -544,11 +583,21 @@ function WeightForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<WeightValues>({
     resolver: zodResolver(weightSchema),
     defaultValues: defaults(),
   });
+
+  const occurredAtError =
+    errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
+  const weightError =
+    errors.weightKg &&
+    t("weight.valueInvalid", {
+      min: formatWeight(WEIGHT_MIN_KG),
+      max: formatWeight(WEIGHT_MAX_KG),
+    });
+  const heightError = errors.heightCm && t("weight.heightInvalid");
 
   const submit = handleSubmit((values) => {
     const body = weightBody(values);
@@ -558,6 +607,12 @@ function WeightForm({
 
   return (
     <FormShell
+      summary={errorSummaryItems(submitCount, [
+        ["weight-occurred-at", occurredAtError],
+        ["weight-value", weightError],
+        ["weight-height", heightError],
+      ])}
+      focusKey={submitCount}
       error={error}
       onSubmit={submit}
       footer={
@@ -573,9 +628,7 @@ function WeightForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={
-          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
-        }
+        error={occurredAtError}
         {...register("occurredAt")}
       />
       <Field
@@ -587,13 +640,7 @@ function WeightForm({
         max={WEIGHT_MAX_KG}
         step={0.1}
         label={t("weight.value")}
-        error={
-          errors.weightKg &&
-          t("weight.valueInvalid", {
-            min: formatWeight(WEIGHT_MIN_KG),
-            max: formatWeight(WEIGHT_MAX_KG),
-          })
-        }
+        error={weightError}
         {...register("weightKg")}
       />
       <Field
@@ -605,7 +652,7 @@ function WeightForm({
         step={0.5}
         optional
         label={t("weight.height")}
-        error={errors.heightCm && t("weight.heightInvalid")}
+        error={heightError}
         {...register("heightCm")}
       />
     </FormShell>
@@ -637,11 +684,15 @@ function MedicationForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<MedicationValues>({
     resolver: zodResolver(medicationSchema),
     defaultValues: defaults(),
   });
+
+  const occurredAtError =
+    errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
+  const drugError = errors.medicationId && t("medications.drugRequired");
 
   const submit = handleSubmit((values) => {
     const body = medicationBody(values);
@@ -663,6 +714,11 @@ function MedicationForm({
 
   return (
     <FormShell
+      summary={errorSummaryItems(submitCount, [
+        ["medication-occurred-at", occurredAtError],
+        ["medication-drug", drugError],
+      ])}
+      focusKey={submitCount}
       error={error}
       onSubmit={submit}
       footer={
@@ -678,16 +734,14 @@ function MedicationForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={
-          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
-        }
+        error={occurredAtError}
         {...register("occurredAt")}
       />
       <SelectField
         id="medication-drug"
         width="wide"
         label={t("medications.drug")}
-        error={errors.medicationId && t("medications.drugRequired")}
+        error={drugError}
         {...register("medicationId")}
       >
         <option value="">{t("medications.drugPlaceholder")}</option>
@@ -732,11 +786,15 @@ function MealForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<MealValues>({
     resolver: zodResolver(mealSchema),
     defaultValues: defaults(),
   });
+
+  const occurredAtError =
+    errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
+  const freeTextError = errors.freeText && t("meals.freeTextRequired");
 
   const submit = handleSubmit((values) => {
     const body = mealBody(values);
@@ -746,6 +804,11 @@ function MealForm({
 
   return (
     <FormShell
+      summary={errorSummaryItems(submitCount, [
+        ["meal-occurred-at", occurredAtError],
+        ["meal-free-text", freeTextError],
+      ])}
+      focusKey={submitCount}
       error={error}
       onSubmit={submit}
       footer={
@@ -761,9 +824,7 @@ function MealForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={
-          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
-        }
+        error={occurredAtError}
         {...register("occurredAt")}
       />
       <TextAreaField
@@ -771,7 +832,7 @@ function MealForm({
         rows={3}
         label={t("meals.freeText")}
         placeholder={t("meals.freeTextPlaceholder")}
-        error={errors.freeText && t("meals.freeTextRequired")}
+        error={freeTextError}
         {...register("freeText")}
       />
     </FormShell>
@@ -799,11 +860,15 @@ function SideEffectForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<SideEffectValues>({
     resolver: zodResolver(sideEffectSchema),
     defaultValues: defaults(),
   });
+
+  const occurredAtError =
+    errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
+  const symptomError = errors.symptom && t("sideEffects.symptomRequired");
 
   const submit = handleSubmit((values) => {
     const body = sideEffectBody(values);
@@ -813,6 +878,11 @@ function SideEffectForm({
 
   return (
     <FormShell
+      summary={errorSummaryItems(submitCount, [
+        ["side-effect-occurred-at", occurredAtError],
+        ["side-effect-symptom", symptomError],
+      ])}
+      focusKey={submitCount}
       error={error}
       onSubmit={submit}
       footer={
@@ -828,9 +898,7 @@ function SideEffectForm({
         width="medium"
         type="datetime-local"
         label={t("form.occurredAt")}
-        error={
-          errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message))
-        }
+        error={occurredAtError}
         {...register("occurredAt")}
       />
       <Field
@@ -838,7 +906,7 @@ function SideEffectForm({
         width="wide"
         label={t("sideEffects.symptom")}
         placeholder={t("sideEffects.symptomPlaceholder")}
-        error={errors.symptom && t("sideEffects.symptomRequired")}
+        error={symptomError}
         {...register("symptom")}
       />
       <TextAreaField

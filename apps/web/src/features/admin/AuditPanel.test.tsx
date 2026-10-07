@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -7,6 +8,8 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import adminRu from "../../locales/ru/admin.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
+import type { SectionSearch } from "../../routes/search";
 import { AuditPanel } from "./AuditPanel";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -32,14 +35,16 @@ const ENTRY = {
   payload_hidden: false,
 };
 
-function renderPanel() {
+function renderPanel(search: SectionSearch = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <SectionRouter section="audit">{children}</SectionRouter>
+        <SectionRouter section="audit" search={search}>
+          {children}
+        </SectionRouter>
       </QueryClientProvider>
     );
   }
@@ -104,5 +109,72 @@ describe("журнал аудита", () => {
 
     await screen.findByText(/10\.0\.0\.1/);
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+});
+
+describe("отбор журнала", () => {
+  function auditQueries(): Record<string, unknown>[] {
+    return (api.GET as Mock).mock.calls
+      .filter(([path]) => path === "/api/v1/admin/audit-log")
+      .map(
+        ([, init]) =>
+          (init as { params: { query: Record<string, unknown> } }).params.query,
+      );
+  }
+
+  it("F5 возвращает автора, объект и период из адреса", async () => {
+    renderPanel({
+      user: ADMIN_ID,
+      entity: "products",
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
+
+    expect(
+      await screen.findByRole("button", { name: /Админ Демо/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Объект")).toHaveValue("products");
+    expect(screen.getByLabelText("С даты")).toHaveValue("2026-09-01");
+    await waitFor(() =>
+      expect(auditQueries()).toContainEqual(
+        expect.objectContaining({ user_id: ADMIN_ID, entity: "products" }),
+      ),
+    );
+  });
+
+  it("неизвестный автор и объект в адресе — отбора нет, а не пустая выдача", async () => {
+    renderPanel({ user: "иванов", entity: "no_such_table" });
+
+    expect(await screen.findByLabelText("Объект")).toHaveValue("");
+    await waitFor(() => expect(auditQueries().length).toBeGreaterThan(0));
+    expect(auditQueries()[0]).toMatchObject({
+      user_id: undefined,
+      entity: undefined,
+    });
+  });
+
+  it("автор ищется по имени на сервере и уходит в адрес", async () => {
+    // Правило П42: раньше автора задавали UUID, набранным руками, — взять его
+    // администратору было неоткуда.
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Любой автор/ }),
+    );
+    await user.type(screen.getByPlaceholderText("Имя или почта"), "Адм");
+    await waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/admin/users",
+        expect.objectContaining({
+          params: expect.objectContaining({
+            query: expect.objectContaining({ q: "Адм" }),
+          }),
+        }),
+      ),
+    );
+
+    await user.click(await screen.findByRole("option", { name: /Админ Демо/ }));
+    await waitFor(() => expect(currentAddress().user).toBe(ADMIN_ID));
   });
 });

@@ -34,6 +34,9 @@ export function RatioBadge({
   className,
 }: RatioBadgeProps) {
   const labels = useKitLabels().ratio;
+  // Без белка и углеводов соотношения нет, и пишется просто «—»: «— : 1»
+  // читалось как число с потерянной первой частью. Форма рецепта обходила это
+  // своей разметкой, а остальные экраны печатали «— : 1».
   if (ratio === null) {
     return (
       <span
@@ -41,7 +44,7 @@ export function RatioBadge({
         data-state="unknown"
         aria-label={labels.unknown}
       >
-        — : 1
+        —
       </span>
     );
   }

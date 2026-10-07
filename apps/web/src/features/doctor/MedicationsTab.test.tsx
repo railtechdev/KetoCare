@@ -173,10 +173,10 @@ describe("препараты из анкеты семьи", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("после неудачной отправки фокус встаёт на первое незаполненное поле", async () => {
+  it("после неудачной отправки сводка ошибок ведёт первой строкой в первое незаполненное поле", async () => {
     // react-hook-form обходит поля в порядке РЕГИСТРАЦИИ, а поле препарата
     // идёт через `Controller` и регистрируется позже соседей: на пустой форме
-    // фокус вставал на дозу, и человек с клавиатуры узнавал не о той ошибке.
+    // первой называлась доза, и человек с клавиатуры узнавал не о той ошибке.
     const user = userEvent.setup();
     renderTab();
 
@@ -185,9 +185,10 @@ describe("препараты из анкеты семьи", () => {
     );
     await user.click(await screen.findByRole("button", { name: "Сохранить" }));
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Препарат")).toHaveFocus(),
-    );
+    const summary = await screen.findByRole("alert");
+    await waitFor(() => expect(summary).toHaveFocus());
+    await user.click(within(summary).getAllByRole("link")[0]!);
+    expect(screen.getByLabelText("Препарат")).toHaveFocus();
   });
 
   it("панель препарата: «Закрыть» по-русски, фокус на первом поле", async () => {
@@ -249,9 +250,12 @@ describe("кратность приёма из списка", () => {
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
-    expect(
-      await screen.findByText("Для «Другой схемы» опишите кратность словами."),
-    ).toBeInTheDocument();
+    const summary = await screen.findByRole("alert");
+    await user.click(
+      within(summary).getByRole("link", {
+        name: "Для «Другой схемы» опишите кратность словами.",
+      }),
+    );
     expect(screen.getByLabelText(/Уточнение к кратности/)).toHaveFocus();
     expect(api.POST).not.toHaveBeenCalled();
   });
@@ -328,9 +332,10 @@ describe("кратность приёма из списка", () => {
 
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
+    // Под полем и строкой в сводке ошибок (правило П8).
     expect(
-      await screen.findByText("Выберите кратность из списка."),
-    ).toBeInTheDocument();
+      await screen.findAllByText("Выберите кратность из списка."),
+    ).toHaveLength(2);
     expect(api.PUT).not.toHaveBeenCalled();
   });
 
@@ -376,6 +381,40 @@ describe("кратность приёма из списка", () => {
 });
 
 describe("доза числом и единицей", () => {
+  it("отказ прошлой попытки не встаёт под новой формой", async () => {
+    (api.POST as Mock).mockResolvedValue({
+      error: {
+        error: { code: "conflict", message: "Такой препарат уже в схеме." },
+      },
+    });
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Назначить препарат" }),
+    );
+    await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
+    await user.type(screen.getByLabelText(/Разовая доза/), "250");
+    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
+    await user.selectOptions(
+      screen.getByLabelText("Кратность"),
+      "2 раза в сутки",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(
+      await screen.findByText("Такой препарат уже в схеме."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Отмена" }));
+    const [open] = await screen.findAllByRole("button", {
+      name: "Назначить препарат",
+    });
+    await user.click(open!);
+
+    expect(await screen.findByLabelText("Препарат")).toBeInTheDocument();
+    expect(screen.queryByText("Такой препарат уже в схеме.")).toBeNull();
+  });
+
   it("«2,5» с запятой и «мл» уходят числом и кодом единицы", async () => {
     (api.POST as Mock).mockResolvedValue({ data: {} });
     const user = userEvent.setup();
@@ -417,9 +456,12 @@ describe("доза числом и единицей", () => {
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
-    expect(
-      await screen.findByText(doctorRu.medications.errors.doseValue),
-    ).toBeInTheDocument();
+    const summary = await screen.findByRole("alert");
+    await user.click(
+      within(summary).getByRole("link", {
+        name: doctorRu.medications.errors.doseValue,
+      }),
+    );
     expect(screen.getByLabelText(/Разовая доза/)).toHaveFocus();
     expect(api.POST).not.toHaveBeenCalled();
   });
@@ -489,9 +531,10 @@ describe("доза числом и единицей", () => {
 
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
+    // Под полем и строкой в сводке ошибок (правило П8).
     expect(
-      await screen.findByText(doctorRu.medications.errors.doseUnit),
-    ).toBeInTheDocument();
+      await screen.findAllByText(doctorRu.medications.errors.doseUnit),
+    ).toHaveLength(2);
     expect(api.PUT).not.toHaveBeenCalled();
   });
 });

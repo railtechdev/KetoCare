@@ -27,7 +27,12 @@ export function CatalogPage() {
   const { t } = useTranslation("products");
 
   return (
-    <PageLayout title={t("catalog.title")} intro={t("catalog.intro")}>
+    <PageLayout
+      title={t("catalog.title")}
+      intro={t("catalog.intro")}
+      width="wide"
+      density="compact"
+    >
       <ProductsPanel canImport={false} chrome="screen" />
 
       {/* Категории ведёт тот же, кто ведёт каталог: сервер разрешает правку

@@ -1,4 +1,5 @@
 import { Toaster } from "@ketocare/ui";
+import { primaryActions } from "@ketocare/ui/testing";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -357,6 +358,27 @@ describe("AdminPage — навигация", () => {
     await screen.findByText("Мария Иванова");
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
   });
+
+  it.each([
+    ["users", ["Пригласить сотрудника"]],
+    ["products", ["Добавить продукт"]],
+    ["dictionaries", ["Добавить значение"]],
+  ])(
+    "первичное действие раздела %s стоит в шапке экрана, и оно одно",
+    async (section, expected) => {
+      // Блок рисовал его строкой под заголовком, а на остальных экранах оно в
+      // шапке справа — его искали там (правило П31).
+      const { container } = renderPage(section);
+
+      const button = await screen.findByRole("button", { name: expected[0] });
+      const header = button.closest("header");
+      expect(header).not.toBeNull();
+      expect(
+        within(header as HTMLElement).getByRole("heading", { level: 1 }),
+      ).toBeInTheDocument();
+      expect(primaryActions(container)).toEqual(expected);
+    },
+  );
 
   it("называет подраздел заголовком экрана, а не общим «Администрирование»", async () => {
     renderPage("audit");

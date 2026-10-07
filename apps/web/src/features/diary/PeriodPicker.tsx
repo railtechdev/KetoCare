@@ -74,29 +74,33 @@ export function PeriodPicker({
       </div>
 
       {preset === "custom" && (
-        <div className="mt-section grid gap-section sm:max-w-md sm:grid-cols-2">
-          {/* Ошибка у пары дат одна на двоих — обе границы указывают на неё
+        // Пара дат спрашивает ширину у своего блока (правило П33): выбор
+        // периода стоит и на экране дневника, и во вкладке карты пациента.
+        <div className="@container mt-section sm:max-w-md">
+          <div className="grid gap-section @sm:grid-cols-2">
+            {/* Ошибка у пары дат одна на двоих — обе границы указывают на неё
               через aria-describedby, а сам текст стоит под парой. */}
-          <Field
-            id={fromId}
-            width="date"
-            type="date"
-            label={t("period.from")}
-            value={from}
-            onChange={(event) => onFromChange(event.target.value)}
-            aria-invalid={invalid ? true : undefined}
-            aria-describedby={invalid ? errorId : undefined}
-          />
-          <Field
-            id={toId}
-            width="date"
-            type="date"
-            label={t("period.to")}
-            value={to}
-            onChange={(event) => onToChange(event.target.value)}
-            aria-invalid={invalid ? true : undefined}
-            aria-describedby={invalid ? errorId : undefined}
-          />
+            <Field
+              id={fromId}
+              width="date"
+              type="date"
+              label={t("period.from")}
+              value={from}
+              onChange={(event) => onFromChange(event.target.value)}
+              aria-invalid={invalid ? true : undefined}
+              aria-describedby={invalid ? errorId : undefined}
+            />
+            <Field
+              id={toId}
+              width="date"
+              type="date"
+              label={t("period.to")}
+              value={to}
+              onChange={(event) => onToChange(event.target.value)}
+              aria-invalid={invalid ? true : undefined}
+              aria-describedby={invalid ? errorId : undefined}
+            />
+          </div>
         </div>
       )}
 

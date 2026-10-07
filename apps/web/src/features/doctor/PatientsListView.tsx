@@ -12,7 +12,7 @@ import {
   SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { SearchX, UserPlus, Users } from "lucide-react";
+import { CalendarX, SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -34,7 +34,12 @@ import { ChildForm } from "../child/ChildForm";
 import { toChildBody } from "../child/childSchemas";
 import { useCreateChildMutation } from "../patients/useChildren";
 import { queryState } from "../../lib/queryState";
-import { useSectionItem } from "../../routes/useSectionTab";
+import {
+  useAddressPatch,
+  useAddressState,
+  useSectionItem,
+  useSectionQuery,
+} from "../../routes/useSectionTab";
 
 /** `?item=` формы новой карты пациента: на неё ссылается главная врача. */
 export const NEW_PATIENT_ITEM = "new";
@@ -55,10 +60,24 @@ interface PatientRow {
 
 export function PatientsListView() {
   const { t } = useTranslation("doctor");
-  const [query, setQuery] = useState("");
+  // Поиск и отбор — в адресе (правило П1): врач, вернувшийся из карты
+  // пациента «Назад», и обновивший страницу должны застать реестр тем же, а не
+  // набирать фамилию заново. Поле держит своё состояние, чтобы каждая буква не
+  // ждала навигации; в адрес уходит то же значение.
+  const [urlQuery, setUrlQuery] = useSectionQuery();
+  const [query, setQueryState] = useState(urlQuery);
+  const setQuery = (value: string) => {
+    setQueryState(value);
+    setUrlQuery(value);
+  };
   // Рабочий список по умолчанию: завершившие терапию уходят из него, но не из
   // системы — их карты читаются, если выбрать их явно (вопрос 18, ADR-0050).
-  const [therapy, setTherapy] = useState<TherapyFilter>("active");
+  // Умолчание в адрес не пишется.
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const therapy: TherapyFilter = address.therapy ?? "active";
+  const setTherapy = (value: TherapyFilter) =>
+    patchAddress({ therapy: value === "ended" ? "ended" : undefined });
   // Форма новой карты — в адресе (`?item=new`), а не в состоянии экрана: на
   // неё ведёт пустая главная врача («Завести карту»), и ссылка должна
   // открывать форму, а не список, где кнопку ещё надо найти.
@@ -176,11 +195,18 @@ export function PatientsListView() {
           if (next === null) {
             return <span className="text-sm text-muted-foreground">—</span>;
           }
+          const date = formatIsoDate(next.plannedOn) ?? next.plannedOn;
+          if (!next.overdue)
+            return <span className="tabular-nums">{date}</span>;
+          // Просрочку называет значок и слово, а не один цвет (WCAG 1.4.1):
+          // красная дата без подписи для части врачей неотличима от обычной.
           return (
-            <span
-              className={`tabular-nums ${next.overdue ? "font-semibold text-destructive" : ""}`}
-            >
-              {formatIsoDate(next.plannedOn) ?? next.plannedOn}
+            <span className="inline-flex flex-wrap items-center gap-1 font-semibold text-destructive">
+              <CalendarX aria-hidden="true" className="size-4 shrink-0" />
+              <span className="tabular-nums">{date}</span>
+              <span className="text-sm font-normal">
+                {t("course.visits.overdue")}
+              </span>
             </span>
           );
         },
@@ -200,7 +226,10 @@ export function PatientsListView() {
               pending={overviews.pending}
             />
             {row.original.flags?.staleData === true && (
-              <NudgeFamilyButton patientId={row.original.patient.id} />
+              <NudgeFamilyButton
+                patientId={row.original.patient.id}
+                patientName={row.original.patient.full_name}
+              />
             )}
           </div>
         ),

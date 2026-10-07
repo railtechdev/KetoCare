@@ -25,6 +25,21 @@ import { RouteErrorPage } from "./routes/RouteErrorPage";
 import { PatientRoute } from "./routes/PatientRoute";
 import { PatientViewRoute } from "./routes/PatientViewRoute";
 import { SectionRoute } from "./routes/SectionRoute";
+import {
+  text,
+  validatePatientSearch,
+  validateSectionSearch,
+  type PatientSearch,
+  type SectionSearch,
+} from "./routes/search";
+
+export type {
+  FilterSearch,
+  PatientSearch,
+  PeriodSearch,
+  SectionSearch,
+  ViewStateSearch,
+} from "./routes/search";
 
 export interface RouterContext {
   /** null — не аутентифицирован. Роутер не монтируется, пока сессия восстанавливается. */
@@ -128,69 +143,10 @@ const appIndexRoute = createRoute({
   component: () => null,
 });
 
-/**
- * Один параметризованный маршрут вместо набора статических: список разделов
- * зависит от роли, и генерация путей строками обходила бы типизацию роутера.
- */
-export interface SectionSearch {
-  /** Выбранный ребёнок. В адресе, а не в состоянии: ссылка на экран должна
-      однозначно говорить, о ком она, — иначе присланная врачу или второму
-      родителю ссылка откроет данные другого ребёнка. */
-  patient?: string;
-  /** Вкладка экрана: параллельные виды одного объекта (правило П30 канона). */
-  tab?: string;
-  /** Разновидность внутри вкладки: вид дневника, выбранный справочник. */
-  kind?: string;
-  /**
-   * Объект или задача второго уровня внутри раздела: открытый продукт
-   * (`item=<id>`), заведение новой позиции (`item=new`), импорт
-   * (`item=import`).
-   *
-   * В адресе, а не в состоянии экрана: правило П1 канона требует адрес у
-   * каждого объекта второго уровня. Пока параметра не было, администратор,
-   * правивший продукт, не мог ни переслать ссылку коллеге, ни обновить
-   * страницу — F5 возвращал в список, а «Назад» браузера уводил из раздела.
-   */
-  item?: string;
-  /**
-   * Задача сборки PDF-отчёта.
-   *
-   * В адресе, а не в состоянии экрана: сборка идёт в воркере секундами, и до
-   * этого параметра её идентификатор терялся при обновлении страницы, переходе
-   * в другой раздел и возврате. Готовый файл после этого достать было нечем —
-   * ручки «мои задачи» у API нет, только выдача по идентификатору, — и человек
-   * заказывал сборку заново, второй раз занимая воркер.
-   *
-   * Тот же класс, что потерянная переписка помощника: то, что живёт на
-   * сервере, не должно существовать только в памяти вкладки.
-   */
-  job?: string;
-  /**
-   * Строка поиска раздела.
-   *
-   * В адресе, потому что поиск — это ссылка: калькулятор, не нашедший продукт,
-   * отправляет в справочник с тем же запросом, и переспрашивать его у семьи,
-   * стоящей у плиты, незачем.
-   */
-  q?: string;
-  /**
-   * Отбор справочника продуктов «сверялись с источником раньше этой даты»
-   * (`YYYY-MM-DD`). Приходит со ссылки главной администратора «N позиций не
-   * сверялись»: прежде она клала дату в строку поиска, и справочник искал
-   * продукты по названию «2025-10-07».
-   */
-  verified?: string;
-}
-
 /** Разделы кабинета у всех ролей вместе: всё прочее — несуществующий адрес. */
 const ALL_SECTIONS: ReadonlySet<string> = new Set(
   Object.values(SECTIONS_BY_ROLE).flat(),
 );
-
-/** Непустая строка или ничего: `?tab=` в адресе — то же самое, что его отсутствие. */
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value !== "" ? value : undefined;
-}
 
 const sectionRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -200,26 +156,8 @@ const sectionRoute = createRoute({
   // здесь, TanStack Router молча выбрасывает — так `kind` и терялся, из-за чего
   // быстрые кнопки главной («Записать кетоны») открывали дневник на чужой
   // вкладке.
-  validateSearch: (search: Record<string, unknown>): SectionSearch => {
-    const result: SectionSearch = {};
-    const patient = text(search.patient);
-    const tab = text(search.tab);
-    const kind = text(search.kind);
-    const item = text(search.item);
-    const q = text(search.q);
-    const job = text(search.job);
-    const verified = text(search.verified);
-    if (patient !== undefined) result.patient = patient;
-    if (tab !== undefined) result.tab = tab;
-    if (kind !== undefined) result.kind = kind;
-    if (item !== undefined) result.item = item;
-    if (q !== undefined) result.q = q;
-    if (job !== undefined) result.job = job;
-    if (verified !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(verified)) {
-      result.verified = verified;
-    }
-    return result;
-  },
+  validateSearch: (search: Record<string, unknown>): SectionSearch =>
+    validateSectionSearch(search),
   beforeLoad: ({ context, params, search }) => {
     const role = context.session?.role;
     if (!role) return;
@@ -257,49 +195,18 @@ const sectionRoute = createRoute({
 });
 
 /**
- * Параметры адреса внутри карты пациента.
- *
- * Их два, и оба уже были у раздела: вид дневника и задача сборки отчёта.
- * Вкладки (`?tab=`) здесь нет — её место занял уровень пути, а `?patient=`
- * незачем: пациент и есть путь.
- */
-export interface PatientSearch {
-  /** Вид дневника внутри раздела «Дневники» */
-  kind?: string;
-  /**
-   * Предмет, открытый внутри раздела: продукт или готовое блюдо, пришедшее в
-   * калькулятор (`item=dish:<id>`). Тем же параметром состав, собранный в общем
-   * калькуляторе, попадает в карту пациента.
-   */
-  item?: string;
-  /**
-   * Задача сборки PDF-отчёта. В адресе по той же причине, что и в разделах:
-   * сборка идёт в воркере секундами, а ручки «мои задачи» у API нет — потеряв
-   * идентификатор, готовый файл достать нечем.
-   */
-  job?: string;
-}
-
-/**
  * Карта пациента — уровень пути, а не параметр списка.
  *
  * Разбор, из которого это выросло, — в `routes/PatientRoute.tsx`. Здесь важно
  * одно: `patients/$patientId` длиннее одного сегмента, поэтому со статическим
  * разделом `/app/patients` он не спорит — реестр остаётся на своём адресе.
  */
+
 const patientRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "patients/$patientId",
-  validateSearch: (search: Record<string, unknown>): PatientSearch => {
-    const result: PatientSearch = {};
-    const kind = text(search.kind);
-    const item = text(search.item);
-    const job = text(search.job);
-    if (kind !== undefined) result.kind = kind;
-    if (item !== undefined) result.item = item;
-    if (job !== undefined) result.job = job;
-    return result;
-  },
+  validateSearch: (search: Record<string, unknown>): PatientSearch =>
+    validatePatientSearch(search),
   beforeLoad: ({ context }) => {
     const role = context.session?.role;
     if (!role) return;

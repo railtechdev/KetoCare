@@ -6,6 +6,8 @@ import {
   FilterBar,
   formatOccurredAt,
   Section,
+  SEARCH_DELAY_MS,
+  useDebouncedValue,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ScrollText } from "lucide-react";
@@ -21,7 +23,6 @@ import {
   AUDIT_PAGE_SIZE,
   EMPTY_AUDIT_FILTERS,
   isRangeInvalid,
-  isUserIdInvalid,
   type AuditFilters,
 } from "./auditFilters";
 import { shortId } from "./format";
@@ -31,6 +32,8 @@ import { TableSkeleton } from "./TableSkeleton";
 import { useAuditLog } from "./useAuditLog";
 import type { AuditEntry } from "./types";
 import { Field, SelectField } from "../../components/Field";
+import { PersonPicker } from "../../components/PersonPicker";
+import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
 import { queryState } from "../../lib/queryState";
 
 /**
@@ -42,32 +45,54 @@ import { queryState } from "../../lib/queryState";
 export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   const { t } = useTranslation("admin");
 
-  const [filters, setFilters] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
+  // Отбор — в адресе (правило П1): ссылка «вот что делал этот человек в
+  // четверг» пересылается коллеге и переживает F5. Значения, которых журнал не
+  // знает, отбрасываются: незнакомая таблица в адресе дала бы пустую выдачу без
+  // видимой причины — список её не покажет выбранной.
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const filters: AuditFilters = {
+    userId: address.user ?? "",
+    entity: AUDIT_ENTITIES.find((value) => value === address.entity) ?? "",
+    action: AUDIT_ACTIONS.find((value) => value === address.action) ?? "",
+    from: address.from ?? "",
+    to: address.to ?? "",
+  };
   const [offset, setOffset] = useState(0);
+  const [authorQuery, setAuthorQuery] = useState("");
+  const debouncedAuthorQuery = useDebouncedValue(authorQuery, SEARCH_DELAY_MS);
+  // Автор ищется на сервере по имени и почте: учётных записей сотни, и отбор
+  // по загруженной странице однажды ответил бы «не найдено» о том, кто есть.
+  const authors = useAdminUsers({ q: debouncedAuthorQuery, role: "" });
 
-  const userIdInvalid = isUserIdInvalid(filters);
   const rangeInvalid = isRangeInvalid(filters);
 
   // Заведомо неверный фильтр на сервер не уходит: он вернул бы 422, а на экране
   // это выглядит как поломка журнала, а не как опечатка в поле.
-  const auditLog = useAuditLog(
-    filters,
-    offset,
-    !userIdInvalid && !rangeInvalid,
-  );
+  const auditLog = useAuditLog(filters, offset, !rangeInvalid);
 
   const rows = useMemo(() => auditLog.data?.items ?? [], [auditLog.data]);
   const total = auditLog.data?.total ?? 0;
 
+  function writeFilters(next: AuditFilters) {
+    patchAddress({
+      user: next.userId === "" ? undefined : next.userId,
+      entity: next.entity === "" ? undefined : next.entity,
+      action: next.action === "" ? undefined : next.action,
+      from: next.from === "" ? undefined : next.from,
+      to: next.to === "" ? undefined : next.to,
+    });
+  }
+
   function patchFilters(patch: Partial<AuditFilters>) {
     // Любая смена фильтра возвращает к первой странице: иначе выдача открылась
     // бы на середине уже другой выборки.
-    setFilters((current) => ({ ...current, ...patch }));
+    writeFilters({ ...filters, ...patch });
     setOffset(0);
   }
 
   function resetFilters() {
-    setFilters(EMPTY_AUDIT_FILTERS);
+    writeFilters(EMPTY_AUDIT_FILTERS);
     setOffset(0);
   }
 
@@ -192,13 +217,36 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
           типов, и `Section` с `titleHidden` описан ровно для этого случая. */}
       <Section title={t("audit.filters.legend")} titleHidden>
         <FilterBar label={t("audit.filters.legend")}>
-          <Field
+          <PersonPicker
             id="audit-user"
             label={t("audit.filters.user")}
-            placeholder={t("audit.filters.userPlaceholder")}
-            value={filters.userId}
-            onChange={(event) => patchFilters({ userId: event.target.value })}
-            error={userIdInvalid && t("audit.filters.userInvalid")}
+            placeholder={t("audit.filters.anyUser")}
+            selectedId={filters.userId === "" ? undefined : filters.userId}
+            selectedName={
+              filters.userId === ""
+                ? undefined
+                : (names[filters.userId] ?? shortId(filters.userId))
+            }
+            people={(authors.data?.items ?? []).map((user) => ({
+              id: user.id,
+              name: user.full_name,
+              detail: [t(`common:roles.${user.role}`), user.email]
+                .filter((part): part is string => Boolean(part))
+                .join(" · "),
+            }))}
+            filter="server"
+            query={authorQuery}
+            onQueryChange={setAuthorQuery}
+            status={authors.status}
+            onRetry={() => void authors.refetch()}
+            onSelect={(userId) => patchFilters({ userId: userId ?? "" })}
+            texts={{
+              search: t("audit.filters.userSearch"),
+              empty: t("audit.filters.userNotFound"),
+              loadError: t("audit.filters.userLoadError"),
+              retry: t("common:actions.retry"),
+              clear: t("audit.filters.anyUser"),
+            }}
           />
 
           <SelectField

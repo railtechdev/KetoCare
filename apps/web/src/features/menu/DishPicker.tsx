@@ -20,6 +20,8 @@ interface Props {
   /** Идентификатор сообщения об ошибке формы — связывается с полем */
   errorId?: string;
   invalid?: boolean;
+  /** id поля поиска, когда на него ведёт строка сводки ошибок формы */
+  inputId?: string;
 }
 
 /**
@@ -45,13 +47,15 @@ export function DishPicker({
   onSelect,
   errorId,
   invalid,
+  inputId: inputIdProp,
 }: Props) {
   const { t } = useTranslation("menu");
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [open, setOpen] = useState(false);
 
-  const inputId = useId();
+  const ownInputId = useId();
+  const inputId = inputIdProp ?? ownInputId;
   const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const { options, isFetching, isError, error } = useDishOptions(
     patientId,

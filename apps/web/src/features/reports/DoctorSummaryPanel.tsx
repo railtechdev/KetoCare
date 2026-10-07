@@ -7,14 +7,16 @@ import {
   Section,
   Skeleton,
   WarningBanner,
+  cn,
   toast,
 } from "@ketocare/ui";
-import { Sparkles } from "lucide-react";
+import { OctagonX, Sparkles, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TextAreaField } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
+import { formatIsoDate, formatTimestamp } from "../doctor/dates";
 import {
   approvalRejectionOf,
   useApproveSummaryMutation,
@@ -210,7 +212,7 @@ function Draft({
       {approved && summary.approved_at && (
         <p className="m-0 text-sm text-muted-foreground">
           {t("summary.approvedAt", {
-            at: new Date(summary.approved_at).toLocaleDateString("ru-RU"),
+            at: formatTimestamp(summary.approved_at) ?? summary.approved_at,
           })}
         </p>
       )}
@@ -256,8 +258,8 @@ function Draft({
             open={confirming}
             onOpenChange={setConfirming}
             title={t("summary.confirm.title", {
-              from: summary.period_start,
-              to: summary.period_end,
+              from: formatIsoDate(summary.period_start) ?? summary.period_start,
+              to: formatIsoDate(summary.period_end) ?? summary.period_end,
             })}
             description={t("summary.confirm.description")}
             confirmLabel={t("summary.approve")}
@@ -403,15 +405,34 @@ function Checks({ checks }: { checks: SummaryCheck[] }) {
       <p className="m-0 text-sm font-medium">{t("summary.checks.title")}</p>
       <ul className="m-0 flex list-none flex-col gap-field p-0">
         {checks.map((check, index) => (
-          <li key={`${check.kind}-${index}`} className="text-sm">
+          <li
+            key={`${check.kind}-${index}`}
+            className="flex flex-wrap items-baseline gap-x-1 text-sm"
+          >
+            {/* Запрещающая находка отличается от подсказки значком и словом,
+                а не только цветом (WCAG 1.4.1): от этого различия зависит,
+                можно ли утвердить сводку. */}
             <span
-              className={
-                check.hard ? "text-destructive" : "text-warning-strong"
-              }
+              className={cn(
+                "inline-flex items-center gap-1 self-center",
+                check.hard ? "text-destructive" : "text-warning-strong",
+              )}
             >
+              {check.hard ? (
+                <OctagonX aria-hidden="true" className="size-4 shrink-0" />
+              ) : (
+                <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+              )}
               {t(`summary.checks.kind.${check.kind}`, {
                 defaultValue: t("summary.checks.kind.other"),
               })}
+            </span>
+            <span className="text-muted-foreground">
+              (
+              {check.hard
+                ? t("summary.checks.hardMark")
+                : t("summary.checks.softMark")}
+              )
             </span>
             {check.fragment && (
               <span className="text-muted-foreground">

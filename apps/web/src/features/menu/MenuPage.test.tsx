@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -7,7 +7,10 @@ import i18n from "../../lib/i18n";
 import menuRu from "../../locales/ru/menu.json";
 import { api } from "../../lib/api";
 import { MenuPage } from "./MenuPage";
-import { todayIso } from "./dates";
+import { shiftIsoDate, todayIso } from "./dates";
+import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
+import type { SectionSearch } from "../../routes/search";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -128,6 +131,9 @@ function respond(path: string) {
       },
     };
   }
+  if (path === "/api/v1/recipes") {
+    return { data: { items: [], total: 0 } };
+  }
   if (path === "/api/v1/recipes/{recipe_id}") {
     return {
       data: { id: "r1", title: "Каша на кокосовом масле", servings: 1 },
@@ -136,13 +142,16 @@ function respond(path: string) {
   throw new Error(`Unexpected GET ${path}`);
 }
 
-function renderPage() {
+function renderPage(search: SectionSearch = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  // Выбранный день живёт в адресе (`?date=`), и экран без роутера не работает.
   return render(
     <QueryClientProvider client={client}>
-      <MenuPage patientId="p1" />
+      <SectionRouter section="menu" search={search}>
+        <MenuPage patientId="p1" />
+      </SectionRouter>
     </QueryClientProvider>,
   );
 }
@@ -574,5 +583,114 @@ describe("что взвесить", () => {
 
     expect(await screen.findByText("100 г")).toBeInTheDocument();
     expect(screen.queryByText("50 г")).not.toBeInTheDocument();
+  });
+});
+
+describe("выбранный день — в адресе", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(respond(path)),
+    );
+  });
+
+  function requestedDates(): unknown[] {
+    return (api.GET as unknown as Mock).mock.calls
+      .filter(([path]) => path === "/api/v1/patients/{patient_id}/menus")
+      .map(
+        ([, init]) =>
+          (init as { params: { query: { date: string } } }).params.query.date,
+      );
+  }
+
+  it("F5 возвращает тот же день, а не сегодняшний", async () => {
+    // Правило П1: врач, переславший ссылку на завтрашний план, и семья,
+    // обновившая страницу, должны увидеть тот же день.
+    const tomorrow = shiftIsoDate(todayIso(), 1);
+    renderPage({ date: tomorrow });
+
+    await screen.findByText("Каша на кокосовом масле");
+    expect(requestedDates()).toEqual([tomorrow]);
+    // Завтрашний день: отметить съеденным нечего.
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("смена дня уходит в адрес, а сегодня в адрес не пишется", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Каша на кокосовом масле");
+    expect(currentAddress().date).toBeUndefined();
+
+    await user.click(screen.getByRole("button", { name: "Следующий день" }));
+    await waitFor(() =>
+      expect(currentAddress().date).toBe(shiftIsoDate(todayIso(), 1)),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Предыдущий день" }));
+    await waitFor(() => expect(currentAddress().date).toBeUndefined());
+  });
+
+  it("несуществующая дата в адресе — это сегодня, а не поломка экрана", async () => {
+    renderPage({ date: "2026-02-30" });
+
+    await screen.findByText("Каша на кокосовом масле");
+    expect(requestedDates()).toEqual([todayIso()]);
+  });
+});
+
+describe("добавление блюда", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(respond(path)),
+    );
+  });
+
+  async function addOmelette(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить блюдо в приём: Приём 2",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: /Приём 2/ });
+    await user.type(
+      within(dialog).getByRole("combobox", { name: /Блюдо/ }),
+      "Омлет",
+    );
+    await user.click(await screen.findByRole("option", { name: /Омлет/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Добавить" }));
+    return dialog;
+  }
+
+  it("при отказе сервера панель остаётся открытой, с ошибкой и выбранным блюдом", async () => {
+    (api.PUT as unknown as Mock).mockResolvedValue({
+      error: {
+        error: { code: "conflict", message: "День изменён в другом окне." },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const dialog = await addOmelette(user);
+
+    expect(
+      await within(dialog).findByText("День изменён в другом окне."),
+    ).toBeVisible();
+    expect(screen.getByRole("dialog", { name: /Приём 2/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: /Блюдо/ })).toHaveValue(
+      "Омлет на сливках",
+    );
+  });
+
+  it("после успеха панель закрывается", async () => {
+    (api.PUT as unknown as Mock).mockResolvedValue({ data: MENU });
+    const user = userEvent.setup();
+    renderPage();
+
+    await addOmelette(user);
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /Приём 2/ })).toBeNull(),
+    );
   });
 });

@@ -8,31 +8,9 @@ import {
   EMPTY_AUDIT_FILTERS,
   endOfDayIso,
   isRangeInvalid,
-  isUserIdInvalid,
   startOfDayIso,
   toAuditQuery,
 } from "./auditFilters";
-
-describe("isUserIdInvalid", () => {
-  it("пустое поле — это отсутствие фильтра, а не ошибка", () => {
-    expect(isUserIdInvalid(EMPTY_AUDIT_FILTERS)).toBe(false);
-  });
-
-  it("ловит идентификатор, который сервер отклонит", () => {
-    expect(isUserIdInvalid({ ...EMPTY_AUDIT_FILTERS, userId: "иванов" })).toBe(
-      true,
-    );
-  });
-
-  it("пропускает UUID", () => {
-    expect(
-      isUserIdInvalid({
-        ...EMPTY_AUDIT_FILTERS,
-        userId: " 0f8fad5b-d9cb-469f-a165-70867728950e ",
-      }),
-    ).toBe(false);
-  });
-});
 
 describe("isRangeInvalid", () => {
   it("ловит период с началом позже конца", () => {

@@ -2,6 +2,7 @@ import {
   AsyncSection,
   Badge,
   EmptyState,
+  formatMass,
   formatOccurredAt,
   Section,
   Skeleton,
@@ -10,6 +11,7 @@ import { History } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { formatIsoDate } from "../doctor/dates";
 import { changedFields, type RevisionField } from "./revisionDiff";
 import { useProductRevisions } from "./useProductRevisions";
 import { queryState } from "../../lib/queryState";
@@ -139,6 +141,15 @@ export function ProductRevisions({ productId }: { productId: string }) {
   );
 }
 
+/** Поля снимка, где лежит число: Decimal сервер может отдать и строкой. */
+const NUMERIC_FIELDS: ReadonlySet<RevisionField> = new Set([
+  "kcal_100g",
+  "fat_100g",
+  "protein_100g",
+  "carbs_100g",
+  "fiber_100g",
+]);
+
 /** Значение снимка в человеческом виде: да/нет вместо true/false, «—» вместо пустоты. */
 function formatValue(
   t: ReturnType<typeof useTranslation<"products">>["t"],
@@ -153,6 +164,18 @@ function formatValue(
   }
   if (value === null || value === undefined || value === "") {
     return t("revisions.empty.value");
+  }
+  // Дата сверки — `YYYY-MM-DD` без зоны: через `new Date` она съехала бы на
+  // сутки западнее Гринвича.
+  if (field === "verified_at" && typeof value === "string") {
+    return formatIsoDate(value) ?? value;
+  }
+  // Пищевая ценность приходит числом — и печаталась бы английской записью,
+  // «52.5» в истории рядом с «52,5» в карточке над ней (правило П45).
+  if (typeof value === "number") return formatMass(value);
+  if (typeof value === "string" && NUMERIC_FIELDS.has(field)) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return formatMass(parsed);
   }
   return String(value);
 }

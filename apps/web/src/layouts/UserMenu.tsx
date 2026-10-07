@@ -6,6 +6,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -14,7 +16,6 @@ import {
 } from "@ketocare/ui";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  Check,
   LogOut,
   Monitor,
   Moon,
@@ -59,7 +60,10 @@ export function UserMenu({ session }: { session: Session }) {
         <Button
           variant="ghost"
           className="min-h-touch gap-field px-2"
-          aria-label={t("nav.account")}
+          // Подпись содержит видимое имя (WCAG 2.5.3 «Label in Name»):
+          // голосовое управление ищет кнопку по тому, что написано на ней, а
+          // «Учётная запись» в ответ на «Мария Иванова» не находилось.
+          aria-label={t("nav.accountOf", { name })}
         >
           <Avatar className="size-8">
             <AvatarFallback>{initialsOf(fullName)}</AvatarFallback>
@@ -98,21 +102,24 @@ export function UserMenu({ session }: { session: Session }) {
             {t("nav.theme")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            {THEME_OPTIONS.map(({ value, icon: Icon }) => (
-              <DropdownMenuItem
-                key={value}
-                onSelect={() => {
-                  storeThemePreference(value);
-                  setTheme(value);
-                }}
-              >
-                <Icon aria-hidden="true" />
-                {t(`theme.${value}`)}
-                {theme === value && (
-                  <Check aria-hidden="true" className="ml-auto" />
-                )}
-              </DropdownMenuItem>
-            ))}
+            {/* Выбор одного из трёх — группа радиокнопок, а не три пункта
+                меню с галочкой: галочку видно глазами, а программа чтения
+                экрана без role="menuitemradio" не сообщала, что выбрано. */}
+            <DropdownMenuRadioGroup
+              value={theme}
+              onValueChange={(value) => {
+                const next = value as ThemePreference;
+                storeThemePreference(next);
+                setTheme(next);
+              }}
+            >
+              {THEME_OPTIONS.map(({ value, icon: Icon }) => (
+                <DropdownMenuRadioItem key={value} value={value}>
+                  <Icon aria-hidden="true" />
+                  {t(`theme.${value}`)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 

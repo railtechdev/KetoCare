@@ -47,7 +47,7 @@ export function TelegramPanel({ patientId, childName }: Props) {
 
   return (
     <div className="flex flex-col gap-section">
-      <Section title={t("code.title")} density="compact">
+      <Section title={t("code.title")}>
         <p className="m-0 text-muted-foreground">{t("code.intro")}</p>
 
         {code === undefined ? (

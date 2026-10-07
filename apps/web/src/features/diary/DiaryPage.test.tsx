@@ -11,6 +11,8 @@ import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import diaryRu from "../../locales/ru/diary.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
+import type { SectionSearch } from "../../routes/search";
 import { SessionProvider } from "../auth/session";
 import { DiaryPage } from "./DiaryPage";
 import { toDateTimeLocalInput } from "./time";
@@ -58,7 +60,7 @@ function respond(path: string) {
   return { data: { items: [], total: 0 } };
 }
 
-function renderPage(search: { kind?: string } = {}) {
+function renderPage(search: SectionSearch = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -155,9 +157,10 @@ describe("DiaryPage", () => {
       });
       await user.click(within(dialog).getByRole("button", { name: submit }));
 
+      // Под полем и строкой в сводке ошибок (правило П8).
       expect(
-        await within(dialog).findByText(/Это время ещё не наступило/),
-      ).toBeInTheDocument();
+        await within(dialog).findAllByText(/Это время ещё не наступило/),
+      ).toHaveLength(2);
       expect(
         within(dialog).queryByText("Укажите дату и время события."),
       ).not.toBeInTheDocument();
@@ -323,5 +326,69 @@ describe("состояния, которые не врут", () => {
     const type = await within(dialog).findByLabelText(/Тип приступа/);
     // Узкая ширина обрезала выбранное значение: «Выберите ин…».
     expect(type.className).not.toMatch(/max-w-field/);
+  });
+});
+
+describe("период дневника — в адресе", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(respond(path)),
+    );
+    (api.POST as unknown as Mock).mockResolvedValue({ error: {} });
+  });
+
+  function ketoneQueries(): { from: string; to: string }[] {
+    return (api.GET as unknown as Mock).mock.calls
+      .filter(([path]) => path === "/api/v1/patients/{patient_id}/logs/ketones")
+      .map(
+        ([, init]) =>
+          (init as { params: { query: { from: string; to: string } } }).params
+            .query,
+      );
+  }
+
+  it("F5 возвращает произвольный период со своими границами", async () => {
+    // Правило П1: «кетоны за август» — это ссылка, и после обновления
+    // страницы экран обязан показать август, а не умолчание.
+    renderPage({
+      kind: "ketones",
+      period: "custom",
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+
+    expect(
+      await screen.findByRole("radio", { name: "Произвольный" }),
+    ).toBeChecked();
+    expect(screen.getByLabelText("С даты")).toHaveValue("2026-08-01");
+    expect(screen.getByLabelText("По дату")).toHaveValue("2026-08-31");
+    await screen.findAllByText(/3,2/);
+    expect(ketoneQueries()[0]?.from).toBe(new Date(2026, 7, 1).toISOString());
+  });
+
+  it("выбор периода уходит в адрес, умолчание — нет", async () => {
+    const user = userEvent.setup();
+    renderPage({ kind: "ketones" });
+
+    await user.click(await screen.findByRole("radio", { name: "Месяц" }));
+    expect(currentAddress()).toMatchObject({ period: "month" });
+
+    // Произвольный период начинается с того отрезка, что был на экране.
+    await user.click(screen.getByRole("radio", { name: "Произвольный" }));
+    const address = currentAddress();
+    expect(address.period).toBe("custom");
+    expect(address.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(address.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    await user.click(screen.getByRole("radio", { name: "Неделя" }));
+    expect(currentAddress().period).toBeUndefined();
+    expect(currentAddress().from).toBeUndefined();
+  });
+
+  it("незнакомый период в адресе — умолчание экрана", async () => {
+    renderPage({ kind: "ketones", period: "year" as never });
+
+    expect(await screen.findByRole("radio", { name: "Неделя" })).toBeChecked();
   });
 });

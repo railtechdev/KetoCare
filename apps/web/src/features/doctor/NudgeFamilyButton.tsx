@@ -20,9 +20,17 @@ import type { FamilyNudge } from "./types";
  */
 export function NudgeFamilyButton({
   patientId,
+  patientName,
   size = "sm",
 }: {
   patientId: string;
+  /**
+   * Имя ребёнка — для подписи кнопки в строке перечня: там кнопок столько же,
+   * сколько молчащих семей, и «Напомнить семье» без имени программа чтения
+   * экрана зачитывала одинаково в каждой строке. В карте пациента имя уже
+   * в заголовке, и оно не нужно.
+   */
+  patientName?: string;
   size?: "sm" | "default";
 }) {
   const { t } = useTranslation("doctor");
@@ -35,6 +43,11 @@ export function NudgeFamilyButton({
       size={size}
       className="min-h-touch"
       disabled={nudge.isPending}
+      aria-label={
+        patientName === undefined
+          ? undefined
+          : t("nudge.actionFor", { name: patientName })
+      }
       onClick={() =>
         nudge.mutate(undefined, {
           onSuccess: (result) => announce(t, result),

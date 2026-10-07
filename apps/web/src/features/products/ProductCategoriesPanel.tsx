@@ -12,6 +12,7 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { ListOrdered, Merge, Plus } from "lucide-react";
 import { useId, useMemo, useState } from "react";
+import { TableSkeleton } from "../admin/TableSkeleton";
 import { useTranslation } from "react-i18next";
 
 import { Field, SelectField } from "../../components/Field";
@@ -77,6 +78,9 @@ export function ProductCategoriesPanel() {
         cell: ({ row }) => (
           <CategoryActions
             category={row.original}
+            // Слить можно только в другую категорию: у единственной пункт
+            // открывал бы форму с пустым выбором, где «Слить» ничего не делает.
+            canMerge={rows.length > 1}
             onEdit={() => setEditing({ kind: "edit", category: row.original })}
             onMerge={() =>
               setEditing({ kind: "merge", category: row.original })
@@ -85,7 +89,7 @@ export function ProductCategoriesPanel() {
         ),
       },
     ],
-    [t],
+    [t, rows.length],
   );
 
   return (
@@ -93,7 +97,13 @@ export function ProductCategoriesPanel() {
       title={t("categories.title")}
       description={t("categories.intro")}
       action={
-        <Button type="button" onClick={() => setEditing({ kind: "create" })}>
+        // Вторичное: первичное действие экрана — «Добавить продукт» в его
+        // шапке (П31), категории заводят изредка.
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setEditing({ kind: "create" })}
+        >
           <Plus aria-hidden="true" />
           {t("categories.create")}
         </Button>
@@ -101,7 +111,7 @@ export function ProductCategoriesPanel() {
     >
       <AsyncSection
         {...queryState(categories)}
-        skeleton={null}
+        skeleton={<TableSkeleton label={t("categories.loading")} columns={3} />}
         error={
           categories.isError
             ? {
@@ -148,10 +158,12 @@ export function ProductCategoriesPanel() {
 
 function CategoryActions({
   category,
+  canMerge,
   onEdit,
   onMerge,
 }: {
   category: ProductCategory;
+  canMerge: boolean;
   onEdit: () => void;
   onMerge: () => void;
 }) {
@@ -160,14 +172,36 @@ function CategoryActions({
 
   return (
     <div className="flex flex-wrap gap-field">
-      <Button type="button" variant="ghost" size="sm" onClick={onEdit}>
+      {/* Подпись называет категорию: в таблице строк много, и «Изменить» без
+          объекта программа чтения экрана зачитывала одинаково в каждой. */}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-label={t("categories.actions.forRow", {
+          action: t("categories.actions.edit"),
+          name: category.name_ru,
+        })}
+        onClick={onEdit}
+      >
         {t("categories.actions.edit")}
       </Button>
 
-      <Button type="button" variant="ghost" size="sm" onClick={onMerge}>
-        <Merge aria-hidden="true" />
-        {t("categories.actions.merge")}
-      </Button>
+      {canMerge && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={t("categories.actions.forRow", {
+            action: t("categories.actions.merge"),
+            name: category.name_ru,
+          })}
+          onClick={onMerge}
+        >
+          <Merge aria-hidden="true" />
+          {t("categories.actions.merge")}
+        </Button>
+      )}
 
       {/* Удаление предлагается только у пустой: сервер откажет и объяснит, но
           показывать заведомо отказную кнопку — обещание того, чего нет. */}
@@ -180,6 +214,10 @@ function CategoryActions({
               size="sm"
               className="text-destructive"
               disabled={remove.isPending}
+              aria-label={t("categories.actions.forRow", {
+                action: t("categories.actions.delete"),
+                name: category.name_ru,
+              })}
             >
               {t("categories.actions.delete")}
             </Button>
@@ -387,6 +425,10 @@ function MergeForm({
           submitLabel={t("categories.merge.submit")}
           pendingLabel={t("categories.merge.merging")}
           pending={merge.isPending}
+          // Без выбора отправка молча ничего не делала: кнопка выглядела
+          // рабочей, нажатие не давало ни перехода, ни слова (П44).
+          disabled={target === ""}
+          reason={t("categories.merge.chooseTarget")}
           onCancel={onClose}
           cancelLabel={t("common:actions.cancel")}
         />

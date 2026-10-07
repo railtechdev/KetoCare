@@ -1,4 +1,10 @@
-import { Button, ConfirmDialog, Section, toast } from "@ketocare/ui";
+import {
+  ActionReason,
+  Button,
+  ConfirmDialog,
+  Section,
+  toast,
+} from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -33,6 +39,15 @@ export function CareTransferPanel({ user }: { user: AdminUser }) {
   );
   const target = colleagues.find((candidate) => candidate.id === toUserId);
   const count = user.sole_patients ?? 0;
+  const reasonId = `${selectId}-reason`;
+  // Причина отключённой кнопки (П44) — по одной, в порядке устранения: сначала
+  // есть ли кому передать вообще, потом выбран ли коллега.
+  const reason =
+    transfer.isPending || target !== undefined
+      ? null
+      : colleagues.length === 0 && users.isSuccess
+        ? t("users.transfer.noColleagues")
+        : t("users.transfer.chooseFirst");
 
   return (
     <Section
@@ -68,6 +83,7 @@ export function CareTransferPanel({ user }: { user: AdminUser }) {
             type="button"
             className="min-h-touch self-start"
             disabled={target === undefined || transfer.isPending}
+            aria-describedby={reasonId}
           >
             {t("users.transfer.action")}
           </Button>
@@ -95,6 +111,7 @@ export function CareTransferPanel({ user }: { user: AdminUser }) {
           );
         }}
       />
+      <ActionReason id={reasonId}>{reason}</ActionReason>
     </Section>
   );
 }

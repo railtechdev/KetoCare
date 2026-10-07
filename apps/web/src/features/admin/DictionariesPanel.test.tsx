@@ -58,6 +58,26 @@ describe("справочник типов приступов", () => {
     expect(await screen.findByText("TC")).toBeInTheDocument();
   });
 
+  it("выведенный тип помечен словом, а не только видом строки", async () => {
+    // ADR-0050: выведенный тип семья уже не выберет, но в справочнике он
+    // стоит среди живых — без пометки их не различить (WCAG 1.4.1).
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        items: [
+          ENTRY,
+          { ...ENTRY, id: "s2", name_ru: "Прежний", retired: true },
+        ],
+        total: 2,
+      },
+    });
+    renderPanel();
+
+    expect(
+      await screen.findByText(adminRu.dictionaries.retired),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(adminRu.dictionaries.retired)).toHaveLength(1);
+  });
+
   it("код задаётся при заведении нового типа", async () => {
     const user = userEvent.setup();
     renderPanel();

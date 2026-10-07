@@ -8,6 +8,8 @@ import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
+import type { SectionSearch } from "../../routes/search";
 import { SessionProvider } from "../auth/session";
 import { PatientsListView } from "./PatientsListView";
 import type { Patient, PatientOverview } from "./types";
@@ -135,7 +137,7 @@ const FRESH_OVERVIEW = {
   family_activated: true,
 } satisfies PatientOverview;
 
-function renderList(search: { item?: string } = {}) {
+function renderList(search: SectionSearch = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -236,7 +238,7 @@ describe("реестр пациентов", () => {
     expect(await screen.findByText("Нет замеров: 10 дн.")).toBeInTheDocument();
     const table = within(screen.getByRole("table"));
     expect(
-      table.getAllByRole("button", { name: "Напомнить семье в Telegram" }),
+      table.getAllByRole("button", { name: /^Напомнить семье в Telegram — / }),
     ).toHaveLength(1);
   });
 
@@ -280,5 +282,56 @@ describe("реестр пациентов", () => {
         }),
       );
     });
+  });
+});
+
+describe("поиск и отбор реестра — в адресе", () => {
+  function patientQueries(): { q?: string; therapy?: string }[] {
+    return (api.GET as Mock).mock.calls
+      .filter(([path]) => path === "/api/v1/patients")
+      .map(
+        ([, init]) =>
+          (init as { params: { query: { q?: string; therapy?: string } } })
+            .params.query,
+      );
+  }
+
+  it("F5 возвращает строку поиска и отбор", async () => {
+    renderList({ q: "Иван", therapy: "ended" });
+
+    expect(
+      await screen.findByLabelText(doctorRu.list.search.label),
+    ).toHaveValue("Иван");
+    expect(screen.getByLabelText(doctorRu.list.therapy.label)).toHaveValue(
+      "ended",
+    );
+    await waitFor(() =>
+      expect(patientQueries()).toContainEqual(
+        expect.objectContaining({ q: "Иван", therapy: "ended" }),
+      ),
+    );
+  });
+
+  it("набранное и выбранное уходит в адрес, умолчание — нет", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.type(
+      await screen.findByLabelText(doctorRu.list.search.label),
+      "Ив",
+    );
+    await waitFor(() => expect(currentAddress().q).toBe("Ив"));
+
+    await user.selectOptions(
+      screen.getByLabelText(doctorRu.list.therapy.label),
+      "ended",
+    );
+    await waitFor(() => expect(currentAddress().therapy).toBe("ended"));
+
+    await user.selectOptions(
+      screen.getByLabelText(doctorRu.list.therapy.label),
+      "active",
+    );
+    await waitFor(() => expect(currentAddress().therapy).toBeUndefined());
   });
 });

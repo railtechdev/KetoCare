@@ -47,6 +47,38 @@ export interface AccountFieldsProps<T extends FieldValues> {
   idPrefix: string;
 }
 
+/**
+ * Ошибки полей учётной записи парами «id поля → текст» — для сводки ошибок
+ * формы (правило П8). Тексты те же, что под полями: их считает одна функция.
+ */
+export function useAccountErrorEntries<T extends FieldValues>(
+  errors: FieldErrors<T>,
+  idPrefix: string,
+): [string, string | undefined][] {
+  const { t } = useTranslation("invitations");
+  const messages = accountErrorMessages(t, errors);
+  return [
+    [`${idPrefix}-name`, messages.fullName],
+    [`${idPrefix}-password`, messages.password],
+    [`${idPrefix}-password-repeat`, messages.passwordRepeat],
+  ];
+}
+
+function accountErrorMessages<T extends FieldValues>(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  errors: FieldErrors<T>,
+) {
+  return {
+    fullName: errors.fullName ? t("accept.errors.fullName") : undefined,
+    password: errors.password
+      ? t("accept.errors.password", { min: PASSWORD_MIN_LENGTH })
+      : undefined,
+    passwordRepeat: errors.passwordRepeat
+      ? t("accept.errors.passwordRepeat")
+      : undefined,
+  };
+}
+
 export function AccountFields<T extends FieldValues>({
   register,
   errors,
@@ -55,6 +87,7 @@ export function AccountFields<T extends FieldValues>({
   // Тексты живут в словаре приглашений: они написаны для человека, который
   // заводит учётную запись, и на обоих путях он один и тот же.
   const { t } = useTranslation("invitations");
+  const messages = accountErrorMessages(t, errors);
 
   return (
     <>
@@ -62,7 +95,7 @@ export function AccountFields<T extends FieldValues>({
         id={`${idPrefix}-name`}
         autoComplete="name"
         label={t("accept.fields.fullName")}
-        error={errors.fullName && t("accept.errors.fullName")}
+        error={messages.fullName}
         {...register("fullName" as Path<T>)}
       />
       <Field
@@ -83,10 +116,7 @@ export function AccountFields<T extends FieldValues>({
         autoComplete="new-password"
         label={t("accept.fields.password")}
         hint={t("accept.hints.password", { min: PASSWORD_MIN_LENGTH })}
-        error={
-          errors.password &&
-          t("accept.errors.password", { min: PASSWORD_MIN_LENGTH })
-        }
+        error={messages.password}
         {...register("password" as Path<T>)}
       />
       <Field
@@ -95,7 +125,7 @@ export function AccountFields<T extends FieldValues>({
         type="password"
         autoComplete="new-password"
         label={t("accept.fields.passwordRepeat")}
-        error={errors.passwordRepeat && t("accept.errors.passwordRepeat")}
+        error={messages.passwordRepeat}
         {...register("passwordRepeat" as Path<T>)}
       />
     </>

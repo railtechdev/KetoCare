@@ -184,9 +184,10 @@ describe("показатели в форме рецепта", () => {
     renderForm();
     await addButter(user);
 
+    // Пишет кит (`RatioBadge`): своей разметки у формы для этого больше нет.
     expect(
-      await screen.findByText("Соотношение не определено"),
-    ).toBeInTheDocument();
+      await screen.findByLabelText("Соотношение не определено"),
+    ).toHaveTextContent(/^—$/);
     expect(screen.queryByText("— : 1")).toBeNull();
   });
 

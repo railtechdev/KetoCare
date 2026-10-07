@@ -31,6 +31,6 @@ describe("RatioBadge", () => {
     render(<RatioBadge ratio={null} />);
     expect(
       screen.getByLabelText("Соотношение не определено"),
-    ).toHaveTextContent("— : 1");
+    ).toHaveTextContent(/^—$/);
   });
 });

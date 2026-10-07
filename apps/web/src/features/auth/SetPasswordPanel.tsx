@@ -14,6 +14,10 @@ import { z } from "zod";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { api, errorCodeOf, errorMessageOf } from "../../lib/api";
 import { StepExpired } from "./StepExpired";
 import { useSession } from "./useSession";
@@ -55,8 +59,12 @@ export function SetPasswordPanel({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<Values>({ resolver: zodResolver(schema) });
+
+  const newPasswordError =
+    errors.newPassword && t("setPassword.tooShort", { min: MIN_LENGTH });
+  const repeatError = errors.repeatPassword && t("setPassword.mismatch");
 
   const setPassword = useMutation({
     mutationFn: async (values: Values) => {
@@ -93,6 +101,14 @@ export function SetPasswordPanel({
             className="flex flex-col gap-section"
             onSubmit={handleSubmit((values) => setPassword.mutate(values))}
           >
+            <FormErrorSummary
+              items={errorSummaryItems(submitCount, [
+                ["new-password", newPasswordError],
+                ["repeat-password", repeatError],
+              ])}
+              focusKey={submitCount}
+            />
+
             <Field
               id="new-password"
               type="password"
@@ -100,10 +116,7 @@ export function SetPasswordPanel({
               width="wide"
               label={t("setPassword.newPassword")}
               hint={t("setPassword.hint", { min: MIN_LENGTH })}
-              error={
-                errors.newPassword &&
-                t("setPassword.tooShort", { min: MIN_LENGTH })
-              }
+              error={newPasswordError}
               {...register("newPassword")}
             />
 
@@ -113,7 +126,7 @@ export function SetPasswordPanel({
               autoComplete="new-password"
               width="wide"
               label={t("setPassword.repeat")}
-              error={errors.repeatPassword && t("setPassword.mismatch")}
+              error={repeatError}
               {...register("repeatPassword")}
             />
 

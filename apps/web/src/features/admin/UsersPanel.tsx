@@ -14,6 +14,8 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, RotateCcwKey, SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
+import { PageActions } from "../../components/PageLayout";
+import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 
 import { InvitationsList } from "../invitations/InvitationsList";
@@ -251,8 +253,8 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
           actions={inviteButton}
         />
       ) : (
-        // Заголовок даёт экран; здесь остаётся только действие.
-        <div className="flex flex-wrap gap-field">{inviteButton}</div>
+        // Заголовок даёт экран, а действие уходит в его шапку (П31).
+        <PageActions>{inviteButton}</PageActions>
       )}
 
       {/* Администратор заводит персонал; семью приглашает её врач или диетолог,
@@ -283,7 +285,11 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
               variant="outline"
               className="min-h-touch"
               onClick={() =>
-                void navigator.clipboard?.writeText(issued?.password ?? "")
+                void copyText(issued?.password ?? "").then((ok) =>
+                  ok
+                    ? toast.success(t("common:clipboard.copied"))
+                    : toast.error(t("common:clipboard.failed")),
+                )
               }
             >
               {t("users.temporaryPasswordCopy")}

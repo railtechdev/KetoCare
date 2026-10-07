@@ -9,6 +9,7 @@ import {
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
+import { DayTargetBars } from "../menu/DayTargetBars";
 import { Panel } from "./Panel";
 import type { DaySummary } from "./types";
 
@@ -16,6 +17,8 @@ interface Props {
   day: DaySummary | null;
   /** Калорийность назначения — показывается рядом с фактом, для сравнения глазом */
   targetKcal: number | null;
+  /** Лимит углеводов назначения; вместе с калорийностью даёт полосы целей */
+  carbsLimit: number | null;
 }
 
 /**
@@ -25,7 +28,7 @@ interface Props {
  * медицинские константы ядра (правило 2 CLAUDE.md), их копия в TypeScript
  * разошлась бы с расчётом и показала бы «в норме» там, где ядро считает иначе.
  */
-export function DayTotalsCard({ day, targetKcal }: Props) {
+export function DayTotalsCard({ day, targetKcal, carbsLimit }: Props) {
   const { t } = useTranslation("home");
 
   if (day === null) {
@@ -71,6 +74,19 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
           carbsG={totals.carbs}
         />
 
+        {/* Цели полосой, как в меню (П40): тот же день на главной читался
+            числом, которое складывали в уме, а лимит углеводов не показывался
+            вовсе. «Добавьте ещё N ккал» говорит подсказка полосы — отдельной
+            строкой это стояло бы дважды. */}
+        {targetKcal !== null && carbsLimit !== null && (
+          <DayTargetBars
+            kcal={totals.kcal}
+            carbs={totals.carbs}
+            kcalTarget={targetKcal}
+            carbsLimit={carbsLimit}
+          />
+        )}
+
         {verdict.unavailable ? (
           // Почему вердикта нет — словами сервера, а не догадкой экрана. Одним
           // текстом на все причины кабинет говорил семье «назначения нет» при
@@ -99,15 +115,18 @@ export function DayTotalsCard({ day, targetKcal }: Props) {
           </p>
         )}
 
-        {verdict.kcalBelowTarget && targetKcal !== null && (
-          <p className="m-0 text-sm text-muted-foreground">
-            {t("day.kcalBelowTarget", {
-              value: formatKcal(totals.kcal),
-              target: formatKcal(targetKcal),
-              left: formatKcal(kcalToTarget(totals.kcal, targetKcal)),
-            })}
-          </p>
-        )}
+        {/* Без полос (лимита нет) остаётся строка: набрать норму всё ещё нужно. */}
+        {verdict.kcalBelowTarget &&
+          targetKcal !== null &&
+          carbsLimit === null && (
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("day.kcalBelowTarget", {
+                value: formatKcal(totals.kcal),
+                target: formatKcal(targetKcal),
+                left: formatKcal(kcalToTarget(totals.kcal, targetKcal)),
+              })}
+            </p>
+          )}
 
         {/* Версия ядра показывается рядом с числами: итоги, посчитанные разными
             версиями, могут отличаться, и это должно быть видно. */}

@@ -1,8 +1,10 @@
 import {
+  ActionReason,
   Button,
   DataTable,
   Section,
   WarningBanner,
+  formatKcal,
   formatRatio,
   toast,
 } from "@ketocare/ui";
@@ -104,7 +106,7 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
         header: t("import.preview.kcal"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.kcal == null ? "—" : Math.round(row.original.kcal)}
+            {row.original.kcal == null ? "—" : formatKcal(row.original.kcal)}
           </span>
         ),
       },
@@ -146,11 +148,12 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
           />
         </div>
 
-        <div>
+        <div className="flex flex-col items-start gap-field">
           <Button
             type="button"
             disabled={file === null || busy}
             aria-busy={preview.isPending}
+            aria-describedby={`${ids}-check-reason`}
             onClick={() => {
               if (file === null) return;
               commit.reset();
@@ -160,6 +163,10 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
             <FileUp aria-hidden="true" />
             {preview.isPending ? t("import.checking") : t("import.check")}
           </Button>
+          {/* Причина отключённой кнопки (П44); во время проверки её нет. */}
+          <ActionReason id={`${ids}-check-reason`}>
+            {file === null ? t("common:actions.noFileChosen") : null}
+          </ActionReason>
         </div>
 
         {failure !== null && (
@@ -169,8 +176,9 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
         )}
 
         {report !== null && (
+          // Второй уровень: над отчётом стоит только заголовок экрана (h1
+          // у PageLayout), и h3 пропускал бы уровень (П24).
           <Section
-            level={3}
             title={
               report.dry_run
                 ? t("import.preview.title")
@@ -204,11 +212,12 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
                 <p className="m-0 text-sm text-muted-foreground">
                   {t("import.preview.note")}
                 </p>
-                <div>
+                <div className="flex flex-col items-start gap-field">
                   <Button
                     type="button"
                     disabled={file === null || busy || report.imported === 0}
                     aria-busy={commit.isPending}
+                    aria-describedby={`${ids}-commit-reason`}
                     onClick={() => {
                       if (file === null) return;
                       commit.mutate(
@@ -231,6 +240,13 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
                       ? t("import.importing")
                       : t("import.confirm")}
                   </Button>
+                  {/* Все строки с ошибками — загружать нечего, и кнопка
+                      говорит об этом, а не молчит серым (П44). */}
+                  <ActionReason id={`${ids}-commit-reason`}>
+                    {report.imported === 0 && !busy
+                      ? t("import.preview.nothingToImport")
+                      : null}
+                  </ActionReason>
                 </div>
               </>
             ) : (

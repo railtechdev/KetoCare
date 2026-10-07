@@ -88,7 +88,7 @@ export function AssistantPage({ patientId }: { patientId: string }) {
 
   return (
     <PageLayout title={t("title")} intro={t("intro")} width="form">
-      <Section title={t("conversation")} density="compact">
+      <Section title={t("conversation")}>
         <AsyncSection
           // Пока идёт запрос о последней переписке, экран тоже занят: иначе
           // между ответами мелькает «переписки пока нет» — и родитель успевает
@@ -151,7 +151,7 @@ export function AssistantPage({ patientId }: { patientId: string }) {
         </AsyncSection>
       </Section>
 
-      <Section title={t("ask")} density="compact">
+      <Section title={t("ask")}>
         <ChatComposer
           value={question}
           onChange={setQuestion}

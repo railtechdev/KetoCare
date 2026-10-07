@@ -6,7 +6,7 @@ import {
   type TrendPoint,
 } from "@ketocare/ui";
 import { CalendarSearch } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SelectField } from "../../components/Field";
@@ -14,15 +14,10 @@ import { errorMessageOf } from "../../lib/api";
 import { useSectionTab } from "../../routes/useSectionTab";
 import { DiaryList } from "../diary/DiaryList";
 import { SeizureDiaryGrid } from "../diary/SeizureDiaryGrid";
+import { usePeriodSearch } from "../diary/usePeriodSearch";
 import { PeriodPicker } from "../diary/PeriodPicker";
 import { CHART_KINDS, DIARY_KINDS, type DiaryKind } from "../diary/diaryApi";
-import {
-  customRange,
-  formatChartDate,
-  presetRange,
-  toDateInput,
-  type PeriodPreset,
-} from "../diary/time";
+import { formatChartDate } from "../diary/time";
 import {
   useDiaryLogs,
   usePrescriptionVersions,
@@ -93,21 +88,17 @@ function DiaryKindView({
 }) {
   const { t } = useTranslation("doctor");
 
-  const [preset, setPreset] = useState<PeriodPreset>("month");
-  const [fromInput, setFromInput] = useState(() =>
-    toDateInput(new Date(presetRange("month", new Date()).from)),
-  );
-  const [toInput, setToInput] = useState(() => toDateInput(new Date()));
-
-  // Границы периода считаются один раз на выбор: пересчёт на каждый рендер менял
-  // бы ключ запроса (в нём есть «сейчас») и гонял бы список по кругу.
-  const range = useMemo(
-    () =>
-      preset === "custom"
-        ? customRange(fromInput, toInput)
-        : presetRange(preset, new Date()),
-    [preset, fromInput, toInput],
-  );
+  // Период — в адресе (`usePeriodSearch`): F5 и пересланная ссылка
+  // открывают тот же отрезок, а не умолчание экрана.
+  const {
+    preset,
+    setPreset,
+    fromInput,
+    toInput,
+    setFromInput,
+    setToInput,
+    range,
+  } = usePeriodSearch("month");
 
   const withChart = CHART_KINDS.includes(kind);
 

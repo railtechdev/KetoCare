@@ -1,4 +1,5 @@
 import {
+  ActionReason,
   AsyncSection,
   Badge,
   Button,
@@ -11,12 +12,16 @@ import {
   Section,
   toast,
 } from "@ketocare/ui";
-import { CalendarClock, Plus } from "lucide-react";
+import { CalendarClock, CalendarX, Plus } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
 import { useMedicalProfile } from "./doctorQueries";
@@ -59,6 +64,7 @@ export function TherapyCourseView({
   const mutations = useTherapyCourseMutations(patientId);
   const [endOpen, setEndOpen] = useState(false);
   const [visitOpen, setVisitOpen] = useState(false);
+  const buildReasonId = useId();
 
   const endedOn = profile.data?.therapy_ended_on ?? null;
   const startedOn = schedule.data?.therapy_started_on ?? null;
@@ -152,6 +158,7 @@ export function TherapyCourseView({
                 disabled={
                   startedOn === null || mutations.buildSchedule.isPending
                 }
+                aria-describedby={buildReasonId}
                 onClick={() =>
                   mutations.buildSchedule.mutate(undefined, {
                     onSuccess: (created) =>
@@ -179,10 +186,13 @@ export function TherapyCourseView({
           )
         }
       >
-        {editable && startedOn === null && (
-          <p className="m-0 mb-2 text-sm text-muted-foreground">
-            {t("course.visits.noStart")}
-          </p>
+        {/* Причина отключённой «Построить график» (П44) связана с кнопкой:
+            прежде это был абзац, и программа чтения экрана о нём у кнопки не
+            сообщала. Живая область стоит в разметке постоянно. */}
+        {editable && (
+          <ActionReason id={buildReasonId} className="mb-2">
+            {startedOn === null ? t("course.visits.noStart") : null}
+          </ActionReason>
         )}
         <AsyncSection
           {...queryState(schedule)}
@@ -296,7 +306,10 @@ function VisitItem({
           </Badge>
         ) : (
           visit.overdue && (
-            <Badge variant="destructive">{t("course.visits.overdue")}</Badge>
+            <Badge variant="destructive">
+              <CalendarX aria-hidden="true" />
+              {t("course.visits.overdue")}
+            </Badge>
           )
         )}
       </header>
@@ -372,22 +385,30 @@ function EndTherapySheet({
   const [endedOn, setEndedOn] = useState(todayInput);
   const [reason, setReason] = useState<TherapyEndReason | "">("");
   const [note, setNote] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  // Попытки отправки: по их счёту сводка ошибок забирает фокус (правило П8).
+  const [attempts, setAttempts] = useState(0);
+  const submitted = attempts > 0;
 
   const reasonMissing = reason === "";
   const noteMissing = reason === "other" && note.trim() === "";
+  const endedOnError =
+    submitted && endedOn === "" ? t("course.errors.date") : undefined;
+  const reasonError =
+    submitted && reasonMissing ? t("course.errors.reason") : undefined;
+  const noteError =
+    submitted && noteMissing ? t("course.errors.note") : undefined;
 
   function close() {
     onOpenChange(false);
     setReason("");
     setNote("");
-    setSubmitted(false);
+    setAttempts(0);
     endTherapy.reset();
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setSubmitted(true);
+    setAttempts((count) => count + 1);
     if (reason === "" || noteMissing || endedOn === "") return;
     endTherapy.mutate(
       { ended_on: endedOn, reason, note: note.trim() || null },
@@ -409,6 +430,14 @@ function EndTherapySheet({
       description={t("course.status.endDescription")}
     >
       <form noValidate className="flex flex-col gap-section" onSubmit={submit}>
+        <FormErrorSummary
+          items={errorSummaryItems(attempts, [
+            [`${ids}-ended-on`, endedOnError],
+            [`${ids}-reason`, reasonError],
+            [`${ids}-note`, noteError],
+          ])}
+          focusKey={attempts}
+        />
         <Field
           id={`${ids}-ended-on`}
           type="date"
@@ -417,9 +446,7 @@ function EndTherapySheet({
           max={todayInput()}
           value={endedOn}
           onChange={(event) => setEndedOn(event.target.value)}
-          error={
-            submitted && endedOn === "" ? t("course.errors.date") : undefined
-          }
+          error={endedOnError}
         />
         <SelectField
           id={`${ids}-reason`}
@@ -429,9 +456,7 @@ function EndTherapySheet({
           onChange={(event) =>
             setReason(event.target.value as TherapyEndReason | "")
           }
-          error={
-            submitted && reasonMissing ? t("course.errors.reason") : undefined
-          }
+          error={reasonError}
         >
           <option value="">{t("course.fields.reasonPlaceholder")}</option>
           {THERAPY_END_REASONS.map((value) => (
@@ -447,7 +472,7 @@ function EndTherapySheet({
           label={t("course.fields.note")}
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          error={submitted && noteMissing ? t("course.errors.note") : undefined}
+          error={noteError}
         />
         {endTherapy.isError && (
           <FormError>
@@ -480,19 +505,24 @@ function AddVisitSheet({
   const { addVisit } = useTherapyCourseMutations(patientId);
   const [plannedOn, setPlannedOn] = useState("");
   const [note, setNote] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  // Попытки отправки: по их счёту сводка ошибок забирает фокус (правило П8).
+  const [attempts, setAttempts] = useState(0);
+  const submitted = attempts > 0;
+
+  const plannedOnError =
+    submitted && plannedOn === "" ? t("course.errors.date") : undefined;
 
   function close() {
     onOpenChange(false);
     setPlannedOn("");
     setNote("");
-    setSubmitted(false);
+    setAttempts(0);
     addVisit.reset();
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    setSubmitted(true);
+    setAttempts((count) => count + 1);
     if (plannedOn === "") return;
     addVisit.mutate(
       { planned_on: plannedOn, note: note.trim() || null },
@@ -513,6 +543,12 @@ function AddVisitSheet({
       title={t("course.visits.addTitle")}
     >
       <form noValidate className="flex flex-col gap-section" onSubmit={submit}>
+        <FormErrorSummary
+          items={errorSummaryItems(attempts, [
+            [`${ids}-planned-on`, plannedOnError],
+          ])}
+          focusKey={attempts}
+        />
         <Field
           id={`${ids}-planned-on`}
           type="date"
@@ -520,9 +556,7 @@ function AddVisitSheet({
           label={t("course.fields.plannedOn")}
           value={plannedOn}
           onChange={(event) => setPlannedOn(event.target.value)}
-          error={
-            submitted && plannedOn === "" ? t("course.errors.date") : undefined
-          }
+          error={plannedOnError}
         />
         <TextAreaField
           id={`${ids}-visit-note`}

@@ -55,6 +55,11 @@ interface Props {
    * ссылки.
    */
   canLeave?: boolean;
+  /**
+   * id поля поиска, когда на него ссылается форма: строка сводки ошибок
+   * «Добавьте продукты» ведёт сюда (правило П8).
+   */
+  inputId?: string;
 }
 
 /**
@@ -88,6 +93,7 @@ export function ProductPicker({
   patientId,
   suggestRecipes = false,
   canLeave = false,
+  inputId: inputIdProp,
 }: Props) {
   const { t } = useTranslation("calculator");
   // Раздела «Рецепты» нет у врача (`SECTIONS_BY_ROLE`), и ссылка туда увела бы
@@ -104,7 +110,8 @@ export function ProductPicker({
   // и закрыться не может: пока в поле те же две буквы, условие снова истинно.
   const [dismissed, setDismissed] = useState(false);
 
-  const inputId = useId();
+  const ownInputId = useId();
+  const inputId = inputIdProp ?? ownInputId;
   // Запрос уходит, когда набор стоит спокойно, — как у всех поисков: без
   // задержки каждая буква после второй шла полнотекстовым запросом к базе.
   const debouncedQuery = useDebouncedValue(query, SEARCH_DELAY_MS);

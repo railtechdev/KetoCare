@@ -13,8 +13,9 @@ import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import {
+  useAddressPatch,
+  useAddressState,
   useSectionItem,
-  useSectionQuery,
   useSectionTab,
 } from "../../routes/useSectionTab";
 import { errorMessageOf } from "../../lib/api";
@@ -32,6 +33,7 @@ import {
   EMPTY_RECIPE_FILTERS,
   hasActiveFilters,
   isRatioRangeInvalid,
+  RECIPE_CATEGORIES,
   RECIPES_PAGE_SIZE,
   type RecipeFilters,
 } from "./types";
@@ -39,17 +41,29 @@ import { useRecipeSearch } from "./useRecipes";
 import { queryState } from "../../lib/queryState";
 
 /**
- * Открытый рецепт живёт в адресе (`?item=`, правило П30 канона).
+ * Открытый рецепт и открытая форма живут в адресе (`?item=`, правила П1, П30).
  *
  * До этого карточка открывалась состоянием: адрес оставался `/app/recipes`,
  * «Назад» браузера уводил из раздела, F5 возвращал к списку, а ссылку на рецепт
  * нельзя было переслать — при том что по рецепту готовят и его обсуждают с
- * диетологом.
+ * диетологом. Форма жила состоянием дольше и по той же причине теряла место:
+ * F5 посреди правки возвращал к списку, а «Назад» уводил из раздела.
  *
- * Форма правки остаётся состоянием: это шаг внутри карточки, а не отдельный
- * предмет, и адресовать «наполовину заполненную форму» нечем.
+ * Адресуется то, КАКАЯ форма открыта (`item=new`, `item=edit:<id>`), а не её
+ * содержимое: незаписанный ввод F5 по-прежнему не переживает, но человек
+ * оказывается в той же форме того же рецепта.
  */
-type FormView = { recipeId: string | null };
+const NEW_ITEM = "new";
+const EDIT_PREFIX = "edit:";
+
+function formOf(item: string | undefined): { recipeId: string | null } | null {
+  if (item === NEW_ITEM) return { recipeId: null };
+  if (item?.startsWith(EDIT_PREFIX)) {
+    const recipeId = item.slice(EDIT_PREFIX.length);
+    return recipeId === "" ? null : { recipeId };
+  }
+  return null;
+}
 
 /**
  * Раздел «Рецепты» (раздел 8.1 ТЗ).
@@ -84,13 +98,32 @@ export function RecipesPage() {
   // продукт, ведёт сюда с уже введённым словом («суп из говядины» — это блюдо,
   // и искать его надо здесь). Заодно поиск переживает F5 и пересылается
   // ссылкой: до этого он жил только в памяти вкладки.
-  const [urlQuery, setUrlQuery] = useSectionQuery();
-  const [filters, setFilters] = useState<RecipeFilters>({
+  //
+  // Остальные отборы — категория и границы соотношения — тоже в адресе
+  // (правило П1): диетолог, открывший рецепт из отобранной выдачи, «Назад»
+  // возвращался к полной базе и отбирал заново. Поля держат своё состояние,
+  // чтобы ввод не ждал навигации; в адрес уходит то же значение одним
+  // переходом.
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const [filters, setFilters] = useState<RecipeFilters>(() => ({
     ...EMPTY_RECIPE_FILTERS,
-    q: urlQuery,
-  });
+    q: address.q ?? "",
+    category:
+      RECIPE_CATEGORIES.find((value) => value === address.category) ?? "",
+    ratioMin: address.ratioMin ?? "",
+    ratioMax: address.ratioMax ?? "",
+  }));
   const [openId, setOpenId] = useSectionItem();
-  const [form, setForm] = useState<FormView | null>(null);
+  const form = formOf(openId);
+  const setForm = (next: { recipeId: string | null } | null) =>
+    setOpenId(
+      next === null
+        ? undefined
+        : next.recipeId === null
+          ? NEW_ITEM
+          : `${EDIT_PREFIX}${next.recipeId}`,
+    );
 
   // Поиск уходит с задержкой: иначе полнотекстовый запрос дёргается на каждой букве.
   const debouncedQuery = useDebouncedValue(filters.q, SEARCH_DELAY_MS);
@@ -100,17 +133,21 @@ export function RecipesPage() {
     !rangeInvalid,
   );
 
+  function writeAddress(next: RecipeFilters) {
+    patchAddress({
+      q: next.q.trim() === "" ? undefined : next.q,
+      category: next.category === "" ? undefined : next.category,
+      ratioMin: next.ratioMin.trim() === "" ? undefined : next.ratioMin,
+      ratioMax: next.ratioMax.trim() === "" ? undefined : next.ratioMax,
+    });
+  }
+
   function patchFilters(patch: Partial<RecipeFilters>) {
     // Любая смена фильтра возвращает выдачу к первой странице: иначе после
     // «показать ещё» новый фильтр запросил бы сразу сотню карточек.
-    setFilters((current) => ({
-      ...current,
-      ...patch,
-      limit: RECIPES_PAGE_SIZE,
-    }));
-    // В адрес уходит только строка поиска: остальные фильтры принадлежат
-    // экрану, а по слову сюда приходят извне.
-    if (patch.q !== undefined) setUrlQuery(patch.q);
+    const next = { ...filters, ...patch, limit: RECIPES_PAGE_SIZE };
+    setFilters(next);
+    writeAddress(next);
   }
 
   /**
@@ -121,21 +158,21 @@ export function RecipesPage() {
    */
   function resetFilters() {
     setFilters(EMPTY_RECIPE_FILTERS);
-    setUrlQuery("");
+    writeAddress(EMPTY_RECIPE_FILTERS);
   }
 
   if (form !== null) {
     return (
       <RecipeFormPanel
         recipeId={form.recipeId}
-        onSaved={(recipeId) => {
-          setForm(null);
-          setOpenId(recipeId);
-        }}
-        onCancel={() => {
-          setForm(null);
-          if (form.recipeId === null) setOpenId(undefined);
-        }}
+        // Форма сменяется карточкой одним переходом: открытая форма и есть
+        // `?item=`, и два шага подряд оставили бы между ними пустой адрес.
+        onSaved={(recipeId) => setOpenId(recipeId)}
+        // Отмена возвращает туда, откуда открыли: правку — в карточку рецепта,
+        // создание — в список.
+        onCancel={() =>
+          setOpenId(form.recipeId === null ? undefined : form.recipeId)
+        }
       />
     );
   }

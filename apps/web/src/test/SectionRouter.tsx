@@ -8,7 +8,9 @@ import {
 } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
-import type { SectionSearch } from "../router";
+import { AddressProbe } from "./address";
+
+import { validateSectionSearch, type SectionSearch } from "../routes/search";
 
 /**
  * Обёртка для тестов экранов, которые держат состояние в адресе.
@@ -40,8 +42,15 @@ export function SectionRouter({
     const sectionRoute = createRoute({
       getParentRoute: () => appRoute,
       path: "$section",
-      validateSearch: (value: Record<string, unknown>): SectionSearch => value,
-      component: () => <>{children}</>,
+      // Проверка та же, что у боевого маршрута: параметр, который боевой
+      // выбрасывает, не должен доживать до экрана и в тесте.
+      validateSearch: validateSectionSearch,
+      component: () => (
+        <>
+          {children}
+          <AddressProbe />
+        </>
+      ),
     });
 
     const query = new URLSearchParams(

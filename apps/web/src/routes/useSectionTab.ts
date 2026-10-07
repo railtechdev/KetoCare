@@ -1,6 +1,8 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback } from "react";
 
+import type { PatientSearch, SectionSearch } from "./search";
+
 /**
  * Выбранная вкладка экрана — в адресе, а не в состоянии (правило П30 канона).
  *
@@ -116,4 +118,40 @@ export function useSectionQuery(): [string, (value: string) => void] {
   );
 
   return [search.q ?? "", set];
+}
+
+/** Всё, что экран держит в адресе, — у раздела кабинета и у карты пациента. */
+export type AddressState = Omit<SectionSearch, "patient" | "tab"> &
+  PatientSearch;
+
+/**
+ * Правка нескольких параметров адреса одним переходом.
+ *
+ * Одним — потому что параметры связаны: смена периода отчёта обязана снять
+ * `?job=` вместе с ней, а два перехода подряд оставили бы между ними адрес, в
+ * котором задача собрана за другой период. `undefined` убирает параметр:
+ * умолчание в адрес не пишется, и ссылка без него означает то же самое.
+ *
+ * Переход — `replace`, как у вкладок и строки поиска: отбор и выбранный день —
+ * это то, как смотрят на экран, а не шаг в глубину, и «Назад» не должен
+ * перебирать каждую смену даты.
+ */
+export function useAddressPatch(): (patch: Partial<AddressState>) => void {
+  const navigate = useNavigate();
+
+  return useCallback(
+    (patch: Partial<AddressState>) => {
+      void navigate({
+        to: ".",
+        replace: true,
+        search: (previous) => ({ ...previous, ...patch }),
+      });
+    },
+    [navigate],
+  );
+}
+
+/** Текущие параметры адреса — без привязки к маршруту, по той же причине, что у вкладок. */
+export function useAddressState(): AddressState {
+  return useSearch({ strict: false }) as AddressState;
 }

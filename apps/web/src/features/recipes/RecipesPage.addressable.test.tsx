@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -7,6 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import recipesRu from "../../locales/ru/recipes.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
 import { RecipesPage } from "./RecipesPage";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -107,5 +109,71 @@ describe("строка поиска в адресе", () => {
         }),
       ),
     );
+  });
+});
+
+describe("отборы выдачи в адресе", () => {
+  it("F5 возвращает категорию и границы соотношения", async () => {
+    renderPage({ category: "breakfast", ratioMin: "3", ratioMax: "4.5" });
+
+    expect(await screen.findByLabelText("Категория")).toHaveValue("breakfast");
+    expect(screen.getByLabelText("Соотношение от")).toHaveValue(3);
+    expect(screen.getByLabelText("Соотношение до")).toHaveValue(4.5);
+    await waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/recipes",
+        expect.objectContaining({
+          params: expect.objectContaining({
+            query: expect.objectContaining({
+              category: "breakfast",
+              ratio_min: 3,
+              ratio_max: 4.5,
+            }),
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("выбранная категория уходит в адрес, сброс его чистит", async () => {
+    const user = userEvent.setup();
+    renderPage({});
+
+    await user.selectOptions(
+      await screen.findByLabelText("Категория"),
+      "breakfast",
+    );
+    await waitFor(() => expect(currentAddress().category).toBe("breakfast"));
+
+    await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+    await waitFor(() => expect(currentAddress().category).toBeUndefined());
+  });
+
+  it("незнакомая категория в адресе — любая", async () => {
+    renderPage({ category: "dessert-of-the-day" });
+
+    expect(await screen.findByLabelText("Категория")).toHaveValue("");
+  });
+});
+
+describe("форма рецепта в адресе", () => {
+  it("F5 посреди правки возвращает в форму того же рецепта", async () => {
+    renderPage({ item: `edit:${RECIPE_ID}` });
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Правка рецепта" }),
+    ).toBeInTheDocument();
+  });
+
+  it("новый рецепт открывается адресом, отмена возвращает к списку", async () => {
+    const user = userEvent.setup();
+    renderPage({ item: "new" });
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Новый рецепт" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Отмена" }));
+    await waitFor(() => expect(currentAddress().item).toBeUndefined());
   });
 });

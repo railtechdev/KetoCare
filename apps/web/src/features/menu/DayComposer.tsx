@@ -41,6 +41,7 @@ import {
   type DishKind,
 } from "./useMenu";
 import { queryState } from "../../lib/queryState";
+import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
 
 /** Части экрана, которые раскладывает владелец: шапка у семьи и у карты своя. */
 export interface DayComposerParts {
@@ -84,7 +85,14 @@ export function DayComposer({
   children,
 }: DayComposerProps) {
   const { t } = useTranslation("menu");
-  const [date, setDate] = useState(todayIso);
+  // День — в адресе (правило П1): врач, пересылающий коллеге «посмотри
+  // завтрашний план», и семья, обновившая страницу, должны увидеть тот же
+  // день, а не сегодняшний. Сегодня — умолчание и в адрес не пишется.
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const date = address.date ?? todayIso();
+  const setDate = (next: string) =>
+    patchAddress({ date: next === todayIso() ? undefined : next });
   /** Номер приёма, в который добавляют блюдо; `null` — панель закрыта */
   const [addingMeal, setAddingMeal] = useState<number | null>(null);
   const [copying, setCopying] = useState(false);
@@ -109,6 +117,10 @@ export function DayComposer({
   const mealsPerDay = useMealsPerDay(patientId);
   const meals = mealIndexes(mealsPerDay, items);
 
+  // Панель добавления закрывается только после ответа сервера: закрытая
+  // заранее, она уносила с собой выбор блюда, и при отказе семья видела
+  // ошибку под днём без того, что пыталась добавить, — выбирать приходилось
+  // заново. При отказе панель остаётся открытой, ошибка стоит в ней.
   function addItem(input: {
     mealIndex: number;
     kind: DishKind;
@@ -120,7 +132,12 @@ export function DayComposer({
         date,
         items: [...toWriteItems(items), toWriteItem(input)],
       },
-      { onSuccess: () => toast.success(t("item.added")) },
+      {
+        onSuccess: () => {
+          toast.success(t("item.added"));
+          setAddingMeal(null);
+        },
+      },
     );
   }
 
@@ -221,7 +238,7 @@ export function DayComposer({
 
         {/* Ошибка отправки, а не загрузки: повторять нечего, состав дня
             остался прежним (правило П16 канона). */}
-        {upsert.isError && (
+        {upsert.isError && addingMeal === null && (
           <FormError>
             {errorMessageOf(upsert.error) ?? t("errors.save")}
           </FormError>
@@ -290,7 +307,12 @@ export function DayComposer({
                   withdrawnByItem={withdrawn}
                   canRemove={items.length > 1}
                   pending={upsert.isPending}
-                  onAdd={() => setAddingMeal(mealIndex)}
+                  onAdd={() => {
+                    // Прежний отказ (скажем, удаления позиции) к новой
+                    // попытке не относится и в панели не показывается.
+                    upsert.reset();
+                    setAddingMeal(mealIndex);
+                  }}
                   onRemove={removeItem}
                   onToggleEaten={
                     // Будущий день не отмечается съеденным: съесть его нельзя,
@@ -324,7 +346,12 @@ export function DayComposer({
         closeLabel={t("common:actions.close")}
         open={addingMeal !== null}
         onOpenChange={(open) => {
-          if (!open) setAddingMeal(null);
+          if (!open) {
+            setAddingMeal(null);
+            // Отказ относится к закрытой попытке: открытая заново панель не
+            // должна встречать ошибкой ещё не сделанного выбора.
+            upsert.reset();
+          }
         }}
         title={
           addingMeal === null
@@ -337,12 +364,17 @@ export function DayComposer({
             patientId={patientId}
             mealIndex={addingMeal}
             pending={upsert.isPending}
-            onAdd={(input) => {
-              addItem({ mealIndex: addingMeal, ...input });
+            onAdd={(input) => addItem({ mealIndex: addingMeal, ...input })}
+            onCancel={() => {
               setAddingMeal(null);
+              upsert.reset();
             }}
-            onCancel={() => setAddingMeal(null)}
           />
+        )}
+        {addingMeal !== null && upsert.isError && (
+          <FormError>
+            {errorMessageOf(upsert.error) ?? t("errors.save")}
+          </FormError>
         )}
       </FormSheet>
 

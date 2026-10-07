@@ -10,7 +10,7 @@ import {
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Pill, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
@@ -40,6 +40,20 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
   const { create, update, remove } = useMedicationMutations(patientId);
 
   const [form, setForm] = useState<FormState>(null);
+
+  // Каждое открытие формы начинается без прежней ошибки: отказ сервера от
+  // прошлой попытки (другого препарата, закрытой панели) иначе вставал под
+  // новой, ещё не отправленной формой и выглядел ответом на неё.
+  const resetCreate = create.reset;
+  const resetUpdate = update.reset;
+  const openForm = useCallback(
+    (next: NonNullable<FormState>) => {
+      resetCreate();
+      resetUpdate();
+      setForm(next);
+    },
+    [resetCreate, resetUpdate],
+  );
 
   const canWrite = isDoctor(session?.role);
   const items = medications.data ?? [];
@@ -113,7 +127,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
         cell: ({ row }) => (
           <MedicationActions
             medication={row.original}
-            onEdit={() => setForm({ mode: "edit", medication: row.original })}
+            onEdit={() => openForm({ mode: "edit", medication: row.original })}
             onConfirmDelete={() =>
               remove.mutate(row.original.id, {
                 onSuccess: () =>
@@ -128,7 +142,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
         ),
       },
     ];
-  }, [canWrite, remove, t]);
+  }, [canWrite, openForm, remove, t]);
 
   return (
     <Section
@@ -136,7 +150,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
       density="compact"
       action={
         canWrite && (
-          <Button type="button" onClick={() => setForm({ mode: "create" })}>
+          <Button type="button" onClick={() => openForm({ mode: "create" })}>
             <Plus aria-hidden="true" />
             {t("medications.add")}
           </Button>
@@ -168,7 +182,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
               canWrite ? (
                 <Button
                   type="button"
-                  onClick={() => setForm({ mode: "create" })}
+                  onClick={() => openForm({ mode: "create" })}
                 >
                   <Plus aria-hidden="true" />
                   {t("medications.add")}
@@ -205,7 +219,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
                   type="button"
                   variant="outline"
                   onClick={() =>
-                    setForm({ mode: "create", drugName: drug.name_ru })
+                    openForm({ mode: "create", drugName: drug.name_ru })
                   }
                 >
                   <Plus aria-hidden="true" />

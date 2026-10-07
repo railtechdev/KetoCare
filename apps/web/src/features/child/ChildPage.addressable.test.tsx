@@ -3,7 +3,9 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
+import { primaryActions } from "@ketocare/ui/testing";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -126,5 +128,38 @@ describe("без детей", () => {
     } finally {
       onlineManager.setOnline(true);
     }
+  });
+});
+
+describe("карточка ребёнка (правило П31)", () => {
+  it("на виду два дела, остальное в меню «Ещё»; подписи называют ребёнка", async () => {
+    const { container } = renderPage({});
+
+    expect(await screen.findByText("Аня Иванова")).toBeInTheDocument();
+    // Одно первичное действие — в шапке.
+    expect(primaryActions(container)).toEqual([childRu.child.addByCode]);
+    expect(
+      screen.getByRole("button", { name: "Анкета — Аня Иванова" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Документы — Аня Иванова" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Telegram/ })).toBeNull();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Ещё — Аня Иванова" }));
+    for (const label of ["Telegram", "Близкие", "Кто ведёт", "Изменить"]) {
+      expect(
+        await screen.findByRole("menuitem", { name: label }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("пустой раздел предлагает добавить ребёнка один раз", async () => {
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    const { container } = renderPage({});
+
+    expect(await screen.findByText(childRu.children.empty)).toBeInTheDocument();
+    expect(primaryActions(container)).toEqual([childRu.child.addByCode]);
   });
 });

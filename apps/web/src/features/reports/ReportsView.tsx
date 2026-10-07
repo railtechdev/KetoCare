@@ -12,7 +12,6 @@ import {
 } from "@ketocare/ui";
 import { Download, FileText } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
@@ -20,6 +19,7 @@ import { DoctorSummaryPanel } from "./DoctorSummaryPanel";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { toDateInput } from "../diary/time";
+import { formatIsoDate } from "../doctor/dates";
 import {
   useReport,
   useReportJob,
@@ -28,6 +28,7 @@ import {
   type SeizureByType,
 } from "./useReports";
 import { queryState } from "../../lib/queryState";
+import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
 
 function monthAgo(): string {
   const date = new Date();
@@ -50,33 +51,50 @@ export function ReportsView({ patientId }: { patientId: string }) {
   const { t } = useTranslation("reports");
   const { session } = useSession();
 
-  const [from, setFrom] = useState(monthAgo);
-  const [to, setTo] = useState(() => toDateInput(new Date()));
+  // Период и задача сборки — в адресе, и меняются вместе. Задача хранит свой
+  // период на сервере (`period_start`/`period_end`), и до этого правила после
+  // смены дат экран показывал «файл готов» рядом с другими датами: человек
+  // скачивал отчёт не за тот период, который видел. Поэтому смена периода
+  // снимает `?job=` тем же переходом — собранный файл относится к прошлому
+  // периоду, а новый собирается кнопкой. Ссылка с `?job=` несёт и свой
+  // период: F5 возвращает ровно ту пару, при которой задачу поставили.
+  //
+  // Маршрут не назван намеренно (`strict: false`): экран живёт под двумя
+  // адресами — `/app/reports` у семьи и `/app/patients/<id>/reports` у врача, —
+  // и привязка к одному из них роняла бы его на другом. Параметры при этом
+  // объявлены обоими маршрутами: не объявленный в `validateSearch` теряется
+  // молча.
+  //
   // Задача сборки живёт в адресе, а не в состоянии экрана: PDF собирается
   // воркером секундами, и до этого идентификатор терялся при обновлении
   // страницы и при уходе в другой раздел. Готовый файл после этого достать было
   // нечем — у API нет ручки «мои задачи», только выдача по идентификатору, — и
   // человек заказывал сборку заново, второй раз занимая воркер.
-  //
-  // Маршрут не назван намеренно (`strict: false`): экран живёт под двумя
-  // адресами — `/app/reports` у семьи и `/app/patients/<id>/reports` у врача, —
-  // и привязка к одному из них роняла бы его на другом. Параметр при этом
-  // объявлен обоими маршрутами: не объявленный в `validateSearch` теряется
-  // молча.
-  const search = useSearch({ strict: false });
-  const navigate = useNavigate();
-  const jobId = search.job ?? null;
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const [defaultFrom] = useState(monthAgo);
+  const [defaultTo] = useState(() => toDateInput(new Date()));
+  const from = address.from ?? defaultFrom;
+  const to = address.to ?? defaultTo;
+  const jobId = address.job ?? null;
+
+  const setPeriod = (patch: { from?: string; to?: string }) =>
+    patchAddress({
+      ...patch,
+      job: undefined,
+    });
+  const setFrom = (value: string) =>
+    setPeriod({ from: value === "" ? undefined : value });
+  const setTo = (value: string) =>
+    setPeriod({ to: value === "" ? undefined : value });
 
   const setJobId = useCallback(
-    (next: string | null) => {
-      void navigate({
-        // «Здесь же»: маршрут не назван, потому что экран стоит под двумя.
-        to: ".",
-        search: (previous) => ({ ...previous, job: next ?? undefined }),
-        replace: true,
-      });
-    },
-    [navigate],
+    (next: string | null) =>
+      // Задача ставится за период на экране, и он уходит в адрес вместе с
+      // ней: иначе завтрашнее F5 подставило бы новое умолчание «месяц назад»
+      // рядом с файлом за прошлый.
+      patchAddress({ job: next ?? undefined, from, to }),
+    [patchAddress, from, to],
   );
   // Момент постановки задачи: по нему видно, что сборка затянулась. Воркер
   // может быть не поднят вовсе (PDF требует системных pango и cairo), и тогда
@@ -366,8 +384,9 @@ export function ReportsView({ patientId }: { patientId: string }) {
                   >
                     <p className="m-0 text-sm text-muted-foreground">
                       {t("summary.periodLine", {
-                        from: item.period_start,
-                        to: item.period_end,
+                        from:
+                          formatIsoDate(item.period_start) ?? item.period_start,
+                        to: formatIsoDate(item.period_end) ?? item.period_end,
                       })}
                     </p>
                     <p className="m-0 whitespace-pre-line text-sm">

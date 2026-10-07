@@ -218,9 +218,10 @@ describe("свобода от приступов измеряется сроко
     );
     await user.click(screen.getByRole("button", { name: intakeRu.next }));
 
+    // Под полем и строкой в сводке ошибок (правило П8).
     expect(
-      screen.getByText(intakeRu.errors.lastSeizureRequired),
-    ).toBeInTheDocument();
+      screen.getAllByText(intakeRu.errors.lastSeizureRequired),
+    ).toHaveLength(2);
     // Остались на том же шаге: ошибка стоит здесь, уводить с неё нельзя.
     expect(
       screen.getByLabelText(intakeRu.fields.frequency),
@@ -423,9 +424,14 @@ describe("дата последнего приступа с той точнос�
     );
     await user.click(screen.getByRole("button", { name: intakeRu.next }));
 
-    expect(
-      screen.getByText(intakeRu.errors.lastSeizureRequired),
-    ).toBeInTheDocument();
+    // Сводка ошибок забирает фокус (правило П8), её строка ведёт в поле года.
+    const summary = screen.getByRole("alert");
+    expect(summary).toHaveFocus();
+    await user.click(
+      within(summary).getByRole("link", {
+        name: intakeRu.errors.lastSeizureRequired,
+      }),
+    );
     expect(
       screen.getByLabelText(intakeRu.fields.lastSeizureYear),
     ).toHaveFocus();

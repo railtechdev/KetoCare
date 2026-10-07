@@ -24,6 +24,7 @@ import { useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
 import { DiaryForm } from "./DiaryForm";
 import { DiaryList, DiaryListSkeleton } from "./DiaryList";
+import { usePeriodSearch } from "./usePeriodSearch";
 import { PeriodPicker } from "./PeriodPicker";
 import { SeizureDiaryGrid } from "./SeizureDiaryGrid";
 import {
@@ -33,13 +34,7 @@ import {
   type DiaryKind,
   type DiaryLog,
 } from "./diaryApi";
-import {
-  customRange,
-  formatChartDate,
-  presetRange,
-  toDateInput,
-  type PeriodPreset,
-} from "./time";
+import { formatChartDate } from "./time";
 import {
   useDiaryLogs,
   useDiaryMutations,
@@ -186,21 +181,17 @@ function DiaryTab({
   const { t } = useTranslation("diary");
   const { session } = useSession();
 
-  const [preset, setPreset] = useState<PeriodPreset>("week");
-  const [fromInput, setFromInput] = useState(() =>
-    toDateInput(new Date(presetRange("week", new Date()).from)),
-  );
-  const [toInput, setToInput] = useState(() => toDateInput(new Date()));
-
-  // Границы периода считаются один раз на выбор: пересчёт на каждый рендер менял
-  // бы ключ запроса (в нём есть «сейчас») и гонял бы список по кругу.
-  const range = useMemo(
-    () =>
-      preset === "custom"
-        ? customRange(fromInput, toInput)
-        : presetRange(preset, new Date()),
-    [preset, fromInput, toInput],
-  );
+  // Период — в адресе (`usePeriodSearch`): F5 и пересланная ссылка
+  // открывают тот же отрезок, а не умолчание экрана.
+  const {
+    preset,
+    setPreset,
+    fromInput,
+    toInput,
+    setFromInput,
+    setToInput,
+    range,
+  } = usePeriodSearch("week");
 
   const withChart = CHART_KINDS.includes(kind);
 
