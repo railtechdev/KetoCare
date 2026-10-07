@@ -69,7 +69,7 @@ async def start_without_code(
             children=_names(bindings), active=binding.first_name
         )
         if len(bindings) >= 2
-        else texts.START_ALREADY_LINKED.format(patient_name=binding.patient_name)
+        else texts.START_ALREADY_LINKED.format(patient_name=binding.first_name)
     )
     await message.answer(text, reply_markup=await menu(store, message.chat.id, settings))
 
@@ -198,12 +198,12 @@ def welcome(
 
     if children is not None and len(children) >= 2:
         return texts.LINK_SUCCESS_SEVERAL.format(
-            patient_name=verified.patient_name,
+            patient_name=_first_name(verified),
             children=_names(children),
             switch=texts.BTN_CHILD_PREFIX,
         )
 
-    lines = [texts.LINK_SUCCESS.format(patient_name=verified.patient_name)]
+    lines = [texts.LINK_SUCCESS.format(patient_name=_first_name(verified))]
     if settings.has_miniapp:
         lines.append(texts.LINK_SUCCESS_APP_LINE)
     cabinet = (
@@ -238,6 +238,15 @@ async def _menu_if_linked(
     if exc.details.get("reason") == "already_here":
         return await menu(store, message.chat.id, settings)
     return None
+
+
+def _first_name(verified: LinkVerified) -> str:
+    """Имя ребёнка без фамилии: фамилию в переписку не отдаём (ADR-0048, п. 5)."""
+
+    if verified.patient_first_name:
+        return verified.patient_first_name
+    parts = verified.patient_name.split()
+    return parts[0] if parts else verified.patient_name
 
 
 def _names(bindings: list[Binding]) -> str:
