@@ -101,18 +101,29 @@ export function RemindersBlock({ session }: { session: Session }) {
                 });
               }}
             >
-              {/* Цель касания — вся строка во всю ширину, а не флажок 24 px. */}
-              <label className="flex min-h-touch w-full cursor-pointer items-center gap-field">
-                <input
-                  type="checkbox"
-                  className="size-6 shrink-0 accent-primary"
-                  checked={form.enabled}
-                  onChange={(event) =>
-                    setForm({ ...form, enabled: event.target.checked })
-                  }
-                />
-                <span>{t("reminders.enabled")}</span>
-              </label>
+              <div className="flex flex-col gap-1">
+                {/* Цель касания — вся строка во всю ширину, а не флажок 24 px. */}
+                <label className="flex min-h-touch w-full cursor-pointer items-center gap-field">
+                  <input
+                    type="checkbox"
+                    className="size-6 shrink-0 accent-primary"
+                    checked={form.enabled}
+                    aria-describedby={`${ids}-enabled-hint`}
+                    onChange={(event) =>
+                      setForm({ ...form, enabled: event.target.checked })
+                    }
+                  />
+                  <span>{t("reminders.enabled")}</span>
+                </label>
+                {/* Визит к врачу своего поля не имеет, но выключатель действует
+                    и на него — так и сказано, а не подразумевается. */}
+                <span
+                  id={`${ids}-enabled-hint`}
+                  className="text-sm text-muted-foreground"
+                >
+                  {t("reminders.enabledHint")}
+                </span>
+              </div>
 
               {KINDS.map((kind) => {
                 const id = `${ids}-${kind}`;

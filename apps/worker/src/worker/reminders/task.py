@@ -25,9 +25,17 @@ import structlog
 from core.config import Settings
 from core.control_schedule import labs_for
 from core.db import get_sessionmaker
-from core.models import KetoneLog, MedicationLog, WeightLog
+from core.models import (
+    KetoneLog,
+    MealLog,
+    MedicationLog,
+    SeizureLog,
+    SideEffectLog,
+    WeightLog,
+)
 from core.repositories import control_visits as control_visits_repo
 from core.repositories import diary as diary_repo
+from core.repositories import menus as menus_repo
 from core.repositories import reminders as reminders_repo
 
 from . import texts
@@ -63,6 +71,23 @@ _LOG_MODELS: dict[str, Any] = {
     "medications": MedicationLog,
 }
 
+#: Что снимает вечернее «за сегодня нет записей» — любая запись семьи о дне.
+#:
+#: Все шесть дневников, а не три замера, плюс отметка «съедено» в плане дня
+#: (`menus_repo.has_eaten_on`). Прежде считались только кетоны, вес и
+#: препараты, и семья, отметившая самочувствие по совету самого напоминания
+#: («отметьте самочувствие»), получала его снова на следующий вечер с тем же
+#: «нет записей» — при том что экран настроек обещал «приходит, только если
+#: за день не записано ничего».
+_ANY_DIARY_MODELS: tuple[Any, ...] = (
+    SeizureLog,
+    KetoneLog,
+    WeightLog,
+    MedicationLog,
+    MealLog,
+    SideEffectLog,
+)
+
 
 async def reminders_cron(ctx: dict[str, Any]) -> dict[str, int]:
     """Разослать напоминания, которым настало время.
@@ -91,7 +116,11 @@ async def reminders_cron(ctx: dict[str, Any]) -> dict[str, int]:
                     continue
 
                 if await _already_recorded(
-                    session, kind=kind, patient_id=reminder.patient_id, day=now_local.date()
+                    session,
+                    kind=kind,
+                    patient_id=reminder.patient_id,
+                    day=now_local.date(),
+                    zone=zone,
                 ):
                     skipped += 1
                     continue
@@ -260,26 +289,41 @@ def _is_due(at: time, now_local: datetime) -> bool:
     return timedelta(0) <= delta < WINDOW
 
 
-async def _already_recorded(session: Any, *, kind: str, patient_id: Any, day: date) -> bool:
-    """Запись за сегодня уже есть — напоминать не о чем.
+def day_window(day: date, zone: ZoneInfo) -> tuple[datetime, datetime]:
+    """Местные сутки `day` как полуинтервал моментов в UTC: [полночь, следующая полночь).
 
-    Для «нет записей» проверяются все три вида сразу: смысл этого напоминания в
-    том, что день пуст, а не в том, что пропущен конкретный замер.
+    Сутки — по часовому поясу установки (`settings.tz`), как у дневного предела
+    помощника и у сводки дня: у семьи день начинается в её полночь. Прежде окно
+    шло от вчерашней полуночи UTC до конца завтрашних суток UTC — трое суток, и
+    вчерашний вечерний замер снимал сегодняшнее напоминание.
+
+    Конец — полночь следующей ДАТЫ, а не «начало + 24 часа»: при переводе часов
+    сутки бывают короче или длиннее.
     """
 
-    start = datetime.combine(day, time.min, tzinfo=UTC) - timedelta(days=1)
-    end = datetime.combine(day, time.max, tzinfo=UTC) + timedelta(days=1)
+    start = datetime.combine(day, time.min, tzinfo=zone)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=zone)
+    return start.astimezone(UTC), end.astimezone(UTC)
 
-    models = list(_LOG_MODELS.values()) if kind == "no_records" else [_LOG_MODELS[kind]]
-    for model in models:
-        _, total = await diary_repo.list_for_patient(
-            session,
-            model,
-            patient_id=patient_id,
-            period_from=start,
-            period_to=end,
-            limit=1,
+
+async def _already_recorded(
+    session: Any, *, kind: str, patient_id: Any, day: date, zone: ZoneInfo
+) -> bool:
+    """Запись за сегодня уже есть — напоминать не о чем.
+
+    У замера — запись того же вида. У «нет записей» — любая запись семьи о дне:
+    любой из шести дневников или отметка «съедено» в плане на эту дату. Смысл
+    этого напоминания в том, что день пуст, а не в том, что пропущен
+    конкретный замер.
+    """
+
+    start, end = day_window(day, zone)
+    if kind != "no_records":
+        return await diary_repo.has_entry_between(
+            session, [_LOG_MODELS[kind]], patient_id=patient_id, start=start, end=end
         )
-        if total:
-            return True
-    return False
+    if await diary_repo.has_entry_between(
+        session, _ANY_DIARY_MODELS, patient_id=patient_id, start=start, end=end
+    ):
+        return True
+    return await menus_repo.has_eaten_on(session, patient_id=patient_id, day=day)
