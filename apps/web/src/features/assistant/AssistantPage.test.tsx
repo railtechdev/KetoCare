@@ -30,6 +30,9 @@ function message(overrides: Record<string, unknown> = {}) {
     created_at: "2026-09-04T10:00:00Z",
     status: "done",
     sources: ["how-to-record-ketones"],
+    source_articles: [
+      { slug: "how-to-record-ketones", title: "Как записать кетоны" },
+    ],
     blocked: false,
     ...overrides,
   };
@@ -293,9 +296,48 @@ describe("помощник в кабинете", () => {
     );
     await user.click(screen.getByRole("button", { name: "Спросить" }));
 
+    // Заголовок статьи, а не имя файла: «how-to-record-ketones» под ответом
+    // читается как поломка.
     expect(
-      await screen.findByText(/how-to-record-ketones/),
+      await screen.findByText(/Источник: Как записать кетоны/),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/how-to-record-ketones/)).not.toBeInTheDocument();
+  });
+
+  it("отказ в последней переписке — ошибка с повтором, а не «переписки нет»", async () => {
+    let failList = true;
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/ai-conversations")) {
+        return failList
+          ? Promise.resolve({ error: { error: { code: "internal" } } })
+          : Promise.resolve({
+              data: { items: [{ id: CONVERSATION_ID }], total: 1 },
+            });
+      }
+      if (path.endsWith("/doctors")) return Promise.resolve({ data: [] });
+      return Promise.resolve({
+        data: {
+          id: CONVERSATION_ID,
+          messages: [message({ seq: 0, role: "user", text: "старый вопрос" })],
+        },
+      });
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: 4000 },
+    );
+    expect(
+      screen.queryByText(/как работает приложение/i),
+    ).not.toBeInTheDocument();
+
+    failList = false;
+    await user.click(retry);
+
+    expect(await screen.findByText("старый вопрос")).toBeInTheDocument();
   });
 
   it("исчерпанный предел выключает поле, а не показывает ошибку", async () => {

@@ -67,12 +67,20 @@ export function useRequestPdfMutation(patientId: string) {
  * продолжал бы дёргать сервер, пока экран открыт, — и на вкладке, забытой на
  * ночь, это заметно.
  */
-export function useReportJob(jobId: string | null) {
+export function useReportJob(jobId: string | null, patientId: string) {
   return useQuery({
     queryKey: ["report-job", jobId],
     enabled: jobId !== null,
+    // Задача из адреса бывает чужой или устаревшей (закладка, пересланная
+    // ссылка, срок файла истёк): повторять 404 незачем.
+    retry: false,
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
+      // Отказ и задача другого ребёнка опросом не лечатся: прежде экран
+      // опрашивал сервер каждые две секунды, пока открыта вкладка.
+      if (query.state.status === "error") return false;
+      const data = query.state.data;
+      if (data !== undefined && data.patient_id !== patientId) return false;
+      const status = data?.status;
       return status === "done" || status === "failed" ? false : 2000;
     },
     queryFn: async (): Promise<ReportJob> => {

@@ -27,6 +27,7 @@ import {
   type ReportRange,
   type SeizureByType,
 } from "./useReports";
+import { queryState } from "../../lib/queryState";
 
 function monthAgo(): string {
   const date = new Date();
@@ -87,8 +88,24 @@ export function ReportsView({ patientId }: { patientId: string }) {
 
   const report = useReport(patientId, range);
   const requestPdf = useRequestPdfMutation(patientId);
-  const job = useReportJob(jobId);
-  const takingLong = useTakingLong(requestedAt, job.data?.status);
+  const job = useReportJob(jobId, patientId);
+  // Задача из адреса, которую не показать: не нашлась (срок истёк, ссылка
+  // чужая) или собрана для другого ребёнка — `?job=` остался от карты
+  // соседнего пациента. Скачивать чужой отчёт из карты этого нельзя.
+  const jobLost =
+    jobId !== null &&
+    (job.isError ||
+      (job.data !== undefined && job.data.patient_id !== patientId));
+  // «Долго» считается от постановки задачи. После обновления страницы момент
+  // нажатия потерян — берётся время создания задачи с сервера, иначе экран
+  // заново отсчитывал полминуты для задачи, висящей с утра.
+  const startedAt =
+    requestedAt ??
+    (job.data !== undefined ? Date.parse(job.data.created_at) : null);
+  const takingLong = useTakingLong(
+    jobLost ? null : startedAt,
+    job.data?.status,
+  );
 
   const isDoctor = session?.role === "doctor";
 
@@ -105,7 +122,7 @@ export function ReportsView({ patientId }: { patientId: string }) {
 
   const csvHref = `/api/v1/patients/${patientId}/report?from=${from}&to=${to}&format=csv`;
   const pdfHref =
-    job.data?.status === "done"
+    job.data?.status === "done" && job.data.patient_id === patientId
       ? `/api/v1/reports/jobs/${job.data.id}/file`
       : null;
 
@@ -180,7 +197,30 @@ export function ReportsView({ patientId }: { patientId: string }) {
 
       {jobId !== null && (
         <Section title={t("pdf.title")}>
-          {job.data?.status === "done" && pdfHref !== null ? (
+          {jobLost ? (
+            <div className="flex flex-col items-start gap-field">
+              <p className="m-0 text-sm text-destructive">{t("pdf.lost")}</p>
+              <div className="flex flex-wrap gap-field">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch"
+                  disabled={invalidRange || requestPdf.isPending}
+                  onClick={() => retry()}
+                >
+                  {t("pdf.retry")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-touch"
+                  onClick={() => setJobId(null)}
+                >
+                  {t("pdf.dismiss")}
+                </Button>
+              </div>
+            </div>
+          ) : job.data?.status === "done" && pdfHref !== null ? (
             <Button asChild className="min-h-touch self-start">
               <a href={pdfHref} download>
                 <Download aria-hidden="true" />
@@ -225,7 +265,7 @@ export function ReportsView({ patientId }: { patientId: string }) {
       )}
 
       <AsyncSection
-        loading={report.isLoading}
+        {...queryState(report)}
         skeleton={
           <div
             className="flex flex-col gap-section"

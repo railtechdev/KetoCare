@@ -135,7 +135,7 @@ const FRESH_OVERVIEW = {
   family_activated: true,
 } satisfies PatientOverview;
 
-function renderList() {
+function renderList(search: { item?: string } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -146,7 +146,9 @@ function renderList() {
         <SessionProvider>
           {/* Строка поиска живёт в состоянии экрана, но ссылки на карту —
               адресные, и без роутера они бы не собрались. */}
-          <SectionRouter section="patients">{children}</SectionRouter>
+          <SectionRouter section="patients" search={search}>
+            {children}
+          </SectionRouter>
         </SessionProvider>
       </QueryClientProvider>
     );
@@ -236,6 +238,15 @@ describe("реестр пациентов", () => {
     expect(
       table.getAllByRole("button", { name: "Напомнить семье в Telegram" }),
     ).toHaveLength(1);
+  });
+
+  it("ссылка «Завести карту» открывает форму новой карты", async () => {
+    // На неё ведёт пустая главная врача: форма живёт в адресе (`?item=new`).
+    renderList({ item: "new" });
+
+    expect(
+      await screen.findByRole("dialog", { name: /Новый пациент/ }),
+    ).toBeInTheDocument();
   });
 
   it("имя ведёт в карту пациента по её собственному адресу", async () => {

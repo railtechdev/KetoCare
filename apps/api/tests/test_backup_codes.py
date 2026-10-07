@@ -175,6 +175,7 @@ class TestBackupCodes:
 
         status = await client.get("/api/v1/auth/backup-codes", headers=headers)
         assert status.json()["remaining"] == backup_codes_repo.BACKUP_CODE_COUNT - 1
+        assert status.json()["enrolled"] is True
 
         await session.refresh(doctor)
         assert doctor.totp_secret is not None
@@ -193,6 +194,23 @@ class TestBackupCodes:
             json={"email": doctor.email, "password": PASSWORD, "backup_code": codes[1]},
         )
         assert stale.status_code == 401
+
+    async def test_status_says_when_second_factor_is_off(self, client, make_user, auth_headers):
+        """Потребитель — блок «Резервные коды» в профиле кабинета
+        (`apps/web/src/features/profile/BackupCodesSection.tsx`): у родителя
+        второго фактора нет, и блок с перевыпуском, кончающимся 409, ему не
+        показывается."""
+
+        parent = await make_user(UserRole.PARENT)
+
+        status = await client.get("/api/v1/auth/backup-codes", headers=auth_headers(parent))
+
+        assert status.status_code == 200
+        assert status.json() == {
+            "remaining": 0,
+            "total": backup_codes_repo.BACKUP_CODE_COUNT,
+            "enrolled": False,
+        }
 
     async def test_regenerate_requires_totp_code(self, client, make_user):
         doctor = await make_user(UserRole.DOCTOR)

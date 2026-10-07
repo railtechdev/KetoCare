@@ -24,6 +24,7 @@ import { usePatientOverview } from "../patients/overview";
 import { PatientViewLink } from "./PatientViewLink";
 import { LinesSkeleton } from "./skeletons";
 import type { Patient, PatientOverview } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Раздел «Сводка»: что с ребёнком сейчас.
@@ -48,7 +49,7 @@ export function SummaryTab({ patient }: { patient: Patient }) {
           неудачном ОБНОВЛЕНИИ сохраняет прежний ответ и одновременно
           переводит запрос в состояние ошибки (правило П15 канона). */}
       <AsyncSection
-        loading={overview.isPending}
+        {...queryState(overview)}
         skeleton={<LinesSkeleton label={t("summary.loading")} lines={5} />}
         error={
           overview.isError
@@ -169,6 +170,16 @@ function OverviewPanels({
             icon={CalendarOff}
             title={t("summary.day.empty")}
             description={t("summary.day.emptyDescription")}
+            // Специалист составляет день тем же экраном, что и семья
+            // (ADR-0047): «ждать, пока семья запланирует» больше не
+            // единственный путь, и у пустого дня есть выход.
+            action={
+              <Button asChild variant="outline">
+                <PatientViewLink patientId={patientId} view="menu">
+                  {t("summary.day.compose")}
+                </PatientViewLink>
+              </Button>
+            }
           />
         ) : (
           <div className="flex flex-col gap-section">

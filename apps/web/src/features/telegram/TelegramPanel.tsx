@@ -14,6 +14,7 @@ import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useIssueAccessCode } from "../access/useAccessCodes";
 import { useRevokeLinkMutation, useTelegramLinks } from "./useTelegramLinks";
+import { queryState } from "../../lib/queryState";
 
 interface Props {
   patientId: string;
@@ -119,7 +120,7 @@ export function TelegramPanel({ patientId, childName }: Props) {
         )}
 
         <AsyncSection
-          loading={links.isLoading}
+          {...queryState(links)}
           skeleton={<Skeleton className="h-16 w-full rounded-xl" />}
           error={
             links.isError

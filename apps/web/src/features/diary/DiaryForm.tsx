@@ -345,7 +345,9 @@ function SeizureForm({
         {typesAvailable && (
           <SelectField
             id="seizure-type"
-            width="medium"
+            // Во всю ширину панели: названия типов по ILAE длинные, и в
+            // средней ширине выбранное значение обрезалось на полуслове.
+            width="full"
             label={t("seizures.type")}
             error={errors.seizureTypeId && t("seizures.typeRequired")}
             {...register("seizureTypeId")}
@@ -386,7 +388,8 @@ function SeizureForm({
             двумя способами: в чате интервалом, здесь числом. */}
         <SelectField
           id="seizure-duration-option"
-          width="narrow"
+          // «Выберите ин…» в узкой ширине — значит, выбор не прочесть.
+          width="full"
           optional
           label={t("seizures.durationChoice")}
           error={errors.durationOptionId && t("seizures.durationBothInvalid")}

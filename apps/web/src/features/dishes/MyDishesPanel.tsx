@@ -25,6 +25,7 @@ import {
   useRenameCustomDish,
   type CustomDish,
 } from "./useCustomDishes";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Блюда ребёнка — раскладки, сохранённые из калькулятора.
@@ -66,7 +67,7 @@ export function MyDishesPanel({
       description={t(inCard ? "myDishes.patientIntro" : "myDishes.intro")}
     >
       <AsyncSection
-        loading={dishes.isPending && patientId !== null}
+        {...queryState(dishes)}
         skeleton={null}
         error={
           dishes.isError

@@ -118,6 +118,11 @@ export function PrescriptionForm({
           error={errors.ratio && t("prescription.errors.ratio")}
           {...register("ratio", { valueAsNumber: true })}
         >
+          {/* Пустой вариант первым: без него браузер выбирал первый из
+              списка — 5 : 1, максимум, — и первое назначение уходило с ним,
+              если врач не заметил поля. Кетосоотношение выбирается явно
+              (клинический риск); у новой версии оно приходит из действующей. */}
+          <option value="">{t("fields.ratioPlaceholder")}</option>
           {RATIO_CHOICES.map((value) => (
             <option key={value} value={value}>
               {formatRatio(value)}

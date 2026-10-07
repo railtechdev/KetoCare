@@ -65,7 +65,9 @@ describe("список приглашений", () => {
     renderList();
     expect(await screen.findByText("family@example.com")).toBeInTheDocument();
     expect(screen.getByText("ждёт")).toBeInTheDocument();
-    expect(screen.getAllByText("2026-09-07")).toHaveLength(2);
+    // Срок — по-русски, а не служебной записью «2026-09-07».
+    expect(screen.getAllByText(/^07\.09\.2026/)).toHaveLength(2);
+    expect(screen.queryByText("2026-09-07")).toBeNull();
   });
 
   it("не показывает ссылку повторно", async () => {

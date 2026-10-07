@@ -36,12 +36,20 @@ interface Props {
   recipeId: string;
   /** Правка доступна admin/dietitian; это UX, доступ проверяет сервер */
   canEdit: boolean;
+  /** Есть ли у роли калькулятор: у администратора его нет */
+  canCalculate?: boolean;
   onBack: () => void;
   onEdit: (recipeId: string) => void;
 }
 
 /** Карточка рецепта: состав, приготовление и показатели, посчитанные ядром. */
-export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
+export function RecipeDetail({
+  recipeId,
+  canEdit,
+  canCalculate = true,
+  onBack,
+  onEdit,
+}: Props) {
   const { t } = useTranslation("recipes");
 
   const recipe = useRecipe(recipeId);
@@ -111,12 +119,16 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
           {/* Карточка рецепта вела в никуда: посмотреть можно, сделать —
               ничего. Отсюда рецепт уходит в калькулятор с уже заполненным
               составом, и вкладка «Пересчитать» наконец получает источник. */}
-          <Button asChild variant="outline" className="min-h-touch">
-            <SectionLink section="calculator" item={incomingRecipe(data.id)}>
-              <Calculator aria-hidden="true" />
-              {t("actions.toCalculator")}
-            </SectionLink>
-          </Button>
+          {/* Калькулятора у администратора нет: ссылка вела бы в раздел,
+              который роутер тут же подменяет первым доступным (правило П3). */}
+          {canCalculate && (
+            <Button asChild variant="outline" className="min-h-touch">
+              <SectionLink section="calculator" item={incomingRecipe(data.id)}>
+                <Calculator aria-hidden="true" />
+                {t("actions.toCalculator")}
+              </SectionLink>
+            </Button>
+          )}
 
           {canEdit && (
             <>

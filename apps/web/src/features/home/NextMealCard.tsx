@@ -14,6 +14,7 @@ import { useMenuQuery } from "../menu/useMenu";
 import { itemDishKey, useMenuItemTitles } from "../menu/useDishCatalog";
 import { todayIso } from "../menu/dates";
 import { Panel } from "./Panel";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Ближайший приём пищи — то, ради чего родитель чаще всего открывает кабинет:
@@ -58,7 +59,7 @@ export function NextMealCard({ patientId }: { patientId: string }) {
   return (
     <Panel title={t("nextMeal.title")} action={showAction ? action : undefined}>
       <AsyncSection
-        loading={menu.isPending}
+        {...queryState(menu)}
         skeleton={
           <div
             className="flex flex-col gap-field"

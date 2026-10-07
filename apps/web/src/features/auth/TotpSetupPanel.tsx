@@ -19,14 +19,18 @@ import { QrCode } from "../../components/QrCode";
 import { SetPasswordPanel } from "./SetPasswordPanel";
 import { BackupCodesPanel } from "./BackupCodesPanel";
 import { FormError } from "../../components/FormError";
-import { api, errorMessageOf } from "../../lib/api";
+import { api, errorCodeOf, errorMessageOf } from "../../lib/api";
+import { StepExpired } from "./StepExpired";
 import { totpVerifySchema, type TotpVerifyValues } from "./schemas";
 import { useSession } from "./useSession";
 import { useTotpVerifyMutation } from "./useAuthMutations";
+import { queryState } from "../../lib/queryState";
 
 interface Props {
   /** Краткоживущий токен из ответа login со статусом totp_setup_required. */
   setupToken: string;
+  /** Вернуться к форме входа: токен шага истёк, и повтор с ним не поможет. */
+  onRestart: () => void;
 }
 
 /**
@@ -35,7 +39,7 @@ interface Props {
  * Секрет становится действующим только после подтверждения кодом: до вызова
  * /auth/totp/verify старый второй фактор (если был) продолжает работать.
  */
-export function TotpSetupPanel({ setupToken }: Props) {
+export function TotpSetupPanel({ setupToken, onRestart }: Props) {
   const { t } = useTranslation("auth");
   const { signIn } = useSession();
   const verify = useTotpVerifyMutation(setupToken);
@@ -96,7 +100,16 @@ export function TotpSetupPanel({ setupToken }: Props) {
   // Сначала коды, потом пароль: коды показываются один раз в жизни, и экран
   // задания пароля стёр бы их безвозвратно.
   if (codesSaved && resetToken !== null) {
-    return <SetPasswordPanel resetToken={resetToken} />;
+    return <SetPasswordPanel resetToken={resetToken} onRestart={onRestart} />;
+  }
+
+  // Токен настройки живёт минуты. Истёк — повтор с ним отказывает снова, и
+  // выход один: войти заново (сервер выдаст новый).
+  if (
+    errorCodeOf(setup.error) === "unauthorized" ||
+    errorCodeOf(verify.error) === "unauthorized"
+  ) {
+    return <StepExpired onRestart={onRestart} />;
   }
 
   if (issuedCodes !== null) {
@@ -146,7 +159,7 @@ export function TotpSetupPanel({ setupToken }: Props) {
               подпрыгивает в момент ответа. Ошибка запроса ключа — не ошибка
               формы: её можно повторить, и состояния ведёт AsyncSection. */}
           <AsyncSection
-            loading={setup.isPending}
+            {...queryState(setup)}
             skeleton={
               <div
                 className="flex flex-col items-center gap-field"
@@ -222,6 +235,9 @@ export function TotpSetupPanel({ setupToken }: Props) {
               pendingLabel={t("totpSetup.confirming")}
               pending={verify.isPending}
               disabled={!setup.data}
+              // Без ключа подтверждать нечего: кнопка выключена и говорит
+              // почему (правило П44).
+              reason={!setup.data ? t("totpSetup.waitingForKey") : undefined}
             />
           </form>
         </CardContent>

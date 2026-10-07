@@ -230,6 +230,45 @@ describe("карточка продукта вне текущей выборки
  * фильтрация полученного дала бы «жировые из тех двадцати, что попали на экран».
  * Диетолог решил бы, что жировых продуктов в справочнике три.
  */
+describe("отбор из адреса", () => {
+  it("ссылка «не сверялись» и строка поиска доходят до запроса", async () => {
+    // Главная администратора ведёт сюда со счётчиком несверенных позиций,
+    // калькулятор — со своим запросом. Прежде панель не читала адрес вовсе.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<ProductsPanel />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <SectionRouter
+            section="products"
+            search={{ q: "масло", verified: "2025-10-07" }}
+          >
+            {children}
+          </SectionRouter>
+        </QueryClientProvider>
+      ),
+    });
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Не сверялись с 07\.10\.2025/,
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      const asked = (api.GET as Mock).mock.calls.some(
+        ([path, options]) =>
+          path === "/api/v1/products" &&
+          (options as { params: { query: Record<string, unknown> } }).params
+            .query.verified_before === "2025-10-07" &&
+          (options as { params: { query: Record<string, unknown> } }).params
+            .query.q === "масло",
+      );
+      expect(asked).toBe(true);
+    });
+  });
+});
+
 describe("отбор по ведущему макронутриенту", () => {
   it("уходит в запрос, а не применяется к полученной странице", async () => {
     const user = userEvent.setup();

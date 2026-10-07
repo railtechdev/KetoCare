@@ -177,14 +177,29 @@ describe("специалист составляет день (ADR-0047)", () => 
     ).toBeInTheDocument();
   });
 
-  it("может скопировать день и убрать ошибочный", async () => {
+  it("может убрать ошибочный день, а копировать — только в пустой", async () => {
+    // Копирование поверх составленного дня заменило бы его состав вместе с
+    // отметками «съедено» (ADR-0041): у составленного дня его нет.
+    renderFood();
+
+    expect(
+      await screen.findByRole("button", { name: "Убрать план" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Скопировать день" }),
+    ).toBeNull();
+  });
+
+  it("пустой день можно заполнить копией другого", async () => {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path === "/api/v1/patients/{patient_id}/menus"
+        ? Promise.resolve({ data: { ...MENU, items: [], totals: null } })
+        : Promise.resolve(respond(path)),
+    );
     renderFood();
 
     expect(
       await screen.findByRole("button", { name: "Скопировать день" }),
-    ).toBeVisible();
-    expect(
-      await screen.findByRole("button", { name: "Убрать план" }),
     ).toBeVisible();
   });
 

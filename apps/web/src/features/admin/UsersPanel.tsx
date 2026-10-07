@@ -35,6 +35,7 @@ import {
   type UsersFilter,
 } from "./useAdminUsers";
 import type { AdminUser } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /** Роли для отбора — те же, что назначаются учётной записи. */
 const ROLE_OPTIONS = ["admin", "doctor", "dietitian", "parent"] as const;
@@ -140,44 +141,53 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
                 {t("users.edit")}
               </Button>
 
-              {/* Пароль сбрасывается у любой учётной записи: забыть его может
-                  кто угодно, в отличие от второго фактора, которого у части
-                  ролей нет вовсе. */}
-              <ConfirmDialog
-                trigger={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-touch"
-                    aria-label={t("users.resetPasswordAria", {
-                      name: row.original.full_name,
-                    })}
-                  >
-                    <RotateCcwKey aria-hidden="true" />
-                    {t("users.resetPassword")}
-                  </Button>
-                }
-                title={t("users.confirmResetPasswordTitle", {
-                  name: row.original.full_name,
-                })}
-                description={t("users.confirmResetPasswordBody")}
-                confirmLabel={t("users.confirmResetPasswordAction")}
-                cancelLabel={t("common:actions.cancel")}
-                onConfirm={() =>
-                  resetPassword.mutate(row.original.id, {
-                    onSuccess: (data) =>
-                      setIssued({
+              {/* Пароль сбрасывается у любой учётной записи с почтой: забыть
+                  его может кто угодно. У родителя из Telegram (ADR-0040) почты
+                  и пароля нет — входить временным паролем ему нечем, и сервер
+                  отказывает. Вместо кнопки, ведущей в отказ, — причина
+                  словами (правила П3 и П44). */}
+              {row.original.email === null ? (
+                <span className="self-center text-sm text-muted-foreground">
+                  {t("users.telegramOnly")}
+                </span>
+              ) : (
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-touch"
+                      aria-label={t("users.resetPasswordAria", {
                         name: row.original.full_name,
-                        password: data.temporary_password,
-                      }),
-                    onError: (error) =>
-                      toast.error(
-                        errorMessageOf(error) ?? t("common:errors.unexpected"),
-                      ),
-                  })
-                }
-              />
+                      })}
+                    >
+                      <RotateCcwKey aria-hidden="true" />
+                      {t("users.resetPassword")}
+                    </Button>
+                  }
+                  title={t("users.confirmResetPasswordTitle", {
+                    name: row.original.full_name,
+                  })}
+                  description={t("users.confirmResetPasswordBody")}
+                  confirmLabel={t("users.confirmResetPasswordAction")}
+                  cancelLabel={t("common:actions.cancel")}
+                  onConfirm={() =>
+                    resetPassword.mutate(row.original.id, {
+                      onSuccess: (data) =>
+                        setIssued({
+                          name: row.original.full_name,
+                          password: data.temporary_password,
+                        }),
+                      onError: (error) =>
+                        toast.error(
+                          errorMessageOf(error) ??
+                            t("common:errors.unexpected"),
+                        ),
+                    })
+                  }
+                />
+              )}
 
               {/* Кнопки нет, когда сбрасывать нечего: она вела бы в заведомый
                   409 (правило П3 канона). Признак именно про сброс, а не про
@@ -393,7 +403,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
-        loading={users.isLoading}
+        {...queryState(users)}
         skeleton={<TableSkeleton label={t("users.loading")} columns={6} />}
         error={
           users.isError

@@ -107,6 +107,11 @@ describe("главная администратора", () => {
 
     const link = await screen.findByRole("link", { name: /не сверялись/ });
     expect(link).toHaveAttribute("href", expect.stringContaining("products"));
+    // Отбор по дате сверки, а не дата в строке поиска: прежде справочник
+    // искал продукты с названием «2025-10-07» — то есть не находил ничего.
+    const href = link.getAttribute("href") ?? "";
+    expect(href).toMatch(/verified=\d{4}-\d{2}-\d{2}/);
+    expect(href).not.toMatch(/[?&]q=/);
   });
 
   it("называет невостребованные приглашения", async () => {

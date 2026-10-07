@@ -10,6 +10,8 @@ export interface AssistantMessage {
   created_at: string;
   status: "pending" | "done" | "failed";
   sources: string[];
+  /** Статьи с заголовками — их и печатает экран под ответом. */
+  source_articles: { slug: string; title: string }[];
   blocked: boolean;
 }
 

@@ -18,17 +18,34 @@ import { SectionLink } from "../../components/SectionLink";
  * работающий экран (правило П3 канона).
  */
 const STEPS = [
-  { key: "intake", icon: Baby, section: "child", diaryKind: undefined },
-  { key: "documents", icon: Paperclip, section: "child", diaryKind: undefined },
+  // Анкета и документы открываются сразу на своём подэкране раздела
+  // «Ребёнок» (`?tab=` + `?item=<ребёнок>`). Прежде ссылки вели на список
+  // детей, и родитель искал там, где анкета, — то есть ссылка обещала шаг,
+  // а приводила к поиску.
+  {
+    key: "intake",
+    icon: Baby,
+    section: "child",
+    tab: "intake",
+    diaryKind: undefined,
+  },
+  {
+    key: "documents",
+    icon: Paperclip,
+    section: "child",
+    tab: "documents",
+    diaryKind: undefined,
+  },
   {
     key: "diary",
     icon: NotebookPen,
     section: "diary",
+    tab: undefined,
     diaryKind: "ketones",
   },
 ] as const;
 
-export function WaitingForPrescription() {
+export function WaitingForPrescription({ patientId }: { patientId: string }) {
   const { t } = useTranslation("home");
 
   return (
@@ -38,7 +55,7 @@ export function WaitingForPrescription() {
       density="compact"
     >
       <ul className="m-0 flex list-none flex-col gap-field p-0">
-        {STEPS.map(({ key, icon: Icon, section, diaryKind }) => (
+        {STEPS.map(({ key, icon: Icon, section, tab, diaryKind }) => (
           <li key={key} className="flex items-start gap-field">
             <Icon
               aria-hidden="true"
@@ -47,6 +64,8 @@ export function WaitingForPrescription() {
             <span>
               <SectionLink
                 section={section}
+                tab={tab}
+                item={tab === undefined ? undefined : patientId}
                 diaryKind={diaryKind}
                 className="font-medium underline-offset-2 hover:underline"
               >

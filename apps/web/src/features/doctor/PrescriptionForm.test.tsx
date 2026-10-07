@@ -5,11 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 import "../../lib/i18n";
 import { PrescriptionForm } from "./PrescriptionForm";
 
-function renderForm(onSubmit = vi.fn()) {
+function renderForm(
+  onSubmit = vi.fn(),
+  { ratio }: { ratio?: number } = { ratio: 3.5 },
+) {
   render(
     <PrescriptionForm
       defaultValues={{
-        ratio: 3.5,
+        ratio,
         kcalPerDay: 1200,
         proteinG: 24,
         carbsLimitG: 10,
@@ -46,6 +49,7 @@ describe("кетосоотношение в назначении", () => {
       .getAllByRole("option")
       .map((option) => (option as HTMLOptionElement).value);
     expect(options).toEqual([
+      "",
       "5",
       "4.5",
       "4",
@@ -68,5 +72,19 @@ describe("кетосоотношение в назначении", () => {
 
     // Второй аргумент — событие формы, поэтому сверяется первый.
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ ratio: 4 });
+  });
+
+  it("в первом назначении не выбрано ничего — не 5 : 1", async () => {
+    // Без пустого варианта браузер выбирал первый из списка — максимум, — и
+    // первое назначение уходило с ним, если врач не заметил поля.
+    const user = userEvent.setup();
+    const onSubmit = renderForm(vi.fn(), {});
+
+    expect(
+      (screen.getByLabelText(/Кетосоотношение/) as HTMLSelectElement).value,
+    ).toBe("");
+    await user.click(screen.getByRole("button", { name: /Сохранить|Создать/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

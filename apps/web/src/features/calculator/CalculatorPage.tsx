@@ -4,10 +4,12 @@ import {
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
+  ErrorState,
   RECALC_DELAY_MS,
   canRetry,
   Section,
   Separator,
+  Skeleton,
   WarningBanner,
   exceedsCalcGrams,
   mealTargetsFrom,
@@ -498,12 +500,39 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           // заказчица. В форме рецепта и в исключённых продуктах такого
           // предложения быть не должно.
           suggestRecipes
+          // Состав калькулятора живёт в адресе блюда или набирается заново за
+          // секунды; формы рецепта и профиля ребёнка этого не умеют.
+          canLeave
           excludeIds={rows.map((r) => r.product.id)}
           onPick={(product) => {
             setRows((current) => [...current, { product, grams: 50 }]);
             resetActions();
           }}
         />
+
+        {/* Блюдо из рецепта или «моих блюд» дочитывается: рецепт, затем
+            продукты состава. Прежде экран в это время молчал, а при отказе
+            так и оставался пустым — человек пришёл пересчитать блюдо и не
+            понимал, куда оно делось. */}
+        {incomingDish.isPending && rows.length === 0 && (
+          <div
+            className="flex flex-col gap-field"
+            role="status"
+            aria-busy="true"
+            aria-label={t("incoming.loading")}
+          >
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )}
+        {incomingDish.isError && (
+          <ErrorState
+            title={t("incoming.errorTitle")}
+            description={t("incoming.errorBody")}
+            retryLabel={t("common:actions.retry")}
+            onRetry={incomingDish.retry}
+          />
+        )}
 
         <DishRows
           rows={rows}
@@ -561,6 +590,11 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
           kcal={kcal}
           suggested={suggested}
           prescription={prescription}
+          scaledBy={
+            scale.data !== undefined && scale.variables !== undefined
+              ? scale.variables.factor
+              : null
+          }
           onChange={(next) => {
             touched.current = true;
             setRatio(next.ratio);
@@ -862,12 +896,15 @@ function GoalFields({
   kcal,
   suggested,
   prescription,
+  scaledBy,
   onChange,
 }: {
   ratio: number | null;
   kcal: number | null;
   suggested: TargetsInput | null;
   prescription: { kcal_per_day: number; meals_per_day: number } | null;
+  /** Состав пересчитан на столько порций; `null` — не пересчитан. */
+  scaledBy: number | null;
   onChange: (next: { ratio: number | null; kcal: number | null }) => void;
 }) {
   const { t } = useTranslation("calculator");
@@ -951,6 +988,15 @@ function GoalFields({
           подставить своё число и объявить блюдо не попавшим в него. */}
       {(ratio === null || kcal === null) && (
         <p className="m-0 text-sm text-muted-foreground">{t("goal.none")}</p>
+      )}
+
+      {/* После «Пересчитать порции» калорийность блюда выросла (или упала)
+          во столько же раз, а цель осталась на один приём: без строки
+          объяснения «Цель не достигнута» читалась как ошибка пересчёта. */}
+      {scaledBy !== null && scaledBy !== 1 && kcal !== null && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("goal.scaled", { factor: formatMass(scaledBy) })}
+        </p>
       )}
     </div>
   );

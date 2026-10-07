@@ -23,11 +23,12 @@ from fastapi import APIRouter, Path, Query
 from core.models.enums import UserRole
 from core.repositories import ai_conversations as conversations_repo
 from core.repositories import audit as audit_repo
+from core.repositories import knowledge_base as kb_repo
 
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page
-from ..schemas_ai import ConversationListItem, ConversationRead, MessageRead
+from ..schemas_ai import ConversationListItem, ConversationRead, MessageRead, SourceArticle
 
 router = APIRouter(prefix="/patients/{patient_id}/ai-conversations", tags=["ai"])
 
@@ -100,13 +101,29 @@ async def read_conversation(
     if after_seq is not None:
         messages = [message for message in messages if message.seq > after_seq]
 
+    titles = await kb_repo.titles_for(
+        session, [slug for message in messages for slug in message.sources]
+    )
+
     return ConversationRead(
         id=conversation.id,
         patient_id=conversation.patient_id,
         channel=str(conversation.channel),
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
-        messages=[MessageRead.model_validate(message.model_dump()) for message in messages],
+        messages=[
+            MessageRead.model_validate(
+                {
+                    **message.model_dump(),
+                    "source_articles": [
+                        SourceArticle(slug=slug, title=titles[slug])
+                        for slug in message.sources
+                        if slug in titles
+                    ],
+                }
+            )
+            for message in messages
+        ],
     )
 
 

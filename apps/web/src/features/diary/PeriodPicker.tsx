@@ -51,6 +51,9 @@ export function PeriodPicker({
               value={value}
               checked={preset === value}
               onChange={() => onPresetChange(value)}
+              // Имя — словами, явно: часть средств чтения брала у спрятанного
+              // radio значение («week»), а не подпись.
+              aria-label={t(`period.${value}`)}
               className="peer sr-only"
             />
             {/* Вид — вариант кнопки из кита, состояние — от настоящего radio:

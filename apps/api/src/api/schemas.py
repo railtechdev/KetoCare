@@ -125,6 +125,11 @@ class BackupCodesStatus(BaseModel):
 
     remaining: int
     total: int
+    #: Второй фактор включён. Без него резервные коды не выдаются и не нужны:
+    #: кабинет прячет блок, а не предлагает перевыпуск, который кончится 409.
+    #: Родитель второго фактора не настраивает вовсе (раздел 7 ТЗ — только
+    #: персоналу).
+    enrolled: bool = False
 
 
 class BackupCodesRegenerate(BaseModel):
@@ -816,6 +821,18 @@ class InvitationCreated(BaseModel):
     token: str
     expires_at: datetime
     patient_id: uuid.UUID | None = None
+
+
+class InvitationPreviewRequest(BaseModel):
+    """Токен в теле, а не в адресе: адреса оседают в журналах прокси."""
+
+    token: str
+
+
+class InvitationPreview(BaseModel):
+    """На какую почту заводится учётная запись по приглашению."""
+
+    email: str
 
 
 class InvitationAccept(BaseModel):

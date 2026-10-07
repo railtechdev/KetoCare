@@ -18,6 +18,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
@@ -47,6 +48,7 @@ import {
   useDurationOptions,
   useSeizureTypes,
 } from "./useDiary";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Дневники семьи (раздел 8.3 ТЗ).
@@ -139,7 +141,13 @@ export function DiaryPage({ patientId }: { patientId: string }) {
         {/* Radix монтирует только активную вкладку: запросы соседних видов
             записей не уходят, пока родитель их не открыл. */}
         {DIARY_KINDS.map((value) => (
-          <TabsContent key={value} value={value} className="pt-section">
+          <TabsContent
+            key={value}
+            value={value}
+            // Панель вкладки получает фокус с клавиатуры (Radix ставит
+            // tabIndex=0), а кит гасит рамку — без своей её не видно.
+            className="pt-section rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
             <DiaryTab
               kind={value}
               patientId={patientId}
@@ -207,10 +215,14 @@ function DiaryTab({
   const total = logs.data?.total ?? 0;
   // Схема терапии пуста: записывать приём нечего, и пустое состояние должно
   // объяснять это, а не предлагать «добавить запись».
+  //
+  // Только по ПРИШЕДШЕЙ схеме: при отказе запроса данных нет, и прежнее
+  // условие «не грузится» говорило семье «препараты не назначены» при живой
+  // схеме. Об отказе говорит своё сообщение с повтором выше.
   const schemeEmpty =
     kind === "medications" &&
-    !medications.isPending &&
-    (medications.data ?? []).length === 0;
+    medications.isSuccess &&
+    medications.data.length === 0;
 
   const points = useMemo<TrendPoint[]>(
     () =>
@@ -371,7 +383,11 @@ function DiaryTab({
           приступов» с фразой «за период приступов не записано» и под ним
           рамка «Записей за этот период нет» на 290 px (правило П27). */}
       {kind === "seizures" && items.length > 0 && (
-        <SeizureDiaryGrid logs={items} types={seizureTypes.data ?? []} />
+        <SeizureDiaryGrid
+          logs={items}
+          types={seizureTypes.data ?? []}
+          complete={total <= items.length}
+        />
       )}
 
       {total > items.length && (
@@ -382,50 +398,71 @@ function DiaryTab({
 
       {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанные записи. */}
-      <AsyncSection
-        loading={logs.isLoading}
-        skeleton={<DiaryListSkeleton label={t("list.loadingAria")} />}
-        error={
-          logs.isError
-            ? {
-                title: t("list.errorTitle"),
-                description:
-                  errorMessageOf(logs.error) ?? t("common:errors.unexpected"),
-              }
-            : null
-        }
-        retryLabel={t("common:actions.retry")}
-        onRetry={() => void logs.refetch()}
-        isEmpty={items.length === 0}
-        empty={
-          // На «Лекарствах» с пустой схемой добавлять нечего: препараты
-          // назначает врач. Пустое состояние объясняет это, а не предлагает
-          // действие, которого у семьи нет (правило П3 канона).
-          schemeEmpty ? (
-            <EmptyState
-              icon={Pill}
-              title={t("medications.noneTitle")}
-              description={t("medications.none")}
-            />
-          ) : (
-            <EmptyState
-              icon={NotebookPen}
-              title={t("list.emptyTitle")}
-              description={t("list.emptyBody")}
-              // Вторичная: то же действие уже стоит первичным в шапке экрана,
-              // и два одинаково громких «Добавить запись» на одном экране
-              // делают их одинаково незаметными (правило П31 — одно первичное).
-              // Выход из пустого состояния при этом остаётся (П15).
-              action={
-                <Button type="button" variant="outline" onClick={onAdd}>
-                  {t("list.emptyAction")}
-                </Button>
-              }
-            />
-          )
-        }
-      >
-        {range !== null && (
+      {/* Период задан неверно — запрос не уходит, и показывать нечего: об
+          ошибке ввода говорит сам `PeriodPicker`. Без этой границы под
+          ошибкой периода стояло «записей за этот период нет» — как будто
+          период верный и пустой. Так же устроен дневник в карте пациента. */}
+      {range !== null && (
+        <AsyncSection
+          {...queryState(logs)}
+          skeleton={<DiaryListSkeleton label={t("list.loadingAria")} />}
+          error={
+            logs.isError
+              ? {
+                  title: t("list.errorTitle"),
+                  description:
+                    errorMessageOf(logs.error) ?? t("common:errors.unexpected"),
+                }
+              : null
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void logs.refetch()}
+          isEmpty={items.length === 0}
+          empty={
+            // На «Лекарствах» с пустой схемой добавлять нечего: препараты
+            // назначает врач. Пустое состояние объясняет это, а не предлагает
+            // действие, которого у семьи нет (правило П3 канона).
+            schemeEmpty ? (
+              <EmptyState
+                icon={Pill}
+                title={t("medications.noneTitle")}
+                description={t("medications.none")}
+              />
+            ) : kind === "meals" ? (
+              // Отметки «съедено» живут в плане дня, а не в этом списке: здесь
+              // — только еда, записанная словами. Без объяснения семья,
+              // отметившая весь день, читала «записей нет» и решала, что
+              // отметки пропали.
+              <EmptyState
+                icon={NotebookPen}
+                title={t("list.emptyTitle")}
+                description={t("meals.emptyBody")}
+                action={
+                  <Button asChild variant="outline">
+                    <SectionLink section="menu">
+                      {t("meals.toPlan")}
+                    </SectionLink>
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={NotebookPen}
+                title={t("list.emptyTitle")}
+                description={t("list.emptyBody")}
+                // Вторичная: то же действие уже стоит первичным в шапке экрана,
+                // и два одинаково громких «Добавить запись» на одном экране
+                // делают их одинаково незаметными (правило П31 — одно первичное).
+                // Выход из пустого состояния при этом остаётся (П15).
+                action={
+                  <Button type="button" variant="outline" onClick={onAdd}>
+                    {t("list.emptyAction")}
+                  </Button>
+                }
+              />
+            )
+          }
+        >
           <DiaryList
             logs={items}
             currentUserId={session?.userId ?? null}
@@ -454,8 +491,8 @@ function DiaryTab({
             deletingId={remove.isPending ? (remove.variables ?? null) : null}
             emptyState={null}
           />
-        )}
-      </AsyncSection>
+        </AsyncSection>
+      )}
 
       <FormSheet
         closeLabel={t("common:actions.close")}

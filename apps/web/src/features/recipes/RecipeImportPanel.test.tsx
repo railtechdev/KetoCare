@@ -106,6 +106,33 @@ describe("импорт рецептов", () => {
     });
   });
 
+  it("во время записи говорит «Импортируем», а не «Проверяем»", async () => {
+    // Одна мутация на два действия делила `isPending`: во время записи
+    // кнопка проверки говорила «Проверяем…», а кнопка записи молчала.
+    (api.POST as Mock).mockResolvedValue({ data: PREVIEW });
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.upload(screen.getByLabelText(recipesRu.import.file), file());
+    await user.click(
+      screen.getByRole("button", { name: recipesRu.import.check }),
+    );
+    await screen.findByText("Омлет прогонный");
+
+    (api.POST as Mock).mockReturnValue(new Promise(() => {}));
+    await user.click(
+      screen.getByRole("button", { name: recipesRu.import.confirm }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: recipesRu.import.importing }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: recipesRu.import.check }),
+    ).toBeDisabled();
+    expect(screen.queryByText(recipesRu.import.checking)).toBeNull();
+  });
+
   it("файл с ошибками не даёт нажать «Импортировать»", async () => {
     /* Импорт идёт одной транзакцией: частично заведённый сборник разбирать
        дороже, чем завести заново. */

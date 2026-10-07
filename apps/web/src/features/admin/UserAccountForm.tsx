@@ -61,6 +61,11 @@ export function UserAccountForm({
   });
 
   const sole = user.sole_patients ?? 0;
+  // Родитель из Telegram заведён без почты и пароля (ADR-0040): сотрудником
+  // ему не стать — войти нечем, и сервер такое повышение отвергает. Список
+  // предлагает только то, что сохранится, и говорит почему.
+  const telegramOnly = user.email === null;
+  const roles = telegramOnly ? (["parent"] as const) : ROLES;
   const activeId = `${ids}-active`;
   const roleId = `${ids}-role`;
 
@@ -112,10 +117,11 @@ export function UserAccountForm({
           id={roleId}
           width="medium"
           label={t("users.form.role")}
+          hint={telegramOnly ? t("users.form.roleTelegramOnly") : undefined}
           error={roleError}
           {...register("role")}
         >
-          {ROLES.map((role) => (
+          {roles.map((role) => (
             <option key={role} value={role}>
               {t(`common:roles.${role}`)}
             </option>

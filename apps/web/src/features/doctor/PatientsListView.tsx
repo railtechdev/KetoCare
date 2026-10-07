@@ -33,6 +33,11 @@ import type { Patient } from "./types";
 import { ChildForm } from "../child/ChildForm";
 import { toChildBody } from "../child/childSchemas";
 import { useCreateChildMutation } from "../patients/useChildren";
+import { queryState } from "../../lib/queryState";
+import { useSectionItem } from "../../routes/useSectionTab";
+
+/** `?item=` формы новой карты пациента: на неё ссылается главная врача. */
+export const NEW_PATIENT_ITEM = "new";
 
 interface PatientRow {
   patient: Patient;
@@ -54,7 +59,13 @@ export function PatientsListView() {
   // Рабочий список по умолчанию: завершившие терапию уходят из него, но не из
   // системы — их карты читаются, если выбрать их явно (вопрос 18, ADR-0050).
   const [therapy, setTherapy] = useState<TherapyFilter>("active");
-  const [inviteOpen, setInviteOpen] = useState(false);
+  // Форма новой карты — в адресе (`?item=new`), а не в состоянии экрана: на
+  // неё ведёт пустая главная врача («Завести карту»), и ссылка должна
+  // открывать форму, а не список, где кнопку ещё надо найти.
+  const [item, setItem] = useSectionItem();
+  const inviteOpen = item === NEW_PATIENT_ITEM;
+  const setInviteOpen = (open: boolean) =>
+    setItem(open ? NEW_PATIENT_ITEM : undefined);
   const navigate = useNavigate();
   const createChild = useCreateChildMutation();
 
@@ -240,7 +251,7 @@ export function PatientsListView() {
           у которого строки исчезли за красным блоком, решает, что потерял
           доступ к своим пациентам. */}
       <AsyncSection
-        loading={patients.isPending}
+        {...queryState(patients)}
         skeleton={<TableSkeleton label={t("list.loading")} />}
         error={
           patients.isError
@@ -350,8 +361,7 @@ export function PatientsListView() {
             void createChild
               .mutateAsync(toChildBody(values))
               .then((patient) => {
-                setInviteOpen(false);
-                // Сразу в карту: врач завёл её, чтобы записать назначение, а не
+                // Форма закрывается переходом: сразу в карту: врач завёл её, чтобы записать назначение, а не
                 // чтобы вернуться в список.
                 void navigate({
                   to: "/app/patients/$patientId/$view",

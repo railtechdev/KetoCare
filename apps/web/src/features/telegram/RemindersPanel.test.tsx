@@ -27,6 +27,17 @@ const DEFAULTS = {
   no_records_at: "20:00:00",
 };
 
+const LINK = {
+  id: "l1",
+  patient_id: PATIENT_ID,
+  parent_id: "p1",
+  chat_id: 1,
+  linked_at: "2026-09-01T10:00:00Z",
+  revoked_at: null,
+};
+
+let links: unknown[] = [LINK];
+
 function renderPanel() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -46,7 +57,12 @@ function renderPanel() {
 describe("настройки напоминаний", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (api.GET as Mock).mockResolvedValue({ data: DEFAULTS, error: undefined });
+    links = [LINK];
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/patients/{patient_id}/telegram"
+        ? { data: links, error: undefined }
+        : { data: DEFAULTS, error: undefined },
+    );
     (api.PUT as Mock).mockResolvedValue({ data: DEFAULTS, error: undefined });
   });
 
@@ -87,5 +103,18 @@ describe("настройки напоминаний", () => {
     );
 
     expect(screen.getByLabelText(/Если за день нет записей/)).toBeDisabled();
+  });
+
+  it("без подключённого чата сохранить нельзя — и сказано почему", async () => {
+    // Напоминания приходят в Telegram: без чата им некуда приходить.
+    links = [{ ...LINK, revoked_at: "2026-09-02T10:00:00Z" }];
+    renderPanel();
+
+    expect(
+      await screen.findByText(telegramRu.reminders.noChat),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: telegramRu.reminders.submit }),
+    ).toBeDisabled();
   });
 });

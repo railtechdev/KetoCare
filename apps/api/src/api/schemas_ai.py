@@ -31,6 +31,13 @@ class AssistantAccepted(BaseModel):
     reply_seq: int
 
 
+class SourceArticle(BaseModel):
+    """Статья базы знаний, на которую опирается ответ: имя и заголовок."""
+
+    slug: str
+    title: str
+
+
 class MessageRead(BaseModel):
     seq: int
     id: uuid.UUID
@@ -39,6 +46,10 @@ class MessageRead(BaseModel):
     created_at: datetime
     status: Literal["pending", "done", "failed"]
     sources: list[str] = []
+    #: Те же статьи с заголовками — то, что печатают кабинет и Mini App под
+    #: ответом. `sources` остаётся именами: по ним ответ сверяют с журналом.
+    #: Статьи, которой в индексе больше нет, здесь нет.
+    source_articles: list[SourceArticle] = []
     #: Ответ заменён шаблоном постфильтром. Экран показывает его обычным
     #: сообщением: это ответ по существу, просто не тот, которого ждали.
     blocked: bool = False

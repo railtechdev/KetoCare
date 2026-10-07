@@ -22,6 +22,7 @@ import {
   type IntakeOption,
   type PatientIntake,
 } from "./useIntake";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Анкета регистрации пациента — на чтение.
@@ -61,6 +62,11 @@ export function IntakeView({
   const [editing, setEditing] = useState(false);
 
   const filled = intake.data !== null && intake.data !== undefined;
+  // Ответ анкеты — ссылка на справочник. Без справочника каждая строка
+  // показалась бы «Не отвечено» — то есть неправдой о том, что семья ответила.
+  const dictionariesFailed =
+    (options.isError && options.data === undefined) ||
+    (drugs.isError && drugs.data === undefined);
 
   return (
     <Section
@@ -82,7 +88,7 @@ export function IntakeView({
       }
     >
       <AsyncSection
-        loading={intake.isPending || options.isPending || drugs.isPending}
+        {...queryState(intake, options, drugs)}
         skeleton={<LinesSkeleton label={t("title")} lines={6} />}
         error={
           intake.isError
@@ -91,13 +97,24 @@ export function IntakeView({
                 description:
                   errorMessageOf(intake.error) ?? t("common:errors.unexpected"),
               }
-            : null
+            : dictionariesFailed && filled
+              ? {
+                  title: t("errors.options"),
+                  description:
+                    errorMessageOf(options.error ?? drugs.error) ??
+                    t("common:errors.unexpected"),
+                }
+              : null
         }
         retryLabel={t("common:actions.retry")}
-        onRetry={() => void intake.refetch()}
+        onRetry={() => {
+          if (intake.isError) void intake.refetch();
+          if (options.isError) void options.refetch();
+          if (drugs.isError) void drugs.refetch();
+        }}
         // Незаполненная анкета приходит как `null` (сервер отвечает 404) — это
         // «ещё не заполнена», а не сбой.
-        isEmpty={intake.data === null}
+        isEmpty={intake.data == null || dictionariesFailed}
         empty={
           <EmptyState
             icon={ClipboardList}

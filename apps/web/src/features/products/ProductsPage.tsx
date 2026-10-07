@@ -23,6 +23,7 @@ import { api, errorMessageOf } from "../../lib/api";
 import { useSectionItem, useSectionQuery } from "../../routes/useSectionTab";
 import { useProductCategories } from "../admin/useAdminProducts";
 import { ProductCard } from "./ProductCard";
+import { queryState } from "../../lib/queryState";
 
 interface ProductRow {
   id: string;
@@ -255,7 +256,7 @@ export function ProductsPage() {
           обновление не должно прятать уже показанную выдачу (П15 канона).
           Пустое состояние отдано ему же, поэтому таблица своего не рисует. */}
       <AsyncSection
-        loading={products.isLoading}
+        {...queryState(products)}
         skeleton={<ProductsSkeleton label={t("loading")} />}
         error={
           products.isError

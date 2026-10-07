@@ -86,10 +86,32 @@ async def _is_lead(session: AsyncSession, *, viewer: CurrentUser, patient_id: uu
     return link is not None and not await _invited_by_family(session, link.invited_by)
 
 
+#: Отказ «выйти» последнему взрослому. Один текст на ручку и на подсказку.
+LAST_ADULT_MESSAGE = (
+    "Вы — единственный взрослый с доступом к ребёнку: после выхода дневник вести "
+    "будет некому. Сначала пригласите другого взрослого — или попросите лечащего "
+    "врача закрыть доступ."
+)
+
+
+def _sole_adult_leaving(ground: RemovalGround | None, adults: int) -> bool:
+    """Единственный взрослый уходит сам.
+
+    Ребёнок остался бы без семьи в продукте: дневник, напоминания и бот — всё
+    это ведёт взрослый. Уйти так можно было одним нажатием «Выйти», и вернуть
+    доступ — только новым кодом с приёма. Специалиста правило не касается: он
+    закрывает доступ осознанно (например, не тому человеку) и сам же выдаёт
+    новый код.
+    """
+
+    return ground == "self" and adults <= 1
+
+
 async def members(
     session: AsyncSession, *, patient_id: uuid.UUID, viewer: CurrentUser
 ) -> list[FamilyMemberRead]:
     parent_ids = await patients_repo.list_parent_ids(session, patient_id=patient_id)
+    adults = await patients_repo.count_active_adults(session, patient_id=patient_id)
     viewer_is_lead = await _is_lead(session, viewer=viewer, patient_id=patient_id)
     result: list[FamilyMemberRead] = []
     for parent_id in parent_ids:
@@ -101,6 +123,13 @@ async def members(
         )
         inviter_id = link.invited_by if link is not None else None
         inviter = await users_repo.get(session, inviter_id) if inviter_id is not None else None
+        ground = removal_ground(
+            viewer,
+            member_id=parent.id,
+            inviter_id=inviter_id,
+            viewer_is_lead=viewer_is_lead,
+            member_invited_by_family=inviter is not None and inviter.role is UserRole.PARENT,
+        )
         result.append(
             FamilyMemberRead(
                 id=parent.id,
@@ -109,15 +138,7 @@ async def members(
                 email=parent.email,
                 invited_by_name=inviter.full_name if inviter is not None else None,
                 is_me=parent.id == viewer.id,
-                can_remove=removal_ground(
-                    viewer,
-                    member_id=parent.id,
-                    inviter_id=inviter_id,
-                    viewer_is_lead=viewer_is_lead,
-                    member_invited_by_family=inviter is not None
-                    and inviter.role is UserRole.PARENT,
-                )
-                is not None,
+                can_remove=ground is not None and not _sole_adult_leaving(ground, adults),
             )
         )
     return result
@@ -158,6 +179,10 @@ async def remove(
             "Закрыть доступ этому взрослому может тот, кто его пригласил, основной родитель "
             "или лечащий врач.",
         )
+
+    adults = await patients_repo.count_active_adults(session, patient_id=patient_id, lock=True)
+    if _sole_adult_leaving(ground, adults):
+        raise ApiError(ErrorCode.CONFLICT, LAST_ADULT_MESSAGE)
 
     await patients_repo.unlink_parent(session, parent_id=member_id, patient_id=patient_id)
     chats = await telegram_repo.revoke_for_parent(

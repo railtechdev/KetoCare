@@ -24,6 +24,7 @@ import { useMedications } from "./doctorQueries";
 import { useAedDrugs, usePatientIntake } from "../intake/useIntake";
 import { TableSkeleton } from "./skeletons";
 import { isDoctor, type Medication } from "./types";
+import { queryState } from "../../lib/queryState";
 
 type FormState =
   | { mode: "create"; drugName?: string }
@@ -143,7 +144,7 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
       }
     >
       <AsyncSection
-        loading={medications.isPending}
+        {...queryState(medications)}
         skeleton={<TableSkeleton label={t("medications.loading")} rows={3} />}
         error={
           medications.isError

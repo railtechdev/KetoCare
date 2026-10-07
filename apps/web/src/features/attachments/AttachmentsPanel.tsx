@@ -18,6 +18,7 @@ import { useSession } from "../auth/useSession";
 import { formatIsoDate } from "../doctor/dates";
 import { LinesSkeleton } from "../doctor/skeletons";
 import type { Attachment } from "../doctor/types";
+import { queryState } from "../../lib/queryState";
 
 /** Виды документов — как в справочнике сервера (`AttachmentDocKind`). */
 const DOC_KINDS = [
@@ -128,7 +129,7 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
   return (
     <Section title={t("title")} description={t("intro")} density="compact">
       <AsyncSection
-        loading={attachments.isPending}
+        {...queryState(attachments)}
         skeleton={<LinesSkeleton label={t("loading")} lines={3} />}
         error={
           attachments.isError

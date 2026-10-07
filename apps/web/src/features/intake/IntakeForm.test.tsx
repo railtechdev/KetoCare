@@ -114,6 +114,31 @@ describe("IntakeForm", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("отказ в анкете — ошибка с повтором, а не пустая форма поверх ответов", async () => {
+    // Прежде форма открывалась пустой и при отказе, и «Сохранить» затирало
+    // ответы семьи, лежащие на сервере.
+    let failing = true;
+    saved = { id: "i1", patient_id: "p1", current_aed_ids: ["d-2"] };
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      path === "/api/v1/patients/{patient_id}/intake" && failing
+        ? Promise.resolve({
+            error: { error: { code: "internal", message: "сбой" } },
+          })
+        : Promise.resolve(respond(path)),
+    );
+    const user = userEvent.setup();
+    renderForm();
+
+    expect(
+      await screen.findByText("Не удалось загрузить анкету"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Шаг 1 из 3/)).toBeNull();
+
+    failing = false;
+    await user.click(screen.getByRole("button", { name: "Повторить" }));
+    expect(await screen.findByText(/Шаг 1 из 3/)).toBeInTheDocument();
+  });
+
   it("ведёт по шагам вперёд и назад", async () => {
     const user = userEvent.setup();
     renderForm();

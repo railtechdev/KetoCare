@@ -23,6 +23,7 @@ import { useFamily, useRemoveFamilyMember } from "./doctorQueries";
 import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { LinesSkeleton } from "./skeletons";
 import { isCareRole } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Кто ведёт ребёнка дома (ADR-0011).
@@ -96,7 +97,7 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
       }
     >
       <AsyncSection
-        loading={family.isPending}
+        {...queryState(family)}
         skeleton={<LinesSkeleton label={t("family.loading")} lines={2} />}
         error={
           family.isError
@@ -178,12 +179,20 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
                 memberId={member.id}
                 memberName={member.full_name}
                 links={links.data}
-                loadFailed={links.isError}
+                loadFailed={links.isError && links.data === undefined}
+                onRetry={() => void links.refetch()}
                 canRevoke={isSpecialist}
                 revoking={revoke.isPending}
                 onRevoke={(linkId) =>
                   revoke.mutate(linkId, {
                     onSuccess: () => toast.success(t("family.devices.revoked")),
+                    // Отказ, проглоченный молча, оставлял устройство
+                    // подключённым, а врач считал его отключённым.
+                    onError: (error) =>
+                      toast.error(
+                        errorMessageOf(error) ??
+                          t("family.devices.revokeFailed"),
+                      ),
                   })
                 }
               />
@@ -274,6 +283,7 @@ function Devices({
   memberName,
   links,
   loadFailed,
+  onRetry,
   canRevoke,
   revoking,
   onRevoke,
@@ -289,6 +299,7 @@ function Devices({
       }[]
     | undefined;
   loadFailed: boolean;
+  onRetry: () => void;
   canRevoke: boolean;
   revoking: boolean;
   onRevoke: (linkId: string) => void;
@@ -296,9 +307,20 @@ function Devices({
   const { t } = useTranslation("doctor");
 
   if (loadFailed) {
+    // У отказа есть выход (правило П16): без повтора строка оставалась до
+    // перезагрузки страницы.
     return (
-      <span className="basis-full text-sm text-destructive">
+      <span className="flex basis-full flex-wrap items-center gap-field text-sm text-destructive">
         {t("family.devices.loadError")}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-touch"
+          onClick={onRetry}
+        >
+          {t("common:actions.retry")}
+        </Button>
       </span>
     );
   }

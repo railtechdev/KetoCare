@@ -39,6 +39,8 @@ import { toChildUpdateBody } from "./childSchemas";
 import { useUpdateChildMutation, type Patient } from "../patients/useChildren";
 import { allergyNames } from "../patients/allergies";
 import { usePatients } from "../patients/usePatients";
+import { queryState } from "../../lib/queryState";
+import { formatIsoDate } from "../doctor/dates";
 
 /**
  * Подэкраны раздела. Живут в адресе, а не в состоянии (правило П30 канона).
@@ -119,7 +121,7 @@ export function ChildPage() {
       {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
           обновление не должно прятать уже показанный список детей. */}
       <AsyncSection
-        loading={patients.isLoading}
+        {...queryState(patients)}
         skeleton={
           <div
             className="flex flex-col gap-section"
@@ -166,7 +168,10 @@ export function ChildPage() {
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="font-semibold">{child.full_name}</span>
                     <span className="text-sm text-muted-foreground">
-                      {t("children.birthDate", { date: child.birth_date })}
+                      {t("children.birthDate", {
+                        date:
+                          formatIsoDate(child.birth_date) ?? child.birth_date,
+                      })}
                     </span>
                     <span className="text-sm text-muted-foreground">
                       {child.height_cm === null

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
+import { patientOverviewKey } from "../patients/overview";
 import {
   createDiaryLog,
   deleteDiaryLog,
@@ -71,10 +72,19 @@ export function useDiaryLogs(
 export function useDiaryMutations(patientId: string | null, kind: DiaryKind) {
   const queryClient = useQueryClient();
 
+  // Сводка ребёнка (`/overview`) считается из тех же записей: последний
+  // кетон, вес, приступы за неделю, «семья молчит N дней». Без её сброса
+  // главная семьи и карта у врача показывали прежние числа до истечения
+  // свежести кэша — запись сохранена, а сводка о ней не знает.
   const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: ["patient", patientId, "logs", kind],
-    });
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["patient", patientId, "logs", kind],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: patientOverviewKey(patientId),
+      }),
+    ]);
 
   const create = useMutation({
     mutationFn: async (input: DiaryBody) => {

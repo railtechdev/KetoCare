@@ -35,8 +35,9 @@ const REPORT = {
 };
 
 let jobStatus = "queued";
+let jobPatient = PATIENT_ID;
 
-function renderView() {
+function renderView(search: Record<string, string> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -45,7 +46,9 @@ function renderView() {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <SectionRouter section="reports">{children}</SectionRouter>
+        <SectionRouter section="reports" search={search}>
+          {children}
+        </SectionRouter>
       </QueryClientProvider>
     );
   }
@@ -55,9 +58,17 @@ function renderView() {
 beforeEach(() => {
   vi.clearAllMocks();
   jobStatus = "queued";
+  jobPatient = PATIENT_ID;
   (api.GET as Mock).mockImplementation((path: string) =>
     path.includes("/reports/jobs/")
-      ? Promise.resolve({ data: { id: "job1", status: jobStatus } })
+      ? Promise.resolve({
+          data: {
+            id: "job1",
+            patient_id: jobPatient,
+            status: jobStatus,
+            created_at: new Date().toISOString(),
+          },
+        })
       : Promise.resolve({ data: REPORT }),
   );
   (api.POST as Mock).mockResolvedValue({
@@ -95,5 +106,48 @@ describe("сборка PDF-отчёта", () => {
     );
 
     expect(await screen.findByText(reportsRu.pdf.building)).toBeInTheDocument();
+  });
+
+  it("задача другого пациента из адреса — не скачивается и не опрашивается", async () => {
+    // `?job=` остался от карты соседнего ребёнка: прежде экран опрашивал её
+    // бесконечно или отдавал чужой файл.
+    jobPatient = "99999999-9999-4999-8999-999999999999";
+    jobStatus = "done";
+    renderView({ job: "job1" });
+
+    expect(await screen.findByText(reportsRu.pdf.lost)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Скачать PDF/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Собрать заново" }),
+    ).toBeInTheDocument();
+  });
+
+  it("исчезнувшая задача — сообщение и выход, а не вечное «собираем»", async () => {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.includes("/reports/jobs/")
+        ? Promise.resolve({
+            error: {
+              error: { code: "not_found", message: "Нет такой задачи." },
+            },
+          })
+        : Promise.resolve({ data: REPORT }),
+    );
+    const user = userEvent.setup();
+    renderView({ job: "gone" });
+
+    expect(await screen.findByText(reportsRu.pdf.lost)).toBeInTheDocument();
+    expect(screen.queryByText(reportsRu.pdf.building)).toBeNull();
+    const jobCalls = () =>
+      (api.GET as Mock).mock.calls.filter(([path]) =>
+        String(path).includes("/reports/jobs/"),
+      ).length;
+    expect(jobCalls()).toBe(1);
+
+    await user.click(screen.getByRole("button", { name: "Убрать" }));
+    await waitFor(() =>
+      expect(screen.queryByText(reportsRu.pdf.lost)).toBeNull(),
+    );
   });
 });

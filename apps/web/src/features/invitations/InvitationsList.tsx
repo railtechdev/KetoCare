@@ -18,6 +18,8 @@ import {
   useRevokeInvitationMutation,
   type Invitation,
 } from "./useInvitations";
+import { queryState } from "../../lib/queryState";
+import { formatTimestamp } from "../doctor/dates";
 
 /**
  * Выданные приглашения.
@@ -60,7 +62,10 @@ export function InvitationsList() {
         header: t("list.columns.expires"),
         cell: ({ row }) => (
           <span className="whitespace-nowrap tabular-nums">
-            {row.original.expires_at.slice(0, 10)}
+            {/* По-русски и с часом: ссылка гаснет в момент, а не в день, и
+                «2026-10-14» читалось как служебная запись. */}
+            {formatTimestamp(row.original.expires_at) ??
+              row.original.expires_at}
           </span>
         ),
       },
@@ -80,7 +85,7 @@ export function InvitationsList() {
 
   return (
     <AsyncSection
-      loading={invitations.isPending}
+      {...queryState(invitations)}
       skeleton={null}
       error={
         invitations.isError

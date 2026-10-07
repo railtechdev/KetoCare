@@ -1,4 +1,5 @@
 import {
+  ActionReason,
   AsyncSection,
   Button,
   ConfirmDialog,
@@ -20,6 +21,7 @@ import { useCareTeamMutations } from "./doctorMutations";
 import { useCareTeam, useColleagues } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import { isCareRole } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Кто ведёт пациента (ADR-0003, решение 3).
@@ -31,15 +33,24 @@ import { isCareRole } from "./types";
  * решения ни у одной роли, включая администратора: к клиническим данным у него
  * доступа нет (правило 5 CLAUDE.md).
  *
- * Снять последнего специалиста сервер не даёт и объясняет это по-русски —
- * дублировать проверку на клиенте незачем, она разошлась бы с серверной.
+ * Снять последнего специалиста сервер не даёт (`len(doctor_ids) == 1`).
+ * Кнопку, которая заведомо кончится отказом, панель выключает и называет
+ * причину (правило П44) — правило то же и по тому же списку, что у сервера.
+ * Отказ сервера по другой причине по-прежнему показывается под списком.
  */
 export function CareTeamPanel({
   patientId,
   title,
   description,
+  onSelfRemoved,
 }: {
   patientId: string;
+  /**
+   * Специалист снял ведение с самого себя — доступа к карте у него больше нет.
+   * Экран карты уводит в реестр: оставаться на карте значило бы смотреть на
+   * отказы 403 вместо данных.
+   */
+  onSelfRemoved?: () => void;
   /**
    * Заголовок и пояснение блока.
    *
@@ -68,6 +79,11 @@ export function CareTeamPanel({
   const { add, remove } = useCareTeamMutations(patientId);
 
   const teamIds = new Set((team.data ?? []).map((member) => member.id));
+  // Последнего ведущего сервер снять не даёт (у пациента всегда есть
+  // специалист). Кнопка, которая кончается отказом, — тупик: она выключена и
+  // называет причину (правило П44).
+  const soleSpecialist = (team.data ?? []).length === 1;
+  const reasonId = useId();
   const candidates = (colleagues.data ?? []).filter(
     (colleague) => !teamIds.has(colleague.id),
   );
@@ -87,7 +103,7 @@ export function CareTeamPanel({
       }
     >
       <AsyncSection
-        loading={team.isPending}
+        {...queryState(team)}
         skeleton={<LinesSkeleton label={t("careTeam.loading")} lines={2} />}
         error={
           team.isError
@@ -132,6 +148,8 @@ export function CareTeamPanel({
                       variant="ghost"
                       size="sm"
                       className="min-h-touch text-destructive"
+                      disabled={soleSpecialist}
+                      aria-describedby={soleSpecialist ? reasonId : undefined}
                       aria-label={t("careTeam.removeAria", {
                         name: member.full_name,
                       })}
@@ -148,7 +166,10 @@ export function CareTeamPanel({
                   cancelLabel={t("actions.cancel")}
                   onConfirm={() =>
                     remove.mutate(member.id, {
-                      onSuccess: () => toast.success(t("careTeam.removed")),
+                      onSuccess: () => {
+                        toast.success(t("careTeam.removed"));
+                        if (member.id === session?.userId) onSelfRemoved?.();
+                      },
                     })
                   }
                 />
@@ -156,6 +177,11 @@ export function CareTeamPanel({
             </li>
           ))}
         </ul>
+        {canWrite && (
+          <ActionReason id={reasonId}>
+            {soleSpecialist ? t("careTeam.soleReason") : null}
+          </ActionReason>
+        )}
       </AsyncSection>
 
       {/* Ошибка снятия — не ошибка загрузки: повторять нечего. Так сервер

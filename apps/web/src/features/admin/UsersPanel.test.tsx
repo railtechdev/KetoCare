@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -122,6 +122,46 @@ describe("отключение специалиста", () => {
     await user.click(await screen.findByRole("button", { name: "Изменить" }));
 
     expect(await screen.findByText(/ведёт только он/)).toBeInTheDocument();
+  });
+
+  it("родителю из Telegram не предлагает ни пароль, ни роль сотрудника", async () => {
+    // У такой записи нет почты и пароля (ADR-0040): сброс пароля сервер
+    // отвергает, повышение до сотрудника — тоже. Кнопки и варианты, ведущие
+    // в отказ, — тупик (правила П3 и П44).
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "tg1",
+            full_name: "Мама из Telegram",
+            email: null,
+            role: "parent",
+            is_active: true,
+            created_at: "2026-09-01T10:00:00Z",
+            totp_resettable: false,
+          },
+        ],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(
+      await screen.findByText(adminRu.users.telegramOnly),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Сбросить пароль/ }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Изменить" }));
+    const dialog = await screen.findByRole("dialog");
+    const role = within(dialog).getByLabelText(adminRu.users.form.role, {
+      exact: false,
+    });
+    expect(
+      Array.from((role as HTMLSelectElement).options).map((o) => o.value),
+    ).toEqual(["parent"]);
   });
 
   it("передаёт детей ушедшего специалиста коллеге — выход из тупика (ADR-0045)", async () => {

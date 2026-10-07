@@ -18,6 +18,7 @@ import {
   useSectionTab,
 } from "../../routes/useSectionTab";
 import { errorMessageOf } from "../../lib/api";
+import { SECTIONS_BY_ROLE } from "../auth/roles";
 import { useSession } from "../auth/useSession";
 import { MyDishesPanel } from "../dishes/MyDishesPanel";
 import { useSelectedPatient } from "../patients/useSelectedPatient";
@@ -35,6 +36,7 @@ import {
   type RecipeFilters,
 } from "./types";
 import { useRecipeSearch } from "./useRecipes";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Открытый рецепт живёт в адресе (`?item=`, правило П30 канона).
@@ -147,6 +149,10 @@ export function RecipesPage() {
       <RecipeDetail
         recipeId={openId}
         canEdit={canEdit}
+        canCalculate={
+          session !== null &&
+          SECTIONS_BY_ROLE[session.role].includes("calculator")
+        }
         onBack={() => setOpenId(undefined)}
         onEdit={(recipeId) => setForm({ recipeId })}
       />
@@ -199,7 +205,10 @@ export function RecipesPage() {
             items={TABS.map((value) => ({ value, label: t(`tabs.${value}`) }))}
           />
 
-          <TabsContent value="recipes" className="pt-screen">
+          <TabsContent
+            value="recipes"
+            className="pt-screen rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
             <div className="flex flex-col gap-section">
               <RecipeFiltersPanel
                 filters={filters}
@@ -211,7 +220,7 @@ export function RecipesPage() {
               {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанную выдачу. */}
               <AsyncSection
-                loading={recipes.isLoading}
+                {...queryState(recipes)}
                 skeleton={<RecipeListSkeleton />}
                 error={
                   recipes.isError
@@ -252,7 +261,10 @@ export function RecipesPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="dishes" className="pt-screen">
+          <TabsContent
+            value="dishes"
+            className="pt-screen rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
             <MyDishesPanel patientId={patientId} />
           </TabsContent>
         </Tabs>
@@ -268,7 +280,7 @@ export function RecipesPage() {
           {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанную выдачу. */}
           <AsyncSection
-            loading={recipes.isLoading}
+            {...queryState(recipes)}
             skeleton={<RecipeListSkeleton />}
             error={
               recipes.isError

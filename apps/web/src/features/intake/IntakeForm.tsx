@@ -34,6 +34,7 @@ import {
   type IntakeScale,
   type PatientIntakeBody,
 } from "./useIntake";
+import { queryState } from "../../lib/queryState";
 
 /** Шаги анкеты: «из окна в окно», как просил заказчик (ADR-0007). */
 const STEPS = ["seizures", "therapy", "meals"] as const;
@@ -112,8 +113,12 @@ export function IntakeForm({
 
   // Ответы подставляются один раз, когда пришли: пересборка на каждый рендер
   // затирала бы то, что родитель уже набрал.
+  //
+  // Только после УСПЕШНОГО ответа. Прежнее условие «не грузится» было истинно
+  // и при отказе: форма открывалась пустой, и «Сохранить» затирало ответы,
+  // лежащие на сервере. Отказ — это ошибка с повтором, а не пустая анкета.
   const loaded = intake.data;
-  if (values === null && !intake.isLoading) {
+  if (values === null && intake.isSuccess) {
     setValues(
       loaded == null
         ? EMPTY
@@ -208,7 +213,7 @@ export function IntakeForm({
 
   return (
     <AsyncSection
-      loading={intake.isLoading || options.isLoading}
+      {...queryState(intake, options)}
       skeleton={
         <div
           className="flex flex-col gap-section"
@@ -220,16 +225,26 @@ export function IntakeForm({
         </div>
       }
       error={
-        options.isError
+        intake.isError && values === null
           ? {
-              title: t("errors.options"),
+              title: t("errors.load"),
               description:
-                errorMessageOf(options.error) ?? t("common:errors.unexpected"),
+                errorMessageOf(intake.error) ?? t("common:errors.unexpected"),
             }
-          : null
+          : options.isError
+            ? {
+                title: t("errors.options"),
+                description:
+                  errorMessageOf(options.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
       }
       retryLabel={t("common:actions.retry")}
-      onRetry={() => void options.refetch()}
+      onRetry={() => {
+        if (intake.isError) void intake.refetch();
+        if (options.isError) void options.refetch();
+      }}
       isEmpty={values === null}
       empty={null}
     >

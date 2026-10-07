@@ -7,7 +7,7 @@ import {
   MetricRow,
   Section,
 } from "@ketocare/ui";
-import { CircleCheck, Users } from "lucide-react";
+import { CircleCheck, UserPlus, Users } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,11 +18,13 @@ import { usePatients } from "../patients/usePatients";
 import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
 import { PatientViewLink } from "./PatientViewLink";
+import { NEW_PATIENT_ITEM } from "./PatientsListView";
 import type { PatientView } from "./patientViews";
 import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import { LinesSkeleton } from "./skeletons";
 import type { Patient } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Сколько пациентов показывать в очереди.
@@ -159,7 +161,8 @@ export function DoctorHomePage() {
             }
           >
             <AsyncSection
-              loading={patients.isPending || !settled}
+              {...queryState(patients)}
+              loading={queryState(patients).loading || !settled}
               skeleton={
                 <LinesSkeleton label={t("home.queue.loading")} lines={4} />
               }
@@ -179,6 +182,18 @@ export function DoctorHomePage() {
               empty={
                 <EmptyState
                   icon={items.length === 0 ? Users : CircleCheck}
+                  // Карту ребёнка заводит специалист (ADR-0040): у пустой
+                  // главной есть выход — сразу в форму новой карты.
+                  action={
+                    items.length === 0 ? (
+                      <Button asChild>
+                        <SectionLink section="patients" item={NEW_PATIENT_ITEM}>
+                          <UserPlus aria-hidden="true" />
+                          {t("home.queue.createCard")}
+                        </SectionLink>
+                      </Button>
+                    ) : undefined
+                  }
                   title={
                     items.length === 0
                       ? t("home.queue.noPatients")

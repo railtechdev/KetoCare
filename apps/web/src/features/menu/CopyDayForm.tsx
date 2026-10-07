@@ -9,7 +9,11 @@ import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { isIsoDate, shiftIsoDate } from "./dates";
-import { useCopyDayMutation } from "./useMenu";
+import {
+  SourceDayEmptyError,
+  TargetDayNotEmptyError,
+  useCopyDayMutation,
+} from "./useMenu";
 
 const copySchema = z.object({ from: z.string().refine(isIsoDate) });
 
@@ -17,7 +21,7 @@ type CopyValues = z.infer<typeof copySchema>;
 
 interface Props {
   patientId: string | null;
-  /** День, на который копируем: его состав будет заменён целиком */
+  /** День, на который копируем. Только пустой: см. `copiedDay` */
   date: string;
   /** Закрыть панель: копирование удалось */
   onCopied: () => void;
@@ -89,7 +93,13 @@ export function CopyDayForm({ patientId, date, onCopied }: Props) {
       />
 
       {copy.isError && (
-        <FormError>{errorMessageOf(copy.error) ?? t("copy.failed")}</FormError>
+        <FormError>
+          {copy.error instanceof TargetDayNotEmptyError
+            ? t("copy.targetNotEmpty")
+            : copy.error instanceof SourceDayEmptyError
+              ? t("copy.sourceEmpty")
+              : (errorMessageOf(copy.error) ?? t("copy.failed"))}
+        </FormError>
       )}
 
       <FormFooter

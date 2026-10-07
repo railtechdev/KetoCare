@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { queryState } from "../../lib/queryState";
 import { useCareTeam } from "../doctor/doctorQueries";
 import {
   useAskAssistant,
@@ -92,18 +93,21 @@ export function AssistantPage({ patientId }: { patientId: string }) {
           // Пока идёт запрос о последней переписке, экран тоже занят: иначе
           // между ответами мелькает «переписки пока нет» — и родитель успевает
           // прочесть, что его разговора не существует.
-          loading={
-            latest.isPending ||
-            (conversation.isPending && conversationId !== null)
-          }
+          //
+          // Отказ в последней переписке — тоже ошибка с повтором, а не
+          // «переписки пока нет»: разговор на сервере есть, просто не дошёл.
+          {...queryState(latest, conversation)}
           skeleton={<ChatMessage role="assistant" pending />}
           error={
-            conversation.isError
+            latest.isError || conversation.isError
               ? { title: t("loadFailed"), description: t("loadFailedHint") }
               : null
           }
           retryLabel={t("common:actions.retry")}
-          onRetry={() => void conversation.refetch()}
+          onRetry={() => {
+            if (latest.isError) void latest.refetch();
+            if (conversation.isError) void conversation.refetch();
+          }}
           isEmpty={messages.length === 0}
           empty={<p className="text-muted-foreground">{t("empty")}</p>}
         >
@@ -117,11 +121,15 @@ export function AssistantPage({ patientId }: { patientId: string }) {
                       note: (
                         <>
                           {t("disclaimer")}
-                          {message.sources.length > 0 && (
+                          {/* Заголовки статей, а не имена файлов:
+                              «how-to-plan-the-day» читается как поломка. */}
+                          {message.source_articles.length > 0 && (
                             <>
                               {" "}
                               {t("sources", {
-                                list: message.sources.join(", "),
+                                list: message.source_articles
+                                  .map((article) => article.title)
+                                  .join(", "),
                               })}
                             </>
                           )}

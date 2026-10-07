@@ -50,7 +50,9 @@ export function JoinPage() {
   const { t } = useTranslation("access");
   const search = useSearch({ from: "/join" });
   const navigate = useNavigate();
-  const [done, setDone] = useState(false);
+  // Почта заведённой учётной записи: она уезжает на вход, чтобы не набирать
+  // её второй раз. `null` — ещё не заведена.
+  const [done, setDone] = useState<string | null>(null);
 
   const join = useMutation({
     mutationFn: async (values: JoinValues) => {
@@ -87,13 +89,18 @@ export function JoinPage() {
     },
   });
 
-  if (done) {
+  if (done !== null) {
     return (
       <Shell
         title={t("join.doneTitle")}
         description={t("join.doneDescription")}
       >
-        <Button type="button" onClick={() => void navigate({ to: "/login" })}>
+        <Button
+          type="button"
+          onClick={() =>
+            void navigate({ to: "/login", search: { email: done } })
+          }
+        >
           {t("join.toLogin")}
         </Button>
       </Shell>
@@ -110,7 +117,9 @@ export function JoinPage() {
       </p>
       <form
         onSubmit={handleSubmit((values) => {
-          join.mutate(values, { onSuccess: () => setDone(true) });
+          join.mutate(values, {
+            onSuccess: () => setDone(values.email.trim()),
+          });
         })}
         noValidate
         className="flex flex-col gap-section"

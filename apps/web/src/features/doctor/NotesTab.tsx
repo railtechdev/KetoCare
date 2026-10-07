@@ -23,6 +23,7 @@ import { useCreateClinicalNote } from "./doctorMutations";
 import { useClinicalNotes, useColleagues } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import type { ClinicalNote } from "./types";
+import { queryState } from "../../lib/queryState";
 
 const noteSchema = z.object({ text: z.string().trim().min(1) });
 
@@ -90,7 +91,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
         }
       >
         <AsyncSection
-          loading={notes.isLoading}
+          {...queryState(notes)}
           skeleton={<LinesSkeleton label={t("notes.loading")} lines={4} />}
           error={
             notes.isError && !forbidden

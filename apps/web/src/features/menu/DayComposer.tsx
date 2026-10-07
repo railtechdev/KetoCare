@@ -40,6 +40,7 @@ import {
   useUpsertMenuMutation,
   type DishKind,
 } from "./useMenu";
+import { queryState } from "../../lib/queryState";
 
 /** Части экрана, которые раскладывает владелец: шапка у семьи и у карты своя. */
 export interface DayComposerParts {
@@ -136,10 +137,19 @@ export function DayComposer({
 
   const actions = (
     <>
-      <Button type="button" variant="outline" onClick={() => setCopying(true)}>
-        <CopyPlus aria-hidden="true" />
-        {t("copy.title")}
-      </Button>
+      {/* Копирование — только в достоверно ПУСТОЙ день (ADR-0041, `copiedDay`):
+          поверх составленного оно заменило бы состав вместе с отметками
+          «съедено», а до ответа сервера пустота дня не известна. */}
+      {menu.isSuccess && items.length === 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setCopying(true)}
+        >
+          <CopyPlus aria-hidden="true" />
+          {t("copy.title")}
+        </Button>
+      )}
 
       {/* Выход из ошибочно составленного дня. Показывается только когда
           день есть: кнопка, которая ничего не убирает, — обещание без
@@ -178,7 +188,7 @@ export function DayComposer({
       {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанный состав дня. */}
       <AsyncSection
-        loading={menu.isLoading}
+        {...queryState(menu)}
         skeleton={<MenuSkeleton />}
         error={
           menu.isError

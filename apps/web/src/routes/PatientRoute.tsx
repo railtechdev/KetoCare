@@ -1,11 +1,20 @@
-import { AsyncSection, Skeleton, Workspace } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  EmptyState,
+  Skeleton,
+  Workspace,
+} from "@ketocare/ui";
+import { UserX } from "lucide-react";
 import { Outlet, useParams } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { useSession } from "../features/auth/useSession";
 import { PatientNav } from "../features/doctor/PatientNav";
 import { usePatient } from "../features/patients/usePatient";
-import { errorMessageOf } from "../lib/api";
+import { SectionLink } from "../components/SectionLink";
+import { errorCodeOf, errorMessageOf } from "../lib/api";
+import { queryState } from "../lib/queryState";
 
 /**
  * Рабочее место пациента: навигация по его разделам и открытый раздел.
@@ -34,9 +43,38 @@ export function PatientRoute() {
   const { session } = useSession();
   const patient = usePatient(patientId);
 
+  // Карты нет или к ней нет доступа (ведение передали коллеге, ссылка чужая).
+  // Повтор этого не исправит: прежде экран предлагал только «Повторить», без
+  // заголовка и без пути назад, а переключатель в шапке вечно «загружал».
+  // Различать «нет» и «нельзя» не нужно — сервер намеренно отвечает так, чтобы
+  // по ответу нельзя было узнать, существует ли чужой пациент.
+  const code = errorCodeOf(patient.error);
+  if (
+    patient.data === undefined &&
+    (code === "not_found" || code === "forbidden")
+  ) {
+    return (
+      <div className="flex max-w-form flex-col gap-section">
+        <h1 className="sr-only">{t("workspace.missing.title")}</h1>
+        <EmptyState
+          icon={UserX}
+          title={t("workspace.missing.title")}
+          description={t("workspace.missing.body")}
+          action={
+            <Button asChild>
+              <SectionLink section="patients" exact>
+                {t("workspace.missing.toList")}
+              </SectionLink>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <AsyncSection
-      loading={patient.isPending}
+      {...queryState(patient)}
       skeleton={<WorkspaceSkeleton />}
       error={
         patient.isError

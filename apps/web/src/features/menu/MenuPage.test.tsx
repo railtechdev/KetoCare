@@ -319,6 +319,31 @@ describe("MenuPage", () => {
     expect(screen.queryByText(menuRu.totals.none as string)).toBeNull();
   });
 
+  it("копировать предлагает только в пустой день", async () => {
+    // ADR-0041: перенос поверх составленного дня заменил бы его состав вместе
+    // с отметками «съедено».
+    renderPage();
+    await screen.findByText("Каша на кокосовом масле");
+    expect(
+      screen.queryByRole("button", { name: /Скопировать день/ }),
+    ).toBeNull();
+  });
+
+  it("пустой день можно заполнить копией другого", async () => {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? { data: { ...MENU, items: [], totals: null } }
+          : respond(path),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByRole("button", { name: /Скопировать день/ }),
+    ).toBeInTheDocument();
+  });
+
   it("показывает столько приёмов, сколько назначено, а не четыре", async () => {
     // Назначение допускает до десяти приёмов, и клиника назначает шесть
     // (`docs/AUDIT_KDC.md`). День из четырёх слотов такое назначение не

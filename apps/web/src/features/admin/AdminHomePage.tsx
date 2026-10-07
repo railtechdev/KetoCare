@@ -17,6 +17,7 @@ import { ROLES, type Role } from "../auth/roles";
 import { LinesSkeleton } from "../doctor/skeletons";
 import { EMPTY_AUDIT_FILTERS } from "./auditFilters";
 import { useAuditLog } from "./useAuditLog";
+import { queryState } from "../../lib/queryState";
 
 /** Сколько последних операций показывать. Это выжимка, а не журнал. */
 const RECENT_LIMIT = 5;
@@ -100,7 +101,7 @@ export function AdminHomePage() {
         }
       >
         <AsyncSection
-          loading={overview.isPending}
+          {...queryState(overview)}
           skeleton={
             <LinesSkeleton label={t("home.accounts.loading")} lines={4} />
           }
@@ -156,7 +157,7 @@ export function AdminHomePage() {
         }
       >
         <AsyncSection
-          loading={overview.isPending}
+          {...queryState(overview)}
           skeleton={
             <LinesSkeleton label={t("home.products.loading")} lines={1} />
           }
@@ -194,7 +195,7 @@ export function AdminHomePage() {
               <p className="m-0">
                 <SectionLink
                   section="products"
-                  query={staleHref}
+                  verifiedBefore={staleHref}
                   className="underline"
                 >
                   {t("home.products.stale", {
@@ -220,7 +221,7 @@ export function AdminHomePage() {
         }
       >
         <AsyncSection
-          loading={overview.isPending}
+          {...queryState(overview)}
           skeleton={
             <LinesSkeleton label={t("home.invitations.loading")} lines={1} />
           }
@@ -267,7 +268,7 @@ export function AdminHomePage() {
         }
       >
         <AsyncSection
-          loading={recent.isPending}
+          {...queryState(recent)}
           skeleton={<LinesSkeleton label={t("home.audit.loading")} lines={5} />}
           error={
             recent.isError

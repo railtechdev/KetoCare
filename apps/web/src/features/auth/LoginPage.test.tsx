@@ -22,7 +22,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 i18n.addResourceBundle("ru", "auth", authRu, true, true);
 i18n.addResourceBundle("ru", "common", commonRu, true, true);
 
-function renderPage() {
+function renderPage(initialEmail?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -31,7 +31,9 @@ function renderPage() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<LoginPage />, { wrapper: Wrapper });
+  return render(<LoginPage initialEmail={initialEmail} />, {
+    wrapper: Wrapper,
+  });
 }
 
 async function submitCredentials() {
@@ -176,5 +178,15 @@ describe("вход со вторым фактором", () => {
     await submitCredentials();
 
     await waitFor(() => expect(signIn).toHaveBeenCalledWith("a"));
+  });
+
+  it("после создания учётной записи почта уже подставлена", () => {
+    // Человек только что завёл учётную запись по приглашению или коду —
+    // набирать почту второй раз незачем.
+    renderPage("new@example.com");
+
+    expect(screen.getByLabelText(/Электронная почта/)).toHaveValue(
+      "new@example.com",
+    );
   });
 });

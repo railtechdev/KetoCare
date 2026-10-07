@@ -52,6 +52,8 @@ from ..schemas import (
     InvitationAccept,
     InvitationCreate,
     InvitationCreated,
+    InvitationPreview,
+    InvitationPreviewRequest,
     InvitationRead,
     LoginRequest,
     LoginResponse,
@@ -897,6 +899,29 @@ async def activate_access_code(
 
 
 @router.post(
+    "/invitations/preview",
+    response_model=InvitationPreview,
+    summary="Почта приглашения — до создания учётной записи",
+)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def preview_invitation(
+    payload: InvitationPreviewRequest, request: Request, session: SessionDep
+) -> InvitationPreview:
+    """Страница принятия называет почту и честно говорит, что ссылка устарела.
+
+    Прежде человек заполнял имя и пароль и только после «Создать» узнавал, что
+    приглашение истекло, — и не знал, на какую почту входить потом. Почту видит
+    только держатель токена, то есть сам приглашённый; ответ на «нет такого»,
+    «истёк» и «уже принят» один, как у `accept` — иначе токены можно перебирать.
+    """
+
+    invitation = await invitations_repo.find_open(session, payload.token)
+    if invitation is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Приглашение недействительно или истекло.")
+    return InvitationPreview(email=invitation.email)
+
+
+@router.post(
     "/invitations/accept",
     response_model=UserRead,
     status_code=201,
@@ -998,7 +1023,12 @@ async def backup_codes_status(
     владельца с одним кодом и без предупреждения."""
 
     remaining = await backup_codes_repo.count_unused(session, user_id=user.id)
-    return BackupCodesStatus(remaining=remaining, total=backup_codes_repo.BACKUP_CODE_COUNT)
+    db_user = await users_repo.get(session, user.id)
+    return BackupCodesStatus(
+        remaining=remaining,
+        total=backup_codes_repo.BACKUP_CODE_COUNT,
+        enrolled=db_user is not None and db_user.totp_enrolled,
+    )
 
 
 @router.post(

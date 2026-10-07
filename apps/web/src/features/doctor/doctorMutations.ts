@@ -67,10 +67,18 @@ export function useSaveMedicalProfile(patientId: string) {
       }
       return data;
     },
+    // Дата начала терапии из профиля — точка отсчёта для сводки (день
+    // терапии, график контроля, исходная частота приступов) и для реестра
+    // («на терапии / завершили»). Сбрасывается вся ветка пациента, а не один
+    // профиль: иначе карта показывала прежний день терапии до перезагрузки.
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: medicalProfileKey(patientId),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: medicalProfileKey(patientId),
+        }),
+        queryClient.invalidateQueries({ queryKey: ["patient", patientId] }),
+        queryClient.invalidateQueries({ queryKey: ["patients"] }),
+      ]);
     },
   });
 }
@@ -198,7 +206,17 @@ export function useCareTeamMutations(patientId: string) {
       );
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    // Снятый специалист перестаёт видеть ребёнка: реестр («мои пациенты») и
+    // журнал кодов (коды, выданные снятым, больше не действуют — ADR-0040)
+    // меняются вместе со списком ведущих.
+    onSuccess: () =>
+      Promise.all([
+        invalidate(),
+        queryClient.invalidateQueries({ queryKey: ["patients"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["patient", patientId, "access-codes"],
+        }),
+      ]),
   });
 
   return { add, remove };

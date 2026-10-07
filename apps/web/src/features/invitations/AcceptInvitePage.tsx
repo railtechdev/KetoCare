@@ -15,13 +15,16 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { FormError } from "../../components/FormError";
-import { errorMessageOf } from "../../lib/api";
+import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import {
   AccountFields,
   accountShape,
   withPasswordMatch,
 } from "../auth/accountFields";
-import { useAcceptInvitationMutation } from "./useInvitations";
+import {
+  useAcceptInvitationMutation,
+  useInvitationPreview,
+} from "./useInvitations";
 
 // Поля и правила — общие с активацией кода доступа (`features/auth/accountFields`):
 // оба пути заводят одну и ту же учётную запись, и разные требования к паролю на
@@ -60,6 +63,8 @@ export function AcceptInvitePage() {
   });
 
   const token = search.token ?? "";
+  const preview = useInvitationPreview(token);
+  const email = preview.data?.email ?? null;
 
   if (token === "") {
     // Ссылка из мессенджера часто приходит обрезанной. Карточка без единой
@@ -74,9 +79,16 @@ export function AcceptInvitePage() {
     );
   }
 
-  if (done) {
+  // Ссылка устарела: истекла, уже использована или отозвана. Сервер говорит
+  // это одним 404 — и до заполнения формы (предпросмотр), и после «Создать».
+  // Прежде страница показывала форму, а после отправки — красную строку без
+  // выхода: человек не знал ни что делать, ни на какую почту входить.
+  if (
+    !done &&
+    (preview.data === null || errorCodeOf(accept.error) === "not_found")
+  ) {
     return (
-      <Shell title={t("accept.doneTitle")} description={t("accept.doneBody")}>
+      <Shell title={t("accept.expiredTitle")} description={t("accept.expired")}>
         <Button type="button" onClick={() => void navigate({ to: "/login" })}>
           {t("accept.toLogin")}
         </Button>
@@ -84,8 +96,40 @@ export function AcceptInvitePage() {
     );
   }
 
+  const signedUpEmail = accept.data?.email ?? email;
+
+  if (done) {
+    return (
+      <Shell
+        title={t("accept.doneTitle")}
+        description={
+          email === null
+            ? t("accept.doneBody")
+            : t("accept.doneBodyEmail", { email })
+        }
+      >
+        <Button
+          type="button"
+          onClick={() =>
+            void navigate({
+              to: "/login",
+              search: signedUpEmail === null ? {} : { email: signedUpEmail },
+            })
+          }
+        >
+          {t("accept.toLogin")}
+        </Button>
+      </Shell>
+    );
+  }
+
   return (
-    <Shell title={t("accept.title")} description={t("accept.intro")}>
+    <Shell
+      title={t("accept.title")}
+      description={
+        email === null ? t("accept.intro") : t("accept.introEmail", { email })
+      }
+    >
       <form
         onSubmit={handleSubmit((values) => {
           accept.mutate(

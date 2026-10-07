@@ -15,6 +15,7 @@ import { NewPrescriptionNotice } from "./NewPrescriptionNotice";
 import { WaitingForPrescription } from "./WaitingForPrescription";
 import { YesterdayShortfallNotice } from "./YesterdayShortfallNotice";
 import { formatOverviewDate } from "./date";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Главная родителя (раздел 8.3 ТЗ).
@@ -53,7 +54,7 @@ export function HomePage({ patientId }: { patientId: string }) {
       {/* Четыре состояния — в AsyncSection: там же записано, почему неудачное
           обновление не должно прятать уже показанную сводку. */}
       <AsyncSection
-        loading={overview.isLoading}
+        {...queryState(overview)}
         skeleton={<HomeSkeleton />}
         error={
           overview.isError
@@ -90,7 +91,7 @@ export function HomePage({ patientId }: { patientId: string }) {
                 остальная главная состоит из пустых карточек, и подсказка о
                 том, чего ждём и что уже можно делать, важнее их всех. */}
             {prescription === null ? (
-              <WaitingForPrescription />
+              <WaitingForPrescription patientId={patientId} />
             ) : (
               <NewPrescriptionNotice
                 patientId={patientId}

@@ -3,6 +3,8 @@ import {
   ConfirmDialog,
   DataTable,
   EmptyState,
+  formatGrams,
+  formatKcal,
   RatioBadge,
   Section,
   toast,
@@ -26,6 +28,7 @@ import {
 } from "./prescriptionSchema";
 import { TableSkeleton } from "./skeletons";
 import { canWritePrescriptions, type PrescriptionVersion } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Вкладка назначения: новая версия и история версий (раздел 8.3 ТЗ).
@@ -105,7 +108,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         header: t("fields.kcal"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.prescription.kcal_per_day}
+            {formatKcal(row.original.prescription.kcal_per_day)}
           </span>
         ),
       },
@@ -115,7 +118,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         header: t("fields.protein"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.prescription.protein_g}
+            {formatGrams(row.original.prescription.protein_g)}
           </span>
         ),
       },
@@ -125,7 +128,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         header: t("fields.carbsLimit"),
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {row.original.prescription.carbs_limit_g}
+            {formatGrams(row.original.prescription.carbs_limit_g)}
           </span>
         ),
       },
@@ -160,23 +163,34 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
           title={t("prescription.formTitle")}
           description={t("prescription.formHint")}
         >
-          <PrescriptionForm
-            // Ключ по идентификатору действующей версии: после сохранения форма
-            // пересоздаётся уже с новыми значениями, иначе врач увидел бы в ней
-            // предыдущее назначение.
-            key={active?.id ?? "first"}
-            defaultValues={prescriptionFormValues(active, new Date())}
-            pending={create.isPending}
-            error={create.error}
-            onSubmit={setPendingValues}
-          />
+          {/* Форма — только после истории: новая версия строится от
+              действующей. Пока история не пришла (или не пришла вовсе),
+              форма открывалась пустой как «первое назначение», и врач мог
+              записать версию, не видя действующей. */}
+          {history.data === undefined ? (
+            <p className="m-0 text-sm text-muted-foreground" role="status">
+              {t("prescription.formWaiting")}
+            </p>
+          ) : (
+            <PrescriptionForm
+              // Ключ по идентификатору действующей версии: после сохранения
+              // форма пересоздаётся уже с новыми значениями, иначе врач увидел
+              // бы в ней предыдущее назначение.
+              key={active?.id ?? "first"}
+              defaultValues={prescriptionFormValues(active, new Date())}
+              pending={create.isPending}
+              error={create.error}
+              onSubmit={setPendingValues}
+            />
+          )}
           <ConfirmDialog
             open={pendingValues !== null}
             onOpenChange={(open) => {
               if (!open) setPendingValues(null);
             }}
             title={
-              active === null
+              // «Первое» — только по ответу сервера, что версий нет вовсе.
+              history.data?.total === 0
                 ? t("prescription.confirm.titleFirst")
                 : t("prescription.confirm.title")
             }
@@ -204,7 +218,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
             цепочка прятала уже загруженную историю назначений за красным
             блоком при неудачном фоновом обновлении. */}
         <AsyncSection
-          loading={history.isPending}
+          {...queryState(history)}
           skeleton={
             <TableSkeleton label={t("prescription.loading")} rows={3} />
           }

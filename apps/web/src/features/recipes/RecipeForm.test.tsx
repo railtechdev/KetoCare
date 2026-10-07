@@ -175,6 +175,21 @@ describe("показатели в форме рецепта", () => {
     ).toBeInTheDocument();
   });
 
+  it("без соотношения пишет «—», а не «— : 1»", async () => {
+    (api.POST as Mock).mockResolvedValue({
+      data: { ...VERIFIED, dish: { ...VERIFIED.dish, ratio: null } },
+      error: undefined,
+    });
+    const user = userEvent.setup();
+    renderForm();
+    await addButter(user);
+
+    expect(
+      await screen.findByText("Соотношение не определено"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("— : 1")).toBeNull();
+  });
+
   it("показывает вклад каждой позиции числами сервера", async () => {
     const user = userEvent.setup();
     renderForm();

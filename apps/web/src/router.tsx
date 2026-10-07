@@ -3,6 +3,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  notFound,
   redirect,
 } from "@tanstack/react-router";
 
@@ -20,6 +21,7 @@ import {
 import { AppLayout } from "./layouts/AppLayout";
 import { UiShowcase } from "./routes/UiShowcase";
 import { NotFoundPage } from "./routes/NotFoundPage";
+import { RouteErrorPage } from "./routes/RouteErrorPage";
 import { PatientRoute } from "./routes/PatientRoute";
 import { PatientViewRoute } from "./routes/PatientViewRoute";
 import { SectionRoute } from "./routes/SectionRoute";
@@ -42,10 +44,21 @@ const indexRoute = createRoute({
   component: () => null,
 });
 
+function LoginRouteScreen() {
+  const { email } = loginRoute.useSearch();
+  return <LoginPage initialEmail={email} />;
+}
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  component: LoginPage,
+  // `?email=` — почта, на которую только что завели учётную запись (по
+  // приглашению или коду): переписывать её на входе незачем.
+  validateSearch: (search: Record<string, unknown>): { email?: string } => {
+    const email = text(search.email);
+    return email === undefined ? {} : { email };
+  },
+  component: LoginRouteScreen,
   beforeLoad: ({ context }) => {
     if (context.session !== null) throw redirect({ to: "/app" });
   },
@@ -160,7 +173,19 @@ export interface SectionSearch {
    * стоящей у плиты, незачем.
    */
   q?: string;
+  /**
+   * Отбор справочника продуктов «сверялись с источником раньше этой даты»
+   * (`YYYY-MM-DD`). Приходит со ссылки главной администратора «N позиций не
+   * сверялись»: прежде она клала дату в строку поиска, и справочник искал
+   * продукты по названию «2025-10-07».
+   */
+  verified?: string;
 }
+
+/** Разделы кабинета у всех ролей вместе: всё прочее — несуществующий адрес. */
+const ALL_SECTIONS: ReadonlySet<string> = new Set(
+  Object.values(SECTIONS_BY_ROLE).flat(),
+);
 
 /** Непустая строка или ничего: `?tab=` в адресе — то же самое, что его отсутствие. */
 function text(value: unknown): string | undefined {
@@ -183,17 +208,26 @@ const sectionRoute = createRoute({
     const item = text(search.item);
     const q = text(search.q);
     const job = text(search.job);
+    const verified = text(search.verified);
     if (patient !== undefined) result.patient = patient;
     if (tab !== undefined) result.tab = tab;
     if (kind !== undefined) result.kind = kind;
     if (item !== undefined) result.item = item;
     if (q !== undefined) result.q = q;
     if (job !== undefined) result.job = job;
+    if (verified !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(verified)) {
+      result.verified = verified;
+    }
     return result;
   },
   beforeLoad: ({ context, params, search }) => {
     const role = context.session?.role;
     if (!role) return;
+
+    // Раздела нет ни у одной роли — опечатка или ссылка из прошлого. Молча
+    // увести на главную значило бы сделать вид, что ссылка сработала: человек
+    // искал конкретный экран и не понимал, куда он делся.
+    if (!ALL_SECTIONS.has(params.section)) throw notFound();
 
     // Раздел, недоступный роли, — не ошибка, а устаревшая ссылка: уводим на
     // первый доступный, а не показываем 404.
@@ -355,6 +389,10 @@ export const router = createRouter({
   // маршрутизатора без единой ссылки (правило П22 и здравый смысл: из тупика
   // должен быть выход).
   defaultNotFoundComponent: NotFoundPage,
+  // Сбой при показе раздела — по-русски и с выходом. Самый частый повод — не
+  // догрузившаяся часть приложения после выката: тогда страница один раз
+  // перезагружается сама (`routes/chunkReload.ts`).
+  defaultErrorComponent: RouteErrorPage,
 });
 
 declare module "@tanstack/react-router" {

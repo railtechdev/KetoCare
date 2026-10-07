@@ -31,6 +31,7 @@ import { TableSkeleton } from "./TableSkeleton";
 import { useAuditLog } from "./useAuditLog";
 import type { AuditEntry } from "./types";
 import { Field, SelectField } from "../../components/Field";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Журнал аудита (раздел 8.1 ТЗ, раздел админа `audit`).
@@ -264,7 +265,7 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
-        loading={auditLog.isLoading}
+        {...queryState(auditLog)}
         skeleton={<TableSkeleton label={t("audit.loading")} columns={7} />}
         error={
           auditLog.isError

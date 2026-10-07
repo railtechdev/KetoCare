@@ -251,6 +251,70 @@ describe("кто ведёт ребёнка дома", () => {
     );
   });
 
+  it("отказ отключить устройство говорит об этом, а не молчит", async () => {
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/patients/{patient_id}/telegram"
+        ? {
+            data: [
+              {
+                id: "link-1",
+                patient_id: PATIENT_ID,
+                parent_id: "p1",
+                chat_id: 4242,
+                linked_at: "2026-09-12T10:00:00Z",
+                revoked_at: null,
+              },
+            ],
+            error: undefined,
+          }
+        : {
+            data: [{ id: "p1", full_name: "Мать", phone: null, email: null }],
+            error: undefined,
+          },
+    );
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/auth/refresh"
+        ? { data: { access_token: token }, error: undefined }
+        : {
+            data: undefined,
+            error: { error: { code: "internal", message: "Сбой отключения." } },
+          },
+    );
+    const user = userEvent.setup();
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    await user.click(await screen.findByRole("button", { name: "Отключить" }));
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Отключить" })).at(-1)!,
+    );
+
+    expect(await screen.findByText("Сбой отключения.")).toBeInTheDocument();
+  });
+
+  it("отказ списка устройств предлагает повтор", async () => {
+    let failing = true;
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/patients/{patient_id}/telegram"
+        ? failing
+          ? { data: undefined, error: { error: { code: "internal" } } }
+          : { data: [], error: undefined }
+        : {
+            data: [{ id: "p1", full_name: "Мать", phone: null, email: null }],
+            error: undefined,
+          },
+    );
+    const user = userEvent.setup();
+    render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
+
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+    failing = false;
+    await user.click(retry);
+
+    expect(
+      await screen.findByText("Telegram не подключён"),
+    ).toBeInTheDocument();
+  });
+
   it("родителю устройства видны, но кнопки отключить нет — она в его разделе Telegram", async () => {
     token = tokenFor("parent");
     (api.GET as Mock).mockImplementation(async (path: string) => {

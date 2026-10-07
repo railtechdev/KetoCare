@@ -25,6 +25,7 @@ import {
   useMergeCategoryMutation,
   useUpdateCategoryMutation,
 } from "./useCategoryMutations";
+import { queryState } from "../../lib/queryState";
 
 type Editing =
   | { kind: "none" }
@@ -99,7 +100,7 @@ export function ProductCategoriesPanel() {
       }
     >
       <AsyncSection
-        loading={categories.isPending}
+        {...queryState(categories)}
         skeleton={null}
         error={
           categories.isError

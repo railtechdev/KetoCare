@@ -65,6 +65,19 @@ describe("сообщения о действиях администратора 
     expect(screen.getByText(/позвоните в клинику/)).toBeInTheDocument();
   });
 
+  it("передача пациентов — сообщение, а не тревога", async () => {
+    // «Кто-то мог получить доступ» над рабочим событием приучало не читать
+    // тревогу вовсе. Тревога — только про вход: пароль, второй фактор, роль.
+    (api.GET as Mock).mockResolvedValue({ data: [MOVED], error: undefined });
+    renderNotices();
+
+    expect(
+      await screen.findByText(authRu.accountNotices.careTitle),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(authRu.accountNotices.title)).toBeNull();
+    expect(screen.queryByText(/позвоните в клинику/)).toBeNull();
+  });
+
   it("закрытое не возвращается, пока не случится новое", async () => {
     (api.GET as Mock).mockResolvedValue({ data: [RESET], error: undefined });
     const user = userEvent.setup();

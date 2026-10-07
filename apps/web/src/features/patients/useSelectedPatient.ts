@@ -57,6 +57,16 @@ export function useSelectedPatient() {
     /** true — детей несколько и ни один не выбран: экран должен попросить выбрать */
     needsChoice:
       !isPending && !isError && items.length > 1 && selected === undefined,
+    /**
+     * В адресе назван ребёнок, которого среди доступных нет: ссылка устарела
+     * или ведёт к чужому ребёнку. Экран выбора говорит об этом прямо, а не
+     * делает вид, что ребёнок просто не выбран.
+     */
+    requestedMissing:
+      !isPending &&
+      !isError &&
+      search.patient !== undefined &&
+      requested === undefined,
     isPending,
     isError,
     select,

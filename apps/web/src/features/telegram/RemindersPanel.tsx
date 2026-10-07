@@ -10,6 +10,8 @@ import {
   useUpdateRemindersMutation,
   type ReminderSettings,
 } from "./useReminders";
+import { queryState } from "../../lib/queryState";
+import { useTelegramLinks } from "./useTelegramLinks";
 
 /** Виды напоминаний в том порядке, в каком идёт день. */
 const KINDS = ["ketones", "medications", "weight", "no_records"] as const;
@@ -43,6 +45,13 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
 
   const [form, setForm] = useState<ReminderSettings | null>(null);
 
+  // Напоминания приходят в Telegram. Без единого подключённого чата им некуда
+  // приходить: «Сохранить» сохраняло бы обещание, которое некому выполнить.
+  // Список тот же (и из того же кэша), что у привязки выше на экране.
+  const links = useTelegramLinks(patientId);
+  const noChat =
+    links.isSuccess && links.data.every((link) => link.revoked_at !== null);
+
   // Значения приходят с сервера (там же лежат умолчания), поэтому форма
   // наполняется после загрузки, а не инициализируется пустой: пустое поле здесь
   // означает «выключено», и показать его до ответа значит соврать.
@@ -53,7 +62,7 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
   return (
     <Section title={t("reminders.title")} description={t("reminders.intro")}>
       <AsyncSection
-        loading={settings.isPending}
+        {...queryState(settings)}
         skeleton={null}
         error={
           settings.isError
@@ -76,6 +85,7 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
             className="flex flex-col gap-section"
             onSubmit={(event) => {
               event.preventDefault();
+              if (noChat) return;
               update.mutate(form, {
                 onSuccess: () => toast.success(t("reminders.saved")),
               });
@@ -126,6 +136,8 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
               submitLabel={t("reminders.submit")}
               pendingLabel={t("reminders.saving")}
               pending={update.isPending}
+              disabled={noChat}
+              reason={noChat ? t("reminders.noChat") : undefined}
             />
           </form>
         )}

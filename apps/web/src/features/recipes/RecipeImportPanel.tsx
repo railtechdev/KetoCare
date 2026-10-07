@@ -38,9 +38,14 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
   const ids = useId();
 
   const [file, setFile] = useState<File | null>(null);
-  const importRecipes = useImportRecipesMutation();
+  // Проверка и запись — две мутации (как у импорта продуктов): у одной общий
+  // `isPending`, и во время записи кнопка проверки говорила «Проверяем…».
+  const preview = useImportRecipesMutation();
+  const commit = useImportRecipesMutation();
+  const busy = preview.isPending || commit.isPending;
+  const failure = commit.error ?? preview.error;
 
-  const report = importRecipes.data ?? null;
+  const report = commit.data ?? preview.data ?? null;
   const errors = useMemo(() => report?.errors ?? [], [report]);
 
   // Ошибок бывает несколько на одну строку (по колонке на каждую), поэтому
@@ -135,7 +140,8 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
               setFile(event.target.files?.[0] ?? null);
               // Отчёт относится к прежнему файлу: оставить его на экране значит
               // показывать ответ про другой.
-              importRecipes.reset();
+              preview.reset();
+              commit.reset();
             }}
           />
         </div>
@@ -143,21 +149,22 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
         <div>
           <Button
             type="button"
-            disabled={file === null || importRecipes.isPending}
-            aria-busy={importRecipes.isPending}
+            disabled={file === null || busy}
+            aria-busy={preview.isPending}
             onClick={() => {
-              if (file !== null) importRecipes.mutate({ file, dryRun: true });
+              if (file === null) return;
+              commit.reset();
+              preview.mutate({ file, dryRun: true });
             }}
           >
             <FileUp aria-hidden="true" />
-            {importRecipes.isPending ? t("import.checking") : t("import.check")}
+            {preview.isPending ? t("import.checking") : t("import.check")}
           </Button>
         </div>
 
-        {importRecipes.isError && (
+        {failure !== null && (
           <FormError>
-            {errorMessageOf(importRecipes.error) ??
-              t("common:errors.unexpected")}
+            {errorMessageOf(failure) ?? t("common:errors.unexpected")}
           </FormError>
         )}
 
@@ -200,15 +207,11 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
                 <div>
                   <Button
                     type="button"
-                    disabled={
-                      file === null ||
-                      importRecipes.isPending ||
-                      report.imported === 0
-                    }
-                    aria-busy={importRecipes.isPending}
+                    disabled={file === null || busy || report.imported === 0}
+                    aria-busy={commit.isPending}
                     onClick={() => {
                       if (file === null) return;
-                      importRecipes.mutate(
+                      commit.mutate(
                         { file, dryRun: false },
                         {
                           onSuccess: (result) => {
@@ -224,7 +227,9 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
                       );
                     }}
                   >
-                    {t("import.confirm")}
+                    {commit.isPending
+                      ? t("import.importing")
+                      : t("import.confirm")}
                   </Button>
                 </div>
               </>

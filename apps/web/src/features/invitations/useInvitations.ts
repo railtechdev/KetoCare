@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
-import { api } from "../../lib/api";
+import { api, errorCodeOf } from "../../lib/api";
 
 export type InvitationCreated = components["schemas"]["InvitationCreated"];
 export type Invitation = components["schemas"]["InvitationRead"];
@@ -75,6 +75,34 @@ export function useCreateInvitationMutation() {
     // «кого я звал» с задержкой в одно обновление страницы.
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["invitations"] }),
+  });
+}
+
+/**
+ * Почта приглашения — до ввода пароля.
+ *
+ * `null` — приглашение недействительно (истекло, принято, отозвано): сервер
+ * отвечает на все три одним 404, и страница говорит, что делать дальше, ещё до
+ * того, как человек заполнит форму.
+ */
+export function useInvitationPreview(token: string) {
+  return useQuery({
+    queryKey: ["invitation-preview", token],
+    enabled: token !== "",
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async (): Promise<{ email: string } | null> => {
+      const { data, error } = await api.POST(
+        "/api/v1/auth/invitations/preview",
+        { body: { token } },
+      );
+      if (error) {
+        if (errorCodeOf(error) === "not_found") return null;
+        throw error;
+      }
+      if (!data) throw new Error("Empty invitation preview response");
+      return data;
+    },
   });
 }
 

@@ -144,6 +144,20 @@ describe("главная врача", () => {
     });
   });
 
+  it("без пациентов ведёт сразу в форму новой карты (ADR-0040)", async () => {
+    // Прежде пустая главная звала «пригласить семью» — путь, которого после
+    // ADR-0040 нет: карту заводит специалист, семья получает код из неё.
+    (api.GET as Mock).mockResolvedValue({
+      data: { items: [], total: 0 },
+      error: undefined,
+    });
+    renderHome();
+
+    const link = await screen.findByRole("link", { name: /Завести карту/ });
+    expect(link).toHaveAttribute("href", expect.stringContaining("item=new"));
+    expect(link).toHaveAttribute("href", expect.stringContaining("patients"));
+  });
+
   it("в очередь попадают только помеченные пациенты", async () => {
     renderHome();
 
