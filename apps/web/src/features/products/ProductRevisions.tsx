@@ -41,7 +41,7 @@ export function ProductRevisions({ productId }: { productId: string }) {
           <div
             role="status"
             aria-live="polite"
-            className="flex flex-col gap-block"
+            className="flex flex-col gap-section"
           >
             <span className="sr-only">{t("revisions.loading")}</span>
             {[0, 1, 2].map((row) => (
@@ -75,7 +75,7 @@ export function ProductRevisions({ productId }: { productId: string }) {
       >
         <ol
           aria-label={t("revisions.title")}
-          className="m-0 flex list-none flex-col gap-block p-0"
+          className="m-0 flex list-none flex-col gap-section p-0"
         >
           {items.map((entry, index) => {
             // Список идёт от новых к старым, значит предыдущая запись — та,

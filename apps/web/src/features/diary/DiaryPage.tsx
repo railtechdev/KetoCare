@@ -139,7 +139,7 @@ export function DiaryPage({ patientId }: { patientId: string }) {
         {/* Radix монтирует только активную вкладку: запросы соседних видов
             записей не уходят, пока родитель их не открыл. */}
         {DIARY_KINDS.map((value) => (
-          <TabsContent key={value} value={value} className="pt-block">
+          <TabsContent key={value} value={value} className="pt-section">
             <DiaryTab
               kind={value}
               patientId={patientId}
@@ -216,11 +216,19 @@ function DiaryTab({
     () =>
       items.flatMap((log) => {
         if (log.kind === "ketones") {
-          return [{ at: new Date(log.occurred_at), value: log.value }];
+          return [
+            { id: log.id, at: new Date(log.occurred_at), value: log.value },
+          ];
         }
         if (log.kind === "weight") {
-          // weight:raw — точка графика: подпись оси форматирует сама ось.
-          return [{ at: new Date(log.occurred_at), value: log.weight_kg }];
+          return [
+            {
+              id: log.id,
+              at: new Date(log.occurred_at),
+              // weight:raw — точка графика: подпись оси форматирует сама ось.
+              value: log.weight_kg,
+            },
+          ];
         }
         return [];
       }),

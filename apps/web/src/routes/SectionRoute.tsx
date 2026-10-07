@@ -41,7 +41,7 @@ function SectionSkeleton() {
       // ширин.
       className="flex flex-col gap-screen"
     >
-      <div className="flex flex-col gap-block">
+      <div className="flex flex-col gap-section">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-4 w-80 max-w-full" />
       </div>

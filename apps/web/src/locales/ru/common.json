@@ -77,5 +77,33 @@
   },
   "states": {
     "loadingSection": "Загружаем раздел"
+  },
+  "kit": {
+    "macros": {
+      "fat": "Жиры",
+      "protein": "Белки",
+      "carbs": "Углеводы",
+      "kcalFull": "Калорийность, ккал",
+      "fatFull": "Жиры, г",
+      "proteinFull": "Белки, г",
+      "carbsFull": "Углеводы, г",
+      "fatShort": "Ж",
+      "proteinShort": "Б",
+      "carbsShort": "У",
+      "gramsUnit": "г",
+      "kcalUnit": "ккал"
+    },
+    "ratio": {
+      "unknown": "Соотношение не определено",
+      "plain": "Соотношение {{value}}",
+      "within": "Соотношение {{value}}, соответствует назначению",
+      "off": "Соотношение {{value}}, отклоняется от назначения"
+    },
+    "diarySource": {
+      "web": "Веб",
+      "bot": "Бот",
+      "miniapp": "Приложение",
+      "ai_parsed": "Распознано ИИ"
+    }
   }
 }

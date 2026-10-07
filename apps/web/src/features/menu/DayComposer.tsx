@@ -283,7 +283,10 @@ export function DayComposer({
                   onAdd={() => setAddingMeal(mealIndex)}
                   onRemove={removeItem}
                   onToggleEaten={
-                    canMarkEaten
+                    // Будущий день не отмечается съеденным: съесть его нельзя,
+                    // а флажок читался бы как «отметьте заранее» — и отметка
+                    // ушла бы врачу как факт (так же в Mini App).
+                    canMarkEaten && date <= todayIso()
                       ? (itemId, value) =>
                           eaten.mutate({ itemId, eaten: value })
                       : undefined

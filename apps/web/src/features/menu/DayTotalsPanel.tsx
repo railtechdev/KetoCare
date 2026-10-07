@@ -70,7 +70,7 @@ export function DayTotalsPanel({
 
   return (
     <Section title={t("totals.title")}>
-      <div className="flex flex-wrap items-center gap-block">
+      <div className="flex flex-wrap items-center gap-section">
         <RatioBadge
           ratio={totals.ratio}
           withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
@@ -96,7 +96,7 @@ export function DayTotalsPanel({
           сразу. Калорийность — цель, которую НАБИРАЮТ, углеводы — предел,
           который нельзя превышать: у них разный смысл заполнения. */}
       {targets !== null && left !== null && (
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           <TargetBar
             kind="goal"
             label={t("totals.kcalLabel")}

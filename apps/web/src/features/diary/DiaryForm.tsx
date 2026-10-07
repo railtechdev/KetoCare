@@ -180,7 +180,7 @@ function FormShell({
   const { t } = useTranslation("diary");
 
   return (
-    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-block">
+    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-section">
       {description && (
         <p className="m-0 text-sm text-muted-foreground">{description}</p>
       )}
@@ -329,7 +329,7 @@ function SeizureForm({
     >
       {/* Скрытый шаг убирается из потока классом, а не атрибутом hidden:
           утилита flex у соседнего шага перебила бы его display:none. */}
-      <div className={step === 1 ? "flex flex-col gap-block" : "hidden"}>
+      <div className={step === 1 ? "flex flex-col gap-section" : "hidden"}>
         <Field
           id="seizure-occurred-at"
           width="medium"
@@ -401,7 +401,7 @@ function SeizureForm({
         </SelectField>
       </div>
 
-      <div className={step === 2 ? "flex flex-col gap-block" : "hidden"}>
+      <div className={step === 2 ? "flex flex-col gap-section" : "hidden"}>
         <Field
           id="seizure-count"
           width="tiny"
@@ -697,7 +697,7 @@ function MedicationForm({
           </option>
         ))}
       </SelectField>
-      <label className="flex min-h-touch items-center gap-block text-sm font-medium">
+      <label className="flex min-h-touch items-center gap-section text-sm font-medium">
         <input
           type="checkbox"
           className="size-5 accent-primary"

@@ -86,7 +86,7 @@ export function AsyncSection({
     <>
       {error !== null && (
         <ErrorState
-          className="mb-block"
+          className="mb-section"
           title={error.title}
           description={error.description}
           retryLabel={retryLabel}

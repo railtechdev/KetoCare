@@ -154,7 +154,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   );
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {canWrite && (
         <Section
           title={t("prescription.formTitle")}

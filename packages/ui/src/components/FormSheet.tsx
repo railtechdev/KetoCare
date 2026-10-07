@@ -121,7 +121,11 @@ export function FormSheet({
               type="button"
               variant="ghost"
               size="icon"
-              className="-mt-1 -mr-2 shrink-0"
+              // 44 × 44 и на мыши, а не только на сенсоре: панель открывает
+              // родитель с телефона и в Telegram на компьютере, где базовое
+              // правило `pointer: coarse` не срабатывает, а кнопка в углу —
+              // единственный видимый выход из формы.
+              className="-mt-1 -mr-2 size-(--spacing-touch) shrink-0"
               aria-label={closeLabel}
             >
               <X aria-hidden="true" />
@@ -129,7 +133,7 @@ export function FormSheet({
           </SheetClose>
         </SheetHeader>
 
-        <div ref={bodyRef} className="flex flex-col gap-block px-4 pb-4">
+        <div ref={bodyRef} className="flex flex-col gap-section px-4 pb-4">
           {children}
         </div>
       </SheetContent>

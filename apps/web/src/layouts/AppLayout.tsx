@@ -85,7 +85,7 @@ export function AppLayout() {
         </aside>
 
         <div className={nav.content}>
-          <header className="sticky top-0 z-20 flex h-16 items-center gap-block border-b border-border bg-card px-4 sm:px-6">
+          <header className="sticky top-0 z-20 flex h-16 items-center gap-section border-b border-border bg-card px-4 sm:px-6">
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger asChild>
                 <Button

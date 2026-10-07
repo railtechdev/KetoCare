@@ -69,7 +69,7 @@ export function DictionariesPanel({
   );
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {chrome === "tab" ? (
         <SubPageHeader title={t("dictionaries.title")} actions={createButton} />
       ) : (
@@ -220,7 +220,7 @@ function DictionaryEditor({
   );
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {/* Форма — панелью, а не блоком над таблицей: справочник читают чаще,
           чем правят, и раскрытая форма отодвигала список значений вниз
           ровно тогда, когда с ним надо было свериться (правило П32). */}

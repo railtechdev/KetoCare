@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { currentLanguage } from "../../lib/i18n";
+import { useUnsavedGuard } from "../../lib/useTelegram";
 import type { Session } from "../session/useSession";
 import {
   useAskAssistant,
@@ -51,6 +52,11 @@ export function AssistantScreen({ session }: { session: Session }) {
   );
 
   const messages = conversation.data ?? [];
+  // Свежайший разговор не прочитан, а свой разговор человек не выбирал —
+  // показывать «пусто» значит утверждать то, чего мы не знаем.
+  const latestFailed = latest.isError && chosenId === undefined;
+  // Недописанный вопрос: Telegram спросит, прежде чем закрыться.
+  useUnsavedGuard(question.trim() !== "");
   const limited = errorCodeOf(ask.error) === "rate_limited";
 
   // Разговор может быть ещё не прочитан: до отправки берётся свежайший, с
@@ -76,7 +82,7 @@ export function AssistantScreen({ session }: { session: Session }) {
   }
 
   return (
-    <main className="flex flex-col gap-block p-block">
+    <main className="flex flex-col gap-section p-section">
       <h1 className="text-page-title">{t("assistant.title")}</h1>
 
       <Section title={t("assistant.conversation")} density="compact">
@@ -87,7 +93,9 @@ export function AssistantScreen({ session }: { session: Session }) {
           }
           skeleton={<ChatMessage role="assistant" pending />}
           error={
-            conversation.isError
+            // Не прочитался и перечень разговоров: без этой ветки экран
+            // говорил «вопросов ещё не было» семье, у которой переписка есть.
+            conversation.isError || latestFailed
               ? {
                   title: t("assistant.loadFailed"),
                   description: t("assistant.loadFailedHint"),
@@ -101,7 +109,10 @@ export function AssistantScreen({ session }: { session: Session }) {
               : null
           }
           retryLabel={t("actions.retry")}
-          onRetry={() => void conversation.refetch()}
+          onRetry={() => {
+            if (latestFailed) void latest.refetch();
+            if (conversation.isError) void conversation.refetch();
+          }}
           isEmpty={messages.length === 0}
           empty={
             <p className="text-muted-foreground">{t("assistant.empty")}</p>
@@ -111,24 +122,30 @@ export function AssistantScreen({ session }: { session: Session }) {
             {messages.map((message) => (
               <ChatMessage
                 key={message.id}
-                role={message.role}
-                pending={message.status === "pending"}
-                refusal={isRefusal(message)}
-                note={
-                  message.role === "assistant" ? (
-                    <>
-                      {t("assistant.disclaimer")}
-                      {message.sources.length > 0 && (
+                {...(message.role === "assistant"
+                  ? {
+                      role: "assistant" as const,
+                      note: (
                         <>
-                          {" "}
-                          {t("assistant.sources", {
-                            list: message.sources.join(", "),
-                          })}
+                          {t("assistant.disclaimer")}
+                          {message.sources.length > 0 && (
+                            <>
+                              {" "}
+                              {t("assistant.sources", {
+                                list: message.sources.join(", "),
+                              })}
+                            </>
+                          )}
                         </>
-                      )}
-                    </>
-                  ) : undefined
-                }
+                      ),
+                    }
+                  : { role: "user" as const })}
+                pending={message.status === "pending"}
+                // Ответа нет дольше обычного — сказать словами, а не ждать
+                // молча: при остановленном обработчике ожидание шло бы вечно.
+                slowNote={t("assistant.slow")}
+                pendingSince={new Date(message.created_at)}
+                refusal={isRefusal(message)}
               >
                 {message.text}
               </ChatMessage>
@@ -155,12 +172,12 @@ export function AssistantScreen({ session }: { session: Session }) {
           disabled={limited}
         />
         {limited && (
-          <p className="text-warning">
+          <p role="status" className="text-warning-strong">
             {errorMessageOf(ask.error) ?? t("assistant.limited")}
           </p>
         )}
         {ask.isError && !limited && (
-          <p className="text-destructive">
+          <p role="alert" className="text-destructive">
             {errorMessageOf(ask.error) ?? t("assistant.sendFailed")}
           </p>
         )}

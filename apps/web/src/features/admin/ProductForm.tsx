@@ -156,7 +156,7 @@ export function ProductForm({
         </FormError>
       )}
 
-      <fieldset className="m-0 flex flex-col gap-block border-0 p-0">
+      <fieldset className="m-0 flex flex-col gap-section border-0 p-0">
         <legend className="mb-field text-card-title font-semibold">
           {t("products.form.names")}
         </legend>
@@ -204,7 +204,7 @@ export function ProductForm({
         {/* Одна колонка (правило П6): пять значений пищевой ценности — не пары
             вроде «мин/макс», и в две колонки порядок их чтения перестаёт
             совпадать с порядком колонок в источнике, откуда их переносят. */}
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           {NUTRIENTS.map((nutrient) => (
             <Field
               key={nutrient}
@@ -260,7 +260,7 @@ export function ProductForm({
         </div>
       </fieldset>
 
-      <fieldset className="m-0 flex flex-col gap-block border-0 p-0">
+      <fieldset className="m-0 flex flex-col gap-section border-0 p-0">
         <legend className="mb-field text-card-title font-semibold">
           {t("products.form.origin")}
         </legend>

@@ -95,7 +95,7 @@ export function InviteForm({
           });
         })}
         noValidate
-        className="flex max-w-form flex-col gap-block"
+        className="flex max-w-form flex-col gap-section"
       >
         <Field
           id={`${ids}-email`}

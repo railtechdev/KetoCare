@@ -563,8 +563,12 @@ describe("сборка дня в Mini App", () => {
 
     const salad = (await screen.findByText("Салат")).closest("li");
     await user.click(
-      within(salad as HTMLElement).getByRole("button", { name: "Убрать" }),
+      within(salad as HTMLElement).getByRole("button", {
+        name: /^Убрать «/,
+      }),
     );
+    // Убрать — только после подтверждения: кнопка стоит рядом с флажком.
+    await user.click(await screen.findByRole("button", { name: "Убрать" }));
 
     await waitFor(() => {
       expect(api.PUT).toHaveBeenCalledWith(
@@ -610,7 +614,7 @@ describe("сборка дня в Mini App", () => {
 
     expect(await screen.findByText("Омлет")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Убрать" }),
+      screen.queryByRole("button", { name: /^Убрать/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -620,12 +624,57 @@ describe("сборка дня в Mini App", () => {
 
     const dish = (await screen.findByText("Омлет на сливках")).closest("li");
     await user.click(
-      within(dish as HTMLElement).getByRole("button", { name: "Убрать" }),
+      within(dish as HTMLElement).getByRole("button", {
+        name: /^Убрать «/,
+      }),
     );
+    // Убрать — только после подтверждения: кнопка стоит рядом с флажком.
+    await user.click(await screen.findByRole("button", { name: "Убрать" }));
 
     // Схема требует хотя бы одну позицию: пустой `items` был бы отказом 422.
     await waitFor(() => expect(api.DELETE).toHaveBeenCalled());
     expect(api.PUT).not.toHaveBeenCalled();
+  });
+
+  it("«Оставить» в подтверждении не трогает план", async () => {
+    // Кнопка стояла в 4 px под флажком «съедено», и промах убирал блюдо из
+    // плана без вопроса.
+    const user = userEvent.setup();
+    renderScreen();
+
+    const dish = (await screen.findByText("Омлет на сливках")).closest("li");
+    await user.click(
+      within(dish as HTMLElement).getByRole("button", { name: /^Убрать «/ }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Оставить" }));
+
+    expect(api.PUT).not.toHaveBeenCalled();
+    expect(api.DELETE).not.toHaveBeenCalled();
+    expect(screen.getByText("Омлет на сливках")).toBeInTheDocument();
+  });
+
+  it("на завтра «съедено» не ставится — съесть будущий день нельзя", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    expect(
+      await screen.findByRole("checkbox", { name: /Омлет/ }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Завтра" }));
+
+    expect(await screen.findByText("Омлет на сливках")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(
+      screen.getByText(
+        "Отметить «съедено» можно в тот день, когда ребёнок ел.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("строка с флажком — цель касания не ниже 44 px", async () => {
+    renderScreen();
+    const checkbox = await screen.findByRole("checkbox", { name: /Омлет/ });
+    expect(checkbox.closest("label")).toHaveClass("min-h-touch");
   });
 
   it("завтрашний день запрашивается отдельно от сегодняшнего", async () => {
@@ -754,8 +803,12 @@ describe("день не собирается вслепую", () => {
 
     const salad = (await screen.findByText("Салат")).closest("li");
     await user.click(
-      within(salad as HTMLElement).getByRole("button", { name: "Убрать" }),
+      within(salad as HTMLElement).getByRole("button", {
+        name: /^Убрать «/,
+      }),
     );
+    // Убрать — только после подтверждения: кнопка стоит рядом с флажком.
+    await user.click(await screen.findByRole("button", { name: "Убрать" }));
 
     // Панель сборки при удалении закрыта, и её сообщение сюда не доходило:
     // кнопка просто включалась обратно, а позиция оставалась на месте.
@@ -800,8 +853,12 @@ describe("день не собирается вслепую", () => {
     const salad = (await screen.findByText("Салат")).closest("li");
     const before = menuReads();
     await user.click(
-      within(salad as HTMLElement).getByRole("button", { name: "Убрать" }),
+      within(salad as HTMLElement).getByRole("button", {
+        name: /^Убрать «/,
+      }),
     );
+    // Убрать — только после подтверждения: кнопка стоит рядом с флажком.
+    await user.click(await screen.findByRole("button", { name: "Убрать" }));
 
     expect(
       await screen.findByText(/уже отмечено съеденным/),

@@ -4,10 +4,11 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
+import { primaryActions } from "@ketocare/ui/testing";
+
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import homeRu from "../../locales/ru/home.json";
-import { primaryActions } from "../../test/primaryActions";
 import { SectionRouter } from "../../test/SectionRouter";
 import { HomePage } from "./HomePage";
 import type { PatientOverview } from "./types";

@@ -23,7 +23,7 @@ export function TableSkeleton({
 
       <Skeleton className="h-8 w-full" />
       {Array.from({ length: rows }, (_, row) => (
-        <div key={row} className="flex gap-block">
+        <div key={row} className="flex gap-section">
           {Array.from({ length: columns }, (_, cell) => (
             <Skeleton key={cell} className="h-6 flex-1" />
           ))}

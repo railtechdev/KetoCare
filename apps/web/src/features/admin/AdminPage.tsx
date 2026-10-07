@@ -47,7 +47,7 @@ export function AdminPage({ section }: { section?: string }) {
       width="wide"
       density="compact"
     >
-      <div className="flex flex-col gap-block">
+      <div className="flex flex-col gap-section">
         {current === "users" && <UsersPanel chrome="screen" />}
         {current === "leads" && <LeadsPanel chrome="screen" />}
         {current === "products" && (

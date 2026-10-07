@@ -75,7 +75,7 @@ function ViewSkeleton() {
       role="status"
       aria-busy="true"
       aria-label={t("states.loadingSection")}
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
     >
       <Skeleton className="h-40 w-full rounded-xl" />
       <Skeleton className="h-24 w-full rounded-xl" />

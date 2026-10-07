@@ -6,18 +6,30 @@ import {
   NotebookPen,
   UtensilsCrossed,
 } from "lucide-react";
-import { Suspense, lazy, useEffect, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
-import { Skeleton, Toaster } from "@ketocare/ui";
+import {
+  KitLabelsProvider,
+  Skeleton,
+  Toaster,
+  kitLabelsFrom,
+} from "@ketocare/ui";
 import { TabBar, type TabBarItem } from "./components/TabBar";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { MenuScreen } from "./features/menu/MenuScreen";
 import { ChildSwitcher } from "./features/session/ChildSwitcher";
 import { SessionGate } from "./features/session/SessionGate";
 import type { Session } from "./features/session/useSession";
-import { webApp } from "./lib/telegram";
-import { applyTelegramTheme, watchTelegramTheme } from "./lib/theme";
+import { TabVisibleContext } from "./lib/useTelegram";
 
 type TabId = "home" | "menu" | "calculator" | "recipes" | "diary" | "assistant";
 
@@ -60,33 +72,51 @@ const AssistantScreen = lazy(() =>
   })),
 );
 
+/**
+ * Тема, `ready()` и `expand()` — в `main.tsx` до первой отрисовки
+ * (`initTelegram`, `applyTelegramTheme`): из эффекта они успевали показать
+ * кадр светлой темы в тёмном Telegram.
+ */
 export function App() {
-  useEffect(() => {
-    const app = webApp();
-    // `ready` говорит клиенту, что можно убирать заставку, `expand` —
-    // развернуть окно на всю высоту. Без первого приложение открывается в
-    // полупустом окне поверх спиннера Telegram.
-    app?.ready();
-    app?.expand();
-
-    applyTelegramTheme();
-    return watchTelegramTheme();
-  }, []);
-
   return (
-    <div className="flex min-h-dvh flex-col bg-background pt-[var(--safe-top,0px)]">
-      <SessionGate>
-        {(session, { switchChild }) => (
-          <Screens session={session} onSwitchChild={switchChild} />
-        )}
-      </SessionGate>
-      {/* Подтверждения действий («Запись исправлена») — тостами кита. */}
-      <Toaster position="top-center" />
-    </div>
+    <AppKitLabels>
+      {/* Безопасная зона со всех сторон: в альбомной ориентации вырез экрана
+          сбоку закрывал бы край списка. */}
+      <div className="flex min-h-dvh flex-col bg-background pt-[var(--safe-top,0px)] pr-[var(--safe-right,0px)] pl-[var(--safe-left,0px)]">
+        <SessionGate>
+          {(session, { switchChild }) => (
+            <Screens session={session} onSwitchChild={switchChild} />
+          )}
+        </SessionGate>
+        {/* Подтверждения действий («Запись исправлена») — тостами кита. */}
+        <Toaster position="top-center" />
+      </div>
+    </AppKitLabels>
   );
 }
 
-function Screens({
+/** Подписи кита на языке экрана (ADR-0052): «Yog‘lar», а не «Жиры». */
+function AppKitLabels({ children }: { children: ReactNode }) {
+  const { t, i18n } = useTranslation();
+  const labels = useMemo(
+    () => kitLabelsFrom((key, values) => t(key, values)),
+    // Язык — явная зависимость: `t` между языками может остаться той же ссылкой.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, i18n.language],
+  );
+  return <KitLabelsProvider labels={labels}>{children}</KitLabelsProvider>;
+}
+
+const SCREENS: Record<TabId, ComponentType<{ session: Session }>> = {
+  home: HomeScreen,
+  menu: MenuScreen,
+  calculator: CalculatorScreen,
+  recipes: RecipesScreen,
+  diary: DiaryScreen,
+  assistant: AssistantScreen,
+};
+
+export function Screens({
   session,
   onSwitchChild,
 }: {
@@ -95,6 +125,27 @@ function Screens({
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<TabId>("home");
+  // Посещённые вкладки остаются смонтированными, скрытыми: переход на план
+  // дня посреди сборки блюда в калькуляторе стирал состав, недописанный
+  // вопрос помощнику, открытый рецепт и панель сборки дня. Не посещённые не
+  // монтируются вовсе — их чанки и запросы ждут первого перехода.
+  const [visited, setVisited] = useState<ReadonlySet<TabId>>(
+    () => new Set<TabId>(["home"]),
+  );
+  // Прокрутка у окна одна на все вкладки: без памяти вкладка открывалась бы
+  // на высоте предыдущей.
+  const scrollByTab = useRef(new Map<TabId, number>());
+
+  function select(next: TabId) {
+    if (next === tab) return;
+    scrollByTab.current.set(tab, window.scrollY);
+    setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+    setTab(next);
+    // После отрисовки новой вкладки, когда у страницы её высота.
+    requestAnimationFrame(() => {
+      window.scrollTo(0, scrollByTab.current.get(next) ?? 0);
+    });
+  }
 
   const tabs: readonly TabBarItem<TabId>[] = [
     { id: "home", label: t("tabs.home"), icon: House },
@@ -118,16 +169,26 @@ function Screens({
         {/* Пока чанк вкладки едет — скелетон, а не пустота: в Telegram
             приложение открывается поверх чата, и мигание пустым экраном
             читается как «не загрузилось». */}
-        <Suspense fallback={<TabSkeleton />}>
-          {tab === "home" && <HomeScreen session={session} />}
-          {tab === "menu" && <MenuScreen session={session} />}
-          {tab === "calculator" && <CalculatorScreen session={session} />}
-          {tab === "recipes" && <RecipesScreen />}
-          {tab === "diary" && <DiaryScreen session={session} />}
-          {tab === "assistant" && <AssistantScreen session={session} />}
-        </Suspense>
+        {tabs
+          .filter(({ id }) => visited.has(id))
+          .map(({ id }) => {
+            const Screen = SCREENS[id];
+            return (
+              // `hidden` убирает скрытую вкладку и из дерева доступности: её
+              // заголовок и поля не мешают программе чтения с экрана.
+              <div key={id} hidden={id !== tab} data-tab={id}>
+                <TabVisibleContext value={id === tab}>
+                  {/* Своя граница ожидания у каждой вкладки: чанк новой
+                      вкладки не должен прятать уже открытые за скелетоном. */}
+                  <Suspense fallback={<TabSkeleton />}>
+                    <Screen session={session} />
+                  </Suspense>
+                </TabVisibleContext>
+              </div>
+            );
+          })}
       </div>
-      <TabBar items={tabs} active={tab} onSelect={setTab} />
+      <TabBar items={tabs} active={tab} onSelect={select} />
     </>
   );
 }
@@ -135,7 +196,11 @@ function Screens({
 /** Заглушка вкладки в форме будущего содержимого. */
 function TabSkeleton() {
   return (
-    <div role="status" aria-busy="true" className="flex flex-col gap-block p-4">
+    <div
+      role="status"
+      aria-busy="true"
+      className="flex flex-col gap-section p-4"
+    >
       <Skeleton className="h-6 w-40" />
       <Skeleton className="h-32 w-full rounded-xl" />
     </div>

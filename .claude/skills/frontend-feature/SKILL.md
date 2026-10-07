@@ -28,7 +28,7 @@ description: Разработка UI в apps/web (SPA) и apps/miniapp — эк�
   интерфейс, подставляя themeParams Telegram в те же переменные. Хардкод цвета в
   компоненте — ошибка ревью.
 - Шкалы, а не глазомер: `text-page-title` / `text-section-title` / `text-card-title`,
-  `gap-screen` / `gap-block` / `gap-field`; ширина страницы — роль `PageLayout width`,
+  `gap-screen` / `gap-section` / `gap-field`; ширина страницы — роль `PageLayout width`,
   колонки — примитивы кита (`Columns`, `Tiles`, `MetricRow`, `FactList`, `SplitView`,
   `Workspace`). Подробно — `docs/UI_GUIDE.md` и раздел «UI-канон» в `CLAUDE.md`.
 - Текст на цветной подложке бери из парного токена (`text-primary-foreground`,

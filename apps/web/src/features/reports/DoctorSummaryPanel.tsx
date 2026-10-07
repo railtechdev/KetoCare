@@ -196,7 +196,7 @@ function Draft({
   }
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {!approved && (
         /* Формулировка — дословно из раздела 10.5 ТЗ. Не переписывать: это
            согласованный продуктовый текст, и он же единственное, что стоит
@@ -216,7 +216,7 @@ function Draft({
 
       {editing ? (
         <form
-          className="flex flex-col gap-block"
+          className="flex flex-col gap-section"
           onSubmit={(event) => {
             event.preventDefault();
             setConfirming(true);
@@ -283,8 +283,8 @@ function Draft({
           <p
             className={
               approved
-                ? "m-0 whitespace-pre-line border-l-4 border-l-success pl-block text-sm"
-                : "m-0 whitespace-pre-line border-l-4 border-l-warning pl-block text-sm"
+                ? "m-0 whitespace-pre-line border-l-4 border-l-success pl-section text-sm"
+                : "m-0 whitespace-pre-line border-l-4 border-l-warning pl-section text-sm"
             }
             aria-describedby={approved ? undefined : noticeId}
           >
@@ -403,7 +403,11 @@ function Checks({ checks }: { checks: SummaryCheck[] }) {
       <ul className="m-0 flex list-none flex-col gap-field p-0">
         {checks.map((check, index) => (
           <li key={`${check.kind}-${index}`} className="text-sm">
-            <span className={check.hard ? "text-destructive" : "text-warning"}>
+            <span
+              className={
+                check.hard ? "text-destructive" : "text-warning-strong"
+              }
+            >
               {t(`summary.checks.kind.${check.kind}`, {
                 defaultValue: t("summary.checks.kind.other"),
               })}

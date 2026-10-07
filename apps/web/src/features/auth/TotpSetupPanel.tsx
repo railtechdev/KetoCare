@@ -141,7 +141,7 @@ export function TotpSetupPanel({ setupToken }: Props) {
           <CardDescription>{t("totpSetup.intro")}</CardDescription>
         </CardHeader>
 
-        <CardContent className="flex flex-col gap-block">
+        <CardContent className="flex flex-col gap-section">
           {/* Ключ ещё едет — место под QR держится скелетоном, иначе форма
               подпрыгивает в момент ответа. Ошибка запроса ключа — не ошибка
               формы: её можно повторить, и состояния ведёт AsyncSection. */}
@@ -198,7 +198,7 @@ export function TotpSetupPanel({ setupToken }: Props) {
           <form
             onSubmit={onSubmit}
             noValidate
-            className="flex flex-col gap-block"
+            className="flex flex-col gap-section"
           >
             <Field
               id="totp-setup-code"

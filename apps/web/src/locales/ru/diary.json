@@ -147,5 +147,26 @@
     "symptomPlaceholder": "Например: сонливость",
     "symptomRequired": "Укажите симптом.",
     "description": "Описание"
+  },
+  "entry": {
+    "seizure": "Приступ",
+    "seizureTyped": "{{type}}",
+    "durationSec": "Длительность: {{value}} с",
+    "durationInterval": "Длительность: {{value}}",
+    "durationUnnamed": "указана словами",
+    "count": "Приступов: {{value}}",
+    "triggers": "Возможные причины: {{value}}",
+    "ketones": "{{value}} ммоль/л",
+    "ketonesBlood": "Кровь",
+    "ketonesUrine": "Моча",
+    "weight": "{{value}} кг",
+    "height": "Рост: {{value}} см",
+    "medication": "{{name}}",
+    "medicationUnknown": "Препарат",
+    "taken": "Принято",
+    "notTaken": "Пропущено",
+    "meal": "Приём пищи",
+    "mealFromMenu": "Из меню на день",
+    "sideEffect": "{{symptom}}"
   }
 }

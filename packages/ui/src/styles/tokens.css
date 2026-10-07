@@ -58,6 +58,11 @@
   /* В ките нет предупреждения и успеха — эти две роли наши. */
   --color-warning: #f5a623;
   --color-on-warning: #16213e;
+  /* Предупреждение ТЕКСТОМ. `warning` — подложка и полоса: янтарь на белом
+     даёт 2:1, и надпись «вне цели» цветом `text-warning` была нечитаемой
+     ровно там, где её важно прочесть. Утилита — `text-warning-strong`;
+     `text-warning` для текста запрещён тестом `warningText.test.ts`. */
+  --color-warning-strong: #8a5300;
   --color-success: #1e7f5c;
   --color-on-success: #ffffff;
 
@@ -111,9 +116,13 @@
      входа из-за этого прижималась к верхнему краю, а под ней оставалось пустое
      полполотна. Полную высоту брать через `min-h-dvh`: `dvh` учитывает
      сворачивающуюся адресную строку мобильного браузера и в шкалу отступов не
-     попадает. Запрет на `*-screen` в высотах закреплён тестом. */
+     попадает. Запрет на `*-screen` в высотах закреплён тестом.
+     То же с `block`: отступ `--spacing-block` порождал `inline-block` с
+     `inline-size: 1rem`, и обычный `inline-block` получал ширину 16 px. Отступ
+     внутри группы поэтому называется `section`; собранный CSS проверяет
+     `utilities.test.ts`. */
   --spacing-screen: 1.5rem;
-  --spacing-block: 1rem;
+  --spacing-section: 1rem;
   --spacing-field: 0.5rem;
 
   /* --- ширина экрана ---
@@ -184,6 +193,7 @@
   --color-destructive-foreground: #0f172a;
   --color-warning: #e8b45c;
   --color-on-warning: #0f172a;
+  --color-warning-strong: #e8b45c;
   --color-success: #6fcfa3;
   --color-on-success: #0f172a;
 

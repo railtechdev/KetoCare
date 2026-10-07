@@ -26,7 +26,8 @@ export interface SectionProps {
    *
    * Не переносится: кнопка кита держит строку (`whitespace-nowrap`), и место
    * уступает заголовок. Переносимый текст здесь (голая ссылка) отнял бы место у
-   * заголовка первым, и тот рвался бы там, где сейчас помещается.
+   * заголовка первым, и тот рвался бы там, где сейчас помещается. В узком
+   * блоке (уже 28rem) действие встаёт под заголовок, а не рядом.
    */
   action?: ReactNode;
   /**
@@ -84,12 +85,24 @@ export function Section({
       // Внутри блоков вместо `sm:` пишется `@sm:` (правило П33 канона).
       className={cn(
         "@container",
-        compact && "gap-block rounded-lg py-block",
-        !compact && "gap-block",
+        compact && "gap-section rounded-lg py-section",
+        !compact && "gap-section",
         className,
       )}
     >
-      <CardHeader className={cn(compact && "px-block")}>
+      {/* Узкий блок (уже 28rem — телефон, приставная колонка): действие уходит
+          ПОД заголовок. Рядом с двумя кнопками колонка заголовка сжималась до
+          нуля, и «Контрольные визиты» стояли по букве в строке (замер на 360
+          и 390 px). Запрос — к ширине блока (`@container` карточки), а не окна:
+          тот же блок бывает и во всю ширину, и в колонке 20rem. Кит
+          (`card.tsx`) не правится — раскладка задаётся отсюда классами. */}
+      <CardHeader
+        className={cn(
+          compact && "px-section",
+          action &&
+            "@max-md:has-data-[slot=card-action]:grid-cols-1 [&>[data-slot=card-action]]:@max-md:col-start-1 [&>[data-slot=card-action]]:@max-md:row-span-1 [&>[data-slot=card-action]]:@max-md:row-start-auto [&>[data-slot=card-action]]:@max-md:justify-self-start",
+        )}
+      >
         {/* `min-w-0 break-words`: шапка карточки — сетка (`1fr auto` при
             действии), и без `min-w-0` заголовок с именем без пробелов не
             сжимался, а распирал блок. `hyphens-auto` — только рядом с
@@ -120,8 +133,8 @@ export function Section({
 
       <CardContent
         className={cn(
-          "flex flex-col gap-block",
-          compact && "px-block",
+          "flex flex-col gap-section",
+          compact && "px-section",
           contentClassName,
         )}
       >

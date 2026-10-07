@@ -95,7 +95,7 @@ export function RecipeFiltersPanel({
 
         {/* Границы диапазона — единственная пара полей, которую канон
                 разрешает ставить в две колонки (правило П6). */}
-        <div className="grid grid-cols-2 gap-block">
+        <div className="grid grid-cols-2 gap-section">
           <Field
             id={minId}
             width="narrow"

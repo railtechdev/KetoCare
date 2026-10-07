@@ -123,7 +123,7 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
       width="content"
       onBack={onDone}
     >
-      <div className="flex flex-col gap-block">
+      <div className="flex flex-col gap-section">
         <div className="max-w-md">
           <Field
             id={`${ids}-file`}

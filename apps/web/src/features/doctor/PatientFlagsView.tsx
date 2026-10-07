@@ -165,7 +165,7 @@ const BADGE_TONE: Record<FlagTone, string> = {
 /** В легенде значок стоит без плашки, поэтому цвет несёт он сам. */
 const LEGEND_TONE: Record<FlagTone, string> = {
   danger: "text-destructive",
-  warning: "text-warning",
+  warning: "text-warning-strong",
   muted: "text-muted-foreground",
 };
 

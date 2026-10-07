@@ -178,7 +178,7 @@ export function CareTeamPanel({
       >
         <form
           noValidate
-          className="flex flex-col gap-block"
+          className="flex flex-col gap-section"
           onSubmit={(event) => {
             event.preventDefault();
             if (selected === "") return;

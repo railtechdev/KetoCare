@@ -210,7 +210,11 @@ export function IntakeForm({
     <AsyncSection
       loading={intake.isLoading || options.isLoading}
       skeleton={
-        <div className="flex flex-col gap-block" role="status" aria-busy="true">
+        <div
+          className="flex flex-col gap-section"
+          role="status"
+          aria-busy="true"
+        >
           <Skeleton className="h-32 w-full rounded-xl" />
           <Skeleton className="h-32 w-full rounded-xl" />
         </div>
@@ -231,7 +235,7 @@ export function IntakeForm({
     >
       {values !== null && (
         <form
-          className="flex flex-col gap-block"
+          className="flex flex-col gap-section"
           noValidate
           onSubmit={(event) => {
             event.preventDefault();

@@ -1,5 +1,6 @@
 import { cn } from "../lib/cn";
 import { formatRatio } from "../lib/format";
+import { useKitLabels } from "../lib/kitLabels";
 
 export interface RatioBadgeProps {
   /** Фактическое кетосоотношение блюда, напр. 3.87 */
@@ -32,12 +33,13 @@ export function RatioBadge({
   withinTolerance,
   className,
 }: RatioBadgeProps) {
+  const labels = useKitLabels().ratio;
   if (ratio === null) {
     return (
       <span
         className={cn(BASE, BY_STATE.neutral, className)}
         data-state="unknown"
-        aria-label="Соотношение не определено"
+        aria-label={labels.unknown}
       >
         — : 1
       </span>
@@ -49,10 +51,10 @@ export function RatioBadge({
 
   const label =
     withinTolerance === undefined
-      ? `Соотношение ${formatRatio(ratio)}`
+      ? labels.plain(formatRatio(ratio))
       : withinTolerance
-        ? `Соотношение ${formatRatio(ratio)}, соответствует назначению`
-        : `Соотношение ${formatRatio(ratio)}, отклоняется от назначения`;
+        ? labels.within(formatRatio(ratio))
+        : labels.off(formatRatio(ratio));
 
   return (
     <span

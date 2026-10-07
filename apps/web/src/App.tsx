@@ -1,6 +1,8 @@
 import { RouterProvider } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+
+import { KitLabelsProvider, kitLabelsFrom } from "@ketocare/ui";
 
 import { SessionProvider } from "./features/auth/session";
 import { useSession } from "./features/auth/useSession";
@@ -42,10 +44,27 @@ function Shell() {
   return <RouterProvider router={router} context={{ session }} />;
 }
 
+/**
+ * Подписи предметных компонентов кита — из словаря кабинета, а не литералы
+ * кита: те же компоненты стоят в двуязычном Mini App (ADR-0052).
+ */
+function KitLabels({ children }: { children: ReactNode }) {
+  const { t, i18n } = useTranslation("common");
+  const labels = useMemo(
+    () => kitLabelsFrom((key, values) => t(key, values)),
+    // Язык — явная зависимость: `t` между языками может остаться той же ссылкой.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, i18n.language],
+  );
+  return <KitLabelsProvider labels={labels}>{children}</KitLabelsProvider>;
+}
+
 export function App() {
   return (
-    <SessionProvider>
-      <Shell />
-    </SessionProvider>
+    <KitLabels>
+      <SessionProvider>
+        <Shell />
+      </SessionProvider>
+    </KitLabels>
   );
 }

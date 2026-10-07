@@ -28,7 +28,7 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <DayComposer patientId={patientId} canMarkEaten={false}>
         {({ actions, content }) => (
           <>

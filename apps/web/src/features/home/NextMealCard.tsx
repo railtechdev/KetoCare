@@ -103,7 +103,7 @@ export function NextMealCard({ patientId }: { patientId: string }) {
             {t("nextMeal.allEaten")}
           </p>
         ) : (
-          <div className="flex flex-wrap items-center gap-block">
+          <div className="flex flex-wrap items-center gap-section">
             <Badge variant="secondary">
               {t("nextMeal.meal", { index: next.meal_index })}
             </Badge>

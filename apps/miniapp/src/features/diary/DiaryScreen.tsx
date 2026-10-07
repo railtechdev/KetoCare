@@ -4,6 +4,7 @@ import {
   StatusNote,
   TrendChart,
   WarningBanner,
+  formatDayMonth,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
@@ -50,7 +51,7 @@ export function DiaryScreen({ session }: { session: Session }) {
     );
 
   return (
-    <main className="flex flex-col gap-block p-block">
+    <main className="flex flex-col gap-section p-section">
       <h1 className="text-page-title">{t("diary.title")}</h1>
       <p className="text-muted-foreground">
         {t("charts.period", { days: TREND_DAYS })}
@@ -126,17 +127,9 @@ function Trend({
           emptyState={
             kind === "seizures" ? t("charts.seizures.empty") : t("charts.empty")
           }
-          formatDate={formatChartDate}
+          formatDate={formatDayMonth}
         />
       </AsyncSection>
     </Section>
   );
-}
-
-/** День и месяц: год на графике за месяц — шум, а места на телефоне мало. */
-function formatChartDate(value: Date): string {
-  return value.toLocaleDateString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-  });
 }

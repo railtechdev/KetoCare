@@ -357,6 +357,46 @@ describe("помощник в Mini App", () => {
 
     expect(await screen.findByText("куда записать кетоны")).toBeInTheDocument();
   });
+
+  it("неполученный перечень разговоров — отказ с повтором, а не «пусто»", async () => {
+    // Без этой ветки семья с перепиской видела «вопросов ещё не было».
+    let fail = true;
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.endsWith("/ai-conversations")
+        ? Promise.resolve(
+            fail
+              ? { error: { error: { code: "internal", message: "сбой" } } }
+              : { data: { items: [{ id: CONVERSATION_ID }], total: 1 } },
+          )
+        : Promise.resolve({
+            data: {
+              id: CONVERSATION_ID,
+              messages: [
+                message({
+                  seq: 0,
+                  role: "user",
+                  text: "куда записать кетоны",
+                  sources: [],
+                }),
+              ],
+            },
+          }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    // Запрос перечня повторяется клиентом один раз (`createQueryClient`).
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Повторить" },
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText(/Вопросов пока не было/)).toBeNull();
+
+    fail = false;
+    await user.click(retry);
+    expect(await screen.findByText("куда записать кетоны")).toBeInTheDocument();
+  });
 });
 
 describe("кто прочтёт вопрос (ADR-0022)", () => {

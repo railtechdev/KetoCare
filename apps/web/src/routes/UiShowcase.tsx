@@ -55,7 +55,7 @@ export function UiShowcase() {
       intro="Все общие компоненты рядом — чтобы расхождения были видны глазами."
     >
       <Section title="Кнопки">
-        <div className="flex flex-wrap items-center gap-block">
+        <div className="flex flex-wrap items-center gap-section">
           <Button>Основная</Button>
           <Button variant="secondary">Вторичная</Button>
           <Button variant="outline">Контурная</Button>
@@ -65,7 +65,7 @@ export function UiShowcase() {
           <Button size="sm">Мелкая</Button>
           <Button size="lg">Крупная</Button>
         </div>
-        <div className="flex flex-wrap items-center gap-block">
+        <div className="flex flex-wrap items-center gap-section">
           <Button variant="ghost" size="icon" aria-label="Переименовать">
             <Pencil />
           </Button>
@@ -118,7 +118,7 @@ export function UiShowcase() {
       </Section>
 
       <Section title="Предметные компоненты">
-        <div className="flex flex-wrap items-center gap-block">
+        <div className="flex flex-wrap items-center gap-section">
           <RatioBadge ratio={3.9} />
           <RatioBadge ratio={4.2} withinTolerance={false} />
           <RatioBadge ratio={3.5} withinTolerance />
@@ -157,7 +157,7 @@ export function UiShowcase() {
       </Section>
 
       <Section title="Сообщения">
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           <WarningBanner level="info" title="Информация">
             Нейтральное сообщение.
           </WarningBanner>

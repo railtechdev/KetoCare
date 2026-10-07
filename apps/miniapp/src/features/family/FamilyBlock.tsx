@@ -1,7 +1,6 @@
 import {
   AsyncSection,
   Button,
-  ConfirmDialog,
   Section,
   formatOccurredAt,
   toast,
@@ -9,11 +8,14 @@ import {
 import { Send, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
+
 import { errorMessageOf } from "../../lib/api";
 import { shareToTelegram } from "../../lib/telegram";
 import type { Session } from "../session/useSession";
 import {
   type Invitation,
+  useActiveInvitation,
   useFamily,
   useInvite,
   useRemoveMember,
@@ -38,6 +40,12 @@ export function FamilyBlock({ session }: { session: Session }) {
   const family = useFamily(session.patientId);
   const invite = useInvite(session.patientId);
   const remove = useRemoveMember(session.patientId);
+  const active = useActiveInvitation(session.patientId);
+  // Только что выданное — сразу; иначе живое из журнала. Пока журнал не
+  // прочитан, кнопки нет: выпустить второй код поверх живого значит открыть
+  // ещё одну дверь к данным ребёнка. Журнал не прочитался — кнопка есть:
+  // без неё семья не позвала бы никого вовсе.
+  const invitation = invite.data ?? active.data ?? null;
 
   const members = family.data ?? [];
 
@@ -86,7 +94,7 @@ export function FamilyBlock({ session }: { session: Session }) {
               </span>
 
               {member.can_remove && !member.is_me && (
-                <ConfirmDialog
+                <TelegramConfirmDialog
                   trigger={
                     <Button
                       type="button"
@@ -121,9 +129,12 @@ export function FamilyBlock({ session }: { session: Session }) {
         </ul>
       </AsyncSection>
 
-      {invite.data === undefined ? (
+      {invitation !== null ? (
+        <InvitationReady invitation={invitation} />
+      ) : active.isPending ? null : (
         <Button
           type="button"
+          variant="outline"
           className="min-h-touch self-start"
           disabled={invite.isPending}
           onClick={() => invite.mutate()}
@@ -131,8 +142,6 @@ export function FamilyBlock({ session }: { session: Session }) {
           <UserPlus aria-hidden="true" />
           {invite.isPending ? t("family.inviting") : t("family.invite")}
         </Button>
-      ) : (
-        <InvitationReady invitation={invite.data} />
       )}
 
       {invite.isError && (

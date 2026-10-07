@@ -121,7 +121,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
             )
           }
         >
-          <ul className="m-0 flex list-none flex-col gap-block p-0">
+          <ul className="m-0 flex list-none flex-col gap-section p-0">
             {items.map((note) => (
               <li key={note.id}>
                 <NoteItem
@@ -143,7 +143,7 @@ export function NotesTab({ patientId }: { patientId: string }) {
       >
         <form
           noValidate
-          className="flex flex-col gap-block"
+          className="flex flex-col gap-section"
           onSubmit={handleSubmit((values) =>
             create.mutate(values.text.trim(), {
               onSuccess: () => {
@@ -195,7 +195,7 @@ function NoteItem({
 
   return (
     <article className="rounded-xl border border-border p-3">
-      <header className="flex flex-wrap items-baseline justify-between gap-block">
+      <header className="flex flex-wrap items-baseline justify-between gap-section">
         <span className="text-sm font-semibold">
           {/* Имя коллеги берётся из справочника персонала: «Заметка коллеги»
               не отвечает на вопрос, с кем сверяться — а заметку в карте

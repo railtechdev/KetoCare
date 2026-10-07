@@ -158,7 +158,7 @@ function ConversationRow({
         {t("questions.meta", { at: updated, count: item.messages_count })}
       </span>
       {refused && (
-        <span className="flex items-center gap-1 text-xs text-warning">
+        <span className="flex items-center gap-1 text-xs text-warning-strong">
           <TriangleAlert aria-hidden="true" className="size-3.5" />
           {t("questions.refused", { count: item.refused_count })}
         </span>
@@ -184,7 +184,7 @@ function ConversationReader({
   const started = messages[0]?.created_at;
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <Button
         type="button"
         variant="ghost"
@@ -234,7 +234,12 @@ function ConversationReader({
               return (
                 <div key={message.id} className="flex flex-col gap-1">
                   <ChatMessage
-                    role={message.role}
+                    {...(message.role === "assistant"
+                      ? {
+                          role: "assistant" as const,
+                          note: t("assistant:disclaimer"),
+                        }
+                      : { role: "user" as const })}
                     pending={message.status === "pending"}
                     refusal={refusal}
                     meta={
@@ -247,16 +252,11 @@ function ConversationReader({
                           message.created_at}
                       </>
                     }
-                    note={
-                      message.role === "assistant"
-                        ? t("assistant:disclaimer")
-                        : undefined
-                    }
                   >
                     {message.text}
                   </ChatMessage>
                   {refusal && (
-                    <p className="m-0 flex items-center gap-1 text-xs text-warning">
+                    <p className="m-0 flex items-center gap-1 text-xs text-warning-strong">
                       <TriangleAlert aria-hidden="true" className="size-3.5" />
                       {t("questions.refusalNote")}
                     </p>

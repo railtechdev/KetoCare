@@ -75,7 +75,7 @@ export function CardsSkeleton({
       role="status"
       aria-busy="true"
       aria-label={label}
-      className={cn("flex flex-col gap-block", className)}
+      className={cn("flex flex-col gap-section", className)}
     >
       {Array.from({ length: cards }, (_, index) => (
         <Skeleton key={index} className="h-24 w-full rounded-xl" />

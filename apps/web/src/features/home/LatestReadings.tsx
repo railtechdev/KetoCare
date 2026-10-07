@@ -30,7 +30,7 @@ export function LatestReadings({ ketone, weight }: Props) {
   return (
     <section
       aria-labelledby="home-readings"
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
     >
       <h2
         id="home-readings"

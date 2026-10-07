@@ -129,7 +129,7 @@ export function MedicalProfileForm({
     <Section title={t("profile.title")} description={t("profile.formHint")}>
       <form
         noValidate
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         onSubmit={handleSubmit((values) =>
           save.mutate(toBody(values), {
             onSuccess: () => {
@@ -167,7 +167,7 @@ export function MedicalProfileForm({
           {...register("onsetAgeMonths", { valueAsNumber: true })}
         />
 
-        <fieldset className="m-0 flex flex-col gap-block border-0 p-0">
+        <fieldset className="m-0 flex flex-col gap-section border-0 p-0">
           <legend className="mb-2 p-0 text-sm font-semibold">
             {t("profile.fields.genetics")}
           </legend>

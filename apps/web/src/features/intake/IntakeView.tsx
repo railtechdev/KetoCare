@@ -247,7 +247,7 @@ function Answers({
   ] as const;
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {groups.map((group) => (
         <div key={group.title}>
           <h4 className="m-0 mb-field text-sm font-semibold">{group.title}</h4>

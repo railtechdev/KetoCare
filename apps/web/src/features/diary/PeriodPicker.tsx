@@ -71,7 +71,7 @@ export function PeriodPicker({
       </div>
 
       {preset === "custom" && (
-        <div className="mt-block grid gap-block sm:max-w-md sm:grid-cols-2">
+        <div className="mt-section grid gap-section sm:max-w-md sm:grid-cols-2">
           {/* Ошибка у пары дат одна на двоих — обе границы указывают на неё
               через aria-describedby, а сам текст стоит под парой. */}
           <Field

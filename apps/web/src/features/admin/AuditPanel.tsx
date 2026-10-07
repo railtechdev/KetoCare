@@ -179,7 +179,7 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   );
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {chrome === "tab" && (
         <SubPageHeader title={t("audit.title")} intro={t("audit.intro")} />
       )}
@@ -311,7 +311,7 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
       {total > 0 && (
         <nav
           aria-label={t("audit.pagination.label")}
-          className="flex flex-wrap items-center gap-block"
+          className="flex flex-wrap items-center gap-section"
         >
           <Button
             type="button"

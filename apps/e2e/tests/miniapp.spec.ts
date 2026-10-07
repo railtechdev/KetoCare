@@ -23,9 +23,11 @@ import {
  * Telegram и другого размера не видит. 390 x 844 — iPhone 14, как в разборе
  * `docs/AUDIT_MINIAPP.md`.
  *
- * **День берётся ЗАВТРАШНИЙ.** Сегодняшний пишет `journey.spec.ts`, прогон идёт
+ * **День берётся ВЧЕРАШНИЙ.** Сегодняшний пишет `journey.spec.ts`, прогон идёт
  * по общей базе одним воркером, и два сценария на одной дате мешали бы друг
- * другу — падение читалось бы как ошибка приложения.
+ * другу — падение читалось бы как ошибка приложения. Завтрашний не годится:
+ * съесть будущий день нельзя, и флажка «съедено» у него нет. Вчера — ровно
+ * случай семьи, отмечающей съеденное задним числом.
  */
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -38,13 +40,13 @@ test.beforeEach(flushRateLimits);
 /** Блюдо для сборки: своё блюдо ребёнка, как его завела бы семья. */
 const DISH = "Блюдо Mini App E2E";
 
-function tomorrow(): string {
+function yesterday(): string {
   const date = new Date();
-  date.setDate(date.getDate() + 1);
+  date.setDate(date.getDate() - 1);
   return date.toLocaleDateString("sv-SE", { timeZone: "Asia/Tashkent" });
 }
 
-test("семья из Telegram собирает завтрашний день и отмечает съеденное", async ({
+test("семья из Telegram собирает вчерашний день и отмечает съеденное", async ({
   page,
 }) => {
   // Пациент берётся у РОДИТЕЛЯ, как в сквозном сценарии: у него ровно один
@@ -64,9 +66,9 @@ test("семья из Telegram собирает завтрашний день и
   const doctor = doctorPage.request;
   const targets = await ensurePrescription(doctor, patient);
   await ensureTelegramLink(doctor, patient);
-  // Хвост прошлого прогона: план на завтра остался бы, и «Собрать день» легло
+  // Хвост прошлого прогона: план на вчера остался бы, и «Собрать день» легло
   // бы поверх — тест проверял бы историю запусков, а не результат.
-  await clearMenu(doctor, patient, tomorrow());
+  await clearMenu(doctor, patient, yesterday());
   await doctorPage.close();
 
   // Предусловия израсходовали часть лимита на `telegram-init` — дальше идёт
@@ -79,7 +81,7 @@ test("семья из Telegram собирает завтрашний день и
   // Сессия открылась по подписи: ни почты, ни пароля семья не заводила.
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Меню" }).click();
-  await page.getByRole("button", { name: "Завтра" }).click();
+  await page.getByRole("button", { name: "Вчера" }).click();
 
   // --- сборка дня -----------------------------------------------------------
   await page.getByRole("button", { name: "Собрать день" }).click();
@@ -117,12 +119,16 @@ test("семья из Telegram собирает завтрашний день и
   // пропало — это дефект (правило из AUDIT_UX).
   await page.reload();
   await page.getByRole("button", { name: "Меню" }).click();
-  await page.getByRole("button", { name: "Завтра" }).click();
+  await page.getByRole("button", { name: "Вчера" }).click();
   await expect(page.getByRole("checkbox").first()).toBeChecked();
 
   // Съеденное убрать нельзя — сначала снимается отметка: это уже не план, а
   // запись о том, что ребёнок ел (ADR-0041).
   await expect(page.getByRole("button", { name: "Убрать" })).toHaveCount(0);
+
+  // На завтра флажка «съедено» нет: съесть будущий день нельзя.
+  await page.getByRole("button", { name: "Завтра" }).click();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
 });
 
 test("без подписи приложение объясняет, как привязать чат, а не отказывает", async ({

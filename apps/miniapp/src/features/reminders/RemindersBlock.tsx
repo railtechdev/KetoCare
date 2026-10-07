@@ -77,94 +77,111 @@ export function RemindersBlock({ session }: { session: Session }) {
         empty={null}
       >
         {form !== null && (
-          <form
-            noValidate
-            className="flex flex-col gap-field"
-            onSubmit={(event) => {
-              event.preventDefault();
-              save.mutate(form, {
-                onSuccess: () => toast.success(t("reminders.saved")),
-              });
-            }}
-          >
-            <label className="flex min-h-touch items-center gap-field">
-              <input
-                type="checkbox"
-                className="size-6 accent-primary"
-                checked={form.enabled}
-                onChange={(event) =>
-                  setForm({ ...form, enabled: event.target.checked })
-                }
-              />
-              <span>{t("reminders.enabled")}</span>
-            </label>
-
-            {KINDS.map((kind) => {
-              const id = `${ids}-${kind}`;
-              const value = toTimeInput(form[FIELD[kind]]);
-              const label = t(`reminders.kinds.${kind}`);
-              return (
-                <div key={kind} className="flex flex-col gap-1">
-                  <label htmlFor={id}>{label}</label>
-                  <div className="flex flex-wrap items-center gap-field">
-                    <Input
-                      id={id}
-                      type="time"
-                      className="min-h-touch w-36 tabular-nums"
-                      disabled={!form.enabled}
-                      aria-describedby={`${id}-hint`}
-                      value={value}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          [FIELD[kind]]:
-                            event.target.value === ""
-                              ? null
-                              : event.target.value,
-                        })
-                      }
-                    />
-                    {/* На телефоне у поля времени не всегда есть «очистить»,
-                        а пустое время — единственный способ выключить вид. */}
-                    {value !== "" && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="min-h-touch"
-                        disabled={!form.enabled}
-                        aria-label={t("reminders.clearAria", { kind: label })}
-                        onClick={() =>
-                          setForm({ ...form, [FIELD[kind]]: null })
-                        }
-                      >
-                        {t("reminders.clear")}
-                      </Button>
-                    )}
-                  </div>
-                  <span
-                    id={`${id}-hint`}
-                    className="text-sm text-muted-foreground"
-                  >
-                    {t(`reminders.hints.${kind}`)}
-                  </span>
-                </div>
-              );
-            })}
-
-            {save.isError && (
-              <p role="alert" className="m-0 text-destructive">
-                {errorMessageOf(save.error) ?? t("reminders.saveFailed")}
-              </p>
-            )}
-
-            <Button
-              type="submit"
-              className="min-h-touch self-start"
-              disabled={save.isPending}
+          // Свёрнуто по умолчанию: пять полей времени на главной стояли
+          // вровень со сводкой дня, хотя меняют их раз в месяц. Состояние —
+          // словами в заголовке, его видно и в свёрнутом виде.
+          <details className="group">
+            <summary className="flex min-h-touch cursor-pointer items-center gap-field">
+              <span className="min-w-0 flex-1">
+                {settings.data?.enabled
+                  ? t("reminders.statusOn")
+                  : t("reminders.statusOff")}
+              </span>
+              <span className="text-primary underline underline-offset-4">
+                {t("reminders.edit")}
+              </span>
+            </summary>
+            <form
+              noValidate
+              className="mt-field flex flex-col gap-field"
+              onSubmit={(event) => {
+                event.preventDefault();
+                save.mutate(form, {
+                  onSuccess: () => toast.success(t("reminders.saved")),
+                });
+              }}
             >
-              {save.isPending ? t("reminders.saving") : t("reminders.submit")}
-            </Button>
-          </form>
+              {/* Цель касания — вся строка во всю ширину, а не флажок 24 px. */}
+              <label className="flex min-h-touch w-full cursor-pointer items-center gap-field">
+                <input
+                  type="checkbox"
+                  className="size-6 shrink-0 accent-primary"
+                  checked={form.enabled}
+                  onChange={(event) =>
+                    setForm({ ...form, enabled: event.target.checked })
+                  }
+                />
+                <span>{t("reminders.enabled")}</span>
+              </label>
+
+              {KINDS.map((kind) => {
+                const id = `${ids}-${kind}`;
+                const value = toTimeInput(form[FIELD[kind]]);
+                const label = t(`reminders.kinds.${kind}`);
+                return (
+                  <div key={kind} className="flex flex-col gap-1">
+                    <label htmlFor={id}>{label}</label>
+                    <div className="flex flex-wrap items-center gap-field">
+                      <Input
+                        id={id}
+                        type="time"
+                        className="min-h-touch w-36 tabular-nums"
+                        disabled={!form.enabled}
+                        aria-describedby={`${id}-hint`}
+                        value={value}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            [FIELD[kind]]:
+                              event.target.value === ""
+                                ? null
+                                : event.target.value,
+                          })
+                        }
+                      />
+                      {/* На телефоне у поля времени не всегда есть «очистить»,
+                        а пустое время — единственный способ выключить вид. */}
+                      {value !== "" && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="min-h-touch"
+                          disabled={!form.enabled}
+                          aria-label={t("reminders.clearAria", { kind: label })}
+                          onClick={() =>
+                            setForm({ ...form, [FIELD[kind]]: null })
+                          }
+                        >
+                          {t("reminders.clear")}
+                        </Button>
+                      )}
+                    </div>
+                    <span
+                      id={`${id}-hint`}
+                      className="text-sm text-muted-foreground"
+                    >
+                      {t(`reminders.hints.${kind}`)}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {save.isError && (
+                <p role="alert" className="m-0 text-destructive">
+                  {errorMessageOf(save.error) ?? t("reminders.saveFailed")}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                variant="outline"
+                className="min-h-touch self-start"
+                disabled={save.isPending}
+              >
+                {save.isPending ? t("reminders.saving") : t("reminders.submit")}
+              </Button>
+            </form>
+          </details>
         )}
       </AsyncSection>
     </Section>

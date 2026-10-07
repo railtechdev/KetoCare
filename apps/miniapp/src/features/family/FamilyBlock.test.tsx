@@ -185,4 +185,43 @@ describe("близкие в Mini App", () => {
 
     expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
+
+  it("живое приглашение показывается, а не выпускается новое", async () => {
+    // Каждое нажатие «Пригласить» выпускало новый код: у ребёнка копились
+    // действующие неделю двери к его данным, а уже отправленного не было видно.
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    get.mockImplementation(async (path: string) =>
+      path.endsWith("/access-codes")
+        ? {
+            data: [
+              {
+                code: "USED0001",
+                status: "used",
+                purpose: "family_member",
+                expires_at: future,
+                created_at: "2026-10-01T10:00:00Z",
+                join_url: null,
+                deep_link: null,
+              },
+              {
+                code: "LIVE2345",
+                status: "pending",
+                purpose: "family_member",
+                expires_at: future,
+                created_at: "2026-10-05T10:00:00Z",
+                join_url: "https://ketocare.example/join?code=LIVE2345",
+                deep_link: "https://t.me/ketocare_bot?start=LIVE2345",
+              },
+            ],
+          }
+        : { data: MEMBERS },
+    );
+    renderBlock();
+
+    expect(await screen.findByText("LIVE2345")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Пригласить близкого" }),
+    ).toBeNull();
+    expect(post).not.toHaveBeenCalled();
+  });
 });

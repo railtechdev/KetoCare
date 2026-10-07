@@ -228,7 +228,7 @@ export function ReportsView({ patientId }: { patientId: string }) {
         loading={report.isLoading}
         skeleton={
           <div
-            className="flex flex-col gap-block"
+            className="flex flex-col gap-section"
             role="status"
             aria-busy="true"
           >

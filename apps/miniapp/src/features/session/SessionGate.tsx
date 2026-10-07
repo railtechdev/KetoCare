@@ -1,13 +1,19 @@
 import { EmptyState, ErrorState } from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useEffect } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { onSessionExpired } from "../../lib/api";
 import { launchDiagnosis } from "../../lib/telegram";
 import { LanguageSwitch } from "./LanguageSwitch";
 import type { Session, SessionProblem } from "./useSession";
-import { useOpenSession } from "./useSession";
+import { SessionUpdateContext, useOpenSession } from "./useSession";
 
 /**
  * Открывает сессию до того, как показать хоть один экран.
@@ -41,6 +47,34 @@ export function SessionGate({
     [mutate, queryClient],
   );
 
+  // Поправки к сессии после входа (`useUpdateSession`). Привязаны к ответу
+  // входа: новый вход (другой ребёнок, перезапуск) их сбрасывает — он уже
+  // несёт свежие значения с сервера.
+  const [patched, setPatched] = useState<{
+    base: Session;
+    patch: Partial<Session>;
+  } | null>(null);
+  const opened = open.data;
+  const updateSession = useCallback(
+    (patch: Partial<Session>) => {
+      if (opened === undefined) return;
+      setPatched((prev) => ({
+        base: opened,
+        patch: prev?.base === opened ? { ...prev.patch, ...patch } : patch,
+      }));
+    },
+    [opened],
+  );
+  const session = useMemo(
+    () =>
+      opened === undefined
+        ? undefined
+        : patched?.base === opened
+          ? { ...opened, ...patched.patch }
+          : opened,
+    [opened, patched],
+  );
+
   useEffect(() => {
     mutate();
     // Истечение сессии посреди работы — прежде всего отзыв привязки: refresh
@@ -54,7 +88,13 @@ export function SessionGate({
   }, [mutate]);
 
   if (open.isPending || open.isIdle) {
-    return <p className="p-block text-muted-foreground">{t("opening")}</p>;
+    // `role="status"`: программа чтения с экрана объявляет ожидание, а не
+    // молчит до первого экрана.
+    return (
+      <p role="status" className="p-section text-muted-foreground">
+        {t("opening")}
+      </p>
+    );
   }
 
   if (open.isError) {
@@ -62,14 +102,19 @@ export function SessionGate({
     // непонятном языке оставляло бы человека без следующего шага (ADR-0052).
     // Сохранять выбор некуда — входа ещё нет.
     return (
-      <div className="flex flex-col gap-block p-block">
+      <div className="flex flex-col gap-section p-section">
         <LanguageSwitch persist={false} />
         <Problem problem={open.error} onRetry={() => open.mutate()} />
       </div>
     );
   }
 
-  return <>{children(open.data, { switchChild })}</>;
+  if (session === undefined) return null;
+  return (
+    <SessionUpdateContext value={updateSession}>
+      {children(session, { switchChild })}
+    </SessionUpdateContext>
+  );
 }
 
 /** Три исхода неудачного входа — три текста, каждый со своим следующим шагом. */
@@ -87,6 +132,17 @@ function Problem({
       <EmptyState
         title={t("session.notLinked.title")}
         description={t("session.notLinked.description")}
+      />
+    );
+  }
+
+  if (problem === "relaunch") {
+    // Кнопки «повторить» нет намеренно: повтор ушёл бы с той же устаревшей
+    // подписью и кончился бы тем же отказом.
+    return (
+      <EmptyState
+        title={t("session.relaunch.title")}
+        description={t("session.relaunch.description")}
       />
     );
   }

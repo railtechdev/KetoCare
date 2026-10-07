@@ -671,10 +671,10 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
 
             Подбор остаётся первым и крупным (ADR-0028): это главное, чего нет у
             KDC, где граммовку доводят стрелками вручную. */}
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           {/* Ограничения касаются только подбора: проверке они ничего не
               меняют. Поэтому стоят при его кнопке, а не в цели. */}
-          <div className="flex flex-wrap items-start gap-block">
+          <div className="flex flex-wrap items-start gap-section">
             <Field
               id="protein-min"
               width="narrow"
@@ -891,7 +891,7 @@ function GoalFields({
           от поля «Калорийность» — пара читалась как два несвязанных поля, а
           пояснение к правому уезжало к краю экрана. Ширину пары теперь задают
           сами поля. */}
-      <div className="flex items-start gap-block">
+      <div className="flex items-start gap-section">
         {/* Каждое поле — своя доля строки на телефоне и своя ширина на
             десктопе: числовое поле занимает строку целиком до `sm`, и в
             свободном ряду пара распадалась на две строки — а показатели

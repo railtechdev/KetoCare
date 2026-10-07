@@ -1,7 +1,9 @@
 import {
   AsyncSection,
   Button,
+  FieldShell,
   Input,
+  NativeSelect,
   RatioBadge,
   formatKcal,
   useDebouncedValue,
@@ -10,6 +12,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { useTelegramBack } from "../../lib/useTelegram";
 import { type DishOption, useDishOptions } from "./useDishOptions";
 
 /**
@@ -54,6 +57,19 @@ export function ComposePanel({
   const debounced = useDebouncedValue(query, 300);
   const dishes = useDishOptions(patientId, debounced);
 
+  // «Назад» Telegram — шаг панели назад: от выбранного блюда к списку, от
+  // списка — закрыть панель. Без неё аппаратная «Назад» на Android закрывала
+  // весь Mini App посреди сборки дня.
+  useTelegramBack(
+    saving
+      ? null
+      : chosen !== null
+        ? () => {
+            setChosen(null);
+          }
+        : onCancel,
+  );
+
   const factor = Number(portion.replace(",", "."));
   const factorValid = Number.isFinite(factor) && factor > 0 && factor <= 99.99;
 
@@ -62,49 +78,46 @@ export function ComposePanel({
       <div className="flex flex-col gap-field">
         <p className="m-0 font-medium break-words">{chosen.title}</p>
 
-        <label className="flex flex-col gap-1">
-          <span>{t("menu.compose.meal")}</span>
-          {/* Приёмов столько, сколько назначил врач (ADR-0029). Список, а не
-              поле: номер приёма — выбор из назначенного, а не любое число. */}
-          <select
-            className="min-h-(--spacing-touch) rounded-xl border border-border bg-card px-3"
-            value={mealIndex}
-            onChange={(event) => setMealIndex(Number(event.target.value))}
-          >
-            {meals.map((index) => (
-              <option key={index} value={index}>
-                {t("menu.meal", { index })}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FieldShell label={t("menu.compose.meal")}>
+          {() => (
+            // Приёмов столько, сколько назначил врач (ADR-0029). Список, а не
+            // поле: номер приёма — выбор из назначенного, а не любое число.
+            <NativeSelect
+              value={mealIndex}
+              onChange={(event) => setMealIndex(Number(event.target.value))}
+            >
+              {meals.map((index) => (
+                <option key={index} value={index}>
+                  {t("menu.meal", { index })}
+                </option>
+              ))}
+            </NativeSelect>
+          )}
+        </FieldShell>
 
         {/* Подсказка — рядом с полем, а не внутри подписи: всё, что лежит в
-            `label`, скринридер читает как имя поля, и человек слышал бы
-            «Порций в раскладке рецепта 2 одна порция это 1». */}
-        <div className="flex flex-col gap-1">
-          <label className="flex flex-col gap-1">
-            <span>{t("menu.compose.portions")}</span>
-            <Input
-              type="text"
-              inputMode="decimal"
-              className="min-h-(--spacing-touch) w-28 tabular-nums"
-              aria-describedby="compose-portions-hint"
-              value={portion}
-              onChange={(event) => setPortion(event.target.value)}
-            />
-          </label>
-          <span
-            id="compose-portions-hint"
-            className="text-sm text-muted-foreground"
-          >
-            {chosen.servings === null
+            `label`, скринридер читает как имя поля. */}
+        <FieldShell
+          label={t("menu.compose.portions")}
+          hint={
+            chosen.servings === null
               ? t("menu.compose.portionsHintDish")
               : t("menu.compose.portionsHintRecipe", {
                   count: chosen.servings,
-                })}
-          </span>
-        </div>
+                })
+          }
+        >
+          {({ describedBy }) => (
+            <Input
+              type="text"
+              inputMode="decimal"
+              className="min-h-touch w-28 tabular-nums"
+              aria-describedby={describedBy}
+              value={portion}
+              onChange={(event) => setPortion(event.target.value)}
+            />
+          )}
+        </FieldShell>
 
         {saveError != null && (
           <p role="alert" className="m-0 text-destructive">

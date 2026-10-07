@@ -1,9 +1,11 @@
 import {
   Button,
+  FieldShell,
   FormSheet,
   Input,
   KETONE_MAX_MMOL,
   KETONE_MIN_MMOL,
+  NativeSelect,
   OCCURRED_AT_FUTURE,
   SEIZURE_COUNT_MIN,
   Textarea,
@@ -28,10 +30,11 @@ import {
   weightSchema,
   type DiaryEntryBody,
 } from "@ketocare/ui";
-import { useId, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { useTelegramBack, useUnsavedGuard } from "../../lib/useTelegram";
 import type { DiaryLog, MedicationOption, NamedOption } from "./useDiary";
 
 type Values = Record<string, string | boolean>;
@@ -143,13 +146,29 @@ export function EntryEditSheet({
   onClose,
 }: EntryEditSheetProps) {
   const { t } = useTranslation();
-  const [values, setValues] = useState<Values>(() => valuesOf(entry));
+  const initial = useMemo(() => valuesOf(entry), [entry]);
+  const [values, setValues] = useState<Values>(initial);
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState(1);
   const rules = RULES[entry.kind];
 
   const set = (name: string) => (value: string | boolean) =>
     setValues((current) => ({ ...current, [name]: value }));
+
+  // Незаконченная правка: Telegram спросит «закрыть?», а жест вниз по форме
+  // не свернёт приложение вместе с ней.
+  const dirty = Object.keys(values).some(
+    (name) => values[name] !== initial[name],
+  );
+  useUnsavedGuard(dirty);
+
+  // «Назад» Telegram — шаг назад в форме, а с первого шага — закрыть её.
+  // Без этого аппаратная «Назад» на Android закрывала весь Mini App.
+  const back = () => {
+    if (step === 2) setStep(1);
+    else onClose();
+  };
+  useTelegramBack(pending ? null : back);
 
   function submit() {
     const found = diaryFieldErrors(rules.schema, values);
@@ -187,7 +206,7 @@ export function EntryEditSheet({
     >
       <form
         noValidate
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         onSubmit={(event) => {
           event.preventDefault();
           submit();
@@ -223,7 +242,7 @@ export function EntryEditSheet({
             variant="outline"
             className="min-h-touch"
             disabled={pending}
-            onClick={() => (step === 2 ? setStep(1) : onClose())}
+            onClick={back}
           >
             {step === 2 ? t("diary.back") : t("actions.cancel")}
           </Button>
@@ -294,26 +313,11 @@ function EntryFields({
               )}
             />
           )}
-          <TextField
-            label={t("diary.form.durationSec")}
-            optional
-            type="number"
-            inputMode="numeric"
-            value={text("durationSec")}
-            onChange={set("durationSec")}
-            hint={t("diary.form.durationHint")}
-            error={errors.durationSec && t("diary.form.durationSecInvalid")}
-          />
-          <SelectField
-            label={t("diary.form.durationChoice")}
-            optional
-            value={text("durationOptionId")}
-            onChange={set("durationOptionId")}
-            options={[
-              { id: "", name: t("diary.form.durationChoiceNone") },
-              ...durationOptions,
-            ]}
-            error={errors.durationOptionId && t("diary.form.durationBoth")}
+          <DurationField
+            values={values}
+            errors={errors}
+            set={set}
+            durationOptions={durationOptions}
           />
         </>
       ) : (
@@ -457,6 +461,90 @@ function EntryFields({
 }
 
 /**
+ * Длительность приступа — выбор «засекали / со слов», а под ним одно поле.
+ *
+ * Прежде на шаге стояли оба поля сразу (секунды и интервал) плюс подсказка
+ * «одно из двух, не оба» — четыре поля на экране и ошибка, которую форма сама
+ * провоцировала. Это разные величины (ADR-0020): измеренное и названное со
+ * слов, — и выбор между ними делается словами, а не тем, какое поле заполнить.
+ * Переключение очищает второе поле: оба сразу сервер не примет.
+ */
+function DurationField({
+  values,
+  errors,
+  set,
+  durationOptions,
+}: {
+  values: Values;
+  errors: Errors;
+  set: (name: string) => (value: string | boolean) => void;
+  durationOptions: NamedOption[];
+}) {
+  const { t } = useTranslation();
+  const text = (name: string) => String(values[name] ?? "");
+  const [mode, setMode] = useState<"measured" | "estimated">(() =>
+    text("durationSec") !== "" ? "measured" : "estimated",
+  );
+
+  const choose = (next: "measured" | "estimated") => {
+    setMode(next);
+    if (next === "measured") set("durationOptionId")("");
+    else set("durationSec")("");
+  };
+
+  return (
+    <fieldset className="m-0 flex flex-col gap-field border-0 p-0">
+      <legend className="mb-1 p-0">{t("diary.form.durationMode")}</legend>
+      <div className="flex flex-wrap gap-x-section">
+        {(["estimated", "measured"] as const).map((option) => (
+          <label
+            key={option}
+            className="flex min-h-touch cursor-pointer items-center gap-field"
+          >
+            <input
+              type="radio"
+              name="duration-mode"
+              className="size-5 accent-primary"
+              checked={mode === option}
+              onChange={() => choose(option)}
+            />
+            {t(
+              option === "measured"
+                ? "diary.form.durationMeasured"
+                : "diary.form.durationEstimated",
+            )}
+          </label>
+        ))}
+      </div>
+      {mode === "measured" ? (
+        <TextField
+          label={t("diary.form.durationSec")}
+          optional
+          type="number"
+          inputMode="numeric"
+          value={text("durationSec")}
+          onChange={set("durationSec")}
+          hint={t("diary.form.durationHint")}
+          error={errors.durationSec && t("diary.form.durationSecInvalid")}
+        />
+      ) : (
+        <SelectField
+          label={t("diary.form.durationChoice")}
+          optional
+          value={text("durationOptionId")}
+          onChange={set("durationOptionId")}
+          options={[
+            { id: "", name: t("diary.form.durationChoiceNone") },
+            ...durationOptions,
+          ]}
+          error={errors.durationOptionId && t("diary.form.durationBoth")}
+        />
+      )}
+    </fieldset>
+  );
+}
+
+/**
  * Список вариантов с уже записанным значением, даже если справочник его не
  * знает: иначе селект молча подставил бы первый вариант, и сохранение
  * переписало бы лекарство или тип приступа, которого человек не трогал.
@@ -470,55 +558,6 @@ function withCurrent(
     return options;
   }
   return [{ id: current, name: t("diary.form.unknownOption") }, ...options];
-}
-
-function FieldShell({
-  label,
-  optional,
-  hint,
-  error,
-  children,
-}: {
-  label: string;
-  optional?: boolean;
-  hint?: string;
-  error?: string | false;
-  children: (ids: { describedBy: string | undefined }) => ReactNode;
-}) {
-  const { t } = useTranslation();
-  const id = useId();
-  const hintId = `${id}-hint`;
-  const errorId = `${id}-error`;
-  const describedBy =
-    [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") ||
-    undefined;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="flex flex-col gap-1">
-        <span>
-          {label}
-          {optional && (
-            <span className="text-muted-foreground">
-              {" "}
-              ({t("diary.optional")})
-            </span>
-          )}
-        </span>
-        {children({ describedBy })}
-      </label>
-      {hint && (
-        <span id={hintId} className="text-sm text-muted-foreground">
-          {hint}
-        </span>
-      )}
-      {error && (
-        <span id={errorId} role="alert" className="text-sm text-destructive">
-          {error}
-        </span>
-      )}
-    </div>
-  );
 }
 
 function TextField({
@@ -544,9 +583,15 @@ function TextField({
   step?: string;
   min?: number;
 }) {
+  const { t } = useTranslation();
   return (
-    <FieldShell label={label} optional={optional} hint={hint} error={error}>
-      {({ describedBy }) => (
+    <FieldShell
+      label={label}
+      optionalLabel={optional ? t("diary.optional") : undefined}
+      hint={hint}
+      error={error}
+    >
+      {({ describedBy, invalid }) => (
         <Input
           type={type}
           inputMode={inputMode}
@@ -554,7 +599,7 @@ function TextField({
           min={min}
           className="min-h-touch"
           value={value}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={invalid}
           aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}
         />
@@ -576,13 +621,18 @@ function AreaField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <FieldShell label={label} optional={optional} error={error}>
-      {({ describedBy }) => (
+    <FieldShell
+      label={label}
+      optionalLabel={optional ? t("diary.optional") : undefined}
+      error={error}
+    >
+      {({ describedBy, invalid }) => (
         <Textarea
           rows={3}
           value={value}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={invalid}
           aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}
         />
@@ -606,13 +656,17 @@ function SelectField({
   onChange: (value: string) => void;
   options: NamedOption[];
 }) {
+  const { t } = useTranslation();
   return (
-    <FieldShell label={label} optional={optional} error={error}>
-      {({ describedBy }) => (
-        <select
-          className="min-h-touch rounded-xl border border-border bg-card px-3"
+    <FieldShell
+      label={label}
+      optionalLabel={optional ? t("diary.optional") : undefined}
+      error={error}
+    >
+      {({ describedBy, invalid }) => (
+        <NativeSelect
           value={value}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={invalid}
           aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}
         >
@@ -621,7 +675,7 @@ function SelectField({
               {option.name}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       )}
     </FieldShell>
   );

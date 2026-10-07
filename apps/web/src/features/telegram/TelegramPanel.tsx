@@ -45,7 +45,7 @@ export function TelegramPanel({ patientId, childName }: Props) {
   const code = issue.data;
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <Section title={t("code.title")} density="compact">
         <p className="m-0 text-muted-foreground">{t("code.intro")}</p>
 
@@ -146,7 +146,7 @@ export function TelegramPanel({ patientId, childName }: Props) {
             {active.map((link) => (
               <li
                 key={link.id}
-                className="flex flex-wrap items-center gap-block rounded-xl border border-border p-4"
+                className="flex flex-wrap items-center gap-section rounded-xl border border-border p-4"
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <span className="font-medium">

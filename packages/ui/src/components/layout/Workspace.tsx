@@ -62,7 +62,7 @@ export function Workspace({
           содержимым, а не под ним. */}
       <nav
         aria-label={navLabel}
-        className="flex min-w-0 flex-col gap-block xl:sticky xl:top-20 xl:self-start"
+        className="flex min-w-0 flex-col gap-section xl:sticky xl:top-20 xl:self-start"
       >
         {nav}
       </nav>

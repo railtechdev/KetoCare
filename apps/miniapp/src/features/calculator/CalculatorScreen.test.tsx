@@ -259,6 +259,44 @@ beforeEach(() => {
 });
 
 describe("калькулятор в Mini App", () => {
+  it("отказ поиска продукта — словами и с повтором, а не пустым списком", async () => {
+    // Прежде отказ выглядел пустым списком без слов: человек решал, что
+    // продукта в базе нет.
+    const user = userEvent.setup();
+    let fail = true;
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.includes("overview")) {
+        return Promise.resolve({
+          data: {
+            patient_id: SESSION.patientId,
+            date: "2026-08-31",
+            prescription: PRESCRIPTION,
+            day: null,
+            last_ketone: null,
+            last_weight: null,
+            seizures_today: { entries: 0, count: 0 },
+          },
+        });
+      }
+      return Promise.resolve(
+        fail
+          ? { error: { error: { code: "internal", message: "Сбой поиска" } } }
+          : { data: { items: [PRODUCT], total: 1 } },
+      );
+    });
+    renderScreen();
+
+    await user.type(await screen.findByLabelText("Найдите продукт"), "масло");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Сбой поиска");
+    expect(screen.queryByText("Ничего не нашлось")).toBeNull();
+
+    fail = false;
+    await user.click(screen.getByRole("button", { name: "Повторить" }));
+    expect(
+      await screen.findByRole("button", { name: "Масло сливочное" }),
+    ).toBeInTheDocument();
+  });
+
   it("за набранное слово уходит один запрос, а не запрос на букву", async () => {
     // Без задержки каждая буква после второй уходила бы полнотекстовым
     // запросом к базе: «масло» — четыре запроса вместо одного.

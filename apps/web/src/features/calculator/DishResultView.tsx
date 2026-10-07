@@ -65,8 +65,8 @@ export function DishResultView({
         : "off";
 
   return (
-    <div className="flex flex-col gap-block">
-      <div className="flex flex-wrap items-center gap-block">
+    <div className="flex flex-col gap-section">
+      <div className="flex flex-wrap items-center gap-section">
         <RatioBadge ratio={dish.ratio} withinTolerance={ratioWithinTolerance} />
         <span className="tabular-nums">
           {t("kcalValue", { value: formatKcal(dish.kcal) })}
@@ -78,12 +78,12 @@ export function DishResultView({
             className={cn(
               "text-sm tabular-nums",
               kcalWithinTolerance === false
-                ? "text-warning"
+                ? "text-warning-strong"
                 : "text-muted-foreground",
             )}
           >
             {t(delta > 0 ? "result.above" : "result.below", {
-              value: Math.abs(delta),
+              value: formatKcal(Math.abs(delta)),
             })}
           </span>
         )}
@@ -100,7 +100,7 @@ export function DishResultView({
           role="status"
           className={cn(
             "m-0 text-sm",
-            verdict === "within" ? "text-success" : "text-warning",
+            verdict === "within" ? "text-success" : "text-warning-strong",
           )}
         >
           {t(verdict === "within" ? "result.within" : "result.off")}

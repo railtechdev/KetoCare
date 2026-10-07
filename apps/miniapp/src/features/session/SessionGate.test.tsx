@@ -8,6 +8,7 @@ import { NetworkError } from "@ketocare/api-client";
 import "../../lib/i18n";
 import { notifySessionExpired } from "../../lib/api";
 import { SessionGate } from "./SessionGate";
+import { useUpdateSession } from "./useSession";
 
 const launchData = vi.hoisted(() => vi.fn<() => string | null>());
 const post = vi.hoisted(() => vi.fn());
@@ -68,6 +69,49 @@ describe("вход в Mini App", () => {
     expect(await screen.findByText("Кабинет Амина")).toBeInTheDocument();
   });
 
+  it("поправка сессии после входа видна всем экранам", async () => {
+    // Включённый кабинет должен быть виден и ссылке в плане дня, и блоку на
+    // главной — без перезапуска приложения.
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockResolvedValue({
+      data: {
+        access_token: "a",
+        refresh_token: "r",
+        patient_id: "11111111-1111-4111-8111-111111111111",
+        patient_name: "Амина",
+        has_web_credentials: false,
+      },
+      response: { status: 200 },
+    });
+    function Probe({ has }: { has: boolean }) {
+      const update = useUpdateSession();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            update({ hasWebCredentials: true });
+          }}
+        >
+          {has ? "кабинет есть" : "кабинета нет"}
+        </button>
+      );
+    }
+    const client = new QueryClient();
+    render(
+      <QueryClientProvider client={client}>
+        <SessionGate>{(s) => <Probe has={s.hasWebCredentials} />}</SessionGate>
+      </QueryClientProvider>,
+    );
+
+    const button = await screen.findByRole("button", { name: "кабинета нет" });
+    act(() => {
+      button.click();
+    });
+    expect(
+      screen.getByRole("button", { name: "кабинет есть" }),
+    ).toBeInTheDocument();
+  });
+
   it("непривязанному чату показывает, как привязать, а не отказ", async () => {
     // Семья может это исправить сама, и приложение обязано сказать как.
     launchData.mockReturnValue("user=...&hash=...");
@@ -115,13 +159,39 @@ describe("вход в Mini App", () => {
 
   it("прочий отказ даёт повтор, а не тупик", async () => {
     launchData.mockReturnValue("user=...&hash=...");
-    post.mockResolvedValue({ error: {}, response: { status: 401 } });
+    post.mockResolvedValue({ error: {}, response: { status: 500 } });
 
     renderGate();
 
     expect(
       await screen.findByRole("button", { name: "Повторить" }),
     ).toBeInTheDocument();
+  });
+
+  it("непринятая подпись запуска (401) — «откройте снова из чата», без повтора", async () => {
+    // Подпись Telegram живёт ограниченное время: приложение, провисевшее
+    // открытым дольше, при истечении сессии входит заново со старой подписью.
+    // Повтор ушёл бы с той же подписью — помогает только новый запуск.
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockResolvedValue({ error: {}, response: { status: 401 } });
+
+    renderGate();
+
+    expect(
+      await screen.findByText("Закройте приложение и откройте снова из чата"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Повторить" })).toBeNull();
+  });
+
+  it("ожидание входа объявляется программе чтения с экрана", () => {
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockImplementation(() => new Promise(() => undefined));
+
+    renderGate();
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Открываем приложение…",
+    );
   });
 });
 

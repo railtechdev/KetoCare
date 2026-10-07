@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import "../../lib/i18n";
 import { api } from "../../lib/api";
+import { primaryActions } from "@ketocare/ui/testing";
+
 import { HomeScreen } from "./HomeScreen";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -128,6 +130,80 @@ describe("сводка в Mini App", () => {
       screen.getByText(
         "Набрано 600 из 1 200 ккал. Чтобы набрать суточную норму, добавьте ещё 600 ккал.",
       ),
+    ).toBeInTheDocument();
+  });
+
+  it("громкая кнопка на главной — не больше одной (правило П31)", async () => {
+    // Напоминания, приглашение близкого и вход в кабинет стояли тремя
+    // акцентными кнопками подряд под сводкой — ни одна не отвечала на вопрос
+    // «с чего начать». Та же проверка, что у главной кабинета.
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith("/overview")) {
+        return {
+          data: {
+            patient_id: SESSION.patientId,
+            date: "2026-10-05",
+            prescription: null,
+            day: null,
+            last_ketone: null,
+            last_weight: null,
+            seizures_today: { count: 0 },
+          },
+          response: { status: 200 },
+        };
+      }
+      if (path.includes("reminder")) {
+        return {
+          data: {
+            patient_id: SESSION.patientId,
+            enabled: true,
+            ketones_at: "08:00:00",
+            medications_at: null,
+            weight_at: null,
+            no_records_at: "20:00:00",
+          },
+          response: { status: 200 },
+        };
+      }
+      return { data: [], response: { status: 200 } };
+    });
+    const { container } = render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <HomeScreen session={{ ...SESSION, hasWebCredentials: false }} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("Напоминания включены");
+    await screen.findByRole("button", { name: "Пригласить близкого" });
+    expect(primaryActions(container).length).toBeLessThanOrEqual(1);
+  });
+
+  it("последние кетоны — с единицей и способом замера, как в кабинете", async () => {
+    // «1,8» без «ммоль/л» и «по крови» с порогом врача не сравнить: у крови и
+    // мочи шкалы разные.
+    serveOverview({
+      data: {
+        patient_id: SESSION.patientId,
+        date: "2026-10-05",
+        prescription: null,
+        day: null,
+        last_ketone: {
+          value: 1.8,
+          method: "urine",
+          occurred_at: "2026-10-05T07:30:00Z",
+        },
+        last_weight: null,
+        seizures_today: { count: 0 },
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/1,8 ммоль\/л · по моче/),
     ).toBeInTheDocument();
   });
 

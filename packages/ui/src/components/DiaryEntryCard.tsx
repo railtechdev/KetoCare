@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "../lib/cn";
 import { formatOccurredAt } from "../lib/format";
+import { useKitLabels } from "../lib/kitLabels";
 
 export interface DiaryEntryCardProps {
   title: string;
@@ -14,16 +15,6 @@ export interface DiaryEntryCardProps {
   className?: string;
 }
 
-const SOURCE_LABEL: Record<
-  NonNullable<DiaryEntryCardProps["source"]>,
-  string
-> = {
-  web: "Веб",
-  bot: "Бот",
-  miniapp: "Приложение",
-  ai_parsed: "Распознано ИИ",
-};
-
 /** Карточка записи дневника (раздел 8.2 ТЗ). */
 export function DiaryEntryCard({
   title,
@@ -33,6 +24,7 @@ export function DiaryEntryCard({
   actions,
   className,
 }: DiaryEntryCardProps) {
+  const sourceLabels = useKitLabels().diarySource;
   return (
     <article
       className={cn(
@@ -59,11 +51,11 @@ export function DiaryEntryCard({
           <span
             className={cn(
               "text-xs text-muted-foreground",
-              source === "ai_parsed" && "font-semibold text-warning",
+              source === "ai_parsed" && "font-semibold text-warning-strong",
             )}
             data-source={source}
           >
-            {SOURCE_LABEL[source]}
+            {sourceLabels[source]}
           </span>
         )}
         {/* Тач-цели действий не меньше 44 px (раздел 8.2 ТЗ) */}

@@ -142,6 +142,39 @@ export function argumentOf(body: string, name: string): string | null {
   return out.join("").trim().replace(/\s+/g, " ");
 }
 
+/** Первый аргумент вызова — до запятой верхнего уровня. */
+function firstArgument(body: string): string {
+  let depth = 0;
+  for (let i = 0; i < body.length; i += 1) {
+    const char = body[i] ?? "";
+    if ("([{".includes(char)) depth += 1;
+    else if (")]}".includes(char)) depth -= 1;
+    else if (char === "," && depth === 0) return body.slice(0, i);
+  }
+  return body;
+}
+
+/**
+ * Ключи словаря, которые может спросить вызов: литерал целиком или обе ветви
+ * условия. Ключ, собранный выражением (`` `charts.${kind}` ``), не виден —
+ * см. «Чего не ловится». Пространство имён (`ns:ключ`) отбрасывается: в
+ * словаре его нет.
+ */
+export function calledKeys(argument: string): string[] {
+  const literal = /^\s*["'`]([\w.:]+)["'`]\s*$/.exec(argument);
+  const keys =
+    literal !== null
+      ? [literal[1] ?? ""]
+      : argument.includes("?")
+        ? [...argument.matchAll(/["'`]([\w.:]+)["'`]/g)].map(
+            (match) => match[1] ?? "",
+          )
+        : [];
+  return keys
+    .filter((key) => key !== "")
+    .map((key) => key.slice(key.lastIndexOf(":") + 1));
+}
+
 /** Признак того, что число прошло через помощник кита. */
 export function goesThroughHelper(expression: string): boolean {
   return /\bformat[A-Z]\w*\s*\(/.test(expression);
@@ -160,19 +193,24 @@ export function rawNumbersNextToUnits(options: {
     const source = readFileSync(path, "utf8");
     const lines = source.split("\n");
 
-    for (const call of source.matchAll(/\bt\(\s*["'`]([\w.:]+)["'`]/g)) {
-      const argument = call[1];
-      if (argument === undefined) continue;
-      // `t("ns:ключ")` — пространство имён отбрасывается: в словаре его нет.
-      const called = argument.slice(argument.lastIndexOf(":") + 1);
+    for (const call of source.matchAll(/\bt\(/g)) {
+      const body = callBody(source, call.index + call[0].length);
+      // Ключей бывает два: `t(delta > 0 ? "above" : "below", { value })` —
+      // переменная одна на оба шаблона, и пропустить такой вызов значило
+      // пропустить ровно то место, где число печаталось сырым («на 12 ккал»
+      // рядом с «1 200 ккал»).
+      const keys = calledKeys(firstArgument(body));
+      if (keys.length === 0) continue;
       const line = source.slice(0, call.index).split("\n").length;
       const nearby = lines.slice(Math.max(0, line - 4), line).join("\n");
       if (nearby.includes(RAW_MARKER)) continue;
 
       for (const [key, template] of templates) {
-        if (called !== key && !called.endsWith(`.${key}`)) continue;
+        if (
+          !keys.some((called) => called === key || called.endsWith(`.${key}`))
+        )
+          continue;
 
-        const body = callBody(source, call.index + call[0].length);
         for (const variable of unitVariables(template)) {
           const expression = argumentOf(body, variable);
           if (expression === null || goesThroughHelper(expression)) continue;

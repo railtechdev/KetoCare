@@ -36,7 +36,7 @@ export function RecipeListSkeleton() {
   const { t } = useTranslation("recipes");
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <p role="status" className="sr-only">
         {t("list.loading")}
       </p>
@@ -122,7 +122,7 @@ export function RecipeList({
   const { t } = useTranslation("recipes");
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <Tiles as="ul" min="sm" columns="fill">
         {recipes.map((recipe) => (
           <li key={recipe.id}>
@@ -162,7 +162,7 @@ export function RecipeList({
                   )}
                 </p>
 
-                <p className="m-0 mt-auto flex flex-wrap items-center gap-block">
+                <p className="m-0 mt-auto flex flex-wrap items-center gap-section">
                   {/* Вердикт о допуске не передаётся: соотношение рецепта — его
                       характеристика, а соответствие назначению зависит от
                       конкретного ребёнка и считается сервером в меню. */}

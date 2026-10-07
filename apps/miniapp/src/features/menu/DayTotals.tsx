@@ -85,7 +85,7 @@ export function DayTotals({
       />
 
       {targets !== null && (
-        <div className="flex flex-col gap-block">
+        <div className="flex flex-col gap-section">
           <TargetBar
             kind="goal"
             label={t("menu.targets.kcalLabel")}

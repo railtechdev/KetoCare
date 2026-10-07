@@ -76,7 +76,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       <Button
         type="button"
         variant="ghost"
@@ -133,7 +133,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
         </span>
       </label>
 
-      <div className="flex flex-wrap gap-block">
+      <div className="flex flex-wrap gap-section">
         <Button
           type="button"
           disabled={file === null || importProducts.isPending}

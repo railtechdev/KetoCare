@@ -88,7 +88,7 @@ export function MyDishesPanel({
           />
         }
       >
-        <ul className="m-0 flex list-none flex-col gap-block p-0">
+        <ul className="m-0 flex list-none flex-col gap-section p-0">
           {(dishes.data ?? []).map((dish) => (
             <li
               key={dish.id}
@@ -245,7 +245,7 @@ function RenameForm({
   return (
     <form
       noValidate
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
       onSubmit={(event) => {
         event.preventDefault();
         if (trimmed !== "") onSubmit(trimmed);

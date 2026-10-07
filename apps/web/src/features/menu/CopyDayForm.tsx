@@ -70,7 +70,7 @@ export function CopyDayForm({ patientId, date, onCopied }: Props) {
     <form
       onSubmit={(event) => void onSubmit(event)}
       noValidate
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
     >
       <Field
         id={fieldId}

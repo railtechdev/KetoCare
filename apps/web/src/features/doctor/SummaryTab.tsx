@@ -42,7 +42,7 @@ export function SummaryTab({ patient }: { patient: Patient }) {
   const overview = usePatientOverview(patient.id);
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {/* Четыре состояния — общим компонентом. Рукописная цепочка прятала
           уже загруженную сводку за сообщением об ошибке: TanStack Query при
           неудачном ОБНОВЛЕНИИ сохраняет прежний ответ и одновременно
@@ -171,8 +171,8 @@ function OverviewPanels({
             description={t("summary.day.emptyDescription")}
           />
         ) : (
-          <div className="flex flex-col gap-block">
-            <div className="flex flex-wrap items-center gap-block">
+          <div className="flex flex-col gap-section">
+            <div className="flex flex-wrap items-center gap-section">
               {/* Вердикт о соответствии приходит от сервера: допуски — константы
                   расчётного ядра, на клиенте их копии нет (правило 2 CLAUDE.md). */}
               <RatioBadge

@@ -296,7 +296,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
           <p className="m-0 text-muted-foreground">{t("detail.noComputed")}</p>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-block">
+            <div className="flex flex-wrap items-center gap-section">
               {/* Без вердикта о допуске: соотношение рецепта — характеристика
                       блюда, а не соответствие назначению конкретного ребёнка. */}
               <RatioBadge ratio={computed.ratio} />
@@ -320,7 +320,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
             другое число: сколько в одной порции. Пока его не было рядом, семья
             делила в уме — а по этой же порции считается день ребёнка. */}
         {perPortion !== null && data.servings > 1 && (
-          <p className="m-0 flex flex-wrap items-center gap-block tabular-nums">
+          <p className="m-0 flex flex-wrap items-center gap-section tabular-nums">
             <span className="font-medium">{t("detail.perPortion")}</span>
             <span>
               {t("detail.kcal", { value: formatKcal(perPortion.kcal) })}
@@ -335,7 +335,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
           </p>
         )}
 
-        <p className="m-0 flex flex-wrap gap-block text-sm text-muted-foreground tabular-nums">
+        <p className="m-0 flex flex-wrap gap-section text-sm text-muted-foreground tabular-nums">
           <span>{t("detail.yield", { grams: formatMass(data.yield_g) })}</span>
           <span>{t("detail.servings", { value: data.servings })}</span>
         </p>
@@ -369,7 +369,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
             {data.ingredients.map((ingredient) => (
               <li
                 key={ingredient.product_id}
-                className="flex items-baseline justify-between gap-block border-b border-border pb-1"
+                className="flex items-baseline justify-between gap-section border-b border-border pb-1"
               >
                 {/* Граммовка видна всегда, даже пока имена в пути: состав,
                     спрятанный целиком, — это карточка без рецепта, а по ней
@@ -378,7 +378,7 @@ export function RecipeDetail({ recipeId, canEdit, onBack, onEdit }: Props) {
                   {productLabel(productNames.stateOf(ingredient.product_id), t)}
                   {productNames.withdrawn[ingredient.product_id] !==
                     undefined && (
-                    <span className="ml-2 text-sm text-warning">
+                    <span className="ml-2 text-sm text-warning-strong">
                       {t("detail.withdrawn")}
                     </span>
                   )}

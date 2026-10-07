@@ -209,7 +209,7 @@ export function TherapyCourseView({
             />
           }
         >
-          <ul className="m-0 flex list-none flex-col gap-block p-0">
+          <ul className="m-0 flex list-none flex-col gap-section p-0">
             {visits.map((visit) => (
               <li key={visit.id}>
                 <VisitItem
@@ -407,7 +407,7 @@ function EndTherapySheet({
       title={t("course.status.endTitle")}
       description={t("course.status.endDescription")}
     >
-      <form noValidate className="flex flex-col gap-block" onSubmit={submit}>
+      <form noValidate className="flex flex-col gap-section" onSubmit={submit}>
         <Field
           id={`${ids}-ended-on`}
           type="date"
@@ -511,7 +511,7 @@ function AddVisitSheet({
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
       title={t("course.visits.addTitle")}
     >
-      <form noValidate className="flex flex-col gap-block" onSubmit={submit}>
+      <form noValidate className="flex flex-col gap-section" onSubmit={submit}>
         <Field
           id={`${ids}-planned-on`}
           type="date"

@@ -149,6 +149,30 @@ class TestJournalAndRevoke:
         assert row["issued_by_name"] == doctor.full_name
         assert row["used_by_name"] is None
 
+    async def test_journal_gives_links_only_to_live_codes(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        # Потребитель — `FamilyBlock` Mini App: он показывает уже выданное
+        # приглашение близкому вместо нового кода на каждое нажатие.
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await _lead(session, doctor, patient)
+        live = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()
+        revoked = (await client.post(codes_url(patient.id), headers=auth_headers(doctor))).json()
+        await client.post(
+            f"{codes_url(patient.id)}/{revoked['code']}/revoke", headers=auth_headers(doctor)
+        )
+
+        listing = await client.get(codes_url(patient.id), headers=auth_headers(doctor))
+
+        assert listing.status_code == 200, listing.text
+        rows = {row["code"]: row for row in listing.json()}
+        assert rows[live["code"]]["join_url"] == live["join_url"]
+        assert rows[live["code"]]["deep_link"] == live["deep_link"]
+        assert rows[revoked["code"]]["status"] == "revoked"
+        assert rows[revoked["code"]]["join_url"] is None
+        assert rows[revoked["code"]]["deep_link"] is None
+
     async def test_revoked_code_does_not_activate(
         self, client, session, make_user, make_patient, auth_headers
     ):

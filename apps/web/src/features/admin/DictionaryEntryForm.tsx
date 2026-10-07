@@ -94,7 +94,7 @@ export function DictionaryEntryForm({
   return (
     <form
       noValidate
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
       onSubmit={handleSubmit((values) =>
         onSubmit({
           name_ru: values.nameRu.trim(),

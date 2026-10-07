@@ -220,9 +220,9 @@ export function MedicationForm({
           if (first !== undefined) setFocus(first);
         },
       )}
-      className="flex flex-col gap-block"
+      className="flex flex-col gap-section"
     >
-      <div className="grid gap-block sm:grid-cols-2">
+      <div className="grid gap-section sm:grid-cols-2">
         {/* Поле остаётся текстовым: справочник неполон, и закрывать список
             нельзя — врач назначает и то, чего в нём нет. */}
         <Controller

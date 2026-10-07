@@ -266,7 +266,7 @@ function EditForm({
     >
       <form
         noValidate
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         onSubmit={(event) => {
           event.preventDefault();
           mutation.mutate(
@@ -348,7 +348,7 @@ function MergeForm({
     >
       <form
         noValidate
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         onSubmit={(event) => {
           event.preventDefault();
           if (target === "") return;

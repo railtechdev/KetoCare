@@ -98,6 +98,19 @@ describe.each([
     }
   });
 
+  it("предупреждение текстом читаемо на фоне, карточке и приглушённой подложке", () => {
+    // `warning` — подложка; как цвет текста янтарь на белом давал 2:1, и
+    // «вне цели» в калькуляторе было нечитаемым. Текст — `warning-strong`.
+    for (const surface of ["background", "card", "muted"]) {
+      expect(
+        contrastRatio(
+          token(block, "color-warning-strong"),
+          token(block, `color-${surface}`),
+        ),
+      ).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    }
+  });
+
   it("выбранный пункт боковой навигации читаем", () => {
     expect(
       contrastRatio(

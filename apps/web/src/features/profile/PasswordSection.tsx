@@ -99,7 +99,7 @@ export function PasswordSection() {
     <Section title={t("password.title")} description={t("password.intro")}>
       <form
         noValidate
-        className="flex flex-col gap-block"
+        className="flex flex-col gap-section"
         onSubmit={handleSubmit((values) => change.mutate(values))}
       >
         <FormErrorSummary

@@ -82,7 +82,7 @@ export function ProductCard({
       <AsyncSection
         loading={product.isLoading}
         skeleton={
-          <div role="status" className="flex flex-col gap-block">
+          <div role="status" className="flex flex-col gap-section">
             <span className="sr-only">{t("card.loading")}</span>
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-24 w-full max-w-xl" />

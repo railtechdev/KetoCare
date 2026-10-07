@@ -41,7 +41,7 @@ export function HomeScreen({ session }: { session: Session }) {
   const overview = usePatientOverview(session.patientId);
 
   return (
-    <main className="flex flex-col gap-block p-block">
+    <main className="flex flex-col gap-section p-section">
       <header className="flex flex-wrap items-center justify-between gap-field">
         {/* Имя ребёнка без пробелов не должно распирать экран телефона. */}
         <h1 className="min-w-0 break-words text-page-title">
@@ -98,7 +98,7 @@ function Summary({ overview }: { overview: Overview }) {
   } = overview;
 
   return (
-    <div className="flex flex-col gap-block">
+    <div className="flex flex-col gap-section">
       {/* Терапия завершена (вопрос 18, ADR-0050) — нейтрально и без причины:
           её семье называет врач. Тот же текст, что в кабинете. */}
       {(overview.therapy_ended_on ?? null) !== null && (
@@ -172,7 +172,20 @@ function Summary({ overview }: { overview: Overview }) {
         <dl className="grid grid-cols-2 gap-field">
           <Reading
             label={t("home.readings.ketones")}
-            value={ketone ? formatMeasured(ketone.value) : null}
+            // Число с единицей и способом замера, как в кабинете: «1,8» без
+            // «ммоль/л» и без «по крови» сравнить с порогом врача нельзя —
+            // у крови и мочи шкалы разные.
+            value={
+              ketone
+                ? `${t("home.readings.ketonesValue", {
+                    value: formatMeasured(ketone.value),
+                  })} · ${t(
+                    ketone.method === "blood"
+                      ? "home.readings.ketonesBlood"
+                      : "home.readings.ketonesUrine",
+                  )}`
+                : null
+            }
             at={ketone?.occurred_at}
             empty={t("home.readings.none")}
           />

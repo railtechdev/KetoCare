@@ -60,7 +60,7 @@ export function MealGroup({
   return (
     <section
       aria-labelledby={headingId}
-      className="flex flex-col gap-field py-block first:pt-0 last:pb-0"
+      className="flex flex-col gap-field py-section first:pt-0 last:pb-0"
     >
       <div className="flex flex-wrap items-center justify-between gap-field">
         <h3 id={headingId} className="m-0 text-card-title font-semibold">
@@ -211,7 +211,7 @@ export function MealGroup({
                     что выведенный продукт есть, а семье у плиты нужно знать, в
                     каком блюде. */}
                 {withdrawn.length > 0 && (
-                  <p className="m-0 w-full text-sm text-warning">
+                  <p className="m-0 w-full text-sm text-warning-strong">
                     {t("withdrawn.inItem", { list: withdrawn.join(", ") })}
                   </p>
                 )}

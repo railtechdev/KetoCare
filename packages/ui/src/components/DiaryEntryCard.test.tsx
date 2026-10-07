@@ -27,14 +27,14 @@ describe("DiaryEntryCard", () => {
     const badge = screen.getByText("Распознано ИИ");
     expect(badge).toHaveAttribute("data-source", "ai_parsed");
     // Выделяется цветом предупреждения, а не как обычный источник
-    expect(badge.className).toContain("text-warning");
+    expect(badge.className).toContain("text-warning-strong");
   });
 
   it("обычный источник не помечается как ИИ", () => {
     render(<DiaryEntryCard title="Обед" occurredAt={OCCURRED} source="bot" />);
     const badge = screen.getByText("Бот");
     expect(badge).toHaveAttribute("data-source", "bot");
-    expect(badge.className).not.toContain("text-warning");
+    expect(badge.className).not.toContain("text-warning-strong");
   });
 
   it("рендерит содержимое и действия", () => {

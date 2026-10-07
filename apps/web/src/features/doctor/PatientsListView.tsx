@@ -302,7 +302,7 @@ export function PatientsListView() {
             страницы (правило П15 канона). */}
         {overviews.failed && (
           <ErrorState
-            className="mb-block"
+            className="mb-section"
             title={t("list.flagsFailedTitle")}
             description={t("list.flagsFailed")}
             retryLabel={t("common:actions.retry")}

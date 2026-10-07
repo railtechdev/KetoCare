@@ -4,6 +4,7 @@ import {
   Button,
   CALC_GRAMS_MAX,
   EmptyState,
+  FieldShell,
   Input,
   MacroBar,
   MacroFacts,
@@ -33,6 +34,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { useUnsavedGuard } from "../../lib/useTelegram";
 import type { Session } from "../session/useSession";
 import { usePatientOverview } from "../home/useOverview";
 import { SaveDish } from "./SaveDish";
@@ -71,6 +73,9 @@ import {
 export function CalculatorScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<DishRow[]>([]);
+  // Собранный состав — несохранённый ввод: случайный жест вниз или крестик
+  // Telegram не должны стирать его без вопроса.
+  useUnsavedGuard(rows.length > 0);
 
   /**
    * Цель — сырым вводом, как и граммовка.
@@ -387,7 +392,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
     errorMessageOf(actionError) === errorMessageOf(verify.error);
 
   return (
-    <main className="flex flex-col gap-block p-block">
+    <main className="flex flex-col gap-section p-section">
       <h1 className="text-page-title">{t("calculator.title")}</h1>
 
       <Section title={t("calculator.composition")} density="compact">
@@ -631,8 +636,12 @@ export function CalculatorScreen({ session }: { session: Session }) {
         {/* Два действия, и у каждого свой ввод прямо над ним (правило П9
             канона). Подбор первый и крупный: это главное, чего нет у системы,
             в которой клиника работает сегодня, — там граммовку доводят
-            стрелками вручную. */}
-        <div className="flex items-start gap-field">
+            стрелками вручную.
+
+            Поля выровнены по низу: на 360 px «Углеводы не больше, г» переносится
+            в две строки, «Белок не меньше, г» — нет, и при выравнивании по верху
+            поля стояли со сдвигом в строку (20 px). */}
+        <div className="flex items-end gap-field">
           <NumberField
             id="protein-min"
             label={t("calculator.proteinMin")}
@@ -829,27 +838,21 @@ function NumberField({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <label htmlFor={id} className="text-sm">
-        {label}
-      </label>
-      <Input
-        id={id}
-        type="text"
-        inputMode="decimal"
-        className="tabular-nums"
-        value={value}
-        aria-describedby={hint === undefined ? undefined : `${id}-hint`}
-        onChange={(event) => {
-          onChange(event.target.value);
-        }}
-      />
-      {hint !== undefined && (
-        <p id={`${id}-hint`} className="m-0 text-xs text-muted-foreground">
-          {hint}
-        </p>
+    <FieldShell className="min-w-0 flex-1 text-sm" label={label} hint={hint}>
+      {({ describedBy }) => (
+        <Input
+          id={id}
+          type="text"
+          inputMode="decimal"
+          className="tabular-nums"
+          value={value}
+          aria-describedby={describedBy}
+          onChange={(event) => {
+            onChange(event.target.value);
+          }}
+        />
       )}
-    </div>
+    </FieldShell>
   );
 }
 
@@ -878,11 +881,11 @@ function KcalDelta({
     <span
       className={cn(
         "text-sm tabular-nums",
-        within === false ? "text-warning" : "text-muted-foreground",
+        within === false ? "text-warning-strong" : "text-muted-foreground",
       )}
     >
       {t(delta > 0 ? "calculator.above" : "calculator.below", {
-        value: Math.abs(delta),
+        value: formatKcal(Math.abs(delta)),
       })}
     </span>
   );
@@ -944,7 +947,10 @@ function Verdict({
   return (
     <p
       role="status"
-      className={cn("m-0 text-sm", within ? "text-success" : "text-warning")}
+      className={cn(
+        "m-0 text-sm",
+        within ? "text-success" : "text-warning-strong",
+      )}
     >
       {t(within ? "calculator.goalMet" : "calculator.goalMissed")}
     </p>
@@ -968,6 +974,20 @@ function ProductPicker({
   // (`keepPreviousData`). Сказать в эту паузу «ничего не нашлось» значит
   // вынести приговор продукту, которого ещё не искали.
   const settling = query.trim() !== debounced.trim();
+  const searched = debounced.trim().length >= MIN_QUERY;
+  // Отказ поиска — словами и с повтором. Прежде отказ выглядел пустым списком
+  // без единого слова: человек решал, что продукта в базе нет.
+  const failed =
+    searched && !settling && found.isError && found.fetchStatus === "idle";
+  // «Ничего не нашлось» — только об ответе на ЭТИ буквы: не в паузу набора,
+  // не о прежней выдаче (`isPlaceholderData`), не при отказе и не без сети.
+  const nothingFound =
+    searched &&
+    !settling &&
+    found.isSuccess &&
+    !found.isPlaceholderData &&
+    found.fetchStatus === "idle" &&
+    found.data.length === 0;
 
   return (
     <div className="flex flex-col gap-field">
@@ -980,7 +1000,22 @@ function ProductPicker({
           setQuery(event.target.value);
         }}
       />
-      {debounced.trim().length >= MIN_QUERY && (
+      {failed && (
+        <div className="flex flex-col items-start gap-1">
+          <p role="alert" className="m-0 text-destructive">
+            {errorMessageOf(found.error) ?? t("calculator.searchFailed")}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch"
+            onClick={() => void found.refetch()}
+          >
+            {t("actions.retry")}
+          </Button>
+        </div>
+      )}
+      {searched && !failed && (
         <ul className="flex flex-col">
           {(found.data ?? []).map((product) => (
             <li key={product.id}>
@@ -996,14 +1031,11 @@ function ProductPicker({
               </button>
             </li>
           ))}
-          {!settling &&
-            !found.isFetching &&
-            found.fetchStatus !== "paused" &&
-            found.data?.length === 0 && (
-              <li className="text-muted-foreground">
-                {t("calculator.nothingFound")}
-              </li>
-            )}
+          {nothingFound && (
+            <li className="text-muted-foreground">
+              {t("calculator.nothingFound")}
+            </li>
+          )}
         </ul>
       )}
 

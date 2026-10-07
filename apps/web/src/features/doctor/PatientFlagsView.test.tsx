@@ -51,6 +51,7 @@ function toneOf(element: Element, from: "badge" | "legendIcon"): string {
       (name) =>
         name.endsWith("destructive") ||
         name.endsWith("warning") ||
+        name.endsWith("warning-strong") ||
         // Спокойная пометка состояния: цвета тревоги у неё нет намеренно
         // (ADR-0040), но пара «плашка ↔ значок легенды» проверяется так же.
         name.endsWith("muted") ||
@@ -61,7 +62,7 @@ function toneOf(element: Element, from: "badge" | "legendIcon"): string {
 
 const TONE_PAIRS: Record<string, string> = {
   "bg-destructive": "text-destructive",
-  "bg-warning": "text-warning",
+  "bg-warning": "text-warning-strong",
   "bg-muted": "text-muted-foreground",
 };
 
