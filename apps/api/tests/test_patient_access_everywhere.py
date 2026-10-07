@@ -9,8 +9,9 @@
 
 Тест видит только `patient_id` в пути. Ручки, где он приходит телом
 (`/ai/parse`, `/ai/assistant/messages`, `/calc/*`, `/auth/invitations`),
-проверяют доступ вручную через `assert_patient_access`, и новая ручка такого
-вида этот тест не уронит — её проверка остаётся на ревью.
+проверяют доступ вручную через `assert_patient_access`. Их перечисляет
+`test_patient_access_in_body.py`: обходит OpenAPI и требует для каждой строку с
+тестом отказа (Н20).
 """
 
 from __future__ import annotations

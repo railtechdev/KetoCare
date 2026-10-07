@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from limits import parse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -15,7 +17,9 @@ from slowapi.middleware import SlowAPIMiddleware
 from core.config import get_settings
 
 from .client_address import client_address
-from .errors import ErrorCode, error_response
+from .errors import ApiError, ErrorCode, error_response
+
+logger = structlog.get_logger(__name__)
 
 # Ручки, где перебирают секрет (пароль, шестизначный TOTP, токен приглашения):
 # строгий лимит раздела 11 ТЗ.
@@ -47,12 +51,28 @@ REFRESH_RATE_LIMIT = "60/minute"
 # не реже раза в пятнадцать минут — то есть канал записи приступов вставал бы
 # целиком при считанных десятках привязок.
 #
-# Ключ по `chat_id` или `link_id` из тела решил бы это точнее, но эти значения
-# выбирает тот, кого ограничивают. Поэтому лимит остаётся по адресу и просто
-# поднят до величины, за которой стоит уже не работа, а злоупотребление. Подбор
-# им и не сдерживается: код живёт 15 минут при 31^8 вариантов, а секрет привязки
-# имеет полную машинную энтропию.
-BOT_RATE_LIMIT = "120/minute"
+# Лимит по адресу — только общий потолок на весь бот: процесс сорвался в цикл,
+# и его надо остановить. Прежде он был единственным (120/мин), и один человек,
+# присылавший два `/start XXXXXXXX` в секунду, оставлял все семьи без привязки и
+# без сессий бота (Н13, SECURITY_REVIEW). Поэтому потолок поднят до величины,
+# которой живая работа не достигает, а каждому человеку и каждой привязке —
+# своё ведро (`hit_bot_bucket`).
+#
+# Ключи берутся из тела, но выбирает их не тот, кого ограничивают: ручки
+# открыты только сервисному токену бота, а `telegram_user_id` бот берёт из
+# обновления Telegram, где отправителя удостоверяет сам Telegram. `link_id` бот
+# берёт из своего хранилища привязок. Подбор кода лимит и не сдерживает: код
+# живёт не дольше недели при 31^8 вариантов, а секрет привязки имеет полную машинную
+# энтропию.
+BOT_RATE_LIMIT = "1200/minute"
+
+# Погашение кода из бота — на одного человека Telegram. Живой человек гасит код
+# один раз, с опечаткой — два-три.
+BOT_ACTIVATE_PER_USER_LIMIT = "5/minute"
+
+# Обмен секрета привязки на сессию — на одну привязку. Бот делает его раз в
+# пятнадцать минут на чат и после перезапуска.
+BOT_SESSION_PER_LINK_LIMIT = "30/minute"
 
 # Форма заявки на посадочной странице (ADR-0012) — единственная публичная ручка
 # записи. Лимит защищает не секрет, а таблицу: подбирать здесь нечего, зато
@@ -122,6 +142,28 @@ def _build_limiter() -> Limiter:
 
 
 limiter = _build_limiter()
+
+
+def hit_bot_bucket(limit: str, scope: str, key: str) -> None:
+    """Списать попытку из ведра одного человека или одной привязки бота (Н13).
+
+    Не декоратором: ключ лежит в теле запроса, а `key_func` slowapi видит только
+    `Request` до разбора тела. Здесь тело уже разобрано и сверено со схемой, а
+    сервисный токен проверен зависимостью.
+
+    Хранилище — то же, что у декораторов, вместе с запасным в памяти: общий
+    потолок по адресу срабатывает раньше и переключает лимитер на запасное
+    хранилище, если Redis недоступен. Если отказало и оно, лимит не закрывает
+    привязку — тот же размен, что в `_build_limiter`.
+    """
+
+    try:
+        allowed = limiter.limiter.hit(parse(limit), "bot", scope, key)
+    except Exception:  # noqa: BLE001 — недоступное хранилище не закрывает вход
+        logger.warning("bot_rate_limit_storage_failed", scope=scope)
+        return
+    if not allowed:
+        raise ApiError(ErrorCode.RATE_LIMITED, "Слишком много попыток. Попробуйте позже.")
 
 
 def register_rate_limiting(app: FastAPI) -> None:

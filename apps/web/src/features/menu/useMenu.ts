@@ -114,6 +114,8 @@ export function useUpsertMenuMutation(patientId: string | null) {
       return data;
     },
     onSuccess: (menu) => onMenuSaved(queryClient, patientId, menu),
+    onError: (error, input) =>
+      onMenuConflict(queryClient, patientId, input.date, error),
   });
 }
 
@@ -156,6 +158,8 @@ export function useCopyDayMutation(patientId: string | null) {
       return data;
     },
     onSuccess: (menu) => onMenuSaved(queryClient, patientId, menu),
+    onError: (error, input) =>
+      onMenuConflict(queryClient, patientId, input.to, error),
   });
 }
 
@@ -395,4 +399,23 @@ function onMenuSaved(
   void queryClient.invalidateQueries({
     queryKey: patientOverviewKey(patientId),
   });
+}
+
+/**
+ * 409 при сохранении дня: на сервере он уже не тот, что на экране (Н10).
+ *
+ * Чаще всего — семья в ту же минуту отметила съеденным блюдо, которого в новом
+ * составе нет; сервер такой состав отвергает, а экран обязан перечитать день:
+ * иначе следующее действие собиралось бы из устаревшего состава, а специалист
+ * не увидел бы отметку, из-за которой ему отказали. Объяснение — сообщение
+ * сервера под составом (`FormError` в `DayComposer`).
+ */
+function onMenuConflict(
+  queryClient: ReturnType<typeof useQueryClient>,
+  patientId: string | null,
+  date: string,
+  error: unknown,
+): void {
+  if (errorCodeOf(error) !== "conflict") return;
+  void queryClient.invalidateQueries({ queryKey: menuKey(patientId, date) });
 }

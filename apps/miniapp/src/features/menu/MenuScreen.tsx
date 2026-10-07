@@ -23,7 +23,7 @@ import {
   withoutItem,
 } from "./dayPlan";
 import type { Menu, MenuItem } from "./useMenu";
-import { dayAt, useMarkEaten, useMenu } from "./useMenu";
+import { dayAt, isPlanChanged, useMarkEaten, useMenu } from "./useMenu";
 import { useSaveMenu } from "./useSaveMenu";
 
 /**
@@ -314,13 +314,22 @@ export function MenuScreen({ session }: { session: Session }) {
             // Отказ записи называется словами под планом: «Убрать» нажимают при
             // закрытой панели, и её сообщение об ошибке туда не доходит —
             // кнопка просто включалась обратно, а позиция оставалась на месте.
+            // Отметку отвергли, потому что план в ту же минуту пересохранили без
+            // этого блюда (Н10): после перечитки позиции на экране нет, и
+            // сказать это можно только над планом, а не у позиции.
             saveFailed={
               save.isError
                 ? (errorMessageOf(save.error) ?? t("menu.compose.failed"))
-                : null
+                : mark.isError && isPlanChanged(mark.error)
+                  ? (errorMessageOf(mark.error) ?? t("menu.markFailedHint"))
+                  : null
             }
             pendingId={mark.isPending ? mark.variables?.itemId : undefined}
-            failedId={mark.isError ? mark.variables?.itemId : undefined}
+            failedId={
+              mark.isError && !isPlanChanged(mark.error)
+                ? mark.variables?.itemId
+                : undefined
+            }
             failure={errorMessageOf(mark.error) ?? t("menu.markFailedHint")}
           />
         )}

@@ -761,6 +761,78 @@ describe("день не собирается вслепую", () => {
     // кнопка просто включалась обратно, а позиция оставалась на месте.
     expect(await screen.findByText("День занят")).toBeInTheDocument();
   });
+
+  /** Сколько раз экран спрашивал план дня. */
+  function menuReads(): number {
+    return (api.GET as Mock).mock.calls.filter(([path]) =>
+      String(path).endsWith("/menus"),
+    ).length;
+  }
+
+  it("отказ 409 при сохранении дня перечитывает день (Н10)", async () => {
+    const user = userEvent.setup();
+    (api.PUT as Mock).mockResolvedValue({
+      error: {
+        error: {
+          code: "conflict",
+          message: "В новом плане нет блюда, которое уже отмечено съеденным",
+          details: { reason: "drops_eaten_items", eaten: 1 },
+        },
+      },
+      response: { status: 409 },
+    });
+    respond({
+      menu: menu({
+        items: [
+          { ...menu().items[0], id: "item-1", recipe_id: "r1" },
+          {
+            ...menu().items[0],
+            id: "item-2",
+            meal_index: 2,
+            recipe_id: "r2",
+            title: "Салат",
+          },
+        ],
+      }),
+    });
+    renderScreen();
+
+    const salad = (await screen.findByText("Салат")).closest("li");
+    const before = menuReads();
+    await user.click(
+      within(salad as HTMLElement).getByRole("button", { name: "Убрать" }),
+    );
+
+    expect(
+      await screen.findByText(/уже отмечено съеденным/),
+    ).toBeInTheDocument();
+    // Состав на экране устарел: следующее действие строилось бы из него.
+    await waitFor(() => expect(menuReads()).toBeGreaterThan(before));
+  });
+
+  it("отметку на блюде, которого в плане уже нет, объясняют над планом (Н10)", async () => {
+    const user = userEvent.setup();
+    (api.POST as Mock).mockResolvedValue({
+      error: {
+        error: {
+          code: "conflict",
+          message:
+            "План дня только что изменили, и этого блюда в нём больше нет.",
+          details: { reason: "plan_changed" },
+        },
+      },
+      response: { status: 409 },
+    });
+    renderScreen();
+
+    const before = menuReads();
+    await user.click(await screen.findByRole("checkbox", { name: /Омлет/ }));
+
+    expect(
+      await screen.findByText(/этого блюда в нём больше нет/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(menuReads()).toBeGreaterThan(before));
+  });
 });
 
 /**

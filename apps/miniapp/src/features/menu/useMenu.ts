@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
-import { api } from "../../lib/api";
+import { api, errorCodeOf } from "../../lib/api";
 
 export type Menu = components["schemas"]["MenuRead"];
 export type MenuItem = components["schemas"]["MenuItemRead"];
@@ -99,5 +99,21 @@ export function useMarkEaten(patientId: string, day: string) {
         queryKey: ["patient", patientId, "overview"],
       });
     },
+    // Позиции больше нет: план дня в ту же минуту пересохранили без неё (409
+    // `plan_changed`, Н10) или убрали раньше (404). Экран перечитывает день —
+    // иначе семья снова и снова отмечала бы блюдо, которого в плане нет.
+    onError: (error) => {
+      const code = errorCodeOf(error);
+      if (code === "conflict" || code === "not_found") {
+        void queryClient.invalidateQueries({
+          queryKey: menuKey(patientId, day),
+        });
+      }
+    },
   });
+}
+
+/** Отметку отвергли потому, что план дня изменился, — сказать это над планом. */
+export function isPlanChanged(error: unknown): boolean {
+  return errorCodeOf(error) === "conflict";
 }
