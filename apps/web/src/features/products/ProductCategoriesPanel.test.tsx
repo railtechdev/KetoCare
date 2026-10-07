@@ -68,7 +68,12 @@ describe("справочник категорий", () => {
     renderPanel();
 
     await screen.findByText("Жиры");
-    expect(screen.getAllByRole("button", { name: "Удалить" })).toHaveLength(1);
+    // Подпись строки называет категорию: «Удалить» без объекта звучало
+    // одинаково в каждой строке таблицы.
+    expect(screen.getAllByRole("button", { name: /^Удалить/ })).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: "Удалить — жиры" }),
+    ).toBeInTheDocument();
   });
 
   it("слияние переносит позиции в выбранную категорию", async () => {
@@ -76,7 +81,15 @@ describe("справочник категорий", () => {
     renderPanel();
 
     await screen.findByText("Жиры");
-    await user.click(screen.getAllByRole("button", { name: /Слить/ })[0]!);
+    await user.click(screen.getByRole("button", { name: "Слить — Жиры" }));
+
+    // Пока цель не выбрана, кнопка отключена и называет причину (П44): до
+    // этого нажатие молча ничего не делало.
+    const submit = await screen.findByRole("button", { name: "Слить" });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription(
+      "Выберите категорию, куда перенести позиции",
+    );
 
     await user.selectOptions(
       await screen.findByLabelText("Куда перенести"),
@@ -88,5 +101,16 @@ describe("справочник категорий", () => {
       "/api/v1/products/categories/{category_id}/merge",
       expect.objectContaining({ body: { into_id: EMPTY } }),
     );
+  });
+
+  it("у единственной категории сливать не с чем", async () => {
+    (api.GET as Mock).mockResolvedValue({
+      data: [CATEGORIES[0]],
+      error: undefined,
+    });
+    renderPanel();
+
+    await screen.findByText("Жиры");
+    expect(screen.queryByRole("button", { name: /Слить/ })).toBeNull();
   });
 });

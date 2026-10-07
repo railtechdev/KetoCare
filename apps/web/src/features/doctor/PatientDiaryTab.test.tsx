@@ -40,3 +40,28 @@ describe("дневник в карте пациента", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("период дневника в карте — в адресе", () => {
+  it("F5 возвращает выбранный врачом период", async () => {
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<PatientDiaryTab patientId="p1" />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <PatientRouter
+            patientId="p1"
+            view="diary"
+            search={{ period: "week" }}
+          >
+            {children}
+          </PatientRouter>
+        </QueryClientProvider>
+      ),
+    });
+
+    // У врача умолчание — месяц; неделя пришла из адреса.
+    expect(await screen.findByRole("radio", { name: "Неделя" })).toBeChecked();
+  });
+});

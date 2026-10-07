@@ -312,19 +312,27 @@ function MedicalProfilePanel({
   const notFilled = errorCodeOf(profile.error) === "not_found";
   const forbidden = errorCodeOf(profile.error) === "forbidden";
 
-  if (editing) {
-    return (
-      <MedicalProfileForm
-        patientId={patientId}
-        profile={profile.data ?? null}
-        onDone={() => setEditing(false)}
-        onCancel={() => setEditing(false)}
-      />
-    );
-  }
-
   return (
     <Section title={t("profile.title")}>
+      {/* Правка — панелью над разделом (правило П29: короткая форма, не
+          уводящая со списка). Прежде форма подменяла блок на месте: остальной
+          профиль — анкета, документы, семья — уезжал вниз, а адрес и «Назад»
+          о правке ничего не знали. */}
+      <FormSheet
+        closeLabel={t("common:actions.close")}
+        open={editing}
+        onOpenChange={setEditing}
+        title={t("profile.title")}
+        description={t("profile.formHint")}
+      >
+        <MedicalProfileForm
+          patientId={patientId}
+          profile={profile.data ?? null}
+          onDone={() => setEditing(false)}
+          onCancel={() => setEditing(false)}
+        />
+      </FormSheet>
+
       {/* Правило пяти состояний — общим компонентом (П15). 403 и
           «ещё не заполнен» — не сбои, а пустые состояния: предлагать врачу
           «Повторить» там, где повторять нечего, значит звать его в тупик. */}

@@ -16,7 +16,13 @@ import { Apple, PackageSearch, Plus, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useSectionItem, useSectionQuery } from "../../routes/useSectionTab";
+import {
+  useAddressPatch,
+  useAddressState,
+  useSectionItem,
+  useSectionQuery,
+} from "../../routes/useSectionTab";
+import { PageActions } from "../../components/PageLayout";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
@@ -82,9 +88,6 @@ export function ProductsPanel({
 }: Props = {}) {
   const { t } = useTranslation("admin");
 
-  const [localFilters, setFilters] = useState<ProductFilters>(
-    EMPTY_PRODUCT_FILTERS,
-  );
   const [page, setPage] = useState(0);
   // Строка поиска и отбор «давно не сверялись» живут в адресе: на них ведут
   // ссылки — калькулятор со своим запросом, главная администратора со
@@ -94,7 +97,19 @@ export function ProductsPanel({
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const verifiedBefore = search.verified ?? "";
-  const filters: ProductFilters = { ...localFilters, q, verifiedBefore };
+  // Остальные отборы — категория, ведущий макронутриент, выведенные — тоже в
+  // адресе (правило П1): открытая из отобранной таблицы позиция «Назад»
+  // возвращала к полному справочнику, и отбирать приходилось заново.
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const filters: ProductFilters = {
+    ...EMPTY_PRODUCT_FILTERS,
+    q,
+    verifiedBefore,
+    categoryId: address.category ?? "",
+    macro: address.macro ?? "",
+    includeInactive: address.inactive === true,
+  };
   const clearVerified = () => {
     setPage(0);
     void navigate({
@@ -110,8 +125,15 @@ export function ProductsPanel({
    * Иначе выдача из двух строк открывалась бы на седьмой странице — то есть
    * пустой, и человек решил бы, что не нашлось ничего.
    */
-  const setFiltersAndResetPage: typeof setFilters = (update) => {
-    setFilters(update);
+  const setFiltersAndResetPage = (
+    update: (current: ProductFilters) => ProductFilters,
+  ) => {
+    const next = update(filters);
+    patchAddress({
+      category: next.categoryId === "" ? undefined : next.categoryId,
+      macro: next.macro === "" ? undefined : next.macro,
+      inactive: next.includeInactive ? true : undefined,
+    });
     setPage(0);
   };
   const [item, setItem] = useSectionItem();
@@ -212,7 +234,8 @@ export function ProductsPanel({
         header: t("products.columns.verifiedAt"),
         cell: ({ row }) => (
           <span className="whitespace-nowrap tabular-nums">
-            {row.original.verified_at}
+            {formatIsoDate(row.original.verified_at) ??
+              row.original.verified_at}
           </span>
         ),
       },
@@ -363,7 +386,7 @@ export function ProductsPanel({
           actions={actions}
         />
       ) : (
-        <div className="flex flex-wrap gap-field">{actions}</div>
+        <PageActions>{actions}</PageActions>
       )}
 
       {/* Панель фильтров — блок экрана, а значит `Section` со скрытым

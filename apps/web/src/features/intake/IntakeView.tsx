@@ -267,7 +267,11 @@ function Answers({
     <div className="flex flex-col gap-section">
       {groups.map((group) => (
         <div key={group.title}>
-          <h4 className="m-0 mb-field text-sm font-semibold">{group.title}</h4>
+          {/* h3, а не h4: блок анкеты — h2 (`Section`), и уровень между ними
+              пропускать нельзя (П24). */}
+          <h3 className="m-0 mb-field text-card-title font-semibold">
+            {group.title}
+          </h3>
           <FactList>
             {group.rows.map(([label, value]) => (
               <div key={label} className="contents">

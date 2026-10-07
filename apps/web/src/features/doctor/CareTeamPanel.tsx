@@ -13,7 +13,7 @@ import { Plus, Stethoscope, UserMinus } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SelectField } from "../../components/Field";
+import { PersonPicker } from "../../components/PersonPicker";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
@@ -68,6 +68,7 @@ export function CareTeamPanel({
 
   const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState("");
+  const [colleagueQuery, setColleagueQuery] = useState("");
 
   // Справочник персонала сервер отдаёт только doctor и dietitian. Запрашивать
   // его иначе — значит открывать заведомый 403 (правило П3 канона: действия,
@@ -217,28 +218,39 @@ export function CareTeamPanel({
             });
           }}
         >
-          <SelectField
+          {/* Поиск, а не `select` всей клиники (правило П42): коллег
+              десятки, и выбор перечислением превращался в пролистывание.
+              Справочник персонала приходит целиком, без страницы, поэтому
+              отбор по нему честен и идёт на месте — сервер для этого не нужен. */}
+          <PersonPicker
             id={`${ids}-colleague`}
-            width="wide"
             label={t("careTeam.colleague")}
             hint={t("careTeam.colleagueHint")}
-            value={selected}
-            onChange={(event) => setSelected(event.target.value)}
-          >
-            <option value="">{t("careTeam.colleaguePlaceholder")}</option>
-            {candidates.map((colleague) => (
-              <option key={colleague.id} value={colleague.id}>
-                {colleague.full_name} · {t(`common:roles.${colleague.role}`)}
-              </option>
-            ))}
-          </SelectField>
+            placeholder={t("careTeam.colleaguePlaceholder")}
+            selectedId={selected === "" ? undefined : selected}
+            selectedName={
+              candidates.find((colleague) => colleague.id === selected)
+                ?.full_name
+            }
+            people={candidates.map((colleague) => ({
+              id: colleague.id,
+              name: colleague.full_name,
+              detail: t(`common:roles.${colleague.role}`),
+            }))}
+            filter="local"
+            query={colleagueQuery}
+            onQueryChange={setColleagueQuery}
+            status={colleagues.status}
+            onRetry={() => void colleagues.refetch()}
+            onSelect={(id) => setSelected(id ?? "")}
+            texts={{
+              search: t("careTeam.colleagueSearch"),
+              empty: t("careTeam.colleagueNotFound"),
+              loadError: t("careTeam.colleagueLoadError"),
+              retry: t("common:actions.retry"),
+            }}
+          />
 
-          {colleagues.isError && (
-            <FormError>
-              {errorMessageOf(colleagues.error) ??
-                t("common:errors.unexpected")}
-            </FormError>
-          )}
           {add.isError && (
             <FormError>
               {errorMessageOf(add.error) ?? t("common:errors.unexpected")}
@@ -249,6 +261,10 @@ export function CareTeamPanel({
             submitLabel={t("careTeam.addAction")}
             pendingLabel={t("careTeam.adding")}
             pending={add.isPending}
+            // Без выбора отправлять нечего — и кнопка говорит это словами, а
+            // не молчит серым прямоугольником (правило П44).
+            disabled={selected === ""}
+            reason={selected === "" ? t("careTeam.chooseColleague") : undefined}
             onCancel={() => {
               setFormOpen(false);
               setSelected("");

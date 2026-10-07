@@ -6,6 +6,10 @@ import { useTranslation } from "react-i18next";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import type { Patient } from "../patients/useChildren";
 import { childSchema, splitExclusions, type ChildValues } from "./childSchemas";
@@ -41,7 +45,7 @@ export function ChildForm({
     register,
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<ChildValues>({
     resolver: zodResolver(childSchema),
     defaultValues: {
@@ -57,17 +61,32 @@ export function ChildForm({
     },
   });
 
+  const nameError = errors.fullName && t("child.errors.fullName");
+  const birthDateError = errors.birthDate && t("child.errors.birthDate");
+  const sexError = errors.sex && t("child.errors.sex");
+  const heightError = errors.heightCm && t("child.errors.heightCm");
+
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
       noValidate
       className="flex flex-col gap-section"
     >
+      <FormErrorSummary
+        items={errorSummaryItems(submitCount, [
+          [`${ids}-name`, nameError],
+          [`${ids}-birth`, birthDateError],
+          [`${ids}-sex`, sexError],
+          [`${ids}-height`, heightError],
+        ])}
+        focusKey={submitCount}
+      />
+
       <Field
         id={`${ids}-name`}
         width="wide"
         label={t("child.fields.fullName")}
-        error={errors.fullName && t("child.errors.fullName")}
+        error={nameError}
         {...register("fullName")}
       />
 
@@ -78,7 +97,7 @@ export function ChildForm({
             width="date"
             type="date"
             label={t("child.fields.birthDate")}
-            error={errors.birthDate && t("child.errors.birthDate")}
+            error={birthDateError}
             {...register("birthDate")}
           />
           <SelectField
@@ -86,7 +105,7 @@ export function ChildForm({
             width="medium"
             label={t("child.fields.sex")}
             hint={t("child.immutableHint")}
-            error={errors.sex && t("child.errors.sex")}
+            error={sexError}
             {...register("sex")}
           >
             <option value="m">{t("child.sex.m")}</option>
@@ -103,7 +122,7 @@ export function ChildForm({
         step="0.1"
         optional
         label={t("child.fields.heightCm")}
-        error={errors.heightCm && t("child.errors.heightCm")}
+        error={heightError}
         {...register("heightCm")}
       />
 

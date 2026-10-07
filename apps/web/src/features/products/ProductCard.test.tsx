@@ -130,7 +130,8 @@ describe("карточка продукта", () => {
     expect(
       screen.getByText("SR Legacy 2018-04, fdc 173410"),
     ).toBeInTheDocument();
-    expect(screen.getByText("2026-01-01")).toBeInTheDocument();
+    // Дата по-русски, а не ISO из ответа (П45).
+    expect(screen.getByText("01.01.2026")).toBeInTheDocument();
   });
 
   it("показывает историю разницей, а не снимком целиком", async () => {
@@ -150,8 +151,9 @@ describe("карточка продукта", () => {
     // по такой истории и восстанавливают, что было до инцидента.
     const latest = entries[0]?.textContent ?? "";
     expect(latest).toContain("Жиры, г");
-    expect(latest.indexOf("82.5")).toBeGreaterThan(-1);
-    expect(latest.indexOf("82.5")).toBeLessThan(latest.indexOf("81.1"));
+    // Числа русской записью (П45): «82,5», а не «82.5».
+    expect(latest.indexOf("82,5")).toBeGreaterThan(-1);
+    expect(latest.indexOf("82,5")).toBeLessThan(latest.indexOf("81,1"));
 
     // Автор назван у каждой записи: идентификатор без имени отвечает «кто-то».
     expect(screen.getAllByText("Анна Диетолог")).toHaveLength(2);

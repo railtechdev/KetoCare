@@ -4,6 +4,7 @@ import {
   Button,
   EmptyState,
   Skeleton,
+  formatFactor,
 } from "@ketocare/ui";
 import { CalendarDays } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -116,7 +117,9 @@ export function NextMealCard({ patientId }: { patientId: string }) {
               {dishTitle ?? t("nextMeal.unknownDish")}
             </span>
             <span className="text-sm text-muted-foreground tabular-nums">
-              {t("nextMeal.portion", { value: next.portion_factor })}
+              {t("nextMeal.portion", {
+                value: formatFactor(next.portion_factor),
+              })}
             </span>
           </div>
         )}

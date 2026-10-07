@@ -1,4 +1,11 @@
-import { Button, DataTable, Section, toast, WarningBanner } from "@ketocare/ui";
+import {
+  ActionReason,
+  Button,
+  DataTable,
+  Section,
+  toast,
+  WarningBanner,
+} from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, FileUp, RotateCcw } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
@@ -141,11 +148,12 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
         </span>
       </label>
 
-      <div className="flex flex-wrap gap-section">
+      <div className="flex flex-col items-start gap-field">
         <Button
           type="button"
           disabled={file === null || busy}
           aria-busy={preview.isPending}
+          aria-describedby={`${ids}-check-reason`}
           onClick={() => {
             if (file !== null) {
               commit.reset();
@@ -158,6 +166,11 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
             ? t("products.import.checking")
             : t("products.import.check")}
         </Button>
+        {/* Причина отключённой кнопки (П44): серая «Проверить файл» без
+            слова рядом читалась как сбой. Во время проверки причины нет. */}
+        <ActionReason id={`${ids}-check-reason`}>
+          {file === null ? t("common:actions.noFileChosen") : null}
+        </ActionReason>
       </div>
 
       {failure !== null && (

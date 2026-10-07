@@ -1,5 +1,11 @@
-import { AsyncSection, EmptyState, Section, Skeleton } from "@ketocare/ui";
-import { useQuery } from "@tanstack/react-query";
+import {
+  AsyncSection,
+  Button,
+  EmptyState,
+  Section,
+  Skeleton,
+} from "@ketocare/ui";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 import { useTranslation } from "react-i18next";
 
@@ -12,15 +18,27 @@ type Anomalies = components["schemas"]["ProductWithAnomalies"];
 
 const PAGE_SIZE = 50;
 
+/**
+ * Страницы по 50: «показано 50 из 312» без способа увидеть остальные было
+ * тупиком — ревизия базы останавливалась на первой странице, а остальные
+ * 262 продукта с расхождениями оставались ненайденными.
+ */
 function useProductAnomalies() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["admin", "product-anomalies"],
-    queryFn: async (): Promise<{ items: Anomalies[]; total: number }> => {
+    initialPageParam: 0,
+    queryFn: async ({
+      pageParam,
+    }): Promise<{ items: Anomalies[]; total: number }> => {
       const { data, error } = await api.GET("/api/v1/products/anomalies", {
-        params: { query: { limit: PAGE_SIZE, offset: 0 } },
+        params: { query: { limit: PAGE_SIZE, offset: pageParam } },
       });
       if (error || !data) throw error ?? new Error("Empty anomalies response");
       return data;
+    },
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.items.length, 0);
+      return last.items.length > 0 && loaded < last.total ? loaded : undefined;
     },
   });
 }
@@ -40,8 +58,9 @@ function useProductAnomalies() {
 export function ProductAnomaliesPanel() {
   const { t } = useTranslation("admin");
   const anomalies = useProductAnomalies();
-  const rows = anomalies.data?.items ?? [];
-  const total = anomalies.data?.total ?? 0;
+  const pages = anomalies.data?.pages ?? [];
+  const rows = pages.flatMap((page) => page.items);
+  const total = pages.at(-1)?.total ?? 0;
 
   return (
     <Section
@@ -113,6 +132,21 @@ export function ProductAnomaliesPanel() {
               </li>
             ))}
           </ul>
+          {anomalies.hasNextPage && (
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start"
+              disabled={anomalies.isFetchingNextPage}
+              onClick={() => void anomalies.fetchNextPage()}
+            >
+              {anomalies.isFetchingNextPage
+                ? t("products.anomalies.loadingMore")
+                : t("products.anomalies.showMore", {
+                    count: Math.min(PAGE_SIZE, total - rows.length),
+                  })}
+            </Button>
+          )}
         </>
       </AsyncSection>
     </Section>

@@ -2,6 +2,10 @@ import {
   Badge,
   Button,
   ConfirmDialog,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   ErrorState,
   MacroBar,
   RatioBadge,
@@ -13,7 +17,15 @@ import {
   formatMass,
   toast,
 } from "@ketocare/ui";
-import { Calculator, Download, Pencil, Trash2, Upload } from "lucide-react";
+import {
+  Calculator,
+  Download,
+  Ellipsis,
+  Pencil,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
@@ -61,6 +73,7 @@ export function RecipeDetail({
   const unpublish = useUnpublishRecipeMutation();
   const remove = useDeleteRecipeMutation();
   const uploadPhoto = useUploadRecipePhotoMutation();
+  const [confirm, setConfirm] = useState<"unpublish" | "delete" | null>(null);
 
   const data = recipe.data;
 
@@ -142,7 +155,7 @@ export function RecipeDetail({
                 {t("actions.edit")}
               </Button>
 
-              {data.status !== "published" ? (
+              {data.status !== "published" && (
                 <Button
                   type="button"
                   className="min-h-touch"
@@ -159,55 +172,74 @@ export function RecipeDetail({
                     ? t("actions.publishing")
                     : t("actions.publish")}
                 </Button>
-              ) : (
-                /* Подтверждение называет рецепт: снятие с публикации убирает его
-                 у всех семей разом, а уже составленные дни не трогает —
-                 их состав заморожен снимком (ADR-0016). */
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-touch"
-                      disabled={unpublish.isPending}
-                    >
-                      <Download aria-hidden="true" />
-                      {unpublish.isPending
-                        ? t("actions.unpublishing")
-                        : t("actions.unpublish")}
-                    </Button>
-                  }
-                  title={t("actions.confirmUnpublish.title", {
-                    title: data.title,
-                  })}
-                  description={t("actions.confirmUnpublish.body")}
-                  confirmLabel={t("actions.confirmUnpublish.confirm")}
-                  cancelLabel={t("actions.cancel")}
-                  onConfirm={() =>
-                    unpublish.mutate(data.id, {
-                      onSuccess: () =>
-                        toast.success(t("actions.unpublishSuccess")),
-                    })
-                  }
-                />
               )}
 
-              {/* Заголовок диалога называет рецепт: подтверждается исчезновение
-                конкретного блюда, а не абстрактное «вы уверены?». */}
-              <ConfirmDialog
-                trigger={
+              {/* Редкие действия — в меню «Ещё» (правило П31): четыре
+                  кнопки в шапке одного веса не отвечали, что здесь главное.
+                  Оба пункта открывают подтверждение, называющее рецепт. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     className="min-h-touch"
-                    disabled={remove.isPending}
+                    disabled={unpublish.isPending || remove.isPending}
+                  >
+                    <Ellipsis aria-hidden="true" />
+                    {unpublish.isPending
+                      ? t("actions.unpublishing")
+                      : remove.isPending
+                        ? t("actions.deleting")
+                        : t("actions.more")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {data.status === "published" && (
+                    <DropdownMenuItem onSelect={() => setConfirm("unpublish")}>
+                      <Download aria-hidden="true" />
+                      {t("actions.unpublish")}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setConfirm("delete")}
                   >
                     <Trash2 aria-hidden="true" />
-                    {remove.isPending
-                      ? t("actions.deleting")
-                      : t("actions.delete")}
-                  </Button>
+                    {t("actions.delete")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Снятие с публикации убирает рецепт у всех семей разом, а уже
+                  составленные дни не трогает — их состав заморожен снимком
+                  (ADR-0016). */}
+              <ConfirmDialog
+                open={confirm === "unpublish"}
+                onOpenChange={(open) => {
+                  if (!open) setConfirm(null);
+                }}
+                title={t("actions.confirmUnpublish.title", {
+                  title: data.title,
+                })}
+                description={t("actions.confirmUnpublish.body")}
+                confirmLabel={t("actions.confirmUnpublish.confirm")}
+                cancelLabel={t("actions.cancel")}
+                onConfirm={() =>
+                  unpublish.mutate(data.id, {
+                    onSuccess: () =>
+                      toast.success(t("actions.unpublishSuccess")),
+                  })
                 }
+              />
+
+              {/* Заголовок диалога называет рецепт: подтверждается исчезновение
+                  конкретного блюда, а не абстрактное «вы уверены?». */}
+              <ConfirmDialog
+                open={confirm === "delete"}
+                onOpenChange={(open) => {
+                  if (!open) setConfirm(null);
+                }}
+                destructive
                 title={t("actions.confirmDelete.title", { title: data.title })}
                 description={t("actions.confirmDelete.body")}
                 confirmLabel={t("actions.confirmDelete.confirm")}
@@ -257,7 +289,7 @@ export function RecipeDetail({
         </FormError>
       )}
 
-      <Section title={t("detail.photo")} density="compact">
+      <Section title={t("detail.photo")}>
         <RecipePhoto
           recipeId={data.id}
           photoPath={data.photo_path}

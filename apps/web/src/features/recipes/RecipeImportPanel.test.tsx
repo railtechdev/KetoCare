@@ -72,6 +72,14 @@ describe("импорт рецептов", () => {
     expect(await screen.findByText("Омлет прогонный")).toBeInTheDocument();
     expect(screen.getByText("290")).toBeInTheDocument();
     expect(screen.getByText("4.2 : 1")).toBeInTheDocument();
+
+    // Под заголовком экрана (h1) отчёт — блок второго уровня, не третьего (П24).
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: recipesRu.import.preview.title,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("сначала проверка, запись — вторым нажатием", async () => {
@@ -162,8 +170,21 @@ describe("импорт рецептов", () => {
     expect(
       await screen.findByText("Продукта нет в справочнике."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: recipesRu.import.confirm }),
-    ).toBeDisabled();
+    const confirm = screen.getByRole("button", {
+      name: recipesRu.import.confirm,
+    });
+    expect(confirm).toBeDisabled();
+    // Серая кнопка называет причину (П44).
+    expect(confirm).toHaveAccessibleDescription(
+      recipesRu.import.preview.nothingToImport,
+    );
+  });
+
+  it("без файла кнопка проверки называет, чего не хватает", async () => {
+    renderPanel();
+
+    const check = screen.getByRole("button", { name: recipesRu.import.check });
+    expect(check).toBeDisabled();
+    expect(check).toHaveAccessibleDescription(commonRu.actions.noFileChosen);
   });
 });

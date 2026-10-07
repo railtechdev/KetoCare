@@ -1,6 +1,6 @@
 import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -86,12 +86,51 @@ describe("кто ведёт пациента", () => {
 
     // Повторное подключение сервер отвергнет, а список из двух строк, одна из
     // которых заведомо не работает, — предложение выбрать ошибку.
+    await user.click(
+      await screen.findByRole("button", { name: /Выберите специалиста/ }),
+    );
     expect(
       await screen.findByRole("option", { name: /Анна Диетолог/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: /Иван Врач/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("коллега ищется по имени, а кнопка без выбора называет причину", async () => {
+    // Правила П42 и П44: раньше коллега выбирался из `select` всей клиники, а
+    // отправка без выбора не делала ничего и ничего не говорила.
+    const user = userEvent.setup();
+    render(<CareTeamPanel patientId={PATIENT_ID} />, { wrapper });
+
+    await screen.findByText("Иван Врач");
+    await user.click(
+      screen.getByRole("button", { name: /Подключить коллегу/ }),
+    );
+
+    const submit = await screen.findByRole("button", { name: "Подключить" });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription("Выберите коллегу");
+
+    await user.click(
+      screen.getByRole("button", { name: /Выберите специалиста/ }),
+    );
+    await user.type(screen.getByPlaceholderText("Имя специалиста"), "Анна");
+    await user.click(
+      await screen.findByRole("option", { name: /Анна Диетолог/ }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Специалист.*Анна Диетолог/ }),
+    ).toBeInTheDocument();
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/doctors",
+        expect.objectContaining({ body: { doctor_id: OTHER } }),
+      ),
+    );
   });
 
   it("родителю показывает состав, но не даёт его менять", async () => {

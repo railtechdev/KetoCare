@@ -3,11 +3,13 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
+  FormFooter,
+  FormSheet,
   Section,
   toast,
 } from "@ketocare/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Image, Paperclip, Trash2 } from "lucide-react";
+import { FileText, Image, Paperclip, Plus, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -56,9 +58,18 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
   const queryClient = useQueryClient();
   const { session } = useSession();
 
+  const [formOpen, setFormOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const [docKind, setDocKind] = useState("");
   const [docDate, setDocDate] = useState("");
   const [description, setDescription] = useState("");
+
+  function resetForm() {
+    setFile(null);
+    setDocKind("");
+    setDocDate("");
+    setDescription("");
+  }
 
   const attachments = useQuery({
     queryKey: attachmentsKey(patientId),
@@ -98,9 +109,8 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
       return data;
     },
     onSuccess: async () => {
-      setDocKind("");
-      setDocDate("");
-      setDescription("");
+      resetForm();
+      setFormOpen(false);
       toast.success(t("uploaded"));
       await invalidate();
     },
@@ -127,7 +137,27 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
   const items = attachments.data ?? [];
 
   return (
-    <Section title={t("title")} description={t("intro")} density="compact">
+    <Section
+      title={t("title")}
+      description={t("intro")}
+      // Список идёт раньше формы (правило П32): сюда приходят смотреть
+      // документы, а добавляют изредка. Форма была раскрыта под списком
+      // всегда и отправляла файл сразу при выборе — без «Загрузить», то есть
+      // без шанса проверить вид и дату (П9).
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            upload.reset();
+            setFormOpen(true);
+          }}
+        >
+          <Plus aria-hidden="true" />
+          {t("add")}
+        </Button>
+      }
+    >
       <AsyncSection
         {...queryState(attachments)}
         skeleton={<LinesSkeleton label={t("loading")} lines={3} />}
@@ -223,8 +253,35 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
         </FormError>
       )}
 
-      <div className="flex flex-col gap-field border-t border-border pt-section">
-        <div className="flex flex-wrap gap-section">
+      <FormSheet
+        closeLabel={t("common:actions.close")}
+        open={formOpen}
+        onOpenChange={(open) => {
+          // Закрытие во время отправки не теряет файл: панель вернётся с ним.
+          if (!open && !upload.isPending) resetForm();
+          setFormOpen(open);
+        }}
+        title={t("form.title")}
+        description={t("intro")}
+      >
+        <form
+          noValidate
+          className="flex flex-col gap-field"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (file !== null) upload.mutate(file);
+          }}
+        >
+          <FileField
+            id={`${ids}-file`}
+            width="wide"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            label={t("form.file")}
+            hint={t("form.fileHint")}
+            disabled={upload.isPending}
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+
           <SelectField
             id={`${ids}-kind`}
             width="medium"
@@ -251,50 +308,38 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
             value={docDate}
             onChange={(event) => setDocDate(event.target.value)}
           />
-        </div>
 
-        <Field
-          id={`${ids}-description`}
-          width="wide"
-          optional
-          maxLength={255}
-          label={t("form.description")}
-          hint={t("form.descriptionHint")}
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-        />
+          <Field
+            id={`${ids}-description`}
+            width="wide"
+            optional
+            maxLength={255}
+            label={t("form.description")}
+            hint={t("form.descriptionHint")}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
 
-        {/* Файл — последним: описание заполняется до выбора, потому что выбор
-            сразу отправляет форму. Обратный порядок означал бы, что заполненные
-            поля не попадут в загрузку (правило П32 канона — сначала контекст). */}
-        <FileField
-          id={`${ids}-file`}
-          width="wide"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          label={t("form.file")}
-          hint={t("form.fileHint")}
-          disabled={upload.isPending}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            upload.mutate(file);
-            // Сброс: иначе повторный выбор того же файла не вызовет `change`.
-            event.target.value = "";
-          }}
-        />
+          {upload.isError && (
+            <FormError>
+              {errorMessageOf(upload.error) ?? t("common:errors.unexpected")}
+            </FormError>
+          )}
 
-        {upload.isPending && (
-          <p role="status" className="m-0 text-sm text-muted-foreground">
-            {t("uploading")}
-          </p>
-        )}
-
-        {upload.isError && (
-          <FormError>
-            {errorMessageOf(upload.error) ?? t("common:errors.unexpected")}
-          </FormError>
-        )}
-      </div>
+          <FormFooter
+            submitLabel={t("form.submit")}
+            pendingLabel={t("uploading")}
+            pending={upload.isPending}
+            disabled={file === null}
+            reason={t("form.noFile")}
+            onCancel={() => {
+              resetForm();
+              setFormOpen(false);
+            }}
+            cancelLabel={t("common:actions.cancel")}
+          />
+        </form>
+      </FormSheet>
     </Section>
   );
 }

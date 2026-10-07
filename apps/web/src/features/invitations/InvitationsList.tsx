@@ -19,6 +19,7 @@ import {
   type Invitation,
 } from "./useInvitations";
 import { queryState } from "../../lib/queryState";
+import { TableSkeleton } from "../admin/TableSkeleton";
 import { formatTimestamp } from "../doctor/dates";
 
 /**
@@ -86,7 +87,7 @@ export function InvitationsList() {
   return (
     <AsyncSection
       {...queryState(invitations)}
-      skeleton={null}
+      skeleton={<TableSkeleton label={t("list.loading")} rows={3} />}
       error={
         invitations.isError
           ? {
@@ -161,6 +162,7 @@ function RevokeAction({ invitation }: { invitation: Invitation }) {
           size="sm"
           className="min-h-touch text-destructive"
           disabled={revoke.isPending}
+          aria-label={t("list.revokeFor", { email: invitation.email })}
         >
           {t("list.revoke")}
         </Button>

@@ -15,6 +15,10 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { TextAreaField } from "../../components/Field";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
@@ -59,11 +63,13 @@ export function NotesTab({ patientId }: { patientId: string }) {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<NoteFormValues>({
     resolver: zodResolver(noteSchema),
     defaultValues: { text: "" },
   });
+
+  const noteError = errors.text && t("notes.errors.text");
 
   // 403 — не сбой, а граница роли: диетологу заметки не положены. Показывать
   // ему «не удалось загрузить» с кнопкой «Повторить» значило бы предлагать
@@ -154,12 +160,17 @@ export function NotesTab({ patientId }: { patientId: string }) {
             }),
           )}
         >
+          <FormErrorSummary
+            items={errorSummaryItems(submitCount, [[`${ids}-note`, noteError]])}
+            focusKey={submitCount}
+          />
+
           <TextAreaField
             id={`${ids}-note`}
             rows={5}
             label={t("notes.text")}
             placeholder={t("notes.placeholder")}
-            error={errors.text && t("notes.errors.text")}
+            error={noteError}
             {...register("text")}
           />
 

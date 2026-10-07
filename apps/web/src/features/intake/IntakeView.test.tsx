@@ -115,6 +115,12 @@ describe("анкета глазами специалиста", () => {
     // прочерк вместо прежнего ответа семьи — значит подменить её ответ.
     // Строк две — текущая частота и исходная: у этого ребёнка они совпадают.
     expect(screen.getAllByText("Прежняя шкала частоты")).toHaveLength(2);
+
+    // Группы ответов — h3 под h2 блока: уровень не пропускается (П24).
+    expect(screen.queryAllByRole("heading", { level: 4 })).toHaveLength(0);
+    expect(screen.getAllByRole("heading", { level: 3 }).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it.each([

@@ -7,6 +7,7 @@ import {
   MacroBar,
   MacroFacts,
   RatioBadge,
+  Section,
   cn,
   formatKcal,
   toast,
@@ -23,6 +24,10 @@ import { useTranslation } from "react-i18next";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
 import { ProductPicker } from "../calculator/ProductPicker";
@@ -66,7 +71,7 @@ export function RecipeForm({
     register,
     handleSubmit,
     setValue,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<RecipeFormValues>({
     resolver: zodResolver(recipeFormSchema),
     defaultValues,
@@ -142,6 +147,38 @@ export function RecipeForm({
   const compositionErrorId = `${ids}-composition-error`;
 
   const compositionEmpty = ingredients.fields.length === 0;
+  const productSearchId = `${ids}-product-search`;
+
+  const titleError = errors.title && t("form.errors.title");
+  const categoryError = errors.category && t("form.errors.category");
+  const yieldError = errors.yieldG && t("form.errors.yieldG");
+  const servingsError = errors.servings && t("form.errors.servings");
+  const gramsErrorText = t("form.errors.grams");
+  const compositionError =
+    compositionEmpty && errors.ingredients
+      ? t("form.errors.ingredients")
+      : undefined;
+  const instructionsError =
+    errors.instructions && t("form.errors.instructions");
+
+  // Сводка повторяет порядок формы: основное, порция, состав (по строке на
+  // продукт с неверной массой), приготовление. Пустой состав ведёт в поиск
+  // продукта — исправляют его там, а не в строке сообщения.
+  const summary = errorSummaryItems(submitCount, [
+    [`${ids}-title`, titleError],
+    [categoryId, categoryError],
+    [`${ids}-yield`, yieldError],
+    [`${ids}-servings`, servingsError],
+    ...ingredients.fields.map(
+      (field, index) =>
+        [
+          `${ids}-grams-${field.id}`,
+          errors.ingredients?.[index]?.grams ? gramsErrorText : undefined,
+        ] as const,
+    ),
+    [productSearchId, compositionError],
+    [instructionsId, instructionsError],
+  ]);
 
   return (
     <PageLayout
@@ -152,19 +189,17 @@ export function RecipeForm({
       <form
         noValidate
         onSubmit={handleSubmit(onSubmit)}
-        className="flex flex-col gap-screen"
+        className="@container flex flex-col gap-screen"
       >
-        <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-section text-card-title font-semibold">
-            {t("form.basics")}
-          </legend>
+        <FormErrorSummary items={summary} focusKey={submitCount} />
 
+        <Section title={t("form.basics")}>
           <div className="flex flex-col gap-section">
             <Field
               id={`${ids}-title`}
               label={t("form.title")}
               placeholder={t("form.titlePlaceholder")}
-              error={errors.title && t("form.errors.title")}
+              error={titleError}
               {...register("title")}
             />
 
@@ -172,7 +207,7 @@ export function RecipeForm({
               id={categoryId}
               width="medium"
               label={t("form.category")}
-              error={errors.category && t("form.errors.category")}
+              error={categoryError}
               {...register("category")}
             >
               {RECIPE_CATEGORIES.map((category) => (
@@ -188,14 +223,10 @@ export function RecipeForm({
                 в `src` картинки кабинета. Значение остаётся в форме скрытым,
                 чтобы правка рецепта не стирала уже загруженное фото. */}
           </div>
-        </fieldset>
+        </Section>
 
-        <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-section text-card-title font-semibold">
-            {t("form.portion")}
-          </legend>
-
-          <div className="grid gap-section sm:grid-cols-2">
+        <Section title={t("form.portion")}>
+          <div className="grid gap-section @sm:grid-cols-2">
             <Field
               id={`${ids}-yield`}
               width="narrow"
@@ -204,7 +235,7 @@ export function RecipeForm({
               min={0}
               step={0.1}
               label={t("form.yieldG")}
-              error={errors.yieldG && t("form.errors.yieldG")}
+              error={yieldError}
               {...register("yieldG", { valueAsNumber: true })}
             />
             <Field
@@ -215,17 +246,13 @@ export function RecipeForm({
               min={1}
               step={1}
               label={t("form.servings")}
-              error={errors.servings && t("form.errors.servings")}
+              error={servingsError}
               {...register("servings", { valueAsNumber: true })}
             />
           </div>
-        </fieldset>
+        </Section>
 
-        <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-section text-card-title font-semibold">
-            {t("form.composition")}
-          </legend>
-
+        <Section title={t("form.composition")}>
           {/* Enter в поле поиска не должен отправлять форму: подбирая продукт,
               редактор сохранил бы наполовину заполненный рецепт. Сам выбор из
               списка ProductPicker обрабатывает раньше, на своём input. */}
@@ -243,6 +270,7 @@ export function RecipeForm({
                 застывала навсегда. Отдельного запроса ради имени не возникает:
                 карточка нужна расчёту в любом случае. */}
             <ProductPicker
+              inputId={productSearchId}
               excludeIds={ingredients.fields.map((field) => field.productId)}
               onPick={(product) =>
                 ingredients.append({
@@ -324,7 +352,7 @@ export function RecipeForm({
                         id={`${gramsId}-error`}
                         className="w-full text-sm text-destructive"
                       >
-                        {t("form.errors.grams")}
+                        {gramsErrorText}
                       </p>
                     )}
 
@@ -358,13 +386,13 @@ export function RecipeForm({
             </ul>
           )}
 
-          {compositionEmpty && errors.ingredients && (
+          {compositionError && (
             <p
               id={compositionErrorId}
               role="alert"
               className="mt-field mb-0 text-sm text-destructive"
             >
-              {t("form.errors.ingredients")}
+              {compositionError}
             </p>
           )}
 
@@ -387,16 +415,7 @@ export function RecipeForm({
               )}
             >
               <div className="flex flex-wrap items-center gap-section">
-                {/* Без белка и углеводов соотношения нет: «— : 1» читалось как
-                    число с потерянной первой частью. */}
-                {computed.dish.ratio === null ? (
-                  <span className="tabular-nums">
-                    <span aria-hidden="true">—</span>
-                    <span className="sr-only">{t("form.ratioUndefined")}</span>
-                  </span>
-                ) : (
-                  <RatioBadge ratio={computed.dish.ratio} />
-                )}
+                <RatioBadge ratio={computed.dish.ratio} />
                 <span className="tabular-nums">
                   {t("form.computedKcal", {
                     value: formatKcal(computed.dish.kcal),
@@ -448,19 +467,15 @@ export function RecipeForm({
               {t("form.computedFailed")}
             </p>
           )}
-        </fieldset>
+        </Section>
 
-        <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-section text-card-title font-semibold">
-            {t("form.cooking")}
-          </legend>
-
+        <Section title={t("form.cooking")}>
           <TextAreaField
             id={instructionsId}
             label={t("form.instructions")}
             rows={8}
             placeholder={t("form.instructionsPlaceholder")}
-            error={errors.instructions && t("form.errors.instructions")}
+            error={instructionsError}
             {...register("instructions")}
           />
 
@@ -504,7 +519,7 @@ export function RecipeForm({
               </>
             )}
           </div>
-        </fieldset>
+        </Section>
 
         {error !== null && error !== undefined && (
           <FormError>

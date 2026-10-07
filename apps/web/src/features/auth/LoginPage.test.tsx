@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -70,6 +70,30 @@ describe("вход со вторым фактором", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(signIn).not.toHaveBeenCalled();
+  });
+
+  it("фокус уходит в появившееся поле кода (правило П21)", async () => {
+    // Иначе человек с клавиатуры остаётся на кнопке «Войти» и о новом поле
+    // узнаёт, только пройдя форму заново.
+    post.mockResolvedValue({
+      data: { status: "totp_required", tokens: null, totp_setup_token: null },
+    });
+
+    renderPage();
+    const user = await submitCredentials();
+
+    const code = await screen.findByLabelText(
+      /Код из приложения-аутентификатора/,
+    );
+    await waitFor(() => expect(code).toHaveFocus());
+
+    // Переключение на резервный код переносит фокус и в его поле.
+    await user.click(
+      screen.getByRole("button", { name: authRu.login.useBackupCode }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText(authRu.login.backupCode)).toHaveFocus(),
+    );
   });
 
   it("неверный код показывает ошибку — это уже настоящая ошибка", async () => {
@@ -188,5 +212,30 @@ describe("вход со вторым фактором", () => {
     expect(screen.getByLabelText(/Электронная почта/)).toHaveValue(
       "new@example.com",
     );
+  });
+});
+
+describe("сводка ошибок входа (правило П8)", () => {
+  it("пустая форма: сводка забирает фокус, строки ведут в поля", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Войти" }));
+
+    const summary = await screen.findByRole("alert");
+    expect(summary).toHaveFocus();
+    expect(
+      within(summary).getByText(commonRu.form.errorSummary),
+    ).toBeInTheDocument();
+
+    const links = within(summary).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      authRu.login.emailInvalid,
+      authRu.login.passwordRequired,
+    ]);
+
+    await user.click(links[1]!);
+    expect(screen.getByLabelText(/^Пароль/)).toHaveFocus();
+    expect(post).not.toHaveBeenCalled();
   });
 });

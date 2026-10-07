@@ -19,6 +19,7 @@ import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
+import { formatIsoDate } from "../doctor/dates";
 import { ProductRevisions } from "./ProductRevisions";
 import { fetchProductDetail, productDetailKey } from "./useProductDetail";
 import { canSeeProductHistory } from "./types";
@@ -155,7 +156,9 @@ export function ProductCard({
                 <dt className="text-muted-foreground">
                   {t("card.fields.verifiedAt")}
                 </dt>
-                <dd className="m-0 tabular-nums">{data.verified_at}</dd>
+                <dd className="m-0 tabular-nums">
+                  {formatIsoDate(data.verified_at) ?? data.verified_at}
+                </dd>
 
                 <dt className="text-muted-foreground">
                   {t("card.fields.state")}

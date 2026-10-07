@@ -91,7 +91,7 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
               });
             }}
           >
-            <label className="flex items-center gap-field">
+            <label className="flex min-h-touch items-center gap-field">
               <input
                 type="checkbox"
                 className="size-5 accent-primary"
@@ -103,7 +103,7 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
               <span>{t("reminders.enabled")}</span>
             </label>
 
-            <div className="grid gap-section sm:grid-cols-2">
+            <div className="grid gap-section @sm:grid-cols-2">
               {KINDS.map((kind) => (
                 <Field
                   key={kind}

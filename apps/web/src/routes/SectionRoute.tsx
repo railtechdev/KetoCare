@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useSession } from "../features/auth/useSession";
-import { SectionPlaceholder } from "./SectionPlaceholder";
+import { NotFoundPage } from "./NotFoundPage";
 import { SECTION_SCREENS } from "./sections";
 
 /**
@@ -19,8 +19,11 @@ export function SectionRoute() {
   const { section } = useParams({ from: "/app/$section" });
   const { session } = useSession();
 
+  // Неизвестный раздел роутер отсекает раньше (`notFound` в `beforeLoad`), а
+  // раздел без экрана роняет тест `sections`. Сюда попасть нельзя — но если
+  // попали, это «такой страницы нет», а не обещание «раздел появится».
   const screen = SECTION_SCREENS[section];
-  if (!screen) return <SectionPlaceholder section={section} />;
+  if (!screen) return <NotFoundPage />;
 
   return (
     <Suspense fallback={<SectionSkeleton />}>{screen(session?.role)}</Suspense>

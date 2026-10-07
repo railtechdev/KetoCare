@@ -1,19 +1,18 @@
-import {
-  Button,
-  FormFooter,
-  Section,
-  toast,
-  WarningBanner,
-} from "@ketocare/ui";
+import { Button, FormFooter, toast, WarningBanner } from "@ketocare/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Copy } from "lucide-react";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
+import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import {
   invitationLink,
@@ -29,42 +28,18 @@ const inviteSchema = z.object({
 type InviteValues = z.infer<typeof inviteSchema>;
 
 /**
- * Выдача приглашения блоком экрана.
+ * Форма приглашения сотрудника — содержимое панели «Пригласить сотрудника».
  *
- * `roles` задаёт вызывающий экран: администратор зовёт персонал, врач и
- * диетолог — семьи (ADR-0003). Это оформление; сервер проверяет то же самое и
- * отвечает 403 на попытку позвать не ту роль.
+ * Своей рамки и заголовка у неё нет: их даёт панель (`FormSheet`), а форма над
+ * списком учётных записей запрещена правилом П32. Семью форма не зовёт:
+ * доступ семье выдаётся кодом из карты ребёнка (ADR-0040), и вместе с этим
+ * ушли и блок-обёртка для экрана врача, и приглашение к конкретному ребёнку —
+ * ни то ни другое больше никто не вызывал.
  *
- * Отдельно от `InviteForm` потому, что на экране, куда приходят смотреть
- * список, форма обязана открываться панелью, а не стоять над списком
- * (правило П32 канона). Панель даёт свой заголовок, поэтому `Section` там
- * лишний — и вместо флага «рисовать ли рамку» разделены сам блок и его
- * содержимое.
+ * `roles` задаёт вызывающий экран. Это оформление; сервер проверяет то же
+ * самое и отвечает 403 на попытку позвать не ту роль.
  */
-export function InvitePanel({ roles }: { roles: readonly Role[] }) {
-  const { t } = useTranslation("invitations");
-
-  return (
-    <Section title={t("title")} description={t("intro")}>
-      <InviteForm roles={roles} />
-    </Section>
-  );
-}
-
-/**
- * Форма приглашения без обёртки: для панели, у которой свой заголовок.
- *
- * `patientId` — приглашение второго родителя к уже заведённому ребёнку
- * (ADR-0032): приняв его, родитель сразу видит этого ребёнка. Право выдать
- * такое приглашение проверяет сервер — по доступу автора к ребёнку.
- */
-export function InviteForm({
-  roles,
-  patientId,
-}: {
-  roles: readonly Role[];
-  patientId?: string;
-}) {
+export function InviteForm({ roles }: { roles: readonly Role[] }) {
   const { t } = useTranslation("invitations");
   const ids = useId();
   const invite = useCreateInvitationMutation();
@@ -73,11 +48,13 @@ export function InviteForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
     defaultValues: { email: "", role: roles[0] },
   });
+
+  const emailError = errors.email && t("errors.email");
 
   const link =
     invite.data === undefined ? null : invitationLink(invite.data.token);
@@ -86,24 +63,25 @@ export function InviteForm({
     <>
       <form
         onSubmit={handleSubmit((values) => {
-          const body =
-            patientId === undefined
-              ? values
-              : { ...values, patient_id: patientId };
-          invite.mutate(body, {
+          invite.mutate(values, {
             onSuccess: () => reset({ email: "", role: values.role }),
           });
         })}
         noValidate
         className="flex max-w-form flex-col gap-section"
       >
+        <FormErrorSummary
+          items={errorSummaryItems(submitCount, [[`${ids}-email`, emailError]])}
+          focusKey={submitCount}
+        />
+
         <Field
           id={`${ids}-email`}
           width="wide"
           type="email"
           autoComplete="off"
           label={t("fields.email")}
-          error={errors.email && t("errors.email")}
+          error={emailError}
           {...register("email")}
         />
 
@@ -154,9 +132,11 @@ export function InviteForm({
             size="sm"
             className="mt-field"
             onClick={() => {
-              void navigator.clipboard
-                .writeText(link)
-                .then(() => toast.success(t("ready.copied")));
+              void copyText(link).then((ok) =>
+                ok
+                  ? toast.success(t("ready.copied"))
+                  : toast.error(t("common:clipboard.failed")),
+              );
             }}
           >
             <Copy aria-hidden="true" />

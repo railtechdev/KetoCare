@@ -15,9 +15,14 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import {
   AccountFields,
+  useAccountErrorEntries,
   accountShape,
   withPasswordMatch,
 } from "../auth/accountFields";
@@ -51,7 +56,7 @@ export function AcceptInvitePage() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<AcceptValues>({
     resolver: zodResolver(acceptSchema),
     defaultValues: {
@@ -61,6 +66,8 @@ export function AcceptInvitePage() {
       phone: "",
     },
   });
+
+  const accountErrors = useAccountErrorEntries(errors, "invite");
 
   const token = search.token ?? "";
   const preview = useInvitationPreview(token);
@@ -145,6 +152,11 @@ export function AcceptInvitePage() {
         noValidate
         className="flex flex-col gap-section"
       >
+        <FormErrorSummary
+          items={errorSummaryItems(submitCount, accountErrors)}
+          focusKey={submitCount}
+        />
+
         <AccountFields register={register} errors={errors} idPrefix="invite" />
 
         {accept.error !== null && (

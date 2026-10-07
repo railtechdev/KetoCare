@@ -22,6 +22,7 @@ import { isPatientView } from "../features/doctor/patientViews";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
 import { AppToaster } from "./AppToaster";
 import { SidebarNav } from "./SidebarNav";
+import { MAIN_CONTENT_ID, SkipLink } from "./SkipLink";
 import { UserMenu } from "./UserMenu";
 
 /**
@@ -70,6 +71,7 @@ export function AppLayout() {
   return (
     <TooltipProvider>
       <div className="min-h-dvh bg-background">
+        <SkipLink />
         <aside
           className={cn(
             "fixed inset-y-0 left-0 hidden flex-col gap-screen border-r border-sidebar-border bg-sidebar p-2 md:flex",
@@ -148,7 +150,13 @@ export function AppLayout() {
             <UserMenu session={session} />
           </header>
 
-          <main className="p-4 sm:p-6 xl:px-8">
+          {/* Фокус сюда ставит только ссылка в обход навигации: рамка вокруг
+              всей страницы ничего не сообщает, прокрутка уже показала цель. */}
+          <main
+            id={MAIN_CONTENT_ID}
+            tabIndex={-1}
+            className="p-4 outline-none sm:p-6 xl:px-8"
+          >
             <AccountNotices userId={session.userId} />
             <Outlet />
           </main>

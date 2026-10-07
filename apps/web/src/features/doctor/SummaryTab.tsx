@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
 import { usePatientOverview } from "../patients/overview";
+import { DayTargetBars } from "../menu/DayTargetBars";
 import { PatientViewLink } from "./PatientViewLink";
 import { LinesSkeleton } from "./skeletons";
 import type { Patient, PatientOverview } from "./types";
@@ -200,6 +201,17 @@ function OverviewPanels({
               proteinG={day.totals.protein}
               carbsG={day.totals.carbs}
             />
+
+            {/* Цели полосой, как в меню и на главной семьи (П40): один день,
+                показанный в трёх местах, читается одинаково. */}
+            {prescription !== null && (
+              <DayTargetBars
+                kcal={day.totals.kcal}
+                carbs={day.totals.carbs}
+                kcalTarget={prescription.kcal_per_day}
+                carbsLimit={prescription.carbs_limit_g}
+              />
+            )}
 
             {verdict.unavailable ? (
               <p className="m-0 text-sm text-muted-foreground">

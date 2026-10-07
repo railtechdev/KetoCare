@@ -4,6 +4,10 @@ import {
   Button,
   Card,
   CardContent,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   EmptyState,
   FormFooter,
   Skeleton,
@@ -12,8 +16,10 @@ import {
 import {
   Baby,
   ClipboardList,
+  Ellipsis,
   MessageCircle,
   Paperclip,
+  Pencil,
   Plus,
   Stethoscope,
   Users,
@@ -111,11 +117,16 @@ export function ChildPage() {
     <PageLayout
       title={t("title")}
       intro={t("children.intro")}
+      // Пустой раздел предлагает то же действие в своём пустом состоянии, и
+      // две одинаковые акцентные кнопки на одном экране — это вопрос, а не
+      // ответ (П31). Шапка получает его, когда список уже есть.
       actions={
-        <Button type="button" onClick={() => setTab("add")}>
-          <Plus aria-hidden="true" />
-          {t("child.addByCode")}
-        </Button>
+        children.length > 0 ? (
+          <Button type="button" onClick={() => setTab("add")}>
+            <Plus aria-hidden="true" />
+            {t("child.addByCode")}
+          </Button>
+        ) : undefined
       }
     >
       {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
@@ -195,11 +206,21 @@ export function ChildPage() {
                     </span>
                   </div>
 
+                  {/* Шесть одинаковых кнопок в карточке не отвечали на
+                      вопрос «с чего начать», а задавали его (правило П31):
+                      на виду два частых дела, остальные — в меню «Ещё».
+                      Подпись каждой называет ребёнка: детей в семье бывает
+                      двое, и «Анкета» без имени у программы чтения экрана
+                      звучала одинаково в обеих карточках. */}
                   <div className="ml-auto flex flex-wrap gap-field">
                     <Button
                       type="button"
                       variant="outline"
                       className="min-h-touch"
+                      aria-label={t("children.actionFor", {
+                        action: t("children.intake"),
+                        name: child.full_name,
+                      })}
                       onClick={() => open("intake", child)}
                     >
                       <ClipboardList aria-hidden="true" />
@@ -213,58 +234,62 @@ export function ChildPage() {
                       type="button"
                       variant="outline"
                       className="min-h-touch"
+                      aria-label={t("children.actionFor", {
+                        action: t("children.documents"),
+                        name: child.full_name,
+                      })}
                       onClick={() => open("documents", child)}
                     >
                       <Paperclip aria-hidden="true" />
                       {t("children.documents")}
                     </Button>
-                    {/* Бот — канал семьи (раздел 7 ТЗ). Кнопка стоит здесь,
-                        потому что привязка относится к ребёнку, а не к
-                        родителю: у одной семьи может быть двое детей и два
-                        разных чата. */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-touch"
-                      onClick={() => open("telegram", child)}
-                    >
-                      <MessageCircle aria-hidden="true" />
-                      {t("children.telegram")}
-                    </Button>
-                    {/* Близкие — отдельной кнопкой, а не внутри «Кто ведёт»:
-                        под стетоскопом и словом «специалисты» приглашение
-                        бабушки не искал никто (аудит пути, 02.10.2026). */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-touch"
-                      onClick={() => open("family", child)}
-                    >
-                      <Users aria-hidden="true" />
-                      {t("children.family")}
-                    </Button>
-                    {/* Ручка `GET /patients/{id}/doctors` родителю прямо
-                        разрешена — «родитель вправе знать, кто имеет доступ к
-                        данным ребёнка», — а экрана у неё не было ни одного.
-                        Семья не знала ни имени врача, ни того, что к карте
-                        подключён диетолог. */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-touch"
-                      onClick={() => open("care", child)}
-                    >
-                      <Stethoscope aria-hidden="true" />
-                      {t("children.care")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-touch"
-                      onClick={() => open("edit", child)}
-                    >
-                      {t("children.edit")}
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="min-h-touch"
+                          aria-label={t("children.actionFor", {
+                            action: t("children.more"),
+                            name: child.full_name,
+                          })}
+                        >
+                          <Ellipsis aria-hidden="true" />
+                          {t("children.more")}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {/* Бот — канал семьи (раздел 7 ТЗ). Привязка
+                            относится к ребёнку, а не к родителю: у одной
+                            семьи может быть двое детей и два разных чата. */}
+                        <DropdownMenuItem
+                          onSelect={() => open("telegram", child)}
+                        >
+                          <MessageCircle aria-hidden="true" />
+                          {t("children.telegram")}
+                        </DropdownMenuItem>
+                        {/* Близкие — отдельным пунктом, а не внутри «Кто
+                            ведёт»: под словом «специалисты» приглашение
+                            бабушки не искал никто (аудит пути, 02.10.2026). */}
+                        <DropdownMenuItem
+                          onSelect={() => open("family", child)}
+                        >
+                          <Users aria-hidden="true" />
+                          {t("children.family")}
+                        </DropdownMenuItem>
+                        {/* `GET /patients/{id}/doctors` родителю разрешена —
+                            «родитель вправе знать, кто имеет доступ к данным
+                            ребёнка». */}
+                        <DropdownMenuItem onSelect={() => open("care", child)}>
+                          <Stethoscope aria-hidden="true" />
+                          {t("children.care")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => open("edit", child)}>
+                          <Pencil aria-hidden="true" />
+                          {t("children.edit")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardContent>
               </Card>

@@ -1,5 +1,6 @@
 import { Button } from "@ketocare/ui";
 import { X } from "lucide-react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ProductPicker } from "../calculator/ProductPicker";
@@ -31,14 +32,24 @@ export function ExcludedProductsField({
 }) {
   const { t } = useTranslation("child");
 
+  const hintId = useId();
+
   const names = new Map<string, string | null>(
     known.map((entry) => [entry.id, entry.name_ru ?? null]),
   );
 
+  // Группа с общей подписью — `fieldset` с `legend` (правило П23 оставляет его
+  // ровно для такого случая): поиск продукта и список выбранного — одно поле,
+  // а подпись абзацем программа чтения экрана с ними не связывала.
   return (
-    <div className="flex flex-col gap-field">
-      <p className="m-0 text-sm font-medium">{t("child.fields.excluded")}</p>
-      <p className="m-0 text-sm text-muted-foreground">
+    <fieldset
+      className="m-0 flex min-w-0 flex-col gap-field border-0 p-0"
+      aria-describedby={hintId}
+    >
+      <legend className="mb-field p-0 text-sm font-medium">
+        {t("child.fields.excluded")}
+      </legend>
+      <p id={hintId} className="m-0 text-sm text-muted-foreground">
         {t("child.fields.excludedHint")}
       </p>
 
@@ -54,45 +65,69 @@ export function ExcludedProductsField({
         <ul className="m-0 flex list-none flex-wrap gap-field p-0">
           {value.map((id) => (
             <li key={id}>
-              <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-sm">
-                <ExcludedName id={id} name={names.get(id) ?? null} />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="min-h-touch min-w-touch text-muted-foreground"
-                  aria-label={t("child.fields.excludedRemove", {
-                    name: names.get(id) ?? id,
-                  })}
-                  onClick={() => onChange(value.filter((it) => it !== id))}
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </span>
+              <ExcludedChip
+                id={id}
+                name={names.get(id) ?? null}
+                onRemove={() => onChange(value.filter((it) => it !== id))}
+              />
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </fieldset>
   );
 }
 
 /**
- * Название исключённого продукта.
+ * Исключённый продукт и кнопка «убрать».
  *
- * Приходит вместе с карточкой ребёнка, но у только что выбранного его нет — и
- * у сохранённого раньше, если карточку открыли из списка. Идентификатор
- * показывать нельзя: список исключённого читают, решая, чем кормить ребёнка.
+ * Название приходит вместе с карточкой ребёнка, но у только что выбранного его
+ * нет — и у сохранённого раньше, если карточку открыли из списка. Его берёт
+ * справочник, и им же подписана кнопка: прежде подпись подставляла
+ * идентификатор, и программа чтения экрана зачитывала «Убрать из исключений:
+ * 3f2a…». Идентификатор не показывается нигде: список исключённого читают,
+ * решая, чем кормить ребёнка.
  */
-function ExcludedName({ id, name }: { id: string; name: string | null }) {
+function ExcludedChip({
+  id,
+  name,
+  onRemove,
+}: {
+  id: string;
+  name: string | null;
+  onRemove: () => void;
+}) {
   const { t } = useTranslation("child");
   const product = useProduct(name === null ? id : undefined);
 
-  if (name !== null) return <>{name}</>;
-  if (product.data) return <>{product.data.name}</>;
+  const resolved =
+    name ??
+    product.data?.name ??
+    (product.isError ? t("child.fields.excludedUnknown") : null);
+
   return (
-    <span className="text-muted-foreground">
-      {product.isError ? t("child.fields.excludedUnknown") : "…"}
+    <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-sm">
+      {resolved === null ? (
+        <span className="text-muted-foreground">…</span>
+      ) : product.isError && name === null ? (
+        <span className="text-muted-foreground">{resolved}</span>
+      ) : (
+        resolved
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="min-h-touch min-w-touch text-muted-foreground"
+        aria-label={
+          resolved === null
+            ? t("child.fields.excludedRemoveLoading")
+            : t("child.fields.excludedRemove", { name: resolved })
+        }
+        onClick={onRemove}
+      >
+        <X aria-hidden="true" />
+      </Button>
     </span>
   );
 }

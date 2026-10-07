@@ -8,7 +8,9 @@ import {
 } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
-import type { PatientSearch } from "../router";
+import { AddressProbe } from "./address";
+
+import { validatePatientSearch, type PatientSearch } from "../routes/search";
 
 /**
  * Обёртка для тестов экранов карты пациента.
@@ -47,13 +49,20 @@ export function PatientRouter({
     const patientRoute = createRoute({
       getParentRoute: () => appRoute,
       path: "patients/$patientId",
-      validateSearch: (value: Record<string, unknown>): PatientSearch => value,
+      // Проверка та же, что у боевого маршрута: параметр, который боевой
+      // выбрасывает, не должен доживать до экрана и в тесте.
+      validateSearch: validatePatientSearch,
       component: Outlet,
     });
     const viewRoute = createRoute({
       getParentRoute: () => patientRoute,
       path: "$view",
-      component: () => <>{children}</>,
+      component: () => (
+        <>
+          {children}
+          <AddressProbe />
+        </>
+      ),
     });
 
     const query = new URLSearchParams(

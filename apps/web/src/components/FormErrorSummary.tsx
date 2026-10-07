@@ -1,10 +1,32 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface FormErrorSummaryItem {
   /** id поля, к которому ведёт строка сводки */
   fieldId: string;
   /** Тот же текст, что показан под полем: расхождение читается как две разные ошибки */
   message: string;
+}
+
+/**
+ * Строки сводки из пар «id поля → текст под полем».
+ *
+ * До первой отправки сводки нет вовсе (ошибка живёт под полем, с которого
+ * ушли); после — остаются только поля, у которых сообщение есть. Порядок пар
+ * повторяет порядок полей формы, и сводка читается сверху вниз так же, как
+ * форма.
+ *
+ * Сообщение передаётся то же, что и под полем, — одним выражением, а не
+ * второй формулировкой: иначе сводка говорит об ошибке, которой под полем нет.
+ */
+export function errorSummaryItems(
+  submitCount: number,
+  entries: readonly (readonly [fieldId: string, message: unknown])[],
+): FormErrorSummaryItem[] {
+  if (submitCount === 0) return [];
+  return entries.flatMap(([fieldId, message]) =>
+    typeof message === "string" && message !== "" ? [{ fieldId, message }] : [],
+  );
 }
 
 /**
@@ -29,11 +51,13 @@ export function FormErrorSummary({
   items,
   focusKey,
 }: {
-  title: string;
+  /** Заголовок сводки; по умолчанию общий «Проверьте заполнение полей» */
+  title?: string;
   items: readonly FormErrorSummaryItem[];
   /** Счётчик отправок: по его изменению сводка переносит на себя фокус */
   focusKey: number;
 }) {
+  const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const shown = items.length > 0;
 
@@ -50,7 +74,9 @@ export function FormErrorSummary({
       tabIndex={-1}
       className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4"
     >
-      <p className="m-0 font-semibold text-foreground">{title}</p>
+      <p className="m-0 font-semibold text-foreground">
+        {title ?? t("form.errorSummary")}
+      </p>
       <ul className="m-0 mt-field flex list-none flex-col gap-field p-0">
         {items.map((item) => (
           <li key={item.fieldId}>

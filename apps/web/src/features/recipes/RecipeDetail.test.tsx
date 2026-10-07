@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { primaryActions } from "@ketocare/ui/testing";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -126,11 +128,31 @@ describe("карточка рецепта", () => {
     // рецепт сам советовал «снимите его с публикации».
     renderDetail(true);
 
+    // Редкое действие живёт в меню «Ещё» (правило П31), а не пятой кнопкой.
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: /Ещё/ }));
     expect(
-      await screen.findByRole("button", { name: /Снять с публикации/ }),
+      await screen.findByRole("menuitem", { name: /Снять с публикации/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Опубликовать/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("в шапке одно первичное действие и не больше двух вторичных", async () => {
+    // Было четыре кнопки одного веса: калькулятор, правка, снятие с
+    // публикации и удаление. Удаление и снятие ушли в меню «Ещё».
+    (api.GET as Mock).mockResolvedValue({
+      data: { ...RECIPE, status: "draft" },
+      response: { status: 200 },
+    });
+    const { container } = renderDetail(true);
+
+    await screen.findByRole("button", { name: /Изменить/ });
+    expect(primaryActions(container)).toEqual(["Опубликовать"]);
+    expect(
+      screen.queryByRole("button", { name: /^Удалить/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -139,7 +161,7 @@ describe("карточка рецепта", () => {
     // роутер тут же подменяет первым доступным (правило П3).
     renderDetail(true, false);
 
-    await screen.findByRole("button", { name: /Снять с публикации/ });
+    await screen.findByRole("button", { name: /Изменить/ });
     expect(
       screen.queryByRole("link", { name: /калькулятор/i }),
     ).not.toBeInTheDocument();

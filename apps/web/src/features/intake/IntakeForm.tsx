@@ -9,6 +9,10 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field, SelectField } from "../../components/Field";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { toDateInput } from "../diary/time";
@@ -110,6 +114,11 @@ export function IntakeForm({
 
   const [step, setStep] = useState<Step>("seizures");
   const [values, setValues] = useState<Values | null>(null);
+  /**
+   * Попытки уйти с шага с недописанной датой. По их счёту сводка ошибок
+   * появляется и забирает фокус (правило П8).
+   */
+  const [blockedAttempts, setBlockedAttempts] = useState(0);
 
   // Ответы подставляются один раз, когда пришли: пересборка на каждый рендер
   // затирала бы то, что родитель уже набрал.
@@ -261,16 +270,31 @@ export function IntakeForm({
             // Шаг назван явно: без него блокировка сработала бы на ЛЮБОМ шаге,
             // и стоило полю переехать — «Далее» начало бы молча ничего не
             // делать, потому что фокусировать было бы нечего.
+            //
+            // Фокус забирает сводка ошибок, а её строка ведёт в первое
+            // недописанное поле — то, которое и надо исправить.
             if (step === "seizures" && lastSeizureMissing) {
-              document
-                .getElementById(firstMissingId(values.lastSeizure))
-                ?.focus();
+              setBlockedAttempts((count) => count + 1);
               return;
             }
             if (isLast) submit();
             else setStep(STEPS[stepIndex + 1]!);
           }}
         >
+          {step === "seizures" && (
+            <FormErrorSummary
+              items={errorSummaryItems(blockedAttempts, [
+                [
+                  firstMissingId(values.lastSeizure),
+                  lastSeizureMissing
+                    ? t("errors.lastSeizureRequired")
+                    : undefined,
+                ],
+              ])}
+              focusKey={blockedAttempts}
+            />
+          )}
+
           <p className="m-0 text-sm text-muted-foreground">
             {t("step", { current: stepIndex + 1, total: STEPS.length })}
             {" · "}
@@ -474,7 +498,7 @@ function DrugPicker({
       </legend>
       <p className="mt-0 mb-field text-sm text-muted-foreground">{hint}</p>
 
-      <ul className="m-0 grid list-none grid-cols-1 gap-field p-0 sm:grid-cols-2">
+      <ul className="m-0 grid list-none grid-cols-1 gap-field p-0 @sm:grid-cols-2">
         {drugs.map((drug) => (
           <li key={drug.id}>
             <label className="flex min-h-touch items-center gap-field text-sm">

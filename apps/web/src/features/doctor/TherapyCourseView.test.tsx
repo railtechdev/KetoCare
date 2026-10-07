@@ -113,9 +113,10 @@ describe("ход терапии (вопросы 17, 18, 34)", () => {
     await user.click(
       screen.getByRole("button", { name: doctorRu.course.status.endSubmit }),
     );
+    // Под полем и строкой в сводке ошибок (правило П8).
     expect(
-      await screen.findByText(doctorRu.course.errors.reason),
-    ).toBeInTheDocument();
+      await screen.findAllByText(doctorRu.course.errors.reason),
+    ).toHaveLength(2);
     expect(api.PUT).not.toHaveBeenCalled();
 
     await user.selectOptions(
@@ -126,8 +127,8 @@ describe("ход терапии (вопросы 17, 18, 34)", () => {
       screen.getByRole("button", { name: doctorRu.course.status.endSubmit }),
     );
     expect(
-      await screen.findByText(doctorRu.course.errors.note),
-    ).toBeInTheDocument();
+      await screen.findAllByText(doctorRu.course.errors.note),
+    ).toHaveLength(2);
 
     await user.type(
       screen.getByLabelText(doctorRu.course.fields.note, { exact: false }),

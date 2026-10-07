@@ -224,7 +224,10 @@ export function DoctorHomePage() {
                     </PatientViewLink>
                     <PatientFlagsView flags={row.flags} />
                     {row.flags.staleData && (
-                      <NudgeFamilyButton patientId={row.patient.id} />
+                      <NudgeFamilyButton
+                        patientId={row.patient.id}
+                        patientName={row.patient.full_name}
+                      />
                     )}
                   </li>
                 ))}

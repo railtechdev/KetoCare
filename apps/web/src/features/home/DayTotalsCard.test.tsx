@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import i18n from "../../lib/i18n";
 import homeRu from "../../locales/ru/home.json";
+
 import { DayTotalsCard } from "./DayTotalsCard";
 import type { DaySummary } from "./types";
 
@@ -36,7 +37,7 @@ i18n.addResourceBundle("ru", "home", homeRu, true, true);
  */
 describe("итоги дня без меню", () => {
   it("сжимаются до строки и не повторяют кнопку соседнего блока", () => {
-    render(<DayTotalsCard day={null} targetKcal={1200} />);
+    render(<DayTotalsCard day={null} targetKcal={1200} carbsLimit={20} />);
 
     expect(screen.getByText(homeRu.day.empty)).toBeInTheDocument();
     expect(
@@ -62,6 +63,7 @@ describe("почему у дня нет вердикта", () => {
       <DayTotalsCard
         day={day({ tolerance_gap: "no_prescription" })}
         targetKcal={null}
+        carbsLimit={null}
       />,
     );
 
@@ -73,6 +75,7 @@ describe("почему у дня нет вердикта", () => {
       <DayTotalsCard
         day={day({ tolerance_gap: "engine_changed", engine_version: "0.4.0" })}
         targetKcal={1200}
+        carbsLimit={null}
       />,
     );
 
@@ -103,6 +106,7 @@ describe("почему у дня нет вердикта", () => {
           },
         })}
         targetKcal={1200}
+        carbsLimit={null}
       />,
     );
 
@@ -113,5 +117,24 @@ describe("почему у дня нет вердикта", () => {
       screen.queryByText(homeRu.day.offTolerance.title),
     ).not.toBeInTheDocument();
     expect(screen.getByText(homeRu.day.ratioUnknown)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Правило П40: цель — полосой, как в меню. До этого тот же день на главной
+ * читался числом, а лимит углеводов не показывался вовсе.
+ */
+describe("цели дня на главной", () => {
+  it("показаны полосами калорийности и лимита углеводов", () => {
+    render(<DayTotalsCard day={day()} targetKcal={1400} carbsLimit={20} />);
+
+    expect(screen.getAllByRole("progressbar")).toHaveLength(2);
+    expect(screen.getByText("10,0 из 20,0 г")).toBeInTheDocument();
+  });
+
+  it("без лимита полос нет — сравнивать не с чем", () => {
+    render(<DayTotalsCard day={day()} targetKcal={null} carbsLimit={null} />);
+
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 });

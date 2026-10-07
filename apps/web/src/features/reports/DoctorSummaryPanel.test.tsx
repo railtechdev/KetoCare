@@ -169,7 +169,7 @@ describe("черновик сводки", () => {
     // Диалог называет объект и период: врач подтверждает, что понял, что
     // именно уедет в отчёт.
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog).toHaveTextContent("2026-08-01");
+    expect(dialog).toHaveTextContent("01.08.2026");
     await user.click(
       within(dialog).getByRole("button", { name: reportsRu.summary.approve }),
     );

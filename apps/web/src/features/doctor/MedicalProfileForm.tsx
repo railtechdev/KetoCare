@@ -4,10 +4,14 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import { FormFooter, Section, toast } from "@ketocare/ui";
+import { FormFooter, toast } from "@ketocare/ui";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import { optionsOfScale, useIntakeOptions } from "../intake/useIntake";
 import { useSaveMedicalProfile } from "./doctorMutations";
@@ -98,7 +102,7 @@ export function MedicalProfileForm({
     register,
     handleSubmit,
     watch,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<MedicalProfileFormValues>({
     resolver: zodResolver(medicalProfileSchema),
     defaultValues: {
@@ -116,6 +120,8 @@ export function MedicalProfileForm({
     },
   });
 
+  const onsetError = errors.onsetAgeMonths && t("profile.errors.onset");
+
   // Выведенный из употребления вариант остаётся в списке, пока он выбран:
   // скрыть его — значит подменить прежний ответ пустотой (то же правило, что
   // в анкете семьи, — `optionsOfScale`).
@@ -126,82 +132,88 @@ export function MedicalProfileForm({
   );
 
   return (
-    <Section title={t("profile.title")} description={t("profile.formHint")}>
-      <form
-        noValidate
-        className="flex flex-col gap-section"
-        onSubmit={handleSubmit((values) =>
-          save.mutate(toBody(values), {
-            onSuccess: () => {
-              toast.success(t("profile.saved"));
-              onDone();
-            },
-          }),
-        )}
-      >
-        <TextAreaField
-          id={`${ids}-diagnosis`}
-          rows={3}
-          optional
-          label={t("profile.fields.diagnosis")}
-          {...register("diagnosis")}
-        />
+    // Заголовок и пояснение даёт панель (`FormSheet`), в которой форма
+    // открывается: блок с тем же заголовком внутри панели повторял бы его.
+    <form
+      noValidate
+      className="flex flex-col gap-section"
+      onSubmit={handleSubmit((values) =>
+        save.mutate(toBody(values), {
+          onSuccess: () => {
+            toast.success(t("profile.saved"));
+            onDone();
+          },
+        }),
+      )}
+    >
+      <FormErrorSummary
+        items={errorSummaryItems(submitCount, [[`${ids}-onset`, onsetError]])}
+        focusKey={submitCount}
+      />
+
+      <TextAreaField
+        id={`${ids}-diagnosis`}
+        rows={3}
+        optional
+        label={t("profile.fields.diagnosis")}
+        {...register("diagnosis")}
+      />
+
+      <Field
+        id={`${ids}-epilepsy-type`}
+        optional
+        label={t("profile.fields.epilepsyType")}
+        {...register("epilepsyType")}
+      />
+
+      <Field
+        id={`${ids}-onset`}
+        width="narrow"
+        type="number"
+        inputMode="numeric"
+        min={0}
+        step={1}
+        optional
+        label={t("profile.fields.onset")}
+        error={onsetError}
+        {...register("onsetAgeMonths", { valueAsNumber: true })}
+      />
+
+      <fieldset className="m-0 flex flex-col gap-section border-0 p-0">
+        <legend className="mb-2 p-0 text-sm font-semibold">
+          {t("profile.fields.genetics")}
+        </legend>
 
         <Field
-          id={`${ids}-epilepsy-type`}
+          id={`${ids}-gene`}
           optional
-          label={t("profile.fields.epilepsyType")}
-          {...register("epilepsyType")}
+          label={t("profile.fields.gene")}
+          {...register("gene")}
         />
-
         <Field
-          id={`${ids}-onset`}
-          width="narrow"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          step={1}
+          id={`${ids}-variant`}
           optional
-          label={t("profile.fields.onset")}
-          error={errors.onsetAgeMonths && t("profile.errors.onset")}
-          {...register("onsetAgeMonths", { valueAsNumber: true })}
+          label={t("profile.fields.variant")}
+          {...register("variant")}
         />
-
-        <fieldset className="m-0 flex flex-col gap-section border-0 p-0">
-          <legend className="mb-2 p-0 text-sm font-semibold">
-            {t("profile.fields.genetics")}
-          </legend>
-
-          <Field
-            id={`${ids}-gene`}
-            optional
-            label={t("profile.fields.gene")}
-            {...register("gene")}
-          />
-          <Field
-            id={`${ids}-variant`}
-            optional
-            label={t("profile.fields.variant")}
-            {...register("variant")}
-          />
-          <TextAreaField
-            id={`${ids}-interpretation`}
-            rows={3}
-            optional
-            label={t("profile.fields.interpretation")}
-            {...register("interpretation")}
-          />
-        </fieldset>
-
         <TextAreaField
-          id={`${ids}-comorbidities`}
+          id={`${ids}-interpretation`}
           rows={3}
           optional
-          label={t("profile.fields.comorbidities")}
-          {...register("comorbidities")}
+          label={t("profile.fields.interpretation")}
+          {...register("interpretation")}
         />
+      </fieldset>
 
-        {/* Дата начала терапии — ответ клиники 09.09.2026 (вопрос 17). Стоит
+      <TextAreaField
+        id={`${ids}-comorbidities`}
+        rows={3}
+        optional
+        label={t("profile.fields.comorbidities")}
+        {...register("comorbidities")}
+      />
+
+      {/* Дата начала терапии — ответ клиники 09.09.2026 (вопрос 17). Стоит
             здесь, а не в паспорте ребёнка: паспорт правит и семья, а эту дату
             задаёт врач. От неё отсчитываются контрольные визиты, и по ней же
             решается, считать ли ответ семьи о частоте приступов исходным
@@ -210,46 +222,45 @@ export function MedicalProfileForm({
             Поле НЕ ограничено сегодняшним днём: врач назначает диету «с
             понедельника», и `max` запретил бы внести решение заранее. Явную
             опечатку (год раньше рождения ребёнка) отклоняет сервер. */}
-        <Field
-          id={`${ids}-therapy-started-on`}
-          width="narrow"
-          type="date"
-          optional
-          label={t("profile.fields.therapyStartedOn")}
-          hint={t("profile.fields.therapyStartedOnHint")}
-          {...register("therapyStartedOn")}
-        />
+      <Field
+        id={`${ids}-therapy-started-on`}
+        width="narrow"
+        type="date"
+        optional
+        label={t("profile.fields.therapyStartedOn")}
+        hint={t("profile.fields.therapyStartedOnHint")}
+        {...register("therapyStartedOn")}
+      />
 
-        <SelectField
-          id={`${ids}-aed-switch-count`}
-          width="wide"
-          optional
-          label={t("profile.fields.aedSwitchCount")}
-          hint={t("profile.fields.aedSwitchCountHint")}
-          {...register("aedSwitchCountId")}
-        >
-          <option value="">{t("profile.fields.notAnswered")}</option>
-          {aedSwitchOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name_ru}
-            </option>
-          ))}
-        </SelectField>
+      <SelectField
+        id={`${ids}-aed-switch-count`}
+        width="wide"
+        optional
+        label={t("profile.fields.aedSwitchCount")}
+        hint={t("profile.fields.aedSwitchCountHint")}
+        {...register("aedSwitchCountId")}
+      >
+        <option value="">{t("profile.fields.notAnswered")}</option>
+        {aedSwitchOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.name_ru}
+          </option>
+        ))}
+      </SelectField>
 
-        {save.isError && (
-          <FormError>
-            {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
-          </FormError>
-        )}
+      {save.isError && (
+        <FormError>
+          {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
+        </FormError>
+      )}
 
-        <FormFooter
-          submitLabel={t("actions.save")}
-          pendingLabel={t("common:actions.saving")}
-          pending={save.isPending}
-          cancelLabel={t("actions.cancel")}
-          onCancel={onCancel}
-        />
-      </form>
-    </Section>
+      <FormFooter
+        submitLabel={t("actions.save")}
+        pendingLabel={t("common:actions.saving")}
+        pending={save.isPending}
+        cancelLabel={t("actions.cancel")}
+        onCancel={onCancel}
+      />
+    </form>
   );
 }

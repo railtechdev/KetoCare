@@ -19,6 +19,10 @@ import { QrCode } from "../../components/QrCode";
 import { SetPasswordPanel } from "./SetPasswordPanel";
 import { BackupCodesPanel } from "./BackupCodesPanel";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { api, errorCodeOf, errorMessageOf } from "../../lib/api";
 import { StepExpired } from "./StepExpired";
 import { totpVerifySchema, type TotpVerifyValues } from "./schemas";
@@ -68,8 +72,9 @@ export function TotpSetupPanel({ setupToken, onRestart }: Props) {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<TotpVerifyValues>({ resolver: zodResolver(totpVerifySchema) });
+  const codeError = errors.code && t("totpSetup.codeFormat");
 
   /**
    * Резервные коды, выданные вместе с включением второго фактора.
@@ -213,6 +218,13 @@ export function TotpSetupPanel({ setupToken, onRestart }: Props) {
             noValidate
             className="flex flex-col gap-section"
           >
+            <FormErrorSummary
+              items={errorSummaryItems(submitCount, [
+                ["totp-setup-code", codeError],
+              ])}
+              focusKey={submitCount}
+            />
+
             <Field
               id="totp-setup-code"
               inputMode="numeric"
@@ -220,7 +232,7 @@ export function TotpSetupPanel({ setupToken, onRestart }: Props) {
               // ограничений на вставку здесь нет (правило П21 канона).
               autoComplete="one-time-code"
               label={t("totpSetup.codeLabel")}
-              error={errors.code && t("totpSetup.codeFormat")}
+              error={codeError}
               {...register("code")}
             />
 

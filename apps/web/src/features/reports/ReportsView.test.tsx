@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import reportsRu from "../../locales/ru/reports.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
 import { ReportsView } from "./ReportsView";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -149,5 +150,56 @@ describe("сборка PDF-отчёта", () => {
     await waitFor(() =>
       expect(screen.queryByText(reportsRu.pdf.lost)).toBeNull(),
     );
+  });
+});
+
+describe("период отчёта — в адресе", () => {
+  function reportQueries(): { from: string; to: string }[] {
+    return (api.GET as Mock).mock.calls
+      .filter(([path]) => path === "/api/v1/patients/{patient_id}/report")
+      .map(
+        ([, init]) =>
+          (init as { params: { query: { from: string; to: string } } }).params
+            .query,
+      );
+  }
+
+  it("F5 возвращает период из адреса", async () => {
+    renderView({ from: "2026-08-01", to: "2026-08-31" });
+
+    expect(await screen.findByLabelText(/^С/)).toHaveValue("2026-08-01");
+    await waitFor(() =>
+      expect(reportQueries()[0]).toMatchObject({
+        from: "2026-08-01",
+        to: "2026-08-31",
+      }),
+    );
+  });
+
+  it("задача уходит в адрес вместе со своим периодом", async () => {
+    const user = userEvent.setup();
+    renderView({ from: "2026-08-01", to: "2026-08-31" });
+
+    await user.click(
+      await screen.findByRole("button", { name: /Собрать PDF/ }),
+    );
+
+    await waitFor(() =>
+      expect(currentAddress()).toMatchObject({
+        job: "job1",
+        from: "2026-08-01",
+        to: "2026-08-31",
+      }),
+    );
+  });
+
+  it("смена периода снимает задачу: файл собран за прежний", async () => {
+    renderView({ job: "job1", from: "2026-08-01", to: "2026-08-31" });
+
+    const from = await screen.findByLabelText(/^С/);
+    fireEvent.change(from, { target: { value: "2026-07-01" } });
+
+    await waitFor(() => expect(currentAddress().from).toBe("2026-07-01"));
+    expect(currentAddress().job).toBeUndefined();
   });
 });

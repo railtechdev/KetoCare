@@ -15,6 +15,10 @@ import { z } from "zod";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { PageLayout } from "../../components/PageLayout";
 import { BackupCodesSection } from "./BackupCodesSection";
 import { PasswordSection } from "./PasswordSection";
@@ -47,11 +51,13 @@ export function ProfilePage() {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: { fullName: "", phone: "" },
   });
+
+  const nameError = errors.fullName && t("errors.fullName");
 
   // Форма заполняется, когда профиль пришёл: значения по умолчанию считываются
   // один раз при монтировании, а запрос к этому моменту ещё не завершён.
@@ -129,12 +135,19 @@ export function ProfilePage() {
               noValidate
               className="flex flex-col gap-section"
             >
+              <FormErrorSummary
+                items={errorSummaryItems(submitCount, [
+                  ["profile-name", nameError],
+                ])}
+                focusKey={submitCount}
+              />
+
               <Field
                 id="profile-name"
                 width="wide"
                 autoComplete="name"
                 label={t("fields.fullName")}
-                error={errors.fullName && t("errors.fullName")}
+                error={nameError}
                 {...register("fullName")}
               />
 

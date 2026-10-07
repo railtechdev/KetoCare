@@ -6,6 +6,10 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { Field } from "../../components/Field";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { DishPicker } from "./DishPicker";
 import type { DishOption } from "./useDishCatalog";
 import type { DishKind } from "./useMenu";
@@ -52,17 +56,20 @@ export function AddMenuItemForm({
 
   const factorId = useId();
   const dishErrorId = useId();
+  const dishInputId = useId();
 
   const {
     register,
     handleSubmit,
     setValue,
-    reset,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<AddItemValues>({
     resolver: zodResolver(addItemSchema),
     defaultValues: { dishKey: "", portionFactor: 1 },
   });
+
+  const dishError = errors.dishKey && t("picker.required");
+  const factorError = errors.portionFactor && t("add.factorInvalid");
 
   const onSubmit = handleSubmit((values) => {
     if (dish === null) return;
@@ -71,8 +78,9 @@ export function AddMenuItemForm({
       id: dish.id,
       portionFactor: values.portionFactor,
     });
-    setDish(null);
-    reset();
+    // Выбор не сбрасывается: панель закрывает владелец после ответа сервера,
+    // а при отказе человек повторяет попытку с тем же блюдом, не выбирая его
+    // заново.
   });
 
   return (
@@ -84,7 +92,16 @@ export function AddMenuItemForm({
       })}
       className="flex flex-col gap-section rounded-lg border border-border p-4"
     >
+      <FormErrorSummary
+        items={errorSummaryItems(submitCount, [
+          [dishInputId, dishError],
+          [factorId, factorError],
+        ])}
+        focusKey={submitCount}
+      />
+
       <DishPicker
+        inputId={dishInputId}
         patientId={patientId}
         value={dish}
         onSelect={(option) => {
@@ -94,9 +111,9 @@ export function AddMenuItemForm({
         errorId={errors.dishKey ? dishErrorId : undefined}
         invalid={errors.dishKey !== undefined}
       />
-      {errors.dishKey && (
+      {dishError && (
         <p id={dishErrorId} className="m-0 text-sm text-destructive">
-          {t("picker.required")}
+          {dishError}
         </p>
       )}
 
@@ -109,7 +126,7 @@ export function AddMenuItemForm({
         step={0.1}
         label={t("add.factor")}
         hint={t("add.factorHint")}
-        error={errors.portionFactor && t("add.factorInvalid")}
+        error={factorError}
         {...register("portionFactor", { valueAsNumber: true })}
       />
 

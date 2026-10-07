@@ -5,6 +5,7 @@ import {
   Metric,
   MetricRow,
   Section,
+  formatMeasured,
   formatNumber,
   formatWeight,
 } from "@ketocare/ui";
@@ -134,7 +135,9 @@ export function GrowthView({ patientId }: { patientId: string }) {
                       {point.height_cm === null || point.height_cm === undefined
                         ? t("growth.noScore")
                         : t("growth.cm", {
-                            value: formatNumber(point.height_cm, 1),
+                            // Рост — измерение: «112 см», как в профиле, а не «112,0»
+                            // с дописанным нулём (П45, formatMeasured).
+                            value: formatMeasured(point.height_cm),
                           })}
                     </td>
                     <td className="py-1 pr-3 tabular-nums">

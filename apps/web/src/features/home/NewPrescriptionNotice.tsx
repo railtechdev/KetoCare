@@ -50,7 +50,7 @@ export function NewPrescriptionNotice({
       description={t("newPrescription.intro", {
         date: formatOverviewDate(prescription.created_at.slice(0, 10)),
       })}
-      density="compact"
+
       action={
         <Button
           type="button"

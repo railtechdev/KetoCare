@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  Badge,
   ConfirmDialog,
   FormSheet,
   Button,
@@ -10,6 +11,7 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { ListOrdered, Plus } from "lucide-react";
 import { useId, useMemo, useState } from "react";
+import { PageActions } from "../../components/PageLayout";
 import { useTranslation } from "react-i18next";
 
 import { SelectField } from "../../components/Field";
@@ -74,7 +76,7 @@ export function DictionariesPanel({
       {chrome === "tab" ? (
         <SubPageHeader title={t("dictionaries.title")} actions={createButton} />
       ) : (
-        <div className="flex flex-wrap gap-field">{createButton}</div>
+        <PageActions>{createButton}</PageActions>
       )}
 
       <SelectField
@@ -138,7 +140,21 @@ function DictionaryEditor({
 
   const columns = useMemo<ColumnDef<DictionaryEntry, unknown>[]>(
     () => [
-      { accessorKey: "name_ru", header: t("dictionaries.columns.name") },
+      {
+        accessorKey: "name_ru",
+        header: t("dictionaries.columns.name"),
+        // Выведенный тип (ADR-0050) семья в дневнике уже не выберет, но в
+        // справочнике он стоит рядом с живыми: без пометки словом их не
+        // отличить вовсе — ни цветом, ни чем-либо ещё (WCAG 1.4.1).
+        cell: ({ row }) => (
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {row.original.name_ru}
+            {(row.original as { retired?: boolean }).retired === true && (
+              <Badge variant="outline">{t("dictionaries.retired")}</Badge>
+            )}
+          </span>
+        ),
+      },
       // Код показывается только там, где он есть: у методов измерения кетонов
       // такой колонки нет и быть не должно.
       ...(kind === "seizure-types"

@@ -83,7 +83,9 @@ describe("список приглашений", () => {
     // У принятого учётная запись уже создана, у истёкшего ссылка и так не
     // работает: кнопка обещала бы действие, которого нет.
     await screen.findByText("family@example.com");
-    expect(screen.getAllByRole("button", { name: "Отозвать" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: /^Отозвать — / }),
+    ).toHaveLength(1);
   });
 
   it("отзыв подтверждается и называет адрес", async () => {
@@ -91,7 +93,7 @@ describe("список приглашений", () => {
     const user = userEvent.setup();
     await screen.findByText("family@example.com");
 
-    await user.click(screen.getByRole("button", { name: "Отозвать" }));
+    await user.click(screen.getByRole("button", { name: /^Отозвать — / }));
     expect(
       await screen.findByRole("alertdialog", {
         name: "Отозвать приглашение для family@example.com?",

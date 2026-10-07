@@ -10,11 +10,15 @@ import {
   WarningBanner,
 } from "@ketocare/ui";
 import { Activity } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { Field } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
 /**
@@ -72,11 +76,27 @@ export function LoginPage({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    setFocus,
+    formState: { errors, submitCount },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: initialEmail ?? "" },
   });
+
+  // Поле кода появляется после шага пароля — и фокус уходит в него. Без этого
+  // человек с клавиатуры или со скринридером оставался на кнопке «Войти» и о
+  // новом поле узнавал, только пройдя форму заново (правило П21 канона).
+  const codeField = totpRequired
+    ? useBackupCode
+      ? "backupCode"
+      : "totpCode"
+    : null;
+  useEffect(() => {
+    if (codeField !== null) setFocus(codeField);
+  }, [codeField, setFocus]);
+
+  const emailError = errors.email && t("login.emailInvalid");
+  const passwordError = errors.password && t("login.passwordRequired");
 
   // Шаг входа истёк — назад к форме: сервер выдаст новый токен шага.
   const restart = () => {
@@ -189,6 +209,14 @@ export function LoginPage({
               noValidate
               className="flex flex-col gap-section"
             >
+              <FormErrorSummary
+                items={errorSummaryItems(submitCount, [
+                  ["email", emailError],
+                  ["password", passwordError],
+                ])}
+                focusKey={submitCount}
+              />
+
               <Field
                 id="email"
                 type="email"
@@ -196,7 +224,7 @@ export function LoginPage({
                 // не ограничивается (правило П21 канона).
                 autoComplete="username"
                 label={t("login.email")}
-                error={errors.email && t("login.emailInvalid")}
+                error={emailError}
                 {...register("email")}
               />
 
@@ -205,7 +233,7 @@ export function LoginPage({
                 type="password"
                 autoComplete="current-password"
                 label={t("login.password")}
-                error={errors.password && t("login.passwordRequired")}
+                error={passwordError}
                 {...register("password")}
               />
 

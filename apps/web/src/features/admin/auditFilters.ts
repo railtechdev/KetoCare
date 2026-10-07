@@ -1,6 +1,11 @@
 /** Фильтры журнала аудита (раздел 8.3 ТЗ: журнал только читается). */
 export interface AuditFilters {
-  /** Идентификатор автора действия; пустая строка — фильтр не задан */
+  /**
+   * Идентификатор автора действия; пустая строка — фильтр не задан. Выбирается
+   * поиском по имени (`PersonPicker`), набирать его руками не нужно: прежнее
+   * поле для UUID требовало значения, взять которое администратору было
+   * неоткуда.
+   */
   userId: string;
   entity: string;
   action: string;
@@ -127,19 +132,6 @@ export const AUDIT_ACTIONS = [
   "profile_updated",
   "language_changed",
 ] as const;
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUuid(value: string): boolean {
-  return UUID_PATTERN.test(value.trim());
-}
-
-/** Введён идентификатор, который сервер отклонит как невалидный UUID. */
-export function isUserIdInvalid(filters: AuditFilters): boolean {
-  const value = filters.userId.trim();
-  return value !== "" && !isUuid(value);
-}
 
 export function isRangeInvalid(filters: AuditFilters): boolean {
   return filters.from !== "" && filters.to !== "" && filters.from > filters.to;

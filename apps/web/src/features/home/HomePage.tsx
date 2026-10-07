@@ -76,7 +76,7 @@ export function HomePage({ patientId }: { patientId: string }) {
             {/* Терапия завершена (вопрос 18, ADR-0050): нейтральная строка,
                 без причины — причину семье называет врач, а не продукт. */}
             {(data.therapy_ended_on ?? null) !== null && (
-              <Section title={t("therapyEnded.title")} density="compact">
+              <Section title={t("therapyEnded.title")}>
                 <p className="m-0">
                   {t("therapyEnded.text", {
                     date:
@@ -125,6 +125,7 @@ export function HomePage({ patientId }: { patientId: string }) {
                   <DayTotalsCard
                     day={data.day ?? null}
                     targetKcal={data.prescription?.kcal_per_day ?? null}
+                    carbsLimit={data.prescription?.carbs_limit_g ?? null}
                   />
                   <LatestReadings
                     ketone={data.last_ketone ?? null}

@@ -9,6 +9,7 @@ import {
 } from "@ketocare/ui";
 import { KeyRound, Copy, Share2 } from "lucide-react";
 import { useState } from "react";
+import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 
 import { QrCode } from "../../components/QrCode";
@@ -88,12 +89,8 @@ export function AccessCodePanel({
         // Закрыли окно или браузер отказал — падаем в копирование ниже.
       }
     }
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success(t("panel.share.copied"));
-    } catch {
-      toast.error(t("panel.share.failed"));
-    }
+    if (await copyText(text)) toast.success(t("panel.share.copied"));
+    else toast.error(t("panel.share.failed"));
   }
 
   async function handleIssue() {
@@ -109,7 +106,7 @@ export function AccessCodePanel({
       <Section
         title={voice("title")}
         description={voice("intro")}
-        density="compact"
+
         action={
           <Button
             type="button"
@@ -166,8 +163,12 @@ export function AccessCodePanel({
               variant="ghost"
               className="min-h-touch"
               onClick={() => {
-                void navigator.clipboard?.writeText(issued.code);
-                setCopied(true);
+                // «Скопировано» — только после подтверждения браузера: на
+                // отказ называется выход, а не обещается то, чего не было.
+                void copyText(issued.code).then((ok) => {
+                  setCopied(ok);
+                  if (!ok) toast.error(t("common:clipboard.failed"));
+                });
               }}
             >
               <Copy aria-hidden="true" />
@@ -193,7 +194,7 @@ export function AccessCodePanel({
         )}
       </Section>
 
-      <Section title={t("panel.journalTitle")} density="compact" level={3}>
+      <Section title={t("panel.journalTitle")} level={3}>
         <AsyncSection
           {...queryState(journal)}
           skeleton={

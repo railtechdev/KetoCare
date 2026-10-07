@@ -3,10 +3,8 @@ import {
   MacroBar,
   RatioBadge,
   Section,
-  TargetBar,
   WarningBanner,
   dayVerdict,
-  formatGrams,
   formatKcal,
   toleranceGapKey,
   type DayTolerance,
@@ -14,6 +12,7 @@ import {
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
+import { DayTargetBars } from "./DayTargetBars";
 import type { DayTargets, DayTotals } from "./useMenu";
 
 interface Props {
@@ -57,17 +56,6 @@ export function DayTotalsPanel({
 
   const verdict = dayVerdict(tolerance, toleranceGap);
 
-  // «Осталось до цели» вместо арифметики в уме (правило П18 канона). Знак
-  // разницы решает только формулировку: превышение — не вердикт о соответствии
-  // назначению, его выносит сервер (`dayVerdict` кита).
-  const left =
-    targets === null
-      ? null
-      : {
-          kcal: targets.kcalPerDay - totals.kcal,
-          carbs: targets.carbsLimitG - totals.carbs,
-        };
-
   return (
     <Section title={t("totals.title")}>
       <div className="flex flex-wrap items-center gap-section">
@@ -91,43 +79,15 @@ export function DayTotalsPanel({
         carbsG={totals.carbs}
       />
 
-      {/* Цели — полосой, а не только числом. «Осталось 910,5 ккал» родитель
-          читал и складывал в уме; полоса отвечает на «сколько дня осталось»
-          сразу. Калорийность — цель, которую НАБИРАЮТ, углеводы — предел,
-          который нельзя превышать: у них разный смысл заполнения. */}
-      {targets !== null && left !== null && (
-        <div className="flex flex-col gap-section">
-          <TargetBar
-            kind="goal"
-            label={t("totals.kcalLabel")}
-            value={totals.kcal}
-            target={targets.kcalPerDay}
-            valueText={t("totals.kcalOfTarget", {
-              value: formatKcal(totals.kcal),
-              target: formatKcal(targets.kcalPerDay),
-            })}
-            hint={
-              left.kcal >= 0
-                ? t("totals.kcalLeft", { value: formatKcal(left.kcal) })
-                : t("totals.kcalOver", { value: formatKcal(-left.kcal) })
-            }
-          />
-          <TargetBar
-            kind="limit"
-            label={t("totals.carbsLabel")}
-            value={totals.carbs}
-            target={targets.carbsLimitG}
-            valueText={t("totals.carbsOfLimit", {
-              value: formatGrams(totals.carbs),
-              limit: formatGrams(targets.carbsLimitG),
-            })}
-            hint={
-              left.carbs >= 0
-                ? t("totals.carbsLeft", { value: formatGrams(left.carbs) })
-                : t("totals.carbsOver", { value: formatGrams(-left.carbs) })
-            }
-          />
-        </div>
+      {/* Цели — полосой, а не только числом (П40): «осталось 910,5 ккал»
+          родитель читал и складывал в уме. */}
+      {targets !== null && (
+        <DayTargetBars
+          kcal={totals.kcal}
+          carbs={totals.carbs}
+          kcalTarget={targets.kcalPerDay}
+          carbsLimit={targets.carbsLimitG}
+        />
       )}
 
       {verdict.ratioOffTolerance && (

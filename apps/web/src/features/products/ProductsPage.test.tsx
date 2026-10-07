@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -8,6 +8,8 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import productsRu from "../../locales/ru/products.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
+import type { SectionSearch } from "../../routes/search";
 import { ProductsPage } from "./ProductsPage";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -44,7 +46,7 @@ const TOTAL = 3000;
 
 let lastQuery: Record<string, unknown> = {};
 
-function renderPage() {
+function renderPage(search: SectionSearch = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -52,7 +54,9 @@ function renderPage() {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <SectionRouter section="products">{children}</SectionRouter>
+        <SectionRouter section="products" search={search}>
+          {children}
+        </SectionRouter>
       </QueryClientProvider>
     );
   }
@@ -119,6 +123,22 @@ describe("справочник продуктов", () => {
     expect(lastQuery.category_id).toBe(CATEGORY_ID);
     // Иначе выдача из двух строк открылась бы на седьмой странице — пустой.
     expect(lastQuery.offset).toBe(0);
+  });
+
+  it("категория живёт в адресе: F5 возвращает отбор", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Продукт 1");
+    await user.selectOptions(screen.getByLabelText("Категория"), CATEGORY_ID);
+    await waitFor(() => expect(currentAddress().category).toBe(CATEGORY_ID));
+  });
+
+  it("категория из адреса доходит до запроса", async () => {
+    renderPage({ category: CATEGORY_ID });
+
+    await screen.findByText("Продукт 1");
+    expect(lastQuery.category_id).toBe(CATEGORY_ID);
   });
 
   it("показывает соотношение сервера и не выдумывает его у чистого жира", async () => {

@@ -49,11 +49,7 @@ export function WaitingForPrescription({ patientId }: { patientId: string }) {
   const { t } = useTranslation("home");
 
   return (
-    <Section
-      title={t("waiting.title")}
-      description={t("waiting.intro")}
-      density="compact"
-    >
+    <Section title={t("waiting.title")} description={t("waiting.intro")}>
       <ul className="m-0 flex list-none flex-col gap-field p-0">
         {STEPS.map(({ key, icon: Icon, section, tab, diaryKind }) => (
           <li key={key} className="flex items-start gap-field">

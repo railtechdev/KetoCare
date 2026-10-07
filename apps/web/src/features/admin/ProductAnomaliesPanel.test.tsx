@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -99,5 +100,39 @@ describe("проверка базы продуктов", () => {
     expect(
       await screen.findByText(adminRu.products.anomalies.kind.other),
     ).toBeInTheDocument();
+  });
+
+  it("за первой страницей есть следующая, а не тупик «показано 50 из N»", async () => {
+    const row = (index: number) => ({
+      product_id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name_ru: `Продукт ${index}`,
+      is_active: true,
+      anomalies: [{ kind: "all_zero", values: {}, field: "" }],
+    });
+    (api.GET as Mock).mockImplementation(
+      (_path: string, init: { params: { query: { offset: number } } }) => {
+        const offset = init.params.query.offset;
+        const items =
+          offset === 0
+            ? Array.from({ length: 50 }, (_, i) => row(i))
+            : [row(50), row(51)];
+        return Promise.resolve({ data: { items, total: 52 } });
+      },
+    );
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(await screen.findByText("Продукт 0")).toBeInTheDocument();
+    expect(screen.getByText("Показаны 50 из 52.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Показать ещё 2" }));
+
+    expect(await screen.findByText("Продукт 51")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Показать ещё/ })).toBeNull(),
+    );
+    expect(api.GET).toHaveBeenLastCalledWith("/api/v1/products/anomalies", {
+      params: { query: { limit: 50, offset: 50 } },
+    });
   });
 });

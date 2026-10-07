@@ -7,6 +7,10 @@ import { z } from "zod";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import {
+  FormErrorSummary,
+  errorSummaryItems,
+} from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import { isIsoDate, shiftIsoDate } from "./dates";
 import {
@@ -46,11 +50,15 @@ export function CopyDayForm({ patientId, date, onCopied }: Props) {
     register,
     handleSubmit,
     setError,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<CopyValues>({
     resolver: zodResolver(copySchema),
     defaultValues: { from: shiftIsoDate(date, -1) },
   });
+
+  const fromError =
+    errors.from &&
+    t(errors.from.type === "sameDate" ? "copy.sameDate" : "copy.invalidDate");
 
   const onSubmit = handleSubmit((values) => {
     if (values.from === date) {
@@ -76,19 +84,17 @@ export function CopyDayForm({ patientId, date, onCopied }: Props) {
       noValidate
       className="flex flex-col gap-section"
     >
+      <FormErrorSummary
+        items={errorSummaryItems(submitCount, [[fieldId, fromError]])}
+        focusKey={submitCount}
+      />
+
       <Field
         id={fieldId}
         type="date"
         label={t("copy.source")}
         width="date"
-        error={
-          errors.from &&
-          t(
-            errors.from.type === "sameDate"
-              ? "copy.sameDate"
-              : "copy.invalidDate",
-          )
-        }
+        error={fromError}
         {...register("from")}
       />
 

@@ -1,4 +1,6 @@
 import { Button, WarningBanner } from "@ketocare/ui";
+import { useState } from "react";
+import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -23,6 +25,9 @@ export function BackupCodesPanel({
   doneLabel: string;
 }) {
   const { t } = useTranslation("auth");
+  // Ответ строкой рядом с кнопкой, а не тостом: панель показывается и при
+  // настройке второго фактора на экране входа, где тостов нет вовсе.
+  const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
 
   return (
     <div className="flex flex-col gap-section">
@@ -48,7 +53,11 @@ export function BackupCodesPanel({
           type="button"
           variant="outline"
           className="min-h-touch"
-          onClick={() => void navigator.clipboard?.writeText(codes.join("\n"))}
+          onClick={() =>
+            void copyText(codes.join("\n")).then((ok) =>
+              setCopy(ok ? "copied" : "failed"),
+            )
+          }
         >
           {t("backupCodes.copy")}
         </Button>
@@ -56,6 +65,16 @@ export function BackupCodesPanel({
           {doneLabel}
         </Button>
       </div>
+      <p
+        role="status"
+        className={
+          copy === "failed"
+            ? "m-0 text-sm text-destructive"
+            : "m-0 text-sm text-muted-foreground"
+        }
+      >
+        {copy === "idle" ? null : t(`common:clipboard.${copy}`)}
+      </p>
     </div>
   );
 }

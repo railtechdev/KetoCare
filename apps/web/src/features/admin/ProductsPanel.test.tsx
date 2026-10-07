@@ -10,6 +10,7 @@ import { api } from "../../lib/api";
 import type { ProductDetail } from "../products/useProductDetail";
 import adminRu from "../../locales/ru/admin.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { currentAddress } from "../../test/address";
 import { ProductsPanel } from "./ProductsPanel";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -343,5 +344,69 @@ describe("отбор по ведущему макронутриенту", () => 
       adminRu.products.filters.macroValue.carbs,
     ]);
     expect(select.textContent).not.toMatch(/macroValue/);
+  });
+});
+
+describe("отборы справочника — в адресе", () => {
+  function productQueries(): Record<string, unknown>[] {
+    return (api.GET as Mock).mock.calls
+      .filter(([path]) => path === "/api/v1/products")
+      .map(
+        ([, options]) =>
+          (options as { params: { query: Record<string, unknown> } }).params
+            .query,
+      );
+  }
+
+  it("F5 возвращает категорию, макронутриент и выведенные", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<ProductsPanel />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <SectionRouter
+            section="products"
+            search={{ category: CATEGORY_ID, macro: "fat", inactive: true }}
+          >
+            {children}
+          </SectionRouter>
+        </QueryClientProvider>
+      ),
+    });
+
+    expect(
+      await screen.findByLabelText(adminRu.products.filters.macro),
+    ).toHaveValue("fat");
+    expect(
+      screen.getByLabelText(adminRu.products.filters.includeInactive),
+    ).toBeChecked();
+    await waitFor(() =>
+      expect(productQueries()).toContainEqual(
+        expect.objectContaining({
+          category_id: CATEGORY_ID,
+          macro: "fat",
+        }),
+      ),
+    );
+  });
+
+  it("выбор уходит в адрес, снятие — убирает параметр", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.selectOptions(
+      await screen.findByLabelText(adminRu.products.filters.macro),
+      "protein",
+    );
+    await waitFor(() => expect(currentAddress().macro).toBe("protein"));
+
+    const inactive = screen.getByLabelText(
+      adminRu.products.filters.includeInactive,
+    );
+    await user.click(inactive);
+    await waitFor(() => expect(currentAddress().inactive).toBe(true));
+    await user.click(inactive);
+    await waitFor(() => expect(currentAddress().inactive).toBeUndefined());
   });
 });
