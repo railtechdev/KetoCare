@@ -54,7 +54,7 @@ export function PatientRoute() {
     (code === "not_found" || code === "forbidden")
   ) {
     return (
-      <div className="flex max-w-form flex-col gap-block">
+      <div className="flex max-w-form flex-col gap-section">
         <h1 className="sr-only">{t("workspace.missing.title")}</h1>
         <EmptyState
           icon={UserX}

@@ -37,7 +37,7 @@ export function RouteErrorPage({ error }: ErrorComponentProps) {
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-screen">
-      <div className="flex w-full max-w-form flex-col gap-block">
+      <div className="flex w-full max-w-form flex-col gap-section">
         <h1 className="sr-only">{t("routeError.title")}</h1>
         <ErrorState
           title={t("routeError.title")}

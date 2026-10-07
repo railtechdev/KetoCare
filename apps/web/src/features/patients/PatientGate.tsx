@@ -45,7 +45,7 @@ export function PatientGate({
       {...queryState(patients)}
       skeleton={
         <div
-          className="flex max-w-form flex-col gap-block"
+          className="flex max-w-form flex-col gap-section"
           role="status"
           aria-busy="true"
         >
