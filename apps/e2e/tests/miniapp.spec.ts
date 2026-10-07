@@ -101,7 +101,10 @@ test("семья из Telegram собирает вчерашний день и �
   // Цели назначения рядом с итогами: собирать суточный рацион ребёнка, не видя
   // их, — собирать вслепую. Числа считает ядро на сервере, клиент их не шлёт.
   await expect(
-    page.getByText(new RegExp(`из ${targets.kcalPerDay.toLocaleString("ru")}`)),
+    page
+      .getByText(new RegExp(`из ${targets.kcalPerDay.toLocaleString("ru")}`))
+      // На прошедшем дне цель названа и полосой, и строкой «Набрано … из …».
+      .first(),
   ).toBeVisible();
   await expect(
     page.getByText(/Чтобы набрать суточную норму, добавьте ещё .* ккал/),
@@ -151,5 +154,9 @@ test("подделанная подпись не пускает", async ({ page 
 
   await page.goto(`${MINIAPP_URL}/#tgWebAppData=${encodeURIComponent(forged)}`);
 
-  await expect(page.getByText(/Не удалось открыть приложение/)).toBeVisible();
+  // Сервер отвечает 401, и повтор с той же подписью не поможет: экран
+  // отправляет открыть приложение заново из чата, а не «повторить».
+  await expect(
+    page.getByText("Закройте приложение и откройте снова из чата"),
+  ).toBeVisible();
 });
