@@ -408,9 +408,40 @@ class TestSecondCode:
             SECOND_PATIENT,
         }
         assert (await linked_store.get(CHAT_ID)).patient_id == SECOND_PATIENT  # type: ignore[union-attr]
-        assert "Тимур Иванов" in message.last
+        assert "Тимур" in message.last
+        # Фамилию в переписку не отдаём (ADR-0048, п. 5).
+        assert "Иванов" not in message.last
         assert texts.BTN_CHILD_PREFIX in message.last
         assert texts.BTN_CHILD.format(name="Тимур") in _button_texts(message.last_markup)
+
+
+class TestNoSurnameInChat:
+    """Приветствие называет ребёнка по имени, без фамилии (ADR-0048, п. 5)."""
+
+    def _verified(self, first_name: str = "Тимур") -> LinkVerified:
+        return LinkVerified(
+            link_id=SECOND_LINK,
+            patient_id=SECOND_PATIENT,
+            patient_name="Тимур Иванов",
+            secret=SECOND_SECRET,
+            web_url="https://app.example",
+            has_web_credentials=False,
+            patient_first_name=first_name,
+        )
+
+    def test_first_child(self):
+        text = start.welcome(self._verified(), SETTINGS, children=[TIMUR])
+        assert "Тимур" in text
+        assert "Иванов" not in text
+
+    def test_second_child(self):
+        text = start.welcome(self._verified(), SETTINGS, children=[ANYA, TIMUR])
+        assert "Иванов" not in text
+
+    def test_api_without_first_name_still_hides_surname(self):
+        text = start.welcome(self._verified(first_name=""), SETTINGS, children=[TIMUR])
+        assert "Тимур" in text
+        assert "Иванов" not in text
 
 
 def _state() -> FSMContext:
