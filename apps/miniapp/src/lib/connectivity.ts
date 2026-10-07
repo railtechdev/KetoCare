@@ -1,4 +1,5 @@
 import { onlineManager } from "@tanstack/react-query";
+import { useSyncExternalStore } from "react";
 
 import { webApp } from "./telegram";
 
@@ -49,4 +50,21 @@ export function connectivityListener(
 /** Подключает `connectivityListener` к общему `onlineManager`. */
 export function watchConnectivity(): void {
   onlineManager.setEventListener(connectivityListener);
+}
+
+/**
+ * Есть ли сеть — по тому же `onlineManager`, по которому встают на паузу
+ * запросы.
+ *
+ * Нужен формам записи: мутации без сети отказывают сразу (ADR-0034), и кнопка
+ * «Сохранить», нажатая без связи, давала бы отказ, о котором можно сказать
+ * заранее. Источник один с запросами — иначе экран говорил бы «нет связи» над
+ * загружающимися данными или наоборот.
+ */
+export function useOnline(): boolean {
+  return useSyncExternalStore(
+    (notify) => onlineManager.subscribe(notify),
+    () => onlineManager.isOnline(),
+    () => true,
+  );
 }

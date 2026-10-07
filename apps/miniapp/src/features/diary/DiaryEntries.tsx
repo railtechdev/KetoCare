@@ -11,16 +11,7 @@ import {
   formatOccurredAt,
   toast,
 } from "@ketocare/ui";
-import {
-  Droplet,
-  HeartPulse,
-  NotebookPen,
-  Pill,
-  Scale,
-  UtensilsCrossed,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
+import { NotebookPen } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -31,6 +22,7 @@ import { errorMessageOf } from "../../lib/api";
 import { useFamily } from "../family/useFamily";
 import type { Session } from "../session/useSession";
 import { EntryEditSheet } from "./EntryEditSheet";
+import { KIND_ICON } from "./kinds";
 import {
   type DiaryLog,
   useDiaryEntries,
@@ -39,16 +31,6 @@ import {
   useMedications,
   useSeizureTypes,
 } from "./useDiary";
-
-/** Значок вида — чтобы запись узнавалась раньше, чем прочитана. */
-const KIND_ICON: Record<DiaryLog["kind"], LucideIcon> = {
-  seizures: Zap,
-  ketones: Droplet,
-  weight: Scale,
-  medications: Pill,
-  meals: UtensilsCrossed,
-  "side-effects": HeartPulse,
-};
 
 /** Описание записи — кит, общий с кабинетом; слова — `diary.entry.*` (ADR-0044). */
 function describeEntry(
@@ -82,7 +64,14 @@ function dayFormat(): Intl.DateTimeFormat {
  * её спиной. Отметку «съедено» из плана дня здесь не правят: её снимают в
  * плане, иначе план и дневник разошлись бы.
  */
-export function DiaryEntries({ session }: { session: Session }) {
+export function DiaryEntries({
+  session,
+  onAdd,
+}: {
+  session: Session;
+  /** Открыть «Добавить запись» — из пустого состояния. */
+  onAdd: () => void;
+}) {
   const { t } = useTranslation();
   const diary = useDiaryEntries(session.patientId);
   const family = useFamily(session.patientId);
@@ -135,6 +124,11 @@ export function DiaryEntries({ session }: { session: Session }) {
             icon={NotebookPen}
             title={t("diary.emptyTitle")}
             description={t("diary.emptyBody")}
+            action={
+              <Button type="button" className="min-h-touch" onClick={onAdd}>
+                {t("diary.add.action")}
+              </Button>
+            }
           />
         }
       >
@@ -187,7 +181,8 @@ export function DiaryEntries({ session }: { session: Session }) {
 
       {editing !== null && (
         <EntryEditSheet
-          entry={editing}
+          key={`${editing.kind}-${editing.id}`}
+          target={{ entry: editing }}
           title={describeEntry(editing, names, t).title}
           seizureTypes={seizureTypes.data ?? []}
           durationOptions={durationOptions.data ?? []}

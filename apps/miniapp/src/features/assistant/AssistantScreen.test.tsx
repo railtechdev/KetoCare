@@ -33,6 +33,9 @@ function message(overrides: Record<string, unknown> = {}) {
     created_at: "2026-09-04T10:00:00Z",
     status: "done",
     sources: ["how-to-record-ketones"],
+    source_articles: [
+      { slug: "how-to-record-ketones", title: "Как записать кетоны" },
+    ],
     blocked: false,
     ...overrides,
   };
@@ -71,6 +74,7 @@ beforeEach(() => {
           role: "user",
           text: "куда записать кетоны",
           sources: [],
+          source_articles: [],
         }),
         message({ seq: 1 }),
       ],
@@ -82,6 +86,21 @@ beforeEach(() => {
 const KEY_FORMAT = /^[\x21\x23-\x5b\x5d-\x7e]{1,255}$/;
 
 describe("помощник в Mini App", () => {
+  it("под ответом — заголовки статей, а не имена файлов", async () => {
+    // Ответ сервера несёт и `sources` (имена для сверки с журналом), и
+    // `source_articles` с заголовками; семья читает заголовки
+    // (test_assistant_sources_contract.py).
+    const user = userEvent.setup();
+    renderScreen();
+
+    await ask(user);
+
+    expect(
+      await screen.findByText(/Источник: Как записать кетоны\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/how-to-record-ketones/)).toBeNull();
+  });
+
   it("вопрос уходит в найденную переписку, если список успел прийти", async () => {
     // Заморозка начинается с ОТПРАВКИ, а не с набора: иначе достаточно
     // набрать вопрос раньше, чем дочитался список, — и сервер заведёт вторую
@@ -214,11 +233,13 @@ describe("помощник в Mini App", () => {
             role: "user",
             text: "что нам принимать",
             sources: [],
+            source_articles: [],
           }),
           message({
             seq: 1,
             text: "Этот вопрос нужно обсудить с лечащим врачом.",
             sources: [],
+            source_articles: [],
             blocked: true,
           }),
         ],
@@ -346,6 +367,7 @@ describe("помощник в Mini App", () => {
                   role: "user",
                   text: "куда записать кетоны",
                   sources: [],
+                  source_articles: [],
                 }),
                 message({ seq: 1 }),
               ],
@@ -377,6 +399,7 @@ describe("помощник в Mini App", () => {
                   role: "user",
                   text: "куда записать кетоны",
                   sources: [],
+                  source_articles: [],
                 }),
               ],
             },

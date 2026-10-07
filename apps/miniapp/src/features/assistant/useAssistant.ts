@@ -9,7 +9,10 @@ export interface AssistantMessage {
   text: string;
   created_at: string;
   status: "pending" | "done" | "failed";
+  /** Имена статей — для сверки с журналом, не для экрана. */
   sources: string[];
+  /** Статьи, по которым дан ответ: на экране — их заголовки. */
+  source_articles: { slug: string; title: string }[];
   blocked: boolean;
 }
 

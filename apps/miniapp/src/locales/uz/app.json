@@ -195,7 +195,7 @@
     "today": "Bugun",
     "yesterday": "Kecha",
     "emptyTitle": "Ikki hafta ichida yozuvlar yo‘q",
-    "emptyBody": "Yozuvlar botdagi tugmalarni bosganingizda paydo bo‘ladi: «Xuruj», «Ketonlar», «Vazn», «Dorilar», «Ovqat», «O‘zini his qilish». Kun rejasidagi «yeyildi» belgilari ham shu yerga tushadi.",
+    "emptyBody": "Xuruj, ketonlar, vazn, dori yoki o‘zini his qilishni «Yozuv qo‘shish» tugmasi bilan yozing. Kun rejasidagi «yeyildi» belgilari ham shu yerga tushadi.",
     "loadError": "Yozuvlar yuklanmadi",
     "loadErrorHint": "Aloqani tekshirib, yana urinib ko‘ring.",
     "wroteBy": "Yozdi: {{name}}",
@@ -216,6 +216,7 @@
     "save": "Saqlash",
     "saving": "Saqlanmoqda…",
     "saved": "Yozuv tuzatildi",
+    "added": "Yozuv qo‘shildi",
     "saveFailed": "Yozuvni saqlab bo‘lmadi",
     "optional": "majburiy emas",
     "entry": {
@@ -265,7 +266,6 @@
       "heightInvalid": "Musbat santimetrlar soni.",
       "medication": "Dori",
       "medicationRequired": "Dorini tanlang.",
-      "taken": "Dori berildi",
       "mealText": "Bola nima yedi",
       "mealRequired": "Bola nima yeganini yozing.",
       "symptom": "Nima bezovta qilyapti",
@@ -274,10 +274,30 @@
       "unknownOption": "Avval qanday yozilgan bo‘lsa",
       "durationMode": "Xuruj qancha davom etdi",
       "durationMeasured": "Soat bilan o‘lchadik",
-      "durationEstimated": "So‘z bilan, taxminan"
+      "durationEstimated": "So‘z bilan, taxminan",
+      "choose": "Tanlang",
+      "seizureTypeRequired": "Qanday xuruj bo‘lganini tanlang.",
+      "takenQuestion": "Dori berildimi?"
     },
     "next": "Keyingi",
-    "back": "Orqaga"
+    "back": "Orqaga",
+    "add": {
+      "action": "Yozuv qo‘shish",
+      "title": "Nimani yozamiz?",
+      "formTitle": "Yangi yozuv",
+      "mealsTitle": "Ovqat — kun rejasida",
+      "mealsBody": "Ovqat kun rejasida belgilanadi: retseptlar yoki o‘z taomlaringizdan birini tanlang va «Yeyildi»ni bosing. Shunda shifokor bola aslida qancha olganini ko‘radi.",
+      "openMenu": "Kun rejasini ochish",
+      "noMedications": "Shifokor hali dorilarni kiritmagan — hozircha belgilaydigan narsa yo‘q.",
+      "kinds": {
+        "seizures": "Xuruj",
+        "ketones": "Ketonlar",
+        "weight": "Vazn",
+        "medications": "Dori",
+        "meals": "Ovqat",
+        "side-effects": "O‘zini his qilish"
+      }
+    }
   },
   "reminders": {
     "title": "Eslatmalar",

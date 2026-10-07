@@ -8,6 +8,7 @@ import {
   NativeSelect,
   OCCURRED_AT_FUTURE,
   SEIZURE_COUNT_MIN,
+  StatusNote,
   Textarea,
   WEIGHT_MAX_KG,
   WEIGHT_MIN_KG,
@@ -26,16 +27,23 @@ import {
   sideEffectSchema,
   toDateTimeLocalInput,
   toast,
+  useAttemptKey,
   weightBody,
   weightSchema,
   type DiaryEntryBody,
 } from "@ketocare/ui";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { useOnline } from "../../lib/connectivity";
 import { useTelegramBack, useUnsavedGuard } from "../../lib/useTelegram";
-import type { DiaryLog, MedicationOption, NamedOption } from "./useDiary";
+import type {
+  CreatableKind,
+  DiaryLog,
+  MedicationOption,
+  NamedOption,
+} from "./useDiary";
 
 type Values = Record<string, string | boolean>;
 type Errors = Record<string, string>;
@@ -73,6 +81,39 @@ const SEIZURE_FIRST_STEP = [
   "durationSec",
   "durationOptionId",
 ];
+
+/**
+ * Значения новой записи.
+ *
+ * Время — «сейчас»: чаще всего записывают только что случившееся, а поправить
+ * время проще, чем набрать. Лекарство и тип приступа не подставляются: выбор
+ * по умолчанию записал бы препарат или приступ, которого человек не выбирал.
+ * Лекарство по умолчанию «дали» — как в боте, где отметка о приёме и есть
+ * запись; «пропустили» выбирается явно.
+ */
+function defaultsOf(kind: CreatableKind): Values {
+  const occurredAt = toDateTimeLocalInput(new Date());
+  switch (kind) {
+    case "seizures":
+      return {
+        occurredAt,
+        seizureTypeId: "",
+        durationSec: "",
+        durationOptionId: "",
+        count: String(SEIZURE_COUNT_MIN),
+        description: "",
+        triggers: "",
+      };
+    case "ketones":
+      return { occurredAt, value: "", method: "blood" };
+    case "weight":
+      return { occurredAt, weightKg: "", heightCm: "" };
+    case "medications":
+      return { occurredAt, medicationId: "", taken: true };
+    case "side-effects":
+      return { occurredAt, symptom: "", description: "" };
+  }
+}
 
 /** Значения формы из записи: правят ровно то, что записали. */
 function valuesOf(entry: DiaryLog): Values {
@@ -116,7 +157,15 @@ function valuesOf(entry: DiaryLog): Values {
 }
 
 export interface EntryEditSheetProps {
-  entry: DiaryLog;
+  /**
+   * Что открыто: правка записи или новая запись этого вида.
+   *
+   * Форма одна на оба случая — поля, проверка и тело запроса не должны
+   * расходиться между «записать» и «исправить» (дополнение к ADR-0044 от
+   * 07.10.2026).
+   */
+  target: { entry: DiaryLog } | { kind: CreatableKind };
+  /** Подзаголовок панели: какая запись правится или какого вида новая. */
   title: string;
   seizureTypes: NamedOption[];
   durationOptions: NamedOption[];
@@ -124,8 +173,23 @@ export interface EntryEditSheetProps {
   pending: boolean;
   /** Отказ последнего сохранения — его словами сервера (раздел 5.1). */
   error: unknown;
-  onSave: (body: DiaryEntryBody, onSaved: () => void) => void;
+  /**
+   * `attemptKey` — ключ попытки для `Idempotency-Key` (ADR-0035): тот же,
+   * пока не изменилось введённое, поэтому повтор после потерянного ответа не
+   * заводит вторую запись.
+   */
+  onSave: (
+    body: DiaryEntryBody,
+    onSaved: () => void,
+    attemptKey: string,
+  ) => void;
+  /** Закрыть форму совсем: сохранено или панель смахнули. */
   onClose: () => void;
+  /**
+   * «Назад» с первого шага и «Отмена». У новой записи это возврат к выбору
+   * вида, у правки — то же, что закрыть.
+   */
+  onBack?: () => void;
 }
 
 /**
@@ -135,7 +199,7 @@ export interface EntryEditSheetProps {
  * сборку тела делает кит. Ошибка сервера показывается его словами (раздел 5.1).
  */
 export function EntryEditSheet({
-  entry,
+  target,
   title,
   seizureTypes,
   durationOptions,
@@ -144,13 +208,27 @@ export function EntryEditSheet({
   error,
   onSave,
   onClose,
+  onBack = onClose,
 }: EntryEditSheetProps) {
   const { t } = useTranslation();
-  const initial = useMemo(() => valuesOf(entry), [entry]);
+  const creating = "kind" in target;
+  const kind = "kind" in target ? target.kind : target.entry.kind;
+  // Начальные значения — на всё время жизни формы: «сейчас» у новой записи
+  // не должно уезжать с каждой отрисовкой, иначе форма сочла бы себя
+  // изменённой, ничего не получив от человека.
+  const [initial] = useState<Values>(() =>
+    "kind" in target ? defaultsOf(target.kind) : valuesOf(target.entry),
+  );
   const [values, setValues] = useState<Values>(initial);
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState(1);
-  const rules = RULES[entry.kind];
+  const rules = RULES[kind];
+  const online = useOnline();
+  const attemptKey = useAttemptKey(`${kind}:${JSON.stringify(values)}`);
+  // Шаг, на котором запись уходит на сервер: «Далее» у приступа сети не
+  // требует, «Сохранить» без неё отказал бы — об этом говорится заранее.
+  const savingStep = !(kind === "seizures" && step === 1);
+  const blockedOffline = savingStep && !online;
 
   const set = (name: string) => (value: string | boolean) =>
     setValues((current) => ({ ...current, [name]: value }));
@@ -166,13 +244,13 @@ export function EntryEditSheet({
   // Без этого аппаратная «Назад» на Android закрывала весь Mini App.
   const back = () => {
     if (step === 2) setStep(1);
-    else onClose();
+    else onBack();
   };
   useTelegramBack(pending ? null : back);
 
   function submit() {
     const found = diaryFieldErrors(rules.schema, values);
-    if (entry.kind === "seizures" && step === 1) {
+    if (kind === "seizures" && step === 1) {
       // Второй шаг открывается только с годным первым: иначе ошибка всплыла
       // бы при сохранении на экране, где этого поля не видно.
       const firstStep = Object.fromEntries(
@@ -186,12 +264,19 @@ export function EntryEditSheet({
     }
     setErrors(found);
     if (Object.keys(found).length > 0) return;
+    // Выключенная кнопка — не единственная защита: Enter в поле отправляет
+    // форму в обход неё.
+    if (blockedOffline || pending) return;
     const body = rules.body(values);
     if (body === null) return;
-    onSave(body, () => {
-      toast.success(t("diary.saved"));
-      onClose();
-    });
+    onSave(
+      body,
+      () => {
+        toast.success(t(creating ? "diary.added" : "diary.saved"));
+        onClose();
+      },
+      attemptKey,
+    );
   }
 
   return (
@@ -200,7 +285,7 @@ export function EntryEditSheet({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={t("diary.editTitle")}
+      title={t(creating ? "diary.add.formTitle" : "diary.editTitle")}
       description={title}
       closeLabel={t("diary.close")}
     >
@@ -213,7 +298,8 @@ export function EntryEditSheet({
         }}
       >
         <EntryFields
-          entry={entry}
+          kind={kind}
+          creating={creating}
           step={step}
           values={values}
           errors={errors}
@@ -223,6 +309,8 @@ export function EntryEditSheet({
           medications={medications}
         />
 
+        {blockedOffline && <StatusNote>{t("errors.network")}</StatusNote>}
+
         {error != null && (
           <p role="alert" className="m-0 text-destructive">
             {errorMessageOf(error) ?? t("diary.saveFailed")}
@@ -230,8 +318,13 @@ export function EntryEditSheet({
         )}
 
         <div className="flex flex-wrap gap-field">
-          <Button type="submit" className="min-h-touch" disabled={pending}>
-            {entry.kind === "seizures" && step === 1
+          <Button
+            type="submit"
+            className="min-h-touch"
+            disabled={pending || blockedOffline}
+            aria-busy={pending || undefined}
+          >
+            {!savingStep
               ? t("diary.next")
               : pending
                 ? t("diary.saving")
@@ -253,7 +346,8 @@ export function EntryEditSheet({
 }
 
 function EntryFields({
-  entry,
+  kind,
+  creating,
   step,
   values,
   errors,
@@ -262,7 +356,8 @@ function EntryFields({
   durationOptions,
   medications,
 }: {
-  entry: DiaryLog;
+  kind: DiaryLog["kind"];
+  creating: boolean;
   step: number;
   values: Values;
   errors: Errors;
@@ -290,27 +385,39 @@ function EntryFields({
     />
   );
 
-  switch (entry.kind) {
+  // У новой записи выбора ещё нет: первым стоит «Выберите», а не первый
+  // вариант, иначе запись ушла бы с тем, что человек не выбирал.
+  const choose = creating ? [{ id: "", name: t("diary.form.choose") }] : [];
+
+  switch (kind) {
     case "seizures":
       return step === 1 ? (
         <>
           {occurredAt}
           {/* Без справочника тип не меняется: он уезжает на сервер прежним,
-              придумать идентификатор нельзя. */}
-          {seizureTypes.length > 0 && (
+              придумать идентификатор нельзя. У новой записи поле стоит всегда:
+              тип обязателен, и ошибка «выберите» должна быть под полем. */}
+          {(creating || seizureTypes.length > 0) && (
             <SelectField
               label={t("diary.form.seizureType")}
               value={text("seizureTypeId")}
               onChange={set("seizureTypeId")}
               // Выведенный тип остаётся в списке только у записи, которая на
               // нём стоит: новый приступ — по ILAE 2025 (ADR-0050).
-              options={withCurrent(
-                seizureTypes.filter(
-                  (type) => !type.retired || type.id === text("seizureTypeId"),
+              options={[
+                ...choose,
+                ...withCurrent(
+                  seizureTypes.filter(
+                    (type) =>
+                      !type.retired || type.id === text("seizureTypeId"),
+                  ),
+                  text("seizureTypeId"),
+                  t,
                 ),
-                text("seizureTypeId"),
-                t,
-              )}
+              ]}
+              error={
+                errors.seizureTypeId && t("diary.form.seizureTypeRequired")
+              }
             />
           )}
           <DurationField
@@ -413,18 +520,36 @@ function EntryFields({
             label={t("diary.form.medication")}
             value={text("medicationId")}
             onChange={set("medicationId")}
-            options={withCurrent(medications, text("medicationId"), t)}
+            options={[
+              ...choose,
+              ...withCurrent(medications, text("medicationId"), t),
+            ]}
             error={errors.medicationId && t("diary.form.medicationRequired")}
           />
-          <label className="flex min-h-touch items-center gap-field">
-            <input
-              type="checkbox"
-              className="size-6 accent-primary"
-              checked={values.taken === true}
-              onChange={(event) => set("taken")(event.target.checked)}
-            />
-            <span>{t("diary.form.taken")}</span>
-          </label>
+          {/* Два слова, а не флажок «дали»: снятый флажок незаметен, и
+              пропуск приёма читался бы как забытая галочка. */}
+          <fieldset className="m-0 flex flex-col gap-field border-0 p-0">
+            <legend className="mb-1 p-0">
+              {t("diary.form.takenQuestion")}
+            </legend>
+            <div className="flex flex-wrap gap-x-section">
+              {([true, false] as const).map((option) => (
+                <label
+                  key={String(option)}
+                  className="flex min-h-touch cursor-pointer items-center gap-field"
+                >
+                  <input
+                    type="radio"
+                    name="medication-taken"
+                    className="size-5 accent-primary"
+                    checked={values.taken === option}
+                    onChange={() => set("taken")(option)}
+                  />
+                  {t(option ? "diary.entry.taken" : "diary.entry.notTaken")}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </>
       );
     case "meals":

@@ -1,6 +1,7 @@
 """Дневник и напоминания из Mini App — стык на стороне поставщика (ADR-0044).
 
-Потребители — вкладка «Дневник» (`apps/miniapp/src/features/diary`) и блок
+Потребители — вкладка «Дневник» (`apps/miniapp/src/features/diary`: лента,
+правка и с 07.10.2026 «Добавить запись») и блок
 «Напоминания» на главной (`apps/miniapp/src/features/reminders`). Их тесты
 работают с подделками ответов, а подделка повторяет представление автора о
 контракте, а не сам контракт. Поэтому здесь каждая ручка, которую они
@@ -269,6 +270,79 @@ class TestDiaryFromMiniApp:
 
         response = await client.get(f"/api/v1/patients/{stranger.id}/logs/ketones", headers=headers)
         assert response.status_code == 403
+
+
+#: Виды, которые Mini App записывает сам. Еды нет: её отмечают в плане дня,
+#: свободного текста Mini App не шлёт (дополнение к ADR-0044 от 07.10.2026).
+CREATABLE = ["seizures", "ketones", "weight", "medications", "side-effects"]
+
+
+def _kit_create_body(kind: str, bot_body: dict) -> dict:
+    """Тело, какое собирает кит (`diaryEntry.ts`): все поля, пустые — `null`.
+
+    Бот шлёт только заполненное; форма Mini App — тело целиком, и сервер
+    обязан принимать именно его.
+    """
+
+    match kind:
+        case "seizures":
+            return bot_body | {"duration_sec": None, "description": None, "triggers": None}
+        case "weight":
+            return bot_body | {"height_cm": None}
+        case "medications":
+            return bot_body | {"taken": False}
+        case "side-effects":
+            return bot_body | {"description": None}
+    return bot_body
+
+
+class TestAddEntryFromMiniApp:
+    """Потребитель — `AddEntry` и `EntryEditSheet` (создание) в Mini App.
+
+    Форма шлёт ключ попытки (`Idempotency-Key`, ADR-0035) и повторяет его,
+    пока введённое не изменилось: потерянный ответ и второе нажатие не должны
+    давать второй приступ.
+    """
+
+    @pytest.mark.parametrize("kind", CREATABLE)
+    async def test_create_with_a_key_and_repeat_is_one_record(
+        self, client, session, make_user, make_patient, kind
+    ):
+        parent, patient, headers = await _open_miniapp(client, session, make_user, make_patient)
+        url = f"/api/v1/patients/{patient.id}/logs/{kind}"
+        bot_body = await _create_body(session, kind, patient=patient, make_user=make_user)
+        body = _kit_create_body(kind, bot_body)
+        keyed = headers | {"Idempotency-Key": str(uuid.uuid4())}
+
+        first = await client.post(url, headers=keyed, json=body)
+        second = await client.post(url, headers=keyed, json=body)
+
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+        assert second.json()["id"] == first.json()["id"]
+        # Автор — вошедший: иначе своя новая запись не получила бы
+        # «Исправить» в ленте.
+        assert first.json()["created_by"] == str(parent.id)
+        listed = await client.get(url, headers=headers)
+        assert listed.json()["total"] == 1
+
+    async def test_same_key_with_another_body_is_refused(
+        self, client, session, make_user, make_patient
+    ):
+        """Форма меняет ключ вместе с введённым; сервер ловит, если нет."""
+
+        _, patient, headers = await _open_miniapp(client, session, make_user, make_patient)
+        url = f"/api/v1/patients/{patient.id}/logs/ketones"
+        body = await _create_body(session, "ketones", patient=patient, make_user=make_user)
+        keyed = headers | {"Idempotency-Key": str(uuid.uuid4())}
+
+        first = await client.post(url, headers=keyed, json=body)
+        other = await client.post(url, headers=keyed, json=body | {"value": 3.1})
+
+        assert first.status_code == 201, first.text
+        assert other.status_code == 422, other.text
+        # Экран печатает отказ словами сервера.
+        assert other.json()["error"]["message"]
 
 
 class TestRemindersFromMiniApp:

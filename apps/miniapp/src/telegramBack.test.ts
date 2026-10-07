@@ -28,6 +28,7 @@ describe("кнопка «Назад» Telegram", () => {
   it("панель правки записи и сборки дня подписаны на «Назад»", () => {
     for (const file of [
       "features/diary/EntryEditSheet.tsx",
+      "features/diary/AddEntry.tsx",
       "features/menu/ComposePanel.tsx",
       "features/recipes/RecipesScreen.tsx",
       "features/session/WebAccessPanel.tsx",
