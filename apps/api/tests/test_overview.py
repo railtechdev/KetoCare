@@ -1518,3 +1518,73 @@ class TestGrowthDropFlag:
         )
 
         assert response.json()["growth_significant_drop"] is False
+
+    async def test_a_deleted_weighing_does_not_raise_the_flag(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Пометка читает свой ряд (`diary.weight_series`), а не записи дневника.
+
+        Удалённое семьёй взвешивание обязано пропасть и из пометки — иначе
+        ошибочно введённый вес держал бы её поднятой, а раздел карты, куда она
+        ведёт, снижения уже не показывал бы.
+        """
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        await self._weigh_drop(session, patient, z_later=-1.5)
+        mistaken = await session.scalar(
+            select(WeightLog)
+            .where(WeightLog.patient_id == patient.id)
+            .order_by(WeightLog.occurred_at.desc())
+            .limit(1)
+        )
+        assert mistaken is not None
+        mistaken.deleted_at = datetime.now(UTC)
+        await session.flush()
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(doctor)
+        )
+
+        assert response.json()["growth_significant_drop"] is False
+
+    async def test_flag_agrees_with_the_card_section(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Пометка без точек графика и раздел «Рост и вес» отвечают одинаково.
+
+        Пометка считается облегчённо (замер 07.10.2026, «Веер сводок»): без
+        сборки точек. Случай выбран там, где облегчение легче всего ошибиться, —
+        вес в норме, а снизился только рост: пометку поднимают рост-к-возрасту и
+        ИМТ, а не первый показатель.
+        """
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        for on, height_z in ((date(2025, 4, 20), 0.0), (date(2026, 4, 20), -1.4)):
+            age_days = (on - patient.birth_date).days
+            hfa = who.lms_at("hfa", "m", age_days)
+            assert hfa is not None
+            session.add(
+                WeightLog(
+                    patient_id=patient.id,
+                    occurred_at=datetime.combine(on, time(12, 0), tzinfo=UTC),
+                    source=DiarySource.WEB,
+                    weight_kg=_weight_for_z(age_days, 0.0),
+                    height_cm=round(hfa.m * (1 + hfa.s * height_z), 1),
+                )
+            )
+        await session.flush()
+
+        overview = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(doctor)
+        )
+        card = await client.get(
+            f"/api/v1/patients/{patient.id}/growth", headers=auth_headers(doctor)
+        )
+
+        dropped = {i["indicator"] for i in card.json()["indicators"] if i["significant_drop"]}
+        assert "hfa" in dropped and "wfa" not in dropped
+        assert overview.json()["growth_significant_drop"] is True

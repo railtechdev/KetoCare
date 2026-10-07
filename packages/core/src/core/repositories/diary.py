@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import ColumnElement, func, select
@@ -79,6 +81,35 @@ async def list_for_patient[M: DiaryLog](
     items: list[M] = list(await session.scalars(stmt))
     total = await session.scalar(select(func.count()).select_from(model).where(*conditions))
     return items, int(total or 0)
+
+
+@dataclass(frozen=True, slots=True)
+class WeightPoint:
+    occurred_at: datetime
+    weight_kg: Decimal
+    height_cm: Decimal | None
+
+
+async def weight_series(
+    session: AsyncSession, *, patient_id: uuid.UUID, limit: int
+) -> list[WeightPoint]:
+    """Последние `limit` взвешиваний — только то, из чего считается рост по ВОЗ.
+
+    Те же записи и тот же порядок, что у `list_for_patient(WeightLog, …)`, но
+    три столбца вместо сущностей и без подсчёта общего числа. Оценку роста
+    считает каждая сводка специалиста (веер главной врача, `1 + N`), и на
+    годовом ряду ежедневных взвешиваний сборка ORM-объектов стоила ~3 мс на
+    сводку из ~4 — больше, чем сам счёт по таблицам ВОЗ (замер 07.10.2026,
+    infra/load/README.md, «Веер сводок»).
+    """
+
+    stmt = (
+        select(WeightLog.occurred_at, WeightLog.weight_kg, WeightLog.height_cm)
+        .where(WeightLog.patient_id == patient_id, WeightLog.deleted_at.is_(None))
+        .order_by(WeightLog.occurred_at.desc(), WeightLog.id)
+        .limit(limit)
+    )
+    return [WeightPoint(*row) for row in (await session.execute(stmt)).all()]
 
 
 async def create[M: DiaryLog](
