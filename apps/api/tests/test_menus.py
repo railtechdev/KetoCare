@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import func, select, text
 
+from core.clock import local_today
 from core.models import (
     AuditLog,
     CustomDish,
@@ -376,6 +377,47 @@ class TestUpsert:
         )
         assert row is not None
         assert row.deleted_at is not None
+
+    async def test_future_day_is_not_marked_eaten(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Завтрашний план съеденным не отмечается — и не только в интерфейсе.
+
+        Потребители — кабинет (`DayComposer`) и Mini App (`MenuScreen`): оба
+        флажок на будущий день не показывают, а бот и любой клиент ходят в эту
+        же ручку. Снять ошибочную отметку можно и с будущего дня.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        breakfast = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+        tomorrow = (local_today() + timedelta(days=1)).isoformat()
+
+        created = await client.put(
+            _url(patient),
+            json={
+                "date": tomorrow,
+                "items": [{"meal_index": 1, "recipe_id": str(breakfast.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+        item_id = created.json()["items"][0]["id"]
+
+        marked = await client.post(
+            f"{_url(patient)}/items/{item_id}/eaten",
+            json={"eaten": True},
+            headers=auth_headers(parent),
+        )
+        assert marked.status_code == 409, marked.text
+        assert marked.json()["error"]["details"]["reason"] == "future_day"
+
+        unmarked = await client.post(
+            f"{_url(patient)}/items/{item_id}/eaten",
+            json={"eaten": False},
+            headers=auth_headers(parent),
+        )
+        assert unmarked.status_code == 200, unmarked.text
 
     async def test_resaving_day_keeps_eaten_mark_of_unchanged_item(
         self, client, session, make_user, make_patient, auth_headers

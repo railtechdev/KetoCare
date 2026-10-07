@@ -424,7 +424,10 @@ function DayPlan({
               {items.map((item) => (
                 <li key={item.id}>
                   <div className="flex items-start justify-between gap-section">
-                    {canMarkEaten ? (
+                    {/* На будущем дне флажок остаётся только у уже отмеченной
+                        позиции — чтобы снять ошибочную отметку: иначе
+                        позицию нельзя было бы ни снять, ни убрать. */}
+                    {canMarkEaten || item.eaten ? (
                       // Вся строка — цель касания не ниже 44 px, а не квадрат
                       // 20 px флажка: отмечают на ходу, одной рукой.
                       <label className="flex min-h-touch min-w-0 flex-1 cursor-pointer items-center gap-field py-1">
