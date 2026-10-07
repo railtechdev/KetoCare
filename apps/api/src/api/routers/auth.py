@@ -20,6 +20,7 @@ from core.repositories import audit as audit_repo
 from core.repositories import backup_codes as backup_codes_repo
 from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
+from core.repositories import sessions as sessions_repo
 from core.repositories import telegram as telegram_repo
 from core.repositories import users as users_repo
 
@@ -73,8 +74,11 @@ from ..security import (
     decode_token,
     generate_totp_secret,
     hash_password_async,
+    new_session_id,
+    session_id_of,
     staff_session_expired,
     token_predates_password_change,
+    totp_matched_step,
     totp_provisioning_uri,
     totp_secret_usable,
     verify_password_async,
@@ -93,13 +97,17 @@ ROLES_REQUIRING_TOTP = frozenset({UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIET
 _INVALID_CREDENTIALS = "Неверный email или пароль."
 
 
-def _issue_tokens(user: User, *, auth_time: int | None = None) -> TokenPair:
+def _issue_tokens(
+    user: User, *, auth_time: int | None = None, session_id: str | None = None
+) -> TokenPair:
     """Оба токена несут отметку смены пароля: по ней отзываются старые сессии.
 
     `auth_time` — момент входа паролем; при обновлении переносится из прежнего
     токена, чтобы сессия сотрудника не продлевалась бесконечно (E6).
+    `session_id` — так же переносится: по нему «Выйти» закрывает сессию (Н9).
     """
 
+    session_id = session_id or new_session_id()
     return TokenPair(
         access_token=create_token(
             user_id=user.id,
@@ -107,6 +115,7 @@ def _issue_tokens(user: User, *, auth_time: int | None = None) -> TokenPair:
             token_type="access",
             password_changed_at=user.password_changed_at,
             auth_time=auth_time,
+            session_id=session_id,
         ),
         refresh_token=create_token(
             user_id=user.id,
@@ -114,6 +123,7 @@ def _issue_tokens(user: User, *, auth_time: int | None = None) -> TokenPair:
             token_type="refresh",
             password_changed_at=user.password_changed_at,
             auth_time=auth_time,
+            session_id=session_id,
         ),
     )
 
@@ -146,6 +156,18 @@ async def login(
     if user is None or user.password_hash is None:
         await waste_password_verification_async()
         await login_throttle.record_failure(payload.email, client_address(request))
+        # Та же отдельная транзакция, что у неверного пароля ниже (находка Н16):
+        # без неё ветка «нет такой почты» отвечала на запись в базу быстрее, и
+        # учётные записи с паролем отличались от прочих по времени ответа.
+        # Учётной записи в строке нет — её нет или паролем в неё не входят, —
+        # и почты тоже: это может быть чужой адрес, не наш пользователь.
+        await audit_repo.write_audit_log_independent(
+            user_id=None,
+            action="login_failed",
+            entity="users",
+            entity_id=None,
+            ip=client_address(request),
+        )
         raise ApiError(ErrorCode.UNAUTHORIZED, _INVALID_CREDENTIALS)
 
     password_ok = await verify_password_async(user.password_hash, payload.password)
@@ -224,10 +246,8 @@ async def login(
                 session, user_id=user.id, code=payload.backup_code
             )
 
-        if not by_backup and (
-            not payload.totp_code
-            or not verify_totp(user.totp_secret, payload.totp_code, user_id=user.id)
-        ):
+        outcome = "ok" if by_backup else await _consume_totp_code(session, user, payload.totp_code)
+        if outcome != "ok":
             await login_throttle.record_failure(payload.email, client_address(request))
             await audit_repo.write_audit_log_independent(
                 user_id=user.id,
@@ -235,7 +255,18 @@ async def login(
                 entity="users",
                 entity_id=user.id,
                 ip=client_address(request),
+                after={"reason": "totp_reused"} if outcome == "reused" else None,
             )
+            if outcome == "reused":
+                # Своё сообщение, а не «неверный код»: код верный, но уже
+                # открыл сессию, и человеку нужно знать, что ждать следующего,
+                # а не перепроверять цифры. Оракула здесь нет — до этой строки
+                # доходит только тот, кто уже предъявил верный пароль.
+                raise ApiError(
+                    ErrorCode.UNAUTHORIZED,
+                    TOTP_REUSED_MESSAGE,
+                    details={"reason": "totp_reused"},
+                )
             raise ApiError(ErrorCode.UNAUTHORIZED, "Неверный код подтверждения.")
 
         if by_backup:
@@ -281,6 +312,29 @@ async def login(
     return LoginResponse(status="ok", tokens=tokens)
 
 
+#: Повтор кода, уже открывшего сессию (находка Н8, RFC 6238 §5.2).
+TOTP_REUSED_MESSAGE = "Этот код уже использован. Дождитесь следующего кода в приложении."
+
+
+async def _consume_totp_code(
+    session: AsyncSession, user: User, code: str | None
+) -> Literal["ok", "invalid", "reused"]:
+    """Код верен И его шаг ещё не принимался (находка Н8).
+
+    `reused` — код верный, но его шаг (или более поздний) уже открыл сессию:
+    врач во второй вкладке в ту же полминуты или подсмотревший пароль и код.
+    """
+
+    if not code:
+        return "invalid"
+    step = totp_matched_step(user.totp_secret, code, user_id=user.id)
+    if step is None:
+        return "invalid"
+    if await users_repo.claim_totp_step(session, user_id=user.id, step=step):
+        return "ok"
+    return "reused"
+
+
 @router.post("/refresh", response_model=TokenPair, summary="Обновить пару токенов")
 @limiter.limit(REFRESH_RATE_LIMIT)
 async def refresh(
@@ -307,6 +361,12 @@ async def refresh(
     if token_predates_password_change(claims, user.password_changed_at):
         raise ApiError(ErrorCode.UNAUTHORIZED, "Пароль изменён, войдите заново.")
 
+    # Сессия, закрытая «Выйти» (Н9), — для всех каналов: проверка стоит до
+    # развилки, и Mini App с кабинетом проходят её одинаково.
+    session_id = session_id_of(claims)
+    if session_id is None or await sessions_repo.is_revoked(session, session_id):
+        raise ApiError(ErrorCode.UNAUTHORIZED, "Сессия завершена, войдите заново.")
+
     channel = channel_of(claims)
     if channel != "web":
         # Обновление не повышает канал. Иначе токен Mini App, сужённый до
@@ -314,19 +374,26 @@ async def refresh(
         # полноценную веб-сессию родителя — то есть сужение не значило бы
         # ничего. Привязка проверяется на живость при каждом запросе
         # (`get_current_user`), поэтому отзыв гасит и обновлённую пару.
-        return await _reissue_scoped(session, user, claims, channel)
+        return await _reissue_scoped(session, user, claims, channel, session_id=session_id)
 
     if staff_session_expired(user.role, claims):
         raise auth_challenge("Сессия длится не дольше суток — войдите заново.")
 
     started = claims.get("auth")
-    tokens = _issue_tokens(user, auth_time=started if isinstance(started, int) else None)
+    tokens = _issue_tokens(
+        user, auth_time=started if isinstance(started, int) else None, session_id=session_id
+    )
     tokens = set_auth_cookies(response, tokens)
     return tokens
 
 
 async def _reissue_scoped(
-    session: AsyncSession, user: User, claims: dict[str, Any], channel: Channel
+    session: AsyncSession,
+    user: User,
+    claims: dict[str, Any],
+    channel: Channel,
+    *,
+    session_id: str,
 ) -> TokenPair:
     """Пара токенов того же канала, с тем же сужением и той же привязкой.
 
@@ -369,6 +436,7 @@ async def _reissue_scoped(
             password_changed_at=user.password_changed_at,
             channel=channel,
             binding_id=binding_id,
+            session_id=session_id,
         )
 
     return TokenPair(access_token=token("access"), refresh_token=token("refresh"))
@@ -426,8 +494,44 @@ async def miniapp_switch_child(
 
 
 @router.post("/logout", status_code=204, summary="Выход")
-async def logout(response: Response) -> None:
+async def logout(
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    payload: RefreshRequest | None = None,
+) -> None:
+    """Снимает cookie и закрывает сессию на сервере (находка Н9).
+
+    Прежде выход только снимал cookie, и токен обновления, скопированный до
+    выхода, жил ещё до 12 часов у сотрудника и 30 дней у родителя. Теперь
+    идентификатор сессии уходит в перечень закрытых до истечения срока токена,
+    и обновление по любому токену этой сессии отвечает 401.
+
+    Токен берётся из cookie (кабинет) или из тела (Mini App держит пару в
+    памяти). Негодный или отсутствующий токен — не ошибка: выйти можно и из
+    уже истёкшей сессии, и закрывать тогда нечего. Право закрыть сессию даёт
+    сам токен: кто его держит, тот ею и пользуется.
+    """
+
     clear_auth_cookies(response)
+    token = (payload.refresh_token if payload else None) or request.cookies.get("refresh_token")
+    if not token:
+        return
+    try:
+        claims = decode_token(token, expected_type="refresh")
+        user_id = uuid.UUID(claims["sub"])
+    except (ApiError, KeyError, ValueError):
+        return
+    session_id = session_id_of(claims)
+    expires = claims.get("exp")
+    if session_id is None or not isinstance(expires, int):
+        return
+    await sessions_repo.revoke(
+        session,
+        session_id=session_id,
+        user_id=user_id,
+        expires_at=datetime.fromtimestamp(expires, UTC),
+    )
 
 
 @router.post("/totp/setup", response_model=TotpSetupResponse, summary="Начать настройку 2FA")

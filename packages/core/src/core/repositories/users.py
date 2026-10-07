@@ -7,6 +7,7 @@ from collections.abc import Collection, Sequence
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select, true
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -191,3 +192,25 @@ async def languages_by_ids(
 
     rows = await session.execute(select(User.id, User.language).where(User.id.in_(list(user_ids))))
     return {row.id: row.language for row in rows}
+
+
+async def claim_totp_step(session: AsyncSession, *, user_id: uuid.UUID, step: int) -> bool:
+    """Отметить шаг TOTP использованным; `False` — он уже был принят (повтор кода).
+
+    Сравнение и запись — одно условное UPDATE: два параллельных входа с одним
+    кодом не пройдут оба, как бы ни совпали по времени. Принимается только шаг
+    строго больше записанного: код из прошлого окна после входа нынешним — тоже
+    повтор (NIST SP 800-63B, §5.1.4.2).
+    """
+
+    claimed = await session.scalar(
+        sql_update(User)
+        .where(
+            User.id == user_id,
+            or_(User.totp_last_step.is_(None), User.totp_last_step < step),
+        )
+        .values(totp_last_step=step)
+        .returning(User.id)
+        .execution_options(synchronize_session=False)
+    )
+    return claimed is not None

@@ -352,3 +352,42 @@ async def notify_password_changed(ctx: dict[str, Any], parent_id: str) -> int:
                 continue
             delivered += 1
     return delivered
+
+
+#: События учётной записи, о которых узнают все её чаты (находки Н2 и Н7).
+#: Ключ — имя события в очереди и ключ текста; неизвестное событие не
+#: отправляется — сообщение о безопасности со случайным текстом хуже молчания.
+ACCOUNT_SECURITY_EVENTS = frozenset({"device_linked", "web_credentials_set"})
+
+
+async def notify_account_security(
+    ctx: dict[str, Any], parent_id: str, event: str, skip_chat_id: int | None = None
+) -> int:
+    """Сообщить во все чаты взрослого о событии его учётной записи.
+
+    `skip_chat_id` — чат, который и вызвал событие: новому устройству бот уже
+    ответил, а предупреждение предназначено владельцу на прежних.
+    Текст постоянный — без имён, чисел и ссылок: он уходит и туда, где чат
+    могли увидеть посторонние.
+    """
+
+    if event not in ACCOUNT_SECURITY_EVENTS:
+        logger.warning("account_security_event_unknown", kind=event)
+        return 0
+    settings = Settings()  # type: ignore[call-arg]
+    if not settings.bot_token:
+        return 0
+
+    sessionmaker = get_sessionmaker()
+    delivered = 0
+    async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
+        links = await telegram_repo.list_live_links_for_parent(session, uuid.UUID(parent_id))
+        text = texts.text(await parent_language(session, uuid.UUID(parent_id)), event)
+        for chat_id in sorted({link.chat_id for link in links} - {skip_chat_id}):
+            try:
+                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+            except TelegramSendError as exc:
+                logger.warning("account_security_notice_not_delivered", kind=event, reason=str(exc))
+                continue
+            delivered += 1
+    return delivered

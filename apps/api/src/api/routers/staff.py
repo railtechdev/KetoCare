@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from core import languages
 from core.config import get_settings
+from core.models import User
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import telegram as telegram_repo
@@ -27,6 +28,7 @@ from ..deps.auth import CurrentUserDep, SessionDep, bearer_token, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import AUTH_RATE_LIMIT, limiter
 from ..schemas import (
+    AccountNotice,
     ColleagueRead,
     CredentialsCreate,
     LanguageRead,
@@ -108,6 +110,67 @@ async def read_me(user: CurrentUserDep, session: SessionDep) -> UserRead:
     return UserRead.model_validate(me)
 
 
+#: За какой срок показываются действия администратора над учётной записью.
+#: Неделя: сотрудник, ушедший в отпуск на выходные, увидит сообщение при
+#: первом же входе, а не узнает о сбросе своего пароля из журнала.
+ACCOUNT_NOTICE_WINDOW = timedelta(days=7)
+
+
+@router.get(
+    "/me/account-notices",
+    response_model=list[AccountNotice],
+    summary="Что администратор сделал с моей учётной записью",
+)
+async def list_my_account_notices(user: CurrentUserDep, session: SessionDep) -> list[AccountNotice]:
+    """Сброс пароля и второго фактора, смена роли, передача пациентов (находка Н5).
+
+    Администратор клинических данных не читает, но набор его законных действий
+    складывается в доступ к ним: сбросить врачу пароль и фактор и войти им,
+    передать его детей подконтрольной учётной записи. Всё это пишется в журнал
+    — и врач о журнале не знает. Теперь кабинет показывает эти действия
+    владельцу учётной записи при входе, неделю с момента действия: сброс,
+    которого он не просил, — повод позвонить в клинику сразу.
+
+    Канала, кроме кабинета, у сотрудника нет: Telegram сотрудники не
+    привязывают, почты в продукте нет (решение G4). Читается из `audit_log`,
+    своего хранилища у сообщений нет — им нечего хранить сверх журнала.
+    """
+
+    entries = await audit_repo.list_actions_on_account(
+        session, user_id=user.id, since=datetime.now(UTC) - ACCOUNT_NOTICE_WINDOW
+    )
+    me = str(user.id)
+    notices: list[AccountNotice] = []
+    transfers: dict[tuple[str, datetime], int] = {}
+    for entry in entries:
+        if entry.action == "password_reset":
+            notices.append(AccountNotice(kind="password_reset", at=entry.created_at))
+        elif entry.action == "totp_reset":
+            notices.append(AccountNotice(kind="totp_reset", at=entry.created_at))
+        elif entry.action == "update":
+            role_before = (entry.before or {}).get("role")
+            role_after = (entry.after or {}).get("role")
+            if role_before != role_after:
+                notices.append(AccountNotice(kind="role_changed", at=entry.created_at))
+        elif entry.action == "transfer_care":
+            # Передача пишется строкой на каждого ребёнка, а в одной транзакции
+            # у всех строк одно `created_at` (`now()` транзакции): по нему они
+            # и собираются в одно сообщение с числом детей.
+            kind = (
+                "care_received"
+                if (entry.after or {}).get("doctor_id") == me
+                else "care_handed_over"
+            )
+            key = (kind, entry.created_at)
+            transfers[key] = transfers.get(key, 0) + 1
+    notices.extend(
+        AccountNotice(kind=kind, at=at, count=count)  # type: ignore[arg-type]
+        for (kind, at), count in transfers.items()
+    )
+    notices.sort(key=lambda notice: notice.at, reverse=True)
+    return notices
+
+
 @router.get("/me/language", response_model=LanguageRead, summary="Свой язык в боте и приложении")
 async def read_my_language(user: CurrentUserDep, session: SessionDep) -> LanguageRead:
     """Язык семейных каналов (ADR-0052).
@@ -124,29 +187,64 @@ async def read_my_language(user: CurrentUserDep, session: SessionDep) -> Languag
 
 @router.put("/me/language", response_model=LanguageRead, summary="Выбрать свой язык")
 async def update_my_language(
-    payload: LanguageUpdate, user: CurrentUserDep, session: SessionDep
+    payload: LanguageUpdate, request: Request, user: CurrentUserDep, session: SessionDep
 ) -> LanguageRead:
     """Сохранить язык бота, Mini App и сообщений в Telegram (ADR-0052).
 
     Любая роль может сохранить себе язык, но читают его только семейные
-    каналы: кабинет в браузере остаётся русским. Аудита нет намеренно — это
-    предпочтение интерфейса, а не доступ и не клинические данные.
+    каналы: кабинет в браузере остаётся русским.
+
+    В журнал пишется (находка Н14): это правка учётной записи, а «операции с
+    учётками» раздел 4.2 ТЗ велит журналировать. Язык решает, на каком языке
+    уходят сообщения о безопасности учётной записи, — смена языка чужой
+    открытой сессией тоже вопрос «кто и когда».
     """
 
     me = await users_repo.get(session, user.id)
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+    before = me.language
     updated = await users_repo.update(session, user=me, language=payload.language)
+    if before != updated.language:
+        await audit_repo.write_audit_log(
+            session,
+            user_id=me.id,
+            action="language_changed",
+            entity="users",
+            entity_id=me.id,
+            before={"language": before},
+            after={"language": updated.language},
+            ip=client_address(request),
+        )
     return LanguageRead(language=languages.known_or_none(updated.language))
 
 
 @router.patch("/me", response_model=UserRead, summary="Изменить свой профиль")
-async def update_me(payload: MeUpdate, user: CurrentUserDep, session: SessionDep) -> UserRead:
+async def update_me(
+    payload: MeUpdate, request: Request, user: CurrentUserDep, session: SessionDep
+) -> UserRead:
     me = await users_repo.get(session, user.id)
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
 
-    updated = await users_repo.update(session, user=me, **payload.model_dump())
+    changes = payload.model_dump()
+    before = {key: getattr(me, key) for key in changes}
+    updated = await users_repo.update(session, user=me, **changes)
+    after = {key: getattr(updated, key) for key in changes}
+    if before != after:
+        # Та же правка администратором пишется (`services/admin.py`), своя —
+        # нет; а «кто сменил телефон, по которому врач звонит семье» спрашивают
+        # именно после инцидента (находка Н14).
+        await audit_repo.write_audit_log(
+            session,
+            user_id=me.id,
+            action="profile_updated",
+            entity="users",
+            entity_id=me.id,
+            before=before,
+            after=after,
+            ip=client_address(request),
+        )
     return UserRead.model_validate(updated)
 
 
@@ -176,11 +274,26 @@ async def set_credentials(
 
     Токенов не выдаёт: сессия у вызвавшего уже есть, а `password_changed_at`
     здесь не ставится — обрывать нечего, прежним паролем никто не входил.
+
+    Из Mini App — только с устройства, которому учётная запись доверяет
+    (`_require_established_chat`, находки Н2 и Н7), и с сообщением во все её
+    чаты: кабинет, заведённый чужой рукой, иначе жил бы незаметно для
+    владельца.
     """
 
     me = await users_repo.get(session, user.id)
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
+
+    if user.channel == "miniapp":
+        link = (
+            await telegram_repo.get_active_link(session, user.binding_id)
+            if user.binding_id is not None
+            else None
+        )
+        if link is None:
+            raise ApiError(ErrorCode.FORBIDDEN, "Привязка отозвана, откройте приложение заново.")
+        await _require_established_chat(session, me, telegram_user_id=link.chat_id)
 
     if me.has_web_credentials:
         raise ApiError(
@@ -213,6 +326,9 @@ async def set_credentials(
         after={"email": me.email},
         ip=client_address(request),
     )
+    # Во все чаты учётной записи, включая этот: «вход в кабинет включён» —
+    # событие, о котором владелец обязан узнать, даже если включал не он.
+    after_commit.defer(session, "notify_account_security", str(me.id), "web_credentials_set")
     return UserRead.model_validate(me)
 
 
@@ -251,12 +367,13 @@ async def reset_password_via_telegram(
     me = await users_repo.get(session, user.id)
     if me is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Учётная запись не найдена.")
-    await _require_fresh_launch(session, payload.init_data, parent_id=me.id)
+    signer = await _require_fresh_launch(session, payload.init_data, parent_id=me.id)
     if not me.has_web_credentials or me.email is None:
         raise ApiError(
             ErrorCode.CONFLICT,
             "Кабинет ещё не включён: задайте почту и пароль в блоке «Вход в кабинет».",
         )
+    await _require_established_chat(session, me, telegram_user_id=signer)
 
     me.password_hash = await hash_password_async(payload.password)
     me.password_changed_at = datetime.now(UTC)
@@ -375,7 +492,9 @@ def _login_moment(request: Request) -> int | None:
 _FRESH_LAUNCH = timedelta(minutes=10)
 
 
-async def _require_fresh_launch(session: SessionDep, raw: str, *, parent_id: uuid.UUID) -> None:
+async def _require_fresh_launch(session: SessionDep, raw: str, *, parent_id: uuid.UUID) -> int:
+    """Свежая подпись запуска от чата этого взрослого; возвращает Telegram подписавшего."""
+
     stale = ApiError(
         ErrorCode.FORBIDDEN,
         "Для смены пароля закройте приложение и откройте его снова — так мы убедимся, "
@@ -394,3 +513,57 @@ async def _require_fresh_launch(session: SessionDep, raw: str, *, parent_id: uui
     links = await telegram_repo.list_active_links_by_chat(session, launch.user_id)
     if not any(link.parent_id == parent_id for link in links):
         raise stale
+    return launch.user_id
+
+
+#: Сколько чат, подключённый к учётной записи, должен прожить, прежде чем с
+#: него можно задать или сбросить вход в кабинет (находки Н2 и Н7).
+#:
+#: Сутки — потому что сообщение о подключении нового устройства уходит во все
+#: прочие чаты учётной записи сразу (`notify_account_security`), и у владельца,
+#: чей код «своего чата» дошёл не до того человека, есть день, чтобы заметить
+#: его и попросить врача отключить устройство. Так поступает и сам Telegram:
+#: только что подключённое устройство не может завершать прежние сеансы, пока
+#: не пройдёт время. Меньше суток — владелец может проспать сообщение, больше —
+#: честный второй телефон ждёт без пользы.
+NEW_DEVICE_HOLD = timedelta(hours=24)
+
+
+async def _require_established_chat(
+    session: SessionDep, me: User, *, telegram_user_id: int
+) -> None:
+    """С этого Telegram вправе задавать вход в кабинет учётной записи (Н2, Н7).
+
+    «Чат привязан к учётной записи» — не то же, что «это её владелец»: чат
+    привязывается и кодом «своего чата», а код могли переслать или
+    сфотографировать. Прежде такой чат ставил на учётную запись свою почту и
+    пароль (`/users/me/credentials`) или выбивал владельца сбросом
+    (`/users/me/credentials/reset`) — и получал веб-доступ ко всем её детям.
+
+    Два случая:
+
+    1. **Это Telegram, которым учётная запись заведена** (`users.telegram_user_id`
+       — его ставит только активация кода в боте новым человеком). Он и есть её
+       удостоверение — пропускается сразу: семья, вышедшая с приёма, включает
+       кабинет в тот же день.
+    2. **Любой другой чат этой учётной записи** — подключённый кодом своего
+       чата или учётной записи, заведённой в вебе. Пропускается, только если
+       прожил `NEW_DEVICE_HOLD`.
+    """
+
+    if me.telegram_user_id is not None and me.telegram_user_id == telegram_user_id:
+        return
+    links = [
+        link
+        for link in await telegram_repo.list_active_links_by_chat(session, telegram_user_id)
+        if link.parent_id == me.id
+    ]
+    oldest = min((link.linked_at for link in links), default=None)
+    if oldest is None or datetime.now(UTC) - oldest < NEW_DEVICE_HOLD:
+        raise ApiError(
+            ErrorCode.FORBIDDEN,
+            "Этот Telegram подключён к учётной записи меньше суток назад. Задать или "
+            "сбросить вход в кабинет с него можно будет через сутки после подключения — "
+            "или сейчас с того Telegram, с которого семья подключалась первой.",
+            details={"reason": "new_device"},
+        )

@@ -9,6 +9,7 @@ from .accounts import (
     Patient,
     ReminderDelivery,
     ReminderSettings,
+    RevokedSession,
     TelegramAccount,
     User,
     UserBackupCode,
@@ -64,6 +65,7 @@ __all__ = [
     "ReminderDelivery",
     "ReminderSettings",
     "TelegramAccount",
+    "RevokedSession",
     "UserBackupCode",
     "AccessCode",
     # clinical

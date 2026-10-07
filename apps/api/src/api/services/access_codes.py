@@ -364,19 +364,26 @@ async def activate_new_account(
 ) -> tuple[User, Patient]:
     """Активация незнакомым системе человеком: заводится учётная запись родителя."""
 
-    # Почта проверяется ДО погашения: иначе каждая проверка гасила код и
-    # возвращала его обратно, а «обратно» держалось на откате транзакции, а не
-    # на самом возврате (#240). Здесь код ещё не тронут, и объяснять нечего.
+    # Код проверяется ДО почты (находка Н6). Прежде порядок был обратный, и
+    # публичная ручка с выдуманным кодом отвечала 409 «почта занята» или 404
+    # «код недействителен» — то есть сообщала любому, есть ли в системе
+    # учётная запись с этой почтой, в том числе сотрудника. Вход такого оракула
+    # старательно избегает. Теперь негодный код даёт один и тот же 404 при
+    # любой почте, а о занятости узнаёт только тот, у кого на руках
+    # действующий код.
+    claimed = await _claim_or_refuse(session, code)
+    await _require_web_code(session, claimed)
+    await _require_live_issuer(session, claimed)
+
     if await users_repo.get_by_email(session, email) is not None:
+        # Код возвращается в обращение явно, а не откатом транзакции (#240):
+        # человек ни в чём не ошибся с кодом, и он пригодится ему в кабинете.
+        await codes_repo.release(session, code=claimed.code)
         raise ApiError(
             ErrorCode.CONFLICT,
             "Эта почта уже занята. Войдите в кабинет и откройте «Ребёнок» → "
             "«Добавить ребёнка по коду».",
         )
-
-    claimed = await _claim_or_refuse(session, code)
-    await _require_web_code(session, claimed)
-    await _require_live_issuer(session, claimed)
 
     parent = await users_repo.create(
         session,
@@ -507,6 +514,12 @@ async def activate_from_telegram(
         last_name=last_name,
         ip=ip,
     )
+    # Чат уже ведёт другого ребёнка этой же учётной записи — устройство не
+    # новое, и тревога «подключён ещё один Telegram» была бы ложной.
+    chat_already_known = any(
+        link.parent_id == parent.id
+        for link in await telegram_repo.list_active_links_by_chat(session, chat_id)
+    )
 
     patient = await _attach_parent(session, code=claimed, parent=parent, ip=ip)
 
@@ -537,6 +550,15 @@ async def activate_from_telegram(
         ip=ip,
         after={"chat_id": link.chat_id, "patient_id": str(link.patient_id)},
     )
+    if claimed.purpose is AccessCodePurpose.OWN_CHAT and not chat_already_known:
+        # Код своего чата мог дойти не до того человека — его пересылают и
+        # фотографируют (находка Н2). Прочие чаты учётной записи узнают о новом
+        # устройстве сразу; сам новый чат — нет, ему и так ответил бот. С нового
+        # устройства сутки нельзя задать вход в кабинет (`NEW_DEVICE_HOLD`), и
+        # это время у владельца на то, чтобы попросить врача его отключить.
+        after_commit.defer(
+            session, "notify_account_security", str(parent.id), "device_linked", link.chat_id
+        )
     return parent, patient, link, secret
 
 

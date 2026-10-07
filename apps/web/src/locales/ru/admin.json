@@ -96,7 +96,11 @@
       "accept_access_code": "Активация кода доступа",
       "create_user": "Заведена учётная запись",
       "set_credentials": "Задан вход в кабинет",
-      "password_reset_via_telegram": "Новый пароль кабинета задан из Telegram"
+      "password_reset_via_telegram": "Новый пароль кабинета задан из Telegram",
+      "diary_entry_updated": "Исправлена запись дневника",
+      "diary_entry_deleted": "Удалена запись дневника",
+      "profile_updated": "Изменён свой профиль",
+      "language_changed": "Изменён язык"
     },
     "entities": {
       "ai_conversations": "Переписки с помощником",
@@ -120,7 +124,13 @@
       "seizure_types": "Типы приступов",
       "telegram_accounts": "Привязки Telegram",
       "users": "Учётные записи",
-      "access_codes": "Коды доступа семьи"
+      "access_codes": "Коды доступа семьи",
+      "seizure_logs": "Дневник приступов",
+      "ketone_logs": "Дневник кетонов",
+      "weight_logs": "Дневник веса",
+      "medication_logs": "Дневник приёма лекарств",
+      "meal_logs": "Дневник питания",
+      "side_effect_logs": "Дневник самочувствия"
     },
     "error": "Не удалось загрузить журнал"
   },

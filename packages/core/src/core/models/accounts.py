@@ -64,6 +64,11 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     # действующий totp_secret не трогается — иначе один вызов setup мог бы
     # отобрать второй фактор у владельца учётной записи.
     totp_pending_secret: Mapped[str | None] = mapped_column(String(64))
+    # Последний принятый при входе шаг TOTP (номер 30-секундного интервала).
+    # Код одноразовый (NIST SP 800-63B, §5.1.4.2): без отметки подсмотревший
+    # пароль и код входил его повтором в окне ±30 с. Код с шагом не больше
+    # записанного отвергается; запись и сравнение — один UPDATE.
+    totp_last_step: Mapped[int | None] = mapped_column(BIGINT)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Язык семейных каналов — бота, Mini App и сообщений воркера в Telegram
     # (ADR-0052). Свойство человека, а не чата: бот, приложение и рассылки
@@ -134,6 +139,27 @@ class User(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
         # экран — пустыми ключами словаря. Новый язык — это миграция и словари.
         CheckConstraint("language IN ('ru', 'uz')", name="users_language_known"),
     )
+
+
+class RevokedSession(Base, CreatedAtMixin):
+    """Сессия, закрытая кнопкой «Выйти» (находка Н9 security-прохода).
+
+    Токен обновления живёт без состояния: отзыв всех сессий учётной записи
+    делает отметка смены пароля. «Выйти» же должно закрыть ОДНУ сессию — эту
+    вкладку, а не телефон с ботом. Поэтому каждая сессия несёт свой
+    идентификатор (claim `sid`, переносится через все обновления), и выход
+    записывает его сюда до истечения срока токена. Строки с истёкшим сроком
+    ничего не значат и вычищаются при следующем выходе.
+    """
+
+    __tablename__ = "revoked_sessions"
+    __table_args__ = (Index("ix_revoked_sessions_expires_at", "expires_at"),)
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
 
 
 class UserBackupCode(Base, UUIDPkMixin, CreatedAtMixin):

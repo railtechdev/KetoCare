@@ -675,6 +675,8 @@ class TestSeizureTypesIlae2025:
             source=DiarySource.WEB,
             seizure_type_id=legacy.id,
             count=1,
+            # Правит запись только её автор (ADR-0044, находка Н1).
+            created_by=parent.id,
         )
         session.add(old)
         await session.flush()

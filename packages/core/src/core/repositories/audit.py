@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AuditLog
@@ -86,6 +86,48 @@ async def list_entries(
     items = list(await session.scalars(stmt))
     total = await session.scalar(select(func.count()).select_from(AuditLog).where(*conditions))
     return items, int(total or 0)
+
+
+#: Действия, которые совершают НАД учётной записью другие люди (находка Н5).
+ACTIONS_ON_ACCOUNT = ("password_reset", "totp_reset", "update")
+
+
+async def list_actions_on_account(
+    session: AsyncSession, *, user_id: uuid.UUID, since: datetime
+) -> list[AuditLog]:
+    """Что делали с учётной записью другие — для сообщения её владельцу.
+
+    Две группы записей: правки самой учётной записи (сброс пароля и второго
+    фактора, смена роли и активности — `entity_id` она сама) и передача ведения,
+    где она стоит в `before` или `after` (`transfer_care` пишется на ребёнка, а
+    не на специалиста). Свои действия владельца сюда не попадают: о них он
+    знает.
+    """
+
+    me = str(user_id)
+    on_account = and_(
+        AuditLog.entity == "users",
+        AuditLog.entity_id == user_id,
+        AuditLog.action.in_(ACTIONS_ON_ACCOUNT),
+    )
+    care = and_(
+        AuditLog.action == "transfer_care",
+        or_(
+            AuditLog.before["doctor_id"].astext == me,
+            AuditLog.after["doctor_id"].astext == me,
+        ),
+    )
+    stmt = (
+        select(AuditLog)
+        .where(
+            AuditLog.created_at >= since,
+            or_(AuditLog.user_id.is_(None), AuditLog.user_id != user_id),
+            or_(on_account, care),
+        )
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(500)
+    )
+    return list(await session.scalars(stmt))
 
 
 async def write_audit_log_independent(

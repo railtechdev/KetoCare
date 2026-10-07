@@ -552,6 +552,10 @@ class TestPasswordResetFromTheMiniApp:
         self, client, session, make_user, make_patient, auth_headers, enqueued
     ):
         parent, _, _ = await _linked_family(session, make_user, make_patient)
+        # Учётная запись заведена этим Telegram — его подпись и есть её
+        # удостоверение, ждать сутки не нужно (находка Н2).
+        parent.telegram_user_id = CHAT_ID
+        await session.flush()
         old_web = auth_headers(parent)
         opened = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
 

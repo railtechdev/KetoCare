@@ -132,6 +132,20 @@ def needs_rehash(password_hash: str) -> bool:
     return _hasher.check_needs_rehash(password_hash)
 
 
+def new_session_id() -> str:
+    return uuid.uuid4().hex
+
+
+def session_id_of(claims: dict[str, Any]) -> str | None:
+    """Идентификатор сессии токена; у токенов до появления `sid` — его `jti`."""
+
+    for key in ("sid", "jti"):
+        value = claims.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 def create_token(
     *,
     user_id: uuid.UUID,
@@ -142,6 +156,7 @@ def create_token(
     channel: Channel = "web",
     binding_id: uuid.UUID | None = None,
     auth_time: int | None = None,
+    session_id: str | None = None,
 ) -> str:
     """`patient_scope` — ограничение токена одним пациентом (Mini App, раздел 5.2 ТЗ).
 
@@ -179,6 +194,11 @@ def create_token(
     # Момент входа паролем — переносится через все обновления. По нему
     # сессия сотрудника кончается через сутки, сколько бы её ни продлевали.
     payload["auth"] = auth_time if auth_time is not None else int(now.timestamp())
+    # Идентификатор сессии — тоже переносится через все обновления. По нему
+    # «Выйти» закрывает именно эту сессию (находка Н9): `jti` у каждого
+    # обновления новый, и отзыв по нему оставлял бы живыми токены, выданные
+    # той же сессии раньше, — например, скопированные из cookie до выхода.
+    payload["sid"] = session_id if session_id is not None else new_session_id()
     if binding_id is not None:
         # Привязка, по которой выдан токен. Нужна, чтобы отзыв действовал
         # немедленно: без неё отозванная привязка ещё пятнадцать минут
@@ -278,21 +298,41 @@ def verify_totp(secret: str | None, code: str, *, user_id: uuid.UUID | None = No
     не уходит: тексты исключений родовые, значения в них нет.
     """
 
+    return totp_matched_step(secret, code, user_id=user_id) is not None
+
+
+def totp_matched_step(
+    secret: str | None, code: str, *, user_id: uuid.UUID | None = None
+) -> int | None:
+    """Номер 30-секундного шага, которому соответствует код, или `None`.
+
+    Те же правила, что у `verify_totp` (он и спрашивает здесь): соседний шаг
+    допускается, испорченный секрет — отказ с записью в журнал. Номер нужен
+    входу (находка Н8): код одноразовый, и принятый шаг запоминается
+    (`users_repo.claim_totp_step`), чтобы повтор того же кода в окне ±30 с не
+    открыл вторую сессию подсмотревшему.
+    """
+
     if not secret:
         # Ни None, ни пустая строка код не подтверждают. Проверка здесь, а не у
         # каждого вызывающего: иначе `pyotp` падает на None «object of type
         # NoneType has no len()», и сужение типа расползается по роутеру.
-        return False
+        return None
 
     try:
-        return pyotp.TOTP(secret).verify(code, valid_window=1)
+        totp = pyotp.TOTP(secret)
+        current = totp.timecode(datetime.now(UTC))
+        # Порядок — от прошлого к будущему, как у `pyotp.TOTP.verify`.
+        for step in (current - 1, current, current + 1):
+            if pyotp.utils.strings_equal(str(code), str(totp.generate_otp(step))):
+                return step
     except ValueError as exc:  # binascii.Error — его подкласс; неASCII даёт голый ValueError
         # Значение в базе не разбирается как base32: записано мимо приложения
         # (сид, ручная правка, миграция). `generate_totp_secret()` такого не даёт.
         logger.warning(
             "totp_secret_unparseable", reason=str(exc), user_id=str(user_id) if user_id else None
         )
-        return False
+    return None
 
 
 def totp_secret_usable(secret: str | None) -> bool:
