@@ -219,8 +219,9 @@ export function careTeamKey(patientId: string) {
  * Кто ведёт пациента.
  *
  * Ручка открыта и семье — родитель вправе знать, у кого есть доступ к данным
- * ребёнка, — но экрана у неё пока нет; здесь список нужен врачу, чтобы
- * передать пациента коллеге или подключить диетолога (ADR-0003, решение 3).
+ * ребёнка. Врачу список нужен, чтобы передать пациента коллеге или подключить
+ * диетолога (ADR-0003, решение 3); семье — в «Кто ведёт» у ребёнка и под полем
+ * вопроса помощнику: эти же люди читают переписку (ADR-0022).
  */
 export function useCareTeam(patientId: string) {
   return useQuery({
@@ -230,7 +231,8 @@ export function useCareTeam(patientId: string) {
         "/api/v1/patients/{patient_id}/doctors",
         { params: { path: { patient_id: patientId } } },
       );
-      if (error || !data) throw error ?? new Error("Empty care team response");
+      if (error || !Array.isArray(data))
+        throw error ?? new Error("Malformed care team response");
       return data;
     },
   });

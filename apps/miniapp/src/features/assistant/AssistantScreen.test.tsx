@@ -317,11 +317,15 @@ describe("помощник в Mini App", () => {
       await screen.findByText(/как работает приложение/i),
     ).toBeInTheDocument();
 
-    // Один запрос — за СПИСКОМ: без него приложение не знает, был ли разговор.
-    expect(api.GET).toHaveBeenCalledTimes(1);
-    expect((api.GET as Mock).mock.calls[0]?.[0]).toBe(
+    // К переписке — один запрос, за СПИСКОМ: без него приложение не знает,
+    // был ли разговор. Перечень ведущих специалистов (кто прочтёт вопрос) —
+    // другая ручка и сюда не считается.
+    const conversationCalls = (api.GET as Mock).mock.calls
+      .map(([path]) => path as string)
+      .filter((path) => path.includes("ai-conversations"));
+    expect(conversationCalls).toEqual([
       "/api/v1/patients/{patient_id}/ai-conversations",
-    );
+    ]);
   });
 
   it("открывается на последней переписке после перезапуска из чата", async () => {
@@ -352,5 +356,38 @@ describe("помощник в Mini App", () => {
     renderScreen();
 
     expect(await screen.findByText("куда записать кетоны")).toBeInTheDocument();
+  });
+});
+
+describe("кто прочтёт вопрос (ADR-0022)", () => {
+  function withCareTeam(team: unknown) {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.endsWith("/doctors")
+        ? Promise.resolve({ data: team })
+        : Promise.resolve({ data: { items: [], total: 0 } }),
+    );
+  }
+
+  it("называет специалистов, которые ведут ребёнка, по именам", async () => {
+    withCareTeam([
+      { id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" },
+      { id: "d2", role: "dietitian", full_name: "Петров Борис" },
+    ]);
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        /видят специалисты, которые ведут вашего ребёнка: Иванова Анна Сергеевна \(врач\) и Петров Борис \(диетолог\)/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("без имён говорит о ролях, а не молчит", async () => {
+    withCareTeam([]);
+    renderScreen();
+
+    expect(
+      await screen.findByText(/видят специалисты.*— врач и диетолог/),
+    ).toBeInTheDocument();
   });
 });

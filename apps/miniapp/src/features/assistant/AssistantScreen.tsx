@@ -2,6 +2,7 @@ import {
   AsyncSection,
   ChatComposer,
   ChatMessage,
+  chatReadersList,
   isRefusal,
   Section,
   useFrozenAttempt,
@@ -10,9 +11,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { currentLanguage } from "../../lib/i18n";
 import type { Session } from "../session/useSession";
 import {
   useAskAssistant,
+  useCareTeam,
   useConversation,
   useLatestConversationId,
 } from "./useAssistant";
@@ -38,6 +41,14 @@ export function AssistantScreen({ session }: { session: Session }) {
 
   const conversation = useConversation(session.patientId, conversationId);
   const ask = useAskAssistant(session.patientId);
+  // Пока имена не пришли или не пришли вовсе — строка о ролях: молчать о том,
+  // что вопрос прочтут, нельзя ни в одном состоянии.
+  const careTeam = useCareTeam(session.patientId);
+  const readers = chatReadersList(
+    careTeam.data,
+    (role) => t(`assistant.audience.role.${role}`, { defaultValue: role }),
+    currentLanguage() === "uz" ? "uz-Latn" : "ru",
+  );
 
   const messages = conversation.data ?? [];
   const limited = errorCodeOf(ask.error) === "rate_limited";
@@ -135,6 +146,11 @@ export function AssistantScreen({ session }: { session: Session }) {
           sendLabel={t("assistant.send")}
           sendingLabel={t("assistant.sending")}
           hint={t("assistant.hint")}
+          audience={
+            readers === null
+              ? t("assistant.audience.roles")
+              : t("assistant.audience.named", { list: readers })
+          }
           pending={ask.isPending}
           disabled={limited}
         />

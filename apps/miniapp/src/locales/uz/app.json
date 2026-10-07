@@ -409,7 +409,15 @@
     "conversation": "Suhbat",
     "ask": "So‘rash",
     "placeholder": "Masalan: ketonlarni qayerga yozish kerak",
-    "hint": "Yordamchi ilova materiallari bo‘yicha javob beradi. Materiallar hozircha faqat rus tilida, shuning uchun savolni ruscha yozsangiz, javob topilishi ehtimoli ko‘proq. Yozishmani davolovchi shifokor bola kartasida ko‘radi, lekin xabarnoma olmaydi — shoshilinch masalalar haqida u bilan bevosita gaplashing.",
+    "hint": "Yordamchi ilova materiallari bo‘yicha javob beradi. Materiallar hozircha faqat rus tilida, shuning uchun savolni ruscha yozsangiz, javob topilishi ehtimoli ko‘proq.",
+    "audience": {
+      "named": "Bu savollarni bolangizni olib boruvchi mutaxassislar ko‘radi: {{list}}. Ular xabarnoma olmaydi — shoshilinch masalalar bo‘yicha klinikaga qo‘ng‘iroq qiling.",
+      "roles": "Bu savollarni bolangizni olib boruvchi mutaxassislar — shifokor va dietolog ko‘radi. Ular xabarnoma olmaydi — shoshilinch masalalar bo‘yicha klinikaga qo‘ng‘iroq qiling.",
+      "role": {
+        "doctor": "shifokor",
+        "dietitian": "dietolog"
+      }
+    },
     "send": "So‘rash",
     "sending": "Yuborilmoqda…",
     "empty": "Ilova qanday ishlashi haqida so‘rang: tayinlovni qayerda ko‘rish, yeyilganini qanday belgilash, o‘lchovni qanday yozish.",

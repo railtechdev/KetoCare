@@ -8,6 +8,7 @@ const LABELS = {
   placeholder: "Спросите о приложении",
   sendLabel: "Спросить",
   sendingLabel: "Отправляем…",
+  audience: "Эти вопросы видят специалисты, которые ведут ребёнка.",
 };
 
 describe("ChatComposer", () => {
@@ -59,5 +60,24 @@ describe("ChatComposer", () => {
     );
 
     expect(screen.getByLabelText("Спросите о приложении")).toBeDisabled();
+  });
+
+  it("называет, кто прочтёт вопрос, — до поля, а не после отправки", () => {
+    // Человек пишет иначе, когда знает, что его читает врач (ADR-0022):
+    // предупреждение после отправки уже ничего не меняет.
+    render(
+      <ChatComposer
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        {...LABELS}
+      />,
+    );
+
+    const note = screen.getByText(LABELS.audience);
+    const field = screen.getByLabelText("Спросите о приложении");
+    expect(
+      note.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
