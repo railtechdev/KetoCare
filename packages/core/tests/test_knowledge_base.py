@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from core.knowledge.documents import ArticleError, read_article, split_article
+from core.knowledge.documents import ArticleError, article_paths, read_article, split_article
 from core.knowledge.indexer import reindex
 from core.repositories import knowledge_base as kb
 
@@ -127,6 +127,82 @@ class TestIndex:
 
         assert not report.ok
         assert any("broken.md" in error for error in report.errors)
+
+
+class TestIndexedDirectories:
+    """Индекс читает только `product/` и `clinical/`.
+
+    Рядом лежит `clinical-drafts/` — черновики клинических статей из открытых
+    источников, ждущие подписи медицинской команды. До семьи они доезжать не
+    должны ни в каком виде, и преградой не может быть одна строка `status`.
+    """
+
+    @pytest.mark.asyncio
+    async def test_clinical_drafts_are_not_read(self, session, tmp_path: Path) -> None:
+        write(tmp_path / "product", "how-to-record-ketones.md", PRODUCT)
+        # Подписанный по форме текст в каталоге черновиков: если индекс его
+        # прочтёт, статус approved пропустит его к модели.
+        signed = (
+            PRODUCT.replace("kind: product", "kind: clinical")
+            .replace("id: how-to-record-ketones", "id: ketone-strips")
+            .replace("source: docs/TZ_AI_AGENTS.md#7.3", "source: https://example.org")
+            + "approved_by: кто-то\napproved_at: 2026-10-07\n"
+        )
+        write(tmp_path / "clinical-drafts", "ketone-strips.md", signed)
+        write(tmp_path / "clinical-drafts", "broken.md", "нет заголовка вовсе")
+
+        report = await reindex(session, root=tmp_path)
+
+        assert report.ok
+        assert report.documents == 1
+        assert report.skipped_drafts == 0
+        found = await kb.search(session, q="кетоны")
+        assert {passage.doc_slug for passage in found} == {"how-to-record-ketones"}
+
+    def test_only_product_and_clinical_paths(self, tmp_path: Path) -> None:
+        write(tmp_path / "product", "a.md", PRODUCT)
+        write(tmp_path / "product", "README.md", "# про каталог")
+        write(tmp_path / "clinical", "b.md", PRODUCT)
+        write(tmp_path / "clinical-drafts", "c.md", PRODUCT)
+        write(tmp_path, "d.md", PRODUCT)
+
+        names = [path.relative_to(tmp_path).as_posix() for path in article_paths(tmp_path)]
+
+        assert names == ["clinical/b.md", "product/a.md"]
+
+
+REPO_KB = Path(__file__).resolve().parents[3] / "docs" / "knowledge-base"
+
+
+class TestRepositoryKnowledgeBase:
+    """Статьи репозитория — те, что выкат положит в индекс."""
+
+    def test_every_article_parses(self) -> None:
+        paths = article_paths(REPO_KB)
+        assert paths, "в product/ нет ни одной статьи — помощнику нечем отвечать"
+        slugs = [read_article(path, root=REPO_KB).slug for path in paths]
+        assert len(slugs) == len(set(slugs))
+
+    def test_clinical_drafts_stay_unsigned_drafts(self) -> None:
+        """Черновик подписывает медицинская команда, перенося файл в
+        `clinical/`. Подпись внутри каталога черновиков — путаница: текст
+        выглядит утверждённым и при этом не индексируется."""
+
+        drafts = sorted((REPO_KB / "clinical-drafts").glob("*.md"))
+        for path in drafts:
+            if path.name == "README.md":
+                continue
+            head = path.read_text(encoding="utf-8").split("\n---\n", 1)[0]
+            fields = dict(
+                (key.strip(), value.strip())
+                for key, _, value in (
+                    line.partition(":") for line in head.splitlines()[1:] if ":" in line
+                )
+            )
+            assert fields.get("kind") == "clinical", path.name
+            assert fields.get("status") == "draft", path.name
+            assert not fields.get("approved_by"), path.name
+            assert not fields.get("approved_at"), path.name
 
 
 class TestSearch:
