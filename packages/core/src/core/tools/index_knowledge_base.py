@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ..config import get_settings
 from ..db import get_sessionmaker
-from ..knowledge.documents import ArticleError, read_article
+from ..knowledge.documents import ArticleError, article_paths, read_article
 from ..knowledge.indexer import reindex
 
 
@@ -49,9 +49,7 @@ async def _reindex(root: Path) -> int:
 def _check(root: Path) -> int:
     problems: list[str] = []
     seen: dict[str, Path] = {}
-    for path in sorted(root.rglob("*.md")):
-        if path.name == "README.md":
-            continue
+    for path in article_paths(root):
         try:
             article = read_article(path, root=root)
         except ArticleError as error:

@@ -18,7 +18,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import KbChunk
-from .documents import Article, ArticleError, read_article, split_article
+from .documents import Article, ArticleError, article_paths, read_article, split_article
 
 
 def _collect(root: Path) -> tuple[list[Article], list[str], int]:
@@ -28,9 +28,7 @@ def _collect(root: Path) -> tuple[list[Article], list[str], int]:
     errors: list[str] = []
     drafts = 0
 
-    for path in sorted(root.rglob("*.md")):
-        if path.name == "README.md":
-            continue
+    for path in article_paths(root):
         try:
             article = read_article(path, root=root)
         except ArticleError as error:

@@ -23,6 +23,14 @@ CLINICAL_FIELDS = ("approved_by", "approved_at")
 KINDS = ("product", "clinical")
 STATUSES = ("approved", "draft")
 
+#: Каталоги, из которых индекс берёт статьи. Только эти два и только они:
+#: рядом лежат материалы, которые до семьи доезжать не должны вовсе, —
+#: например, `clinical-drafts/`, черновики клинических статей из открытых
+#: источников, ждущие подписи медицинской команды. Обход всего дерева
+#: подхватил бы их, и единственной преградой остался бы `status: draft` в
+#: заголовке, который правится одной строкой.
+INDEXED_DIRS = ("product", "clinical")
+
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _HEADING = re.compile(r"^(#{1,3})\s+(.+?)\s*$", re.MULTILINE)
 
@@ -51,6 +59,21 @@ class Chunk:
     ord: int
     heading_path: str
     body: str
+
+
+def article_paths(root: Path) -> list[Path]:
+    """Файлы статей базы знаний: `product/` и `clinical/`, без README.
+
+    Одна функция на индекс и на проверку `--check`: две копии обхода однажды
+    разошлись бы, и проверка пропускала бы то, на чём падает выкат.
+    """
+
+    paths: list[Path] = []
+    for name in INDEXED_DIRS:
+        directory = root / name
+        if directory.is_dir():
+            paths.extend(path for path in directory.rglob("*.md") if path.name != "README.md")
+    return sorted(paths)
 
 
 def read_article(path: Path, *, root: Path) -> Article:
