@@ -30,7 +30,9 @@ import {
   useSeizureTypes,
 } from "../diary/useDiary";
 import { useMedications } from "./doctorQueries";
+import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { CardsSkeleton } from "./skeletons";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Дневники пациента глазами врача (раздел 8.1 ТЗ, карта пациента).
@@ -234,7 +236,11 @@ function DiaryKindView({
           записей нет» (правило П27). Тот же дефект был в дневнике семьи и был
           там закрыт; здесь он остался — экранов два, а правило было одно. */}
       {kind === "seizures" && items.length > 0 && (
-        <SeizureDiaryGrid logs={items} types={seizureTypes.data ?? []} />
+        <SeizureDiaryGrid
+          logs={items}
+          types={seizureTypes.data ?? []}
+          complete={total <= items.length}
+        />
       )}
 
       {total > items.length && (
@@ -250,7 +256,7 @@ function DiaryKindView({
         // показанные записи и не выводится вместе с «записей нет»: врач,
         // который только что их читал, иначе решил бы, что данные пропали.
         <AsyncSection
-          loading={logs.isLoading}
+          {...queryState(logs)}
           skeleton={<CardsSkeleton label={t("diary.loading")} />}
           error={
             logs.isError
@@ -271,6 +277,12 @@ function DiaryKindView({
               icon={CalendarSearch}
               title={t("diary.empty")}
               description={t("diary.emptyDescription")}
+              // Пустой дневник — повод написать семье, а не тупик: напоминание
+              // уходит ей в Telegram (ADR-0046), сервер сам держит предел
+              // «раз в сутки» и называет, если чата нет.
+              action={
+                <NudgeFamilyButton patientId={patientId} size="default" />
+              }
             />
           }
         >

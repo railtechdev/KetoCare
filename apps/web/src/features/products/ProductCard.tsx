@@ -22,6 +22,7 @@ import { useSession } from "../auth/useSession";
 import { ProductRevisions } from "./ProductRevisions";
 import { fetchProductDetail, productDetailKey } from "./useProductDetail";
 import { canSeeProductHistory } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Карточка позиции справочника — по адресу (`?item=<id>`).
@@ -80,7 +81,7 @@ export function ProductCard({
       }
     >
       <AsyncSection
-        loading={product.isLoading}
+        {...queryState(product)}
         skeleton={
           <div role="status" className="flex flex-col gap-section">
             <span className="sr-only">{t("card.loading")}</span>

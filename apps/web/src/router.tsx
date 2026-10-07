@@ -160,6 +160,13 @@ export interface SectionSearch {
    * стоящей у плиты, незачем.
    */
   q?: string;
+  /**
+   * Отбор справочника продуктов «сверялись с источником раньше этой даты»
+   * (`YYYY-MM-DD`). Приходит со ссылки главной администратора «N позиций не
+   * сверялись»: прежде она клала дату в строку поиска, и справочник искал
+   * продукты по названию «2025-10-07».
+   */
+  verified?: string;
 }
 
 /** Непустая строка или ничего: `?tab=` в адресе — то же самое, что его отсутствие. */
@@ -183,12 +190,16 @@ const sectionRoute = createRoute({
     const item = text(search.item);
     const q = text(search.q);
     const job = text(search.job);
+    const verified = text(search.verified);
     if (patient !== undefined) result.patient = patient;
     if (tab !== undefined) result.tab = tab;
     if (kind !== undefined) result.kind = kind;
     if (item !== undefined) result.item = item;
     if (q !== undefined) result.q = q;
     if (job !== undefined) result.job = job;
+    if (verified !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(verified)) {
+      result.verified = verified;
+    }
     return result;
   },
   beforeLoad: ({ context, params, search }) => {

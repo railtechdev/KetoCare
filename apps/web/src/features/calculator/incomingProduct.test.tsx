@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -78,5 +79,44 @@ describe("продукт из справочника", () => {
       "/api/v1/products/{product_id}",
       expect.anything(),
     );
+  });
+});
+
+describe("блюдо из рецепта", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("пока состав дочитывается — скелетон, при отказе — ошибка с повтором", async () => {
+    // Прежде экран молчал и при загрузке, и при отказе: человек пришёл
+    // пересчитать блюдо и видел пустой состав без объяснений.
+    let failRecipe = true;
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/v1/recipes/{recipe_id}") {
+        return failRecipe
+          ? { data: undefined, error: { error: { code: "internal" } } }
+          : {
+              data: {
+                id: "r1",
+                ingredients: [{ product_id: PRODUCT_ID, grams: 30 }],
+              },
+              error: undefined,
+            };
+      }
+      if (path.includes("{product_id}")) {
+        return { data: PRODUCT, error: undefined };
+      }
+      return { data: { items: [], total: 0 }, error: undefined };
+    });
+    const user = userEvent.setup();
+    renderWithItem("recipe:r1");
+
+    expect(
+      await screen.findByText(calculatorRu.incoming.errorTitle),
+    ).toBeInTheDocument();
+
+    failRecipe = false;
+    await user.click(screen.getByRole("button", { name: "Повторить" }));
+
+    expect(await screen.findByText("Кокосовое масло")).toBeInTheDocument();
+    expect(screen.queryByText(calculatorRu.incoming.errorTitle)).toBeNull();
   });
 });

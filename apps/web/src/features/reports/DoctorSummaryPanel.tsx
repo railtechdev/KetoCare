@@ -25,6 +25,7 @@ import {
   type SummaryCheck,
 } from "./useDoctorSummary";
 import type { ReportRange } from "./useReports";
+import { queryState } from "../../lib/queryState";
 
 type ApproveMutation = ReturnType<typeof useApproveSummaryMutation>;
 
@@ -90,7 +91,7 @@ export function DoctorSummaryPanel({
       }
     >
       <AsyncSection
-        loading={summaries.isLoading}
+        {...queryState(summaries)}
         skeleton={<Skeleton className="h-24 w-full rounded-xl" />}
         error={summaries.isError ? { title: t("summary.loadFailed") } : null}
         retryLabel={t("common:actions.retry")}

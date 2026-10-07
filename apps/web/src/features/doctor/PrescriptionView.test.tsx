@@ -234,6 +234,24 @@ describe("форма назначения", () => {
     expect(field().value).toBe("3.5");
   });
 
+  it("без истории формы нет — новая версия строится от действующей", async () => {
+    // Прежде при отказе истории форма открывалась пустой как «первое
+    // назначение», и врач мог записать версию, не видя действующей.
+    (api.GET as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/prescriptions"
+          ? { error: { error: { code: "internal", message: "сбой" } } }
+          : { data: { items: [], total: 0 } },
+      ),
+    );
+    renderView();
+
+    expect(
+      await screen.findByText(doctorRu.prescription.formWaiting),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Сохранить/ })).toBeNull();
+  });
+
   it("держит диету и схему препаратов в одном разделе", async () => {
     // Разносить их значило бы требовать переход между двумя половинами одного
     // решения: и то и другое — то, что назначил врач.

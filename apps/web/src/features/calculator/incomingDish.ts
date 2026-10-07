@@ -30,6 +30,8 @@ export function useIncomingComposition(
   rows: DishRow[] | null;
   isPending: boolean;
   isError: boolean;
+  /** Повторить то, что отказало: рецепт, список блюд или продукты состава. */
+  retry: () => void;
 } {
   const recipe = useQuery({
     queryKey: ["recipes", "detail", incoming?.id],
@@ -89,15 +91,20 @@ export function useIncomingComposition(
   });
 
   const source = incoming?.kind === "recipe" ? recipe : dish;
+  const retry = () => {
+    if (recipe.isError) void recipe.refetch();
+    if (dishes.isError) void dishes.refetch();
+    for (const query of products) if (query.isError) void query.refetch();
+  };
   const productsPending = products.some((query) => query.isPending);
   const productsFailed = products.some((query) => query.isError);
 
   if (incoming === null || incoming.kind === "product") {
-    return { rows: null, isPending: false, isError: false };
+    return { rows: null, isPending: false, isError: false, retry };
   }
 
   if (source.isError || productsFailed) {
-    return { rows: null, isPending: false, isError: true };
+    return { rows: null, isPending: false, isError: true, retry };
   }
 
   if (composition === null || productsPending) {
@@ -108,9 +115,9 @@ export function useIncomingComposition(
       !dish.isPending &&
       dish.data === undefined
     ) {
-      return { rows: null, isPending: false, isError: true };
+      return { rows: null, isPending: false, isError: true, retry };
     }
-    return { rows: null, isPending: true, isError: false };
+    return { rows: null, isPending: true, isError: false, retry };
   }
 
   const byId = new Map(
@@ -127,5 +134,5 @@ export function useIncomingComposition(
     })
     .filter((row): row is DishRow => row !== null);
 
-  return { rows, isPending: false, isError: false };
+  return { rows, isPending: false, isError: false, retry };
 }

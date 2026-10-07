@@ -15,6 +15,7 @@ import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
 import { LinesSkeleton } from "./skeletons";
 import { useGrowth, type GrowthIndicator } from "./therapyCourse";
+import { queryState } from "../../lib/queryState";
 
 type Score = { z: number; percentile: number } | null | undefined;
 
@@ -54,7 +55,7 @@ export function GrowthView({ patientId }: { patientId: string }) {
         density="compact"
       >
         <AsyncSection
-          loading={growth.isLoading}
+          {...queryState(growth)}
           skeleton={<LinesSkeleton label={t("growth.loading")} lines={3} />}
           error={
             growth.isError

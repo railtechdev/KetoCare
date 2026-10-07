@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  copiedDay,
   menuKey,
   menusKey,
   toWriteItem,
@@ -93,5 +94,33 @@ describe("ключи запросов", () => {
     // сохранения меню на экране осталась бы прежняя выдача.
     const day = menuKey("patient-1", "2026-08-28");
     expect(day.slice(0, 3)).toEqual([...menusKey("patient-1")]);
+  });
+});
+
+describe("copiedDay", () => {
+  const source = { items: [item({ recipe_id: "r1", eaten: true })] };
+
+  it("переносит состав в пустой день без отметок «съедено»", () => {
+    expect(copiedDay(source, null)).toEqual([
+      {
+        meal_index: 1,
+        recipe_id: "r1",
+        custom_dish_id: null,
+        portion_factor: 1,
+      },
+    ]);
+    expect(copiedDay(source, { items: [] })).toHaveLength(1);
+  });
+
+  it("в составленный день не переносит ничего", () => {
+    // PUT задаёт день целиком: перенос стёр бы отметки «съедено» (ADR-0041).
+    expect(
+      copiedDay(source, { items: [item({ recipe_id: "r2" })] }),
+    ).toBeNull();
+  });
+
+  it("из пустого дня переносить нечего", () => {
+    expect(copiedDay(null, null)).toBeNull();
+    expect(copiedDay({ items: [] }, null)).toBeNull();
   });
 });

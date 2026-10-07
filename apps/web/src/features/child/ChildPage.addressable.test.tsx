@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -96,5 +100,29 @@ describe("подэкраны раздела «Ребёнок» живут в а�
     expect(
       await screen.findByRole("heading", { name: "Telegram-бот: Аня Иванова" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("без детей", () => {
+  it("ведёт к коду от врача, а не к «заведите профиль» (ADR-0040)", async () => {
+    // Завести ребёнка семья сама не может: карту заводит врач и выдаёт код.
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    renderPage({});
+
+    expect(await screen.findByText(childRu.children.empty)).toBeInTheDocument();
+    expect(screen.getByText(/по коду от врача/)).toBeInTheDocument();
+  });
+
+  it("без сети не говорит, что детей нет", async () => {
+    onlineManager.setOnline(false);
+    try {
+      (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+      renderPage({});
+
+      expect(await screen.findByText(/Нет связи/)).toBeInTheDocument();
+      expect(screen.queryByText(childRu.children.empty)).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });

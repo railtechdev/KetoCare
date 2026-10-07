@@ -157,6 +157,28 @@ describe("анкета глазами специалиста", () => {
     expect(screen.getAllByText("Не отвечено").length).toBeGreaterThan(0);
   });
 
+  it("без справочников — ошибка с повтором, а не «Не отвечено»", async () => {
+    // Ответ хранится ссылкой на справочник: без него каждая строка читалась
+    // бы «Не отвечено» — неправдой о том, что семья ответила.
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("intake-options"))
+        return { data: undefined, error: { error: { code: "internal" } } };
+      if (path.includes("aed-drugs")) return { data: DRUGS, error: undefined };
+      return { data: INTAKE, error: undefined };
+    });
+    render(<IntakeView patientId={PATIENT_ID} />, { wrapper });
+
+    expect(
+      await screen.findByText(
+        "Не удалось загрузить варианты ответов",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Не отвечено")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Повторить" })).toBeEnabled();
+  });
+
   it("незаполненную анкету показывает пустым состоянием, а не ошибкой", async () => {
     mockGet("missing");
     render(<IntakeView patientId={PATIENT_ID} />, { wrapper });

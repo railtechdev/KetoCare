@@ -27,6 +27,7 @@ import {
   type DictionaryKind,
 } from "./useDictionaries";
 import type { DictionaryEntry } from "./types";
+import { queryState } from "../../lib/queryState";
 
 type Editing =
   | { kind: "none" }
@@ -291,7 +292,7 @@ function DictionaryEditor({
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
-        loading={entries.isLoading}
+        {...queryState(entries)}
         skeleton={
           <TableSkeleton label={t("dictionaries.loading")} columns={3} />
         }

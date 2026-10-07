@@ -21,6 +21,8 @@ import {
   type FamilyConversation,
 } from "./familyQuestions";
 import { LinesSkeleton } from "./skeletons";
+import { queryState } from "../../lib/queryState";
+import { PatientViewLink } from "./PatientViewLink";
 
 /**
  * «Вопросы семьи» — переписка семьи с помощником, на чтение (ADR-0022).
@@ -80,9 +82,20 @@ function ConversationList({
           : t("questions.description")
       }
       density="compact"
+      // «Вопросы ждут вас» без выхода — тупик: отвечать семье здесь нельзя
+      // (переписка только на чтение), а контакты семьи — в разделе «Профиль».
+      action={
+        refused > 0 ? (
+          <Button asChild variant="outline">
+            <PatientViewLink patientId={patientId} view="profile">
+              {t("questions.contacts")}
+            </PatientViewLink>
+          </Button>
+        ) : undefined
+      }
     >
       <AsyncSection
-        loading={conversations.isLoading}
+        {...queryState(conversations)}
         skeleton={<LinesSkeleton label={t("questions.loading")} lines={4} />}
         error={
           conversations.isError
@@ -206,7 +219,7 @@ function ConversationReader({
         density="compact"
       >
         <AsyncSection
-          loading={conversation.isLoading}
+          {...queryState(conversation)}
           skeleton={<ChatMessage role="assistant" pending />}
           error={
             conversation.isError

@@ -7,6 +7,7 @@ import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { api, errorMessageOf } from "../../lib/api";
 import { BackupCodesPanel } from "../auth/BackupCodesPanel";
+import { queryState } from "../../lib/queryState";
 
 /** Ниже этого остатка о наборе пора напомнить: он кончается молча. */
 const LOW_WATERMARK = 3;
@@ -61,6 +62,13 @@ export function BackupCodesSection() {
   const remaining = status.data?.remaining ?? 0;
   const total = status.data?.total ?? 0;
 
+  // Без второго фактора резервных кодов нет и не будет: родитель его не
+  // настраивает вовсе. Блок с «осталось 0 из 10» и перевыпуском, который
+  // кончается отказом, — тупик, а не информация.
+  if (issued === null && status.data !== undefined && !status.data.enrolled) {
+    return null;
+  }
+
   return (
     <Section
       title={t("backupCodes.sectionTitle")}
@@ -74,7 +82,7 @@ export function BackupCodesSection() {
         />
       ) : (
         <AsyncSection
-          loading={status.isPending}
+          {...queryState(status)}
           skeleton={
             <p role="status" className="m-0 text-sm text-muted-foreground">
               {t("backupCodes.loading")}

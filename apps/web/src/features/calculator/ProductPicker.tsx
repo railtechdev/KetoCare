@@ -44,6 +44,17 @@ interface Props {
    * бессмыслен, а уход по ссылке ещё и потерял бы незаписанное.
    */
   suggestRecipes?: boolean;
+  /**
+   * Можно ли увести человека со страницы в справочник, когда продукта не
+   * нашлось.
+   *
+   * Только там, где уход ничего не теряет. В форме рецепта и в исключённых
+   * продуктах ребёнка ссылка «Искать в справочнике» уводила со страницы, и
+   * набранный, но не сохранённый рецепт пропадал целиком. По умолчанию —
+   * нельзя: забытое «можно» стоит потерянной формы, забытое «нельзя» — одной
+   * ссылки.
+   */
+  canLeave?: boolean;
 }
 
 /**
@@ -76,12 +87,14 @@ export function ProductPicker({
   excludeIds,
   patientId,
   suggestRecipes = false,
+  canLeave = false,
 }: Props) {
   const { t } = useTranslation("calculator");
   // Раздела «Рецепты» нет у врача (`SECTIONS_BY_ROLE`), и ссылка туда увела бы
   // его на главную: тупик того же рода, который здесь и закрывается (П3).
   const role = useOptionalSession()?.session?.role;
   const canOpenRecipes =
+    canLeave &&
     suggestRecipes &&
     role !== undefined &&
     SECTIONS_BY_ROLE[role].includes("recipes");
@@ -213,25 +226,32 @@ export function ProductPicker({
                 : t("noMatches", { query: query.trim() })}
             </span>
           </span>
-          <span className="flex flex-wrap items-center gap-field">
-            <Button asChild variant="outline" size="sm" className="min-h-touch">
-              <SectionLink section="products" query={query.trim()}>
-                {t("openCatalog")}
-              </SectionLink>
-            </Button>
-            {canOpenRecipes && (
+          {canLeave && (
+            <span className="flex flex-wrap items-center gap-field">
               <Button
                 asChild
                 variant="outline"
                 size="sm"
                 className="min-h-touch"
               >
-                <SectionLink section="recipes" query={query.trim()}>
-                  {t("openRecipes")}
+                <SectionLink section="products" query={query.trim()}>
+                  {t("openCatalog")}
                 </SectionLink>
               </Button>
-            )}
-          </span>
+              {canOpenRecipes && (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="min-h-touch"
+                >
+                  <SectionLink section="recipes" query={query.trim()}>
+                    {t("openRecipes")}
+                  </SectionLink>
+                </Button>
+              )}
+            </span>
+          )}
         </div>
       )}
 

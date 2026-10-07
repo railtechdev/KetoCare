@@ -119,3 +119,23 @@ async def count_chunks(session: AsyncSession) -> int:
 
     total = await session.scalar(select(func.count()).select_from(KbChunk))
     return int(total or 0)
+
+
+async def titles_for(session: AsyncSession, slugs: list[str]) -> dict[str, str]:
+    """Заголовки статей по их именам — для ссылок «по материалам» в переписке.
+
+    Ответ помощника хранит имя статьи (`doc_slug`): им модель ссылается на
+    источник, и оно не меняется при правке заголовка. Человеку же нужен
+    заголовок — «how-to-plan-the-day» под ответом читается как поломка.
+    Статьи, которой в индексе больше нет, в ответе нет: ссылка на неё никуда
+    не ведёт.
+    """
+
+    if not slugs:
+        return {}
+    rows = await session.execute(
+        select(KbChunk.doc_slug, KbChunk.doc_title)
+        .where(KbChunk.doc_slug.in_(set(slugs)))
+        .distinct()
+    )
+    return {row.doc_slug: row.doc_title for row in rows}

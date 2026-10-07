@@ -16,6 +16,8 @@ interface Props {
   item?: string;
   /** Строка поиска для нового раздела (`?q=`) */
   query?: string;
+  /** Отбор справочника «сверялись раньше даты» (`?verified=YYYY-MM-DD`) */
+  verifiedBefore?: string;
   /**
    * Пациент, чью карту нужно открыть.
    *
@@ -69,6 +71,7 @@ export function SectionLink({
   tab,
   item,
   query,
+  verifiedBefore,
   patient,
   title,
   current,
@@ -95,6 +98,7 @@ export function SectionLink({
         kind: diaryKind,
         item,
         q: query,
+        verified: verifiedBefore,
         patient: patient ?? previous.patient,
       })}
       className={className}

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../../lib/api";
 import { SectionLink } from "../../components/SectionLink";
 import { anomalyDetail, anomalyKind } from "./productAnomalyText";
+import { queryState } from "../../lib/queryState";
 
 type Anomalies = components["schemas"]["ProductWithAnomalies"];
 
@@ -49,7 +50,7 @@ export function ProductAnomaliesPanel() {
       description={t("products.anomalies.description")}
     >
       <AsyncSection
-        loading={anomalies.isLoading}
+        {...queryState(anomalies)}
         skeleton={<Skeleton className="h-24 w-full rounded-xl" />}
         error={
           anomalies.isError ? { title: t("products.anomalies.failed") } : null

@@ -14,7 +14,8 @@ import { z } from "zod";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
-import { api, errorMessageOf } from "../../lib/api";
+import { api, errorCodeOf, errorMessageOf } from "../../lib/api";
+import { StepExpired } from "./StepExpired";
 import { useSession } from "./useSession";
 
 /** Совпадает с серверной проверкой (`PasswordSet` в `apps/api/src/api/schemas.py`). */
@@ -40,7 +41,14 @@ type Values = z.infer<typeof schema>;
  *
  * Текущий пароль здесь не спрашивается — владелец его не знает.
  */
-export function SetPasswordPanel({ resetToken }: { resetToken: string }) {
+export function SetPasswordPanel({
+  resetToken,
+  onRestart,
+}: {
+  resetToken: string;
+  /** Вернуться к форме входа: токен задания пароля истёк. */
+  onRestart: () => void;
+}) {
   const { t } = useTranslation("auth");
   const { signIn } = useSession();
 
@@ -62,6 +70,12 @@ export function SetPasswordPanel({ resetToken }: { resetToken: string }) {
     },
     onSuccess: (tokens) => signIn(tokens.access_token),
   });
+
+  // Токен задания пароля истёк: повтор с ним отказывает снова, выход —
+  // войти временным паролем ещё раз.
+  if (errorCodeOf(setPassword.error) === "unauthorized") {
+    return <StepExpired onRestart={onRestart} />;
+  }
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-screen">

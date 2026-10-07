@@ -28,6 +28,7 @@ import {
   type ControlVisit,
   type TherapyEndReason,
 } from "./therapyCourse";
+import { queryState } from "../../lib/queryState";
 
 /** Сегодня в формате поля `type="date"` по часам браузера. */
 function todayInput(): string {
@@ -184,7 +185,7 @@ export function TherapyCourseView({
           </p>
         )}
         <AsyncSection
-          loading={schedule.isLoading}
+          {...queryState(schedule)}
           skeleton={
             <LinesSkeleton label={t("course.visits.loading")} lines={4} />
           }

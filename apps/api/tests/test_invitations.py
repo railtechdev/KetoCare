@@ -129,6 +129,35 @@ class TestAcceptInvitation:
         assert first.status_code == 201
         assert second.status_code == 404, "повторное использование токена должно отклоняться"
 
+    async def test_preview_names_the_email_without_claiming(
+        self, client, session, make_user, auth_headers
+    ):
+        """Потребитель — страница принятия приглашения в кабинете
+        (`apps/web/src/features/invitations/AcceptInvitePage.tsx`): почта
+        называется до ввода пароля, а устаревшая ссылка — до заполнения формы.
+        """
+
+        token = await self._invite(client, session, make_user, auth_headers)
+
+        preview = await client.post("/api/v1/auth/invitations/preview", json={"token": token})
+        assert preview.status_code == 200, preview.text
+        assert preview.json() == {"email": "acc@example.com"}
+
+        # Предпросмотр не принимает приглашение: создать учётную запись можно.
+        accepted = await client.post(
+            "/api/v1/auth/invitations/accept",
+            json={"token": token, "full_name": "Врач", "password": STRONG_PASSWORD},
+        )
+        assert accepted.status_code == 201
+
+        # Принятое — как и неизвестное — один и тот же 404.
+        again = await client.post("/api/v1/auth/invitations/preview", json={"token": token})
+        unknown = await client.post(
+            "/api/v1/auth/invitations/preview", json={"token": "totally-made-up"}
+        )
+        assert again.status_code == unknown.status_code == 404
+        assert again.json() == unknown.json()
+
     async def test_unknown_token_rejected(self, client):
         response = await client.post(
             "/api/v1/auth/invitations/accept",

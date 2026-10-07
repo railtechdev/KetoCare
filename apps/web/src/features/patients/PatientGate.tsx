@@ -1,10 +1,11 @@
-import { Button, EmptyState, ErrorState, Skeleton } from "@ketocare/ui";
+import { AsyncSection, Button, EmptyState, Skeleton } from "@ketocare/ui";
 import { Baby, Users } from "lucide-react";
 import { Fragment, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
+import { queryState } from "../../lib/queryState";
 import { usePatients } from "./usePatients";
 import { useSelectedPatient } from "./useSelectedPatient";
 
@@ -29,37 +30,67 @@ export function PatientGate({
     patientId,
     patients: available,
     needsChoice,
-    isPending,
     select,
   } = useSelectedPatient();
   const patients = usePatients();
 
-  if (isPending) {
-    return (
-      <div
-        className="flex max-w-form flex-col gap-section"
-        role="status"
-        aria-busy="true"
-      >
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
-
-  if (patients.error !== null) {
-    return (
-      <ErrorState
-        className="max-w-form"
-        title={t("patientGate.errorTitle")}
-        description={
-          errorMessageOf(patients.error) ?? t("errors.unexpected") ?? undefined
-        }
-        retryLabel={t("actions.retry")}
-        onRetry={() => void patients.refetch()}
+  // Пять состояний — у `AsyncSection` (правило П15), а не своей цепочкой.
+  // Прежняя цепочка «грузится → ошибка → …» нарушала его дважды: без сети
+  // скелетон крутился вечно (запрос на паузе, а не в загрузке), а неудачное
+  // ОБНОВЛЕНИЕ списка детей прятало уже открытый экран за сообщением об
+  // ошибке — родитель терял недописанную форму.
+  return (
+    <AsyncSection
+      {...queryState(patients)}
+      skeleton={
+        <div
+          className="flex max-w-form flex-col gap-block"
+          role="status"
+          aria-busy="true"
+        >
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      }
+      error={
+        patients.isError
+          ? {
+              title: t("patientGate.errorTitle"),
+              description:
+                errorMessageOf(patients.error) ?? t("errors.unexpected"),
+            }
+          : null
+      }
+      retryLabel={t("actions.retry")}
+      onRetry={() => void patients.refetch()}
+      isEmpty={patients.data === undefined}
+      empty={null}
+    >
+      <Chosen
+        patientId={patientId}
+        available={available}
+        needsChoice={needsChoice}
+        select={select}
+        render={render}
       />
-    );
-  }
+    </AsyncSection>
+  );
+}
+
+function Chosen({
+  patientId,
+  available,
+  needsChoice,
+  select,
+  render,
+}: {
+  patientId: string | null;
+  available: readonly { id: string; full_name: string }[];
+  needsChoice: boolean;
+  select: (patientId: string) => void;
+  render: (patientId: string) => ReactElement;
+}) {
+  const { t } = useTranslation();
 
   if (needsChoice) {
     // Выбор предлагается здесь же, а не отсылкой «в списке наверху страницы»:

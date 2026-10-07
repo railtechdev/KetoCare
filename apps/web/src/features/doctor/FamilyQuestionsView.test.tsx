@@ -129,6 +129,10 @@ describe("вопросы семьи в карте пациента", () => {
     expect(
       screen.getByText(/В 1 разговоре помощник не ответил по существу/),
     ).toBeInTheDocument();
+    // «Ждут вас» — с выходом: контакты семьи в разделе «Профиль».
+    expect(
+      screen.getByRole("link", { name: "Контакты семьи" }),
+    ).toHaveAttribute("href", expect.stringContaining("/profile"));
   });
 
   it("открывает разговор на чтение: вопрос, отказ и время, без поля ответа", async () => {

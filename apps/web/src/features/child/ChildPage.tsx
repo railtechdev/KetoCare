@@ -39,6 +39,7 @@ import { toChildUpdateBody } from "./childSchemas";
 import { useUpdateChildMutation, type Patient } from "../patients/useChildren";
 import { allergyNames } from "../patients/allergies";
 import { usePatients } from "../patients/usePatients";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Подэкраны раздела. Живут в адресе, а не в состоянии (правило П30 канона).
@@ -119,7 +120,7 @@ export function ChildPage() {
       {/* Четыре состояния — в AsyncSection: там же записано, почему упавшее
           обновление не должно прятать уже показанный список детей. */}
       <AsyncSection
-        loading={patients.isLoading}
+        {...queryState(patients)}
         skeleton={
           <div
             className="flex flex-col gap-section"

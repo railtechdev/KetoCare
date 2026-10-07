@@ -13,6 +13,7 @@ import {
   toast,
   formatWeight,
 } from "@ketocare/ui";
+import { useNavigate } from "@tanstack/react-router";
 import { FileText, Lock, Pencil } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,6 +35,7 @@ import { ageInMonths, formatIsoDate, formatTimestamp } from "./dates";
 import { useMedicalProfile } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import type { MedicalProfile, Patient } from "./types";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Раздел «Профиль»: кто этот пациент.
@@ -97,6 +99,7 @@ export function PatientProfileView({
   const profileFailed = medicalProfile.isError && !profileNotFilled;
   const [editOpen, setEditOpen] = useState(false);
   const update = useUpdateChildMutation(patient.id);
+  const navigate = useNavigate();
 
   const months = ageInMonths(patient.birth_date, new Date());
   const birthDate = formatIsoDate(patient.birth_date);
@@ -279,7 +282,15 @@ export function PatientProfileView({
           дневники пусты, а это самый частый повод. */}
       <FamilyPanel patientId={patient.id} />
 
-      <CareTeamPanel patientId={patient.id} />
+      <CareTeamPanel
+        patientId={patient.id}
+        onSelfRemoved={() =>
+          void navigate({
+            to: "/app/$section",
+            params: { section: "patients" },
+          })
+        }
+      />
     </>
   );
 }
@@ -318,7 +329,7 @@ function MedicalProfilePanel({
           «ещё не заполнен» — не сбои, а пустые состояния: предлагать врачу
           «Повторить» там, где повторять нечего, значит звать его в тупик. */}
       <AsyncSection
-        loading={profile.isPending}
+        {...queryState(profile)}
         skeleton={<LinesSkeleton label={t("profile.loading")} lines={4} />}
         error={
           profile.isError && !notFilled && !forbidden

@@ -32,6 +32,7 @@ from core.models.enums import DiarySource, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
+from core.repositories import users as users_repo
 
 pytestmark = pytest.mark.asyncio
 
@@ -215,6 +216,30 @@ class TestUpdateUser:
         )
         assert entry.before["role"] == "parent"
         assert entry.after["role"] == "dietitian"
+
+    async def test_telegram_parent_cannot_become_staff(
+        self, client, session, make_user, auth_headers
+    ):
+        """Родитель из Telegram заведён без почты и пароля (ADR-0040).
+
+        Повышение такой записи упиралось в ограничение схемы
+        `users_staff_have_credentials` и отвечало 500. Отказ обязан быть 409 со
+        словами о том, что делать, — и ничего не менять.
+        """
+        admin = await make_user(UserRole.ADMIN)
+        parent = await users_repo.create(
+            session, role=UserRole.PARENT, full_name="Родитель из Telegram"
+        )
+
+        response = await client.patch(
+            f"{USERS_URL}/{parent.id}", json={"role": "doctor"}, headers=auth_headers(admin)
+        )
+
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "conflict"
+        assert "почты" in response.json()["error"]["message"]
+        stored = await session.get(User, parent.id)
+        assert stored.role is UserRole.PARENT
 
     async def test_cannot_deactivate_self(self, client, session, make_user, auth_headers):
         """Иначе последний администратор одним запросом оставит систему без администрирования."""

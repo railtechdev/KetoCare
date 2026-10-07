@@ -119,11 +119,47 @@ export function useUpsertMenuMutation(patientId: string | null) {
   });
 }
 
+/** Копирование отказано: день-получатель уже составлен. */
+export class TargetDayNotEmptyError extends Error {
+  constructor() {
+    super("Target day already has items");
+    this.name = "TargetDayNotEmptyError";
+  }
+}
+
+/** Копирование отказано: в дне-источнике нечего переносить. */
+export class SourceDayEmptyError extends Error {
+  constructor() {
+    super("Source day has no items");
+    this.name = "SourceDayEmptyError";
+  }
+}
+
 /**
- * Копирование дня: состав другой даты сохраняется на выбранную.
+ * Состав дня-источника для ПУСТОГО дня; `null` — переносить нельзя или нечего.
  *
- * Состав берётся с сервера, а не из кэша: скопировать можно и день, который на
- * этом экране ни разу не открывали.
+ * То же правило, что «Как вчера» в Mini App (`copiedDay`, ADR-0041): `PUT`
+ * задаёт день целиком, и перенос поверх непустого дня заменил бы его состав —
+ * позиции, не совпавшие по ключу `(meal_index, recipe_id, custom_dish_id)`,
+ * сервер мягко удалил бы вместе с отметками «съедено». Отметки не переносятся:
+ * вчерашнее съеденное не значит, что сегодня ребёнок уже поел.
+ */
+export function copiedDay(
+  source: Pick<MenuRead, "items"> | null,
+  target: Pick<MenuRead, "items"> | null,
+): MenuItemWrite[] | null {
+  if ((target?.items.length ?? 0) > 0) return null;
+  const items = toWriteItems(source?.items ?? []);
+  return items.length === 0 ? null : items;
+}
+
+/**
+ * Копирование дня: состав другой даты сохраняется на выбранную — только если
+ * выбранная пуста (`copiedDay`).
+ *
+ * Оба дня читаются с сервера, а не из кэша: скопировать можно и день, который
+ * на этом экране ни разу не открывали, а пустоту получателя надо знать на
+ * момент записи — вторая вкладка или семья в Mini App могла его уже собрать.
  */
 export function useCopyDayMutation(patientId: string | null) {
   const queryClient = useQueryClient();
@@ -133,19 +169,27 @@ export function useCopyDayMutation(patientId: string | null) {
       if (patientId === null)
         throw new Error("patientId is required to copy a menu");
 
-      const source = await api.GET("/api/v1/patients/{patient_id}/menus", {
-        params: {
-          path: { patient_id: patientId },
-          query: { date: input.from },
-        },
-      });
-      // Ошибку источника пробрасываем как есть: «Меню на эту дату не
-      // составлено» сервер уже написал по-русски (раздел 5.1 ТЗ).
-      if (source.error) throw source.error;
-      if (!source.data) throw new Error("Empty source menu response");
+      const read = async (date: string): Promise<MenuRead | null> => {
+        const { data, error } = await api.GET(
+          "/api/v1/patients/{patient_id}/menus",
+          {
+            params: { path: { patient_id: patientId }, query: { date } },
+          },
+        );
+        if (error) {
+          if (errorCodeOf(error) === "not_found") return null;
+          throw error;
+        }
+        return data ?? null;
+      };
 
-      const items = toWriteItems(source.data.items);
-      if (items.length === 0) throw new Error("Source menu has no items");
+      const [source, target] = await Promise.all([
+        read(input.from),
+        read(input.to),
+      ]);
+      if ((target?.items.length ?? 0) > 0) throw new TargetDayNotEmptyError();
+      const items = copiedDay(source, target);
+      if (items === null) throw new SourceDayEmptyError();
 
       const { data, error } = await api.PUT(
         "/api/v1/patients/{patient_id}/menus",
@@ -158,8 +202,17 @@ export function useCopyDayMutation(patientId: string | null) {
       return data;
     },
     onSuccess: (menu) => onMenuSaved(queryClient, patientId, menu),
-    onError: (error, input) =>
-      onMenuConflict(queryClient, patientId, input.to, error),
+    onError: (error, input) => {
+      // Получатель оказался непустым — значит, кэш отстал: перечитать день,
+      // чтобы экран показал настоящий состав и убрал «Скопировать».
+      if (error instanceof TargetDayNotEmptyError) {
+        void queryClient.invalidateQueries({
+          queryKey: menuKey(patientId, input.to),
+        });
+        return;
+      }
+      return onMenuConflict(queryClient, patientId, input.to, error);
+    },
   });
 }
 

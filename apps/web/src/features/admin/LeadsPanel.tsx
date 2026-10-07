@@ -17,6 +17,7 @@ import { SubPageHeader } from "../../components/SubPageHeader";
 import { api, errorMessageOf } from "../../lib/api";
 import { TableSkeleton } from "./TableSkeleton";
 import { MAX_PAGE_SIZE, type Lead } from "./types";
+import { queryState } from "../../lib/queryState";
 
 const LEADS_KEY = ["admin", "leads"] as const;
 
@@ -141,7 +142,7 @@ export function LeadsPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
       )}
 
       <AsyncSection
-        loading={leads.isPending}
+        {...queryState(leads)}
         skeleton={<TableSkeleton label={t("leads.loading")} columns={5} />}
         error={
           leads.isError

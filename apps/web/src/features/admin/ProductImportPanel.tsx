@@ -27,10 +27,16 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
 
   const [file, setFile] = useState<File | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const importProducts = useImportProductsMutation();
+  // Проверка и запись — две мутации, а не одна: у одной общий `isPending`, и
+  // во время записи кнопка проверки говорила «Проверяем…», а кнопка записи
+  // молчала. Отчёт записи, когда он есть, важнее отчёта проверки.
+  const preview = useImportProductsMutation();
+  const commit = useImportProductsMutation();
+  const busy = preview.isPending || commit.isPending;
+  const failure = commit.error ?? preview.error;
   const [updateExisting, setUpdateExisting] = useState(false);
 
-  const report = importProducts.data ?? null;
+  const report = commit.data ?? preview.data ?? null;
   const errors = useMemo(() => report?.errors ?? [], [report]);
 
   // Ошибок может быть несколько на одну строку (по колонке на каждую), поэтому
@@ -72,7 +78,8 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
     setFile(next);
     // Прошлый отчёт относится к прошлому файлу: оставить его на экране —
     // предложить подтвердить импорт по чужому превью.
-    importProducts.reset();
+    preview.reset();
+    commit.reset();
   }
 
   return (
@@ -120,7 +127,8 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
             setUpdateExisting(event.target.checked);
             // Отчёт относится к прежнему режиму: оставить его на экране значит
             // показывать ответ на другой вопрос.
-            importProducts.reset();
+            preview.reset();
+            commit.reset();
           }}
         />
         <span>
@@ -136,25 +144,25 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
       <div className="flex flex-wrap gap-section">
         <Button
           type="button"
-          disabled={file === null || importProducts.isPending}
-          aria-busy={importProducts.isPending}
+          disabled={file === null || busy}
+          aria-busy={preview.isPending}
           onClick={() => {
             if (file !== null) {
-              importProducts.mutate({ file, dryRun: true, updateExisting });
+              commit.reset();
+              preview.mutate({ file, dryRun: true, updateExisting });
             }
           }}
         >
           <FileUp aria-hidden="true" />
-          {importProducts.isPending
+          {preview.isPending
             ? t("products.import.checking")
             : t("products.import.check")}
         </Button>
       </div>
 
-      {importProducts.isError && (
+      {failure !== null && (
         <FormError>
-          {errorMessageOf(importProducts.error) ??
-            t("common:errors.unexpected")}
+          {errorMessageOf(failure) ?? t("common:errors.unexpected")}
         </FormError>
       )}
 
@@ -256,11 +264,11 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
               <div>
                 <Button
                   type="button"
-                  disabled={file === null || importProducts.isPending}
-                  aria-busy={importProducts.isPending}
+                  disabled={file === null || busy}
+                  aria-busy={commit.isPending}
                   onClick={() => {
                     if (file === null) return;
-                    importProducts.mutate(
+                    commit.mutate(
                       { file, dryRun: false, updateExisting },
                       {
                         onSuccess: (result) => {
@@ -283,7 +291,9 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
                     );
                   }}
                 >
-                  {t("products.import.confirm")}
+                  {commit.isPending
+                    ? t("products.import.importing")
+                    : t("products.import.confirm")}
                 </Button>
               </div>
             </>
@@ -297,7 +307,10 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
             // транзакцией, ошибка разбора отменяет весь импорт, а не отдельные
             // строки (частичная база продуктов хуже, чем её отсутствие), и
             // читать список ошибок администратор будет долго.
-            report.imported === 0 && (
+            // «Ничего не записано» — только когда не записано и не обновлено
+            // ничего: обновляющий импорт без новых строк — успех, а не отказ.
+            report.imported === 0 &&
+            report.updated === 0 && (
               <WarningBanner
                 level="danger"
                 title={t("products.import.result.failed")}

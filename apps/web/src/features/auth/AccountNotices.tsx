@@ -7,7 +7,7 @@ import {
 } from "@ketocare/ui";
 import type { components } from "@ketocare/api-client";
 import { useQuery } from "@tanstack/react-query";
-import { ShieldAlert } from "lucide-react";
+import { Info, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -40,6 +40,21 @@ function writeSeen(userId: string, value: string): void {
   } catch {
     // Хранилище недоступно (приватное окно) — сообщение просто вернётся.
   }
+}
+
+/**
+ * Действия, которые касаются ВХОДА: их, если человек не просил, — повод
+ * сразу звонить в клинику. Передача пациентов — рабочее событие: тревога
+ * «кто-то мог получить доступ» над ней приучала не читать тревогу вовсе.
+ */
+const SECURITY_KINDS: ReadonlySet<string> = new Set([
+  "password_reset",
+  "totp_reset",
+  "role_changed",
+]);
+
+function isSecurityNotice(notice: Pick<AccountNotice, "kind">): boolean {
+  return SECURITY_KINDS.has(notice.kind);
 }
 
 /** Сообщения новее закрытого; сервер отдаёт их от свежих к старым. */
@@ -90,10 +105,18 @@ export function AccountNotices({ userId }: { userId: string }) {
     setSeenUpTo(newest.at);
   };
 
+  const alarming = visible.some(isSecurityNotice);
+
   return (
     <Alert className="mb-4" role="status">
-      <ShieldAlert aria-hidden="true" />
-      <AlertTitle>{t("accountNotices.title")}</AlertTitle>
+      {alarming ? (
+        <ShieldAlert aria-hidden="true" />
+      ) : (
+        <Info aria-hidden="true" />
+      )}
+      <AlertTitle>
+        {alarming ? t("accountNotices.title") : t("accountNotices.careTitle")}
+      </AlertTitle>
       <AlertDescription>
         <ul className="list-disc pl-5">
           {visible.map((notice) => (
@@ -105,7 +128,7 @@ export function AccountNotices({ userId }: { userId: string }) {
             </li>
           ))}
         </ul>
-        <p>{t("accountNotices.hint")}</p>
+        {alarming && <p>{t("accountNotices.hint")}</p>}
         <Button
           type="button"
           variant="outline"

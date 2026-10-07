@@ -23,6 +23,11 @@ export interface ProductFilters {
    */
   includeInactive: boolean;
   /**
+   * Только позиции, сверявшиеся с источником раньше этой даты (`YYYY-MM-DD`);
+   * пустая строка — отбора нет. Ссылка «N позиций не сверялись» с главной.
+   */
+  verifiedBefore: string;
+  /**
    * Ведущий макронутриент: пустая строка — фильтр не задан.
    *
    * «Богатые белками / жирами / углеводами» — просьба заказчицы, чтобы менять
@@ -48,6 +53,7 @@ export const EMPTY_PRODUCT_FILTERS: ProductFilters = {
   categoryId: "",
   includeInactive: false,
   macro: "",
+  verifiedBefore: "",
 };
 
 /**
@@ -91,6 +97,7 @@ export function useAdminProducts(filters: ProductFilters, page = 0) {
     category_id: filters.categoryId.trim() || undefined,
     include_inactive: filters.includeInactive || undefined,
     macro: filters.macro || undefined,
+    verified_before: filters.verifiedBefore || undefined,
     limit: PRODUCTS_PAGE_SIZE,
     offset: page * PRODUCTS_PAGE_SIZE,
   };
@@ -118,9 +125,16 @@ export function useAdminProducts(filters: ProductFilters, page = 0) {
 function useProductsInvalidation() {
   const queryClient = useQueryClient();
 
+  // Кроме самих продуктов, из справочника считаются список аномалий и
+  // счётчики главной администратора: без их сброса исправленная позиция
+  // оставалась в «аномалиях», и администратор правил её второй раз.
   return () => {
     void queryClient.invalidateQueries({ queryKey: ["products"] });
     void queryClient.invalidateQueries({ queryKey: ["admin", "audit"] });
+    void queryClient.invalidateQueries({
+      queryKey: ["admin", "product-anomalies"],
+    });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
   };
 }
 

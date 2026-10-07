@@ -66,6 +66,43 @@ describe("отказ 409 при сохранении дня (Н10)", () => {
   });
 
   it("копирование дня перечитывает день, в который копировали", async () => {
+    // Источник составлен, получатель пуст: копировать разрешено.
+    (api.GET as Mock).mockImplementation(
+      (_path: string, options: { params: { query: { date: string } } }) =>
+        Promise.resolve({
+          data: {
+            items:
+              options.params.query.date === DAY
+                ? []
+                : [
+                    {
+                      meal_index: 1,
+                      recipe_id: "r1",
+                      custom_dish_id: null,
+                      portion_factor: 1,
+                    },
+                  ],
+          },
+          response: { status: 200 },
+        }),
+    );
+    (api.PUT as Mock).mockResolvedValue(CONFLICT);
+    const { invalidate, wrapper } = setup();
+    const copy = renderHook(() => useCopyDayMutation(PATIENT), { wrapper });
+
+    act(() => {
+      copy.result.current.mutate({ from: "2026-10-06", to: DAY });
+    });
+
+    await waitFor(() => expect(copy.result.current.isError).toBe(true));
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: menuKey(PATIENT, DAY),
+    });
+  });
+
+  it("в составленный день не копирует и перечитывает его", async () => {
+    // Кэш считал день пустым, а его уже собрали в другой вкладке или в Mini
+    // App: PUT поверх стёр бы отметки «съедено» (ADR-0041).
     (api.GET as Mock).mockResolvedValue({
       data: {
         items: [
@@ -79,7 +116,6 @@ describe("отказ 409 при сохранении дня (Н10)", () => {
       },
       response: { status: 200 },
     });
-    (api.PUT as Mock).mockResolvedValue(CONFLICT);
     const { invalidate, wrapper } = setup();
     const copy = renderHook(() => useCopyDayMutation(PATIENT), { wrapper });
 
@@ -88,6 +124,7 @@ describe("отказ 409 при сохранении дня (Н10)", () => {
     });
 
     await waitFor(() => expect(copy.result.current.isError).toBe(true));
+    expect(api.PUT).not.toHaveBeenCalled();
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: menuKey(PATIENT, DAY),
     });

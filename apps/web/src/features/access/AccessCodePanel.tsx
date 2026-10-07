@@ -20,6 +20,7 @@ import {
   useRevokeAccessCode,
   type AccessCodeCreated,
 } from "./useAccessCodes";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Выдача доступа семье из карты ребёнка (ADR-0040).
@@ -194,7 +195,7 @@ export function AccessCodePanel({
 
       <Section title={t("panel.journalTitle")} density="compact" level={3}>
         <AsyncSection
-          loading={journal.isPending}
+          {...queryState(journal)}
           skeleton={
             <LinesSkeleton label={t("panel.journalLoading")} lines={2} />
           }
@@ -272,9 +273,20 @@ export function AccessCodePanel({
                     description={t("panel.revokeDescription")}
                     confirmLabel={t("panel.revoke")}
                     cancelLabel={t("common:actions.cancel")}
+                    // Итог — тостом в обе стороны: отказ, проглоченный
+                    // молча, оставлял код действующим, а врач считал его
+                    // отозванным.
                     onConfirm={() => {
-                      if (row.code !== null)
-                        void revoke.mutateAsync(row.code).catch(() => null);
+                      const code = row.code;
+                      if (code === null) return;
+                      revoke.mutate(code, {
+                        onSuccess: () =>
+                          toast.success(t("panel.revokedToast", { code })),
+                        onError: (error) =>
+                          toast.error(
+                            errorMessageOf(error) ?? t("panel.revokeFailed"),
+                          ),
+                      });
                     }}
                   />
                 )}

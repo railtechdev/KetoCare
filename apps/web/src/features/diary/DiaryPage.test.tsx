@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -199,5 +203,93 @@ describe("вкладка «Лекарства» без схемы", () => {
     expect(
       screen.queryByRole("button", { name: /Добавить запись/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("состояния, которые не врут", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.POST as unknown as Mock).mockResolvedValue({
+      data: undefined,
+      error: { error: { code: "unauthorized", message: "нет сессии" } },
+    });
+  });
+
+  it("отказ схемы препаратов — не «препараты не назначены»", async () => {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/medications"
+          ? { error: { error: { code: "internal", message: "сбой" } } }
+          : respond(path),
+      ),
+    );
+    renderPage({ kind: "medications" });
+
+    expect(
+      await screen.findByText("Список препаратов не загрузился"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Препараты не назначены")).toBeNull();
+  });
+
+  it("неверный период — не «записей за этот период нет»", async () => {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(respond(path)),
+    );
+    const user = userEvent.setup();
+    renderPage({ kind: "weight" });
+
+    await user.click(
+      await screen.findByRole("radio", { name: "Произвольный" }),
+    );
+    fireEvent.change(screen.getByLabelText("С даты"), {
+      target: { value: "" },
+    });
+
+    expect(await screen.findByText(/Укажите обе даты/)).toBeInTheDocument();
+    expect(screen.queryByText("Записей за этот период нет")).toBeNull();
+  });
+
+  it("сетка неполной страницы не печатает итог за период", async () => {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/logs/seizures"
+          ? {
+              data: {
+                items: [
+                  {
+                    id: "s1",
+                    patient_id: "p1",
+                    occurred_at: "2026-08-29T07:00:00Z",
+                    seizure_type_id: "st-1",
+                    count: 2,
+                    author_user_id: "u1",
+                    created_at: "2026-08-29T07:00:00Z",
+                  },
+                ],
+                total: 250,
+              },
+            }
+          : respond(path),
+      ),
+    );
+    renderPage({ kind: "seizures" });
+
+    expect(await screen.findByText(/Итога за период нет/)).toBeInTheDocument();
+    expect(screen.queryByText("Итог за период")).toBeNull();
+  });
+
+  it("без сети — ожидание связи, а не пустота", async () => {
+    onlineManager.setOnline(false);
+    try {
+      (api.GET as unknown as Mock).mockImplementation((path: string) =>
+        Promise.resolve(respond(path)),
+      );
+      renderPage({ kind: "weight" });
+
+      expect(await screen.findByText(/Нет связи/)).toBeInTheDocument();
+      expect(screen.queryByText("Записей за этот период нет")).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });

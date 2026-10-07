@@ -22,6 +22,7 @@ import { errorMessageOf } from "../../lib/api";
 import { useMe } from "../auth/useMe";
 import { initialsOf } from "../../layouts/initials";
 import { useUpdateProfileMutation } from "./useProfile";
+import { queryState } from "../../lib/queryState";
 
 const profileSchema = z.object({
   fullName: z.string().trim().min(1).max(255),
@@ -87,7 +88,7 @@ export function ProfilePage() {
       {/* Четыре состояния — в AsyncSection: неудачное обновление профиля не
           должно прятать форму вместе с тем, что пользователь в неё уже ввёл. */}
       <AsyncSection
-        loading={me.isLoading}
+        {...queryState(me)}
         skeleton={
           <div
             className="flex flex-col gap-section"

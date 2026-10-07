@@ -15,10 +15,12 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Apple, PackageSearch, Plus, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { useSectionItem } from "../../routes/useSectionTab";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useSectionItem, useSectionQuery } from "../../routes/useSectionTab";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { formatIsoDate } from "../doctor/dates";
 import { useProductDetail } from "../products/useProductDetail";
 import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
@@ -34,6 +36,7 @@ import {
   useProductCategories,
   type ProductFilters,
 } from "./useAdminProducts";
+import { queryState } from "../../lib/queryState";
 
 interface Props {
   /**
@@ -79,8 +82,27 @@ export function ProductsPanel({
 }: Props = {}) {
   const { t } = useTranslation("admin");
 
-  const [filters, setFilters] = useState<ProductFilters>(EMPTY_PRODUCT_FILTERS);
+  const [localFilters, setFilters] = useState<ProductFilters>(
+    EMPTY_PRODUCT_FILTERS,
+  );
   const [page, setPage] = useState(0);
+  // Строка поиска и отбор «давно не сверялись» живут в адресе: на них ведут
+  // ссылки — калькулятор со своим запросом, главная администратора со
+  // счётчиком несверенных позиций. Прежде справочник их не читал, и ссылка
+  // «4 позиции не сверялись» открывала полный список.
+  const [q, setQ] = useSectionQuery();
+  const search = useSearch({ strict: false });
+  const navigate = useNavigate();
+  const verifiedBefore = search.verified ?? "";
+  const filters: ProductFilters = { ...localFilters, q, verifiedBefore };
+  const clearVerified = () => {
+    setPage(0);
+    void navigate({
+      to: ".",
+      replace: true,
+      search: (previous) => ({ ...previous, verified: undefined }),
+    });
+  };
 
   /**
    * Смена отбора возвращает на первую страницу.
@@ -362,12 +384,10 @@ export function ProductsPanel({
             label={t("products.filters.search")}
             placeholder={t("products.filters.searchPlaceholder")}
             value={filters.q}
-            onChange={(event) =>
-              setFiltersAndResetPage((current) => ({
-                ...current,
-                q: event.target.value,
-              }))
-            }
+            onChange={(event) => {
+              setQ(event.target.value);
+              setPage(0);
+            }}
           />
         </div>
 
@@ -430,6 +450,21 @@ export function ProductsPanel({
           {t("products.filters.includeInactive")}
         </label>
 
+        {filters.verifiedBefore !== "" && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch"
+            onClick={clearVerified}
+          >
+            <X aria-hidden="true" />
+            {t("products.filters.clearVerified", {
+              date:
+                formatIsoDate(filters.verifiedBefore) ?? filters.verifiedBefore,
+            })}
+          </Button>
+        )}
+
         {filters.categoryId !== "" && (
           <Button
             type="button"
@@ -468,7 +503,7 @@ export function ProductsPanel({
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
-        loading={products.isLoading}
+        {...queryState(products)}
         skeleton={<TableSkeleton label={t("products.loading")} columns={6} />}
         error={
           products.isError

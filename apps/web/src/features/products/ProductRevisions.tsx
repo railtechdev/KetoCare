@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { errorMessageOf } from "../../lib/api";
 import { changedFields, type RevisionField } from "./revisionDiff";
 import { useProductRevisions } from "./useProductRevisions";
+import { queryState } from "../../lib/queryState";
 
 /**
  * История изменений позиции справочника.
@@ -36,7 +37,7 @@ export function ProductRevisions({ productId }: { productId: string }) {
     <Section title={t("revisions.title")}>
       {/* Ошибка не прячет уже загруженную историю — правило в AsyncSection. */}
       <AsyncSection
-        loading={revisions.isLoading}
+        {...queryState(revisions)}
         skeleton={
           <div
             role="status"

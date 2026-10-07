@@ -110,33 +110,59 @@ describe("кто ведёт пациента", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("показывает отказ сервера снять последнего специалиста", async () => {
-    const user = userEvent.setup();
-    (api.DELETE as Mock).mockResolvedValue({
-      data: undefined,
-      error: {
-        error: {
-          code: "conflict",
-          message: "Нельзя снять последнего специалиста.",
-        },
-      },
-    });
-
+  it("единственного ведущего снять нельзя — кнопка называет причину", async () => {
+    // Сервер последнего специалиста не снимает: кнопка, которая заведомо
+    // кончится отказом, — тупик (правило П44).
     render(<CareTeamPanel patientId={PATIENT_ID} />, { wrapper });
 
-    await screen.findByText("Иван Врач");
+    const button = await screen.findByRole("button", {
+      name: "Снять ведение: Иван Врач",
+    });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(/сначала подключите коллегу/);
+  });
+
+  it("показывает отказ сервера и уходит из карты, сняв себя", async () => {
+    const user = userEvent.setup();
+    const team = [...TEAM, COLLEAGUES[1]];
+    (api.GET as Mock).mockImplementation(async () => ({
+      data: team,
+      error: undefined,
+    }));
+    (api.DELETE as Mock).mockResolvedValueOnce({
+      data: undefined,
+      error: {
+        error: { code: "forbidden", message: "Недостаточно прав." },
+      },
+    });
+    const onSelfRemoved = vi.fn();
+
+    render(
+      <CareTeamPanel patientId={PATIENT_ID} onSelfRemoved={onSelfRemoved} />,
+      { wrapper },
+    );
+
     await user.click(
-      screen.getByRole("button", { name: "Снять ведение: Иван Врач" }),
+      await screen.findByRole("button", { name: "Снять ведение: Иван Врач" }),
     );
     await user.click(
       await screen.findByRole("button", { name: "Снять ведение" }),
     );
+    expect(await screen.findByText("Недостаточно прав.")).toBeInTheDocument();
+    expect(onSelfRemoved).not.toHaveBeenCalled();
 
-    // Причина отказа — единственное, что объясняет врачу, почему ничего не
-    // произошло. Дублировать проверку на клиенте нельзя: она разошлась бы с
-    // серверной, и врач увидел бы запрет там, где сервер разрешает.
-    expect(
-      await screen.findByText(/Нельзя снять последнего специалиста/),
-    ).toBeInTheDocument();
+    // Сняв ведение с себя, специалист теряет доступ к карте — экран уводит
+    // его в реестр, а не оставляет смотреть на отказы.
+    (api.DELETE as Mock).mockResolvedValueOnce({
+      data: undefined,
+      error: undefined,
+    });
+    await user.click(
+      await screen.findByRole("button", { name: "Снять ведение: Иван Врач" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Снять ведение" }),
+    );
+    await vi.waitFor(() => expect(onSelfRemoved).toHaveBeenCalled());
   });
 });

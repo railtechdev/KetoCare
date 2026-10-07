@@ -22,6 +22,8 @@ vi.mock("../../lib/api", async (importOriginal) => {
 i18n.addResourceBundle("ru", "auth", authRu, true, true);
 i18n.addResourceBundle("ru", "common", commonRu, true, true);
 
+const onRestart = vi.fn();
+
 function renderPanel() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -31,9 +33,12 @@ function renderPanel() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  return render(<TotpSetupPanel setupToken="setup-token" />, {
-    wrapper: Wrapper,
-  });
+  return render(
+    <TotpSetupPanel setupToken="setup-token" onRestart={onRestart} />,
+    {
+      wrapper: Wrapper,
+    },
+  );
 }
 
 /** Ответ на /auth/totp/setup — секрет-кандидат и ссылка для QR. */
@@ -54,6 +59,7 @@ async function confirmCode() {
 beforeEach(() => {
   post.mockReset();
   signIn.mockReset();
+  onRestart.mockReset();
 });
 
 describe("первичная настройка второго фактора", () => {
@@ -98,5 +104,69 @@ describe("первичная настройка второго фактора", 
     await user.click(screen.getByRole("button", { name: /Я сохранил коды/ }));
 
     await waitFor(() => expect(signIn).toHaveBeenCalledWith("a"));
+  });
+
+  it("истёкший токен шага — понятные слова и «Начать вход заново»", async () => {
+    // Прежде под полем стояло общее «что-то пошло не так», а повтор с тем же
+    // токеном отказывал снова: выхода из шага не было до перезагрузки.
+    post.mockResolvedValueOnce({
+      error: { error: { code: "unauthorized", message: "Токен истёк." } },
+    });
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(
+      await screen.findByRole("heading", { name: authRu.stepExpired.title }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: authRu.stepExpired.restart }),
+    );
+    expect(onRestart).toHaveBeenCalled();
+  });
+
+  it("пока ключа нет, кнопка выключена и называет причину", async () => {
+    post.mockReturnValueOnce(new Promise(() => {}));
+    renderPanel();
+
+    const button = await screen.findByRole("button", {
+      name: /Подтвердить и войти/,
+    });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByText(authRu.totpSetup.waitingForKey),
+    ).toBeInTheDocument();
+  });
+
+  it("истёкший токен задания пароля тоже ведёт ко входу", async () => {
+    post
+      .mockResolvedValueOnce(SETUP)
+      .mockResolvedValueOnce({
+        data: {
+          tokens: null,
+          backup_codes: ["aaa-111"],
+          password_reset_token: "reset-token",
+        },
+      })
+      .mockResolvedValueOnce({
+        error: { error: { code: "unauthorized", message: "Токен истёк." } },
+      });
+    renderPanel();
+    const user = await confirmCode();
+    await user.click(
+      await screen.findByRole("button", { name: /Я сохранил коды/ }),
+    );
+    await user.type(
+      await screen.findByLabelText("Новый пароль"),
+      "длинный-пароль-1",
+    );
+    await user.type(
+      screen.getByLabelText("Новый пароль ещё раз"),
+      "длинный-пароль-1",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить и войти" }));
+
+    expect(
+      await screen.findByRole("heading", { name: authRu.stepExpired.title }),
+    ).toBeInTheDocument();
   });
 });

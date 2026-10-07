@@ -114,9 +114,17 @@ describe("поиск продукта в калькуляторе", () => {
       error: undefined,
     });
 
-    render(<ProductPicker onPick={() => {}} excludeIds={[]} suggestRecipes />, {
-      wrapper: withRole("parent"),
-    });
+    render(
+      <ProductPicker
+        onPick={() => {}}
+        excludeIds={[]}
+        suggestRecipes
+        canLeave
+      />,
+      {
+        wrapper: withRole("parent"),
+      },
+    );
 
     // Роутер памяти монтируется асинхронно — поле появляется не сразу.
     await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
@@ -150,9 +158,17 @@ describe("поиск продукта в калькуляторе", () => {
       error: undefined,
     });
 
-    render(<ProductPicker onPick={() => {}} excludeIds={[]} suggestRecipes />, {
-      wrapper: withRole("doctor"),
-    });
+    render(
+      <ProductPicker
+        onPick={() => {}}
+        excludeIds={[]}
+        suggestRecipes
+        canLeave
+      />,
+      {
+        wrapper: withRole("doctor"),
+      },
+    );
 
     await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
 
@@ -188,6 +204,11 @@ describe("поиск продукта в калькуляторе", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /Искать в рецептах/ }),
+    ).toBeNull();
+    // И в справочник не уводит: уход со страницы потерял бы незаписанный
+    // рецепт или профиль ребёнка целиком.
+    expect(
+      screen.queryByRole("link", { name: /Искать в справочнике/ }),
     ).toBeNull();
   });
 

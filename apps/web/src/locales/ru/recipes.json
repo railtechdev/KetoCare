@@ -227,7 +227,8 @@
       "column": "Колонка",
       "message": "Что не так",
       "fileScope": "файл"
-    }
+    },
+    "importing": "Импортируем…"
   },
   "table": {
     "previousPage": "Назад",

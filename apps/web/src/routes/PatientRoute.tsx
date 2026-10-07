@@ -6,6 +6,7 @@ import { useSession } from "../features/auth/useSession";
 import { PatientNav } from "../features/doctor/PatientNav";
 import { usePatient } from "../features/patients/usePatient";
 import { errorMessageOf } from "../lib/api";
+import { queryState } from "../lib/queryState";
 
 /**
  * Рабочее место пациента: навигация по его разделам и открытый раздел.
@@ -36,7 +37,7 @@ export function PatientRoute() {
 
   return (
     <AsyncSection
-      loading={patient.isPending}
+      {...queryState(patient)}
       skeleton={<WorkspaceSkeleton />}
       error={
         patient.isError

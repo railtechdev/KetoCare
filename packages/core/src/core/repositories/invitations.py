@@ -77,6 +77,26 @@ async def claim(session: AsyncSession, token: str) -> Invitation | None:
     return result
 
 
+async def find_open(session: AsyncSession, token: str) -> Invitation | None:
+    """Действующее приглашение по токену — без отметки о принятии.
+
+    Те же условия, что у `claim`: не принято, не отозвано, не истекло. Нужен
+    странице принятия, чтобы ДО ввода пароля сказать, на какую почту заводится
+    учётная запись, и честно сказать, что ссылка устарела.
+    """
+
+    now = datetime.now(UTC)
+    result: Invitation | None = await session.scalar(
+        select(Invitation).where(
+            Invitation.token_hash == hash_token(token),
+            Invitation.accepted_at.is_(None),
+            Invitation.revoked_at.is_(None),
+            Invitation.expires_at > now,
+        )
+    )
+    return result
+
+
 async def get(session: AsyncSession, invitation_id: uuid.UUID) -> Invitation | None:
     return await session.get(Invitation, invitation_id)
 

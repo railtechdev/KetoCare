@@ -18,6 +18,7 @@ import {
   useRevokeInvitationMutation,
   type Invitation,
 } from "./useInvitations";
+import { queryState } from "../../lib/queryState";
 
 /**
  * Выданные приглашения.
@@ -80,7 +81,7 @@ export function InvitationsList() {
 
   return (
     <AsyncSection
-      loading={invitations.isPending}
+      {...queryState(invitations)}
       skeleton={null}
       error={
         invitations.isError

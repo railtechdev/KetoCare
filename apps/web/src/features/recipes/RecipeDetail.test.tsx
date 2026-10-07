@@ -66,7 +66,7 @@ function product(id: string, name: string, isActive: boolean) {
   };
 }
 
-function renderDetail(canEdit = false) {
+function renderDetail(canEdit = false, canCalculate = true) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -83,6 +83,7 @@ function renderDetail(canEdit = false) {
     <RecipeDetail
       recipeId={RECIPE_ID}
       canEdit={canEdit}
+      canCalculate={canCalculate}
       onBack={() => {}}
       onEdit={() => {}}
     />,
@@ -130,6 +131,17 @@ describe("карточка рецепта", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Опубликовать/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("без калькулятора у роли ссылки «В калькулятор» нет", async () => {
+    // У администратора калькулятора нет: ссылка вела бы в раздел, который
+    // роутер тут же подменяет первым доступным (правило П3).
+    renderDetail(true, false);
+
+    await screen.findByRole("button", { name: /Снять с публикации/ });
+    expect(
+      screen.queryByRole("link", { name: /калькулятор/i }),
     ).not.toBeInTheDocument();
   });
 

@@ -29,9 +29,16 @@ const DATE = new Intl.DateTimeFormat("ru-RU", {
 export function SeizureDiaryGrid({
   logs,
   types,
+  complete = true,
 }: {
   logs: readonly DiaryLog[];
   types: readonly DictionaryOption[];
+  /**
+   * Пришли ли все записи периода. Список отдаётся страницей (до 200 записей),
+   * и итог, посчитанный по странице, занижал бы число приступов — врач судит
+   * по нему о течении болезни. Неполной сетке итога за период нет.
+   */
+  complete?: boolean;
 }) {
   const { t } = useTranslation("diary");
   const grid = useMemo(() => buildSeizureGrid(logs, types), [logs, types]);
@@ -109,19 +116,27 @@ export function SeizureDiaryGrid({
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-border">
-                  <th scope="row" className="p-2 text-left font-semibold">
-                    {t("grid.periodTotal")}
-                  </th>
-                  <td colSpan={DAY_PARTS.length} />
-                  <td className="p-2 text-right font-semibold tabular-nums">
-                    {grid.total}
-                  </td>
-                </tr>
-              </tfoot>
+              {complete && (
+                <tfoot>
+                  <tr className="border-t-2 border-border">
+                    <th scope="row" className="p-2 text-left font-semibold">
+                      {t("grid.periodTotal")}
+                    </th>
+                    <td colSpan={DAY_PARTS.length} />
+                    <td className="p-2 text-right font-semibold tabular-nums">
+                      {grid.total}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
+
+          {!complete && (
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("grid.incomplete")}
+            </p>
+          )}
 
           {legend !== "" && (
             <p className="m-0 text-xs text-muted-foreground">

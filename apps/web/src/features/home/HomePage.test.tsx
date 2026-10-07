@@ -92,6 +92,16 @@ describe("главная родителя", () => {
     expect(
       screen.getByRole("link", { name: homeRu.waiting.steps.diary.link }),
     ).toHaveAttribute("href", expect.stringContaining("kind=ketones"));
+    // Анкета и документы открываются сразу на своём подэкране этого ребёнка,
+    // а не на списке детей, где их ещё надо найти.
+    const intake = screen
+      .getByRole("link", { name: homeRu.waiting.steps.intake.link })
+      .getAttribute("href");
+    expect(intake).toContain("tab=intake");
+    expect(intake).toContain(`item=${PATIENT_ID}`);
+    expect(
+      screen.getByRole("link", { name: homeRu.waiting.steps.documents.link }),
+    ).toHaveAttribute("href", expect.stringContaining("tab=documents"));
   });
 
   it("говорит о новом назначении и убирает сообщение по нажатию", async () => {
