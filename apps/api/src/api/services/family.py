@@ -111,7 +111,7 @@ async def members(
     session: AsyncSession, *, patient_id: uuid.UUID, viewer: CurrentUser
 ) -> list[FamilyMemberRead]:
     parent_ids = await patients_repo.list_parent_ids(session, patient_id=patient_id)
-    adults = len(parent_ids)
+    adults = await patients_repo.count_active_adults(session, patient_id=patient_id)
     viewer_is_lead = await _is_lead(session, viewer=viewer, patient_id=patient_id)
     result: list[FamilyMemberRead] = []
     for parent_id in parent_ids:
@@ -180,7 +180,7 @@ async def remove(
             "или лечащий врач.",
         )
 
-    adults = len(await patients_repo.list_parent_ids(session, patient_id=patient_id))
+    adults = await patients_repo.count_active_adults(session, patient_id=patient_id, lock=True)
     if _sole_adult_leaving(ground, adults):
         raise ApiError(ErrorCode.CONFLICT, LAST_ADULT_MESSAGE)
 

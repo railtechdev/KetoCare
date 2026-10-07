@@ -269,6 +269,15 @@ class TestRemoval:
         assert response.status_code == 409, response.text
         assert "единственный взрослый" in response.json()["error"]["message"]
 
+        # Второй взрослый с отключённой учётной записью семьёй не считается:
+        # войти он не может, и последний действующий по-прежнему не уходит.
+        disabled = await make_user(UserRole.PARENT, is_active=False)
+        await patients_repo.link_parent(session, parent_id=disabled.id, patient_id=patient.id)
+        again = await client.delete(
+            parents_url(patient.id, mother.id), headers=auth_headers(mother)
+        )
+        assert again.status_code == 409, again.text
+
         # Специалист закрывает доступ осознанно и сам выдаёт новый код.
         by_doctor = await client.get(parents_url(patient.id), headers=auth_headers(doctor))
         assert _by_id(by_doctor.json())[str(mother.id)]["can_remove"] is True

@@ -11,7 +11,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from ..models import DoctorPatient, ParentPatient, Patient
+from ..models import DoctorPatient, ParentPatient, Patient, User
 from ..models.enums import Sex
 from . import therapy as therapy_repo
 
@@ -264,6 +264,31 @@ async def list_parent_ids(session: AsyncSession, *, patient_id: uuid.UUID) -> li
 
     stmt = select(ParentPatient.parent_id).where(ParentPatient.patient_id == patient_id)
     return list(await session.scalars(stmt))
+
+
+async def count_active_adults(
+    session: AsyncSession, *, patient_id: uuid.UUID, lock: bool = False
+) -> int:
+    """Сколько взрослых с ДЕЙСТВУЮЩЕЙ учётной записью ведут ребёнка.
+
+    Отключённая учётная запись войти не может, и семьёй ребёнка её считать
+    нельзя: иначе последний взрослый, который на самом деле может войти,
+    «выходил» бы, оставляя ребёнка без семьи.
+
+    `lock` — заблокировать строки связей до конца транзакции: два взрослых,
+    выходящих одновременно, иначе оба видели бы «нас двое» и оба уходили.
+    """
+
+    links = select(ParentPatient.parent_id).where(ParentPatient.patient_id == patient_id)
+    if lock:
+        links = links.with_for_update()
+    locked = list(await session.scalars(links))
+    if not locked:
+        return 0
+    total = await session.scalar(
+        select(func.count()).select_from(User).where(User.id.in_(locked), User.is_active.is_(True))
+    )
+    return int(total or 0)
 
 
 async def activated_ids(
