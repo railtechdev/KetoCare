@@ -41,7 +41,7 @@
     "react-dom": "^19"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4",
+    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
@@ -51,8 +51,8 @@
     "jsdom": "^27.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tailwindcss": "^4",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.2",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   }
 }

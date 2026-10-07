@@ -115,7 +115,17 @@ describe("язык записи (ADR-0052)", () => {
     // молча берёт локаль устройства и печатает «1,200» — «одна целая две
     // десятых». Поэтому числа языка не берут вовсе — это и проверяется:
     // ни один помощник не просит у `Intl` другой локали.
-    const numberFormat = vi.spyOn(Intl, "NumberFormat");
+    // Шпион с явной реализацией: в vitest 4 шпион без неё, вызванный через
+    // `new`, конструирует встроенный `Intl.NumberFormat` как обычный класс и
+    // возвращает объект без `format`.
+    const OriginalNumberFormat = Intl.NumberFormat;
+    const numberFormat = vi
+      .spyOn(Intl, "NumberFormat")
+      .mockImplementation(function (
+        ...args: ConstructorParameters<typeof Intl.NumberFormat>
+      ) {
+        return new OriginalNumberFormat(...args);
+      });
     setFormatLanguage("uz");
 
     const printed = [
