@@ -216,3 +216,71 @@ async def cost_since(session: AsyncSession, *, since: datetime) -> Decimal:
         .where(AiJob.created_at >= since)
     )
     return Decimal(str(total or 0))
+
+
+async def status_counts_since(
+    session: AsyncSession, *, since: datetime, stuck_before: datetime
+) -> dict[str, int]:
+    """Сколько обращений с момента `since` в каждом исходе — для монитора.
+
+    Ключи — значения `AiJobStatus` плюс `stuck`: строки, которые всё ещё
+    «выполняются», хотя заведены раньше `stuck_before`. Вызов модели столько не
+    длится, значит процесс прервался. `running` их не включает.
+    """
+
+    rows = await session.execute(
+        select(AiJob.status, func.count()).where(AiJob.created_at >= since).group_by(AiJob.status)
+    )
+    counts = {AiJobStatus(status).value: int(count) for status, count in rows.all()}
+    stuck = await session.scalar(
+        select(func.count())
+        .select_from(AiJob)
+        .where(
+            AiJob.created_at >= since,
+            AiJob.status == AiJobStatus.RUNNING,
+            AiJob.created_at < stuck_before,
+        )
+    )
+    counts["stuck"] = int(stuck or 0)
+    running = counts.get(AiJobStatus.RUNNING.value, 0) - counts["stuck"]
+    counts[AiJobStatus.RUNNING.value] = max(running, 0)
+    return counts
+
+
+async def last_finished_at(session: AsyncSession, *, status: AiJobStatus) -> datetime | None:
+    """Когда последний раз закончилось обращение с этим исходом — за всё время."""
+
+    value: datetime | None = await session.scalar(
+        select(func.max(AiJob.finished_at)).where(AiJob.status == status)
+    )
+    return value
+
+
+async def failure_errors_since(
+    session: AsyncSession, *, since: datetime, limit: int = 1000
+) -> list[str]:
+    """Тексты неудач с момента `since`, последние первыми.
+
+    Наружу их отдавать нельзя: в них бывает начало ответа сервера. Вызывающий
+    сводит каждый текст к классу ошибки и показывает только класс.
+    """
+
+    rows = await session.scalars(
+        select(AiJob.error)
+        .where(AiJob.status == AiJobStatus.FAILED, AiJob.created_at >= since)
+        .order_by(AiJob.finished_at.desc().nulls_last(), AiJob.created_at.desc())
+        .limit(limit)
+    )
+    return [error or "" for error in rows]
+
+
+async def last_failure_error(session: AsyncSession) -> str | None:
+    """Текст последней неудачи за всё время — только для сведения к классу."""
+
+    error: str | None = await session.scalar(
+        select(AiJob.error)
+        .where(AiJob.status == AiJobStatus.FAILED)
+        .order_by(AiJob.finished_at.desc().nulls_last(), AiJob.created_at.desc())
+        .limit(1)
+    )
+    return error

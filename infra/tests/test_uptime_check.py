@@ -10,8 +10,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
+import re
 import shutil
 import ssl
 import subprocess
@@ -29,7 +31,34 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _ROOT / "infra" / "scripts" / "uptime_check.py"
 _WORKFLOW = _ROOT / ".github" / "workflows" / "uptime.yml"
+_DEPLOY = _ROOT / ".github" / "workflows" / "deploy.yml"
 _TOKEN = "123456:SECRET-bot-token-never-printed"
+_MONITOR_TOKEN = "MONITOR-token-never-printed-0123456789abcdef"
+
+
+def _ai(
+    succeeded: int = 5,
+    failed: int = 0,
+    classes: list[tuple[str, int]] | None = None,
+    *,
+    stuck: int = 0,
+    configured: bool = True,
+    budget_exhausted: bool = False,
+) -> dict[str, object]:
+    """Ответ `/health/ai` той формы, что пинит `apps/api/tests/test_health_ai.py`."""
+
+    return {
+        "window_hours": 24,
+        "checked_at": "2026-10-08T10:00:00Z",
+        "jobs": {"succeeded": succeeded, "failed": failed, "running": 0, "stuck": stuck},
+        "last_success_at": None,
+        "last_failure_at": None,
+        "last_failure_class": classes[0][0] if classes else None,
+        "failure_classes": [{"error_class": c, "count": n} for c, n in classes or []],
+        "daily_budget_exhausted": budget_exhausted,
+        "configured": {"api_key": configured, "model_fast": True, "model_smart": True},
+    }
+
 
 pytestmark = pytest.mark.skipif(shutil.which("openssl") is None, reason="нужен openssl")
 
@@ -43,6 +72,8 @@ class Stand:
     pending_updates: int = 0
     webhook_url: str = ""
     seen_logins: list[dict[str, str]] = field(default_factory=list)
+    ai_health: tuple[int, dict[str, object]] = field(default_factory=lambda: (200, _ai()))
+    seen_ai_auth: list[str] = field(default_factory=list)
 
     def next_page(self) -> int:
         return self.pages.pop(0) if len(self.pages) > 1 else self.pages[0]
@@ -67,6 +98,13 @@ def _handler(stand: Stand) -> type[BaseHTTPRequestHandler]:
             elif self.path == f"/bot{_TOKEN}/getWebhookInfo":
                 result = {"url": stand.webhook_url, "pending_update_count": stand.pending_updates}
                 self._send(200, {"ok": True, "result": result})
+            elif self.path == "/api/v1/health/ai":
+                presented = self.headers.get("Authorization", "")
+                stand.seen_ai_auth.append(presented)
+                if presented != f"Bearer {_MONITOR_TOKEN}":
+                    self._send(401, {"error": {"code": "unauthorized"}})
+                else:
+                    self._send(*stand.ai_health)
             elif self.path.startswith("/bot"):
                 self._send(401, {"ok": False, "description": "Unauthorized"})
             else:
@@ -136,12 +174,18 @@ def make_stand(tmp_path: Path) -> Iterator[MakeStand]:
 
 
 def _run(
-    stand: Running, tmp_path: Path, *, bot: bool = True
+    stand: Running,
+    tmp_path: Path,
+    *,
+    bot: bool = True,
+    monitor: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     report = tmp_path / "report.md"
-    env = {k: v for k, v in os.environ.items() if k != "BOT_TOKEN"}
+    env = {k: v for k, v in os.environ.items() if k not in ("BOT_TOKEN", "MONITOR_TOKEN")}
     if bot:
         env["BOT_TOKEN"] = _TOKEN
+    if monitor is not None:
+        env["MONITOR_TOKEN"] = monitor
     result = subprocess.run(
         [
             sys.executable, str(_SCRIPT),
@@ -273,3 +317,146 @@ class TestWorkflow:
         steps = "\n".join(str(step.get("run", "")) for step in job["steps"])
         assert "infra/scripts/uptime_check.py" in steps
         assert "gh issue create" in steps and "gh issue close" in steps
+
+    def test_passes_the_monitor_token_to_the_stand(self) -> None:
+        workflow = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
+        assert "MONITOR_TOKEN" in workflow[True]["workflow_call"]["secrets"]
+        check = next(s for s in workflow["jobs"]["check"]["steps"] if s.get("id") == "check")
+        assert check["env"]["MONITOR_TOKEN"] == "${{ secrets.MONITOR_TOKEN }}"
+
+    def test_deploy_puts_the_monitor_token_on_the_stand(self) -> None:
+        """Тот же секрет обязан доехать до стенда — иначе ручки там нет (404)."""
+
+        workflow = yaml.safe_load(_DEPLOY.read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["deploy"]["steps"]
+        render = next(s for s in steps if s.get("name") == "Собрать окружение из секретов")
+        assert render["env"]["MONITOR_TOKEN"] == "${{ secrets.MONITOR_TOKEN }}"
+        script = render["run"]
+        start = re.search(r"^\s*NAMES\s*=\s*\[", script, re.M)
+        assert start is not None
+        bracket = script.index("[", start.start())
+        names = ast.literal_eval(script[bracket : script.index("]", bracket) + 1])
+        assert "MONITOR_TOKEN" in names
+
+
+class TestAiHealth:
+    """Проверка ИИ: пассивная, по журналу обращений, и только с токеном."""
+
+    def test_healthy(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        stand = make_stand(Stand())
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "ok   ИИ: обращений к модели за сутки: успешных 5, неудач 0" in result.stdout
+        assert stand.stand.seen_ai_auth == [f"Bearer {_MONITOR_TOKEN}"]
+        assert "✅ ИИ" in report
+
+    def test_no_token_means_no_ai_check(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        stand = make_stand(Stand(ai_health=(200, _ai(0, 99, [("APITimeoutError", 99)]))))
+
+        result, _ = _run(stand, tmp_path, bot=False)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "ИИ" not in result.stdout
+        assert stand.stand.seen_ai_auth == []
+
+    def test_scoped_key_failure_fails(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        """То, что стенд месяц писал в журнал и никто не видел."""
+
+        broken = _ai(0, 12, [("BadRequestError 400 invalid_request_error", 12)])
+        stand = make_stand(Stand(ai_health=(200, broken)))
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 1
+        assert "❌ **ИИ** — ошибка ключа или настройки модели" in report
+        assert "<!-- uptime-failed: ИИ -->" in report
+
+    @pytest.mark.parametrize(
+        "error_class",
+        [
+            "AuthenticationError 401 authentication_error",
+            "PermissionDeniedError 403 permission_error",
+            "NotFoundError 404 not_found_error",
+        ],
+    )
+    def test_auth_failure_fails_even_with_successes(
+        self, make_stand: MakeStand, tmp_path: Path, error_class: str
+    ) -> None:
+        stand = make_stand(Stand(ai_health=(200, _ai(40, 1, [(error_class, 1)]))))
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 1
+        assert error_class in report
+
+    def test_no_success_at_all_fails(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        stand = make_stand(Stand(ai_health=(200, _ai(0, 3, [("APITimeoutError", 3)]))))
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 1
+        assert "ни одного успешного обращения" in report
+
+    def test_key_not_configured_fails(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        stand = make_stand(Stand(ai_health=(200, _ai(0, 0, configured=False))))
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 1
+        assert "не задано: ANTHROPIC_API_KEY" in report
+
+    def test_quiet_day_is_not_an_outage(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        """Ночью вызовов может не быть вовсе: «ноль из нуля» — не отказ."""
+
+        stand = make_stand(Stand(ai_health=(200, _ai(0, 0))))
+
+        result, _ = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    def test_many_transient_failures_only_warn(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        flaky = _ai(3, 5, [("APIConnectionError", 3), ("InternalServerError 500 api_error", 2)])
+        stand = make_stand(Stand(ai_health=(200, flaky)))
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "::warning::ИИ:" in result.stdout
+        assert "неудач больше половины" in result.stdout
+        assert "⚠️ ИИ" in report and "❌" not in report
+
+    def test_route_absent_on_stand(self, make_stand: MakeStand, tmp_path: Path) -> None:
+        stand = make_stand(Stand(ai_health=(404, {"error": {"code": "not_found"}})))
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 1
+        assert "MONITOR_TOKEN пуст или короче 32 знаков" in report
+
+    def test_token_mismatch_fails_and_never_leaks(
+        self, make_stand: MakeStand, tmp_path: Path
+    ) -> None:
+        stand = make_stand(Stand())
+        wrong = "WRONG-monitor-token-that-must-not-be-printed-xyz"
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=wrong)
+
+        assert result.returncode == 1
+        assert "токен монитора" in report
+        for text in (result.stdout, result.stderr, report):
+            assert wrong not in text
+            assert _MONITOR_TOKEN not in text
+
+    def test_class_from_the_stand_cannot_inject_runner_commands(
+        self, make_stand: MakeStand, tmp_path: Path
+    ) -> None:
+        evil = "BadRequestError 400\n::add-mask::x\n@owner"
+        stand = make_stand(Stand(ai_health=(200, _ai(0, 1, [(evil, 1)]))))
+
+        result, report = _run(stand, tmp_path, bot=False, monitor=_MONITOR_TOKEN)
+
+        assert result.returncode == 1
+        assert "::add-mask::" not in result.stdout + report
+        assert "@owner" not in result.stdout + report

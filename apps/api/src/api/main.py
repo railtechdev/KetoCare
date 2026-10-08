@@ -36,6 +36,7 @@ from .routers import (
     telegram,
     therapy_course,
 )
+from .routers.health import router as monitor_health_router
 
 API_PREFIX = "/api/v1"
 
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     v1.include_router(admin.router)
     v1.include_router(telegram.router)
     v1.include_router(telegram.bot_router)
+    v1.include_router(monitor_health_router)
     app.include_router(v1)
 
     @app.get("/health", tags=["service"], summary="Проверка живости")

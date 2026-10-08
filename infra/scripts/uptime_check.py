@@ -26,13 +26,25 @@
   и у живого очередь пуста. Если процесс бота лежит, сообщения семей копятся у
   Telegram (`pending_update_count`), и это единственный признак, видимый
   снаружи. `getUpdates` монитор не вызывает никогда: он отобрал бы обновления
-  у работающего бота.
+  у работающего бота;
+- **ИИ** — только если задан `MONITOR_TOKEN`. `GET /api/v1/health/ai` отдаёт
+  сводку журнала `ai_jobs` за сутки: сколько обращений к модели удалось и
+  сколько нет, классы неудач, заданы ли ключ и модели. С 08.09.2026 на стенде
+  каждое обращение отвечало `400 invalid_request_error` (ключ не привязан к
+  workspace), помощник и сводка врача месяц молча показывали шаблоны «сейчас
+  недоступно», а монитор был зелёным. Отказ — когда за сутки нет ни одного
+  успеха при неудачах, когда среди неудач есть класс ключа или настройки
+  (`AUTH_OR_CONFIG_*`) и когда ключ или модель не заданы. Больше половины
+  неудач при живых успехах — предупреждение, а не отказ: сбой у Anthropic
+  проходит сам и issue не заслуживает. Проверка пассивная — ни одного
+  собственного обращения к модели: пробный вызов стоил бы денег каждые
+  пятнадцать минут.
 
 Каждая проверка — до `--attempts` попыток с паузой: транзит до Узбекистана
 мигает (см. шаг «Стенд отвечает снаружи» в deploy.yml), и одиночный таймаут —
 не отказ. Номер удавшейся попытки печатается: деградация пути видна заранее.
 
-Токен бота не печатается ни в каком виде: текст ошибки чистится от него.
+Токены бота и монитора не печатаются ни в каком виде: текст ошибки чистится от них.
 Только стандартная библиотека — workflow не ставит зависимостей и укладывается
 в минуту.
 """
@@ -42,6 +54,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import socket
 import ssl
@@ -60,9 +73,31 @@ from urllib.parse import urlsplit
 #: бот забирает их за секунды; десяток — запас на момент перезапуска.
 PENDING_UPDATES_MAX = 10
 
+#: Коды HTTP ответа Anthropic, которые значат «не тот ключ или не та настройка»,
+#: а не «сервис мигнул». 400 сюда входит потому, что именно им отвечал ключ без
+#: workspace; 404 — имя модели, которой нет.
+AUTH_OR_CONFIG_CODES = frozenset({"400", "401", "403", "404"})
+
+#: Имена исключений SDK с тем же смыслом — на случай, если кода в классе нет.
+AUTH_OR_CONFIG_NAMES = frozenset(
+    {"AuthenticationError", "PermissionDeniedError", "NotFoundError", "BadRequestError"}
+)
+
+#: Типы ошибок в теле ответа Anthropic с тем же смыслом.
+AUTH_OR_CONFIG_TYPES = frozenset(
+    {"invalid_request_error", "authentication_error", "permission_error", "not_found_error"}
+)
+
+#: Доля неудач, с которой при живых успехах печатается предупреждение.
+AI_FAILURE_SHARE_WARN = 0.5
+
 
 class CheckFailed(Exception):
     """Проверка не прошла; текст уходит в журнал и в issue."""
+
+
+class Warned(str):
+    """Проверка прошла, но с предупреждением: печатается, issue не открывает."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +112,7 @@ class Outcome:
     ok: bool
     detail: str
     attempt: int
+    warning: bool = False
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -220,11 +256,124 @@ def bot_is_polling(
     return run
 
 
+def is_auth_or_config(error_class: str) -> bool:
+    """Класс неудачи значит «ключ или настройка», а не мигание сервиса."""
+
+    # Класс собирает API: «имя исключения [код] [тип ошибки Anthropic]».
+    words = error_class.split()
+    return bool(words) and (
+        words[0] in AUTH_OR_CONFIG_NAMES
+        or bool(AUTH_OR_CONFIG_CODES.intersection(words[1:2]))
+        or bool(AUTH_OR_CONFIG_TYPES.intersection(words))
+    )
+
+
+def _safe_class(value: object) -> str:
+    """Класс ошибки из ответа стенда — тем же узким алфавитом, что собирает API.
+
+    Строка уходит в `::error::` и в тело issue: перевод строки в ней стал бы
+    командой раннера (`::add-mask::`, `::stop-commands::`), `@` — упоминанием.
+    API и так отдаёт только `[A-Za-z0-9_ =]`, но монитор не обязан верить
+    стенду, который он как раз проверяет.
+    """
+
+    return re.sub(r"[^A-Za-z0-9_ =]", "", str(value))[:80] or "?"
+
+
+def judge_ai_health(body: object) -> str:
+    """Вердикт по ответу `/health/ai`: строка — живо, `Warned` — живо с оговоркой."""
+
+    if not isinstance(body, dict):
+        raise CheckFailed("ответ /health/ai не JSON-объект")
+    try:
+        jobs = body["jobs"]
+        configured = body["configured"]
+        succeeded = int(jobs["succeeded"])
+        failed = int(jobs["failed"])
+        stuck = int(jobs.get("stuck", 0))
+        classes = [
+            (_safe_class(item["error_class"]), int(item["count"]))
+            for item in body["failure_classes"]
+        ]
+    except (KeyError, TypeError, ValueError):
+        raise CheckFailed("ответ /health/ai не той формы — монитор и API разошлись") from None
+
+    missing = [
+        name
+        for key, name in (
+            ("api_key", "ANTHROPIC_API_KEY"),
+            ("model_fast", "AI_MODEL_FAST"),
+            ("model_smart", "AI_MODEL_SMART"),
+        )
+        if configured.get(key) is not True
+    ]
+    if missing:
+        raise CheckFailed(f"на стенде не задано: {', '.join(missing)} — ИИ-функции выключены")
+
+    broken = [(name, count) for name, count in classes if is_auth_or_config(name)]
+    if broken:
+        name, count = broken[0]
+        raise CheckFailed(
+            f"ошибка ключа или настройки модели: {name} ({count} за сутки, "
+            f"успешных {succeeded}) — помощник и сводки отвечают шаблонами"
+        )
+    if failed > 0 and succeeded == 0:
+        top = classes[0][0] if classes else "?"
+        raise CheckFailed(
+            f"за сутки ни одного успешного обращения к модели, неудач {failed} ({top})"
+        )
+
+    summary = f"обращений к модели за сутки: успешных {succeeded}, неудач {failed}"
+    notes: list[str] = []
+    total = succeeded + failed
+    if total and failed / total > AI_FAILURE_SHARE_WARN:
+        notes.append(f"неудач больше половины ({classes[0][0] if classes else '?'})")
+    if stuck:
+        notes.append(f"застряло {stuck}")
+    if body.get("daily_budget_exhausted") is True:
+        notes.append("дневной бюджет исчерпан")
+    if notes:
+        return Warned(f"{summary}; внимание: {', '.join(notes)}")
+    return summary
+
+
+def ai_is_healthy(
+    opener: urllib.request.OpenerDirector, base: str, token: str, timeout: float
+) -> Callable[[], str]:
+    url = base.rstrip("/") + "/api/v1/health/ai"
+
+    def run() -> str:
+        try:
+            status, body = _request(
+                opener, url, timeout=timeout, headers={"Authorization": f"Bearer {token}"}
+            )
+        except CheckFailed as error:
+            raise CheckFailed(str(error).replace(token, "***")) from None
+        if status == 404:
+            raise CheckFailed(
+                "ручки /health/ai нет: на стенде MONITOR_TOKEN пуст или короче 32 знаков"
+            )
+        if status == 401:
+            raise CheckFailed(
+                "стенд не принял токен монитора: MONITOR_TOKEN в репозитории и на стенде разные"
+            )
+        if status != 200:
+            raise CheckFailed(f"/health/ai отвечает {status}")
+        try:
+            answer = json.loads(body)
+        except ValueError:
+            raise CheckFailed("/health/ai вернул не JSON") from None
+        return judge_ai_health(answer)
+
+    return run
+
+
 def run_with_retries(check: Check, attempts: int, backoff: float) -> Outcome:
     detail = ""
     for attempt in range(1, attempts + 1):
         try:
-            return Outcome(check.name, True, check.run(), attempt)
+            result = check.run()
+            return Outcome(check.name, True, result, attempt, isinstance(result, Warned))
         except CheckFailed as error:
             detail = str(error)
         except Exception as error:  # noqa: BLE001 — сбой проверки тоже отказ, не падение
@@ -271,6 +420,9 @@ def build_checks(args: argparse.Namespace) -> list[Check]:
                 ),
             )
         )
+    monitor_token = os.environ.get("MONITOR_TOKEN", "")
+    if monitor_token and args.app:
+        checks.append(Check("ИИ", ai_is_healthy(opener, args.app, monitor_token, args.timeout)))
     return checks
 
 
@@ -283,7 +435,8 @@ def _report(outcomes: list[Outcome], environment: str) -> str:
         "",
     ]
     lines += [f"- ❌ **{o.name}** — {o.detail}" for o in failed]
-    lines += [f"- ✅ {o.name} — {o.detail}" for o in outcomes if o.ok]
+    lines += [f"- ⚠️ {o.name} — {o.detail}" for o in outcomes if o.ok and o.warning]
+    lines += [f"- ✅ {o.name} — {o.detail}" for o in outcomes if o.ok and not o.warning]
     run_url = os.environ.get("RUN_URL")
     if run_url:
         lines += ["", f"Прогон: {run_url}"]
@@ -317,7 +470,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     for o in outcomes:
-        if o.ok:
+        if o.ok and o.warning:
+            print(f"::warning::{o.name}: {o.detail} (попытка {o.attempt})")
+        elif o.ok:
             print(f"ok   {o.name}: {o.detail} (попытка {o.attempt})")
         else:
             print(f"::error::{o.name}: {o.detail} (после {o.attempt} попыток)")
