@@ -34,7 +34,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Коммит или ветка для выкатки (по умолчанию — вершина main)"
+        description: "Коммит или ветка для выкатки (по умолчанию — вершина main); на сервер уходит её SHA"
         required: false
         default: "main"
 
@@ -68,32 +68,66 @@ jobs:
         id: target
         env:
           GH_TOKEN: ${{ github.token }}
+          # Через окружение, а не подстановкой `${{ }}` в тело: строка из формы
+          # «Run workflow» иначе становилась бы частью скрипта.
+          EVENT: ${{ github.event_name }}
+          INPUT_REF: ${{ inputs.ref }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            REF='${{ inputs.ref }}'
+          TIP=$(gh api "repos/$REPOSITORY/commits/main" --jq .sha)
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # На сервер уходит ТОЛЬКО полный SHA, никогда имя ветки. Ручной
+            # запуск с `ref: main` (умолчание формы и путь восстановления из
+            # docs/DEPLOY.md) 08.10.2026 падал: исполняемая копия
+            # remote-deploy.sh на сервере брала ЛОКАЛЬНУЮ ветку `main`,
+            # застывшую на fe63b65, вместе со старым deploy.sh, а тот падал на
+            # `git pull` в отсоединённом HEAD. SHA одинаково понимает любая
+            # версия серверного скрипта. Ветка и сокращённый хеш разрешаются
+            # здесь, через API, по origin — тем же запросом, что TIP.
+            WANTED="${INPUT_REF:-main}"
+            # Строка уходит в путь запроса к API: `..` увёл бы его к другой ручке.
+            if ! printf '%s' "$WANTED" | grep -qE '^[A-Za-z0-9._/-]{1,120}$' \
+               || printf '%s' "$WANTED" | grep -q '\.\.'; then
+              echo "::error::Недопустимая ссылка на коммит"
+              exit 1
+            fi
+            if [ "$WANTED" = "main" ]; then
+              REF="$TIP"
+            else
+              REF=$(gh api "repos/$REPOSITORY/commits/$WANTED" --jq .sha) || {
+                echo "::error::Ссылка «${WANTED}» не найдена в репозитории"
+                exit 1
+              }
+            fi
           else
             # head_sha прогона, а не вершина main: пока шёл CI, в main мог
             # уехать ещё один коммит, и выкатился бы непроверенный.
-            REF='${{ github.event.workflow_run.head_sha }}'
+            REF="$RUN_SHA"
+
+            # Прогон относится не к вершине main — выкатывать его нельзя: стенд
+            # молча откатился бы на предыдущую версию, и при аддитивных
+            # миграциях этого какое-то время никто бы не заметил. Так бывает в
+            # двух случаях, и оба нормальны: повторный запуск старого зелёного
+            # прогона (обычное дело при флаки-тесте) и два слияния подряд, когда
+            # CI первого финиширует уже после второго.
+            #
+            # Это ОТКАЗ ОТ ДЕЙСТВИЯ, а не сбой: выкатится следующий прогон, тот
+            # самый, что относится к вершине. Красный крест здесь означал бы
+            # поломку там, где всё сработало правильно, — а на серии слияний он
+            # загорался бы каждый раз, и настоящий сбой деплоя перестал бы
+            # отличаться от штатной работы.
+            if [ "$REF" != "$TIP" ]; then
+              echo "::notice::Прогон относится к $REF, а вершина main — $TIP. Выкатку делает прогон вершины."
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
 
-          # Прогон относится не к вершине main — выкатывать его нельзя: стенд
-          # молча откатился бы на предыдущую версию, и при аддитивных миграциях
-          # этого какое-то время никто бы не заметил. Так бывает в двух
-          # случаях, и оба нормальны: повторный запуск старого зелёного прогона
-          # (обычное дело при флаки-тесте) и два слияния подряд, когда CI
-          # первого финиширует уже после второго.
-          #
-          # Это ОТКАЗ ОТ ДЕЙСТВИЯ, а не сбой: выкатится следующий прогон, тот
-          # самый, что относится к вершине. Красный крест здесь означал бы
-          # поломку там, где всё сработало правильно, — а на серии слияний он
-          # загорался бы каждый раз, и настоящий сбой деплоя перестал бы
-          # отличаться от штатной работы.
-          TIP=$(gh api repos/${{ github.repository }}/commits/main --jq .sha)
-          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "$REF" != "$TIP" ]; then
-            echo "::notice::Прогон относится к $REF, а вершина main — $TIP. Выкатку делает прогон вершины."
-            echo "stale=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          if ! printf '%s' "$REF" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::Не удалось получить полный SHA коммита (получено: «${REF}»)"
+            exit 1
           fi
 
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
@@ -108,6 +142,10 @@ jobs:
           BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Токен монитора доступности: открывает GET /api/v1/health/ai. Тот же
+          # секрет читает uptime.yml — значение одно на оба места. Пусто —
+          # ручки на стенде нет (404), а монитор без секрета ИИ не проверяет.
+          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
           # Имена моделей (раздел 10.2 ТЗ). Не секреты — но принимаются и из
           # Secrets: адрес Mini App уже наступил на эти грабли, а расплата
           # несоразмерная — выкат успешен, ИИ-функции молча отвечают
@@ -179,7 +217,7 @@ jobs:
 
           NAMES = [
               "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
-              "BOT_USERNAME", "ANTHROPIC_API_KEY",
+              "BOT_USERNAME", "ANTHROPIC_API_KEY", "MONITOR_TOKEN",
               "AI_MODEL_FAST", "AI_MODEL_SMART",
               "AI_DAILY_BUDGET_USD", "AI_USER_DAILY_LIMIT",
               "SENTRY_DSN", "SENTRY_ENVIRONMENT",

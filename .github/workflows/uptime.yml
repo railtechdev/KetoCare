@@ -5,7 +5,7 @@ name: Uptime
 # До него живость стенда проверял только шаг «Стенд отвечает снаружи» в
 # deploy.yml, то есть стенд мог пролежать несколько дней, и заметил бы это
 # следующий выкат. Здесь те же проверки и больше — страницы, вход до базы,
-# сроки сертификатов, бот — раз в пятнадцать минут. Логика живёт в
+# сроки сертификатов, бот, ИИ — раз в пятнадцать минут. Логика живёт в
 # infra/scripts/uptime_check.py и проверяется тестом против местной подделки
 # (infra/tests/test_uptime_check.py); здесь только запуск и issue.
 #
@@ -55,6 +55,8 @@ on:
     secrets:
       BOT_TOKEN:
         required: false
+      MONITOR_TOKEN:
+        required: false
 
 concurrency:
   group: uptime-${{ inputs.environment || 'test' }}
@@ -94,6 +96,10 @@ jobs:
           # Токен бота нужен только для getMe/getWebhookInfo. Скрипт его не
           # печатает, а GitHub маскирует секреты в журнале и сам.
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          # Токен ручки /api/v1/health/ai (состояние ИИ по журналу ai_jobs) —
+          # то же значение, что deploy.yml кладёт на стенд. Нет секрета —
+          # проверка ИИ пропускается, остальные идут.
+          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
         run: |
           for name in LANDING_URL APP_URL MINIAPP_URL; do
             if [ -z "${!name}" ]; then
