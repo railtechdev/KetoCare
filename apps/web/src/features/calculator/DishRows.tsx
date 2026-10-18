@@ -89,13 +89,13 @@ export function DishRows({
         return (
           <li
             key={row.product.id}
-            className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2"
+            className="flex flex-col gap-1.5 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-2.5 shadow-kc-sm"
           >
             {/* basis-full у названия: на узком экране масса и удаление уезжают
                 на свою строку, а длинное название не выдавливает поле за экран
                 (П20). */}
             <div className="flex flex-wrap items-center gap-field">
-              <span className="min-w-0 flex-1 basis-full break-words sm:basis-auto">
+              <span className="min-w-0 flex-1 basis-full font-medium break-words sm:basis-auto">
                 {row.product.name}
                 {!row.product.isActive && (
                   <span className="ml-2 text-sm text-warning-strong">
@@ -160,20 +160,24 @@ export function DishRows({
                 блюда, но остаются: гасить их совсем значит очищать строку, по
                 которой человек и правит граммовку. */}
             {uncounted?.has(row.product.id) ? (
-              <MacroFacts
-                label={t("contribution.label", { name: row.product.name })}
-                uncounted={t("contribution.uncounted")}
-              />
-            ) : (
-              contribution !== undefined && (
+              <div className="-mx-3.5 -mb-2.5 mt-0.5 border-t border-border/60 bg-muted/25 px-3.5 py-1.5">
                 <MacroFacts
                   label={t("contribution.label", { name: row.product.name })}
-                  kcal={contribution.kcal}
-                  fatG={contribution.fat_g}
-                  proteinG={contribution.protein_g}
-                  carbsG={contribution.carbs_g}
-                  stale={stale}
+                  uncounted={t("contribution.uncounted")}
                 />
+              </div>
+            ) : (
+              contribution !== undefined && (
+                <div className="-mx-3.5 -mb-2.5 mt-0.5 border-t border-border/60 bg-muted/25 px-3.5 py-1.5">
+                  <MacroFacts
+                    label={t("contribution.label", { name: row.product.name })}
+                    kcal={contribution.kcal}
+                    fatG={contribution.fat_g}
+                    proteinG={contribution.protein_g}
+                    carbsG={contribution.carbs_g}
+                    stale={stale}
+                  />
+                </div>
               )
             )}
           </li>

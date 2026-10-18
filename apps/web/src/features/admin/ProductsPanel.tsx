@@ -470,12 +470,34 @@ export function ProductsPanel({
           </SelectField>
         </div>
 
+        <div className="min-w-48">
+          <SelectField
+            id="admin-product-category"
+            width="medium"
+            label={t("products.columns.category")}
+            value={filters.categoryId}
+            onChange={(event) =>
+              setFiltersAndResetPage((current) => ({
+                ...current,
+                categoryId: event.target.value,
+              }))
+            }
+          >
+            <option value="">{t("products.filters.macroAny")}</option>
+            {(categories.data ?? []).map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name_ru}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
         {/* Без этого флажка снятие «активен» было необратимым: позиция
             исчезала из выдачи для всех, включая того, кто её вывел. */}
-        <label className="flex min-h-touch items-center gap-field text-sm">
+        <label className="mb-section flex min-h-touch cursor-pointer items-center gap-field rounded-lg border border-border/70 bg-muted/20 px-3 text-sm">
           <input
             type="checkbox"
-            className="size-4"
+            className="size-4 accent-primary"
             checked={filters.includeInactive}
             onChange={(event) =>
               setFiltersAndResetPage((current) => ({
@@ -491,7 +513,7 @@ export function ProductsPanel({
           <Button
             type="button"
             variant="outline"
-            className="min-h-touch"
+            className="mb-section min-h-touch"
             onClick={clearVerified}
           >
             <X aria-hidden="true" />
@@ -506,7 +528,7 @@ export function ProductsPanel({
           <Button
             type="button"
             variant="outline"
-            className="min-h-touch"
+            className="mb-section min-h-touch"
             onClick={() =>
               setFiltersAndResetPage((current) => ({
                 ...current,
@@ -574,6 +596,11 @@ export function ProductsPanel({
           data={rows}
           caption={t("products.table.caption")}
           emptyState={null}
+          footerMeta={
+            products.data !== undefined
+              ? t("table.found", { total: products.data.total })
+              : undefined
+          }
           labels={{
             previousPage: t("table.previousPage"),
             nextPage: t("table.nextPage"),
@@ -587,14 +614,6 @@ export function ProductsPanel({
           }}
         />
       </AsyncSection>
-
-      {/* Сколько всего нашлось — рядом с постраничностью: «страница 1 из 7» не
-          отвечает на вопрос «а сколько их». */}
-      {products.data !== undefined && (
-        <p className="m-0 text-sm text-muted-foreground">
-          {t("table.found", { total: products.data.total })}
-        </p>
-      )}
     </div>
   );
 }

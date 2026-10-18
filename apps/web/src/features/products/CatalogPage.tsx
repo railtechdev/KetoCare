@@ -1,30 +1,19 @@
+import { SegmentedControl } from "@ketocare/ui";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { useAddressState } from "../../routes/useSectionTab";
 import { ProductsPanel } from "../admin/ProductsPanel";
 import { ProductCategoriesPanel } from "./ProductCategoriesPanel";
 
-/**
- * Справочник продуктов для того, кто его ведёт, — но вне раздела
- * администрирования.
- *
- * Диетологу сервер разрешает заводить и править продукты
- * (`_EDITOR_ROLES = (ADMIN, DIETITIAN)` в `routers/products.py`), а кабинет
- * отдавал ему тот же экран на чтение, что и родителю. Роль, чья работа и есть
- * вести каталог, не могла в нём ничего изменить.
- *
- * Отдельный экран, а не вкладка администрирования: соседние вкладки там —
- * учётные записи, заявки и журнал аудита, и все они закрыты ролью admin.
- * Показывать их диетологу значило бы вести его в 403 (правило П3 канона).
- *
- * Импорт CSV за админом: `POST /products/import` закрыт `require_roles(ADMIN)`,
- * тогда как править каталог вправе и диетолог. Панель получает это
- * возможностью (`canImport={false}` ниже), а не вычисляет роль сама. История
- * правок под этот запрет НЕ попадает: она открыта администратору, диетологу и
- * врачу (`_HISTORY_ROLES`), и панель показывает её всем, кто до неё дошёл.
- */
+type CatalogView = "catalog" | "categories";
+
 export function CatalogPage() {
   const { t } = useTranslation("products");
+  const address = useAddressState();
+  const [view, setView] = useState<CatalogView>("catalog");
+  const isEditingItem = address.item !== undefined && address.item !== "";
 
   return (
     <PageLayout
@@ -33,12 +22,25 @@ export function CatalogPage() {
       width="wide"
       density="compact"
     >
-      <ProductsPanel canImport={false} chrome="screen" />
+      {!isEditingItem && (
+        <div>
+          <SegmentedControl<CatalogView>
+            label={t("catalog.title")}
+            value={view}
+            onChange={setView}
+            items={[
+              { value: "catalog", label: t("catalog.title") },
+              { value: "categories", label: t("categories.title") },
+            ]}
+          />
+        </div>
+      )}
 
-      {/* Категории ведёт тот же, кто ведёт каталог: сервер разрешает правку
-          диетологу наравне с администратором (`_EDITOR_ROLES`), а до этого
-          справочник категорий не был доступен ни одной роли. */}
-      <ProductCategoriesPanel />
+      {(isEditingItem || view === "catalog") && (
+        <ProductsPanel canImport={false} chrome="screen" />
+      )}
+
+      {!isEditingItem && view === "categories" && <ProductCategoriesPanel />}
     </PageLayout>
   );
 }

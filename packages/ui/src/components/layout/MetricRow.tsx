@@ -74,13 +74,15 @@ export interface MetricProps {
  */
 export function Metric({ label, value, unit, hint, emphasis }: MetricProps) {
   return (
-    <div className="min-w-0">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
+    <div className="flex min-w-0 flex-col justify-between gap-1 rounded-lg border border-border/70 bg-muted/25 px-3.5 py-2.5">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="m-0 flex flex-wrap items-baseline gap-1">
         <span
           className={cn(
             "tabular-nums",
-            emphasis ? "text-metric font-semibold" : "font-medium",
+            emphasis
+              ? "text-metric font-bold text-foreground"
+              : "text-lg font-semibold text-foreground",
           )}
         >
           {value ?? "—"}
@@ -88,7 +90,7 @@ export function Metric({ label, value, unit, hint, emphasis }: MetricProps) {
         {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
       </dd>
       {hint && (
-        <dd className="m-0 mt-1 text-sm text-muted-foreground">{hint}</dd>
+        <dd className="m-0 text-xs text-muted-foreground">{hint}</dd>
       )}
     </div>
   );

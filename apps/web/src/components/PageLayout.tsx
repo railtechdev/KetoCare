@@ -96,7 +96,7 @@ export function PageLayout({
             )}
 
             <div className="flex flex-wrap items-start justify-between gap-section">
-              <div className="min-w-0">
+              <div className="min-w-64 flex-1">
                 {/* `break-words`: заголовок часто несёт имя ребёнка или название
                   продукта из базы, а слово без пробелов длиннее экрана 360 px
                   выдавливало страницу вбок — `min-w-0` даёт колонке сжаться, но
@@ -105,7 +105,7 @@ export function PageLayout({
                   {title}
                 </h1>
                 {intro && (
-                  <p className="m-0 mt-1 break-words text-sm text-muted-foreground">
+                  <p className="m-0 mt-1 max-w-3xl break-words text-sm text-muted-foreground">
                     {intro}
                   </p>
                 )}
@@ -114,7 +114,7 @@ export function PageLayout({
                 через `PageActions`. Пустой не занимает места (`empty:hidden`). */}
               <div
                 ref={setActionsSlot}
-                className="flex flex-wrap items-center gap-field empty:hidden"
+                className="flex shrink-0 flex-wrap items-center gap-field empty:hidden"
               >
                 {actions}
               </div>

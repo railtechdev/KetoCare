@@ -1,10 +1,12 @@
 import {
   AsyncSection,
+  Badge,
   Button,
   formatOccurredAt,
   Metric,
   MetricRow,
   Section,
+  Tiles,
 } from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -145,118 +147,128 @@ export function AdminHomePage() {
         </AsyncSection>
       </Section>
 
-      <Section
-        title={t("home.products.title")}
-        description={t("home.products.intro")}
-        action={
-          <Button asChild variant="outline">
-            <SectionLink section="products">
-              {t("home.products.toList")}
-            </SectionLink>
-          </Button>
-        }
-      >
-        <AsyncSection
-          {...queryState(overview)}
-          skeleton={
-            <LinesSkeleton label={t("home.products.loading")} lines={1} />
+      <Tiles min="md">
+        <Section
+          title={t("home.products.title")}
+          description={t("home.products.intro")}
+          action={
+            <Button asChild variant="outline">
+              <SectionLink section="products">
+                {t("home.products.toList")}
+              </SectionLink>
+            </Button>
           }
-          error={
-            overview.isError
-              ? {
-                  title: t("home.products.loadError"),
-                  description:
-                    errorMessageOf(overview.error) ??
-                    t("common:errors.unexpected"),
-                }
-              : null
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void overview.refetch()}
-          isEmpty={false}
-          empty={null}
         >
-          <div className="flex flex-col gap-field">
-            <p className="m-0 tabular-nums">
-              {t("home.products.total", {
-                count: overview.data?.products_total ?? 0,
-              })}
-              {" · "}
-              {t("home.products.active", {
-                count: overview.data?.products_active ?? 0,
-              })}
-            </p>
-
-            {/* «Давно не сверялось» — эксплуатационный порог, а не оценка
-                правильности значений: он говорит «пора перепроверить». Число
-                со ссылкой на сами позиции: счётчик без перехода к ним был бы
-                тупиком. */}
-            {(overview.data?.products_stale ?? 0) > 0 && (
-              <p className="m-0">
-                <SectionLink
-                  section="products"
-                  verifiedBefore={staleHref}
-                  className="underline"
-                >
-                  {t("home.products.stale", {
-                    count: overview.data?.products_stale ?? 0,
-                    days: overview.data?.stale_after_days ?? 0,
+          <AsyncSection
+            {...queryState(overview)}
+            skeleton={
+              <LinesSkeleton label={t("home.products.loading")} lines={1} />
+            }
+            error={
+              overview.isError
+                ? {
+                    title: t("home.products.loadError"),
+                    description:
+                      errorMessageOf(overview.error) ??
+                      t("common:errors.unexpected"),
+                  }
+                : null
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void overview.refetch()}
+            isEmpty={false}
+            empty={null}
+          >
+            <div className="flex flex-col gap-field">
+              <div className="rounded-lg border border-border/70 bg-muted/25 px-3.5 py-2.5">
+                <p className="m-0 text-base font-semibold text-foreground tabular-nums">
+                  {t("home.products.total", {
+                    count: overview.data?.products_total ?? 0,
                   })}
-                </SectionLink>
-              </p>
-            )}
-          </div>
-        </AsyncSection>
-      </Section>
+                  {" · "}
+                  <span className="font-medium text-muted-foreground">
+                    {t("home.products.active", {
+                      count: overview.data?.products_active ?? 0,
+                    })}
+                  </span>
+                </p>
+              </div>
 
-      <Section
-        title={t("home.invitations.title")}
-        description={t("home.invitations.intro")}
-        action={
-          <Button asChild variant="outline">
-            <SectionLink section="users">
-              {t("home.invitations.toList")}
-            </SectionLink>
-          </Button>
-        }
-      >
-        <AsyncSection
-          {...queryState(overview)}
-          skeleton={
-            <LinesSkeleton label={t("home.invitations.loading")} lines={1} />
+              {/* «Давно не сверялось» — эксплуатационный порог, а не оценка
+                  правильности значений: он говорит «пора перепроверить». Число
+                  со ссылкой на сами позиции: счётчик без перехода к ним был бы
+                  тупиком. */}
+              {(overview.data?.products_stale ?? 0) > 0 && (
+                <p className="m-0">
+                  <SectionLink
+                    section="products"
+                    verifiedBefore={staleHref}
+                    className="inline-flex items-center rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1 text-sm font-medium text-warning-text underline"
+                  >
+                    {t("home.products.stale", {
+                      count: overview.data?.products_stale ?? 0,
+                      days: overview.data?.stale_after_days ?? 0,
+                    })}
+                  </SectionLink>
+                </p>
+              )}
+            </div>
+          </AsyncSection>
+        </Section>
+
+        <Section
+          title={t("home.invitations.title")}
+          description={t("home.invitations.intro")}
+          action={
+            <Button asChild variant="outline">
+              <SectionLink section="users">
+                {t("home.invitations.toList")}
+              </SectionLink>
+            </Button>
           }
-          error={
-            overview.isError
-              ? {
-                  title: t("home.invitations.loadError"),
-                  description:
-                    errorMessageOf(overview.error) ??
-                    t("common:errors.unexpected"),
-                }
-              : null
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void overview.refetch()}
-          isEmpty={false}
-          empty={null}
         >
-          {/* Забытое приглашение — открытая дверь в кабинет с данными ребёнка:
-              пока оно живо, по ссылке заводится учётная запись. */}
-          <p className="m-0 tabular-nums">
-            {t("home.invitations.pending", {
-              count: overview.data?.invitations_pending ?? 0,
-            })}
-            {(overview.data?.invitations_expired ?? 0) > 0 && (
-              <>
-                {" · "}
-                {t("home.invitations.expired", {
-                  count: overview.data?.invitations_expired ?? 0,
+          <AsyncSection
+            {...queryState(overview)}
+            skeleton={
+              <LinesSkeleton label={t("home.invitations.loading")} lines={1} />
+            }
+            error={
+              overview.isError
+                ? {
+                    title: t("home.invitations.loadError"),
+                    description:
+                      errorMessageOf(overview.error) ??
+                      t("common:errors.unexpected"),
+                  }
+                : null
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void overview.refetch()}
+            isEmpty={false}
+            empty={null}
+          >
+            {/* Забытое приглашение — открытая дверь в кабинет с данными ребёнка:
+                пока оно живо, по ссылке заводится учётная запись. */}
+            <div className="rounded-lg border border-border/70 bg-muted/25 px-3.5 py-2.5">
+              <p className="m-0 text-base font-semibold text-foreground tabular-nums">
+                {t("home.invitations.pending", {
+                  count: overview.data?.invitations_pending ?? 0,
                 })}
-              </>
-            )}
-          </p>
-        </AsyncSection>
-      </Section>
+                {(overview.data?.invitations_expired ?? 0) > 0 && (
+                  <>
+                    {" · "}
+                    <span className="font-medium text-muted-foreground">
+                      {t("home.invitations.expired", {
+                        count: overview.data?.invitations_expired ?? 0,
+                      })}
+                    </span>
+                  </>
+                )}
+              </p>
+            </div>
+          </AsyncSection>
+        </Section>
+      </Tiles>
 
       <Section
         title={t("home.audit.title")}
@@ -289,27 +301,32 @@ export function AdminHomePage() {
             </p>
           }
         >
-          <ul className="m-0 flex list-none flex-col gap-field p-0 text-sm">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
             {recentRows.map((row) => (
-              <li key={row.id} className="flex flex-wrap items-baseline gap-3">
-                <time
-                  dateTime={row.created_at}
-                  className="text-muted-foreground tabular-nums"
-                >
-                  {formatOccurredAt(new Date(row.created_at))}
-                </time>
-                {/* Значение из справочника, а не сырой код: `defaultValue`
-                    оставляет код, если действие в словарь ещё не занесли. */}
-                <span className="font-medium">
-                  {t(`audit.actions.${row.action}`, {
-                    defaultValue: row.action,
-                  })}
-                </span>
-                <span className="text-muted-foreground">
+              <li
+                key={row.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/20 px-3.5 py-2"
+              >
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <time
+                    dateTime={row.created_at}
+                    className="text-xs font-medium text-muted-foreground tabular-nums"
+                  >
+                    {formatOccurredAt(new Date(row.created_at))}
+                  </time>
+                  {/* Значение из справочника, а не сырой код: `defaultValue`
+                      оставляет код, если действие в словарь ещё не занесли. */}
+                  <span className="font-medium text-foreground">
+                    {t(`audit.actions.${row.action}`, {
+                      defaultValue: row.action,
+                    })}
+                  </span>
+                </div>
+                <Badge variant="secondary">
                   {t(`audit.entities.${row.entity}`, {
                     defaultValue: row.entity,
                   })}
-                </span>
+                </Badge>
               </li>
             ))}
           </ul>

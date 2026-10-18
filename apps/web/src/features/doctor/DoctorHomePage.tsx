@@ -207,18 +207,18 @@ export function DoctorHomePage() {
                 />
               }
             >
-              <ul className="m-0 flex list-none flex-col gap-field p-0">
+              <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
                 {queue.map((row) => (
                   <li
                     key={row.patient.id}
-                    className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
+                    className="flex flex-wrap items-center gap-field rounded-xl border border-border bg-muted/20 px-3.5 py-2.5 transition-colors hover:border-primary/35 hover:bg-muted/35"
                   >
                     {/* Имя — ссылка на карту: врач открывает её в новой вкладке и
                     пересылает коллеге (правило П1 канона). */}
                     <PatientViewLink
                       patientId={row.patient.id}
                       view={viewForFlags(row.flags)}
-                      className="min-w-0 flex-1 font-medium break-words underline-offset-2 hover:underline"
+                      className="min-w-0 flex-1 font-semibold text-foreground break-words underline-offset-2 hover:text-primary hover:underline"
                     >
                       {row.patient.full_name}
                     </PatientViewLink>

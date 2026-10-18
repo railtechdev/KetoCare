@@ -5,6 +5,7 @@ import {
   MacroBar,
   RatioBadge,
   Section,
+  TargetBar,
   WarningBanner,
   formatOccurredAt,
   formatMeasured,
@@ -126,18 +127,22 @@ function Summary({ overview }: { overview: Overview }) {
           })}
         </WarningBanner>
       )}
-      <Section title={t("home.prescription.title")} density="compact">
+      <Section
+        title={t("home.prescription.title")}
+        density="compact"
+        tone="accent"
+      >
         {prescription === null || prescription === undefined ? (
           <p className="text-muted-foreground">{t("home.prescription.none")}</p>
         ) : (
           <div className="flex flex-wrap items-center gap-field">
             <RatioBadge ratio={Number(prescription.ratio)} />
-            <span>
+            <span className="font-semibold tabular-nums">
               {t("home.prescription.kcal", {
                 kcal: formatKcal(prescription.kcal_per_day),
               })}
             </span>
-            <span className="text-muted-foreground">
+            <span className="text-muted-foreground tabular-nums">
               {t("home.prescription.macros", {
                 protein: formatGrams(prescription.protein_g),
                 carbs: formatGrams(prescription.carbs_limit_g),
@@ -151,20 +156,44 @@ function Summary({ overview }: { overview: Overview }) {
         {day === null || day === undefined ? (
           <p className="text-muted-foreground">{t("home.today.noMenu")}</p>
         ) : (
-          <>
+          <div className="flex flex-col gap-field">
             <MacroBar
               fatG={day.totals.fat}
               proteinG={day.totals.protein}
               carbsG={day.totals.carbs}
               showGrams
             />
+            {prescription !== null && prescription !== undefined && (
+              <div className="flex flex-col gap-field pt-1">
+                <TargetBar
+                  kind="goal"
+                  label={t("menu.targets.kcalLabel")}
+                  value={day.totals.kcal}
+                  target={prescription.kcal_per_day}
+                  valueText={t("menu.targets.kcalOfTarget", {
+                    value: formatKcal(day.totals.kcal),
+                    target: formatKcal(prescription.kcal_per_day),
+                  })}
+                />
+                <TargetBar
+                  kind="limit"
+                  label={t("menu.targets.carbsLabel")}
+                  value={day.totals.carbs}
+                  target={prescription.carbs_limit_g}
+                  valueText={t("menu.targets.carbsOfLimit", {
+                    value: formatGrams(day.totals.carbs),
+                    limit: formatGrams(prescription.carbs_limit_g),
+                  })}
+                />
+              </div>
+            )}
             <DayVerdictNote
               tolerance={day.tolerance}
               gap={day.tolerance_gap}
               kcal={day.totals.kcal}
               targetKcal={prescription?.kcal_per_day ?? null}
             />
-          </>
+          </div>
         )}
       </Section>
 
@@ -219,16 +248,16 @@ function Reading({
   empty: string;
 }) {
   return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd>
+    <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-sm font-semibold tabular-nums">
         {value === null ? (
-          <span className="text-muted-foreground">{empty}</span>
+          <span className="font-normal text-muted-foreground">{empty}</span>
         ) : (
           <>
             {value}
             {at !== undefined && (
-              <span className="text-muted-foreground">
+              <span className="block text-xs font-normal text-muted-foreground">
                 {" "}
                 · {formatOccurredAt(new Date(at))}
               </span>

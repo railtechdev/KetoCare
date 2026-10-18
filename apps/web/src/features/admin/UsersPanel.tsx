@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  Badge,
   ConfirmDialog,
   FormSheet,
   Button,
@@ -87,12 +88,35 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
 
   const columns = useMemo<ColumnDef<AdminUser, unknown>[]>(
     () => [
-      { accessorKey: "full_name", header: t("users.columns.name") },
-      { accessorKey: "email", header: t("users.columns.email") },
+      {
+        accessorKey: "full_name",
+        header: t("users.columns.name"),
+        cell: ({ row }) => (
+          <span className="font-medium text-foreground">
+            {row.original.full_name}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "email",
+        header: t("users.columns.email"),
+        cell: ({ row }) =>
+          row.original.email === null ? (
+            <span className="text-xs text-muted-foreground">
+              {t("users.telegramOnly")}
+            </span>
+          ) : (
+            <span className="text-foreground">{row.original.email}</span>
+          ),
+      },
       {
         accessorKey: "role",
         header: t("users.columns.role"),
-        cell: ({ row }) => t(`common:roles.${row.original.role}`),
+        cell: ({ row }) => (
+          <Badge variant="secondary">
+            {t(`common:roles.${row.original.role}`)}
+          </Badge>
+        ),
       },
       {
         accessorKey: "is_active",
@@ -101,8 +125,8 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
           <span
             className={
               row.original.is_active
-                ? "text-success"
-                : "text-muted-foreground italic"
+                ? "inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success"
+                : "inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
             }
           >
             {row.original.is_active
@@ -115,7 +139,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         accessorKey: "created_at",
         header: t("users.columns.createdAt"),
         cell: ({ row }) => (
-          <span className="whitespace-nowrap tabular-nums">
+          <span className="whitespace-nowrap text-muted-foreground tabular-nums">
             {formatOccurredAt(new Date(row.original.created_at))}
           </span>
         ),
@@ -130,7 +154,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
               {t("users.self")}
             </span>
           ) : (
-            <div className="flex flex-wrap gap-field">
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
               <Button
                 type="button"
                 variant="outline"
@@ -143,16 +167,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
                 {t("users.edit")}
               </Button>
 
-              {/* Пароль сбрасывается у любой учётной записи с почтой: забыть
-                  его может кто угодно. У родителя из Telegram (ADR-0040) почты
-                  и пароля нет — входить временным паролем ему нечем, и сервер
-                  отказывает. Вместо кнопки, ведущей в отказ, — причина
-                  словами (правила П3 и П44). */}
-              {row.original.email === null ? (
-                <span className="self-center text-sm text-muted-foreground">
-                  {t("users.telegramOnly")}
-                </span>
-              ) : (
+              {row.original.email !== null && (
                 <ConfirmDialog
                   trigger={
                     <Button
@@ -191,11 +206,6 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
                 />
               )}
 
-              {/* Кнопки нет, когда сбрасывать нечего: она вела бы в заведомый
-                  409 (правило П3 канона). Признак именно про сброс, а не про
-                  пригодность секрета: у испорченного фактора кнопка обязана
-                  остаться. Подтверждение называет учётную запись — «сбросить
-                  второй фактор» без имени это вопрос без объекта (правило П14). */}
               {row.original.totp_resettable && (
                 <ConfirmDialog
                   trigger={

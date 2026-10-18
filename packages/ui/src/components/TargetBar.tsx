@@ -22,7 +22,7 @@ export interface TargetBarProps {
   /** Готовая строка «X из Y ед.» — формат чисел и единицы знает вызывающий */
   valueText: ReactNode;
   /** Готовая строка «осталось N» либо «сверх нормы N» */
-  hint: ReactNode;
+  hint?: ReactNode;
   className?: string;
 }
 
@@ -79,9 +79,11 @@ export function TargetBar({
         )}
       />
 
-      <p className="m-0 mt-1 text-sm text-muted-foreground tabular-nums">
-        {hint}
-      </p>
+      {hint !== undefined && (
+        <p className="m-0 mt-1 text-sm text-muted-foreground tabular-nums">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

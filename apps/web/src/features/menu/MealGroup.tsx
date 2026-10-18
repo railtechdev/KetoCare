@@ -94,10 +94,13 @@ export function MealGroup({
             return (
               <li
                 key={item.id}
-                className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-1"
+                className={cn(
+                  "flex flex-wrap items-center gap-field rounded-xl border border-border bg-card px-3.5 py-2 shadow-kc-sm transition-colors",
+                  item.eaten && "bg-muted/35",
+                )}
               >
                 {onToggleEaten ? (
-                  <label className="flex min-h-touch items-center gap-field text-sm">
+                  <label className="flex min-h-touch cursor-pointer items-center gap-field text-sm font-medium">
                     <input
                       type="checkbox"
                       className="size-5 accent-primary"
@@ -119,17 +122,17 @@ export function MealGroup({
 
                 <span
                   className={cn(
-                    "min-w-0 flex-1 break-words",
+                    "min-w-0 flex-1 font-medium break-words",
                     item.eaten && "text-muted-foreground line-through",
                   )}
                 >
                   {title}
                 </span>
 
-                <span className="text-sm text-muted-foreground">
+                <span className="text-xs font-medium text-muted-foreground">
                   {t(`item.${item.recipe_id !== null ? "recipe" : "custom"}`)}
                 </span>
-                <span className="text-sm text-muted-foreground tabular-nums">
+                <span className="rounded-md bg-muted/60 px-2 py-0.5 text-sm font-medium text-foreground tabular-nums">
                   {t("item.portion", {
                     factor: formatPortionFactor(item.portion_factor),
                   })}
@@ -166,15 +169,15 @@ export function MealGroup({
                     подстраховано: во время выката фронт какое-то время говорит
                     со старым API, и день не должен исчезать целиком. */}
                 {(item.ingredients ?? []).length > 0 && (
-                  <details className="m-0 w-full text-sm">
-                    <summary className="min-h-touch cursor-pointer py-1 text-muted-foreground">
+                  <details className="m-0 w-full border-t border-border/60 pt-1 text-sm">
+                    <summary className="min-h-touch cursor-pointer py-1 font-medium text-muted-foreground hover:text-foreground">
                       {t("item.composition")}
                     </summary>
-                    <ul className="m-0 flex list-none flex-col gap-1 p-0 pt-1">
+                    <ul className="m-0 flex list-none flex-col divide-y divide-border/50 rounded-lg bg-muted/25 px-3 py-1">
                       {(item.ingredients ?? []).map((line) => (
                         <li
                           key={line.product_id}
-                          className="flex flex-wrap justify-between gap-field"
+                          className="flex flex-wrap items-center justify-between gap-field py-1.5"
                         >
                           <span>
                             {line.name_ru}
@@ -187,7 +190,7 @@ export function MealGroup({
                               </span>
                             )}
                           </span>
-                          <span className="text-muted-foreground tabular-nums">
+                          <span className="font-semibold text-foreground tabular-nums">
                             {t("item.grams", {
                               value: formatMass(line.grams),
                             })}

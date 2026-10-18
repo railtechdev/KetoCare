@@ -167,13 +167,21 @@ export function MenuScreen({ session }: { session: Session }) {
       {/* Три дня, а не календарь (см. `DAYS`). Кнопки делят строку поровну:
           на 360 px три подписи «Вчера / Сегодня / Завтра» помещаются в ряд, а
           перенос одной из них на вторую строку читался бы как другой выбор. */}
-      <div className="flex gap-field" role="group" aria-label={t("menu.day")}>
+      <div
+        className="flex gap-1 rounded-xl border border-border/80 bg-muted/60 p-1"
+        role="group"
+        aria-label={t("menu.day")}
+      >
         {DAYS.map((option) => (
           <Button
             key={option.offset}
             type="button"
-            variant={dayOffset === option.offset ? "default" : "outline"}
-            className="min-h-touch min-w-0 flex-1 px-2"
+            variant={dayOffset === option.offset ? "secondary" : "ghost"}
+            className={
+              dayOffset === option.offset
+                ? "min-h-touch min-w-0 flex-1 bg-card px-2 font-semibold text-foreground shadow-kc-sm hover:bg-card"
+                : "min-h-touch min-w-0 flex-1 px-2 text-muted-foreground hover:text-foreground"
+            }
             aria-pressed={dayOffset === option.offset}
             onClick={() => {
               setDayOffset(option.offset);

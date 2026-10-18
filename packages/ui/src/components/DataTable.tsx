@@ -31,6 +31,8 @@ export interface DataTableProps<TData> {
   serverPagination?: ServerPagination;
   /** Доступное описание таблицы для скринридера */
   caption: string;
+  /** Сводка числа записей в подвале таблицы (например, «Найдено записей: 42») */
+  footerMeta?: ReactNode;
   className?: string;
 }
 
@@ -64,6 +66,7 @@ export function DataTable<TData>({
   pageSize = 20,
   serverPagination,
   caption,
+  footerMeta,
   className,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -107,16 +110,25 @@ export function DataTable<TData>({
     serverPagination !== undefined
       ? pageCount > 1
       : pageSize > 0 && pageCount > 1;
+  const showFooter = showPagination || Boolean(footerMeta);
 
   return (
-    <div className={className}>
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-kc-sm",
+        className,
+      )}
+    >
       {/* Широкая таблица прокручивается внутри себя, а не растягивает страницу */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left">
+        <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-border">
+              <tr
+                key={headerGroup.id}
+                className="border-b border-border bg-muted/45"
+              >
                 {headerGroup.headers.map((header) => {
                   const sortable = header.column.getCanSort();
                   const direction = header.column.getIsSorted();
@@ -136,9 +148,9 @@ export function DataTable<TData>({
                             : undefined
                       }
                       className={cn(
-                        "px-3 py-2 text-sm font-semibold text-muted-foreground",
+                        "px-3.5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
                         isStickyRight &&
-                          "sticky right-0 z-10 bg-card/95 backdrop-blur-xs",
+                          "sticky right-0 z-10 border-l border-border/60 bg-muted/95 backdrop-blur-xs",
                       )}
                     >
                       {sortable ? (
@@ -149,7 +161,7 @@ export function DataTable<TData>({
                         <button
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
-                          className="flex min-h-touch items-center gap-1 text-left"
+                          className="flex min-h-touch items-center gap-1 text-left font-semibold tracking-wide uppercase hover:text-foreground"
                         >
                           {flexRender(
                             header.column.columnDef.header,
@@ -176,11 +188,11 @@ export function DataTable<TData>({
             ))}
           </thead>
 
-          <tbody>
+          <tbody className="divide-y divide-border bg-card">
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="group border-b border-border transition-colors last:border-0 hover:bg-muted/40"
+                className="group bg-card transition-colors hover:bg-muted/35"
               >
                 {row.getVisibleCells().map((cell) => {
                   const isStickyRight = cell.column.id === "actions";
@@ -188,9 +200,9 @@ export function DataTable<TData>({
                     <td
                       key={cell.id}
                       className={cn(
-                        "px-3 py-2",
+                        "px-3.5 py-2.5 align-middle",
                         isStickyRight &&
-                          "sticky right-0 z-10 bg-card/95 backdrop-blur-xs group-hover:bg-muted/80",
+                          "sticky right-0 z-10 border-l border-border/60 bg-card/95 backdrop-blur-xs group-hover:bg-muted/85",
                       )}
                     >
                       {flexRender(
@@ -206,31 +218,45 @@ export function DataTable<TData>({
         </table>
       </div>
 
-      {showPagination && (
-        <nav className="mt-3 flex items-center gap-3" aria-label={caption}>
-          <button
-            type="button"
-            onClick={() => goTo(pageIndex - 1)}
-            disabled={!canPrevious}
-            className="min-h-touch rounded-lg border border-border px-3 disabled:opacity-50"
-          >
-            {labels.previousPage}
-          </button>
-          <span
-            role="status"
-            className="text-sm text-muted-foreground tabular-nums"
-          >
-            {labels.pageStatus(pageIndex + 1, pageCount)}
-          </span>
-          <button
-            type="button"
-            onClick={() => goTo(pageIndex + 1)}
-            disabled={!canNext}
-            className="min-h-touch rounded-lg border border-border px-3 disabled:opacity-50"
-          >
-            {labels.nextPage}
-          </button>
-        </nav>
+      {showFooter && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-muted/20 px-4 py-2.5">
+          {footerMeta ? (
+            <div className="text-sm text-muted-foreground tabular-nums">
+              {footerMeta}
+            </div>
+          ) : (
+            <span />
+          )}
+          {showPagination && (
+            <nav
+              className="flex items-center gap-2.5"
+              aria-label={caption}
+            >
+              <button
+                type="button"
+                onClick={() => goTo(pageIndex - 1)}
+                disabled={!canPrevious}
+                className="min-h-touch rounded-lg border border-border bg-card px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {labels.previousPage}
+              </button>
+              <span
+                role="status"
+                className="px-1 text-sm font-medium text-muted-foreground tabular-nums"
+              >
+                {labels.pageStatus(pageIndex + 1, pageCount)}
+              </span>
+              <button
+                type="button"
+                onClick={() => goTo(pageIndex + 1)}
+                disabled={!canNext}
+                className="min-h-touch rounded-lg border border-border bg-card px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {labels.nextPage}
+              </button>
+            </nav>
+          )}
+        </div>
       )}
     </div>
   );

@@ -87,7 +87,7 @@ export function PersonPicker({
   const valueId = `${id}-value`;
 
   return (
-    <div className="flex flex-col gap-field">
+    <div data-slot="field" className="flex flex-col gap-field">
       <Label id={labelId} htmlFor={id}>
         {label}
       </Label>
@@ -109,14 +109,14 @@ export function PersonPicker({
             // прочёл бы «Автор действия, кнопка», не сказав, кто выбран.
             aria-labelledby={`${labelId} ${valueId}`}
             aria-describedby={hint ? hintId : undefined}
-            className="min-h-touch w-full justify-start gap-field sm:max-w-field-wide"
+            className="min-h-touch w-full justify-start gap-field border-input bg-card font-normal hover:bg-muted/30 sm:max-w-field-wide"
           >
             <span
               id={valueId}
               className={
                 selectedId === undefined
                   ? "truncate text-muted-foreground"
-                  : "truncate"
+                  : "truncate text-foreground"
               }
             >
               {selectedId === undefined

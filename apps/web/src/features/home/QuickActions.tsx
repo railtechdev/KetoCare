@@ -22,9 +22,24 @@ import { SectionLink } from "../../components/SectionLink";
  * кнопки подряд не отвечали на вопрос «с чего начать» — они его задавали.
  */
 const ACTIONS = [
-  { key: "seizure", icon: Zap, kind: "seizures" },
-  { key: "ketones", icon: Droplets, kind: "ketones" },
-  { key: "weight", icon: Scale, kind: "weight" },
+  {
+    key: "seizure",
+    icon: Zap,
+    kind: "seizures",
+    iconTone: "bg-destructive/12 text-destructive",
+  },
+  {
+    key: "ketones",
+    icon: Droplets,
+    kind: "ketones",
+    iconTone: "bg-primary/12 text-primary",
+  },
+  {
+    key: "weight",
+    icon: Scale,
+    kind: "weight",
+    iconTone: "bg-accent text-accent-foreground",
+  },
 ] as const;
 
 export function QuickActions() {
@@ -38,7 +53,7 @@ export function QuickActions() {
       {/* Видимый заголовок, а не только метка для скринридера: родителю без
           опыта работы с интерфейсами ряд кнопок без подписи не говорит, что
           это одно и то же дело — запись замера. */}
-      <p className="m-0 text-sm text-muted-foreground">
+      <p className="m-0 text-sm font-medium text-muted-foreground">
         {t("quickActions.title")}
       </p>
 
@@ -47,17 +62,22 @@ export function QuickActions() {
           дня. Замеры записывают часто, но это не то, с чего начинают: пока все
           кнопки были одного веса, экран предлагал пять равных начал. Касание
           при этом осталось одним, а цель — 44 px. */}
-      <ul className="m-0 flex list-none flex-col gap-field p-0 sm:flex-row sm:flex-wrap">
-        {ACTIONS.map(({ key, icon: Icon, kind }) => (
+      <ul className="m-0 grid list-none gap-field p-0 sm:flex sm:flex-row sm:flex-wrap">
+        {ACTIONS.map(({ key, icon: Icon, kind, iconTone }) => (
           <li key={key}>
             <Button
               asChild
               variant="outline"
               size="lg"
-              className="min-h-touch w-full sm:w-auto"
+              className="min-h-touch w-full justify-start gap-2.5 bg-card px-3.5 shadow-kc-sm sm:w-auto"
             >
-              <SectionLink section="diary" diaryKind={kind}>
-                <Icon aria-hidden="true" />
+              <SectionLink section="diary" diaryKind={kind} item="new">
+                <span
+                  aria-hidden="true"
+                  className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md ${iconTone}`}
+                >
+                  <Icon className="size-3.5" />
+                </span>
                 {t(`quickActions.${key}`)}
               </SectionLink>
             </Button>

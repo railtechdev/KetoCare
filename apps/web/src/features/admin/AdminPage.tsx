@@ -1,6 +1,9 @@
+import { SegmentedControl } from "@ketocare/ui";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { useAddressState } from "../../routes/useSectionTab";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { LeadsPanel } from "./LeadsPanel";
@@ -9,6 +12,8 @@ import { ProductsPanel } from "./ProductsPanel";
 import { ProductCategoriesPanel } from "../products/ProductCategoriesPanel";
 import { UsersPanel } from "./UsersPanel";
 import { isAdminSection, type AdminSection } from "./types";
+
+type ProductsWorkspaceView = "catalog" | "categories" | "anomalies";
 
 /**
  * Администрирование (раздел 8.1 ТЗ: users, products, dictionaries, audit).
@@ -33,9 +38,16 @@ import { isAdminSection, type AdminSection } from "./types";
  * журнала аудита.
  */
 export function AdminPage({ section }: { section?: string }) {
-  const { t } = useTranslation("admin");
+  const { t } = useTranslation(["admin", "products"]);
+  const address = useAddressState();
+  const [productsView, setProductsView] =
+    useState<ProductsWorkspaceView>("catalog");
 
   const current = sectionFromRoute(section);
+  const isEditingProductItem =
+    current === "products" &&
+    address.item !== undefined &&
+    address.item !== "";
 
   return (
     // Разделы админки — таблицы: учётки, продукты, справочники, журнал. Это
@@ -52,18 +64,38 @@ export function AdminPage({ section }: { section?: string }) {
         {current === "leads" && <LeadsPanel chrome="screen" />}
         {current === "products" && (
           <>
-            <ProductsPanel chrome="screen" />
+            {!isEditingProductItem && (
+              <div>
+                <SegmentedControl<ProductsWorkspaceView>
+                  label={t("products.title")}
+                  value={productsView}
+                  onChange={setProductsView}
+                  items={[
+                    { value: "catalog", label: t("products.title") },
+                    {
+                      value: "categories",
+                      label: t("products:categories.title"),
+                    },
+                    {
+                      value: "anomalies",
+                      label: t("products.anomalies.title"),
+                    },
+                  ]}
+                />
+              </div>
+            )}
 
-            {/* Категории — часть того же справочника: заводить продукт можно
-                только в существующую категорию, а до этого её нельзя было ни
-                завести, ни переименовать, ни свести с одноимённой. */}
-            <ProductCategoriesPanel />
+            {(isEditingProductItem || productsView === "catalog") && (
+              <ProductsPanel chrome="screen" />
+            )}
 
-            {/* Проверка базы на аномалии (раздел 10.1 ТЗ). Внизу раздела, а не
-                вверху: это ревизия того, что уже загружено, а не ежедневная
-                работа — иначе она оттесняла бы поиск продукта, ради которого
-                сюда и заходят. */}
-            <ProductAnomaliesPanel />
+            {!isEditingProductItem && productsView === "categories" && (
+              <ProductCategoriesPanel />
+            )}
+
+            {!isEditingProductItem && productsView === "anomalies" && (
+              <ProductAnomaliesPanel />
+            )}
           </>
         )}
         {current === "dictionaries" && <DictionariesPanel chrome="screen" />}

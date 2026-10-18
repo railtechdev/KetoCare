@@ -105,18 +105,20 @@ export function NextMealCard({ patientId }: { patientId: string }) {
             {t("nextMeal.allEaten")}
           </p>
         ) : (
-          <div className="flex flex-wrap items-center gap-section">
-            <Badge variant="secondary">
-              {t("nextMeal.meal", { index: next.meal_index })}
-            </Badge>
-            <span className="min-w-0 text-card-title font-semibold break-words">
-              {/* Ключ словаря — `recipe:<id>` / `custom:<id>`, а не идентификатор
-                  позиции меню: `titles[next.id]` не совпадал никогда, и главный
-                  блок главной вместо названия блюда всегда показывал «Блюдо».
-                  В меню тот же словарь читается правильно — через `itemDishKey`. */}
-              {dishTitle ?? t("nextMeal.unknownDish")}
-            </span>
-            <span className="text-sm text-muted-foreground tabular-nums">
+          <div className="flex flex-wrap items-center justify-between gap-section rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-field">
+              <Badge variant="secondary">
+                {t("nextMeal.meal", { index: next.meal_index })}
+              </Badge>
+              <span className="min-w-0 text-card-title font-semibold break-words">
+                {/* Ключ словаря — `recipe:<id>` / `custom:<id>`, а не идентификатор
+                    позиции меню: `titles[next.id]` не совпадал никогда, и главный
+                    блок главной вместо названия блюда всегда показывал «Блюдо».
+                    В меню тот же словарь читается правильно — через `itemDishKey`. */}
+                {dishTitle ?? t("nextMeal.unknownDish")}
+              </span>
+            </div>
+            <span className="rounded-md bg-card px-2.5 py-1 text-sm font-medium text-foreground shadow-kc-sm tabular-nums">
               {t("nextMeal.portion", {
                 value: formatFactor(next.portion_factor),
               })}

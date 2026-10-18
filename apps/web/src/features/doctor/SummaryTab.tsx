@@ -4,9 +4,12 @@ import {
   formatGrams,
   AsyncSection,
   Button,
+  Columns,
   EmptyState,
   FactList,
   MacroBar,
+  Metric,
+  MetricRow,
   RatioBadge,
   Section,
   WarningBanner,
@@ -93,202 +96,218 @@ function OverviewPanels({
   const verdict = dayVerdict(tolerance, day?.tolerance_gap ?? null);
 
   return (
-    <>
-      <Section title={t("summary.prescription.title")}>
-        {prescription === null ? (
-          <EmptyState
-            icon={ClipboardList}
-            title={t("summary.prescription.empty")}
-            description={t("summary.prescription.emptyDescription")}
-            action={
-              // Ссылкой, а не кнопкой: раздел живёт по адресу, и переход к
-              // назначению открывается в новой вкладке и пересылается коллеге
-              // (правило П1 канона). Кнопка со сменой вкладки ничего этого не
-              // умела. Назначение — первое, что от врача требуется у нового
-              // пациента, и путь к нему не должен быть длиннее одного клика.
-              <Button asChild>
-                <PatientViewLink patientId={patientId} view="prescription">
-                  {t("summary.prescription.toTab")}
-                </PatientViewLink>
-              </Button>
-            }
-          />
-        ) : (
-          <FactList>
-            <dt className="text-muted-foreground">{t("fields.ratio")}</dt>
-            <dd className="m-0">
-              {/* Вердикт о допуске здесь не показывается: это сама цель
-                  назначения, а не измерение, которое с ней сравнивают. */}
-              <RatioBadge ratio={prescription.ratio} />
-            </dd>
-
-            <dt className="text-muted-foreground">{t("fields.kcal")}</dt>
-            <dd className="m-0 tabular-nums">
-              {t("units.kcalPerDay", {
-                value: formatKcal(prescription.kcal_per_day),
-              })}
-            </dd>
-
-            <dt className="text-muted-foreground">{t("fields.protein")}</dt>
-            <dd className="m-0 tabular-nums">
-              {t("units.gramsPerDay", {
-                value: formatGrams(prescription.protein_g),
-              })}
-            </dd>
-
-            <dt className="text-muted-foreground">{t("fields.carbsLimit")}</dt>
-            <dd className="m-0 tabular-nums">
-              {t("units.gramsPerDay", {
-                value: formatGrams(prescription.carbs_limit_g),
-              })}
-            </dd>
-
-            <dt className="text-muted-foreground">{t("fields.meals")}</dt>
-            <dd className="m-0 tabular-nums">{prescription.meals_per_day}</dd>
-
-            <dt className="text-muted-foreground">
-              {t("fields.effectiveFrom")}
-            </dt>
-            <dd className="m-0 tabular-nums">
-              {formatIsoDate(prescription.effective_from) ?? "—"}
-            </dd>
-
-            {prescription.restrictions !== null && (
-              <>
-                <dt className="text-muted-foreground">
-                  {t("fields.restrictions")}
-                </dt>
-                <dd className="m-0">{prescription.restrictions}</dd>
-              </>
-            )}
-          </FactList>
-        )}
-      </Section>
-
-      <Section title={t("summary.day.title")}>
-        {day === null ? (
-          <EmptyState
-            icon={CalendarOff}
-            title={t("summary.day.empty")}
-            description={t("summary.day.emptyDescription")}
-            // Специалист составляет день тем же экраном, что и семья
-            // (ADR-0047): «ждать, пока семья запланирует» больше не
-            // единственный путь, и у пустого дня есть выход.
-            action={
-              <Button asChild variant="outline">
-                <PatientViewLink patientId={patientId} view="menu">
-                  {t("summary.day.compose")}
-                </PatientViewLink>
-              </Button>
-            }
-          />
-        ) : (
-          <div className="flex flex-col gap-section">
-            <div className="flex flex-wrap items-center gap-section">
-              {/* Вердикт о соответствии приходит от сервера: допуски — константы
-                  расчётного ядра, на клиенте их копии нет (правило 2 CLAUDE.md). */}
-              <RatioBadge
-                ratio={day.totals.ratio}
-                withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
+    <Columns
+      asideLabel={t("summary.prescription.title")}
+      asideSticky
+      main={
+        <>
+          <Section title={t("summary.day.title")}>
+            {day === null ? (
+              <EmptyState
+                icon={CalendarOff}
+                title={t("summary.day.empty")}
+                description={t("summary.day.emptyDescription")}
+                // Специалист составляет день тем же экраном, что и семья
+                // (ADR-0047): «ждать, пока семья запланирует» больше не
+                // единственный путь, и у пустого дня есть выход.
+                action={
+                  <Button asChild variant="outline">
+                    <PatientViewLink patientId={patientId} view="menu">
+                      {t("summary.day.compose")}
+                    </PatientViewLink>
+                  </Button>
+                }
               />
-              <span className="tabular-nums">
-                {t("units.kcal", { value: formatKcal(day.totals.kcal) })}
-              </span>
-            </div>
-
-            <MacroBar
-              fatG={day.totals.fat}
-              proteinG={day.totals.protein}
-              carbsG={day.totals.carbs}
-            />
-
-            {/* Цели полосой, как в меню и на главной семьи (П40): один день,
-                показанный в трёх местах, читается одинаково. */}
-            {prescription !== null && (
-              <DayTargetBars
-                kcal={day.totals.kcal}
-                carbs={day.totals.carbs}
-                kcalTarget={prescription.kcal_per_day}
-                carbsLimit={prescription.carbs_limit_g}
-              />
-            )}
-
-            {verdict.unavailable ? (
-              <p className="m-0 text-sm text-muted-foreground">
-                {t(`summary.day.${toleranceGapKey(verdict.unavailableReason)}`)}
-              </p>
-            ) : verdict.ratioOffTolerance ? (
-              <WarningBanner level="warning" title={t("summary.day.offTitle")}>
-                {t("summary.day.offRatio")}
-              </WarningBanner>
-            ) : verdict.ratioUnknown ? (
-              <p role="status" className="m-0 text-sm text-muted-foreground">
-                {t("summary.day.ratioUnknown")}
-              </p>
             ) : (
-              <p role="status" className="m-0 text-sm text-success">
-                {t("summary.day.within")}
-              </p>
+              <div className="flex flex-col gap-section">
+                <div className="flex flex-wrap items-center gap-section">
+                  {/* Вердикт о соответствии приходит от сервера: допуски — константы
+                      расчётного ядра, на клиенте их копии нет (правило 2 CLAUDE.md). */}
+                  <RatioBadge
+                    ratio={day.totals.ratio}
+                    withinTolerance={
+                      tolerance?.ratio_within_tolerance ?? undefined
+                    }
+                  />
+                  <span className="font-semibold tabular-nums">
+                    {t("units.kcal", { value: formatKcal(day.totals.kcal) })}
+                  </span>
+                </div>
+
+                <MacroBar
+                  fatG={day.totals.fat}
+                  proteinG={day.totals.protein}
+                  carbsG={day.totals.carbs}
+                />
+
+                {/* Цели полосой, как в меню и на главной семьи (П40): один день,
+                    показанный в трёх местах, читается одинаково. */}
+                {prescription !== null && (
+                  <DayTargetBars
+                    kcal={day.totals.kcal}
+                    carbs={day.totals.carbs}
+                    kcalTarget={prescription.kcal_per_day}
+                    carbsLimit={prescription.carbs_limit_g}
+                  />
+                )}
+
+                {verdict.unavailable ? (
+                  <p className="m-0 text-sm text-muted-foreground">
+                    {t(
+                      `summary.day.${toleranceGapKey(verdict.unavailableReason)}`,
+                    )}
+                  </p>
+                ) : verdict.ratioOffTolerance ? (
+                  <WarningBanner
+                    level="warning"
+                    title={t("summary.day.offTitle")}
+                  >
+                    {t("summary.day.offRatio")}
+                  </WarningBanner>
+                ) : verdict.ratioUnknown ? (
+                  <p role="status" className="m-0 text-sm text-muted-foreground">
+                    {t("summary.day.ratioUnknown")}
+                  </p>
+                ) : (
+                  <p role="status" className="m-0 text-sm text-success">
+                    {t("summary.day.within")}
+                  </p>
+                )}
+
+                {verdict.kcalBelowTarget && (
+                  <p className="m-0 text-sm text-muted-foreground">
+                    {t("summary.day.kcalBelowTarget", {
+                      value: formatKcal(day.totals.kcal),
+                      target: formatKcal(prescription?.kcal_per_day ?? 0),
+                    })}
+                  </p>
+                )}
+
+                {day.engine_version && (
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {t("units.engineVersion", { version: day.engine_version })}
+                  </p>
+                )}
+              </div>
             )}
+          </Section>
 
-            {verdict.kcalBelowTarget && (
-              <p className="m-0 text-sm text-muted-foreground">
-                {t("summary.day.kcalBelowTarget", {
-                  value: formatKcal(day.totals.kcal),
-                  target: formatKcal(prescription?.kcal_per_day ?? 0),
+          <Section title={t("summary.readings.title")}>
+            <MetricRow label={t("summary.readings.title")}>
+              <Metric
+                label={t("summary.readings.ketone")}
+                value={
+                  data.last_ketone == null
+                    ? t("summary.readings.noKetone")
+                    : t("summary.readings.ketoneValue", {
+                        value: formatMeasured(data.last_ketone.value),
+                        method: t(
+                          `summary.readings.method.${data.last_ketone.method}`,
+                        ),
+                        at: formatOccurredAt(
+                          new Date(data.last_ketone.occurred_at),
+                        ),
+                      })
+                }
+              />
+              <Metric
+                label={t("summary.readings.weight")}
+                value={
+                  data.last_weight == null
+                    ? t("summary.readings.noWeight")
+                    : t("summary.readings.weightValue", {
+                        value: formatWeight(data.last_weight.weight_kg),
+                        at: formatOccurredAt(
+                          new Date(data.last_weight.occurred_at),
+                        ),
+                      })
+                }
+              />
+              <Metric
+                label={t("summary.readings.seizures")}
+                value={t("summary.readings.seizuresValue", {
+                  count: data.seizures_today.count,
+                  entries: data.seizures_today.entries,
                 })}
-              </p>
-            )}
+              />
+            </MetricRow>
+          </Section>
+        </>
+      }
+      aside={
+        <Section title={t("summary.prescription.title")} tone="accent">
+          {prescription === null ? (
+            <EmptyState
+              icon={ClipboardList}
+              title={t("summary.prescription.empty")}
+              description={t("summary.prescription.emptyDescription")}
+              action={
+                // Ссылкой, а не кнопкой: раздел живёт по адресу, и переход к
+                // назначению открывается в новой вкладке и пересылается коллеге
+                // (правило П1 канона). Кнопка со сменой вкладки ничего этого не
+                // умела. Назначение — первое, что от врача требуется у нового
+                // пациента, и путь к нему не должен быть длиннее одного клика.
+                <Button asChild>
+                  <PatientViewLink patientId={patientId} view="prescription">
+                    {t("summary.prescription.toTab")}
+                  </PatientViewLink>
+                </Button>
+              }
+            />
+          ) : (
+            <FactList>
+              <dt className="text-muted-foreground">{t("fields.ratio")}</dt>
+              <dd className="m-0">
+                {/* Вердикт о допуске здесь не показывается: это сама цель
+                    назначения, а не измерение, которое с ней сравнивают. */}
+                <RatioBadge ratio={prescription.ratio} />
+              </dd>
 
-            {day.engine_version && (
-              <p className="m-0 text-xs text-muted-foreground">
-                {t("units.engineVersion", { version: day.engine_version })}
-              </p>
-            )}
-          </div>
-        )}
-      </Section>
-
-      <Section title={t("summary.readings.title")}>
-        <FactList>
-          <dt className="text-muted-foreground">
-            {t("summary.readings.ketone")}
-          </dt>
-          <dd className="m-0">
-            {data.last_ketone == null
-              ? t("summary.readings.noKetone")
-              : t("summary.readings.ketoneValue", {
-                  value: formatMeasured(data.last_ketone.value),
-                  method: t(
-                    `summary.readings.method.${data.last_ketone.method}`,
-                  ),
-                  at: formatOccurredAt(new Date(data.last_ketone.occurred_at)),
+              <dt className="text-muted-foreground">{t("fields.kcal")}</dt>
+              <dd className="m-0 tabular-nums">
+                {t("units.kcalPerDay", {
+                  value: formatKcal(prescription.kcal_per_day),
                 })}
-          </dd>
+              </dd>
 
-          <dt className="text-muted-foreground">
-            {t("summary.readings.weight")}
-          </dt>
-          <dd className="m-0">
-            {data.last_weight == null
-              ? t("summary.readings.noWeight")
-              : t("summary.readings.weightValue", {
-                  value: formatWeight(data.last_weight.weight_kg),
-                  at: formatOccurredAt(new Date(data.last_weight.occurred_at)),
+              <dt className="text-muted-foreground">{t("fields.protein")}</dt>
+              <dd className="m-0 tabular-nums">
+                {t("units.gramsPerDay", {
+                  value: formatGrams(prescription.protein_g),
                 })}
-          </dd>
+              </dd>
 
-          <dt className="text-muted-foreground">
-            {t("summary.readings.seizures")}
-          </dt>
-          <dd className="m-0 tabular-nums">
-            {t("summary.readings.seizuresValue", {
-              count: data.seizures_today.count,
-              entries: data.seizures_today.entries,
-            })}
-          </dd>
-        </FactList>
-      </Section>
-    </>
+              <dt className="text-muted-foreground">
+                {t("fields.carbsLimit")}
+              </dt>
+              <dd className="m-0 tabular-nums">
+                {t("units.gramsPerDay", {
+                  value: formatGrams(prescription.carbs_limit_g),
+                })}
+              </dd>
+
+              <dt className="text-muted-foreground">{t("fields.meals")}</dt>
+              <dd className="m-0 tabular-nums">{prescription.meals_per_day}</dd>
+
+              <dt className="text-muted-foreground">
+                {t("fields.effectiveFrom")}
+              </dt>
+              <dd className="m-0 tabular-nums">
+                {formatIsoDate(prescription.effective_from) ?? "—"}
+              </dd>
+
+              {prescription.restrictions !== null && (
+                <>
+                  <dt className="text-muted-foreground">
+                    {t("fields.restrictions")}
+                  </dt>
+                  <dd className="m-0">{prescription.restrictions}</dd>
+                </>
+              )}
+            </FactList>
+          )}
+        </Section>
+      }
+    />
   );
 }

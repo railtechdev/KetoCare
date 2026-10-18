@@ -176,7 +176,7 @@ export const PATIENT_VIEW_WIDTH: Record<
   PatientView,
   NonNullable<PageLayoutProps["width"]>
 > = {
-  summary: "content",
+  summary: "wide",
   prescription: "wide",
   menu: "wide",
   // Калькулятор — одна колонка состава и результата под ней: считают по нему

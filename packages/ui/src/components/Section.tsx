@@ -43,6 +43,13 @@ export interface SectionProps {
    * содержимому и подпись над которыми была бы шумом (панель фильтров).
    */
   titleHidden?: boolean;
+  /**
+   * Визуальный тон блока:
+   * - `default` — основная рабочая карточка (`bg-card`)
+   * - `accent` — фокусный блок первостепенной важности
+   * - `muted` — справочный / второстепенный блок (`bg-muted/40`)
+   */
+  tone?: "default" | "accent" | "muted";
   className?: string;
   contentClassName?: string;
   children: ReactNode;
@@ -68,6 +75,7 @@ export function Section({
   action,
   density,
   titleHidden = false,
+  tone = "default",
   className,
   contentClassName,
   children,
@@ -81,12 +89,15 @@ export function Section({
       // блока, а не окна. Один и тот же блок стоит и во всю колонку, и в
       // приставной колонке 20rem: `sm:grid-cols-2` внутри него спрашивает о
       // ширине окна и в узкой колонке на широком мониторе оставался
-      // двухстолбцовым — подписи ломались, числа налезали друг на друга.
+      // двухстолбцовым — подписи ломаются, числа налезают друг на друга.
       // Внутри блоков вместо `sm:` пишется `@sm:` (правило П33 канона).
       className={cn(
         "@container",
         compact && "gap-section rounded-lg py-section",
         !compact && "gap-section",
+        tone === "accent" &&
+          "border-primary/30 bg-linear-to-b from-secondary/50 to-card",
+        tone === "muted" && "border-border/70 bg-muted/40 shadow-none",
         className,
       )}
     >

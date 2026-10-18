@@ -1,4 +1,4 @@
-import { buttonVariants, cn } from "@ketocare/ui";
+import { SegmentedControl } from "@ketocare/ui";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -29,48 +29,25 @@ export function PeriodPicker({
   invalid,
 }: PeriodPickerProps) {
   const { t } = useTranslation("diary");
-  const groupName = useId();
   const fromId = useId();
   const toId = useId();
   const errorId = useId();
 
   return (
-    <fieldset className="m-0 border-0 p-0">
-      <legend className="mb-field p-0 text-sm font-medium">
-        {t("period.legend")}
-      </legend>
-
-      <div className="flex flex-wrap gap-field">
-        {PRESETS.map((value) => (
-          <label key={value} className="cursor-pointer">
-            {/* Настоящий radio, спрятанный визуально: стрелки, роль и озвучивание
-                достаются от браузера, а вид задаётся соседним span. */}
-            <input
-              type="radio"
-              name={groupName}
-              value={value}
-              checked={preset === value}
-              onChange={() => onPresetChange(value)}
-              // Имя — словами, явно: часть средств чтения брала у спрятанного
-              // radio значение («week»), а не подпись.
-              aria-label={t(`period.${value}`)}
-              className="peer sr-only"
-            />
-            {/* Вид — вариант кнопки из кита, состояние — от настоящего radio:
-                своя строка классов здесь разошлась бы с кнопками экрана. */}
-            <span
-              className={cn(
-                buttonVariants({ variant: "outline" }),
-                "min-h-touch",
-                "peer-checked:border-primary peer-checked:bg-primary peer-checked:font-semibold peer-checked:text-primary-foreground",
-                "peer-checked:hover:bg-primary peer-checked:hover:text-primary-foreground",
-                "peer-focus-visible:border-ring peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50",
-              )}
-            >
-              {t(`period.${value}`)}
-            </span>
-          </label>
-        ))}
+    <div className="flex flex-col gap-field">
+      <div className="flex flex-wrap items-center gap-field">
+        <span className="text-sm font-medium text-muted-foreground">
+          {t("period.legend")}:
+        </span>
+        <SegmentedControl
+          label={t("period.legend")}
+          value={preset}
+          onValueChange={onPresetChange}
+          options={PRESETS.map((value) => ({
+            value,
+            label: t(`period.${value}`),
+          }))}
+        />
       </div>
 
       {preset === "custom" && (
@@ -113,6 +90,6 @@ export function PeriodPicker({
           {t("period.invalid")}
         </p>
       )}
-    </fieldset>
+    </div>
   );
 }

@@ -160,6 +160,12 @@ export type { SectionProps } from "./components/Section";
 export { TabsBar } from "./components/TabsBar";
 export type { TabsBarProps, TabsBarItem } from "./components/TabsBar";
 
+export { SegmentedControl } from "./components/SegmentedControl";
+export type {
+  SegmentedControlProps,
+  SegmentedControlItem,
+} from "./components/SegmentedControl";
+
 export { FieldShell, NativeSelect } from "./components/FieldShell";
 export { FormSheet } from "./components/FormSheet";
 export type { FormSheetProps } from "./components/FormSheet";

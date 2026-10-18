@@ -6,15 +6,15 @@ import {
   Button,
   DataTable,
   EmptyState,
+  SegmentedControl,
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ListOrdered, Plus } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { PageActions } from "../../components/PageLayout";
 import { useTranslation } from "react-i18next";
 
-import { SelectField } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
 import { useSectionTab } from "../../routes/useSectionTab";
 import { DictionaryEntryForm } from "./DictionaryEntryForm";
@@ -49,11 +49,9 @@ export function DictionariesPanel({
   chrome?: "tab" | "screen";
 }) {
   const { t } = useTranslation("admin");
-  const selectId = useId();
 
-  // Справочник выбирается переключателем, а не второй полосой вкладок:
-  // админка уже открыта вкладкой, а вкладки не вкладываются в вкладки —
-  // две одинаковые полосы подряд читаются как одна (правило П29).
+  // Справочник выбирается сегментированным переключателем, а не второй полосой
+  // вкладок: все четыре справочника видны сразу и хранятся в адресе (`?kind=`).
   const [kind, setKind] = useSectionTab<DictionaryKind>(
     "kind",
     DICTIONARY_KINDS,
@@ -79,24 +77,22 @@ export function DictionariesPanel({
         <PageActions>{createButton}</PageActions>
       )}
 
-      <SelectField
-        id={selectId}
-        label={t("dictionaries.tabsLabel")}
-        width="medium"
-        value={kind}
-        onChange={(event) => {
-          setKind(event.target.value as DictionaryKind);
-          // Правка принадлежит покинутому справочнику: оставить её открытой
-          // значило бы предложить сохранить тип приступа в методы кетонов.
-          setEditing({ kind: "none" });
-        }}
-      >
-        {DICTIONARY_KINDS.map((value) => (
-          <option key={value} value={value}>
-            {t(`dictionaries.kinds.${value}`)}
-          </option>
-        ))}
-      </SelectField>
+      <div>
+        <SegmentedControl<DictionaryKind>
+          label={t("dictionaries.tabsLabel")}
+          value={kind}
+          onChange={(next) => {
+            setKind(next);
+            // Правка принадлежит покинутому справочнику: оставить её открытой
+            // значило бы предложить сохранить тип приступа в методы кетонов.
+            setEditing({ kind: "none" });
+          }}
+          items={DICTIONARY_KINDS.map((value) => ({
+            value,
+            label: t(`dictionaries.kinds.${value}`),
+          }))}
+        />
+      </div>
 
       {/* Свой экземпляр на справочник: загруженные значения не должны
           переезжать с одного справочника на другой. */}
@@ -147,7 +143,7 @@ function DictionaryEditor({
         // справочнике он стоит рядом с живыми: без пометки словом их не
         // отличить вовсе — ни цветом, ни чем-либо ещё (WCAG 1.4.1).
         cell: ({ row }) => (
-          <span className="inline-flex flex-wrap items-center gap-2">
+          <span className="inline-flex flex-wrap items-center gap-2 font-medium text-foreground">
             {row.original.name_ru}
             {(row.original as { retired?: boolean }).retired === true && (
               <Badge variant="outline">{t("dictionaries.retired")}</Badge>
@@ -163,9 +159,9 @@ function DictionaryEditor({
               accessorKey: "code",
               header: t("dictionaries.columns.code"),
               cell: ({ row }: { row: { original: DictionaryEntry } }) => (
-                <span className="tabular-nums">
+                <Badge variant="secondary" className="font-mono tabular-nums">
                   {(row.original as { code?: string | null }).code ?? "—"}
-                </span>
+                </Badge>
               ),
             } as ColumnDef<DictionaryEntry, unknown>,
           ]
@@ -174,7 +170,9 @@ function DictionaryEditor({
         accessorKey: "sort",
         header: t("dictionaries.columns.sort"),
         cell: ({ row }) => (
-          <span className="tabular-nums">{row.original.sort}</span>
+          <span className="text-muted-foreground tabular-nums">
+            {row.original.sort}
+          </span>
         ),
       },
       {
@@ -182,7 +180,7 @@ function DictionaryEditor({
         header: t("dictionaries.columns.actions"),
         enableSorting: false,
         cell: ({ row }) => (
-          <div className="flex flex-wrap gap-field">
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
             <Button
               type="button"
               variant="outline"
@@ -203,8 +201,9 @@ function DictionaryEditor({
               trigger={
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                   aria-label={t("dictionaries.deleteEntry", {
                     name: row.original.name_ru,
                   })}

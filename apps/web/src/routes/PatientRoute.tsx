@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 
 import { useSession } from "../features/auth/useSession";
 import { PatientNav } from "../features/doctor/PatientNav";
+import { usePatientOverview } from "../features/patients/overview";
 import { usePatient } from "../features/patients/usePatient";
 import { SectionLink } from "../components/SectionLink";
 import { errorCodeOf, errorMessageOf } from "../lib/api";
@@ -42,6 +43,7 @@ export function PatientRoute() {
   const { patientId } = useParams({ from: "/app/patients/$patientId" });
   const { session } = useSession();
   const patient = usePatient(patientId);
+  const overview = usePatientOverview(patientId);
 
   // Карты нет или к ней нет доступа (ведение передали коллеге, ссылка чужая).
   // Повтор этого не исправит: прежде экран предлагал только «Повторить», без
@@ -93,7 +95,13 @@ export function PatientRoute() {
       {patient.data !== undefined && (
         <Workspace
           navLabel={t("workspace.navLabel", { name: patient.data.full_name })}
-          nav={<PatientNav patient={patient.data} role={session?.role} />}
+          nav={
+            <PatientNav
+              patient={patient.data}
+              role={session?.role}
+              overview={overview.data ?? null}
+            />
+          }
         >
           {/* Раздел рисует себя вместе со своим заголовком: у каждого своё
               название, и общий заголовок здесь означал бы, что шапка страницы

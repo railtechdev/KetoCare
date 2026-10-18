@@ -1,9 +1,12 @@
+import type { ReactNode } from "react";
+
 import { cn } from "@ui/lib/cn";
 import { TabsList, TabsTrigger } from "./ui/tabs";
 
 export interface TabsBarItem {
   value: string;
   label: string;
+  badge?: ReactNode;
 }
 
 export interface TabsBarProps {
@@ -39,9 +42,14 @@ export function TabsBar({ label, items, className }: TabsBarProps) {
         <TabsTrigger
           key={item.value}
           value={item.value}
-          className="min-h-touch flex-none px-4"
+          className="min-h-touch flex-none gap-2 px-4"
         >
-          {item.label}
+          <span>{item.label}</span>
+          {item.badge !== undefined && item.badge !== null && (
+            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground tabular-nums group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary">
+              {item.badge}
+            </span>
+          )}
         </TabsTrigger>
       ))}
     </TabsList>

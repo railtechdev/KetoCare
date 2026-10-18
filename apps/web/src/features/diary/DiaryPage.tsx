@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
-import { useSectionTab } from "../../routes/useSectionTab";
+import { useSectionItem, useSectionTab } from "../../routes/useSectionTab";
 import { useSession } from "../auth/useSession";
 import { DiaryForm } from "./DiaryForm";
 import { DiaryList, DiaryListSkeleton } from "./DiaryList";
@@ -67,10 +67,20 @@ export function DiaryPage({ patientId }: { patientId: string }) {
     DIARY_KINDS,
     "seizures",
   );
+  const [sectionItem, setSectionItem] = useSectionItem();
 
   /** Запись, которую правим; `null` вместе с открытой панелью — новая запись */
   const [editing, setEditing] = useState<DiaryLog | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+
+  // Тот же запрос, что у формы записи: ключ общий, второго обращения нет.
+  const medications = usePatientMedications(patientId, kind === "medications");
+  const canAdd =
+    kind !== "medications" ||
+    medications.isPending ||
+    (medications.data ?? []).length > 0;
+
+  const isSheetOpen = formOpen || (sectionItem === "new" && canAdd);
 
   function openNew() {
     setEditing(null);
@@ -82,16 +92,12 @@ export function DiaryPage({ patientId }: { patientId: string }) {
     setFormOpen(true);
   }
 
-  // Тот же запрос, что у формы записи: ключ общий, второго обращения нет.
-  const medications = usePatientMedications(patientId, kind === "medications");
-  const canAdd =
-    kind !== "medications" ||
-    medications.isPending ||
-    (medications.data ?? []).length > 0;
-
   function closeForm() {
     setFormOpen(false);
     setEditing(null);
+    if (sectionItem === "new") {
+      setSectionItem(undefined);
+    }
   }
 
   return (
@@ -147,7 +153,7 @@ export function DiaryPage({ patientId }: { patientId: string }) {
               kind={value}
               patientId={patientId}
               editing={editing}
-              formOpen={formOpen}
+              formOpen={isSheetOpen}
               onAdd={openNew}
               onEdit={openEdit}
               onCloseForm={closeForm}
