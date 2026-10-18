@@ -292,6 +292,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { session: null },
+  defaultViewTransition: true,
   // Несуществующий адрес — свой экран с выходом, а не англоязычная заглушка
   // маршрутизатора без единой ссылки (правило П22 и здравый смысл: из тупика
   // должен быть выход).

@@ -120,6 +120,7 @@ export function DataTable<TData>({
                 {headerGroup.headers.map((header) => {
                   const sortable = header.column.getCanSort();
                   const direction = header.column.getIsSorted();
+                  const isStickyRight = header.column.id === "actions";
 
                   return (
                     <th
@@ -134,7 +135,11 @@ export function DataTable<TData>({
                             ? "descending"
                             : undefined
                       }
-                      className="px-3 py-2 text-sm font-semibold text-muted-foreground"
+                      className={cn(
+                        "px-3 py-2 text-sm font-semibold text-muted-foreground",
+                        isStickyRight &&
+                          "sticky right-0 z-10 bg-card/95 backdrop-blur-xs",
+                      )}
                     >
                       {sortable ? (
                         // Своего aria-label у кнопки нет: её доступным именем
@@ -173,12 +178,28 @@ export function DataTable<TData>({
 
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-b border-border last:border-0">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-3 py-2">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
+              <tr
+                key={row.id}
+                className="group border-b border-border transition-colors last:border-0 hover:bg-muted/40"
+              >
+                {row.getVisibleCells().map((cell) => {
+                  const isStickyRight = cell.column.id === "actions";
+                  return (
+                    <td
+                      key={cell.id}
+                      className={cn(
+                        "px-3 py-2",
+                        isStickyRight &&
+                          "sticky right-0 z-10 bg-card/95 backdrop-blur-xs group-hover:bg-muted/80",
+                      )}
+                    >
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>

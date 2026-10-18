@@ -28,7 +28,7 @@ export function DiaryEntryCard({
   return (
     <article
       className={cn(
-        "rounded-xl bg-card p-4 text-foreground shadow-kc",
+        "rounded-xl border border-border bg-card p-4 text-foreground shadow-sm",
         className,
       )}
     >

@@ -27,7 +27,7 @@ export function TabBar<T extends string>({
   onSelect: (id: T) => void;
 }) {
   return (
-    <nav className="sticky bottom-0 border-t border-border bg-card pb-[var(--safe-bottom,0px)]">
+    <nav className="sticky bottom-0 z-20 border-t border-border bg-card/95 pb-[var(--safe-bottom,0px)] backdrop-blur-xs">
       <ul className="flex">
         {items.map(({ id, label, icon: Icon }) => (
           <li key={id} className="flex-1">

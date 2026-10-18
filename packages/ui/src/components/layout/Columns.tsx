@@ -15,6 +15,12 @@ const SPLIT_AT = {
   xl: "xl:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
 } as const;
 
+const SPLIT_WIDE_AT = {
+  md: "md:grid-cols-[minmax(0,1fr)_26rem]",
+  lg: "lg:grid-cols-[minmax(0,1fr)_26rem]",
+  xl: "xl:grid-cols-[minmax(0,1fr)_26rem]",
+} as const;
+
 /**
  * Приставная колонка стоит в разметке первой, а визуально всё равно справа.
  *
@@ -55,6 +61,8 @@ export interface ColumnsProps {
   aside: ReactNode;
   /** С какой ширины колонки расходятся; уже — одна колонка */
   from?: keyof typeof SPLIT_AT;
+  /** Ширина приставной колонки: обычная (20rem) или широкая (26rem, для расчёта) */
+  asideWidth?: "default" | "wide";
   /**
    * Приставная колонка не уезжает при прокрутке основной. Для справки, к
    * которой обращаются постоянно: итоги дня рядом с составом меню.
@@ -95,6 +103,7 @@ export function Columns({
   main,
   aside,
   from = "lg",
+  asideWidth = "default",
   asideSticky = false,
   asideFirst = false,
   asideLabel,
@@ -135,10 +144,11 @@ export function Columns({
     </aside>
   );
 
+  const splitClass =
+    asideWidth === "wide" ? SPLIT_WIDE_AT[from] : SPLIT_AT[from];
+
   return (
-    <div
-      className={cn("grid items-start gap-section", SPLIT_AT[from], className)}
-    >
+    <div className={cn("grid items-start gap-section", splitClass, className)}>
       {asideFirst ? [asideColumn, mainColumn] : [mainColumn, asideColumn]}
     </div>
   );

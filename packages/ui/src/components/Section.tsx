@@ -99,6 +99,7 @@ export function Section({
       <CardHeader
         className={cn(
           compact && "px-section",
+          titleHidden && !description && !action && "sr-only",
           action &&
             "@max-md:has-data-[slot=card-action]:grid-cols-1 [&>[data-slot=card-action]]:@max-md:col-start-1 [&>[data-slot=card-action]]:@max-md:row-span-1 [&>[data-slot=card-action]]:@max-md:row-start-auto [&>[data-slot=card-action]]:@max-md:justify-self-start",
         )}
@@ -135,6 +136,7 @@ export function Section({
         className={cn(
           "flex flex-col gap-section",
           compact && "px-section",
+          contentClassName?.includes("flex-wrap") && "flex-row",
           contentClassName,
         )}
       >

@@ -45,17 +45,33 @@ ssh root@189.74.96.24 "sed -i '/ketocare-stand-setup-2026-09-17-temporary/d' ~/.
 
 ## 2. На чём остановились
 
-Очередь пуста: открытых PR и задач нет, `main` выкачен на стенд, CI зелёный.
+Очередь пуста: открытых PR и задач нет, `main` актуален, линтеры и тесты зелёные.
 
-За последние дни закрыто: этап Б онбординга (семья из Telegram без почты и
+**Финальный хэндоф редизайна и UX/UI-оптимизации фронтенда (18.10.2026):**
+Проведён сквозной визуальный и функциональный обход всех 58 экранов и состояний (`apps/web`, `apps/miniapp`, `@ketocare/ui`) по всем ролям (`parent`, `doctor`, `dietitian`, `admin`) на десктопе (`1440×900`), планшетах/ноутбуках (`1024×800`) и телефонах (`390×844`) в светлой и тёмной темах, после чего выполнен четырёхэтапный рефакторинг:
+
+1. **Токены, поверхности и примитивы (`@ketocare/ui`)**:
+   - В `packages/ui/src/styles/tokens.css` добавлен глобальный сброс `border-color: var(--color-border)` в `@layer base` (исправлен дефект Tailwind v4, из-за которого `border` без суффикса наследовал `currentColor` `#16213e` / `#e8edf7` на всех карточках, таблицах, диалогах и кнопках), заданы нативные `color-scheme: light` / `dark` и типографические правила `text-wrap: balance` / `pretty`.
+   - В `packages/ui/src/components/Section.tsx` устранён паразитный верхний отступ `16–24px` при `titleHidden` (перевод `CardHeader` в `sr-only`) и конфликт `flex-col` с `flex-wrap` в `CardContent`.
+   - В `packages/ui/src/components/DiaryEntryCard.tsx` выровнены контур и тень (`border-border shadow-sm`) с `Card` и `Section`.
+   - В `packages/ui/src/components/DataTable.tsx` колонка `actions` («Действия») закреплена справа (`sticky right-0 z-10 bg-card/95 backdrop-blur-xs`).
+   - В `packages/ui/src/components/layout/Columns.tsx` добавлен вариант `asideWidth="wide"` (`26rem`).
+2. **Навигация и пространственная эргономика (`@ketocare/ui`, `apps/web`)**:
+   - В `packages/ui/src/components/layout/Workspace.tsx` порог двухколоночной рабочей области карты пациента снижен с `xl:` (`1280px`) до `lg:` (`1024px`), что убрало рассыпание 11 пунктов меню пациента в многострочную шапку на ноутбуках и планшетах.
+   - В `apps/web/src/features/doctor/PatientNav.tsx` для мобильных экранов (`< lg`) ссылка «Все пациенты» и имя ребёнка объединены в одну компактную строку с плотными пилюлями разделов (выиграно ~160px первого экрана).
+   - В `apps/web/src/layouts/SidebarNav.tsx` свёрнутые иконочные ссылки снабжены доступными всплывающими подсказками Radix `Tooltip` (`side="right"`).
+3. **Экраны ролей (`apps/web`, `apps/miniapp`)**:
+   - В `apps/web/src/features/doctor/PrescriptionTab.tsx` и `PrescriptionForm.tsx` действующее назначение и история версий подняты **над** формой создания новой версии, а поля формы переведены на компактную 3-колоночную контейнерную сетку (`@sm:grid-cols-2 @md:grid-cols-3`).
+   - В `apps/web/src/features/calculator/CalculatorPage.tsx` калькулятор переведён на двухколоночный `Columns` (`from="xl" asideWidth="wide" asideSticky`): слева — состав и сохранение блюда, справа в закреплённой панели — цель, `MacroBar`, вердикт допуска и кнопки подбора/пересчёта граммовки.
+   - В `apps/web/src/features/admin/UsersPanel.tsx` выровнена панель фильтров (`flex-row flex-wrap items-end`), а в `apps/web/src/features/admin/ProductsPanel.tsx` объединены источник, версия и дата сверки с переносом длинных названий, чтобы таблица помещалась в `1440px` без обрезания колонок.
+   - В `apps/miniapp/src/features/session/LanguageSwitch.tsx` и `apps/miniapp/src/components/TabBar.tsx` переключатель языка приведён к компактному сегментированному контролу, а нижняя панель защищена `z-20` и `backdrop-blur-xs`.
+   - В `apps/web/src/router.tsx` включён `defaultViewTransition: true` с учётом `prefers-reduced-motion: reduce`.
+
+Предыдущие вехи: этап Б онбординга (семья из Telegram без почты и
 пароля), сборка плана дня прямо в Mini App вместе с целями назначения, сквозной
 прогон Mini App, заголовки безопасности и работающие резервные копии на стенде,
 разбор записи чисел по всему интерфейсу. Подробности — в `CLAUDE.md` и в
-описаниях PR #238-#259.
-
-**Что я собирался делать следующим:** свод состояния для заказчика.
-`READINESS.md` писался до Telegram-первого пути, до сборки дня в Mini App и до
-e2e; клинические блокеры там прежние, а картина «что готово» устарела.
+описаниях PR #238-#301.
 
 ## 3. Что ждёт человека, а не разработку
 

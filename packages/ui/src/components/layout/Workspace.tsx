@@ -52,8 +52,8 @@ export function Workspace({
   return (
     <div
       className={cn(
-        "grid items-start gap-screen",
-        "xl:grid-cols-[var(--container-nav)_minmax(0,1fr)]",
+        "grid items-start gap-section lg:gap-screen",
+        "lg:grid-cols-[var(--container-nav)_minmax(0,1fr)]",
         className,
       )}
     >
@@ -62,7 +62,7 @@ export function Workspace({
           содержимым, а не под ним. */}
       <nav
         aria-label={navLabel}
-        className="flex min-w-0 flex-col gap-section xl:sticky xl:top-20 xl:self-start"
+        className="flex min-w-0 flex-col gap-field lg:sticky lg:top-20 lg:gap-section lg:self-start"
       >
         {nav}
       </nav>
@@ -92,7 +92,7 @@ export function WorkspaceNav({
   return (
     <ul
       className={cn(
-        "m-0 flex list-none flex-wrap gap-1 p-0 xl:flex-col xl:flex-nowrap",
+        "m-0 flex list-none flex-wrap gap-1 p-0 lg:flex-col lg:flex-nowrap",
         className,
       )}
     >

@@ -47,18 +47,25 @@ export function LanguageSwitch({ persist }: { persist: boolean }) {
     <div
       role="group"
       aria-label={t("language.label")}
-      className="flex flex-wrap items-center gap-2"
+      className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/60 p-1"
     >
-      <Globe aria-hidden="true" className="size-4 text-muted-foreground" />
+      <Globe
+        aria-hidden="true"
+        className="ml-1.5 size-3.5 text-muted-foreground"
+      />
       {LANGUAGES.map((language) => (
         <Button
           key={language}
           type="button"
-          size="sm"
-          variant={language === active ? "default" : "outline"}
+          size="xs"
+          variant="ghost"
           aria-pressed={language === active}
           lang={language === "uz" ? "uz-Latn" : "ru"}
-          className="min-h-(--spacing-touch)"
+          className={
+            language === active
+              ? "min-h-8 bg-card px-2.5 font-medium text-foreground shadow-xs hover:bg-card"
+              : "min-h-8 px-2.5 text-muted-foreground hover:text-foreground"
+          }
           onClick={() => {
             choose(language);
           }}

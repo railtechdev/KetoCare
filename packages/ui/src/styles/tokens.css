@@ -209,6 +209,7 @@
   --color-sidebar-accent-foreground: #7fa6ff;
   --color-sidebar-border: #2c3a55;
   --color-sidebar-ring: #7fa6ff;
+  color-scheme: dark;
 }
 
 /* Несколько компонентов кита обращаются к переменным напрямую, минуя утилиты
@@ -216,6 +217,7 @@
    объявляются псевдонимами тех же значений — второго источника правды не
    заводим. */
 :root {
+  color-scheme: light;
   --radius: 0.75rem;
   --border: var(--color-border);
   --popover: var(--color-popover);
@@ -223,10 +225,35 @@
 }
 
 @layer base {
+  /* В Tailwind 4 класс `border` без явного цвета берёт `currentColor`
+     (то есть цвет текста `#16213e` / `#e8edf7`). Задаём базовый цвет границы
+     из токена `--color-border`, чтобы все карточки, поля и таблицы кита имели
+     спокойный структурный контур. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  th {
+    text-wrap: balance;
+  }
+
+  p,
+  dd,
+  li {
+    text-wrap: pretty;
   }
 
   /* Видимый фокус обязателен (доступность, раздел 8.2 ТЗ) */

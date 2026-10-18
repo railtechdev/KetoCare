@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { cn } from "@ketocare/ui";
+import { Tooltip, TooltipContent, TooltipTrigger, cn } from "@ketocare/ui";
 import { SectionLink } from "../components/SectionLink";
 import { SIDEBAR_HIDDEN_SECTIONS } from "../features/auth/roles";
 import { SECTION_ICONS } from "../routes/sections";
@@ -11,9 +11,10 @@ import { SECTION_ICONS } from "../routes/sections";
  * широком экране.
  *
  * Между 768 и 1024 px панель — полоса значков: подпись скрыта визуально, но
- * остаётся скринридеру (`sr-only lg:not-sr-only`), а мыши её показывает
- * `title`. Значок без имени — не навигация: разделов девять, и «корзинка»
- * одинаково похожа и на продукты, и на меню.
+ * остаётся скринридеру (`sr-only lg:not-sr-only`), а мыши и клавиатуре её
+ * мгновенно показывает `Tooltip` (и `title` как резерв). Значок без имени — не
+ * навигация: разделов девять, и «корзинка» одинаково похожа и на продукты, и
+ * на меню.
  *
  * В шторке подписи видны всегда: она открывается на телефоне, где места по
  * ширине столько же, сколько у широкой панели, и прятать там подписи не за чем.
@@ -52,39 +53,55 @@ export function SidebarNav({
 
             const label = t(`nav.${section}`);
 
+            const link = (
+              <SectionLink
+                section={section}
+                title={iconsOnly ? label : undefined}
+                className={cn(
+                  "flex min-h-touch items-center gap-section rounded-lg px-3 text-sm font-medium",
+                  "text-sidebar-foreground/80 no-underline transition-colors",
+                  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  labels === "never" && "justify-center px-0",
+                  labels === "responsive" &&
+                    "justify-center px-0 lg:justify-start lg:px-3",
+                )}
+                // Карта пациента лежит внутри своего раздела
+                // (`/app/patients/<id>/…`), и роутер считает пункт «Пациенты»
+                // открытым по началу пути. Это верно: врач, работающий в
+                // карте, находится именно в этом разделе — и видит по меню,
+                // где он.
+                activeProps={{
+                  className:
+                    "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
+                }}
+                // Закрытие мобильной шторки висит на самой ссылке, а не на
+                // подписи внутри неё: тап по значку мимо текста не попадал в
+                // обработчик, и шторка оставалась открытой поверх раздела, в
+                // который пользователь только что перешёл.
+                onClick={onNavigate}
+              >
+                {Icon && (
+                  <Icon aria-hidden="true" className="size-5 shrink-0" />
+                )}
+                <span className={hideLabel}>{label}</span>
+              </SectionLink>
+            );
+
             return (
               <li key={section}>
-                <SectionLink
-                  section={section}
-                  title={iconsOnly ? label : undefined}
-                  className={cn(
-                    "flex min-h-touch items-center gap-section rounded-lg px-3 text-sm font-medium",
-                    "text-sidebar-foreground/80 no-underline transition-colors",
-                    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    labels === "never" && "justify-center px-0",
-                    labels === "responsive" &&
-                      "justify-center px-0 lg:justify-start lg:px-3",
-                  )}
-                  // Карта пациента лежит внутри своего раздела
-                  // (`/app/patients/<id>/…`), и роутер считает пункт «Пациенты»
-                  // открытым по началу пути. Это верно: врач, работающий в
-                  // карте, находится именно в этом разделе — и видит по меню,
-                  // где он.
-                  activeProps={{
-                    className:
-                      "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
-                  }}
-                  // Закрытие мобильной шторки висит на самой ссылке, а не на
-                  // подписи внутри неё: тап по значку мимо текста не попадал в
-                  // обработчик, и шторка оставалась открытой поверх раздела, в
-                  // который пользователь только что перешёл.
-                  onClick={onNavigate}
-                >
-                  {Icon && (
-                    <Icon aria-hidden="true" className="size-5 shrink-0" />
-                  )}
-                  <span className={hideLabel}>{label}</span>
-                </SectionLink>
+                {iconsOnly ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>{link}</TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className={cn(labels === "responsive" && "lg:hidden")}
+                    >
+                      {label}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  link
+                )}
               </li>
             );
           })}

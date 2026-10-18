@@ -4,6 +4,7 @@ import {
   ActionReason,
   Button,
   CALC_GRAMS_MAX,
+  Columns,
   ErrorState,
   RECALC_DELAY_MS,
   canRetry,
@@ -79,7 +80,7 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
   const { t } = useTranslation("calculator");
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")} width="form">
+    <PageLayout title={t("title")} intro={t("intro")} width="content">
       <CalculatorView patientId={patientId} />
     </PageLayout>
   );
@@ -483,386 +484,373 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   }
 
   return (
-    /* Ширину калькулятор несёт с собой, а не берёт у экрана: в разделе кабинета
-       оболочка уже ограничена ролью «форма», а в карте пациента она шире —
-       и те же блоки растягивались там на 1102 px под поля в 123 px. Одна
-       колонка на все размещения — одна правая линия у поиска, состава, полосы
-       макронутриентов и кнопок. */
-    <div className="flex max-w-form flex-col gap-screen">
-      <Section
-        title={t("composition.title")}
-        description={t("composition.description")}
-      >
-        <ProductPicker
-          patientId={patientId}
-          // Здесь собирают блюдо, и сюда набирают его название целиком:
-          // «суп из говядины» в поиске продуктов — то, на чём застряла
-          // заказчица. В форме рецепта и в исключённых продуктах такого
-          // предложения быть не должно.
-          suggestRecipes
-          // Состав калькулятора живёт в адресе блюда или набирается заново за
-          // секунды; формы рецепта и профиля ребёнка этого не умеют.
-          canLeave
-          excludeIds={rows.map((r) => r.product.id)}
-          onPick={(product) => {
-            setRows((current) => [...current, { product, grams: 50 }]);
-            resetActions();
-          }}
-        />
-
-        {/* Блюдо из рецепта или «моих блюд» дочитывается: рецепт, затем
-            продукты состава. Прежде экран в это время молчал, а при отказе
-            так и оставался пустым — человек пришёл пересчитать блюдо и не
-            понимал, куда оно делось. */}
-        {incomingDish.isPending && rows.length === 0 && (
-          <div
-            className="flex flex-col gap-field"
-            role="status"
-            aria-busy="true"
-            aria-label={t("incoming.loading")}
-          >
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        )}
-        {incomingDish.isError && (
-          <ErrorState
-            title={t("incoming.errorTitle")}
-            description={t("incoming.errorBody")}
-            retryLabel={t("common:actions.retry")}
-            onRetry={incomingDish.retry}
-          />
-        )}
-
-        <DishRows
-          rows={rows}
-          contributions={contributions}
-          uncounted={uncounted}
-          stale={stale}
-          onChangeGrams={(productId, grams) => {
-            setRows((current) =>
-              current.map((row) =>
-                row.product.id === productId ? { ...row, grams } : row,
-              ),
-            );
-            resetActions();
-          }}
-          onRemove={(productId) => {
-            setRows((current) =>
-              current.filter((row) => row.product.id !== productId),
-            );
-            resetActions();
-          }}
-        />
-      </Section>
-
-      {/* Что ребёнку нельзя — над расчётом, а не под ним: подбор снимает такие
-          продукты со входа, и по числам этого не видно.
-          Запрещать или предупреждать — вопрос 29 медицинской команде. */}
-      {(excluded.length > 0 || solveExcluded.length > 0) && (
-        <WarningBanner level="danger" title={t("excluded.title")}>
-          {excluded.length > 0 && (
-            <p className="m-0">
-              {t("excluded.verify", {
-                list: namesOf(excluded, t("excluded.unknownProduct")),
-              })}
-            </p>
-          )}
-          {solveExcluded.length > 0 && (
-            <p className="m-0">
-              {t("excluded.solve", {
-                list: namesOf(solveExcluded, t("excluded.unknownProduct")),
-              })}
-            </p>
-          )}
-        </WarningBanner>
-      )}
-
-      {/* Цель, факт и действия — одним блоком, в этом порядке. Цель обязана
-          стоять выше вердикта о ней; факт обязан стоять рядом с составом, иначе
-          правка граммовки уводит итог ниже сгиба (замер на 1280×800). Оба
-          требования выполняются, только если цель и факт лежат в одном блоке —
-          так же устроен и кабинет, к которому привыкла клиника: строка «Goal»
-          прямо над строкой «Actual». */}
-      <Section title={t("calc.title")}>
-        <GoalFields
-          ratio={ratio}
-          kcal={kcal}
-          suggested={suggested}
-          prescription={prescription}
-          scaledBy={
-            scale.data !== undefined && scale.variables !== undefined
-              ? scale.variables.factor
-              : null
-          }
-          onChange={(next) => {
-            touched.current = true;
-            setRatio(next.ratio);
-            setKcal(next.kcal);
-            resetActions();
-          }}
-        />
-
-        {/* Область постоянна: живую область, появившуюся вместе с текстом,
-            озвучивают не все программы чтения с экрана. Пустая — вне потока. */}
-        <p
-          id={waitingId}
-          role="status"
-          className={
-            waitingForNetwork ? "m-0 text-sm text-muted-foreground" : "sr-only"
-          }
-        >
-          {waitingForNetwork ? t("waitingForNetwork") : ""}
-        </p>
-        {/* Пустой расчёт молчит: о том, что состав не набран, уже сказано в
-            блоке состава — строкой над этим. Своя фраза здесь была вторым
-            сообщением об одном и том же (правило П27 канона), и вместе с
-            рамкой пустого состава они отодвигали цель на 200 px вниз. */}
-        {dish === null ? null : (
-          <div
-            aria-busy={stale}
-            className={stale ? "opacity-60 transition-opacity" : undefined}
-          >
-            <DishResultView
-              dish={dish}
-              goal={targets}
-              ratioWithinTolerance={ratioWithin ?? undefined}
-              kcalWithinTolerance={kcalWithin ?? undefined}
-            />
-            {stale && (
-              <p role="status" className="m-0 text-sm text-muted-foreground">
-                {t("recalculating")}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Отказ проверки не показывался вовсе: показатели просто исчезали, и
-            после пересчёта порций в массы, которые расчёт уже не принимает,
-            человек видел пустоту без причины. Пока правка не догнала расчёт,
-            прежний отказ не показывается — он о другом составе. */}
-        {refusalMessage !== null && (
-          <div className="flex flex-col items-start gap-field">
-            <div id={refusalId}>
-              <FormError>{refusalMessage}</FormError>
-            </div>
-            {/* Повтор — только при сбое: отказ по данным при том же составе
-                повторится слово в слово (правило в ките, общее с Mini App). */}
-            {(retrying || canRetry(errorCodeOf(verify.error))) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                // `aria-disabled`, а не `disabled`: выключенная кнопка теряет
-                // фокус, а повторное нажатие гасит сам обработчик.
-                className="aria-disabled:opacity-50"
-                aria-disabled={retrying || undefined}
-                aria-busy={retrying || undefined}
-                onClick={() => {
-                  if (retrying) return;
-                  // Без сети повтор не уходит, а ждёт: прежний отказ рядом с «Повторяем…»
-                  // не говорил, что запрос ждёт связи.
-                  // Текст ожидания запоминается как показанный отказ — и после
-                  // возврата сети плашка не возвращается к старому отказу, а
-                  // новый отказ объявит себя сам. Пауза бывает только при
-                  // запуске без сети: мутация, начатая с сетью, падает.
-                  setRetry({
-                    input: verifyInput,
-                    message: onlineManager.isOnline()
-                      ? refusalMessage
-                      : t("waitingForNetwork"),
-                  });
-                  runVerify();
+    <div className="flex flex-col gap-screen">
+      <Columns
+        from="xl"
+        asideWidth="wide"
+        asideSticky
+        asideLabel={t("calc.title")}
+        main={
+          <>
+            <Section
+              title={t("composition.title")}
+              description={t("composition.description")}
+            >
+              <ProductPicker
+                patientId={patientId}
+                // Здесь собирают блюдо, и сюда набирают его название целиком:
+                // «суп из говядины» в поиске продуктов — то, на чём застряла
+                // заказчица. В форме рецепта и в исключённых продуктах такого
+                // предложения быть не должно.
+                suggestRecipes
+                // Состав калькулятора живёт в адресе блюда или набирается заново за
+                // секунды; формы рецепта и профиля ребёнка этого не умеют.
+                canLeave
+                excludeIds={rows.map((r) => r.product.id)}
+                onPick={(product) => {
+                  setRows((current) => [...current, { product, grams: 50 }]);
+                  resetActions();
                 }}
-              >
-                {retrying
-                  ? t("common:actions.retrying")
-                  : t("common:actions.retry")}
-              </Button>
-            )}
-          </div>
-        )}
-        {/* Постоянная область: появившаяся вместе с текстом объявляется не
-            всеми программами чтения с экрана. */}
-        <p role="status" className="sr-only">
-          {retrying && !verify.isPaused
-            ? t("common:actions.retrying")
-            : announceRetryFailed
-              ? refusalMessage
-              : ""}
-        </p>
-
-        <Separator />
-
-        {/* Два действия, и у каждого свой ввод прямо над ним.
-
-            Раньше ряд начинался кнопкой «Подобрать граммовку», за ней шло чужое
-            поле «Коэффициент порции» с кнопкой пересчёта, а ограничения подбора
-            стояли ПОД всем этим — то есть поля действия читались после самого
-            действия, а два разных действия делили одну строку. Порядок «поля →
-            кнопка» — правило П9 канона, и он же отвечает на вопрос «что эта
-            кнопка возьмёт в расчёт».
-
-            Подбор остаётся первым и крупным (ADR-0028): это главное, чего нет у
-            KDC, где граммовку доводят стрелками вручную. */}
-        <div className="flex flex-col gap-section">
-          {/* Ограничения касаются только подбора: проверке они ничего не
-              меняют. Поэтому стоят при его кнопке, а не в цели. */}
-          <div className="flex flex-wrap items-start gap-section">
-            <Field
-              id="protein-min"
-              width="narrow"
-              label={t("targets.proteinMin")}
-              optional
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step={1}
-              value={proteinMin ?? ""}
-              onChange={(e) => {
-                // Подбор, ждущий связи, иначе вписал бы раскладку по прежнему
-                // пределу, и вердикт этого не заметил бы: пределов он не судит.
-                setProteinMin(e.target.value === "" ? null : +e.target.value);
-                solve.reset();
-              }}
-              className="tabular-nums"
-            />
-            <Field
-              id="carbs-max"
-              width="narrow"
-              label={t("targets.carbsMax")}
-              optional
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step={1}
-              value={carbsMax ?? ""}
-              onChange={(e) => {
-                setCarbsMax(e.target.value === "" ? null : +e.target.value);
-                solve.reset();
-              }}
-              className="tabular-nums"
-            />
-          </div>
-
-          <div className="flex flex-col gap-field">
-            <div>
-              <Button
-                type="button"
-                size="lg"
-                className="min-h-touch"
-                disabled={solveBlockedBy !== null || busy}
-                aria-busy={solve.isPending}
-                aria-describedby={
-                  solveBlockedBy !== null ? reasonId : actionsWaitingDescription
-                }
-                onClick={() => {
-                  if (targets === null) return;
-                  scale.reset();
-                  solve.mutate({ rows, targets, patientId });
-                }}
-              >
-                {solve.isPending ? t("actions.solving") : t("actions.solve")}
-              </Button>
-            </div>
-          </div>
-
-          {/* Пересчёт порций — второе действие, со своим числом.
-
-              `[&_[data-slot=field]]:mb-0` снимает у поля нижний отступ формы:
-              ряд равняется по низу, и без этого кнопка равнялась на нижний край
-              ОТСТУПА поля, а не самого поля — поле оказывалось на 16 px выше. */}
-          <div className="flex flex-col gap-field">
-            <div className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0">
-              <Field
-                id="factor"
-                width="tiny"
-                label={t("factor")}
-                // Пересчёт ПЕРЕПИСЫВАЕТ граммовку в составе, и сказать об
-                // этом обязан тот, кто предлагает нажать: в Mini App подпись
-                // была, в кабинете — нет.
-                hint={t("factorHint")}
-                type="number"
-                inputMode="decimal"
-                min={0.1}
-                step={0.1}
-                value={factor}
-                onChange={(event) => {
-                  // Пересчёт, ждущий связи, иначе вписал бы граммы по прежнему
-                  // множителю — как в Mini App.
-                  setFactor(Number(event.target.value));
-                  scale.reset();
-                }}
-                className="tabular-nums"
               />
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-touch"
-                disabled={scaleBlockedBy !== null || busy}
-                aria-busy={scale.isPending}
-                aria-describedby={
-                  scaleBlockedBy !== null ? reasonId : actionsWaitingDescription
-                }
-                onClick={() => {
-                  solve.reset();
-                  scale.mutate({ rows, factor });
+
+              {/* Блюдо из рецепта или «моих блюд» дочитывается: рецепт, затем
+                  продукты состава. Прежде экран в это время молчал, а при отказе
+                  так и оставался пустым — человек пришёл пересчитать блюдо и не
+                  понимал, куда оно делось. */}
+              {incomingDish.isPending && rows.length === 0 && (
+                <div
+                  className="flex flex-col gap-field"
+                  role="status"
+                  aria-busy="true"
+                  aria-label={t("incoming.loading")}
+                >
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              )}
+              {incomingDish.isError && (
+                <ErrorState
+                  title={t("incoming.errorTitle")}
+                  description={t("incoming.errorBody")}
+                  retryLabel={t("common:actions.retry")}
+                  onRetry={incomingDish.retry}
+                />
+              )}
+
+              <DishRows
+                rows={rows}
+                contributions={contributions}
+                uncounted={uncounted}
+                stale={stale}
+                onChangeGrams={(productId, grams) => {
+                  setRows((current) =>
+                    current.map((row) =>
+                      row.product.id === productId ? { ...row, grams } : row,
+                    ),
+                  );
+                  resetActions();
                 }}
+                onRemove={(productId) => {
+                  setRows((current) =>
+                    current.filter((row) => row.product.id !== productId),
+                  );
+                  resetActions();
+                }}
+              />
+            </Section>
+
+            {/* Что ребёнку нельзя — над расчётом, а не под ним: подбор снимает такие
+                продукты со входа, и по числам этого не видно.
+                Запрещать или предупреждать — вопрос 29 медицинской команде. */}
+            {(excluded.length > 0 || solveExcluded.length > 0) && (
+              <WarningBanner level="danger" title={t("excluded.title")}>
+                {excluded.length > 0 && (
+                  <p className="m-0">
+                    {t("excluded.verify", {
+                      list: namesOf(excluded, t("excluded.unknownProduct")),
+                    })}
+                  </p>
+                )}
+                {solveExcluded.length > 0 && (
+                  <p className="m-0">
+                    {t("excluded.solve", {
+                      list: namesOf(
+                        solveExcluded,
+                        t("excluded.unknownProduct"),
+                      ),
+                    })}
+                  </p>
+                )}
+              </WarningBanner>
+            )}
+
+            {/* Форма стоит, пока есть состав, а не пока есть показатели: показатели
+                пропадают на каждой массе тяжелее предела, и вместе с формой
+                пропадали бы набранное название и выбранный пациент. Состав тяжелее
+                предела или ещё не проверенный форма отправить не даёт и говорит
+                почему. */}
+            {rows.length > 0 && (
+              <>
+                {/* Куда уходит собранный состав, зависит от того, чей это экран:
+                    в карте ребёнка — сразу в его блюда, в общем калькуляторе —
+                    вместе с выбором ребёнка. */}
+                {patientId === undefined ? (
+                  <HandOffToPatient
+                    rows={rows}
+                    blockedBy={tooHeavyReason}
+                    waitingFor={actionsBusyReason}
+                  />
+                ) : (
+                  <SaveDishForm
+                    patientId={patientId}
+                    rows={rows}
+                    blockedBy={saveBlockedBy}
+                    waitingFor={saveWaitsFor}
+                  />
+                )}
+              </>
+            )}
+          </>
+        }
+        aside={
+          <>
+            {/* Цель, факт и действия — одним блоком, в этом порядке. На широком
+                экране блок закреплён справа от состава, чтобы при правке граммовки
+                полосы макронутриентов и вердикт всегда оставались перед глазами. */}
+            <Section title={t("calc.title")}>
+              <GoalFields
+                ratio={ratio}
+                kcal={kcal}
+                suggested={suggested}
+                prescription={prescription}
+                scaledBy={
+                  scale.data !== undefined && scale.variables !== undefined
+                    ? scale.variables.factor
+                    : null
+                }
+                onChange={(next) => {
+                  touched.current = true;
+                  setRatio(next.ratio);
+                  setKcal(next.kcal);
+                  resetActions();
+                }}
+              />
+
+              {/* Область постоянна: живую область, появившуюся вместе с текстом,
+                  озвучивают не все программы чтения с экрана. Пустая — вне потока. */}
+              <p
+                id={waitingId}
+                role="status"
+                className={
+                  waitingForNetwork
+                    ? "m-0 text-sm text-muted-foreground"
+                    : "sr-only"
+                }
               >
-                {scale.isPending ? t("actions.scaling") : t("actions.scale")}
-              </Button>
-            </div>
-          </div>
+                {waitingForNetwork ? t("waitingForNetwork") : ""}
+              </p>
+              {/* Пустой расчёт молчит: о том, что состав не набран, уже сказано в
+                  блоке состава — строкой над этим. */}
+              {dish === null ? null : (
+                <div
+                  aria-busy={stale}
+                  className={
+                    stale ? "opacity-60 transition-opacity" : undefined
+                  }
+                >
+                  <DishResultView
+                    dish={dish}
+                    goal={targets}
+                    ratioWithinTolerance={ratioWithin ?? undefined}
+                    kcalWithinTolerance={kcalWithin ?? undefined}
+                  />
+                  {stale && (
+                    <p
+                      role="status"
+                      className="m-0 text-sm text-muted-foreground"
+                    >
+                      {t("recalculating")}
+                    </p>
+                  )}
+                </div>
+              )}
 
-          {/* Одна область на блок действий, и она постоянна: живая область,
-              появившаяся вместе с текстом, озвучивается не всеми программами
-              чтения с экрана. */}
-          <ActionReason id={reasonId}>{actionsBlockedBy}</ActionReason>
-        </div>
-      </Section>
+              {/* Отказ проверки не показывался вовсе: показатели просто исчезали, и
+                  после пересчёта порций в массы, которые расчёт уже не принимает,
+                  человек видел пустоту без причины. Пока правка не догнала расчёт,
+                  прежний отказ не показывается — он о другом составе. */}
+              {refusalMessage !== null && (
+                <div className="flex flex-col items-start gap-field">
+                  <div id={refusalId}>
+                    <FormError>{refusalMessage}</FormError>
+                  </div>
+                  {/* Повтор — только при сбое: отказ по данным при том же составе
+                      повторится слово в слово (правило в ките, общее с Mini App). */}
+                  {(retrying || canRetry(errorCodeOf(verify.error))) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      // `aria-disabled`, а не `disabled`: выключенная кнопка теряет
+                      // фокус, а повторное нажатие гасит сам обработчик.
+                      className="aria-disabled:opacity-50"
+                      aria-disabled={retrying || undefined}
+                      aria-busy={retrying || undefined}
+                      onClick={() => {
+                        if (retrying) return;
+                        setRetry({
+                          input: verifyInput,
+                          message: onlineManager.isOnline()
+                            ? refusalMessage
+                            : t("waitingForNetwork"),
+                        });
+                        runVerify();
+                      }}
+                    >
+                      {retrying
+                        ? t("common:actions.retrying")
+                        : t("common:actions.retry")}
+                    </Button>
+                  )}
+                </div>
+              )}
+              {/* Постоянная область: появившаяся вместе с текстом объявляется не
+                  всеми программами чтения с экрана. */}
+              <p role="status" className="sr-only">
+                {retrying && !verify.isPaused
+                  ? t("common:actions.retrying")
+                  : announceRetryFailed
+                    ? refusalMessage
+                    : ""}
+              </p>
 
-      {/* Неразрешимая задача — не ошибка, а объяснимый результат (раздел 8.3 ТЗ):
-          сервер возвращает человекочитаемую причину, её и показываем. Для врача
-          это и есть ответ на его вопрос: назначение на этих продуктах не
-          собирается. */}
-      {infeasible && (
-        <WarningBanner level="danger" title={t("infeasible.title")}>
-          {errorMessageOf(solve.error)}
-        </WarningBanner>
-      )}
+              <Separator />
 
-      {/* Отказ действия, дословно повторяющий видимый отказ проверки, — вторая
-          строка с тем же текстом (правило П27). */}
-      {actionError && !infeasible && !duplicateOfVerify && (
-        <FormError>{actionMessage ?? t("common:errors.unexpected")}</FormError>
-      )}
+              <div className="flex flex-col gap-section">
+                <div className="flex flex-wrap items-start gap-section">
+                  <Field
+                    id="protein-min"
+                    width="narrow"
+                    label={t("targets.proteinMin")}
+                    optional
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step={1}
+                    value={proteinMin ?? ""}
+                    onChange={(e) => {
+                      setProteinMin(
+                        e.target.value === "" ? null : +e.target.value,
+                      );
+                      solve.reset();
+                    }}
+                    className="tabular-nums"
+                  />
+                  <Field
+                    id="carbs-max"
+                    width="narrow"
+                    label={t("targets.carbsMax")}
+                    optional
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step={1}
+                    value={carbsMax ?? ""}
+                    onChange={(e) => {
+                      setCarbsMax(
+                        e.target.value === "" ? null : +e.target.value,
+                      );
+                      solve.reset();
+                    }}
+                    className="tabular-nums"
+                  />
+                </div>
 
-      {/* Форма стоит, пока есть состав, а не пока есть показатели: показатели
-          пропадают на каждой массе тяжелее предела, и вместе с формой
-          пропадали бы набранное название и выбранный пациент. Состав тяжелее
-          предела или ещё не проверенный форма отправить не даёт и говорит
-          почему. */}
-      {rows.length > 0 && (
-        <>
-          {/* Куда уходит собранный состав, зависит от того, чей это экран:
-              в карте ребёнка — сразу в его блюда, в общем калькуляторе —
-              вместе с выбором ребёнка. */}
-          {patientId === undefined ? (
-            <HandOffToPatient
-              rows={rows}
-              blockedBy={tooHeavyReason}
-              waitingFor={actionsBusyReason}
-            />
-          ) : (
-            <SaveDishForm
-              patientId={patientId}
-              rows={rows}
-              blockedBy={saveBlockedBy}
-              waitingFor={saveWaitsFor}
-            />
-          )}
-        </>
-      )}
+                <div className="flex flex-col gap-field">
+                  <div>
+                    <Button
+                      type="button"
+                      size="lg"
+                      className="min-h-touch"
+                      disabled={solveBlockedBy !== null || busy}
+                      aria-busy={solve.isPending}
+                      aria-describedby={
+                        solveBlockedBy !== null
+                          ? reasonId
+                          : actionsWaitingDescription
+                      }
+                      onClick={() => {
+                        if (targets === null) return;
+                        scale.reset();
+                        solve.mutate({ rows, targets, patientId });
+                      }}
+                    >
+                      {solve.isPending
+                        ? t("actions.solving")
+                        : t("actions.solve")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-field">
+                  <div className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0">
+                    <Field
+                      id="factor"
+                      width="tiny"
+                      label={t("factor")}
+                      hint={t("factorHint")}
+                      type="number"
+                      inputMode="decimal"
+                      min={0.1}
+                      step={0.1}
+                      value={factor}
+                      onChange={(event) => {
+                        setFactor(Number(event.target.value));
+                        scale.reset();
+                      }}
+                      className="tabular-nums"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-touch"
+                      disabled={scaleBlockedBy !== null || busy}
+                      aria-busy={scale.isPending}
+                      aria-describedby={
+                        scaleBlockedBy !== null
+                          ? reasonId
+                          : actionsWaitingDescription
+                      }
+                      onClick={() => {
+                        solve.reset();
+                        scale.mutate({ rows, factor });
+                      }}
+                    >
+                      {scale.isPending
+                        ? t("actions.scaling")
+                        : t("actions.scale")}
+                    </Button>
+                  </div>
+                </div>
+
+                <ActionReason id={reasonId}>{actionsBlockedBy}</ActionReason>
+              </div>
+            </Section>
+
+            {infeasible && (
+              <WarningBanner level="danger" title={t("infeasible.title")}>
+                {errorMessageOf(solve.error)}
+              </WarningBanner>
+            )}
+
+            {actionError && !infeasible && !duplicateOfVerify && (
+              <FormError>
+                {actionMessage ?? t("common:errors.unexpected")}
+              </FormError>
+            )}
+          </>
+        }
+      />
     </div>
   );
 }
@@ -928,12 +916,8 @@ function GoalFields({
           от поля «Калорийность» — пара читалась как два несвязанных поля, а
           пояснение к правому уезжало к краю экрана. Ширину пары теперь задают
           сами поля. */}
-      <div className="flex items-start gap-section">
-        {/* Каждое поле — своя доля строки на телефоне и своя ширина на
-            десктопе: числовое поле занимает строку целиком до `sm`, и в
-            свободном ряду пара распадалась на две строки — а показатели
-            блюда обязаны читаться рядом с целью. */}
-        <div className="min-w-0 flex-1 sm:flex-none">
+      <div className="grid grid-cols-2 items-start gap-field">
+        <div className="min-w-0">
           <Field
             id="ratio"
             width="narrow"
@@ -958,7 +942,7 @@ function GoalFields({
             className="tabular-nums"
           />
         </div>
-        <div className="min-w-0 flex-1 sm:flex-none">
+        <div className="min-w-0">
           <Field
             id="kcal"
             width="narrow"

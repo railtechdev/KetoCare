@@ -368,17 +368,20 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         title={t("users.filters.legend")}
         titleHidden
         density="compact"
-        contentClassName="flex flex-wrap items-end gap-section"
+        contentClassName="flex-row flex-wrap items-end gap-section"
       >
-        <Field
-          id="users-search"
-          type="search"
-          label={t("users.filters.search")}
-          value={filter.q}
-          onChange={(event) =>
-            setFilter((current) => ({ ...current, q: event.target.value }))
-          }
-        />
+        <div className="min-w-56 flex-1 sm:max-w-md">
+          <Field
+            id="users-search"
+            width="wide"
+            type="search"
+            label={t("users.filters.search")}
+            value={filter.q}
+            onChange={(event) =>
+              setFilter((current) => ({ ...current, q: event.target.value }))
+            }
+          />
+        </div>
         <SelectField
           id="users-role"
           label={t("users.filters.role")}

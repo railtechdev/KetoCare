@@ -47,7 +47,7 @@ export function PatientNav({
 
   return (
     <>
-      <div className="flex flex-col gap-field">
+      <div className="flex flex-wrap items-center justify-between gap-field lg:flex-col lg:items-start">
         <SectionLink
           section="patients"
           exact
@@ -60,7 +60,7 @@ export function PatientNav({
         {/* Заголовок второго уровня: первый занят названием раздела, а имя
             пациента — подпись ко всей навигации, а не второй заголовок
             страницы (правило П24 канона). */}
-        <div className="px-2">
+        <div className="flex items-baseline gap-2 px-2 lg:block">
           <h2 className="m-0 text-card-title font-semibold break-words text-foreground">
             {patient.full_name}
           </h2>
@@ -86,7 +86,7 @@ export function PatientNav({
                 view={view}
                 current={open}
                 className={cn(
-                  "flex min-h-touch items-center gap-field rounded-lg px-3 text-sm font-medium",
+                  "flex min-h-touch items-center gap-field rounded-lg px-2.5 text-xs font-medium sm:text-sm lg:px-3",
                   "no-underline transition-colors",
                   "hover:bg-accent hover:text-accent-foreground",
                   open
@@ -94,7 +94,10 @@ export function PatientNav({
                     : "text-foreground/80",
                 )}
               >
-                <Icon aria-hidden="true" className="size-4 shrink-0" />
+                <Icon
+                  aria-hidden="true"
+                  className="hidden size-4 shrink-0 lg:block"
+                />
                 {t(`workspace.views.${view}`)}
               </PatientViewLink>
             </li>

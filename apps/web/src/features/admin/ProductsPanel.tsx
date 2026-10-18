@@ -162,7 +162,15 @@ export function ProductsPanel({
 
   const columns = useMemo<ColumnDef<Product, unknown>[]>(
     () => [
-      { accessorKey: "name_ru", header: t("products.columns.name") },
+      {
+        accessorKey: "name_ru",
+        header: t("products.columns.name"),
+        cell: ({ row }) => (
+          <span className="block max-w-36 whitespace-normal font-medium leading-snug">
+            {row.original.name_ru}
+          </span>
+        ),
+      },
       {
         accessorKey: "category_id",
         header: t("products.columns.category"),
@@ -171,7 +179,7 @@ export function ProductsPanel({
             type="button"
             variant="link"
             size="sm"
-            className="px-0"
+            className="h-auto px-0 text-left whitespace-normal"
             title={row.original.category_id}
             onClick={() =>
               setFiltersAndResetPage((current) => ({
@@ -224,26 +232,32 @@ export function ProductsPanel({
             <RatioBadge ratio={row.original.ratio} />
           ),
       },
-      { accessorKey: "source", header: t("products.columns.source") },
-      {
-        accessorKey: "source_version",
-        header: t("products.columns.sourceVersion"),
-      },
       {
         accessorKey: "verified_at",
-        header: t("products.columns.verifiedAt"),
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap tabular-nums">
-            {formatIsoDate(row.original.verified_at) ??
-              row.original.verified_at}
-          </span>
-        ),
+        header: t("products.columns.source"),
+        cell: ({ row }) => {
+          const verified =
+            formatIsoDate(row.original.verified_at) ?? row.original.verified_at;
+          return (
+            <span
+              className="flex flex-col leading-tight"
+              title={`${t("products.columns.source")}: ${row.original.source} · ${t("products.columns.sourceVersion")}: ${row.original.source_version} · ${t("products.columns.verifiedAt")}: ${verified}`}
+            >
+              <span className="max-w-32 truncate">{row.original.source}</span>
+              <span className="max-w-32 truncate text-xs text-muted-foreground tabular-nums">
+                {[row.original.source_version, verified]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </span>
+          );
+        },
       },
       {
         accessorKey: "is_active",
         header: t("products.columns.status"),
         cell: ({ row }) => (
-          <span className="flex flex-col">
+          <span className="flex flex-col leading-tight">
             {row.original.is_active ? (
               <span className="text-success">
                 {t("products.status.active")}
@@ -256,7 +270,7 @@ export function ProductsPanel({
             {/* Приправа (ADR-0054) — рядом со статусом: диетолог ищет
                 глазами, что из справочника не идёт в расчёт. */}
             {!row.original.counts_in_calculation && (
-              <span className="text-sm text-muted-foreground">
+              <span className="max-w-36 whitespace-normal text-xs text-muted-foreground">
                 {t("products.status.uncounted")}
               </span>
             )}
