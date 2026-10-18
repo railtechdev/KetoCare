@@ -71,7 +71,9 @@ export function SegmentedControl<T extends string = string>({
               value={item.value}
               checked={active}
               disabled={item.disabled}
-              aria-label={typeof item.label === "string" ? item.label : undefined}
+              aria-label={
+                typeof item.label === "string" ? item.label : undefined
+              }
               onChange={() => onChange(item.value)}
               className="sr-only"
             />
@@ -82,4 +84,3 @@ export function SegmentedControl<T extends string = string>({
     </fieldset>
   );
 }
-

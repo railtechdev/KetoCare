@@ -228,10 +228,7 @@ export function DataTable<TData>({
             <span />
           )}
           {showPagination && (
-            <nav
-              className="flex items-center gap-2.5"
-              aria-label={caption}
-            >
+            <nav className="flex items-center gap-2.5" aria-label={caption}>
               <button
                 type="button"
                 onClick={() => goTo(pageIndex - 1)}

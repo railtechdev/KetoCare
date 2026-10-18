@@ -45,9 +45,7 @@ export function AdminPage({ section }: { section?: string }) {
 
   const current = sectionFromRoute(section);
   const isEditingProductItem =
-    current === "products" &&
-    address.item !== undefined &&
-    address.item !== "";
+    current === "products" && address.item !== undefined && address.item !== "";
 
   return (
     // Разделы админки — таблицы: учётки, продукты, справочники, журнал. Это

@@ -89,9 +89,7 @@ export function Metric({ label, value, unit, hint, emphasis }: MetricProps) {
         </span>
         {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
       </dd>
-      {hint && (
-        <dd className="m-0 text-xs text-muted-foreground">{hint}</dd>
-      )}
+      {hint && <dd className="m-0 text-xs text-muted-foreground">{hint}</dd>}
     </div>
   );
 }

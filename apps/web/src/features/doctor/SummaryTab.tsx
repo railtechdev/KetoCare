@@ -165,7 +165,10 @@ function OverviewPanels({
                     {t("summary.day.offRatio")}
                   </WarningBanner>
                 ) : verdict.ratioUnknown ? (
-                  <p role="status" className="m-0 text-sm text-muted-foreground">
+                  <p
+                    role="status"
+                    className="m-0 text-sm text-muted-foreground"
+                  >
                     {t("summary.day.ratioUnknown")}
                   </p>
                 ) : (

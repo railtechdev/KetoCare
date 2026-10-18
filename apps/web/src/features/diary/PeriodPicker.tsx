@@ -42,8 +42,8 @@ export function PeriodPicker({
         <SegmentedControl
           label={t("period.legend")}
           value={preset}
-          onValueChange={onPresetChange}
-          options={PRESETS.map((value) => ({
+          onChange={onPresetChange}
+          items={PRESETS.map((value) => ({
             value,
             label: t(`period.${value}`),
           }))}
