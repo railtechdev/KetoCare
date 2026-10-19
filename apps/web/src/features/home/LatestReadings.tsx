@@ -54,11 +54,17 @@ export function LatestReadings({ ketone, weight }: Props) {
         ) : (
           <DiaryEntryCard
             title={t("ketone.title")}
+            category={t("ketone.title")}
+            metric={t("ketone.value", { value: formatMeasured(ketone.value) })}
+            status={
+              ketone.value >= 1.5 && ketone.value <= 4.0
+                ? "success"
+                : ketone.value > 0
+                  ? "warning"
+                  : "default"
+            }
             occurredAt={new Date(ketone.occurred_at)}
           >
-            <p className="m-0 text-metric font-semibold tabular-nums">
-              {t("ketone.value", { value: formatMeasured(ketone.value) })}
-            </p>
             <p className="m-0 mt-1 text-sm text-muted-foreground">
               {t(`ketone.method.${ketone.method}`)}
             </p>
@@ -76,12 +82,12 @@ export function LatestReadings({ ketone, weight }: Props) {
         ) : (
           <DiaryEntryCard
             title={t("weight.title")}
+            category={t("weight.title")}
+            metric={t("weight.value", {
+              value: formatWeight(weight.weight_kg),
+            })}
             occurredAt={new Date(weight.occurred_at)}
-          >
-            <p className="m-0 text-metric font-semibold tabular-nums">
-              {t("weight.value", { value: formatWeight(weight.weight_kg) })}
-            </p>
-          </DiaryEntryCard>
+          />
         )}
       </Tiles>
     </section>

@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FormFooter, WarningBanner } from "@ketocare/ui";
+import { Button, FormFooter, WarningBanner, formatKcal } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -89,6 +89,7 @@ export function ProductForm({
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, submitCount },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -107,6 +108,32 @@ export function ProductForm({
   const [kcal, fat, protein, carbs, fiber] = watch(NUTRIENTS);
   const check = useProductValuesCheck({ kcal, fat, protein, carbs, fiber });
   const findings = check.data ?? [];
+
+  // Расчётная калорийность по формуле Этуотера: (protein * 4) + (fat * 9) + (carbs * 4)
+  const hasMacroInputs =
+    protein !== undefined &&
+    !Number.isNaN(protein) &&
+    fat !== undefined &&
+    !Number.isNaN(fat) &&
+    carbs !== undefined &&
+    !Number.isNaN(carbs);
+
+  const expectedKcal = hasMacroInputs
+    ? (protein ?? 0) * 4 + (fat ?? 0) * 9 + (carbs ?? 0) * 4
+    : null;
+  const roundedExpectedKcal =
+    expectedKcal !== null ? Math.round(expectedKcal) : null;
+  const isKcalFilled = kcal !== undefined && !Number.isNaN(kcal) && kcal > 0;
+  const hasPositiveMacros =
+    (protein ?? 0) > 0 || (fat ?? 0) > 0 || (carbs ?? 0) > 0;
+  const diffKcal =
+    expectedKcal !== null && isKcalFilled ? Math.abs(kcal - expectedKcal) : 0;
+  const isAtwaterDivergent =
+    expectedKcal !== null &&
+    roundedExpectedKcal !== null &&
+    isKcalFilled &&
+    hasPositiveMacros &&
+    (diffKcal > 25 || (expectedKcal > 0 && diffKcal / expectedKcal > 0.15));
 
   function fieldId(name: keyof ProductFormValues) {
     const spec = VALIDATED.find((field) => field.name === name);
@@ -242,6 +269,36 @@ export function ProductForm({
               {t("products.form.seasoningHint")}
             </p>
           </div>
+          {isAtwaterDivergent && roundedExpectedKcal !== null && (
+            <WarningBanner
+              level="warning"
+              title={t("products.form.atwaterTitle")}
+            >
+              <p className="m-0">
+                {t("products.form.atwaterMismatch", {
+                  expected: formatKcal(roundedExpectedKcal),
+                  declared: formatKcal(kcal),
+                })}
+              </p>
+              <div className="mt-field">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setValue("kcal", roundedExpectedKcal, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    });
+                  }}
+                >
+                  {t("products.form.atwaterSubstitute", {
+                    expected: formatKcal(roundedExpectedKcal),
+                  })}
+                </Button>
+              </div>
+            </WarningBanner>
+          )}
           {findings.length > 0 && (
             <WarningBanner
               level="warning"

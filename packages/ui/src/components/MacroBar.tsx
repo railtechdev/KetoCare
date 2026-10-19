@@ -1,4 +1,4 @@
-import { formatGrams } from "../lib/format";
+import { formatGrams, formatKcal } from "../lib/format";
 import { cn } from "../lib/cn";
 import { useKitLabels } from "../lib/kitLabels";
 
@@ -28,6 +28,20 @@ export interface MacroBarProps {
   /** Показывать граммы рядом с подписями */
   showGrams?: boolean;
   className?: string;
+  /** Целевые граммы БЖУ (и ккал) */
+  targetGrams?: {
+    fat?: number;
+    protein?: number;
+    carbs?: number;
+    kcal?: number;
+  };
+  /** Оставшиеся граммы БЖУ (и ккал) до суточной нормы */
+  remainingGrams?: {
+    fat?: number;
+    protein?: number;
+    carbs?: number;
+    kcal?: number;
+  };
 }
 
 interface Segment {
@@ -56,6 +70,8 @@ export function MacroBar({
   carbsG,
   netCarbs,
   showGrams = true,
+  targetGrams,
+  remainingGrams,
   className,
 }: MacroBarProps) {
   const { macros } = useKitLabels();
@@ -102,20 +118,39 @@ export function MacroBar({
       </div>
 
       <ul className="mt-2 flex list-none flex-wrap gap-4 p-0 text-sm text-foreground">
-        {segments.map((segment) => (
-          <li key={segment.key} className="flex items-center gap-1.5">
-            <span
-              className={cn("size-2.5 rounded-sm", segment.color)}
-              aria-hidden="true"
-            />
-            <span>{segment.label}</span>
-            {showGrams && (
-              <span className="text-muted-foreground tabular-nums">
-                {formatGrams(segment.grams)} {macros.gramsUnit}
-              </span>
-            )}
-          </li>
-        ))}
+        {segments.map((segment) => {
+          const target = targetGrams?.[segment.key];
+          const remaining = remainingGrams?.[segment.key];
+
+          return (
+            <li
+              key={segment.key}
+              className="flex items-center gap-1.5 flex-wrap"
+            >
+              <span
+                className={cn("size-2.5 rounded-sm shrink-0", segment.color)}
+                aria-hidden="true"
+              />
+              <span>{segment.label}</span>
+              {showGrams && (
+                <span className="text-muted-foreground tabular-nums">
+                  {formatGrams(segment.grams)} {macros.gramsUnit}
+                </span>
+              )}
+              {target !== undefined && (
+                <span className="text-muted-foreground tabular-nums text-xs">
+                  {macros.ofTarget} {formatGrams(target)} {macros.gramsUnit}
+                </span>
+              )}
+              {remaining !== undefined && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  ({macros.remaining}: {formatGrams(remaining)}{" "}
+                  {macros.gramsUnit})
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       {/* Чистые углеводы — отдельной строкой под полосой, а не четвёртым
@@ -127,6 +162,25 @@ export function MacroBar({
             {formatGrams(netCarbs.grams)} {macros.gramsUnit}
           </span>
           {netCarbs.note !== undefined && ` — ${netCarbs.note}`}
+        </p>
+      )}
+
+      {(remainingGrams?.kcal !== undefined ||
+        targetGrams?.kcal !== undefined) && (
+        <p className="mt-1.5 mb-0 text-xs text-muted-foreground tabular-nums">
+          {macros.kcalFull}:{" "}
+          {targetGrams?.kcal !== undefined && (
+            <span>
+              {macros.ofTarget} {formatKcal(targetGrams.kcal)}{" "}
+              {macros.kcalUnit}{" "}
+            </span>
+          )}
+          {remainingGrams?.kcal !== undefined && (
+            <span>
+              ({macros.remaining}: {formatKcal(remainingGrams.kcal)}{" "}
+              {macros.kcalUnit})
+            </span>
+          )}
         </p>
       )}
     </div>

@@ -72,4 +72,25 @@ describe("сводка ошибок записи дневника", () => {
     );
     expect(screen.getByLabelText(diaryRu.seizures.type)).toHaveFocus();
   });
+
+  it("рассчитывает GKI в реальном времени при вводе кетонов и глюкозы", async () => {
+    const user = userEvent.setup();
+    renderForm("ketones");
+
+    const ketoneInput = screen.getByLabelText(diaryRu.ketones.value);
+    const glucoseInput = screen.getByLabelText(
+      new RegExp(diaryRu.ketones.glucose),
+    );
+
+    await user.type(ketoneInput, "2.0");
+    await user.type(glucoseInput, "4.0");
+
+    // GKI = 4.0 / 2.0 = 2.0 (high / глубокий кетоз)
+    expect(await screen.findByText(/GKI: 2[.,]0/)).toHaveTextContent(
+      /GKI: 2[.,]0/,
+    );
+    expect(await screen.findByText(/GKI: 2[.,]0/)).toHaveTextContent(
+      diaryRu.ketones.gkiLevels.high,
+    );
+  });
 });

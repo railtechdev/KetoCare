@@ -112,6 +112,7 @@ export function DishRows({
                   id={`grams-${row.product.id}`}
                   type="number"
                   inputMode="decimal"
+                  pattern="[0-9]*[.,]?[0-9]*"
                   min={0}
                   max={CALC_GRAMS_MAX}
                   step={1}
@@ -123,7 +124,7 @@ export function DishRows({
                     onChangeGrams?.(row.product.id, Number(event.target.value))
                   }
                   className={cn(
-                    "min-h-touch w-24 text-right tabular-nums",
+                    "min-h-touch w-field-tiny text-right tabular-nums sm:w-24",
                     "read-only:bg-muted read-only:text-muted-foreground",
                   )}
                 />

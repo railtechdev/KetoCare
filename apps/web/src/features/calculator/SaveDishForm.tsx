@@ -1,10 +1,17 @@
-import { FormFooter, Section, toast, useAttemptKey } from "@ketocare/ui";
+import {
+  Button,
+  FormFooter,
+  Section,
+  toast,
+  useAttemptKey,
+} from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
+import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { dishSignature, type DishRow } from "./types";
 import { useSaveDishMutation } from "./useCalcMutations";
@@ -42,6 +49,7 @@ export function SaveDishForm({
   const queryClient = useQueryClient();
   const save = useSaveDishMutation(patientId);
   const [title, setTitle] = useState("");
+  const [saved, setSaved] = useState(false);
   // Пока название и состав те же, попытка та же: повтор после потерянного
   // ответа не создаст второго блюда (ADR-0035).
   const attemptKey = useAttemptKey(dishSignature(patientId, title, rows));
@@ -71,6 +79,7 @@ export function SaveDishForm({
                 // принять следующее блюдо.
                 toast.success(t("save.saved"));
                 setTitle("");
+                setSaved(true);
                 void queryClient.invalidateQueries({
                   queryKey: ["patient", patientId, "custom-dishes"],
                 });
@@ -86,7 +95,10 @@ export function SaveDishForm({
           width="wide"
           value={title}
           placeholder={t("save.placeholder")}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            if (saved) setSaved(false);
+          }}
         />
 
         {save.isError && (
@@ -116,6 +128,19 @@ export function SaveDishForm({
                   : (waitingFor ?? undefined)))
           }
         />
+
+        {saved && (
+          <div className="flex flex-wrap items-center gap-field pt-1">
+            <Button asChild variant="outline" size="sm" className="min-h-touch">
+              <SectionLink section="menu">{t("save.toMenu")}</SectionLink>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="min-h-touch">
+              <SectionLink section="diary" diaryKind="meals" item="new">
+                {t("save.toDiary")}
+              </SectionLink>
+            </Button>
+          </div>
+        )}
       </form>
     </Section>
   );

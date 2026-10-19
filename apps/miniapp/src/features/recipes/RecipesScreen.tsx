@@ -256,8 +256,10 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
         ) : (
           <div className="flex flex-wrap items-center gap-field">
             <RatioBadge ratio={portion.ratio} />
-            <span>{t("recipes.kcal", { kcal: formatKcal(portion.kcal) })}</span>
-            <span className="text-muted-foreground">
+            <span className="tabular-nums">
+              {t("recipes.kcal", { kcal: formatKcal(portion.kcal) })}
+            </span>
+            <span className="text-muted-foreground tabular-nums">
               {t("recipes.macros", {
                 fat: formatGrams(portion.fat),
                 protein: formatGrams(portion.protein),
@@ -266,7 +268,7 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
             </span>
           </div>
         )}
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground tabular-nums">
           {t("recipes.servings", {
             count: recipe.servings,
             yield: formatMass(recipe.yield_g),

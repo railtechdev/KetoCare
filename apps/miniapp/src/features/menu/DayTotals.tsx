@@ -81,6 +81,16 @@ export function DayTotals({
         fatG={totals.fat}
         proteinG={totals.protein}
         carbsG={totals.carbs}
+        targetGrams={
+          targets?.kcalPerDay !== undefined
+            ? { kcal: targets.kcalPerDay }
+            : undefined
+        }
+        remainingGrams={
+          targets?.kcalPerDay !== undefined
+            ? { kcal: targets.kcalPerDay - totals.kcal }
+            : undefined
+        }
         showGrams
       />
 

@@ -35,6 +35,12 @@ export interface KitLabels {
     /** Единицы после числа */
     gramsUnit: string;
     kcalUnit: string;
+    /** Остаток до суточной нормы */
+    remaining: string;
+    /** Превышение суточной нормы */
+    exceeded: string;
+    /** Предлог/обозначение целевого ориентира («из») */
+    ofTarget: string;
   };
   ratio: {
     unknown: string;
@@ -42,6 +48,16 @@ export interface KitLabels {
     plain: (value: string) => string;
     within: (value: string) => string;
     off: (value: string) => string;
+    /** Целевой ориентир соотношения */
+    target: (value: string) => string;
+    /** Величина отклонения от цели */
+    delta: (value: string) => string;
+    /** Статус попадания в коридор допуска */
+    inRange: string;
+    /** Статус умеренного отклонения */
+    deviation: string;
+    /** Статус критического отклонения */
+    critical: string;
   };
   diarySource: {
     web: string;
@@ -65,18 +81,63 @@ export const DEFAULT_KIT_LABELS: KitLabels = {
     carbsShort: "У",
     gramsUnit: "г",
     kcalUnit: "ккал",
+    remaining: "Осталось",
+    exceeded: "Превышено",
+    ofTarget: "из",
   },
   ratio: {
     unknown: "Соотношение не определено",
     plain: (value) => `Соотношение ${value}`,
     within: (value) => `Соотношение ${value}, соответствует назначению`,
     off: (value) => `Соотношение ${value}, отклоняется от назначения`,
+    target: (value) => `Цель: ${value}`,
+    delta: (value) => `Δ ${value}`,
+    inRange: "В норме",
+    deviation: "Отклонение",
+    critical: "Критическое",
   },
   diarySource: {
     web: "Веб",
     bot: "Бот",
     miniapp: "Приложение",
     ai_parsed: "Распознано ИИ",
+  },
+};
+
+export const EN_KIT_LABELS: KitLabels = {
+  macros: {
+    fat: "Fat",
+    protein: "Protein",
+    carbs: "Carbs",
+    kcalFull: "Calories, kcal",
+    fatFull: "Fat, g",
+    proteinFull: "Protein, g",
+    carbsFull: "Carbs, g",
+    fatShort: "F",
+    proteinShort: "P",
+    carbsShort: "C",
+    gramsUnit: "g",
+    kcalUnit: "kcal",
+    remaining: "Remaining",
+    exceeded: "Exceeded",
+    ofTarget: "of",
+  },
+  ratio: {
+    unknown: "Ratio unknown",
+    plain: (value) => `Ratio ${value}`,
+    within: (value) => `Ratio ${value}, within target`,
+    off: (value) => `Ratio ${value}, off target`,
+    target: (value) => `Target: ${value}`,
+    delta: (value) => `Δ ${value}`,
+    inRange: "In range",
+    deviation: "Deviation",
+    critical: "Critical",
+  },
+  diarySource: {
+    web: "Web",
+    bot: "Bot",
+    miniapp: "App",
+    ai_parsed: "AI parsed",
   },
 };
 
@@ -117,12 +178,20 @@ export function kitLabelsFrom(t: KitTranslate): KitLabels {
       carbsShort: macro("carbsShort"),
       gramsUnit: macro("gramsUnit"),
       kcalUnit: macro("kcalUnit"),
+      remaining: macro("remaining"),
+      exceeded: macro("exceeded"),
+      ofTarget: macro("ofTarget"),
     },
     ratio: {
       unknown: t("kit.ratio.unknown"),
       plain: (value) => t("kit.ratio.plain", { value }),
       within: (value) => t("kit.ratio.within", { value }),
       off: (value) => t("kit.ratio.off", { value }),
+      target: (value) => t("kit.ratio.target", { value }),
+      delta: (value) => t("kit.ratio.delta", { value }),
+      inRange: t("kit.ratio.inRange"),
+      deviation: t("kit.ratio.deviation"),
+      critical: t("kit.ratio.critical"),
     },
     diarySource: {
       web: source("web"),

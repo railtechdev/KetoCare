@@ -87,6 +87,7 @@ export type { FormatLanguage } from "./lib/format";
 
 export {
   DEFAULT_KIT_LABELS,
+  EN_KIT_LABELS,
   kitLabelsFrom,
   useKitLabels,
 } from "./lib/kitLabels";

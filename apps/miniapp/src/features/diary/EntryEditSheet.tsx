@@ -6,6 +6,7 @@ import {
   KETONE_MAX_MMOL,
   KETONE_MIN_MMOL,
   NativeSelect,
+  cn,
   OCCURRED_AT_FUTURE,
   SEIZURE_COUNT_MIN,
   StatusNote,
@@ -709,6 +710,8 @@ function TextField({
   min?: number;
 }) {
   const { t } = useTranslation();
+  const isNumeric =
+    type === "number" || inputMode === "decimal" || inputMode === "numeric";
   return (
     <FieldShell
       label={label}
@@ -722,7 +725,7 @@ function TextField({
           inputMode={inputMode}
           step={step}
           min={min}
-          className="min-h-touch"
+          className={cn("min-h-touch", isNumeric && "tabular-nums")}
           value={value}
           aria-invalid={invalid}
           aria-describedby={describedBy}

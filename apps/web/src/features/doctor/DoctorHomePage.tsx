@@ -5,7 +5,9 @@ import {
   EmptyState,
   Metric,
   MetricRow,
+  RatioBadge,
   Section,
+  formatKcal,
 } from "@ketocare/ui";
 import { CircleCheck, UserPlus, Users } from "lucide-react";
 import { useMemo } from "react";
@@ -23,7 +25,7 @@ import type { PatientView } from "./patientViews";
 import { usePatientOverviews } from "./doctorQueries";
 import { attentionRank, computePatientFlags, type PatientFlags } from "./flags";
 import { LinesSkeleton } from "./skeletons";
-import type { Patient } from "./types";
+import type { Patient, PatientOverview } from "./types";
 import { queryState } from "../../lib/queryState";
 
 /**
@@ -39,6 +41,7 @@ interface QueueRow {
   patient: Patient;
   flags: PatientFlags;
   rank: number;
+  overview: PatientOverview | null;
 }
 
 /**
@@ -117,7 +120,7 @@ export function DoctorHomePage() {
         if (flags.nutritionOff) offTolerance += 1;
 
         const rank = attentionRank(flags);
-        if (rank > 0) rows.push({ patient, flags, rank });
+        if (rank > 0) rows.push({ patient, flags, rank, overview });
       }
 
       rows.sort(
@@ -211,24 +214,38 @@ export function DoctorHomePage() {
                 {queue.map((row) => (
                   <li
                     key={row.patient.id}
-                    className="flex flex-wrap items-center gap-field rounded-xl border border-border bg-muted/20 px-3.5 py-2.5 transition-colors hover:border-primary/35 hover:bg-muted/35"
+                    className="flex flex-wrap items-center justify-between gap-field rounded-xl border border-border bg-muted/20 px-3.5 py-2.5 transition-colors hover:border-primary/35 hover:bg-muted/35"
                   >
-                    {/* Имя — ссылка на карту: врач открывает её в новой вкладке и
-                    пересылает коллеге (правило П1 канона). */}
-                    <PatientViewLink
-                      patientId={row.patient.id}
-                      view={viewForFlags(row.flags)}
-                      className="min-w-0 flex-1 font-semibold text-foreground break-words underline-offset-2 hover:text-primary hover:underline"
-                    >
-                      {row.patient.full_name}
-                    </PatientViewLink>
-                    <PatientFlagsView flags={row.flags} />
-                    {row.flags.staleData && (
-                      <NudgeFamilyButton
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                      <PatientViewLink
                         patientId={row.patient.id}
-                        patientName={row.patient.full_name}
-                      />
-                    )}
+                        view={viewForFlags(row.flags)}
+                        className="font-semibold text-foreground break-words underline-offset-2 hover:text-primary hover:underline"
+                      >
+                        {row.patient.full_name}
+                      </PatientViewLink>
+                      {row.overview?.prescription && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <RatioBadge ratio={row.overview.prescription.ratio} />
+                          <span className="font-medium text-foreground tabular-nums">
+                            {t("list.kcalValue", {
+                              value: formatKcal(
+                                row.overview.prescription.kcal_per_day,
+                              ),
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-field">
+                      <PatientFlagsView flags={row.flags} />
+                      {row.flags.staleData && (
+                        <NudgeFamilyButton
+                          patientId={row.patient.id}
+                          patientName={row.patient.full_name}
+                        />
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -7,12 +7,22 @@ import {
   CardHeader,
   CardTitle,
   FormFooter,
+  SegmentedControl,
   WarningBanner,
 } from "@ketocare/ui";
-import { Activity } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  KeyRound,
+  Moon,
+  ShieldCheck,
+  Sun,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+
+import { useTheme } from "../../lib/theme";
 
 import { FormError } from "../../components/FormError";
 import {
@@ -35,15 +45,25 @@ import { loginSchema, type LoginValues } from "./schemas";
 import { useSession } from "./useSession";
 import { useLoginMutation } from "./useAuthMutations";
 
+const LANGUAGE_OPTIONS = [
+  { value: "ru", label: "RU" },
+  { value: "uz", label: "UZ" },
+  { value: "en", label: "EN" },
+] as const;
+
 export function LoginPage({
   initialEmail,
 }: {
   /** Почта только что заведённой учётной записи (`/login?email=`). */
   initialEmail?: string;
 } = {}) {
-  const { t } = useTranslation("auth");
+  const { t, i18n } = useTranslation(["auth", "common"]);
   const { signIn } = useSession();
   const login = useLoginMutation();
+  const { theme, setTheme } = useTheme();
+
+  const currentLang =
+    (i18n.language?.slice(0, 2) as "ru" | "uz" | "en") || "ru";
 
   /** Токен первичной настройки 2FA, если сервер её потребовал. */
   const [setupToken, setSetupToken] = useState<string | null>(null);
@@ -77,6 +97,7 @@ export function LoginPage({
     register,
     handleSubmit,
     setFocus,
+    watch,
     formState: { errors, submitCount },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -171,36 +192,67 @@ export function LoginPage({
     }
   });
 
+  const watchedEmail = watch("email");
+
   return (
     <div className="flex min-h-dvh items-center justify-center p-screen">
       <div className="flex w-full max-w-form flex-col gap-section">
-        {/* Знак продукта и одна строка о том, что это: человек приходит сюда по
-            ссылке из письма и должен понять, куда попал, до того как введёт
-            почту. Тот же значок стоит в шапке кабинета — вход не должен
-            выглядеть чужой страницей. */}
-        <div className="flex items-center gap-field">
-          <span
-            aria-hidden="true"
-            className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"
-          >
-            <Activity className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <p className="m-0 text-card-title font-semibold">
-              {t("login.brand")}
-            </p>
-            <p className="m-0 text-sm text-muted-foreground">
-              {t("login.tagline")}
-            </p>
+        {/* Шапка с логотипом, переключателем языка и темы */}
+        <div className="flex items-center justify-between gap-field">
+          <div className="flex items-center gap-field">
+            <span
+              aria-hidden="true"
+              className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-kc-sm"
+            >
+              <Activity className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="m-0 text-card-title font-semibold">
+                {t("login.brand")}
+              </p>
+              <p className="m-0 text-sm text-muted-foreground">
+                {t("login.tagline")}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <SegmentedControl
+              label={t("login.languageLabel")}
+              size="sm"
+              value={currentLang}
+              items={LANGUAGE_OPTIONS}
+              onChange={(val) => {
+                void i18n.changeLanguage(val);
+              }}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="min-h-touch min-w-11 text-muted-foreground hover:text-foreground"
+              aria-label={t("theme.toggle", { ns: "common" })}
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
+              {theme === "dark" ? (
+                <Sun className="size-4" />
+              ) : (
+                <Moon className="size-4" />
+              )}
+            </Button>
           </div>
         </div>
 
-        <Card>
+        <Card className="shadow-kc">
           <CardHeader>
             <CardTitle className="text-page-title">
-              <h1 className="m-0 font-semibold">{t("login.title")}</h1>
+              <h1 className="m-0 font-semibold">
+                {totpRequired ? t("login.totpStepTitle") : t("login.title")}
+              </h1>
             </CardTitle>
-            <CardDescription>{t("login.intro")}</CardDescription>
+            <CardDescription>
+              {totpRequired ? t("login.totpStepIntro") : t("login.intro")}
+            </CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -217,25 +269,53 @@ export function LoginPage({
                 focusKey={submitCount}
               />
 
-              <Field
-                id="email"
-                type="email"
-                // Менеджеры паролей узнают поле по autoComplete; вставка ничем
-                // не ограничивается (правило П21 канона).
-                autoComplete="username"
-                label={t("login.email")}
-                error={emailError}
-                {...register("email")}
-              />
+              {/* Поля email и password остаются в DOM, чтобы react-hook-form передавала их значения на шаге 2FA */}
+              <div className={totpRequired ? "hidden" : "contents"}>
+                <Field
+                  id="email"
+                  type="email"
+                  // Менеджеры паролей узнают поле по autoComplete; вставка ничем
+                  // не ограничивается (правило П21 канона).
+                  autoComplete="username"
+                  label={t("login.email")}
+                  error={emailError}
+                  {...register("email")}
+                />
 
-              <Field
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                label={t("login.password")}
-                error={passwordError}
-                {...register("password")}
-              />
+                <Field
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  label={t("login.password")}
+                  error={passwordError}
+                  {...register("password")}
+                />
+              </div>
+
+              {totpRequired && (
+                <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 px-3.5 py-2.5 text-sm">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <ShieldCheck className="size-4 shrink-0 text-primary" />
+                    <span className="truncate font-medium text-foreground">
+                      {watchedEmail || initialEmail}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-touch text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setTotpRequired(false);
+                      setUseBackupCode(false);
+                      login.reset();
+                    }}
+                  >
+                    <ArrowLeft className="mr-1 size-3.5" />
+                    {t("login.backToLogin")}
+                  </Button>
+                </div>
+              )}
 
               {factorBroken && (
                 <WarningBanner level="warning" title={t("login.brokenTitle")}>
@@ -256,11 +336,12 @@ export function LoginPage({
                 ) : (
                   <Field
                     id="totp"
-                    width="narrow"
+                    width="full"
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     label={t("login.totpCode")}
                     hint={t("login.totpHint")}
+                    className="text-center font-mono text-2xl tracking-widest tabular-nums"
                     {...register("totpCode")}
                   />
                 ))}
@@ -298,26 +379,34 @@ export function LoginPage({
         {/* Регистрации в продукте нет: доступ выдаёт клиника (ADR-0003).
             Человек без учётной записи иначе упирается в форму, которую ему
             нечем заполнить, и не понимает, что делать дальше. */}
-        <div className="rounded-xl border border-border bg-card px-4 py-3">
-          <p className="m-0 text-sm font-semibold">
-            {t("login.noAccountTitle")}
-          </p>
-          <p className="m-0 mt-1 text-sm text-muted-foreground">
-            {t("login.noAccount")}
-          </p>
-          {/* Код на руках — частый случай: его прислали врач или родитель.
-              Без этой ссылки страница с формой для кода находилась только по
-              адресу из приглашения (аудит пути, 02.10.2026). */}
-          {/* Обычная ссылка, а не `Link` роутера: страница входа рисуется и
-              вне дерева маршрутов (проверка сессии), а переход на публичную
-              страницу полной загрузкой ничего не теряет. */}
-          <a
-            href="/join"
-            className="mt-2 inline-block text-sm text-primary underline underline-offset-4"
-          >
-            {t("login.haveCode")}
-          </a>
-        </div>
+        {!totpRequired && (
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-kc-sm">
+            <div className="flex items-start gap-3.5">
+              <span
+                aria-hidden="true"
+                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary"
+              >
+                <KeyRound className="size-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-sm font-semibold text-foreground">
+                  {t("login.noAccountTitle")}
+                </p>
+                <p className="m-0 mt-1 text-sm text-muted-foreground leading-relaxed">
+                  {t("login.noAccount")}
+                </p>
+                <div className="mt-4">
+                  <a
+                    href="/join"
+                    className="inline-flex min-h-touch items-center justify-center rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {t("login.haveCode")}
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

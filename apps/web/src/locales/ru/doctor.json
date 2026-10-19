@@ -16,6 +16,13 @@
       "label": "Поиск по имени",
       "placeholder": "Начните вводить имя"
     },
+    "quickFilters": {
+      "label": "Быстрый фильтр",
+      "all": "Все пациенты",
+      "attention": "Требуют внимания",
+      "active": "Активные"
+    },
+    "targetRatioLabel": "Цель: {{value}}:1",
     "columns": {
       "name": "Пациент",
       "age": "Возраст",
@@ -503,6 +510,8 @@
   "workspace": {
     "toList": "Все пациенты",
     "navLabel": "Разделы карты пациента: {{name}}",
+    "patientBanner": "Клинический статус пациента: {{name}}",
+    "heightValue": "{{value}} см",
     "loadError": "Карту пациента загрузить не удалось",
     "views": {
       "summary": "Сводка",

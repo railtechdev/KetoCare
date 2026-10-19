@@ -221,3 +221,67 @@ export const SECTION_ICONS: Record<string, LucideIcon> = {
   audit: ScrollText,
   profile: UserRound,
 };
+
+/** Смысловые группы разделов кабинета (раздел 8.1 ТЗ) */
+export type SectionGroup =
+  "daily" | "nutrition" | "clinical" | "management" | "account";
+
+export type SectionId =
+  | "home"
+  | "calculator"
+  | "products"
+  | "recipes"
+  | "menu"
+  | "diary"
+  | "reports"
+  | "assistant"
+  | "child"
+  | "patients"
+  | "users"
+  | "leads"
+  | "dictionaries"
+  | "audit"
+  | "profile";
+
+export interface Section {
+  id: SectionId | string;
+  group?: SectionGroup;
+}
+
+export const SECTION_GROUPS: Record<string, SectionGroup> = {
+  home: "daily",
+  diary: "daily",
+  calculator: "nutrition",
+  menu: "nutrition",
+  recipes: "nutrition",
+  products: "nutrition",
+  patients: "clinical",
+  reports: "clinical",
+  child: "management",
+  assistant: "management",
+  users: "management",
+  leads: "management",
+  dictionaries: "management",
+  audit: "management",
+  profile: "account",
+};
+
+export const SECTION_GROUP_ORDER: readonly SectionGroup[] = [
+  "daily",
+  "nutrition",
+  "clinical",
+  "management",
+  "account",
+] as const;
+
+export function getSectionGroup(section: string): SectionGroup {
+  return SECTION_GROUPS[section] ?? "management";
+}
+
+/** 4 самых частых раздела роли для быстрого мобильного TabBar */
+export const PRIMARY_MOBILE_SECTIONS: Record<Role, readonly string[]> = {
+  parent: ["home", "diary", "calculator", "menu"],
+  doctor: ["home", "patients", "calculator", "products"],
+  dietitian: ["home", "patients", "calculator", "products"],
+  admin: ["home", "users", "leads", "products"],
+};

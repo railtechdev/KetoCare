@@ -19,6 +19,10 @@ interface Props {
   targetKcal: number | null;
   /** Лимит углеводов назначения; вместе с калорийностью даёт полосы целей */
   carbsLimit: number | null;
+  /** Целевое соотношение назначения — передаётся в RatioBadge */
+  targetRatio?: number | null;
+  /** Целевой белок назначения — передаётся в MacroBar */
+  proteinTarget?: number | null;
 }
 
 /**
@@ -28,7 +32,13 @@ interface Props {
  * медицинские константы ядра (правило 2 CLAUDE.md), их копия в TypeScript
  * разошлась бы с расчётом и показала бы «в норме» там, где ядро считает иначе.
  */
-export function DayTotalsCard({ day, targetKcal, carbsLimit }: Props) {
+export function DayTotalsCard({
+  day,
+  targetKcal,
+  carbsLimit,
+  targetRatio,
+  proteinTarget,
+}: Props) {
   const { t } = useTranslation("home");
 
   if (day === null) {
@@ -57,6 +67,7 @@ export function DayTotalsCard({ day, targetKcal, carbsLimit }: Props) {
           <RatioBadge
             ratio={totals.ratio}
             withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
+            targetRatio={targetRatio ?? undefined}
           />
           <span className="tabular-nums">
             {targetKcal === null
@@ -72,6 +83,10 @@ export function DayTotalsCard({ day, targetKcal, carbsLimit }: Props) {
           fatG={totals.fat}
           proteinG={totals.protein}
           carbsG={totals.carbs}
+          targetGrams={{
+            protein: proteinTarget ?? undefined,
+            carbs: carbsLimit ?? undefined,
+          }}
         />
 
         {/* Цели полосой, как в меню (П40): тот же день на главной читался

@@ -55,6 +55,7 @@
   /* --- состояния --- */
   --color-destructive: #c0392b;
   --color-destructive-foreground: #ffffff;
+  --color-destructive-subtle: #fbeaea;
   /* В ките нет предупреждения и успеха — эти две роли наши. */
   --color-warning: #f5a623;
   --color-on-warning: #16213e;
@@ -63,8 +64,10 @@
      ровно там, где её важно прочесть. Утилита — `text-warning-strong`;
      `text-warning` для текста запрещён тестом `warningText.test.ts`. */
   --color-warning-strong: #8a5300;
+  --color-warning-subtle: #fef6e6;
   --color-success: #1e7f5c;
   --color-on-success: #ffffff;
+  --color-success-subtle: #eaf6f1;
 
   /* --- границы и фокус --- */
   --color-border: #e3e8f1;
@@ -191,11 +194,14 @@
 
   --color-destructive: #f09189;
   --color-destructive-foreground: #0f172a;
+  --color-destructive-subtle: #361817;
   --color-warning: #e8b45c;
   --color-on-warning: #0f172a;
   --color-warning-strong: #e8b45c;
+  --color-warning-subtle: #332611;
   --color-success: #6fcfa3;
   --color-on-success: #0f172a;
+  --color-success-subtle: #132f26;
 
   --color-border: #2c3a55;
   --color-input: #364566;
@@ -254,6 +260,15 @@
   dd,
   li {
     text-wrap: pretty;
+  }
+
+  /* Числовые метрики и бейджи всегда используют моноширинные цифры (tabular-nums) */
+  .text-metric {
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot="badge"] {
+    font-variant-numeric: tabular-nums;
   }
 
   /* Видимый фокус обязателен (доступность, раздел 8.2 ТЗ) */

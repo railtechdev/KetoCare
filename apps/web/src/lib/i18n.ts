@@ -21,6 +21,12 @@ import reportsRu from "../locales/ru/reports.json";
 import childRu from "../locales/ru/child.json";
 import telegramRu from "../locales/ru/telegram.json";
 
+import commonEn from "../locales/en/common.json";
+import authEn from "../locales/en/auth.json";
+
+import commonUz from "../locales/uz/common.json";
+import authUz from "../locales/uz/auth.json";
+
 /**
  * i18n-слой (раздел 8.5 ТЗ). Язык пока один, но все пользовательские строки
  * проходят через него: захардкоженная строка в JSX — ошибка ревью (правило 8
@@ -50,6 +56,14 @@ export const resources = {
     reports: reportsRu,
     child: childRu,
     telegram: telegramRu,
+  },
+  en: {
+    common: commonEn,
+    auth: authEn,
+  },
+  uz: {
+    common: commonUz,
+    auth: authUz,
   },
 } as const;
 

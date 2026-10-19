@@ -1,5 +1,12 @@
 import { Button } from "@ketocare/ui";
-import { Droplets, Scale, Zap } from "lucide-react";
+import {
+  Calculator,
+  Droplets,
+  Scale,
+  UtensilsCrossed,
+  Zap,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SectionLink } from "../../components/SectionLink";
@@ -21,7 +28,15 @@ import { SectionLink } from "../../components/SectionLink";
  * «Составить меню» в блоке ближайшего приёма пищи. Четыре одинаковые синие
  * кнопки подряд не отвечали на вопрос «с чего начать» — они его задавали.
  */
-const ACTIONS = [
+interface ActionItem {
+  key: string;
+  icon: LucideIcon;
+  section?: string;
+  kind?: string;
+  iconTone: string;
+}
+
+const ACTIONS: readonly ActionItem[] = [
   {
     key: "seizure",
     icon: Zap,
@@ -39,6 +54,18 @@ const ACTIONS = [
     icon: Scale,
     kind: "weight",
     iconTone: "bg-accent text-accent-foreground",
+  },
+  {
+    key: "meal",
+    icon: UtensilsCrossed,
+    kind: "meals",
+    iconTone: "bg-chart-carbs/12 text-chart-carbs",
+  },
+  {
+    key: "calculator",
+    icon: Calculator,
+    section: "calculator",
+    iconTone: "bg-primary/12 text-primary",
   },
 ] as const;
 
@@ -63,7 +90,7 @@ export function QuickActions() {
           кнопки были одного веса, экран предлагал пять равных начал. Касание
           при этом осталось одним, а цель — 44 px. */}
       <ul className="m-0 grid list-none gap-field p-0 sm:flex sm:flex-row sm:flex-wrap">
-        {ACTIONS.map(({ key, icon: Icon, kind, iconTone }) => (
+        {ACTIONS.map(({ key, icon: Icon, section, kind, iconTone }) => (
           <li key={key}>
             <Button
               asChild
@@ -71,7 +98,11 @@ export function QuickActions() {
               size="lg"
               className="min-h-touch w-full justify-start gap-2.5 bg-card px-3.5 shadow-kc-sm sm:w-auto"
             >
-              <SectionLink section="diary" diaryKind={kind} item="new">
+              <SectionLink
+                section={section ?? "diary"}
+                diaryKind={kind}
+                item={kind ? "new" : undefined}
+              >
                 <span
                   aria-hidden="true"
                   className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md ${iconTone}`}

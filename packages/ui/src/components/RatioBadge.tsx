@@ -1,3 +1,5 @@
+import { AlertCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
+
 import { cn } from "../lib/cn";
 import { formatRatio } from "../lib/format";
 import { useKitLabels } from "../lib/kitLabels";
@@ -15,6 +17,10 @@ export interface RatioBadgeProps {
    * иначе. `undefined` — назначение неизвестно, показываем нейтрально.
    */
   withinTolerance?: boolean;
+  /** Целевое значение кетосоотношения из назначения (напр. 4.0) */
+  targetRatio?: number;
+  /** Допуск соответствия (по умолчанию 0.15) */
+  tolerance?: number;
   className?: string;
 }
 
@@ -31,12 +37,12 @@ const BY_STATE = {
 export function RatioBadge({
   ratio,
   withinTolerance,
+  targetRatio,
+  tolerance = 0.15,
   className,
 }: RatioBadgeProps) {
   const labels = useKitLabels().ratio;
-  // Без белка и углеводов соотношения нет, и пишется просто «—»: «— : 1»
-  // читалось как число с потерянной первой частью. Форма рецепта обходила это
-  // своей разметкой, а остальные экраны печатали «— : 1».
+
   if (ratio === null) {
     return (
       <span
@@ -45,10 +51,56 @@ export function RatioBadge({
         aria-label={labels.unknown}
       >
         —
+        {targetRatio !== undefined && (
+          <span className="ml-1.5 font-normal text-muted-foreground">
+            ({labels.target(formatRatio(targetRatio))})
+          </span>
+        )}
       </span>
     );
   }
 
+  // Расширенный режим: передан целевой ориентир кетосоотношения
+  if (targetRatio !== undefined) {
+    const diff = Math.abs(ratio - targetRatio);
+    const isOk =
+      withinTolerance !== undefined ? withinTolerance : diff <= tolerance;
+    const isCritical = !isOk && diff > tolerance * 2;
+
+    const status = isOk ? "inRange" : isCritical ? "critical" : "deviation";
+    const state = isOk ? "ok" : "off";
+
+    const StatusIcon = isOk
+      ? CheckCircle2
+      : isCritical
+        ? AlertCircle
+        : AlertTriangle;
+
+    const statusClasses = isOk
+      ? "bg-success-subtle text-success border-success/30"
+      : isCritical
+        ? "bg-destructive-subtle text-destructive border-destructive/30"
+        : "bg-warning-subtle text-warning-strong border-warning/30";
+
+    const label = `${isOk ? labels.within(formatRatio(ratio)) : labels.off(formatRatio(ratio))}. ${labels.target(formatRatio(targetRatio))}`;
+
+    return (
+      <span
+        className={cn(BASE, statusClasses, className)}
+        data-state={state}
+        data-status={status}
+        aria-label={label}
+      >
+        <StatusIcon className="mr-1.5 size-3.5 shrink-0" aria-hidden="true" />
+        <span>{formatRatio(ratio)}</span>
+        <span className="ml-1.5 font-normal opacity-85">
+          ({labels.target(formatRatio(targetRatio))})
+        </span>
+      </span>
+    );
+  }
+
+  // Базовый режим обратной совместимости: только ratio и withinTolerance
   const state =
     withinTolerance === undefined ? "neutral" : withinTolerance ? "ok" : "off";
 

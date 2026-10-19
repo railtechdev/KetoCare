@@ -12,6 +12,7 @@ import {
 import { cn } from "../lib/cn";
 import { formatMeasured } from "../lib/format";
 import { dayAxis, valueDomain } from "../lib/trendAxes";
+import { EmptyState } from "./EmptyState";
 
 export interface TrendPoint {
   /**
@@ -70,6 +71,14 @@ export function TrendChart({
   className,
 }: TrendChartProps) {
   if (points.length === 0) {
+    if (typeof emptyState === "string") {
+      return (
+        <EmptyState
+          title={emptyState}
+          className={cn("py-8 text-muted-foreground", className)}
+        />
+      );
+    }
     return (
       <div className={cn("text-muted-foreground", className)}>{emptyState}</div>
     );
@@ -136,6 +145,7 @@ export function TrendChart({
               value: unit,
               angle: -90,
               position: "insideLeft",
+              fill: "var(--color-muted-foreground)",
               fontSize: 12,
             }}
           />
@@ -150,11 +160,21 @@ export function TrendChart({
               `${formatMeasured(value)} ${unit}`,
               "",
             ]}
+            itemStyle={{
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--color-foreground)",
+            }}
+            labelStyle={{
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--color-muted-foreground)",
+              fontWeight: 500,
+            }}
             contentStyle={{
               background: "var(--color-card)",
               border: "1px solid var(--color-border)",
               borderRadius: "var(--radius)",
               color: "var(--color-foreground)",
+              boxShadow: "var(--shadow-kc-sm)",
             }}
           />
 

@@ -11,6 +11,20 @@ interface MacroFactsCommon {
   /** Числа посчитаны не по тому, что сейчас в полях */
   stale?: boolean;
   className?: string;
+  /** Целевые граммы БЖУ (и ккал) */
+  targetGrams?: {
+    kcal?: number;
+    fat?: number;
+    protein?: number;
+    carbs?: number;
+  };
+  /** Оставшиеся граммы БЖУ (и ккал) до суточной нормы */
+  remainingGrams?: {
+    kcal?: number;
+    fat?: number;
+    protein?: number;
+    carbs?: number;
+  };
 }
 
 interface CountedFacts extends MacroFactsCommon {
@@ -57,7 +71,13 @@ export type MacroFactsProps = CountedFacts | UncountedFacts;
  * вспомогательной технологии — полные названия.
  */
 export function MacroFacts(props: MacroFactsProps) {
-  const { label, stale = false, className } = props;
+  const {
+    label,
+    stale = false,
+    targetGrams,
+    remainingGrams,
+    className,
+  } = props;
   const { macros } = useKitLabels();
 
   // Одно место на оба канала: и кабинет, и Mini App показывают приправу этой
@@ -87,22 +107,62 @@ export function MacroFacts(props: MacroFactsProps) {
         full={macros.kcalFull}
         short={macros.kcalUnit}
         value={formatKcal(kcal)}
+        target={
+          targetGrams?.kcal !== undefined
+            ? formatKcal(targetGrams.kcal)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.kcal !== undefined
+            ? `${macros.remaining}: ${formatKcal(remainingGrams.kcal)}`
+            : undefined
+        }
         after
       />
       <Cell
         full={macros.fatFull}
         short={macros.fatShort}
         value={formatGrams(fatG)}
+        target={
+          targetGrams?.fat !== undefined
+            ? formatGrams(targetGrams.fat)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.fat !== undefined
+            ? `${macros.remaining}: ${formatGrams(remainingGrams.fat)}`
+            : undefined
+        }
       />
       <Cell
         full={macros.proteinFull}
         short={macros.proteinShort}
         value={formatGrams(proteinG)}
+        target={
+          targetGrams?.protein !== undefined
+            ? formatGrams(targetGrams.protein)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.protein !== undefined
+            ? `${macros.remaining}: ${formatGrams(remainingGrams.protein)}`
+            : undefined
+        }
       />
       <Cell
         full={macros.carbsFull}
         short={macros.carbsShort}
         value={formatGrams(carbsG)}
+        target={
+          targetGrams?.carbs !== undefined
+            ? formatGrams(targetGrams.carbs)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.carbs !== undefined
+            ? `${macros.remaining}: ${formatGrams(remainingGrams.carbs)}`
+            : undefined
+        }
       />
     </div>
   );
@@ -119,11 +179,15 @@ function Cell({
   full,
   short,
   value,
+  target,
+  remaining,
   after = false,
 }: {
   full: string;
   short: string;
   value: string;
+  target?: string;
+  remaining?: string;
   after?: boolean;
 }) {
   const mark = (
@@ -133,11 +197,21 @@ function Cell({
   );
 
   return (
-    <span className="flex min-w-0 items-baseline gap-1">
+    <span className="flex min-w-0 flex-wrap items-baseline gap-1">
       <span className="sr-only">{full}</span>
       {!after && mark}
-      <span className="text-foreground">{value}</span>
+      <span className="text-foreground tabular-nums">{value}</span>
       {after && mark}
+      {target !== undefined && (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          /{target}
+        </span>
+      )}
+      {remaining !== undefined && (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          ({remaining})
+        </span>
+      )}
     </span>
   );
 }

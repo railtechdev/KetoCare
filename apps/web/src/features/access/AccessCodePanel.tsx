@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  Badge,
   Button,
   toast,
   ConfirmDialog,
@@ -129,7 +130,7 @@ export function AccessCodePanel({
         )}
 
         {issued !== null && (
-          <div className="flex flex-col items-center gap-field">
+          <div className="flex flex-col items-center gap-field rounded-xl border border-border bg-card p-6 text-center shadow-sm">
             {/* QR ведёт в бота, если имя бота настроено, и на веб-активацию,
                 если нет. Подпись обязана называть, что откроется: до этапа Б
                 бот кода доступа не понимал, поле `deep_link` приходило пустым,
@@ -145,49 +146,52 @@ export function AccessCodePanel({
             </p>
 
             <span className="text-sm font-medium">{voice("codeLabel")}</span>
-            <output className="rounded-md bg-muted px-4 py-2 font-mono text-page-title tracking-widest">
+            <output className="rounded-md bg-muted px-4 py-2 font-mono text-page-title font-semibold tracking-widest text-foreground">
               {issued.code}
             </output>
 
-            <Button
-              type="button"
-              className="min-h-touch"
-              onClick={() => void handleShare(issued)}
-            >
-              <Share2 aria-hidden="true" />
-              {t("panel.share.action")}
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                type="button"
+                className="min-h-touch"
+                onClick={() => void handleShare(issued)}
+              >
+                <Share2 aria-hidden="true" />
+                {t("panel.share.action")}
+              </Button>
 
-            <Button
-              type="button"
-              variant="ghost"
-              className="min-h-touch"
-              onClick={() => {
-                // «Скопировано» — только после подтверждения браузера: на
-                // отказ называется выход, а не обещается то, чего не было.
-                void copyText(issued.code).then((ok) => {
-                  setCopied(ok);
-                  if (!ok) toast.error(t("common:clipboard.failed"));
-                });
-              }}
-            >
-              <Copy aria-hidden="true" />
-              {copied ? t("panel.copied") : t("panel.copy")}
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                onClick={() => {
+                  // «Скопировано» — только после подтверждения браузера: на
+                  // отказ называется выход, а не обещается то, чего не было.
+                  void copyText(issued.code).then((ok) => {
+                    setCopied(ok);
+                    if (!ok) toast.error(t("common:clipboard.failed"));
+                    else toast.success(t("panel.copied"));
+                  });
+                }}
+              >
+                <Copy aria-hidden="true" />
+                {copied ? t("panel.copied") : t("panel.copy")}
+              </Button>
+            </div>
 
-            <p className="m-0 text-sm text-muted-foreground">
+            <p className="m-0 text-sm font-medium text-muted-foreground">
               {t("panel.expires", {
                 date: formatOccurredAt(new Date(issued.expires_at)),
               })}
             </p>
-            <p className="m-0 text-sm break-all text-muted-foreground">
+            <p className="m-0 text-xs break-all text-muted-foreground">
               {t("panel.joinUrl", { url: issued.join_url })}
             </p>
             {/* Правило, кому давать код, система не проверяет — но назвать
                 его на экране обязана (ADR-0040, решение 6). Родителю оно
                 звучит иначе: законный представитель он сам, и передавая код,
                 он и даёт то самое согласие. */}
-            <p className="m-0 text-center text-sm text-muted-foreground">
+            <p className="m-0 max-w-sm text-center text-xs text-muted-foreground">
               {voice("whoMay")}
             </p>
           </div>
@@ -227,34 +231,67 @@ export function AccessCodePanel({
                 // Код бывает скрыт (чужой код своего чата), и ключом служит
                 // время выпуска с позицией — строки журнала не переставляются.
                 key={`${row.created_at}-${index}`}
-                className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-field rounded-lg border border-border p-3 transition-colors hover:bg-muted/30"
               >
-                {/* Чужой код своего чата сервер не отдаёт: по нему вошедший
-                    вёл бы дневник от имени выпустившего (ADR-0042). */}
-                <span className="font-mono tracking-widest">
-                  {row.code ?? t("panel.hiddenCode")}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {t(`panel.status.${row.status}`)}
-                </span>
-                {/* Журнал общий: в нём и коды своего чата, которые родитель
-                    выпускает в разделе «Telegram». Без пометки они читались бы
-                    как выданный кому-то доступ. */}
-                <span className="text-sm text-muted-foreground">
-                  {t(`panel.purpose.${row.purpose}`)}
-                </span>
-                {row.issued_by_name !== null &&
-                  row.issued_by_name !== undefined && (
-                    <span className="text-sm text-muted-foreground">
-                      {t("panel.issuedBy", { name: row.issued_by_name })}
-                    </span>
+                <div className="flex flex-wrap items-center gap-field">
+                  {/* Чужой код своего чата сервер не отдаёт: по нему вошедший
+                      вёл бы дневник от имени выпустившего (ADR-0042). */}
+                  <span className="font-mono font-medium tracking-widest text-foreground">
+                    {row.code ?? t("panel.hiddenCode")}
+                  </span>
+                  {row.code !== null && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => {
+                        void copyText(row.code!).then((ok) => {
+                          if (ok) toast.success(t("panel.copied"));
+                          else toast.error(t("common:clipboard.failed"));
+                        });
+                      }}
+                      title={t("panel.copy")}
+                      aria-label={`${t("panel.copy")} ${row.code}`}
+                    >
+                      <Copy className="size-3.5" aria-hidden="true" />
+                    </Button>
                   )}
-                {row.used_by_name !== null &&
-                  row.used_by_name !== undefined && (
-                    <span className="text-sm text-muted-foreground">
-                      {t("panel.usedBy", { name: row.used_by_name })}
-                    </span>
-                  )}
+                  <Badge
+                    variant={
+                      row.status === "pending"
+                        ? "default"
+                        : row.status === "used"
+                          ? "secondary"
+                          : "outline"
+                    }
+                  >
+                    {t(`panel.status.${row.status}`)}
+                  </Badge>
+                  {/* Журнал общий: в нём и коды своего чата, которые родитель
+                      выпускает в разделе «Telegram». Без пометки они читались бы
+                      как выданный кому-то доступ. */}
+                  <span className="text-xs text-muted-foreground">
+                    {t(`panel.purpose.${row.purpose}`)}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {t("panel.expires", {
+                      date: formatOccurredAt(new Date(row.expires_at)),
+                    })}
+                  </span>
+                  {row.issued_by_name !== null &&
+                    row.issued_by_name !== undefined && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("panel.issuedBy", { name: row.issued_by_name })}
+                      </span>
+                    )}
+                  {row.used_by_name !== null &&
+                    row.used_by_name !== undefined && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("panel.usedBy", { name: row.used_by_name })}
+                      </span>
+                    )}
+                </div>
 
                 {row.status === "pending" && row.code !== null && (
                   <ConfirmDialog
@@ -263,7 +300,7 @@ export function AccessCodePanel({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="ml-auto min-h-touch"
+                        className="ml-auto min-h-touch text-destructive"
                       >
                         {t("panel.revoke")}
                       </Button>

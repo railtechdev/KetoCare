@@ -11,6 +11,15 @@
     "admin": "Администратор"
   },
   "nav": {
+    "groups": {
+      "daily": "Ежедневное",
+      "nutrition": "Питание и расчёт",
+      "clinical": "Клиника и аналитика",
+      "management": "Управление",
+      "account": "Учётная запись"
+    },
+    "more": "Ещё",
+    "quickNav": "Быстрая навигация",
     "home": "Главная",
     "calculator": "Калькулятор",
     "products": "Продукты",
@@ -53,7 +62,9 @@
     "saving": "Сохраняем…",
     "delete": "Удалить",
     "chooseFile": "Выбрать файл",
-    "noFileChosen": "Файл не выбран"
+    "noFileChosen": "Файл не выбран",
+    "showPassword": "Показать пароль",
+    "hidePassword": "Скрыть пароль"
   },
   "patientGate": {
     "chooseTitle": "Выберите ребёнка",
@@ -76,7 +87,8 @@
   "theme": {
     "light": "Светлое",
     "dark": "Тёмное",
-    "system": "Как в системе"
+    "system": "Как в системе",
+    "toggle": "Сменить тему"
   },
   "notFound": {
     "title": "Такой страницы нет",
@@ -100,13 +112,21 @@
       "proteinShort": "Б",
       "carbsShort": "У",
       "gramsUnit": "г",
-      "kcalUnit": "ккал"
+      "kcalUnit": "ккал",
+      "remaining": "Осталось",
+      "exceeded": "Превышено",
+      "ofTarget": "из"
     },
     "ratio": {
       "unknown": "Соотношение не определено",
       "plain": "Соотношение {{value}}",
       "within": "Соотношение {{value}}, соответствует назначению",
-      "off": "Соотношение {{value}}, отклоняется от назначения"
+      "off": "Соотношение {{value}}, отклоняется от назначения",
+      "target": "Цель: {{value}}",
+      "delta": "Δ {{value}}",
+      "inRange": "В норме",
+      "deviation": "Отклонение",
+      "critical": "Критическое"
     },
     "diarySource": {
       "web": "Веб",

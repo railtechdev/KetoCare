@@ -124,3 +124,34 @@ describe("карточка продукта: приправа (ADR-0054)", () =>
     await waitFor(() => expect(api.POST).toHaveBeenCalled());
   });
 });
+
+describe("карточка продукта: контроль калорийности по формуле Этуотера", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.POST as Mock).mockResolvedValue({ data: [] });
+  });
+
+  it("показывает предупреждение при расхождении БЖУ и позволяет подставить расчётную калорийность", async () => {
+    // 10*4 + 20*9 + 30*4 = 340 ккал. Задаём kcal = 100 (расхождение 240 ккал).
+    renderForm({ kcal: 100, fat: 20, protein: 10, carbs: 30, fiber: 0 });
+
+    expect(
+      screen.getByText(adminRu.products.form.atwaterTitle),
+    ).toBeInTheDocument();
+
+    const substituteButton = screen.getByRole("button", {
+      name: /340/,
+    });
+    expect(substituteButton).toBeInTheDocument();
+
+    fireEvent.click(substituteButton);
+
+    const kcalInput = screen.getByLabelText(adminRu.products.form.kcal);
+    expect(kcalInput).toHaveValue(340);
+
+    // После подстановки расхождение устранено — баннер исчезает
+    expect(
+      screen.queryByText(adminRu.products.form.atwaterTitle),
+    ).not.toBeInTheDocument();
+  });
+});

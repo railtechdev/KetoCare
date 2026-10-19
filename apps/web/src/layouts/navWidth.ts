@@ -8,8 +8,8 @@
  * (`layout.test.ts`).
  */
 export const NAV = {
-  /** Полоса значков с 768 px, подписи — с 1024 px. */
-  sections: { aside: "w-16 lg:w-64", content: "md:pl-16 lg:pl-64" },
+  /** Полоса значков с видимыми подписями с 768 px (5rem / 80px), полное меню — с 1024 px. */
+  sections: { aside: "w-20 lg:w-64", content: "md:pl-20 lg:pl-64" },
   /**
    * Внутри карты пациента — только значки, на любой ширине.
    *
