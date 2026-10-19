@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export type ThemePreference = "light" | "dark" | "system";
 
 const STORAGE_KEY = "ketocare-theme";
@@ -56,6 +58,17 @@ export function storeThemePreference(preference: ThemePreference): void {
     // выбор не сохранится до перезагрузки — это лучше, чем отказ переключения
   }
   applyTheme(preference);
+}
+
+export function useTheme() {
+  const [theme, setThemeState] = useState<ThemePreference>(readThemePreference);
+
+  const setTheme = (next: ThemePreference) => {
+    storeThemePreference(next);
+    setThemeState(next);
+  };
+
+  return { theme, setTheme };
 }
 
 /**

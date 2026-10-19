@@ -1,0 +1,23 @@
+{
+  "nav": {
+    "groups": {
+      "daily": "Kunlik",
+      "nutrition": "Oziqlanish va hisob",
+      "clinical": "Klinika va tahlil",
+      "management": "Boshqaruv",
+      "account": "Hisob"
+    },
+    "more": "Yana",
+    "quickNav": "Tezkor o‘tish"
+  },
+  "theme": {
+    "toggle": "Mavzuni o‘zgartirish"
+  },
+  "actions": {
+    "showPassword": "Parolni ko‘rsatish",
+    "hidePassword": "Parolni yashirish",
+    "retry": "Qaytarish",
+    "close": "Yopish",
+    "cancel": "Bekor qilish"
+  }
+}

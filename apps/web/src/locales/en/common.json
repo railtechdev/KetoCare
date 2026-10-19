@@ -1,0 +1,56 @@
+{
+  "nav": {
+    "groups": {
+      "daily": "Daily",
+      "nutrition": "Nutrition & calc",
+      "clinical": "Clinical & analytics",
+      "management": "Management",
+      "account": "Account"
+    },
+    "more": "More",
+    "quickNav": "Quick navigation"
+  },
+  "actions": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
+  },
+  "theme": {
+    "toggle": "Toggle theme"
+  },
+  "kit": {
+    "macros": {
+      "fat": "Fat",
+      "protein": "Protein",
+      "carbs": "Carbs",
+      "kcalFull": "Calories, kcal",
+      "fatFull": "Fat, g",
+      "proteinFull": "Protein, g",
+      "carbsFull": "Carbs, g",
+      "fatShort": "F",
+      "proteinShort": "P",
+      "carbsShort": "C",
+      "gramsUnit": "g",
+      "kcalUnit": "kcal",
+      "remaining": "Remaining",
+      "exceeded": "Exceeded",
+      "ofTarget": "of"
+    },
+    "ratio": {
+      "unknown": "Ratio unknown",
+      "plain": "Ratio {{value}}",
+      "within": "Ratio {{value}}, within target",
+      "off": "Ratio {{value}}, off target",
+      "target": "Target: {{value}}",
+      "delta": "Δ {{value}}",
+      "inRange": "In range",
+      "deviation": "Deviation",
+      "critical": "Critical"
+    },
+    "diarySource": {
+      "web": "Web",
+      "bot": "Bot",
+      "miniapp": "App",
+      "ai_parsed": "AI parsed"
+    }
+  }
+}

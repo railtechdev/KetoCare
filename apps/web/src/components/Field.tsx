@@ -1,4 +1,5 @@
 import { Input, Label, Textarea, cn } from "@ketocare/ui";
+import { Eye, EyeOff } from "lucide-react";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -130,8 +131,19 @@ export function Field({
   id,
   className,
   width = "full",
+  type,
   ...props
 }: FieldBaseProps & ComponentProps<"input">) {
+  const { t } = useTranslation();
+  const [showPassword, setShowPassword] = useState(false);
+
+  const isPassword = type === "password";
+  const effectiveType = isPassword
+    ? showPassword
+      ? "text"
+      : "password"
+    : type;
+
   return (
     <FieldShell
       label={label}
@@ -140,16 +152,48 @@ export function Field({
       optional={optional}
       id={id}
     >
-      <Input
-        id={id}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={useDescribedBy(id, error, hint)}
-        className={cn("min-h-touch", WIDTH_CLASS[width], className)}
-        {...props}
-      />
+      {isPassword ? (
+        <div className={cn("relative flex items-center", WIDTH_CLASS[width])}>
+          <Input
+            id={id}
+            type={effectiveType}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={useDescribedBy(id, error, hint)}
+            className={cn("min-h-touch pr-12 w-full", className)}
+            {...props}
+          />
+          <button
+            type="button"
+            aria-label={
+              showPassword
+                ? t("actions.hidePassword")
+                : t("actions.showPassword")
+            }
+            onClick={() => setShowPassword((prev) => !prev)}
+            className="absolute right-0 flex min-h-touch min-w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-r-lg"
+          >
+            {showPassword ? (
+              <EyeOff className="size-5" aria-hidden="true" />
+            ) : (
+              <Eye className="size-5" aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      ) : (
+        <Input
+          id={id}
+          type={effectiveType}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={useDescribedBy(id, error, hint)}
+          className={cn("min-h-touch", WIDTH_CLASS[width], className)}
+          {...props}
+        />
+      )}
     </FieldShell>
   );
 }
+
+export const PasswordField = Field;
 
 export function SelectField({
   label,
