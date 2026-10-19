@@ -1,7 +1,7 @@
 import { Button, FormFooter, toast, WarningBanner } from "@ketocare/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Copy } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
@@ -43,6 +43,7 @@ export function InviteForm({ roles }: { roles: readonly Role[] }) {
   const { t } = useTranslation("invitations");
   const ids = useId();
   const invite = useCreateInvitationMutation();
+  const [copied, setCopied] = useState(false);
 
   const {
     register,
@@ -64,7 +65,10 @@ export function InviteForm({ roles }: { roles: readonly Role[] }) {
       <form
         onSubmit={handleSubmit((values) => {
           invite.mutate(values, {
-            onSuccess: () => reset({ email: "", role: values.role }),
+            onSuccess: () => {
+              setCopied(false);
+              reset({ email: "", role: values.role });
+            },
           });
         })}
         noValidate
@@ -132,15 +136,15 @@ export function InviteForm({ roles }: { roles: readonly Role[] }) {
             size="sm"
             className="mt-field"
             onClick={() => {
-              void copyText(link).then((ok) =>
-                ok
-                  ? toast.success(t("ready.copied"))
-                  : toast.error(t("common:clipboard.failed")),
-              );
+              void copyText(link).then((ok) => {
+                setCopied(ok);
+                if (ok) toast.success(t("ready.copied"));
+                else toast.error(t("common:clipboard.failed"));
+              });
             }}
           >
             <Copy aria-hidden="true" />
-            {t("ready.copy")}
+            {copied ? t("ready.copied") : t("ready.copy")}
           </Button>
           <p className="mt-field mb-0 text-sm text-muted-foreground">
             {t("ready.oncePerToken")}
