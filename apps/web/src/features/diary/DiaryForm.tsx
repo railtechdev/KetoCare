@@ -2,8 +2,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   EmptyState,
   FormFooter,
+  StatusNote,
   WarningBanner,
+  cn,
   formatMeasured,
+  formatNumber,
   formatWeight,
   OCCURRED_AT_FUTURE,
   KETONE_MAX_MMOL,
@@ -407,12 +410,14 @@ function SeizureForm({
           width="narrow"
           type="number"
           inputMode="decimal"
+          pattern="[0-9]*"
           min={0}
           step={1}
           optional
           label={t("seizures.duration")}
           hint={t("seizures.durationHint")}
           error={durationError}
+          className="tabular-nums"
           {...register("durationSec")}
         />
 
@@ -443,10 +448,12 @@ function SeizureForm({
           width="tiny"
           type="number"
           inputMode="decimal"
+          pattern="[0-9]*"
           min={SEIZURE_COUNT_MIN}
           step={1}
           label={t("seizures.count")}
           error={countError}
+          className="tabular-nums"
           {...register("count")}
         />
         <TextAreaField
@@ -478,6 +485,7 @@ function KetoneForm({
   error,
 }: FormCallbacks & { editing: (DiaryLog & { kind: "ketones" }) | null }) {
   const { t } = useTranslation("diary");
+  const [glucose, setGlucose] = useState("");
 
   const defaults = (): KetoneValues => ({
     occurredAt: editing ? occurredInput(editing.occurred_at) : nowInput(),
@@ -489,11 +497,46 @@ function KetoneForm({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, submitCount },
   } = useForm<KetoneValues>({
     resolver: zodResolver(ketoneSchema),
     defaultValues: defaults(),
   });
+
+  const ketoneValueStr = watch("value");
+  const kVal = parseFloat(String(ketoneValueStr).replace(",", "."));
+  const gVal = parseFloat(glucose.replace(",", "."));
+  const hasGki = !isNaN(kVal) && kVal > 0 && !isNaN(gVal) && gVal > 0;
+  const gki = hasGki ? gVal / kVal : null;
+
+  const gkiLevel =
+    gki === null
+      ? null
+      : gki < 1
+        ? {
+            level: t("ketones.gkiLevels.highest"),
+            tone: "text-success font-medium",
+          }
+        : gki <= 3
+          ? {
+              level: t("ketones.gkiLevels.high"),
+              tone: "text-success font-medium",
+            }
+          : gki <= 6
+            ? {
+                level: t("ketones.gkiLevels.moderate"),
+                tone: "text-foreground",
+              }
+            : gki <= 9
+              ? {
+                  level: t("ketones.gkiLevels.low"),
+                  tone: "text-warning-strong",
+                }
+              : {
+                  level: t("ketones.gkiLevels.none"),
+                  tone: "text-destructive",
+                };
 
   const occurredAtError =
     errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
@@ -507,7 +550,10 @@ function KetoneForm({
   const submit = handleSubmit((values) => {
     const body = ketoneBody(values);
     if (body === null) return;
-    onSubmit(body, () => reset(defaults()));
+    onSubmit(body, () => {
+      reset(defaults());
+      setGlucose("");
+    });
   });
 
   return (
@@ -540,13 +586,38 @@ function KetoneForm({
         width="narrow"
         type="number"
         inputMode="decimal"
+        pattern="[0-9]*[.,]?[0-9]*"
         min={KETONE_MIN_MMOL}
         max={KETONE_MAX_MMOL}
         step={0.1}
         label={t("ketones.value")}
         error={valueError}
+        className="tabular-nums"
         {...register("value")}
       />
+      <Field
+        id="ketone-glucose"
+        width="narrow"
+        type="number"
+        inputMode="decimal"
+        pattern="[0-9]*[.,]?[0-9]*"
+        min={0}
+        step={0.1}
+        optional
+        label={t("ketones.glucose")}
+        hint={t("ketones.glucoseHint")}
+        value={glucose}
+        onChange={(event) => setGlucose(event.target.value)}
+        className="tabular-nums"
+      />
+      {hasGki && gki !== null && gkiLevel !== null && (
+        <StatusNote className={cn("tabular-nums text-sm", gkiLevel.tone)}>
+          {t("ketones.gki", {
+            value: formatNumber(gki, 1),
+            level: gkiLevel.level,
+          })}
+        </StatusNote>
+      )}
       <SelectField
         id="ketone-method"
         width="medium"
@@ -636,11 +707,13 @@ function WeightForm({
         width="narrow"
         type="number"
         inputMode="decimal"
+        pattern="[0-9]*[.,]?[0-9]*"
         min={WEIGHT_MIN_KG}
         max={WEIGHT_MAX_KG}
         step={0.1}
         label={t("weight.value")}
         error={weightError}
+        className="tabular-nums"
         {...register("weightKg")}
       />
       <Field
@@ -648,11 +721,13 @@ function WeightForm({
         width="narrow"
         type="number"
         inputMode="decimal"
+        pattern="[0-9]*[.,]?[0-9]*"
         min={1}
         step={0.5}
         optional
         label={t("weight.height")}
         error={heightError}
+        className="tabular-nums"
         {...register("heightCm")}
       />
     </FormShell>

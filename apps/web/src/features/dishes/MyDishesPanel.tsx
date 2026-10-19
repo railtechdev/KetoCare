@@ -10,7 +10,14 @@ import {
   formatKcal,
   toast,
 } from "@ketocare/ui";
-import { Calculator, CookingPot, Pencil, Trash2 } from "lucide-react";
+import {
+  CalendarPlus,
+  Calculator,
+  CookingPot,
+  Pencil,
+  Trash2,
+  Utensils,
+} from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -146,6 +153,42 @@ export function MyDishesPanel({
                   </SectionLink>
                 )}
               </Button>
+
+              {openIn !== "card" && (
+                <>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    className="min-w-touch"
+                  >
+                    <SectionLink
+                      section="menu"
+                      aria-label={t("myDishes.toMenu", { title: dish.title })}
+                      title={t("myDishes.toMenu", { title: dish.title })}
+                    >
+                      <CalendarPlus aria-hidden="true" className="size-4" />
+                    </SectionLink>
+                  </Button>
+
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    className="min-w-touch"
+                  >
+                    <SectionLink
+                      section="diary"
+                      diaryKind="meals"
+                      item="new"
+                      aria-label={t("myDishes.eaten", { title: dish.title })}
+                      title={t("myDishes.eaten", { title: dish.title })}
+                    >
+                      <Utensils aria-hidden="true" className="size-4" />
+                    </SectionLink>
+                  </Button>
+                </>
+              )}
 
               <Button
                 type="button"

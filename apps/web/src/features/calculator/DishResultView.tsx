@@ -67,7 +67,11 @@ export function DishResultView({
   return (
     <div className="flex flex-col gap-section">
       <div className="flex flex-wrap items-center gap-section">
-        <RatioBadge ratio={dish.ratio} withinTolerance={ratioWithinTolerance} />
+        <RatioBadge
+          ratio={dish.ratio}
+          withinTolerance={ratioWithinTolerance}
+          targetRatio={goal?.ratio}
+        />
         <span className="tabular-nums">
           {t("kcalValue", { value: formatKcal(dish.kcal) })}
         </span>
