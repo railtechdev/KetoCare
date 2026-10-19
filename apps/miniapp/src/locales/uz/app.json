@@ -525,13 +525,21 @@
       "proteinShort": "O",
       "carbsShort": "U",
       "gramsUnit": "g",
-      "kcalUnit": "kkal"
+      "kcalUnit": "kkal",
+      "remaining": "Qoldi",
+      "exceeded": "Ortiqcha",
+      "ofTarget": "dan"
     },
     "ratio": {
       "unknown": "Nisbat aniqlanmagan",
       "plain": "Nisbat {{value}}",
       "within": "Nisbat {{value}}, tayinlovga mos",
-      "off": "Nisbat {{value}}, tayinlovdan farq qiladi"
+      "off": "Nisbat {{value}}, tayinlovdan farq qiladi",
+      "target": "Maqsad: {{value}}",
+      "delta": "Δ {{value}}",
+      "inRange": "Me’yorda",
+      "deviation": "Farqlanadi",
+      "critical": "Kritik farq"
     },
     "diarySource": {
       "web": "Veb",

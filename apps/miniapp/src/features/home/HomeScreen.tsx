@@ -161,6 +161,16 @@ function Summary({ overview }: { overview: Overview }) {
               fatG={day.totals.fat}
               proteinG={day.totals.protein}
               carbsG={day.totals.carbs}
+              targetGrams={
+                prescription?.kcal_per_day !== undefined
+                  ? { kcal: prescription.kcal_per_day }
+                  : undefined
+              }
+              remainingGrams={
+                prescription?.kcal_per_day !== undefined
+                  ? { kcal: prescription.kcal_per_day - day.totals.kcal }
+                  : undefined
+              }
               showGrams
             />
             {prescription !== null && prescription !== undefined && (

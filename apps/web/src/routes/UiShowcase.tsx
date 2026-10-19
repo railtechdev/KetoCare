@@ -22,11 +22,13 @@ import {
   MetricRow,
   RatioBadge,
   Section,
+  SegmentedControl,
   Skeleton,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
+  TargetBar,
   Tiles,
   toast,
   WarningBanner,
@@ -76,6 +78,18 @@ export function UiShowcase() {
             <X />
           </Button>
         </div>
+        <div className="mt-4">
+          <SegmentedControl
+            label="Период"
+            value="day"
+            onChange={() => undefined}
+            items={[
+              { value: "day", label: "День" },
+              { value: "week", label: "Неделя" },
+              { value: "month", label: "Месяц" },
+            ]}
+          />
+        </div>
       </Section>
 
       <Section title="Поля формы">
@@ -120,8 +134,8 @@ export function UiShowcase() {
       <Section title="Предметные компоненты">
         <div className="flex flex-wrap items-center gap-section">
           <RatioBadge ratio={3.9} />
-          <RatioBadge ratio={4.2} withinTolerance={false} />
-          <RatioBadge ratio={3.5} withinTolerance />
+          <RatioBadge ratio={3.5} targetRatio={3.5} withinTolerance />
+          <RatioBadge ratio={4.2} targetRatio={3.5} withinTolerance={false} />
           <Badge>Метка</Badge>
           <Badge variant="secondary">Вторичная</Badge>
         </div>
@@ -130,7 +144,35 @@ export function UiShowcase() {
           fatG={80}
           proteinG={20}
           carbsG={8}
+          targetGrams={{ fat: 90, protein: 25, carbs: 10, kcal: 1200 }}
+          remainingGrams={{ fat: 10, protein: 5, carbs: 2, kcal: 368 }}
+          showGrams
         />
+        <MacroBar
+          className="mt-2 max-w-md"
+          fatG={110}
+          proteinG={35}
+          carbsG={18}
+          targetGrams={{ fat: 90, protein: 25, carbs: 10, kcal: 1200 }}
+          remainingGrams={{ fat: -20, protein: -10, carbs: -8, kcal: -80 }}
+          showGrams
+        />
+        <div className="mt-4 flex max-w-md flex-col gap-field">
+          <TargetBar
+            kind="goal"
+            label="Калорийность"
+            value={832}
+            target={1200}
+            valueText="832 из 1 200 ккал"
+          />
+          <TargetBar
+            kind="limit"
+            label="Углеводы"
+            value={8}
+            target={12}
+            valueText="8 из 12 г"
+          />
+        </div>
         {/* Рядом с полосой намеренно: те же числа в двух формах. Полоса
             отвечает «каково соотношение», числа — «что даёт этот продукт», и
             расхождение их размеров видно только здесь. */}
@@ -141,19 +183,33 @@ export function UiShowcase() {
           fatG={40.5}
           proteinG={0.5}
           carbsG={0.1}
+          remainingGrams={{ fat: 10, protein: 5, carbs: 2, kcal: 368 }}
         />
         {/* Число идёт через помощник кита, а не литералом: витрина для того и
             сделана, чтобы расхождения были видны, — а литерал показывал бы
             запись, которой в продукте нет. Именно здесь «3.4 ммоль/л» через
             точку и стояло над «Ж 40,5» через запятую (П45). */}
-        <DiaryEntryCard
-          className="mt-4 max-w-md"
-          title={`${formatMeasured(3.4)} ммоль/л`}
-          occurredAt={new Date()}
-          source="web"
-        >
-          Замер по крови
-        </DiaryEntryCard>
+        <div className="mt-4 flex max-w-md flex-col gap-field">
+          <DiaryEntryCard
+            category="Кетоны"
+            metric={`${formatMeasured(3.4)} ммоль/л`}
+            title="Замер кетонов"
+            status="success"
+            occurredAt={new Date()}
+            source="web"
+          >
+            Замер по крови
+          </DiaryEntryCard>
+          <DiaryEntryCard
+            category="Приступ"
+            status="destructive"
+            title="Тонико-клонический приступ"
+            occurredAt={new Date()}
+            source="bot"
+          >
+            Длился: от 1 до 5 минут
+          </DiaryEntryCard>
+        </div>
       </Section>
 
       <Section title="Сообщения">

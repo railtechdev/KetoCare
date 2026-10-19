@@ -58,3 +58,4 @@ apps/e2e/.last-run.json
 
 # Рабочие копии агентов Claude Code (isolation: worktree) — не часть репозитория
 .claude/worktrees/
+.antigravity/
