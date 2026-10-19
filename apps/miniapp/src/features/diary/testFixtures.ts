@@ -18,9 +18,9 @@ export const SESSION = {
   hasWebCredentials: true,
 };
 
-/** Момент «час назад» — внутри обоих периодов и не в будущем. */
+/** Момент внутри сегодняшнего дня — внутри обоих периодов и не в будущем. */
 export function hourAgo(): string {
-  return new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  return new Date(Date.now() - 60 * 1000).toISOString();
 }
 
 function base(id: string, createdBy: string | null) {
