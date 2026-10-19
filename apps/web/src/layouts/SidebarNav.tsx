@@ -46,7 +46,9 @@ export function SidebarNav({
 
   const grouped = SECTION_GROUP_ORDER.map((group) => ({
     group,
-    items: visibleSections.filter((section) => getSectionGroup(section) === group),
+    items: visibleSections.filter(
+      (section) => getSectionGroup(section) === group,
+    ),
   })).filter((entry) => entry.items.length > 0);
 
   // Гарантируем отображение любых неклассифицированных разделов
@@ -95,7 +97,8 @@ export function SidebarNav({
                       "flex min-h-touch items-center rounded-lg font-medium transition-colors no-underline",
                       "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                       labels === "never" && "justify-center px-0 text-sm",
-                      labels === "always" && "justify-start gap-section px-3 text-sm",
+                      labels === "always" &&
+                        "justify-start gap-section px-3 text-sm",
                       labels === "responsive" &&
                         "flex-col justify-center px-1 py-1.5 text-center gap-0.5 lg:flex-row lg:justify-start lg:gap-section lg:px-3 lg:py-2 lg:text-left text-sm",
                     )}

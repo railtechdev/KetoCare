@@ -54,7 +54,7 @@ interface FieldBaseProps {
 export const FIELD_CONTROL =
   "min-h-touch w-full rounded-lg border border-input bg-card px-3 py-2.5 text-foreground";
 
-function useDescribedBy(
+function getDescribedBy(
   id: string | undefined,
   error: ReactNode,
   hint: ReactNode,
@@ -158,7 +158,7 @@ export function Field({
             id={id}
             type={effectiveType}
             aria-invalid={error ? true : undefined}
-            aria-describedby={useDescribedBy(id, error, hint)}
+            aria-describedby={getDescribedBy(id, error, hint)}
             className={cn("min-h-touch pr-12 w-full", className)}
             {...props}
           />
@@ -184,7 +184,7 @@ export function Field({
           id={id}
           type={effectiveType}
           aria-invalid={error ? true : undefined}
-          aria-describedby={useDescribedBy(id, error, hint)}
+          aria-describedby={getDescribedBy(id, error, hint)}
           className={cn("min-h-touch", WIDTH_CLASS[width], className)}
           {...props}
         />
@@ -221,7 +221,7 @@ export function SelectField({
       <select
         id={id}
         aria-invalid={error ? true : undefined}
-        aria-describedby={useDescribedBy(id, error, hint)}
+        aria-describedby={getDescribedBy(id, error, hint)}
         className={cn(FIELD_CONTROL, WIDTH_CLASS[width], className)}
         {...props}
       >
@@ -252,7 +252,7 @@ export function TextAreaField({
       <Textarea
         id={id}
         aria-invalid={error ? true : undefined}
-        aria-describedby={useDescribedBy(id, error, hint)}
+        aria-describedby={getDescribedBy(id, error, hint)}
         className={cn(WIDTH_CLASS[width], className)}
         {...props}
       />
@@ -308,7 +308,7 @@ export function FileField({
           // соседа можно только вперёд.
           className="peer sr-only"
           aria-invalid={error ? true : undefined}
-          aria-describedby={useDescribedBy(id, error, hint)}
+          aria-describedby={getDescribedBy(id, error, hint)}
           {...props}
           onChange={(event) => {
             setChosen(event.target.files?.[0]?.name ?? null);

@@ -123,8 +123,7 @@ export function ProductForm({
     : null;
   const roundedExpectedKcal =
     expectedKcal !== null ? Math.round(expectedKcal) : null;
-  const isKcalFilled =
-    kcal !== undefined && !Number.isNaN(kcal) && kcal > 0;
+  const isKcalFilled = kcal !== undefined && !Number.isNaN(kcal) && kcal > 0;
   const hasPositiveMacros =
     (protein ?? 0) > 0 || (fat ?? 0) > 0 || (carbs ?? 0) > 0;
   const diffKcal =

@@ -1,4 +1,10 @@
-import { Button, FormFooter, Section, toast, useAttemptKey } from "@ketocare/ui";
+import {
+  Button,
+  FormFooter,
+  Section,
+  toast,
+  useAttemptKey,
+} from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -126,9 +132,7 @@ export function SaveDishForm({
         {saved && (
           <div className="flex flex-wrap items-center gap-field pt-1">
             <Button asChild variant="outline" size="sm" className="min-h-touch">
-              <SectionLink section="menu">
-                {t("save.toMenu")}
-              </SectionLink>
+              <SectionLink section="menu">{t("save.toMenu")}</SectionLink>
             </Button>
             <Button asChild variant="outline" size="sm" className="min-h-touch">
               <SectionLink section="diary" diaryKind="meals" item="new">

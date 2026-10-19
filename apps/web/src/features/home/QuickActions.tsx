@@ -1,5 +1,11 @@
 import { Button } from "@ketocare/ui";
-import { Calculator, Droplets, Scale, UtensilsCrossed, Zap } from "lucide-react";
+import {
+  Calculator,
+  Droplets,
+  Scale,
+  UtensilsCrossed,
+  Zap,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 

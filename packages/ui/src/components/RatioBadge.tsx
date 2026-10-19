@@ -63,7 +63,8 @@ export function RatioBadge({
   // Расширенный режим: передан целевой ориентир кетосоотношения
   if (targetRatio !== undefined) {
     const diff = Math.abs(ratio - targetRatio);
-    const isOk = withinTolerance !== undefined ? withinTolerance : diff <= tolerance;
+    const isOk =
+      withinTolerance !== undefined ? withinTolerance : diff <= tolerance;
     const isCritical = !isOk && diff > tolerance * 2;
 
     const status = isOk ? "inRange" : isCritical ? "critical" : "deviation";

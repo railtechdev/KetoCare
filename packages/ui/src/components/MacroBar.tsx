@@ -123,7 +123,10 @@ export function MacroBar({
           const remaining = remainingGrams?.[segment.key];
 
           return (
-            <li key={segment.key} className="flex items-center gap-1.5 flex-wrap">
+            <li
+              key={segment.key}
+              className="flex items-center gap-1.5 flex-wrap"
+            >
               <span
                 className={cn("size-2.5 rounded-sm shrink-0", segment.color)}
                 aria-hidden="true"
@@ -141,7 +144,8 @@ export function MacroBar({
               )}
               {remaining !== undefined && (
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  ({macros.remaining}: {formatGrams(remaining)} {macros.gramsUnit})
+                  ({macros.remaining}: {formatGrams(remaining)}{" "}
+                  {macros.gramsUnit})
                 </span>
               )}
             </li>
@@ -161,17 +165,20 @@ export function MacroBar({
         </p>
       )}
 
-      {(remainingGrams?.kcal !== undefined || targetGrams?.kcal !== undefined) && (
+      {(remainingGrams?.kcal !== undefined ||
+        targetGrams?.kcal !== undefined) && (
         <p className="mt-1.5 mb-0 text-xs text-muted-foreground tabular-nums">
           {macros.kcalFull}:{" "}
           {targetGrams?.kcal !== undefined && (
             <span>
-              {macros.ofTarget} {formatKcal(targetGrams.kcal)} {macros.kcalUnit}{" "}
+              {macros.ofTarget} {formatKcal(targetGrams.kcal)}{" "}
+              {macros.kcalUnit}{" "}
             </span>
           )}
           {remainingGrams?.kcal !== undefined && (
             <span>
-              ({macros.remaining}: {formatKcal(remainingGrams.kcal)} {macros.kcalUnit})
+              ({macros.remaining}: {formatKcal(remainingGrams.kcal)}{" "}
+              {macros.kcalUnit})
             </span>
           )}
         </p>

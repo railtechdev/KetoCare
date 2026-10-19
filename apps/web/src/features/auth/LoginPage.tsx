@@ -10,7 +10,14 @@ import {
   SegmentedControl,
   WarningBanner,
 } from "@ketocare/ui";
-import { Activity, ArrowLeft, KeyRound, Moon, ShieldCheck, Sun } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  KeyRound,
+  Moon,
+  ShieldCheck,
+  Sun,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -55,7 +62,8 @@ export function LoginPage({
   const login = useLoginMutation();
   const { theme, setTheme } = useTheme();
 
-  const currentLang = (i18n.language?.slice(0, 2) as "ru" | "uz" | "en") || "ru";
+  const currentLang =
+    (i18n.language?.slice(0, 2) as "ru" | "uz" | "en") || "ru";
 
   /** Токен первичной настройки 2FA, если сервер её потребовал. */
   const [setupToken, setSetupToken] = useState<string | null>(null);

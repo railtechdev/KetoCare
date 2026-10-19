@@ -83,7 +83,9 @@ export function LatestReadings({ ketone, weight }: Props) {
           <DiaryEntryCard
             title={t("weight.title")}
             category={t("weight.title")}
-            metric={t("weight.value", { value: formatWeight(weight.weight_kg) })}
+            metric={t("weight.value", {
+              value: formatWeight(weight.weight_kg),
+            })}
             occurredAt={new Date(weight.occurred_at)}
           />
         )}

@@ -71,7 +71,13 @@ export type MacroFactsProps = CountedFacts | UncountedFacts;
  * вспомогательной технологии — полные названия.
  */
 export function MacroFacts(props: MacroFactsProps) {
-  const { label, stale = false, targetGrams, remainingGrams, className } = props;
+  const {
+    label,
+    stale = false,
+    targetGrams,
+    remainingGrams,
+    className,
+  } = props;
   const { macros } = useKitLabels();
 
   // Одно место на оба канала: и кабинет, и Mini App показывают приправу этой
@@ -101,30 +107,62 @@ export function MacroFacts(props: MacroFactsProps) {
         full={macros.kcalFull}
         short={macros.kcalUnit}
         value={formatKcal(kcal)}
-        target={targetGrams?.kcal !== undefined ? formatKcal(targetGrams.kcal) : undefined}
-        remaining={remainingGrams?.kcal !== undefined ? `${macros.remaining}: ${formatKcal(remainingGrams.kcal)}` : undefined}
+        target={
+          targetGrams?.kcal !== undefined
+            ? formatKcal(targetGrams.kcal)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.kcal !== undefined
+            ? `${macros.remaining}: ${formatKcal(remainingGrams.kcal)}`
+            : undefined
+        }
         after
       />
       <Cell
         full={macros.fatFull}
         short={macros.fatShort}
         value={formatGrams(fatG)}
-        target={targetGrams?.fat !== undefined ? formatGrams(targetGrams.fat) : undefined}
-        remaining={remainingGrams?.fat !== undefined ? `${macros.remaining}: ${formatGrams(remainingGrams.fat)}` : undefined}
+        target={
+          targetGrams?.fat !== undefined
+            ? formatGrams(targetGrams.fat)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.fat !== undefined
+            ? `${macros.remaining}: ${formatGrams(remainingGrams.fat)}`
+            : undefined
+        }
       />
       <Cell
         full={macros.proteinFull}
         short={macros.proteinShort}
         value={formatGrams(proteinG)}
-        target={targetGrams?.protein !== undefined ? formatGrams(targetGrams.protein) : undefined}
-        remaining={remainingGrams?.protein !== undefined ? `${macros.remaining}: ${formatGrams(remainingGrams.protein)}` : undefined}
+        target={
+          targetGrams?.protein !== undefined
+            ? formatGrams(targetGrams.protein)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.protein !== undefined
+            ? `${macros.remaining}: ${formatGrams(remainingGrams.protein)}`
+            : undefined
+        }
       />
       <Cell
         full={macros.carbsFull}
         short={macros.carbsShort}
         value={formatGrams(carbsG)}
-        target={targetGrams?.carbs !== undefined ? formatGrams(targetGrams.carbs) : undefined}
-        remaining={remainingGrams?.carbs !== undefined ? `${macros.remaining}: ${formatGrams(remainingGrams.carbs)}` : undefined}
+        target={
+          targetGrams?.carbs !== undefined
+            ? formatGrams(targetGrams.carbs)
+            : undefined
+        }
+        remaining={
+          remainingGrams?.carbs !== undefined
+            ? `${macros.remaining}: ${formatGrams(remainingGrams.carbs)}`
+            : undefined
+        }
       />
     </div>
   );

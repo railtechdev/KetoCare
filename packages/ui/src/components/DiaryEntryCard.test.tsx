@@ -75,11 +75,7 @@ describe("DiaryEntryCard", () => {
 
   it("поддерживает статусы отклонений и подложки", () => {
     const { container, rerender } = render(
-      <DiaryEntryCard
-        title="Обед"
-        occurredAt={OCCURRED}
-        status="success"
-      />,
+      <DiaryEntryCard title="Обед" occurredAt={OCCURRED} status="success" />,
     );
 
     const article = container.querySelector("article");
@@ -87,11 +83,7 @@ describe("DiaryEntryCard", () => {
     expect(article?.className).toContain("bg-success-subtle/30");
 
     rerender(
-      <DiaryEntryCard
-        title="Обед"
-        occurredAt={OCCURRED}
-        status="warning"
-      />,
+      <DiaryEntryCard title="Обед" occurredAt={OCCURRED} status="warning" />,
     );
     expect(article).toHaveAttribute("data-status", "warning");
     expect(article?.className).toContain("bg-warning-subtle/30");
@@ -107,4 +99,3 @@ describe("DiaryEntryCard", () => {
     expect(article?.className).toContain("bg-destructive-subtle/30");
   });
 });
-

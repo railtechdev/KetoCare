@@ -224,11 +224,7 @@ export const SECTION_ICONS: Record<string, LucideIcon> = {
 
 /** Смысловые группы разделов кабинета (раздел 8.1 ТЗ) */
 export type SectionGroup =
-  | "daily"
-  | "nutrition"
-  | "clinical"
-  | "management"
-  | "account";
+  "daily" | "nutrition" | "clinical" | "management" | "account";
 
 export type SectionId =
   | "home"
@@ -289,4 +285,3 @@ export const PRIMARY_MOBILE_SECTIONS: Record<Role, readonly string[]> = {
   dietitian: ["home", "patients", "calculator", "products"],
   admin: ["home", "users", "leads", "products"],
 };
-

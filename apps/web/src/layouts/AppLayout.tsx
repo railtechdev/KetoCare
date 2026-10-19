@@ -20,10 +20,7 @@ import { NAV } from "./navWidth";
 import { useSession } from "../features/auth/useSession";
 import { isPatientView } from "../features/doctor/patientViews";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
-import {
-  PRIMARY_MOBILE_SECTIONS,
-  SECTION_ICONS,
-} from "../routes/sections";
+import { PRIMARY_MOBILE_SECTIONS, SECTION_ICONS } from "../routes/sections";
 import { SectionLink } from "../components/SectionLink";
 import { AppToaster } from "./AppToaster";
 import { SidebarNav } from "./SidebarNav";

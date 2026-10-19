@@ -36,7 +36,14 @@ vi.mock("../components/SectionLink", () => ({
 }));
 
 describe("SidebarNav", () => {
-  const sections = ["home", "diary", "calculator", "menu", "recipes", "profile"];
+  const sections = [
+    "home",
+    "diary",
+    "calculator",
+    "menu",
+    "recipes",
+    "profile",
+  ];
 
   it("не отображает скрытые разделы (профиль)", () => {
     render(

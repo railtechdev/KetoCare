@@ -208,11 +208,13 @@ export function PatientsListView() {
                   dayRatio !== null && rxRatio !== null ? rxRatio : undefined
                 }
               />
-              {dayRatio !== null && rxRatio !== null && dayRatio !== rxRatio && (
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {t("list.targetRatioLabel", { value: rxRatio })}
-                </span>
-              )}
+              {dayRatio !== null &&
+                rxRatio !== null &&
+                dayRatio !== rxRatio && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {t("list.targetRatioLabel", { value: rxRatio })}
+                  </span>
+                )}
             </div>
           );
         },
@@ -321,7 +323,9 @@ export function PatientsListView() {
             width="medium"
             label={t("list.therapy.label")}
             value={therapy}
-            onChange={(event) => setTherapy(event.target.value as TherapyFilter)}
+            onChange={(event) =>
+              setTherapy(event.target.value as TherapyFilter)
+            }
           >
             <option value="active">{t("list.therapy.active")}</option>
             <option value="ended">{t("list.therapy.ended")}</option>
