@@ -107,4 +107,20 @@ describe("чистые углеводы", () => {
 
     expect(screen.queryByText(/чистых/)).toBeNull();
   });
+
+  it("показывает targetGrams и remainingGrams, когда они переданы", () => {
+    render(
+      <MacroBar
+        fatG={50}
+        proteinG={20}
+        carbsG={10}
+        targetGrams={{ fat: 80, protein: 30, carbs: 15, kcal: 850 }}
+        remainingGrams={{ fat: 30, protein: 10, carbs: 5, kcal: 350 }}
+      />,
+    );
+
+    expect(screen.getByText(/из 80,0 г/)).toBeInTheDocument();
+    expect(screen.getByText(/\(Осталось: 30,0 г\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Калорийность, ккал/)).toBeInTheDocument();
+  });
 });

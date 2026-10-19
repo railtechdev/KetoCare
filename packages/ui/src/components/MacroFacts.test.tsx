@@ -87,4 +87,24 @@ describe("MacroFacts", () => {
     );
     expect(note.closest("p")).not.toHaveTextContent("ккал");
   });
+
+  it("отображает targetGrams и remainingGrams, когда они переданы", () => {
+    render(
+      <MacroFacts
+        label={LABEL}
+        kcal={100}
+        fatG={10}
+        proteinG={2}
+        carbsG={1}
+        targetGrams={{ kcal: 200, fat: 20, protein: 4, carbs: 2 }}
+        remainingGrams={{ kcal: 100, fat: 10, protein: 2, carbs: 1 }}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: LABEL });
+    expect(group).toHaveTextContent("/200");
+    expect(group).toHaveTextContent("(Осталось: 100)");
+    expect(group).toHaveTextContent("/20,0");
+    expect(group).toHaveTextContent("(Осталось: 10,0)");
+  });
 });

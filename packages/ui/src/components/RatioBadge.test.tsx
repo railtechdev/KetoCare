@@ -33,4 +33,33 @@ describe("RatioBadge", () => {
       screen.getByLabelText("Соотношение не определено"),
     ).toHaveTextContent(/^—$/);
   });
+
+  it("выводит целевой ориентир и статус попадания в коридор при targetRatio", () => {
+    render(<RatioBadge ratio={3.95} targetRatio={4.0} tolerance={0.15} />);
+    const badge = screen.getByLabelText(/Цель: 4.0 : 1/i);
+    expect(badge).toHaveAttribute("data-status", "inRange");
+    expect(badge).toHaveAttribute("data-state", "ok");
+    expect(badge.className).toContain("bg-success-subtle");
+    expect(badge.className).toContain("text-success");
+    expect(badge).toHaveTextContent("4.0 : 1");
+    expect(badge).toHaveTextContent("(Цель: 4.0 : 1)");
+  });
+
+  it("выводит умеренное отклонение с warning-subtle", () => {
+    render(<RatioBadge ratio={3.85} targetRatio={4.0} tolerance={0.1} />);
+    const badge = screen.getByLabelText(/Цель: 4.0 : 1/i);
+    expect(badge).toHaveAttribute("data-status", "deviation");
+    expect(badge).toHaveAttribute("data-state", "off");
+    expect(badge.className).toContain("bg-warning-subtle");
+    expect(badge.className).toContain("text-warning-strong");
+  });
+
+  it("выводит критическое отклонение с destructive-subtle", () => {
+    render(<RatioBadge ratio={2.5} targetRatio={4.0} tolerance={0.15} />);
+    const badge = screen.getByLabelText(/Цель: 4.0 : 1/i);
+    expect(badge).toHaveAttribute("data-status", "critical");
+    expect(badge).toHaveAttribute("data-state", "off");
+    expect(badge.className).toContain("bg-destructive-subtle");
+    expect(badge.className).toContain("text-destructive");
+  });
 });

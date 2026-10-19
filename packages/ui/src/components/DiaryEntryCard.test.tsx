@@ -52,4 +52,59 @@ describe("DiaryEntryCard", () => {
       screen.getByRole("button", { name: "Изменить" }),
     ).toBeInTheDocument();
   });
+
+  it("отображает категорию и главный числовой показатель с tabular-nums", () => {
+    const { container } = render(
+      <DiaryEntryCard
+        title="Замер"
+        occurredAt={OCCURRED}
+        category="Кетоны"
+        metric="3,2 ммоль/л"
+      />,
+    );
+
+    expect(screen.getByText("Кетоны")).toBeInTheDocument();
+    const metricEl = screen.getByText("3,2 ммоль/л");
+    expect(metricEl).toBeInTheDocument();
+    expect(metricEl.className).toContain("tabular-nums");
+    expect(metricEl.className).toContain("text-metric");
+
+    const timeEl = container.querySelector("time");
+    expect(timeEl?.className).toContain("tabular-nums");
+  });
+
+  it("поддерживает статусы отклонений и подложки", () => {
+    const { container, rerender } = render(
+      <DiaryEntryCard
+        title="Обед"
+        occurredAt={OCCURRED}
+        status="success"
+      />,
+    );
+
+    const article = container.querySelector("article");
+    expect(article).toHaveAttribute("data-status", "success");
+    expect(article?.className).toContain("bg-success-subtle/30");
+
+    rerender(
+      <DiaryEntryCard
+        title="Обед"
+        occurredAt={OCCURRED}
+        status="warning"
+      />,
+    );
+    expect(article).toHaveAttribute("data-status", "warning");
+    expect(article?.className).toContain("bg-warning-subtle/30");
+
+    rerender(
+      <DiaryEntryCard
+        title="Обед"
+        occurredAt={OCCURRED}
+        status="destructive"
+      />,
+    );
+    expect(article).toHaveAttribute("data-status", "destructive");
+    expect(article?.className).toContain("bg-destructive-subtle/30");
+  });
 });
+
