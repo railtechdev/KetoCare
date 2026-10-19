@@ -8,6 +8,7 @@ import {
   FilterBar,
   FormSheet,
   RatioBadge,
+  SegmentedControl,
   useDebouncedValue,
   SEARCH_DELAY_MS,
 } from "@ketocare/ui";
@@ -49,6 +50,7 @@ interface PatientRow {
   name: string;
   ageMonths: number | null;
   ratio: number | null;
+  dayRatio: number | null;
   kcalPerDay: number | null;
   flags: PatientFlags | null;
   attention: number;
@@ -88,6 +90,19 @@ export function PatientsListView() {
   const navigate = useNavigate();
   const createChild = useCreateChildMutation();
 
+  const [filterMode, setFilterMode] = useState<"all" | "attention" | "active">(
+    "all",
+  );
+
+  const quickFilterItems = useMemo(
+    () => [
+      { value: "all" as const, label: t("list.quickFilters.all") },
+      { value: "attention" as const, label: t("list.quickFilters.attention") },
+      { value: "active" as const, label: t("list.quickFilters.active") },
+    ],
+    [t],
+  );
+
   // Поиск уходит на сервер (см. `usePatients`), поэтому список уже отобран.
   const debouncedQuery = useDebouncedValue(query, SEARCH_DELAY_MS);
   const patients = usePatients(debouncedQuery, therapy);
@@ -112,6 +127,7 @@ export function PatientsListView() {
           name: patient.full_name,
           ageMonths: ageInMonths(patient.birth_date, now),
           ratio: overview?.prescription?.ratio ?? null,
+          dayRatio: overview?.day?.totals?.ratio ?? null,
           kcalPerDay: overview?.prescription?.kcal_per_day ?? null,
           flags,
           attention: attentionRank(flags),
@@ -136,6 +152,16 @@ export function PatientsListView() {
           left.name.localeCompare(right.name, "ru-RU"),
       );
   }, [items, overviews.byPatientId, settled]);
+
+  const displayedRows = useMemo(() => {
+    if (filterMode === "attention") {
+      return rows.filter((row) => row.attention > 0);
+    }
+    if (filterMode === "active") {
+      return rows.filter((row) => row.patient.family_activated);
+    }
+    return rows;
+  }, [rows, filterMode]);
 
   const columns = useMemo<ColumnDef<PatientRow, unknown>[]>(
     () => [
@@ -164,20 +190,38 @@ export function PatientsListView() {
       {
         accessorKey: "ratio",
         header: t("list.columns.ratio"),
-        cell: ({ row }) =>
-          row.original.ratio === null ? (
-            <span className="text-sm text-muted-foreground">
-              {t("list.noPrescription")}
-            </span>
-          ) : (
-            <RatioBadge ratio={row.original.ratio} />
-          ),
+        cell: ({ row }) => {
+          const rxRatio = row.original.ratio;
+          const dayRatio = row.original.dayRatio;
+          if (rxRatio === null && dayRatio === null) {
+            return (
+              <span className="text-sm text-muted-foreground">
+                {t("list.noPrescription")}
+              </span>
+            );
+          }
+          return (
+            <div className="flex flex-col gap-0.5">
+              <RatioBadge
+                ratio={dayRatio ?? rxRatio ?? 0}
+                targetRatio={
+                  dayRatio !== null && rxRatio !== null ? rxRatio : undefined
+                }
+              />
+              {dayRatio !== null && rxRatio !== null && dayRatio !== rxRatio && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {t("list.targetRatioLabel", { value: rxRatio })}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "kcalPerDay",
         header: t("list.columns.kcal"),
         cell: ({ row }) => (
-          <span className="tabular-nums">
+          <span className="tabular-nums font-medium text-foreground">
             {row.original.kcalPerDay === null
               ? "—"
               : t("list.kcalValue", {
@@ -254,27 +298,36 @@ export function PatientsListView() {
         </Button>
       }
     >
-      <FilterBar label={t("list.filtersLabel")}>
-        <Field
-          id="patient-search"
-          width="wide"
-          type="search"
-          label={t("list.search.label")}
-          placeholder={t("list.search.placeholder")}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
+      <div className="flex flex-col gap-field">
+        <SegmentedControl
+          label={t("list.quickFilters.label")}
+          value={filterMode}
+          onChange={setFilterMode}
+          items={quickFilterItems}
+          size="sm"
         />
-        <SelectField
-          id="patient-therapy"
-          width="medium"
-          label={t("list.therapy.label")}
-          value={therapy}
-          onChange={(event) => setTherapy(event.target.value as TherapyFilter)}
-        >
-          <option value="active">{t("list.therapy.active")}</option>
-          <option value="ended">{t("list.therapy.ended")}</option>
-        </SelectField>
-      </FilterBar>
+        <FilterBar label={t("list.filtersLabel")}>
+          <Field
+            id="patient-search"
+            width="wide"
+            type="search"
+            label={t("list.search.label")}
+            placeholder={t("list.search.placeholder")}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <SelectField
+            id="patient-therapy"
+            width="medium"
+            label={t("list.therapy.label")}
+            value={therapy}
+            onChange={(event) => setTherapy(event.target.value as TherapyFilter)}
+          >
+            <option value="active">{t("list.therapy.active")}</option>
+            <option value="ended">{t("list.therapy.ended")}</option>
+          </SelectField>
+        </FilterBar>
+      </div>
 
       {/* Ошибка обновления списка не прячет уже показанных пациентов: врач,
           у которого строки исчезли за красным блоком, решает, что потерял
@@ -352,7 +405,7 @@ export function PatientsListView() {
 
         <DataTable
           columns={columns}
-          data={rows}
+          data={displayedRows}
           caption={t("list.caption")}
           // Пустое состояние — у `AsyncSection`, иначе оно рисовалось бы
           // дважды: и вместо таблицы, и вместо всего блока.
