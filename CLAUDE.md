@@ -41,12 +41,12 @@ KetoCare — платформа сопровождения кетогенной 
 
 **Этап 2 «Веб-кабинеты» завершён:**
 
-- `packages/ui` — **shadcn/ui** (25 компонентов в `src/components/ui`, ставятся и обновляются командой `shadcn add`) + предметные компоненты: `RatioBadge`, `MacroBar`, `TrendChart`, `DiaryEntryCard`, `DataTable`, а также общие состояния — `AsyncSection`, `EmptyState`, `ErrorState`, `ConfirmDialog`, `FormFooter`, `Section`, `TabsBar`, `FormSheet`.
-- `apps/web` — React 19, Tailwind 4, TanStack Router/Query/Table, react-hook-form + zod, i18n, тёмная тема, сессия (access-токен в памяти, refresh в httpOnly cookie), вход с 2FA.
-- Экраны раздела 8.3: калькулятор, продукты, главная родителя, меню, дневники (6 видов), рецепты, кабинет врача, админка. Плюс сверх ТЗ: свой профиль, настройки с профилями детей, приглашения, витрина `/dev/ui`.
+- `packages/ui` — **shadcn/ui** (25 компонентов в `src/components/ui`, ставятся и обновляются командой `shadcn add`) + предметные компоненты: `RatioBadge`, `MacroBar`, `MacroFacts`, `TrendChart`, `DiaryEntryCard`, `DataTable`, а также общие состояния — `AsyncSection`, `EmptyState`, `ErrorState`, `ConfirmDialog`, `FormFooter`, `Section`, `TabsBar`, `FormSheet`, а также централизованная локализация `KitLabelsProvider` (ADR-0052).
+- `apps/web` — React 19, Tailwind 4, TanStack Router/Query/Table, react-hook-form + zod, i18n, тёмная тема, сессия (access-токен в памяти, refresh в httpOnly cookie), вход с 2FA, семантическая навигация и клиническая эргономика.
+- Экраны раздела 8.3: калькулятор со сквозным контекстом, продукты с валидацией БЖУ по Этватеру, главная родителя (пульт управления), меню, дневники (6 видов), рецепты, кабинет врача со списком клинического приоритета и закреплённой плашкой карты, админка. Плюс сверх ТЗ: свой профиль, настройки с профилями детей, приглашения, витрина `/dev/ui`.
 - `apps/api` — `/logs`, `/menus`, `/overview`, `/recipes`, `/custom-dishes`, `/clinical`, `/admin`, `/dictionaries`, `/users` (свой профиль, смена пароля, справочник персонала), ведение пациента специалистом.
 
-Тестов на 16.09.2026: **1835 pytest** (`apps/api` 1075, `apps/worker` 166, `infra` 155, `.claude/hooks` 131, `apps/bot` 112, `packages/core` 102, `packages/keto_engine` 94); vitest на 07.10.2026 — **1275** (`apps/web` 717, `apps/miniapp` 283, `packages/ui` 256, `packages/api-client` 10, `packages/landing` 9). Единственный пропуск — рендер PDF без системных pango и cairo.
+Тестов на 16.09.2026: **1835 pytest** (`apps/api` 1075, `apps/worker` 166, `infra` 155, `.claude/hooks` 131, `apps/bot` 112, `packages/core` 102, `packages/keto_engine` 94); vitest на 20.10.2026 — **1319+** (`apps/web` 738, `apps/miniapp` 298, `packages/ui` 263, `packages/api-client` 10, `packages/landing` 9). Единственный пропуск — рендер PDF без системных pango и cairo.
 `make seed-demo` наполняет локальную БД демо-данными (три роли, продукты, две недели дневника).
 
 Сверх ТЗ, по материалам заказчика от 29.08.2026 ([ADR-0007](docs/adr/0007-patient-intake-and-seizure-diary.md)):
