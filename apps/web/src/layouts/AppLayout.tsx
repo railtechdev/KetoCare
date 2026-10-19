@@ -15,11 +15,16 @@ import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AccountNotices } from "../features/auth/AccountNotices";
-import { SECTIONS_BY_ROLE } from "../features/auth/roles";
+import { type Role, SECTIONS_BY_ROLE } from "../features/auth/roles";
 import { NAV } from "./navWidth";
 import { useSession } from "../features/auth/useSession";
 import { isPatientView } from "../features/doctor/patientViews";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
+import {
+  PRIMARY_MOBILE_SECTIONS,
+  SECTION_ICONS,
+} from "../routes/sections";
+import { SectionLink } from "../components/SectionLink";
 import { AppToaster } from "./AppToaster";
 import { SidebarNav } from "./SidebarNav";
 import { MAIN_CONTENT_ID, SkipLink } from "./SkipLink";
@@ -151,20 +156,98 @@ export function AppLayout() {
           </header>
 
           {/* Фокус сюда ставит только ссылка в обход навигации: рамка вокруг
-              всей страницы ничего не сообщает, прокрутка уже показала цель. */}
+              всей страницы ничего не сообщает, прокрутка уже показала цель.
+              Нижний отступ pb-24 на мобильных экранах гарантирует, что фиксированный
+              нижний бар навигации не перекроет кнопки действий или формы. */}
           <main
             id={MAIN_CONTENT_ID}
             tabIndex={-1}
-            className="p-4 outline-none sm:p-6 xl:px-8"
+            className="p-4 pb-24 outline-none sm:p-6 md:pb-6 xl:px-8"
           >
             <AccountNotices userId={session.userId} />
             <Outlet />
           </main>
         </div>
 
+        {/* Быстрый нижний бар для мобильных экранов (< 768 px) */}
+        <MobileBottomNav
+          role={session.role}
+          onOpenMore={() => setNavOpen(true)}
+        />
+
         <AppToaster />
       </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Быстрая нижняя навигация для мобильных экранов (раздел 8.2 ТЗ).
+ *
+ * Отображает 4 основных раздела роли + кнопку «Ещё» (открытие полной шторки),
+ * позволяя родителю и врачу управлять интерфейсом одной рукой без лишних кликов
+ * в гамбургер-меню.
+ */
+function MobileBottomNav({
+  role,
+  onOpenMore,
+}: {
+  role: Role;
+  onOpenMore: () => void;
+}) {
+  const { t } = useTranslation();
+  const primarySections = PRIMARY_MOBILE_SECTIONS[role] ?? [];
+
+  return (
+    <nav
+      aria-label={t("nav.quickNav")}
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-sidebar-border bg-sidebar/95 pb-[var(--safe-bottom,0px)] backdrop-blur-xs md:hidden"
+    >
+      <ul className="m-0 flex list-none items-center justify-around p-0">
+        {primarySections.map((section) => {
+          const Icon = SECTION_ICONS[section];
+          const label = t(`nav.${section}`);
+
+          return (
+            <li key={section} className="flex-1">
+              <SectionLink
+                section={section}
+                className={cn(
+                  "flex min-h-touch flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-center text-sidebar-foreground/75 transition-colors no-underline",
+                  "hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+                activeProps={{
+                  className: "text-primary font-semibold",
+                }}
+              >
+                {Icon && (
+                  <Icon aria-hidden="true" className="size-5 shrink-0" />
+                )}
+                <span className="w-full truncate text-[11px] leading-tight">
+                  {label}
+                </span>
+              </SectionLink>
+            </li>
+          );
+        })}
+        <li className="flex-1">
+          <button
+            type="button"
+            onClick={onOpenMore}
+            aria-label={t("nav.openMenu")}
+            className={cn(
+              "flex min-h-touch w-full flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-center text-sidebar-foreground/75 transition-colors",
+              "hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <Menu aria-hidden="true" className="size-5 shrink-0" />
+            <span className="w-full truncate text-[11px] leading-tight">
+              {t("nav.more")}
+            </span>
+          </button>
+        </li>
+      </ul>
+    </nav>
   );
 }
 
