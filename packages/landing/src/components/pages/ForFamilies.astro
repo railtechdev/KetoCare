@@ -1,0 +1,145 @@
+---
+import { useTranslations } from "../../i18n";
+import { pagePath, type Locale } from "../../i18n/config";
+import { JOIN_URL, LOGIN_URL } from "../../site";
+import Layout from "../../layouts/Layout.astro";
+import HeroPreview from "../HeroPreview.astro";
+import LeadForm from "../LeadForm.astro";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const d = useTranslations(locale);
+const fp = d.forFamiliesPage;
+---
+
+<Layout
+  locale={locale}
+  page="forFamilies"
+  title={fp.seo.title}
+  description={fp.seo.description}
+  ctaHref={JOIN_URL}
+  ctaLabel={d.nav.clinicCode}
+>
+  {/* ---------- Hero: Семьям и родителям ---------- */}
+  <section class="hero">
+    <div class="hero__glow hero__glow--amber" aria-hidden="true"></div>
+    <div class="hero__glow hero__glow--blue" aria-hidden="true"></div>
+    <div class="wrap hero__inner split">
+      <div class="split__text">
+        <p class="badge">
+          <span class="badge__dot" aria-hidden="true"></span>
+          {fp.hero.eyebrow}
+        </p>
+        <h1 class="h1" style="margin:22px 0 20px">{fp.hero.h1}</h1>
+        <p class="lead measure--tight" style="margin-bottom:32px">
+          {fp.hero.lead}
+        </p>
+        <div class="btn-row" style="margin-bottom:28px">
+          <a class="btn btn--primary" href={JOIN_URL}>{fp.hero.ctaCode}</a>
+          <a class="btn btn--secondary" href={LOGIN_URL}>{fp.hero.ctaApp}</a>
+          <a
+            class="btn btn--outline"
+            href={pagePath("home", locale) + "#calculator"}
+          >
+            {d.home.calc.eyebrow}
+          </a>
+        </div>
+      </div>
+
+      <div class="split__media reveal">
+        <HeroPreview locale={locale} />
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- 4 простых шага ---------- */}
+  <section class="section section--white section--bordered">
+    <div class="wrap reveal">
+      <div style="text-align:center;max-width:760px;margin:0 auto 52px">
+        <p class="eyebrow">{fp.hero.eyebrow}</p>
+        <h2 class="h2">{fp.stepsTitle}</h2>
+      </div>
+
+      <div class="pillars-grid">
+        {
+          fp.steps.map((step) => (
+            <div class="pillar-card">
+              <div class="pillar-card__top">
+                <span class="pillar-card__num num tabular-nums">
+                  {step.num}
+                </span>
+                <span class="pillar-card__badge">✓ {d.common.brand}</span>
+              </div>
+              <h3 class="card__title" style="margin-bottom:12px">
+                {step.title}
+              </h3>
+              <p
+                class="card__text"
+                style="color:var(--ink-muted);line-height:1.6"
+              >
+                {step.text}
+              </p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Инструменты для комфорта всей семьи ---------- */}
+  <section class="section section--sand">
+    <div class="wrap reveal">
+      <div style="text-align:center;max-width:760px;margin:0 auto 48px">
+        <p class="eyebrow">{d.common.brand} Ecosystem</p>
+        <h2 class="h2">{fp.featuresTitle}</h2>
+      </div>
+
+      <div class="grid grid--auto">
+        {
+          fp.features.map((feat) => (
+            <div
+              class="card card--sunken"
+              style="padding:32px;border-radius:18px"
+            >
+              <h3
+                class="card__title"
+                style="margin-bottom:12px;font-size:1.2rem"
+              >
+                {feat.title}
+              </h3>
+              <p
+                class="card__text"
+                style="color:var(--ink-muted);line-height:1.65"
+              >
+                {feat.text}
+              </p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- Заявка на ранний доступ / активация ---------- */}
+  <section class="section section--white section--bordered" id="join">
+    <div class="wrap wrap--narrow reveal">
+      <div style="text-align:center;margin-bottom:36px">
+        <p class="eyebrow">{d.home.cta.family.eyebrow}</p>
+        <h2 class="h2" style="margin-bottom:12px">{d.home.cta.family.title}</h2>
+        <p class="lead" style="max-width:52ch;margin-inline:auto">
+          {d.home.cta.family.text}
+        </p>
+      </div>
+
+      <div
+        class="card card--sunken"
+        style="padding:36px;border-radius:20px;max-width:560px;margin-inline:auto"
+      >
+        <LeadForm locale={locale} variant="family" />
+      </div>
+    </div>
+  </section>
+</Layout>

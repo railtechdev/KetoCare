@@ -12,15 +12,19 @@
 
 const env = import.meta.env;
 
-/** Кабинет: отдельный поддомен, поэтому ссылка абсолютная. */
+/** Кабинет: в разработке ведёт на локальный порт 5173, на проде — на поддомен. */
 export const APP_URL: string =
-  env.PUBLIC_APP_URL ?? "https://app.ketocare.railtech.uz";
+  env.PUBLIC_APP_URL ??
+  (env.DEV ? "http://localhost:5173" : "https://app.ketocare.railtech.uz");
 
 /** Страница входа в кабинет. */
 export const LOGIN_URL = `${APP_URL}/login`;
 
 /** Вход по коду клиники (активация пациента). */
 export const JOIN_URL = `${APP_URL}/join`;
+
+/** Панель администратора системы. */
+export const ADMIN_URL = `${APP_URL}/admin`;
 
 /** Куда уходят заявки с форм. Относительный путь: nginx лендинга проксирует
  *  его в API, поэтому запрос остаётся same-origin и CORS не нужен. */

@@ -32,10 +32,6 @@ const verdictText = {
 
 /**
  * Строки, которые скрипту нужны в браузере: он не имеет доступа к словарю.
- *
- * `<` экранируется вручную: JSON.stringify его не трогает, и строка перевода,
- * содержащая `</script>`, закрыла бы блок и вывалила остаток в разметку.
- * Сейчас таких строк нет — но перевод правят люди, а ошибка тихая.
  */
 const configJson = JSON.stringify({
   ingredients: INGREDIENTS,
@@ -44,13 +40,22 @@ const configJson = JSON.stringify({
   locale,
   grams: d.common.grams,
   verdict: verdictText,
+  atwaterOkText: d.home.calc.atwaterBadge,
 }).replaceAll("<", "\\u003c");
 ---
 
 <div class="calc" data-calc>
   <div class="calc__head">
-    <strong>{d.home.calc.dish}</strong>
-    <span class="num" data-calc-kcal>{Math.round(r.kcal)} {d.common.kcal}</span>
+    <div>
+      <strong style="display:block;font-size:1.06rem">{d.home.calc.dish}</strong
+      >
+      <span style="font-size:0.79rem;color:var(--ink-muted)"
+        >{d.home.calc.targetRatioCorridor}</span
+      >
+    </div>
+    <span class="num tabular-nums" data-calc-kcal
+      >{Math.round(r.kcal)} {d.common.kcal}</span
+    >
   </div>
 
   {
@@ -58,7 +63,7 @@ const configJson = JSON.stringify({
       <div class="calc__ing">
         <div class="calc__ing-row">
           <label for={`calc-ing-${i}`}>{d.home.calc.ingredients[i]}</label>
-          <span class="num" data-calc-grams={i}>
+          <span class="num tabular-nums" data-calc-grams={i}>
             {ing.initial} {d.common.grams}
           </span>
         </div>
@@ -94,44 +99,34 @@ const configJson = JSON.stringify({
       <span>
         <i style="background:var(--macro-fat)" aria-hidden="true"></i>
         {d.common.fat}
-        <strong class="num" data-calc-macro="fat">
+        <strong class="num tabular-nums" data-calc-macro="fat">
           {formatNumber(r.fat, locale)}&nbsp;{d.common.grams}
         </strong>
       </span>
       <span>
         <i style="background:var(--macro-protein)" aria-hidden="true"></i>
         {d.common.protein}
-        <strong class="num" data-calc-macro="protein">
+        <strong class="num tabular-nums" data-calc-macro="protein">
           {formatNumber(r.protein, locale)}&nbsp;{d.common.grams}
         </strong>
       </span>
       <span>
         <i style="background:var(--macro-carbs)" aria-hidden="true"></i>
         {d.common.carbs}
-        <strong class="num" data-calc-macro="carbs">
+        <strong class="num tabular-nums" data-calc-macro="carbs">
           {formatNumber(r.carbs, locale)}&nbsp;{d.common.grams}
         </strong>
       </span>
     </div>
 
-    {
-      /* Число, из которого получено соотношение, стоит рядом с ним.
-        Соотношение перестало следовать из углеводов, показанных выше, и без
-        этой строки посетитель не сложит 3,4 г углеводов в 3,54 : 1. Ровно так
-        же устроен `MacroBar` в продукте. */
-    }
     <p class="calc__net-carbs">
       {d.home.calc.netCarbs}{" "}
-      <strong class="num" data-calc-net-carbs>
+      <strong class="num tabular-nums" data-calc-net-carbs>
         {formatNumber(r.netCarbs, locale)}&nbsp;{d.common.grams}
       </strong>
       {" — "}{d.home.calc.netCarbsNote}
     </p>
 
-    {
-      /* Итог меняется при движении ползунка — экранный диктор должен
-        сообщить об этом, не перебивая ввод: role="status" и aria-live="polite". */
-    }
     <div
       class="calc__verdict"
       data-calc-verdict
@@ -152,17 +147,21 @@ const configJson = JSON.stringify({
       >
     </div>
 
-    {
-      /* Оговорка стоит внутри карточки, а не в стороне: посетитель, который
-        считает этим завтрак ребёнку, смотрит именно сюда. */
-    }
+    <!-- Валидация по формуле Этватера (PR #303) -->
+    <div class="atwater-box" data-calc-atwater>
+      <div class="atwater-box__header">
+        <span class="atwater-badge" data-calc-atwater-badge>
+          {d.home.calc.atwaterBadge}
+        </span>
+      </div>
+      <p class="atwater-box__note">
+        {d.home.calc.atwaterNote}
+      </p>
+    </div>
+
     <p class="calc__disclaimer">{d.home.calc.disclaimer}</p>
   </div>
 
-  {
-    /* Не скрипт, а данные для скрипта: значения словаря, которых он иначе не
-      узнает. is:inline — чтобы сборщик не пытался его обрабатывать. */
-  }
   <script
     is:inline
     type="application/json"

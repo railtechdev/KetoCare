@@ -38,6 +38,8 @@ export const PAGES = {
   home: "",
   howItWorks: "how-it-works",
   doctors: "doctors",
+  forFamilies: "for-families",
+  methodology: "methodology",
 } as const;
 
 export type PageKey = keyof typeof PAGES;

@@ -178,15 +178,93 @@ function initCalculator(): void {
     if (ratioEl) {
       ratioEl.textContent = `${formatNumber(r.ratio, config.locale, 2)} : 1`;
       ratioEl.classList.toggle("ratio-badge--off", r.state !== "ok");
+      ratioEl.classList.toggle("ratio-badge--low", r.state === "low");
+      ratioEl.classList.toggle("ratio-badge--high", r.state === "high");
     }
-    if (verdictEl) verdictEl.dataset.state = r.state === "ok" ? "ok" : "off";
+    if (verdictEl) verdictEl.dataset.state = r.state;
     if (verdictTextEl) verdictTextEl.textContent = config.verdict[r.state];
+
+    const atwaterBadgeEl = root.querySelector<HTMLElement>(
+      "[data-calc-atwater-badge]",
+    );
+    if (atwaterBadgeEl) {
+      atwaterBadgeEl.classList.toggle("atwater-badge--off", !r.atwaterOk);
+    }
   };
 
   inputs.forEach((input, i) => {
     input.addEventListener("input", () => {
       grams[i] = Number(input.value);
       render();
+    });
+  });
+}
+
+/* ---------- Переключение темы оформления ---------- */
+
+function initTheme(): void {
+  const toggle = document.querySelector<HTMLButtonElement>(
+    "[data-theme-toggle]",
+  );
+  if (!toggle) return;
+
+  const getSystemTheme = (): "dark" | "light" =>
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+
+  const getCurrentTheme = (): "dark" | "light" => {
+    const attr = document.documentElement.getAttribute("data-theme");
+    if (attr === "dark" || attr === "light") return attr;
+    const stored = localStorage.getItem("kc-theme");
+    if (stored === "dark" || stored === "light") return stored;
+    return getSystemTheme();
+  };
+
+  const setTheme = (theme: "dark" | "light"): void => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("kc-theme", theme);
+    } catch {
+      // Игнорируем ошибки при недоступном localStorage
+    }
+  };
+
+  toggle.addEventListener("click", () => {
+    const current = getCurrentTheme();
+    setTheme(current === "dark" ? "light" : "dark");
+  });
+}
+
+/* ---------- Интерактивное превью (PR #303) ---------- */
+
+function initHeroPreview(): void {
+  const root = document.querySelector<HTMLElement>("[data-hero-preview]");
+  if (!root) return;
+
+  const tabs = Array.from(
+    root.querySelectorAll<HTMLButtonElement>("[data-preview-tab]"),
+  );
+  const panels = Array.from(
+    root.querySelectorAll<HTMLElement>("[data-preview-panel]"),
+  );
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const mode = tab.dataset.previewTab;
+      if (!mode) return;
+
+      tabs.forEach((t) => {
+        const isActive = t === tab;
+        t.classList.toggle("is-active", isActive);
+        t.setAttribute("aria-selected", String(isActive));
+      });
+
+      panels.forEach((p) => {
+        const isActive = p.dataset.previewPanel === mode;
+        p.classList.toggle("is-active", isActive);
+        p.hidden = !isActive;
+      });
     });
   });
 }
@@ -356,6 +434,8 @@ function initLeadForms(): void {
 }
 
 initNav();
+initTheme();
+initHeroPreview();
 initReveal();
 initFaq();
 initCalculator();

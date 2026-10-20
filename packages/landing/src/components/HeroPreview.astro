@@ -1,0 +1,431 @@
+---
+/**
+ * Интерактивное превью главного экрана (PR #303).
+ * Переключение в 1 клик между «Режимом Родителя» и «Режимом Врача».
+ */
+import { useTranslations } from "../i18n";
+import type { Locale } from "../i18n/config";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const d = useTranslations(locale);
+const p = d.home.hero.preview;
+const par = p.parent;
+const doc = p.doctor;
+---
+
+<div class="hero-preview" data-hero-preview>
+  <!-- Вкладки переключения режима (1-клик) -->
+  <div class="preview-tabs" role="tablist" aria-label={d.common.brand}>
+    <button
+      type="button"
+      role="tab"
+      class="preview-tab is-active"
+      aria-selected="true"
+      aria-controls="preview-parent"
+      id="tab-parent"
+      data-preview-tab="parent"
+    >
+      <span class="preview-tab__icon" aria-hidden="true">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </span>
+      <span>{p.tabParent}</span>
+    </button>
+
+    <button
+      type="button"
+      role="tab"
+      class="preview-tab"
+      aria-selected="false"
+      aria-controls="preview-doctor"
+      id="tab-doctor"
+      data-preview-tab="doctor"
+    >
+      <span class="preview-tab__icon" aria-hidden="true">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+        </svg>
+      </span>
+      <span>{p.tabDoctor}</span>
+    </button>
+  </div>
+
+  <!-- Панель 1: Режим Родителя -->
+  <div
+    class="preview-panel is-active"
+    id="preview-parent"
+    role="tabpanel"
+    aria-labelledby="tab-parent"
+    data-preview-panel="parent"
+  >
+    <div class="mock">
+      <!-- Шапка ребенка -->
+      <div class="mock__row">
+        <div>
+          <div style="font-size:0.78rem;color:var(--ink-muted)">
+            {par.today}
+          </div>
+          <div style="font-size:1.06rem;font-weight:700">
+            {par.childName}
+          </div>
+        </div>
+        <span class="mock__avatar" aria-hidden="true">
+          {par.childInitials}
+        </span>
+      </div>
+
+      <!-- Прием пищи с граммовками -->
+      <div class="mock__panel">
+        <div
+          style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap"
+        >
+          <span class="mock__label">{par.nextMeal}</span>
+          <span class="ratio-badge">{par.targetRatioBadge}</span>
+        </div>
+        <div style="font-weight:600;font-size:0.95rem">{par.dish}</div>
+        <div
+          style="font-size:0.8rem;color:var(--ink-muted);margin-top:2px"
+          class="num tabular-nums"
+        >
+          {par.dishGrams}
+        </div>
+        <div
+          style="font-size:0.8rem;color:var(--primary);margin-top:3px;font-weight:600"
+          class="num tabular-nums"
+        >
+          {par.dishMacros}
+        </div>
+      </div>
+
+      <!-- День против назначения -->
+      <div class="mock__box">
+        <div
+          style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"
+        >
+          <span style="font-size:0.84rem;font-weight:600"
+            >{par.dayVsPrescription}</span
+          >
+          <span
+            class="num tabular-nums"
+            style="font-size:0.8rem;font-weight:600;color:var(--primary)"
+            >{par.caloriesValue}</span
+          >
+        </div>
+        <div class="meter" style="margin-bottom:10px" aria-hidden="true">
+          <span style="width:62%"></span>
+        </div>
+        <div class="macro-bar" aria-hidden="true">
+          <span style="width:71%;background:var(--macro-fat)"></span>
+          <span style="width:18%;background:var(--macro-protein)"></span>
+          <span style="width:11%;background:var(--macro-carbs)"></span>
+        </div>
+        <div class="macro-legend">
+          <span>
+            <i style="background:var(--macro-fat)" aria-hidden="true"></i>
+            {d.common.fat}
+            <span class="num tabular-nums" style="color:var(--ink-muted)"
+              >{par.fatValue}</span
+            >
+          </span>
+          <span>
+            <i style="background:var(--macro-protein)" aria-hidden="true"></i>
+            {d.common.protein}
+            <span class="num tabular-nums" style="color:var(--ink-muted)"
+              >{par.proteinValue}</span
+            >
+          </span>
+          <span>
+            <i style="background:var(--macro-carbs)" aria-hidden="true"></i>
+            {d.common.carbs}
+            <span class="num tabular-nums" style="color:var(--ink-muted)"
+              >{par.carbsValue}</span
+            >
+          </span>
+        </div>
+
+        <!-- Оставшиеся углеводы -->
+        <p
+          style="margin-top:10px;font-size:0.8rem;background:var(--surface-sunken);border-radius:9px;padding:7px 11px"
+          set:html={par.carbsLeft}
+        />
+      </div>
+
+      <!-- Плашка GKI (Glucose-Ketone Index) -->
+      <div class="gki-badge-box">
+        <div
+          style="display:flex;justify-content:space-between;align-items:center"
+        >
+          <span class="gki-badge-pill num tabular-nums">{par.gkiBadge}</span>
+          <span
+            class="num tabular-nums"
+            style="font-size:0.77rem;color:var(--ink-muted)"
+            >{par.gkiDetails}</span
+          >
+        </div>
+      </div>
+
+      <!-- Быстрые действия в 1 клик (просторная сетка 2x2) -->
+      <div class="mock__quick" aria-hidden="true" style="margin-top:14px">
+        <span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m12 3-1.9 5.8a6 6 0 1 0 7.8 0L12 3z"></path>
+          </svg>
+          {par.quickKetones}
+        </span>
+        <span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          {par.quickGlucose}
+        </span>
+        <span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 3v18"></path>
+            <path d="m4 7 8-4 8 4"></path>
+            <path d="M6 18H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2"></path>
+            <path d="M18 18h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"></path>
+          </svg>
+          {par.quickWeight}
+        </span>
+        <span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+            ></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          {par.quickSeizure}
+        </span>
+      </div>
+    </div>
+    <p class="mock__caption">{par.caption}</p>
+  </div>
+
+  <!-- Панель 2: Режим Врача -->
+  <div
+    class="preview-panel"
+    id="preview-doctor"
+    role="tabpanel"
+    aria-labelledby="tab-doctor"
+    hidden
+    data-preview-panel="doctor"
+  >
+    <div class="mock mock--doctor">
+      <!-- Закрепленная шапка пациента (Sticky patient bar) -->
+      <div class="doctor-sticky-bar">
+        <div
+          style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap"
+        >
+          <div>
+            <div style="font-size:0.88rem;font-weight:700;color:var(--ink)">
+              {doc.pinnedHeader.patientName}
+            </div>
+            <div
+              style="font-size:0.76rem;color:var(--ink-muted)"
+              class="num tabular-nums"
+            >
+              {doc.pinnedHeader.prescription}
+            </div>
+          </div>
+          <span
+            class="num tabular-nums"
+            style="font-size:0.75rem;font-weight:600;background:var(--success-bg);color:var(--success);padding:3px 8px;border-radius:6px"
+          >
+            {doc.pinnedHeader.gki}
+          </span>
+        </div>
+      </div>
+
+      <!-- Клинический светофор (Triage) -->
+      <div style="margin-bottom:12px">
+        <div
+          style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-muted);margin-bottom:8px"
+        >
+          {doc.triageTitle}
+        </div>
+        <div class="triage-list">
+          <!-- Красная зона -->
+          <div class="triage-item triage-item--danger">
+            <span class="triage-item__dot" aria-hidden="true"></span>
+            <div class="triage-item__content">
+              <div
+                style="display:flex;justify-content:space-between;align-items:center"
+              >
+                <strong>{doc.triageRed.name}</strong>
+                <span class="triage-tag triage-tag--danger"
+                  >{doc.triageRed.badge}</span
+                >
+              </div>
+              <div
+                style="font-size:0.75rem;color:var(--ink-muted);margin-top:2px"
+              >
+                {doc.triageRed.reason}
+              </div>
+            </div>
+          </div>
+
+          <!-- Желтая зона -->
+          <div class="triage-item triage-item--warning">
+            <span class="triage-item__dot" aria-hidden="true"></span>
+            <div class="triage-item__content">
+              <div
+                style="display:flex;justify-content:space-between;align-items:center"
+              >
+                <strong>{doc.triageYellow.name}</strong>
+                <span class="triage-tag triage-tag--warning"
+                  >{doc.triageYellow.badge}</span
+                >
+              </div>
+              <div
+                style="font-size:0.75rem;color:var(--ink-muted);margin-top:2px"
+              >
+                {doc.triageYellow.reason}
+              </div>
+            </div>
+          </div>
+
+          <!-- Зеленая зона -->
+          <div class="triage-item triage-item--success">
+            <span class="triage-item__dot" aria-hidden="true"></span>
+            <div class="triage-item__content">
+              <div
+                style="display:flex;justify-content:space-between;align-items:center"
+              >
+                <strong>{doc.triageGreen.name}</strong>
+                <span class="triage-tag triage-tag--success"
+                  >{doc.triageGreen.badge}</span
+                >
+              </div>
+              <div
+                style="font-size:0.75rem;color:var(--ink-muted);margin-top:2px"
+              >
+                {doc.triageGreen.reason}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Тренд кетонов и глюкозы -->
+      <div class="mock__box" style="margin-bottom:0">
+        <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px">
+          {doc.trendTitle}
+        </div>
+        <svg
+          viewBox="0 0 320 68"
+          role="img"
+          aria-hidden="true"
+          style="width:100%;height:auto;margin-bottom:6px"
+        >
+          <!-- Коридор кетоза -->
+          <rect
+            x="0"
+            y="10"
+            width="320"
+            height="38"
+            fill="rgba(30,127,92,0.08)"
+            rx="4"></rect>
+          <!-- Линия глюкозы -->
+          <polyline
+            points="10,48 50,46 90,44 140,43 190,42 240,43 300,42"
+            fill="none"
+            stroke="var(--macro-protein)"
+            stroke-width="2"
+            stroke-dasharray="3 3"></polyline>
+          <!-- Линия кетонов -->
+          <polyline
+            points="10,56 50,50 90,42 140,32 190,26 240,22 300,20"
+            fill="none"
+            stroke="var(--primary)"
+            stroke-width="2.5"
+            stroke-linecap="round"></polyline>
+          <circle cx="300" cy="20" r="3.5" fill="var(--primary)"></circle>
+        </svg>
+        <div
+          style="display:flex;justify-content:space-between;font-size:0.74rem;color:var(--ink-muted);flex-wrap:wrap;gap:4px"
+        >
+          <span class="num tabular-nums"
+            ><strong style="color:var(--primary)">●</strong>
+            {doc.trendKetones}</span
+          >
+          <span class="num tabular-nums"
+            ><strong style="color:var(--macro-protein)">- -</strong>
+            {doc.trendGlucose}</span
+          >
+        </div>
+        <div
+          style="margin-top:4px;font-size:0.75rem;color:var(--success);font-weight:600"
+          class="num tabular-nums"
+        >
+          ✓ {doc.trendGki}
+        </div>
+      </div>
+    </div>
+    <p class="mock__caption">{doc.caption}</p>
+  </div>
+</div>
