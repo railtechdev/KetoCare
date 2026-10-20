@@ -79,6 +79,12 @@ export interface CalcResult {
   proteinPct: number;
   carbsPct: number;
   state: "ok" | "low" | "high";
+  /** Энергия по формуле Этватера: 9*жиры + 4*белки + 4*чистые углеводы */
+  atwaterKcal: number;
+  /** Отклонение калорийности продуктов от расчёта по Этватеру, % */
+  atwaterDiffPct: number;
+  /** В пределах клинической нормы (отклонение <= 10%) */
+  atwaterOk: boolean;
 }
 
 /**
@@ -122,6 +128,12 @@ export function calculateFrom(
         ? "high"
         : "ok";
 
+  // Валидация по формуле Этватера (4*P + 9*F + 4*NetCarbs)
+  const atwaterKcal = fat * 9 + protein * 4 + netCarbs * 4;
+  const atwaterDiffPct =
+    kcal > 0 ? (Math.abs(atwaterKcal - kcal) / kcal) * 100 : 0;
+  const atwaterOk = atwaterDiffPct <= 10;
+
   return {
     fat,
     protein,
@@ -133,6 +145,9 @@ export function calculateFrom(
     proteinPct: (protein / total) * 100,
     carbsPct: (carbs / total) * 100,
     state,
+    atwaterKcal,
+    atwaterDiffPct,
+    atwaterOk,
   };
 }
 

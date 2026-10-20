@@ -19,6 +19,9 @@ export const APP_URL: string =
 /** Страница входа в кабинет. */
 export const LOGIN_URL = `${APP_URL}/login`;
 
+/** Вход по коду клиники (активация пациента). */
+export const JOIN_URL = `${APP_URL}/join`;
+
 /** Куда уходят заявки с форм. Относительный путь: nginx лендинга проксирует
  *  его в API, поэтому запрос остаётся same-origin и CORS не нужен. */
 export const LEADS_ENDPOINT = "/api/v1/leads";

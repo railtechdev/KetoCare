@@ -131,6 +131,14 @@ describe("расчёт демо-калькулятора", () => {
     expect(Number.isFinite(r.fatPct)).toBe(true);
   });
 
+  it("вычисляет контрольную сумму калорий по формуле Этватера", () => {
+    const r = calculate(DEFAULTS);
+    // Для демо-блюда расчетная энергия по Этватеру должна укладываться в 10% от этикетки
+    expect(r.atwaterKcal).toBeGreaterThan(0);
+    expect(r.atwaterDiffPct).toBeLessThan(10);
+    expect(r.atwaterOk).toBe(true);
+  });
+
   it("читает продукты из общего файла, а не из своей копии", () => {
     // Копия здесь означала бы, что python-тест сверяет с ядром одни числа, а
     // страница показывает другие.

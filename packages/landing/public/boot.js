@@ -9,8 +9,23 @@
 //
 // Файл лежит в `public/`, поэтому имя без хеша содержимого и кэшируется как
 // `no-cache` — он и весит меньше килобайта.
+/* global document, localStorage, window, setTimeout */
 (function () {
   var de = document.documentElement;
+  try {
+    var stored = localStorage.getItem("kc-theme");
+    var prefersDark =
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (stored === "dark" || (!stored && prefersDark)) {
+      de.setAttribute("data-theme", "dark");
+    } else {
+      de.setAttribute("data-theme", "light");
+    }
+  } catch {
+    // LocalStorage or matchMedia unavailable
+  }
+
   // `js` — скрипты вообще есть (форма заявки вместо ссылки на почту);
   // `js-anim` — можно прятать блоки до их появления при прокрутке.
   de.classList.add("js", "js-anim");

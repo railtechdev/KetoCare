@@ -109,7 +109,10 @@ export function ProductForm({
   const check = useProductValuesCheck({ kcal, fat, protein, carbs, fiber });
   const findings = check.data ?? [];
 
-  // Расчётная калорийность по формуле Этуотера: (protein * 4) + (fat * 9) + (carbs * 4)
+  // Расчётная калорийность по формуле Этуотера: (protein * 4) + (fat * 9) + (carbs * 4).
+  // Условие показа работает через логическое «И» (отклонение > 10% && разница > 15 ккал),
+  // чтобы на низкокалорийной зелени (огурцы, листовой салат 12–18 ккал) не загоралось
+  // ложное предупреждение из-за клетчатки.
   const hasMacroInputs =
     protein !== undefined &&
     !Number.isNaN(protein) &&
@@ -133,7 +136,9 @@ export function ProductForm({
     roundedExpectedKcal !== null &&
     isKcalFilled &&
     hasPositiveMacros &&
-    (diffKcal > 25 || (expectedKcal > 0 && diffKcal / expectedKcal > 0.15));
+    diffKcal > 15 &&
+    expectedKcal > 0 &&
+    diffKcal / expectedKcal > 0.1;
 
   function fieldId(name: keyof ProductFormValues) {
     const spec = VALIDATED.find((field) => field.name === name);
