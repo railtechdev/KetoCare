@@ -2,11 +2,11 @@
 id: seizure-diary
 title: Как вести дневник приступов и что в нём отмечать
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://www.epilepsy.org.uk/living/seizure-diary https://www.youngepilepsy.org.uk/blog/useful-tips-for-logging-seizures https://www.schn.health.nsw.gov.au/epilepsy-family-handbook/diagnosis/seizures-and-similar-events https://epilepsysociety.org.uk/sites/default/files/2024-11/Ketogenic%20diet%20November%2024.pdf https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Как вести дневник приступов и что в нём отмечать
@@ -51,11 +51,3 @@ approved_at:
 помощь при приступе»).
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Epilepsy Action, Seizure diary — https://www.epilepsy.org.uk/living/seizure-diary
-- Young Epilepsy, Useful tips for logging seizures — https://www.youngepilepsy.org.uk/blog/useful-tips-for-logging-seizures
-- Sydney Children's Hospitals Network, Epilepsy family handbook: seizures and similar events — https://www.schn.health.nsw.gov.au/epilepsy-family-handbook/diagnosis/seizures-and-similar-events
-- Epilepsy Society, Ketogenic diet (листовка, 2024) — https://epilepsysociety.org.uk/sites/default/files/2024-11/Ketogenic%20diet%20November%2024.pdf
-- Matthew's Friends, Introduction to ketogenic dietary therapies for infants and children, 2026 — https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf

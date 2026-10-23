@@ -2,11 +2,11 @@
 id: stopping-the-diet
 title: Как долго длится диета и почему её нельзя бросать самим
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/ https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf https://epilepsysociety.org.uk/sites/default/files/2024-11/Ketogenic%20diet%20November%2024.pdf https://kidshealth.org/CHW/en/parents/ketogenic-diet.html?view=ptr https://charliefoundation.org/keto-for-epilepsy/
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Как долго длится диета и почему её нельзя бросать самим
@@ -33,32 +33,23 @@ approved_at:
 ## Как заканчивают
 
 - только по решению врача;
-- постепенно: назначение меняют ступенями, обычно в течение нескольких недель
+- постепенно: параметры рациона корректируют пошагово, обычно в течение нескольких недель
   или месяцев — порядок задаёт врач;
 - в это время особенно важно вести дневник приступов.
 
-Во время отмены у части детей приступы учащаются, поэтому врач наблюдает за
+В период завершения диеты у части детей приступы учащаются, поэтому врач наблюдает за
 ребёнком внимательнее.
 
 ## Лекарства
 
-Противоприступные препараты на фоне диеты не отменяют и не меняют самим.
-Это решает только невролог.
+Приём противоприступных средств продолжают строго по предписанию врача.
+Коррекция медикаментозной схемы — исключительно решение невролога.
 
 ## Когда звонить врачу
 
-- вы думаете, что диета не помогает, или хотите её закончить — обсудите это с
-  врачом, не прекращая её;
+- возникли сомнения в эффективности плана или желание закончить курс — обсудите это с
+  врачом, сохраняя текущий режим питания;
 - ребёнок отказывается от еды несколько дней;
-- во время отмены приступов стало больше.
+- в период постепенного выхода из диеты приступов стало больше.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Kossoff E. H. и соавт., Epilepsia Open, 2018 — https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/
-- Matthew's Friends, Introduction to ketogenic dietary therapies for infants and children, 2026 — https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf
-- Epilepsy Society, Ketogenic diet (листовка, 2024) — https://epilepsysociety.org.uk/sites/default/files/2024-11/Ketogenic%20diet%20November%2024.pdf
-- KidsHealth (Nemours), Ketogenic diet — https://kidshealth.org/CHW/en/parents/ketogenic-diet.html?view=ptr
-- Charlie Foundation, Keto for epilepsy — https://charliefoundation.org/keto-for-epilepsy/
-- Ответ клиники на вопрос 18 (оценка через 6 месяцев, при эффекте не меньше 2 лет) — docs/medical/OPEN_QUESTIONS.md, часть 4

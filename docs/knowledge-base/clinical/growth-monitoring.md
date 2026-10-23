@@ -2,11 +2,11 @@
 id: growth-monitoring
 title: Зачем следят за ростом и весом ребёнка
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/ https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf https://epilepsysociety.org.uk/sites/default/files/2024-11/Ketogenic%20diet%20November%2024.pdf https://www.who.int/tools/child-growth-standards https://www.who.int/tools/growth-reference-data-for-5to19-years
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Зачем следят за ростом и весом ребёнка
@@ -47,11 +47,3 @@ approved_at:
 - ребёнок стал хуже есть.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Kossoff E. H. и соавт., Epilepsia Open, 2018 — https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/
-- Matthew's Friends, Introduction to ketogenic dietary therapies for infants and children, 2026 — https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf
-- Epilepsy Society, Ketogenic diet (листовка, 2024) — https://epilepsysociety.org.uk/sites/default/files/2024-11/Ketogenic%20diet%20November%2024.pdf
-- ВОЗ, Child growth standards (0–5 лет) — https://www.who.int/tools/child-growth-standards
-- ВОЗ, Growth reference data for 5–19 years — https://www.who.int/tools/growth-reference-data-for-5to19-years

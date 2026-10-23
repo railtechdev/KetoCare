@@ -2,11 +2,11 @@
 id: seizure-first-aid
 title: Первая помощь при приступе и когда вызывать скорую
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://www.in.gov/doe/files/seizure-first-aid-flierhq85x11.pdf https://www.cdc.gov/epilepsy/first-aid-for-seizures/index.html https://www.nice.org.uk/guidance/ng217/chapter/7-Treating-status-epilepticus-repeated-or-cluster-seizures-and-prolonged-seizures https://cr.minzdrav.gov.ru/recomend/741_1
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Первая помощь при приступе и когда вызывать скорую
@@ -66,10 +66,3 @@ approved_at:
 дневник с длительностью.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Epilepsy Foundation, Seizure first aid (листовка, 2020) — https://www.in.gov/doe/files/seizure-first-aid-flierhq85x11.pdf
-- CDC, First aid for seizures — https://www.cdc.gov/epilepsy/first-aid-for-seizures/index.html
-- NICE NG217, раздел 7 — https://www.nice.org.uk/guidance/ng217/chapter/7-Treating-status-epilepticus-repeated-or-cluster-seizures-and-prolonged-seizures
-- Минздрав РФ, клинические рекомендации «Эпилепсия и эпилептический статус у взрослых и детей», 2022 (определение статуса по Trinka и соавт., ILAE, 2015) — https://cr.minzdrav.gov.ru/recomend/741_1

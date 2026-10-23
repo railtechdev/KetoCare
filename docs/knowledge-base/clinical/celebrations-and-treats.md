@@ -2,11 +2,11 @@
 id: celebrations-and-treats
 title: Праздники, гости и угощения
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://www.matthewsfriends.org/wp-content/uploads/2025/10/Celebration-time-updated-2025.pdf https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf https://www.matthewsfriends.org/wp-content/uploads/2025/07/KDRN-MF-SCHOOLS-KDT-2025-final.pdf https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Праздники, гости и угощения
@@ -46,10 +46,3 @@ Matthew's Friends советует поощрять ребёнка не едой
 - вы не уверены, подходит ли рецепт угощения.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Matthew's Friends, Celebration time, 2025 — https://www.matthewsfriends.org/wp-content/uploads/2025/10/Celebration-time-updated-2025.pdf
-- Matthew's Friends, Introduction to ketogenic dietary therapies for infants and children, 2026 — https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf
-- KDRN и Matthew's Friends, Guidance for Schools — KDT, 2025 — https://www.matthewsfriends.org/wp-content/uploads/2025/07/KDRN-MF-SCHOOLS-KDT-2025-final.pdf
-- Kossoff E. H. и соавт., Epilepsia Open, 2018 — https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/

@@ -2,11 +2,11 @@
 id: travelling
 title: Поездки и путешествия на кетогенной диете
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://www.matthewsfriends.org/wp-content/uploads/2025/06/GOING-ON-HOLIDAY-TRAVELLING-ON-KDT.pdf https://childrenswi.org/teaching-sheet/neurology/traveling-with-a-child-who-has-epilepsy https://charliefoundation.org/?p=5 https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Поездки и путешествия на кетогенной диете
@@ -55,10 +55,3 @@ Matthew's Friends советует сначала попробовать кор�
 - не удаётся соблюдать план питания.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Matthew's Friends, Going on holiday / travelling on KDT — https://www.matthewsfriends.org/wp-content/uploads/2025/06/GOING-ON-HOLIDAY-TRAVELLING-ON-KDT.pdf
-- Children's Wisconsin, Traveling with a child who has epilepsy — https://childrenswi.org/teaching-sheet/neurology/traveling-with-a-child-who-has-epilepsy
-- Charlie Foundation, заметка о поездках (правила аэропортов США) — https://charliefoundation.org/?p=5
-- Kossoff E. H. и соавт., Epilepsia Open, 2018 — https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/

@@ -2,11 +2,11 @@
 id: sick-days
 title: Ребёнок заболел — простуда, температура, рвота
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://www.matthewsfriends.org/wp-content/uploads/2025/07/Monitoring-Managing-Illness.pdf https://www.matthewsfriends.org/keto-therapies/keto-management/hospital-guidance-for-those-on-ketogenic-therapy/ https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Ребёнок заболел — простуда, температура, рвота
@@ -49,14 +49,8 @@ approved_at:
   скольких эпизодов рвоты звонить);
 - ребёнок не ест больше суток; **уточнить у клиники:** через сколько дней без
   обычной еды звонить (в источниках — двое суток);
-- признаки низкого сахара или слишком сильного кетоза;
+- проявления низкого сахара или слишком сильного кетоза;
 - приступов стало больше — действуйте по плану неотложной помощи от врача и
   звоните ему.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Matthew's Friends, Monitoring and managing illness, 2023 — https://www.matthewsfriends.org/wp-content/uploads/2025/07/Monitoring-Managing-Illness.pdf
-- Matthew's Friends, Hospital guidance for those on ketogenic therapy — https://www.matthewsfriends.org/keto-therapies/keto-management/hospital-guidance-for-those-on-ketogenic-therapy/
-- Kossoff E. H. и соавт., Epilepsia Open, 2018 — https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/

@@ -2,11 +2,11 @@
 id: school-and-kindergarten
 title: Школа, детский сад и еда вне дома
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://www.matthewsfriends.org/wp-content/uploads/2025/07/KDRN-MF-SCHOOLS-KDT-2025-final.pdf https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf https://www.chelwest.nhs.uk/services/childrens-services/childrens-medicine/ketogenic-diet-for-epilepsy-children https://childrenswi.org/teaching-sheet/neurology/traveling-with-a-child-who-has-epilepsy
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Школа, детский сад и еда вне дома
@@ -46,7 +46,7 @@ approved_at:
 ## План на случай приступа
 
 Передайте в школу письменный план действий при приступе, который дал врач, и
-телефоны для связи. Персонал должен знать признаки низкого сахара и слишком
+телефоны для связи. Персонал должен знать проявления низкого сахара и слишком
 сильного кетоза и сразу звонить вам. **Уточнить у клиники:** выдаёт ли клиника
 письменный план для школы.
 
@@ -57,10 +57,3 @@ approved_at:
 - персонал заметил вялость, частое дыхание, бледность и потливость.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- KDRN и Matthew's Friends, Guidance for Schools — KDT, 2025 — https://www.matthewsfriends.org/wp-content/uploads/2025/07/KDRN-MF-SCHOOLS-KDT-2025-final.pdf
-- Matthew's Friends, Introduction to ketogenic dietary therapies for infants and children, 2026 — https://www.matthewsfriends.org/wp-content/uploads/2026/05/DIGITAL-INTRODUCTION-TO-MEDICAL-KETOGENIC-THERAPIES-FOR-INFANTSCHILDREN2026.pdf
-- Chelsea and Westminster Hospital NHS FT, Ketogenic diet for epilepsy (children) — https://www.chelwest.nhs.uk/services/childrens-services/childrens-medicine/ketogenic-diet-for-epilepsy-children
-- Children's Wisconsin, Traveling with a child who has epilepsy — https://childrenswi.org/teaching-sheet/neurology/traveling-with-a-child-who-has-epilepsy

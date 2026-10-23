@@ -2,11 +2,11 @@
 id: urine-ketone-strips
 title: Как пользоваться тест-полосками для мочи на кетоны
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://shop.ascensiadiabetes.com/pages/ketostix-insert https://www.matthewsfriends.org/keto-therapies/keto-management/ketogenic-monitoring-forms/ https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/ https://www.matthewsfriends.org/wp-content/uploads/2025/07/Monitoring-Managing-Illness.pdf
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Как пользоваться тест-полосками для мочи на кетоны
@@ -67,11 +67,3 @@ approved_at:
 - если сомневаетесь, правильно ли делаете замер.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Ascensia, инструкция к полоскам Ketostix — https://shop.ascensiadiabetes.com/pages/ketostix-insert
-- Matthew's Friends, Ketogenic monitoring forms — https://www.matthewsfriends.org/keto-therapies/keto-management/ketogenic-monitoring-forms/
-- Matthew's Friends, Monitoring and managing illness, 2023 — https://www.matthewsfriends.org/wp-content/uploads/2025/07/Monitoring-Managing-Illness.pdf
-- Kossoff E. H. и соавт., Epilepsia Open, 2018 — https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/
-- Ответ клиники на вопрос 30 (коридор кетонов семье не даётся) — docs/medical/OPEN_QUESTIONS.md, часть 4

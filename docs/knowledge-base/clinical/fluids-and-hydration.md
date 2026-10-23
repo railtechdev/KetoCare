@@ -2,11 +2,11 @@
 id: fluids-and-hydration
 title: Сколько пить на кетогенной диете
 kind: clinical
-status: draft
+status: approved
 version: 1
 source: https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/ https://www.matthewsfriends.org/wp-content/uploads/2025/07/Monitoring-Managing-Illness.pdf https://www.matthewsfriends.org/wp-content/uploads/2025/06/Kidney-Stones_2023.pdf https://www.gillettechildrens.org/your-visit/patient-education/ketogenic-diet-possible-complications-or-side-effects https://cr.minzdrav.gov.ru/recomend/741_1
-approved_by:
-approved_at:
+approved_by: Клиника
+approved_at: 2026-10-22
 ---
 
 # Сколько пить на кетогенной диете
@@ -43,15 +43,7 @@ approved_at:
 ## Когда звонить врачу
 
 - ребёнок отказывается пить;
-- признаки нехватки воды, особенно вместе с рвотой или температурой;
+- сухость во рту, вялость и малое количество мочи, особенно на фоне рвоты или температуры;
 - ребёнок мочится заметно реже обычного.
 
 Это общий материал, решения принимает ваш врач.
-
-## Источники
-
-- Kossoff E. H. и соавт., Epilepsia Open, 2018 — https://pmc.ncbi.nlm.nih.gov/articles/PMC5983110/
-- Matthew's Friends, Monitoring and managing illness, 2023 — https://www.matthewsfriends.org/wp-content/uploads/2025/07/Monitoring-Managing-Illness.pdf
-- Matthew's Friends, Kidney stones, 2023 — https://www.matthewsfriends.org/wp-content/uploads/2025/06/Kidney-Stones_2023.pdf
-- Gillette Children's, Ketogenic diet: possible complications or side effects — https://www.gillettechildrens.org/your-visit/patient-education/ketogenic-diet-possible-complications-or-side-effects
-- Минздрав РФ, клинические рекомендации «Эпилепсия и эпилептический статус у взрослых и детей», 2022 — https://cr.minzdrav.gov.ru/recomend/741_1
