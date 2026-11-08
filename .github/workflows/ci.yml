@@ -21,16 +21,16 @@ jobs:
     name: Линт и типы
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       # Версия pnpm не задаётся здесь: она объявлена в `package.json`
       # (`packageManager: pnpm@9.15.0`). Когда указаны оба места, действие
       # отказывается работать — «Multiple versions of pnpm specified», и все
       # JS-задачи падают ещё до установки зависимостей.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -58,16 +58,16 @@ jobs:
     name: Тесты фронтенда (vitest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       # Версия pnpm не задаётся здесь: она объявлена в `package.json`
       # (`packageManager: pnpm@9.15.0`). Когда указаны оба места, действие
       # отказывается работать — «Multiple versions of pnpm specified», и все
       # JS-задачи падают ещё до установки зависимостей.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -84,11 +84,11 @@ jobs:
     # Обязательный отдельный job (раздел 13 ТЗ). Эталоны нельзя помечать skip/xfail.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Вся история: шаг про ENGINE_VERSION сравнивает ядро с базой PR.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - run: uv sync --all-packages
@@ -148,8 +148,8 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - run: uv sync --all-packages
@@ -180,16 +180,16 @@ jobs:
     name: OpenAPI и api-client
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       # Версия pnpm не задаётся здесь: она объявлена в `package.json`
       # (`packageManager: pnpm@9.15.0`). Когда указаны оба места, действие
       # отказывается работать — «Multiple versions of pnpm specified», и все
       # JS-задачи падают ещё до установки зависимостей.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -227,10 +227,10 @@ jobs:
       matrix:
         target: [api, bot, worker]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
       - name: Сборка образа (${{ matrix.target }})
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/Dockerfile

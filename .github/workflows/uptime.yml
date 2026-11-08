@@ -85,7 +85,7 @@ jobs:
     steps:
       # Нужен один файл: полный checkout и установка зависимостей стоили бы
       # больше самой проверки.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: infra/scripts
           persist-credentials: false
