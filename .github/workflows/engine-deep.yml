@@ -25,3 +25,15 @@ jobs:
         env:
           KETO_ENGINE_DEEP: "1"
         run: uv run pytest packages/keto_engine -q
+
+  report:
+    needs: deep
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    permissions:
+      actions: read
+      issues: write
+    uses: ./.github/workflows/_report-failure.yml
+    with:
+      label: engine-deep
+      title: Глубокий перебор ядра упал
+      failed: ${{ contains(needs.*.result, 'failure') }}

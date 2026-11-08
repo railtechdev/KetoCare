@@ -1,0 +1,62 @@
+name: Отчёт о падении расписания
+
+# Общая часть e2e.yml, audit.yml и engine-deep.yml. Красный прогон по расписанию
+# виден только тому, кто откроет вкладку Actions: E2E так пролежал двадцать ночей,
+# аудит — пять недель. Падение открывает issue с меткой, повторное дописывается
+# комментарием, зелёный прогон закрывает. Схема та же, что у uptime.yml.
+
+on:
+  workflow_call:
+    inputs:
+      label:
+        type: string
+        required: true
+      title:
+        type: string
+        required: true
+      failed:
+        type: boolean
+        required: true
+
+jobs:
+  report:
+    name: Issue о падении и восстановлении
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      LABEL: ${{ inputs.label }}
+      TITLE: ${{ inputs.title }}
+      FAILED: ${{ inputs.failed }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Открыть, дополнить или закрыть issue
+        run: |
+          open=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+          now=$(date -u '+%Y-%m-%d %H:%M UTC')
+
+          if [ "$FAILED" != "true" ]; then
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --body "Восстановлено: прогон прошёл в $now. Прогон: $RUN_URL"
+              gh issue close "$open"
+            fi
+            exit 0
+          fi
+
+          # Список упавшего — удобство, а не условие: без него issue всё равно нужен.
+          failures=$(gh run view "$GITHUB_RUN_ID" --json jobs --jq '
+            .jobs[] | select(.conclusion == "failure")
+            | "- \(.name): \([.steps[] | select(.conclusion == "failure") | .name] | join(", "))"
+          ' || echo "- список получить не удалось, см. прогон")
+          body=$(printf '%s: прогон упал.\n\n%s\n\nПрогон: %s\n' "$now" "$failures" "$RUN_URL")
+
+          if [ -z "$open" ]; then
+            gh label create "$LABEL" --color B60205 --description "$TITLE" 2>/dev/null || true
+            gh issue create --label "$LABEL" --title "$TITLE ($now)" --body "$body"
+          else
+            gh issue comment "$open" --body "$body"
+          fi
