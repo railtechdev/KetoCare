@@ -99,3 +99,15 @@ jobs:
           path: apps/e2e/playwright-report
           retention-days: 7
           if-no-files-found: ignore
+
+  report:
+    needs: e2e
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    permissions:
+      actions: read
+      issues: write
+    uses: ./.github/workflows/_report-failure.yml
+    with:
+      label: nightly-e2e
+      title: Ночной E2E упал
+      failed: ${{ contains(needs.*.result, 'failure') }}

@@ -40,3 +40,15 @@ jobs:
         # Порог — moderate: low-находки в дереве сборки шумят и разбираются
         # вместе с обновлением зависимостей, а не по звонку.
         run: pnpm audit --audit-level moderate
+
+  report:
+    needs: [python, javascript]
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    permissions:
+      actions: read
+      issues: write
+    uses: ./.github/workflows/_report-failure.yml
+    with:
+      label: audit
+      title: Аудит зависимостей нашёл уязвимости
+      failed: ${{ contains(needs.*.result, 'failure') }}
