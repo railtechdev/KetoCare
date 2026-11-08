@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from worker.reports.render import render_html
@@ -139,14 +141,19 @@ def test_report_renders_to_one_a4_page():
 
     Проверка идёт через weasyprint и требует системных pango и cairo — на машине
     без них тест пропускается, а не падает: его отсутствие ничего не говорит о
-    правильности отчёта (см. apps/worker/README.md).
+    правильности отчёта (см. apps/worker/README.md). В CI стоит
+    KETOCARE_REQUIRE_PDF=1, и пропуск становится падением: иначе путь, печатающий
+    отчёт врачу, мог бы молча перестать исполняться.
     """
     try:
         import weasyprint
     except (ImportError, OSError) as error:
         # Именно OSError: системные библиотеки грузятся уже на импорте, и
         # `pytest.importorskip` его не ловит — он ждёт ImportError.
-        pytest.skip(f"weasyprint без системных библиотек: {error}")
+        reason = f"weasyprint без системных библиотек: {error}"
+        if os.environ.get("KETOCARE_REQUIRE_PDF"):
+            pytest.fail(reason)
+        pytest.skip(reason)
 
     document = weasyprint.HTML(string=render_html(REPORT, title="Отчёт по пациенту")).render()
 
