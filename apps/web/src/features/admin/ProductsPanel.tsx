@@ -181,12 +181,12 @@ export function ProductsPanel({
             size="sm"
             className="h-auto px-0 text-left whitespace-normal"
             title={row.original.category_id}
-            onClick={() =>
-              setFiltersAndResetPage((current) => ({
-                ...current,
-                categoryId: row.original.category_id,
-              }))
-            }
+            // Только адрес, без setFiltersAndResetPage: колонки запомнены, и
+            // прочитанные ею `filters` были бы отборами первого рендера.
+            onClick={() => {
+              patchAddress({ category: row.original.category_id });
+              setPage(0);
+            }}
           >
             {categoryNames.get(row.original.category_id) ??
               t("products.columns.unknownCategory")}
@@ -293,7 +293,7 @@ export function ProductsPanel({
         ),
       },
     ],
-    [t, categoryNames, setItem],
+    [t, categoryNames, setItem, patchAddress],
   );
 
   // Проверка и по адресу тоже: `?item=import` вводится руками, и без неё
