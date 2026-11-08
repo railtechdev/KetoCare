@@ -41,6 +41,15 @@ describe("productFormSchema", () => {
     },
   );
 
+  it("принимает идентификатор категории вне вариантов RFC 9562", () => {
+    // `uuid()` в zod 4 проверяет версию и вариант, а идентификатор здесь выбран
+    // из справочника: форма не должна отказывать в существующей категории.
+    const categoryId = "00000000-0000-0000-0000-000000000001";
+    expect(productFormSchema.safeParse({ ...VALID, categoryId }).success).toBe(
+      true,
+    );
+  });
+
   it("не пропускает пустую дату сверки", () => {
     expect(
       productFormSchema.safeParse({ ...VALID, verifiedAt: "" }).success,
