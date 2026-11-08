@@ -24,7 +24,7 @@ test("родитель входит с формы и попадает на гл�
   await page.goto("/login");
 
   await page.getByLabel("Электронная почта").fill(PARENT_EMAIL);
-  await page.getByLabel("Пароль").fill(PASSWORD);
+  await page.getByLabel("Пароль", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Войти" }).click();
 
   await expect(page).toHaveURL(/\/app\/home/);
@@ -34,7 +34,7 @@ test("неверный пароль не пускает и говорит об �
   await page.goto("/login");
 
   await page.getByLabel("Электронная почта").fill(PARENT_EMAIL);
-  await page.getByLabel("Пароль").fill("это не пароль");
+  await page.getByLabel("Пароль", { exact: true }).fill("это не пароль");
   await page.getByRole("button", { name: "Войти" }).click();
 
   await expect(page.getByText("Неверный email или пароль.")).toBeVisible();
@@ -52,7 +52,7 @@ test("неверный пароль не пускает и говорит об �
 test("после перезагрузки родитель остаётся в кабинете", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Электронная почта").fill(PARENT_EMAIL);
-  await page.getByLabel("Пароль").fill(PASSWORD);
+  await page.getByLabel("Пароль", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL(/\/app\/home/);
 
