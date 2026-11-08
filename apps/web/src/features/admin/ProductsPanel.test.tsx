@@ -409,4 +409,35 @@ describe("отборы справочника — в адресе", () => {
     await user.click(inactive);
     await waitFor(() => expect(currentAddress().inactive).toBeUndefined());
   });
+
+  it("категория из строки таблицы не сбрасывает уже заданные отборы", async () => {
+    const listless = (api.GET as Mock).getMockImplementation()!;
+    (api.GET as Mock).mockImplementation((path: string, ...rest: unknown[]) =>
+      path === "/api/v1/products"
+        ? Promise.resolve({
+            data: { items: [PRODUCT], total: 1 },
+            response: { status: 200 },
+          })
+        : listless(path, ...rest),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+
+    // Кнопок с такой подписью в таблице несколько; нужна ссылка из строки.
+    const categoryLink = async () => {
+      const buttons = await screen.findAllByRole("button", { name: "Жиры" });
+      return buttons.find((button) => button.dataset.variant === "link")!;
+    };
+    // Сначала дождаться строки: колонки собраны, отбор включается уже после.
+    await categoryLink();
+    await user.click(
+      screen.getByLabelText(adminRu.products.filters.includeInactive),
+    );
+    await waitFor(() => expect(currentAddress().inactive).toBe(true));
+
+    await user.click(await categoryLink());
+
+    await waitFor(() => expect(currentAddress().category).toBe(CATEGORY_ID));
+    expect(currentAddress().inactive).toBe(true);
+  });
 });
