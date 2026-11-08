@@ -22,7 +22,7 @@ export const productFormSchema = z.object({
   nameRu: requiredText,
   nameUz: z.string().trim(),
   nameEn: z.string().trim(),
-  categoryId: z.string().trim().uuid(),
+  categoryId: z.string().trim().guid(),
   kcal: per100g,
   fat: per100g,
   protein: per100g,

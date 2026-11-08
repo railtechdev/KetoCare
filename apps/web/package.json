@@ -14,7 +14,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3",
+    "@hookform/resolvers": "^5",
     "@ketocare/api-client": "workspace:*",
     "@ketocare/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.23",
@@ -33,7 +33,7 @@
     "react-i18next": "^15.2.0",
     "recharts": "^2",
     "tailwindcss": "^4.3.3",
-    "zod": "^3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
@@ -46,6 +46,6 @@
     "jsdom": "^27.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.4.5",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
