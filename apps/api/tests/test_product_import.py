@@ -264,3 +264,14 @@ class TestSeedFile:
         assert report.ok, report.errors[:5]
         assert report.total_rows == 99
         assert "Масло льняное" in {row.values["name_ru"] for row in report.valid_rows}
+
+    def test_kindergarten_standard_file_imports_cleanly(self) -> None:
+        """Таблица стандарта детсадовских меню годится для импорта (ADR-0055)."""
+
+        table = (
+            Path(__file__).resolve().parents[3] / "infra" / "seed" / "dmtt-2025" / "products.csv"
+        )
+        report = parse_csv(table.read_bytes())
+
+        assert report.ok, report.errors[:5]
+        assert report.total_rows == 36

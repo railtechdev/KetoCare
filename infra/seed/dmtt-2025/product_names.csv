@@ -1,0 +1,76 @@
+key,name_ru,name_uz,category
+apple,Яблоко,Olma,Фрукты и ягоды
+baking_powder,Разрыхлитель,Ko'pirtirgich,Прочее
+barley,Крупа перловая,Perlovka yormasi,Крупы и мука
+basai_cabbage,Капуста басай,Basay karami,Овощи
+beef,Говядина 1 категории,Mol go'shti (I toifa),Мясо и птица
+beet,Свёкла,Lavlagi,Овощи
+bell_pepper,Перец болгарский,Bulg'or qalampiri,Овощи
+bell_pepper_powder,Перец болгарский молотый,Bulg'or qalampiri kukuni,Прочее
+black_radish,Редька,Turp,Овощи
+bread,Хлеб пшеничный из муки 1 сорта,Bug'doy noni (1-navli undan),Крупы и мука
+breadcrumbs,Сухари панировочные,Suxari,Крупы и мука
+buckwheat,Крупа гречневая,Grechka yormasi,Крупы и мука
+butter,"Масло сливочное 82,5 %","Sariyog' (yog'liligi 82,5 %)",Жиры и масла
+cabbage,Капуста белокочанная,Oq boshli karam,Овощи
+carrot,Морковь,Sabzi,Овощи
+cheese,Сыр твёрдый,Pishloq,Молочные продукты
+chicken,Курица 1 категории,Tovuq go'shti (I toifa),Мясо и птица
+chicken_fillet,Курица мякоть,Tovuq go'shti lahm qismi,Мясо и птица
+chickpea,Нут,No'xat,Крупы и мука
+cocoa,Какао-порошок,Kakao kukuni,Прочее
+coriander,Кориандр семена,Kashnich doni,Прочее
+cucumber,Огурец,Bodring,Овощи
+cumin,Зира,Zira,Прочее
+curd,"Творог 2,5–5 %","Tvorog (yog'liligi 2,5–5 %)",Молочные продукты
+dried_apple,Яблоко сушёное,Quritilgan olma,Фрукты и ягоды
+dried_apricot,Абрикос сушёный (баргак),Quritilgan bargak,Фрукты и ягоды
+dried_basil,Базилик сушёный,Quritilgan rayhon,Прочее
+dried_bell_pepper,Перец болгарский сушёный,Quritilgan bulg'or shirin qalampiri,Прочее
+dried_pear,Груша сушёная,Quritilgan nok,Фрукты и ягоды
+dried_plum,Слива сушёная,Quritilgan olxo'ri,Фрукты и ягоды
+egg,Яйцо куриное 1 категории,Tovuq tuxumi (I toifa),Яйца
+fish,Рыба без головы (минтай; сазан),Baliq go'shti (boshsiz),Рыба и морепродукты
+flour,Мука пшеничная,Bug'doy uni,Крупы и мука
+garlic,Чеснок,Sarimsoq piyoz,Овощи
+greens,Зелень,Ko'katlar,Овощи
+honey,Мёд натуральный,Tabiiy asal,Прочее
+jam,Варенье,Murabbo,Прочее
+kefir,Кефир,Kefir,Молочные продукты
+lemon,Лимон,Limon,Фрукты и ягоды
+milk,"Молоко 2,5–3,2 %","Sut (yog'liligi 2,5–3,2 %)",Молочные продукты
+millet,Пшено,Tariq yormasi,Крупы и мука
+muesli,Мюсли с пробиотиками,Probiotikli myusli,Крупы и мука
+mung,Маш,Mosh,Крупы и мука
+oats,Крупа овсяная,Suli yormasi,Крупы и мука
+onion,Лук репчатый,Bosh piyoz,Овощи
+parsley,Петрушка,Petrushka,Овощи
+pasta,Макаронные изделия,Makaron mahsuloti,Крупы и мука
+peas,Горох,Goroh,Крупы и мука
+pickled_cucumber,Огурец консервированный,Konservalangan bodring,Овощи
+plum_jam,Повидло,Povidlo,Прочее
+potato,Картофель,Kartoshka,Овощи
+powdered_sugar,Сахарная пудра,Qand upasi,Прочее
+pumpkin,Тыква,Oshqovoq,Овощи
+quince,Айва,Behi,Фрукты и ягоды
+radish,Редис,Rediska,Овощи
+raisins,Изюм,Mayiz,Фрукты и ягоды
+red_onion,Лук красный,Qizil piyoz,Овощи
+rice,Рис,Guruch,Крупы и мука
+rosehip,Шиповник сушёный,Na'matak,Фрукты и ягоды
+salt,Соль йодированная,Yodlangan osh tuzi,Прочее
+semolina,Крупа манная,Manniy yormasi,Крупы и мука
+sour_cream,Сметана 30 %,Smetana (yog'liligi 30 %),Молочные продукты
+spinach,Шпинат,Shpinat,Овощи
+starch,Крахмал картофельный,Kartoshka kraxmali,Крупы и мука
+sugar,Сахар,Shakar,Прочее
+tea,Чай сухой,Quruq choy,Прочее
+tomato,Помидор,Pomidor,Овощи
+tomato_paste,Томатная паста,Tomat pastasi,Овощи
+vanillin,Ванилин,Vanilin,Прочее
+veg_oil,Масло растительное,O'simlik yog'i,Жиры и масла
+vermicelli,Вермишель,Vermishel,Крупы и мука
+walnut,Грецкий орех (ядро),Yong'oq mag'zi,Орехи и семена
+water,Вода,Suv,Прочее
+yeast,Дрожжи,Xamirturush,Прочее
+zucchini,Кабачок,Qovoqcha,Овощи
