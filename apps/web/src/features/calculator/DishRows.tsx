@@ -8,7 +8,7 @@ import {
   cn,
   exceedsCalcGrams,
 } from "@ketocare/ui";
-import { X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { DishRow, ItemContribution } from "./types";
@@ -48,6 +48,12 @@ interface Props {
  * общую левую линию — а сравнивают именно их. Обозначения те же, что в
  * подсказке поиска («Ж · Б · У»): одна запись на весь экран.
  */
+function stepped(grams: number, delta: number): number {
+  const base = Number.isFinite(grams) ? grams : 0;
+  // Tenths are kept because the solver and portion scaling can produce them.
+  return Math.max(0, Math.round((base + delta) * 10) / 10);
+}
+
 export function DishRows({
   rows,
   onChangeGrams,
@@ -105,6 +111,20 @@ export function DishRows({
               </span>
 
               <div className="flex items-center gap-field sm:ml-auto">
+                {!readOnlyGrams && onChangeGrams && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t("gramsDecrease", { name: row.product.name })}
+                    onClick={() =>
+                      onChangeGrams(row.product.id, stepped(row.grams, -1))
+                    }
+                    className="min-h-touch min-w-touch shrink-0"
+                  >
+                    <Minus aria-hidden="true" />
+                  </Button>
+                )}
                 <label className="sr-only" htmlFor={`grams-${row.product.id}`}>
                   {t("gramsFor", { name: row.product.name })}
                 </label>
@@ -131,6 +151,20 @@ export function DishRows({
                 <span className="text-sm text-muted-foreground">
                   {t("gramsUnit")}
                 </span>
+                {!readOnlyGrams && onChangeGrams && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t("gramsIncrease", { name: row.product.name })}
+                    onClick={() =>
+                      onChangeGrams(row.product.id, stepped(row.grams, 1))
+                    }
+                    className="min-h-touch min-w-touch shrink-0"
+                  >
+                    <Plus aria-hidden="true" />
+                  </Button>
+                )}
 
                 {/* Кнопки удаления нет, когда состав только показывается:
                     расчёт сервера правят не здесь, а изменением ввода выше. */}
@@ -176,6 +210,18 @@ export function DishRows({
                     fatG={contribution.fat_g}
                     proteinG={contribution.protein_g}
                     carbsG={contribution.carbs_g}
+                    extras={[
+                      {
+                        full: t("contribution.netCarbsFull"),
+                        short: t("contribution.netCarbsShort"),
+                        grams: contribution.net_carbs_g,
+                      },
+                      {
+                        full: t("contribution.fiberFull"),
+                        short: t("contribution.fiberShort"),
+                        grams: contribution.fiber_g,
+                      },
+                    ]}
                     stale={stale}
                   />
                 </div>

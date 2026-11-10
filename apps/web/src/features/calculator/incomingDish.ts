@@ -28,6 +28,8 @@ export function useIncomingComposition(
   patientId: string | undefined,
 ): {
   rows: DishRow[] | null;
+  /** Name of the opened saved dish; absent for recipes and products. */
+  dishTitle?: string;
   isPending: boolean;
   isError: boolean;
   /** Повторить то, что отказало: рецепт, список блюд или продукты состава. */
@@ -134,5 +136,11 @@ export function useIncomingComposition(
     })
     .filter((row): row is DishRow => row !== null);
 
-  return { rows, isPending: false, isError: false, retry };
+  return {
+    rows,
+    dishTitle: incoming.kind === "dish" ? dish.data?.title : undefined,
+    isPending: false,
+    isError: false,
+    retry,
+  };
 }

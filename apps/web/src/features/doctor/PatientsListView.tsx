@@ -451,7 +451,7 @@ export function PatientsListView() {
                 // чтобы вернуться в список.
                 void navigate({
                   to: "/app/patients/$patientId/$view",
-                  params: { patientId: patient.id, view: "profile" },
+                  params: { patientId: patient.id, view: "prescription" },
                 });
               })
               .catch(() => null);

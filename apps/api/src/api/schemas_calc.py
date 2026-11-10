@@ -128,6 +128,7 @@ class ItemOut(BaseModel):
     protein_g: float
     carbs_g: float
     fiber_g: float
+    net_carbs_g: float
 
 
 class DishOut(BaseModel):
@@ -144,6 +145,21 @@ class DishOut(BaseModel):
     net_carbs_g: float
     ratio: float | None
     engine_version: str
+
+
+class MealGoalOut(BaseModel):
+    """Grams one meal should contain, shown next to the dish's actual grams.
+
+    Read by the calculator in the web cabinet. A hint only: verdicts still come
+    from `ratio_within_tolerance` and `kcal_within_tolerance`. `protein_g` and
+    `net_carbs_g` are `null` without a patient's prescription or when its
+    protein does not fit the requested ratio and calories (ADR-0058).
+    """
+
+    fat_g: float
+    protein_g: float | None
+    net_carbs_g: float | None
+    non_fat_g: float
 
 
 class VerifyRequest(BaseModel):
@@ -178,6 +194,8 @@ class VerifyResponse(BaseModel):
     #: `False` при `ratio_within_tolerance = null` значит «вердикта нет по
     #: существу», а не «мы его не спрашивали».
     ratio_comparable: bool = False
+    #: Goal of one meal; `null` when no targets were sent.
+    meal_goal: MealGoalOut | None = None
     #: Продукты состава, исключённые этому ребёнку.
     #:
     #: Состав задал человек, и подменять его молча нельзя — поэтому проверка

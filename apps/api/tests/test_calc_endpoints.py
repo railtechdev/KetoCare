@@ -20,6 +20,7 @@ from api.schemas_calc import CALC_GRAMS_MAX
 from core.models import FoodStandard, Product, ProductCategory
 from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, UserRole
 from core.repositories import patients as patients_repo
+from core.repositories import prescriptions as prescriptions_repo
 from keto_engine import ENGINE_VERSION
 
 pytestmark = pytest.mark.asyncio
@@ -106,6 +107,7 @@ class TestVerify:
             "protein_g",
             "carbs_g",
             "fiber_g",
+            "net_carbs_g",
         }
         assert butter["product_id"] == "butter"
         assert butter["grams"] == 50
@@ -900,3 +902,226 @@ class TestChildExclusionsReachTheSolver:
 
         assert response.status_code == 422, response.text
         assert response.json()["error"]["code"] == "validation_error"
+
+
+class TestMealGoal:
+    """Reader: the Fact / Goal table of the calculator in `apps/web`."""
+
+    @staticmethod
+    def _body(patient_id=None, ratio=4.0, kcal=400):
+        return {
+            "ingredients": [BUTTER, CHICKEN],
+            "items": [
+                {"product_id": "butter", "grams": 30},
+                {"product_id": "chicken", "grams": 40},
+            ],
+            "targets": {"ratio": ratio, "kcal": kcal},
+            "patient_id": None if patient_id is None else str(patient_id),
+        }
+
+    async def _patient_with_prescription(self, session, make_user, make_patient, protein=24.0):
+        parent = await make_user(role=UserRole.PARENT)
+        doctor = await make_user(role=UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        await prescriptions_repo.create(
+            session,
+            patient_id=patient.id,
+            ratio=4.0,
+            kcal_per_day=1600,
+            protein_g=protein,
+            carbs_limit_g=20.0,
+            meals_per_day=4,
+            author_id=doctor.id,
+            effective_from=date.today(),
+        )
+        return parent, patient
+
+    async def test_goal_uses_the_prescription_protein(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await self._patient_with_prescription(session, make_user, make_patient)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(patient.id), headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 200, response.text
+        goal = response.json()["meal_goal"]
+        assert set(goal) == {"fat_g", "protein_g", "net_carbs_g", "non_fat_g"}
+        assert goal["fat_g"] == pytest.approx(40.0)
+        assert goal["protein_g"] == pytest.approx(6.0)
+        assert goal["net_carbs_g"] == pytest.approx(4.0)
+        assert goal["non_fat_g"] == pytest.approx(10.0)
+
+    async def test_without_a_patient_only_the_ratio_part_is_known(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(), headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 200, response.text
+        goal = response.json()["meal_goal"]
+        assert goal["fat_g"] == pytest.approx(40.0)
+        assert goal["protein_g"] is None
+        assert goal["net_carbs_g"] is None
+
+    async def test_no_targets_means_no_goal(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+        body = self._body()
+        del body["targets"]
+
+        response = await client.post("/api/v1/calc/verify", json=body, headers=auth_headers(doctor))
+
+        assert response.status_code == 200, response.text
+        assert response.json()["meal_goal"] is None
+
+    async def test_foreign_patient_is_refused(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, patient = await self._patient_with_prescription(session, make_user, make_patient)
+        stranger = await make_user(role=UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(patient.id), headers=auth_headers(stranger)
+        )
+
+        assert response.status_code == 403, response.text
+
+    async def test_position_carries_net_carbs(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(), headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 200, response.text
+        for item in response.json()["dish"]["items"]:
+            assert "net_carbs_g" in item
+
+
+class TestSolveKeepsChosenProducts:
+    """Reader: «Подобрать граммовку» in the web cabinet and the Mini App."""
+
+    WHEY = {
+        "product_id": "whey",
+        "kcal": 370,
+        "fat": 1.0,
+        "protein": 90.0,
+        "carbs": 0.0,
+        "fiber": 0.0,
+    }
+
+    async def test_every_product_stays_in_the_solution(self, client, make_user, auth_headers):
+        # Without the floor the solver leaves the broccoli out of this set.
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {"ratio": 3.5, "kcal": 300},
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        grams = {item["product_id"]: item["grams"] for item in body["dish"]["items"]}
+        assert set(grams) == {"chicken", "butter", "broccoli"}
+        assert grams["broccoli"] >= 2
+        assert body["ratio_within_tolerance"] is True
+
+    async def test_explicit_bounds_win_over_the_floor(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {
+                    "ratio": 3.5,
+                    "kcal": 300,
+                    "per_ingredient_bounds": {"broccoli": [20, 30]},
+                },
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        grams = {item["product_id"]: item["grams"] for item in response.json()["dish"]["items"]}
+        assert 20 <= grams["broccoli"] <= 30
+
+    async def test_infeasible_with_every_product_names_what_to_remove(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, self.WHEY],
+                "targets": {"ratio": 4.0, "kcal": 60},
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422, response.text
+        error = response.json()["error"]
+        assert error["code"] == "infeasible_calculation"
+        assert "whey" in error["message"]
+        assert "Уберите" in error["message"]
+        assert "whey" in error["details"]["product_ids"]
+
+    async def test_reason_uses_the_catalogue_name(self, client, session, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+        category = await session.scalar(select(ProductCategory).limit(1))
+        if category is None:
+            category = ProductCategory(name_ru="Тестовая", sort=0)
+            session.add(category)
+            await session.flush()
+        name = f"Изолят {uuid.uuid4().hex[:8]}"
+        product = Product(
+            name_ru=name,
+            category_id=category.id,
+            kcal_100g=370,
+            fat_100g=1.0,
+            protein_100g=90.0,
+            carbs_100g=0.0,
+            fiber_100g=0.0,
+            source="USDA",
+            source_version="SR28",
+            verified_at=date(2026, 1, 1),
+        )
+        session.add(product)
+        await session.flush()
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, {**self.WHEY, "product_id": str(product.id)}],
+                "targets": {"ratio": 4.0, "kcal": 60},
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422, response.text
+        assert name in response.json()["error"]["message"]
+        assert str(product.id) not in response.json()["error"]["message"]
+
+    async def test_goal_impossible_for_any_set_keeps_the_engine_reason(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={"ingredients": [CHICKEN, BROCCOLI], "targets": {"ratio": 4.0, "kcal": 400}},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422, response.text
+        assert "Уберите" not in response.json()["error"]["message"]

@@ -34,7 +34,7 @@ import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { useSectionItem } from "../../routes/useSectionTab";
 import { useIncomingComposition } from "./incomingDish";
-import { parseIncoming } from "./incomingItem";
+import { incomingDish as dishItem, parseIncoming } from "./incomingItem";
 import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
@@ -95,7 +95,14 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
  * внутри `h1` — ровно так «Калькулятор» и напечатался в карте дважды. Тем же
  * устроен отчёт (`ReportsView`).
  */
-export function CalculatorView({ patientId }: { patientId?: string }) {
+export function CalculatorView({
+  patientId,
+  inCard = false,
+}: {
+  patientId?: string;
+  /** Rendered inside a patient's card rather than the family's section. */
+  inCard?: boolean;
+}) {
   const { t } = useTranslation("calculator");
 
   const [rows, setRows] = useState<DishRow[]>([]);
@@ -359,7 +366,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
   // Первая позиция тяжелее предела — её и называем: по имени человек найдёт
   // поле. Подбор граммов со входа не берёт, поэтому предел его не выключает.
   // Но переписывает он только то, что вошло в раскладку: строка, которую он
-  // отбросил (легче 2 г или исключённая ребёнку), сохранит прежнюю массу, и
+  // отбросил (исключённая ребёнку), сохранит прежнюю массу, и
   // ошибка у поля останется.
   const tooHeavy = rows.find((row) => exceedsCalcGrams(row.grams));
   const solveBlockedBy = noRows
@@ -606,6 +613,19 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                     rows={rows}
                     blockedBy={saveBlockedBy}
                     waitingFor={saveWaitsFor}
+                    inCard={inCard}
+                    editing={
+                      incoming?.kind === "dish" &&
+                      incomingDish.dishTitle !== undefined
+                        ? { id: incoming.id, title: incomingDish.dishTitle }
+                        : null
+                    }
+                    onSavedAsNew={(dishId) => {
+                      // The copy has the rows already on screen; applying it
+                      // again would only repeat them.
+                      appliedDish.current = dishItem(dishId);
+                      setIncomingId(dishItem(dishId));
+                    }}
                   />
                 )}
               </>
@@ -663,6 +683,7 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                     goal={targets}
                     ratioWithinTolerance={ratioWithin ?? undefined}
                     kcalWithinTolerance={kcalWithin ?? undefined}
+                    mealGoal={verify.data?.meal_goal ?? null}
                   />
                   {stale && (
                     <p
@@ -727,6 +748,36 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
               <Separator />
 
               <div className="flex flex-col gap-section">
+                <div className="flex flex-col gap-field">
+                  <div>
+                    <Button
+                      type="button"
+                      size="lg"
+                      className="min-h-touch"
+                      disabled={solveBlockedBy !== null || busy}
+                      aria-busy={solve.isPending}
+                      aria-describedby={
+                        solveBlockedBy !== null
+                          ? reasonId
+                          : actionsWaitingDescription
+                      }
+                      onClick={() => {
+                        if (targets === null) return;
+                        scale.reset();
+                        solve.mutate({ rows, targets, patientId });
+                      }}
+                    >
+                      {solve.isPending
+                        ? t("actions.solving")
+                        : t("actions.solve")}
+                    </Button>
+                  </div>
+                </div>
+
+                <ActionReason id={reasonId}>{actionsBlockedBy}</ActionReason>
+
+                <Separator />
+
                 <div className="flex flex-wrap items-start gap-section">
                   <Field
                     id="protein-min"
@@ -764,32 +815,6 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                     }}
                     className="tabular-nums"
                   />
-                </div>
-
-                <div className="flex flex-col gap-field">
-                  <div>
-                    <Button
-                      type="button"
-                      size="lg"
-                      className="min-h-touch"
-                      disabled={solveBlockedBy !== null || busy}
-                      aria-busy={solve.isPending}
-                      aria-describedby={
-                        solveBlockedBy !== null
-                          ? reasonId
-                          : actionsWaitingDescription
-                      }
-                      onClick={() => {
-                        if (targets === null) return;
-                        scale.reset();
-                        solve.mutate({ rows, targets, patientId });
-                      }}
-                    >
-                      {solve.isPending
-                        ? t("actions.solving")
-                        : t("actions.solve")}
-                    </Button>
-                  </div>
                 </div>
 
                 <div className="flex flex-col gap-field">
@@ -832,9 +857,13 @@ export function CalculatorView({ patientId }: { patientId?: string }) {
                     </Button>
                   </div>
                 </div>
-
-                <ActionReason id={reasonId}>{actionsBlockedBy}</ActionReason>
               </div>
+
+              {dish !== null && (
+                <p className="m-0 text-xs text-muted-foreground">
+                  {t("engineVersion", { version: dish.engine_version })}
+                </p>
+              )}
             </Section>
 
             {infeasible && (

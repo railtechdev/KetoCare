@@ -6,12 +6,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import replace
 
-from core.models import Product
-from keto_engine import DishResult, Ingredient, Targets
+from core.models import Prescription, Product
+from keto_engine import DishResult, Ingredient, Targets, meal_macro_goal
+from keto_engine.constants import DEFAULT_MAX_INGREDIENT_GRAMS, MIN_INGREDIENT_GRAMS
 
-from ..schemas_calc import DishOut, IngredientIn, ItemIn, ItemOut, TargetsIn, UncountedItemOut
+from ..schemas_calc import (
+    DishOut,
+    IngredientIn,
+    ItemIn,
+    ItemOut,
+    MealGoalOut,
+    TargetsIn,
+    UncountedItemOut,
+)
 
 
 def to_ingredients(raw: list[IngredientIn]) -> dict[str, Ingredient]:
@@ -75,6 +85,42 @@ def to_targets(raw: TargetsIn) -> Targets:
     )
 
 
+def keeping_every_product(targets: Targets, product_ids: Iterable[str]) -> Targets:
+    """Targets under which the solver may not drop a product the person chose.
+
+    Bounds the caller set explicitly stay as they are.
+    """
+
+    bounds: dict[str, tuple[float, float | None]] = {
+        product_id: (MIN_INGREDIENT_GRAMS, DEFAULT_MAX_INGREDIENT_GRAMS)
+        for product_id in product_ids
+    }
+    bounds.update(targets.per_ingredient_bounds or {})
+    return replace(targets, per_ingredient_bounds=bounds)
+
+
+def missing_from_solution(dish: DishResult, product_ids: Iterable[str]) -> list[str]:
+    """Products of the request that did not make it into a solved dish."""
+
+    kept = {item.ingredient.product_id for item in dish.items}
+    return [product_id for product_id in product_ids if product_id not in kept]
+
+
+def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
+    goal = meal_macro_goal(
+        targets.ratio,
+        targets.kcal,
+        day_protein_g=None if prescription is None else float(prescription.protein_g),
+        day_kcal=None if prescription is None else float(prescription.kcal_per_day),
+    )
+    return MealGoalOut(
+        fat_g=goal.fat_g,
+        protein_g=goal.protein_g,
+        net_carbs_g=goal.net_carbs_g,
+        non_fat_g=goal.non_fat_g,
+    )
+
+
 def to_dish_out(dish: DishResult) -> DishOut:
     return DishOut(
         items=[
@@ -86,6 +132,7 @@ def to_dish_out(dish: DishResult) -> DishOut:
                 protein_g=item.protein_g,
                 carbs_g=item.carbs_g,
                 fiber_g=item.fiber_g,
+                net_carbs_g=item.net_carbs_g,
             )
             for item in dish.items
         ],

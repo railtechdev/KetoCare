@@ -39,6 +39,11 @@ test("врач заводит карту и выдаёт код, семья вх
   await doctor.getByRole("button", { name: "Завести пациента" }).click();
 
   // Карта открывается сразу: врач завёл её, чтобы записать назначение.
+  await expect(doctor).toHaveURL(/\/app\/patients\/[0-9a-f-]+\/prescription/);
+  await doctor
+    .getByRole("navigation", { name: /Разделы карты пациента/ })
+    .getByRole("link", { name: "Профиль" })
+    .click();
   await expect(doctor).toHaveURL(/\/app\/patients\/[0-9a-f-]+\/profile/);
 
   // --- 2. врач выдаёт семье код -------------------------------------------

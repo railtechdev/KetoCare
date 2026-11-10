@@ -10,6 +10,7 @@ from keto_engine import (
     Ingredient,
     Targets,
     max_non_fat_grams,
+    meal_macro_goal,
     scale,
     solve,
     verify,
@@ -609,3 +610,49 @@ class TestDegenerateNetCarbs:
     def test_solver_does_not_offer_such_a_dish(self) -> None:
         with pytest.raises(InfeasibleError):
             solve([self.DEGENERATE], Targets(ratio=4.0, kcal=400))
+
+
+class TestItemNetCarbs:
+    def test_positions_sum_to_the_dish_and_never_go_negative(self) -> None:
+        fibrous = Ingredient("fibrous", kcal=30, fat=0, protein=1, carbs=5, fiber=7)
+        plain = Ingredient("plain", kcal=60, fat=0, protein=1, carbs=10, fiber=2)
+
+        dish = verify([(fibrous, 100.0), (plain, 50.0)])
+
+        assert dish.items[0].net_carbs_g == 0.0
+        assert dish.items[1].net_carbs_g == pytest.approx(4.0)
+        assert sum(item.net_carbs_g for item in dish.items) == pytest.approx(dish.net_carbs_g)
+
+
+class TestMealMacroGoal:
+    def test_goal_reproduces_the_ratio_and_the_calories(self) -> None:
+        goal = meal_macro_goal(4.0, 400.0, day_protein_g=24.0, day_kcal=1600.0)
+
+        assert goal.non_fat_g == pytest.approx(10.0)
+        assert goal.fat_g == pytest.approx(40.0)
+        assert goal.protein_g == pytest.approx(6.0)
+        assert goal.net_carbs_g == pytest.approx(4.0)
+        assert goal.fat_g / goal.non_fat_g == pytest.approx(4.0)
+        assert 9 * goal.fat_g + 4 * goal.non_fat_g == pytest.approx(400.0)
+
+    def test_protein_follows_the_share_of_daily_calories(self) -> None:
+        small = meal_macro_goal(4.0, 100.0, day_protein_g=24.0, day_kcal=1600.0)
+
+        assert small.protein_g == pytest.approx(1.5)
+
+    def test_without_a_daily_target_the_split_is_unknown(self) -> None:
+        goal = meal_macro_goal(3.0, 310.0)
+
+        assert goal.protein_g is None
+        assert goal.net_carbs_g is None
+        assert goal.non_fat_g == pytest.approx(10.0)
+
+    def test_protein_that_does_not_fit_is_not_shown(self) -> None:
+        goal = meal_macro_goal(5.0, 98.0, day_protein_g=200.0, day_kcal=400.0)
+
+        assert goal.protein_g is None
+        assert goal.net_carbs_g is None
+
+    def test_rejects_non_positive_daily_calories(self) -> None:
+        with pytest.raises(ValueError):
+            meal_macro_goal(4.0, 400.0, day_protein_g=24.0, day_kcal=0.0)

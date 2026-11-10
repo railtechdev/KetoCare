@@ -47,6 +47,7 @@ class ItemAmount:
     protein_g: float
     carbs_g: float
     fiber_g: float
+    net_carbs_g: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,3 +91,18 @@ class InfeasibleError(Exception):
     def __init__(self, reason: str) -> None:
         self.reason = reason
         super().__init__(reason)
+
+
+@dataclass(frozen=True, slots=True)
+class MealMacroGoal:
+    """Grams one meal should contain to hit its ratio and calories.
+
+    `protein_g` and `net_carbs_g` are `None` when the split is unknown: no daily
+    protein target was given, or that protein does not fit this meal's ratio.
+    """
+
+    fat_g: float
+    protein_g: float | None
+    net_carbs_g: float | None
+    #: Protein plus net carbs, the denominator of the ketogenic ratio.
+    non_fat_g: float

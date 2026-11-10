@@ -510,8 +510,6 @@
   "workspace": {
     "toList": "Все пациенты",
     "navLabel": "Разделы карты пациента: {{name}}",
-    "patientBanner": "Клинический статус пациента: {{name}}",
-    "heightValue": "{{value}} см",
     "loadError": "Карту пациента загрузить не удалось",
     "views": {
       "summary": "Сводка",

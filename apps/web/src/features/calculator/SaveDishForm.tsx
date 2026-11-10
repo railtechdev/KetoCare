@@ -12,6 +12,12 @@ import { useTranslation } from "react-i18next";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { SectionLink } from "../../components/SectionLink";
+import { PatientViewLink } from "../doctor/PatientViewLink";
+import {
+  customDishesKey,
+  useUpdateCustomDish,
+  type CustomDish,
+} from "../dishes/useCustomDishes";
 import { errorMessageOf } from "../../lib/api";
 import { dishSignature, type DishRow } from "./types";
 import { useSaveDishMutation } from "./useCalcMutations";
@@ -36,6 +42,12 @@ interface Props {
    * названо» и «ждём расчёта» на каждой правке состава.
    */
   waitingFor?: string | null;
+  /** The form stands in a patient's card, where the dish belongs to the child. */
+  inCard?: boolean;
+  /** Saved dish open in the calculator; `null` when composing a new one. */
+  editing?: { id: string; title: string } | null;
+  /** A copy was saved while editing: the calculator now shows the copy. */
+  onSavedAsNew?: (dishId: string) => void;
 }
 
 /** «Сохранить как моё блюдо» (раздел 8.3 ТЗ). */
@@ -44,18 +56,96 @@ export function SaveDishForm({
   rows,
   blockedBy = null,
   waitingFor = null,
+  inCard = false,
+  editing = null,
+  onSavedAsNew,
 }: Props) {
   const { t } = useTranslation("calculator");
   const queryClient = useQueryClient();
   const save = useSaveDishMutation(patientId);
   const [title, setTitle] = useState("");
+  const update = useUpdateCustomDish(patientId);
   const [saved, setSaved] = useState(false);
+  // The title follows the opened dish, and only when another dish is opened.
+  const [editedId, setEditedId] = useState<string | null>(null);
+  if ((editing?.id ?? null) !== editedId) {
+    setEditedId(editing?.id ?? null);
+    if (editing !== null) setTitle(editing.title);
+  }
   // Пока название и состав те же, попытка та же: повтор после потерянного
   // ответа не создаст второго блюда (ADR-0035).
   const attemptKey = useAttemptKey(dishSignature(patientId, title, rows));
 
+  const cannotSave =
+    title.trim() === "" ||
+    rows.length === 0 ||
+    blockedBy !== null ||
+    waitingFor !== null;
+  const pending = save.isPending || update.isPending;
+  const failure = save.error ?? update.error;
+
+  function saveAsNew(): void {
+    save.mutate(
+      { title: title.trim(), rows, idempotencyKey: attemptKey },
+      {
+        onSuccess: (created) => {
+          // Успех — тост, а не зелёная строка навсегда в потоке страницы (П16
+          // канона): форма остаётся на месте и готова принять следующее блюдо.
+          toast.success(t("save.saved"));
+          if (editing !== null) {
+            // In the cache before the address changes: the calculator finds
+            // the opened dish in this list and would report it as missing.
+            queryClient.setQueryData<CustomDish[]>(
+              customDishesKey(patientId),
+              (current) => [...(current ?? []), created],
+            );
+            onSavedAsNew?.(created.id);
+          } else {
+            setTitle("");
+          }
+          setSaved(true);
+          void queryClient.invalidateQueries({
+            queryKey: ["patient", patientId, "custom-dishes"],
+          });
+        },
+      },
+    );
+  }
+
+  function saveChanges(dishId: string): void {
+    update.mutate(
+      {
+        dishId,
+        title: title.trim(),
+        ingredients: rows.map((row) => ({
+          product_id: row.product.id,
+          grams: row.grams,
+        })),
+      },
+      {
+        onSuccess: () => {
+          toast.success(t("save.savedChanges"));
+          setSaved(true);
+        },
+      },
+    );
+  }
+
+  const heading =
+    editing !== null
+      ? t("save.editAction")
+      : inCard
+        ? t("save.actionChild")
+        : t("save.action");
+  const description =
+    editing !== null
+      ? t("save.editDescription")
+      : inCard
+        ? t("save.descriptionChild")
+        : t("save.description");
+
   return (
-    <Section title={t("save.action")} description={t("save.description")}>
+    <Section title={heading} description={description}>
       <form
         className="flex flex-col gap-section"
         onSubmit={(event) => {
@@ -63,29 +153,9 @@ export function SaveDishForm({
           // Выключенная кнопка — не единственная защита: форма — последняя
           // проверка перед сохранением (сервер исключённое ребёнку не сверяет),
           // и отправка в обход кнопки не должна её миновать.
-          if (
-            title.trim() === "" ||
-            rows.length === 0 ||
-            blockedBy !== null ||
-            waitingFor !== null
-          )
-            return;
-          save.mutate(
-            { title: title.trim(), rows, idempotencyKey: attemptKey },
-            {
-              onSuccess: () => {
-                // Успех — тост, а не зелёная строка навсегда в потоке
-                // страницы (П16 канона): форма остаётся на месте и готова
-                // принять следующее блюдо.
-                toast.success(t("save.saved"));
-                setTitle("");
-                setSaved(true);
-                void queryClient.invalidateQueries({
-                  queryKey: ["patient", patientId, "custom-dishes"],
-                });
-              },
-            },
-          );
+          if (cannotSave) return;
+          if (editing !== null) saveChanges(editing.id);
+          else saveAsNew();
         }}
       >
         <Field
@@ -101,21 +171,31 @@ export function SaveDishForm({
           }}
         />
 
-        {save.isError && (
+        {failure !== null && (
           <FormError>
-            {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
+            {errorMessageOf(failure) ?? t("common:errors.unexpected")}
           </FormError>
         )}
 
         <FormFooter
-          submitLabel={t("save.submit")}
+          submitLabel={
+            editing !== null ? t("save.submitChanges") : t("save.submit")
+          }
           pendingLabel={t("save.saving")}
-          pending={save.isPending}
-          disabled={
-            title.trim() === "" ||
-            rows.length === 0 ||
-            blockedBy !== null ||
-            waitingFor !== null
+          pending={pending}
+          disabled={cannotSave}
+          extra={
+            editing !== null ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                disabled={pending || cannotSave}
+                onClick={saveAsNew}
+              >
+                {t("save.saveAsNew")}
+              </Button>
+            ) : undefined
           }
           // Сначала то, что устраняет человек, — в порядке, в каком устраняют;
           // ожидание проверки последним: оно проходит само.
@@ -131,14 +211,39 @@ export function SaveDishForm({
 
         {saved && (
           <div className="flex flex-wrap items-center gap-field pt-1">
-            <Button asChild variant="outline" size="sm" className="min-h-touch">
-              <SectionLink section="menu">{t("save.toMenu")}</SectionLink>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="min-h-touch">
-              <SectionLink section="diary" diaryKind="meals" item="new">
-                {t("save.toDiary")}
-              </SectionLink>
-            </Button>
+            {inCard ? (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="min-h-touch"
+              >
+                <PatientViewLink patientId={patientId} view="menu">
+                  {t("save.toMenu")}
+                </PatientViewLink>
+              </Button>
+            ) : (
+              <>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="min-h-touch"
+                >
+                  <SectionLink section="menu">{t("save.toMenu")}</SectionLink>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="min-h-touch"
+                >
+                  <SectionLink section="diary" diaryKind="meals" item="new">
+                    {t("save.toDiary")}
+                  </SectionLink>
+                </Button>
+              </>
+            )}
           </div>
         )}
       </form>

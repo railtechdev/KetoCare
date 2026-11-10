@@ -1,7 +1,16 @@
-import { MacroBar, RatioBadge, cn, formatKcal } from "@ketocare/ui";
+import {
+  MacroBar,
+  RatioBadge,
+  cn,
+  formatGrams,
+  formatKcal,
+} from "@ketocare/ui";
+import type { components } from "@ketocare/api-client";
 import { useTranslation } from "react-i18next";
 
 import type { TargetsInput } from "./useCalcMutations";
+
+type MealGoal = components["schemas"]["MealGoalOut"];
 
 export interface DishView {
   kcal: number;
@@ -27,6 +36,8 @@ interface Props {
   /** Вердикты приходят от сервера; допуск — медицинская константа ядра */
   ratioWithinTolerance?: boolean;
   kcalWithinTolerance?: boolean;
+  /** Grams one meal should contain, from the server; `null` without a goal. */
+  mealGoal?: MealGoal | null;
 }
 
 /**
@@ -43,6 +54,7 @@ export function DishResultView({
   goal,
   ratioWithinTolerance,
   kcalWithinTolerance,
+  mealGoal = null,
 }: Props) {
   const { t } = useTranslation("calculator");
 
@@ -111,6 +123,57 @@ export function DishResultView({
         </p>
       )}
 
+      {mealGoal !== null && (
+        <table className="w-full border-collapse text-sm tabular-nums">
+          <caption className="sr-only">{t("goalTable.caption")}</caption>
+          <thead>
+            <tr className="border-b border-border text-muted-foreground">
+              <th scope="col" className="py-1 pr-2 text-left font-medium">
+                {t("goalTable.metric")}
+              </th>
+              <th scope="col" className="px-2 py-1 text-right font-medium">
+                {t("goalTable.fact")}
+              </th>
+              <th scope="col" className="py-1 pl-2 text-right font-medium">
+                {t("goalTable.goal")}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              { key: "fat", fact: dish.fat_g, goal: mealGoal.fat_g },
+              {
+                key: "protein",
+                fact: dish.protein_g,
+                goal: mealGoal.protein_g,
+              },
+              {
+                key: "netCarbs",
+                fact: dish.net_carbs_g,
+                goal: mealGoal.net_carbs_g,
+              },
+              {
+                key: "nonFat",
+                fact: dish.protein_g + dish.net_carbs_g,
+                goal: mealGoal.non_fat_g,
+              },
+            ].map((row) => (
+              <tr key={row.key} className="border-b border-border/60">
+                <th scope="row" className="py-1 pr-2 text-left font-normal">
+                  {t(`goalTable.${row.key}`)}
+                </th>
+                <td className="px-2 py-1 text-right text-foreground">
+                  {formatGrams(row.fact)}
+                </td>
+                <td className="py-1 pl-2 text-right text-muted-foreground">
+                  {row.goal === null ? "—" : formatGrams(row.goal)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
       <MacroBar
         fatG={dish.fat_g}
         proteinG={dish.protein_g}
@@ -121,12 +184,6 @@ export function DishResultView({
           note: t("netCarbsNote"),
         }}
       />
-
-      {/* Версия движка показывается рядом с результатом: расчёт, сделанный
-          разными версиями ядра, может отличаться, и это должно быть видно. */}
-      <p className="m-0 text-xs text-muted-foreground">
-        {t("engineVersion", { version: dish.engine_version })}
-      </p>
     </div>
   );
 }

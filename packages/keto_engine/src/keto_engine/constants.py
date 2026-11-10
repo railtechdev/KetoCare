@@ -80,4 +80,7 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # `None` означает «сказать нечего» (у блюда нет соотношения), и это больше не
 # схлопывается в «не соответствует». Minor: числа те же, меняется форма ответа —
 # у дня без соотношения вместо ложного «вне допуска» приходит «не определено».
-ENGINE_VERSION = "1.2.0"
+# 1.3.0 — `ItemAmount` carries the net carbs of its position, and `meal_macro_goal()`
+# gives the grams one meal should contain. Minor: new contract fields and a new
+# function, the results of verify() and solve() do not change.
+ENGINE_VERSION = "1.3.0"
