@@ -17,6 +17,7 @@ from keto_engine import (
     MealMacroGoal,
     Targets,
     meal_macro_goal,
+    verify,
 )
 from keto_engine.constants import DEFAULT_MAX_INGREDIENT_GRAMS, MIN_INGREDIENT_GRAMS
 
@@ -106,6 +107,76 @@ def keeping_every_product(targets: Targets, product_ids: Iterable[str]) -> Targe
     }
     bounds.update(targets.per_ingredient_bounds or {})
     return replace(targets, per_ingredient_bounds=bounds)
+
+
+#: How far each product may move from the composition. A search bound, not a
+#: clinical limit: the solver tends to its bounds and without a corridor it
+#: pushes vegetables to the minimum mass.
+NEAR_LOWER = 0.5
+NEAR_UPPER = 1.5
+
+
+def near_grams(grams: float, factor: float) -> tuple[float, float | None]:
+    """Search corridor for one product at `grams`, after scaling by `factor`."""
+
+    def clamped(value: float) -> float:
+        return max(MIN_INGREDIENT_GRAMS, min(value, DEFAULT_MAX_INGREDIENT_GRAMS))
+
+    return clamped(grams * factor * NEAR_LOWER), clamped(grams * factor * NEAR_UPPER)
+
+
+def near_current(
+    caller: Targets,
+    keeping_all: Targets,
+    ingredients: Mapping[str, Ingredient],
+    current_grams: Mapping[str, float] | None,
+) -> Targets | None:
+    """Targets that keep the solver near the masses in the form, if any are known.
+
+    Products with a bound from the caller (pins) keep it and do not scale.
+    """
+
+    if not current_grams:
+        return None
+    pinned = caller.per_ingredient_bounds or {}
+    known = [
+        (ingredient, current_grams[product_id])
+        for product_id, ingredient in ingredients.items()
+        if current_grams.get(product_id, 0) > 0
+    ]
+    free = [
+        (ingredient, grams) for ingredient, grams in known if ingredient.product_id not in pinned
+    ]
+    if not free:
+        return None
+
+    free_kcal = verify(free).kcal
+    fixed_kcal = (
+        verify(
+            [(ingredient, bounds[0]) for ingredient, bounds in _pinned_items(ingredients, pinned)]
+        ).kcal
+        if pinned
+        else 0.0
+    )
+    remaining = caller.kcal - fixed_kcal
+    if free_kcal <= 0 or remaining <= 0:
+        return None
+
+    factor = remaining / free_kcal
+    bounds = dict(keeping_all.per_ingredient_bounds or {})
+    bounds.update({ingredient.product_id: near_grams(grams, factor) for ingredient, grams in free})
+    return replace(keeping_all, per_ingredient_bounds=bounds)
+
+
+def _pinned_items(
+    ingredients: Mapping[str, Ingredient],
+    pinned: Mapping[str, tuple[float, float | None]],
+) -> list[tuple[Ingredient, tuple[float, float | None]]]:
+    return [
+        (ingredient, pinned[product_id])
+        for product_id, ingredient in ingredients.items()
+        if product_id in pinned
+    ]
 
 
 def pins_too_small(targets: Targets, product_ids: Iterable[str]) -> list[str]:

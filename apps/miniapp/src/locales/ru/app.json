@@ -341,6 +341,7 @@
     "empty": "Добавьте продукты — расчёт появится здесь.",
     "calc": "Расчёт",
     "ratio": "Кетосоотношение",
+    "ratioPlaceholder": "Выберите",
     "ratioFromPrescription": "Из назначения ребёнка",
     "mealKcal": "Ккал на приём",
     "kcalFromPrescription": "Из назначения: {{kcal}} ккал ÷ {{meals}} приёма",

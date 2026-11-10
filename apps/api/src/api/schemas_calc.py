@@ -221,6 +221,11 @@ class SolveRequest(BaseModel):
     #: предложить его ребёнку, и человеку останется заметить это глазами.
     #: Доступ к пациенту проверяется, чужой идентификатор даёт 403.
     patient_id: uuid.UUID | None = None
+    #: Masses now in the form. With them the solver stays near the composition
+    #: the person assembled instead of pushing products to their minimum.
+    current_grams: dict[str, Annotated[float, Field(ge=0, le=CALC_GRAMS_MAX)]] | None = Field(
+        default=None, max_length=MAX_INGREDIENTS
+    )
 
 
 class SolveResponse(BaseModel):
@@ -235,6 +240,8 @@ class SolveResponse(BaseModel):
     #: Приправы набора (ADR-0054): решатель их не подбирает, и их масса
     #: остаётся той, что ввёл человек. В `dish.items` их нет.
     uncounted: list[UncountedProductOut] = []
+    #: The goal was out of reach near the entered masses, so proportions changed.
+    reshaped: bool = False
 
 
 class PrescriptionGoalRequest(BaseModel):

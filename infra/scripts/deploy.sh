@@ -58,6 +58,11 @@ $COMPOSE run --rm api sh -c "cd packages/core && python -m alembic upgrade head"
 # Пересборка идемпотентна и занимает секунды: статей десятки, не тысячи.
 $COMPOSE run --rm api python -m core.tools.index_knowledge_base
 
+# Документы Минздрава: разовая загрузка, повторный запуск ничего не делает.
+# Отказ загрузки не должен останавливать выкат приложения.
+$COMPOSE run --rm api python infra/scripts/load_dmtt_standard.py --on-deploy \
+    || echo "ВНИМАНИЕ: стандарт Минздрава не загружен, см. вывод выше" >&2
+
 $COMPOSE up -d
 
 if [ "${1:-}" != "--api-only" ]; then

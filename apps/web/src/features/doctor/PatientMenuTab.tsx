@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 
 import { SubPageHeader } from "../../components/SubPageHeader";
-import { MyDishesPanel } from "../dishes/MyDishesPanel";
 import { DayComposer } from "../menu/DayComposer";
 import { WeekGrid } from "../menu/WeekGrid";
 
@@ -22,8 +21,7 @@ import { WeekGrid } from "../menu/WeekGrid";
  * - сохранение специалистом сервер подписывает его именем и пишет семье в
  *   Telegram: план, по которому кормят ребёнка, поменял другой человек.
  *
- * Под планом — блюда ребёнка. Специалист передаёт ему раскладку из калькулятора
- * («Передать пациенту») и сразу может положить её в день.
+ * Блюда ребёнка — отдельный раздел карты, в день они попадают через выбор блюда.
  */
 export function PatientMenuTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
@@ -46,11 +44,6 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
           </>
         )}
       </DayComposer>
-
-      {/* Вне дня: блюда ребёнка не зависят от того, составлен ли план на
-          выбранную дату, и прятать их за загрузкой меню значило бы терять их в
-          самый частый момент — когда плана ещё нет. */}
-      <MyDishesPanel patientId={patientId} openIn="card" />
     </div>
   );
 }

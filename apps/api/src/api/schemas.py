@@ -29,6 +29,7 @@ from core.models.enums import (
 from keto_engine import Ingredient, verify
 
 from .password_policy import check_new_password
+from .schemas_logs import WeightKg
 from .services.product_import import macro_sum_exceeds_limit, macro_sum_message
 
 
@@ -237,6 +238,8 @@ class PatientCreate(BaseModel):
     birth_date: date
     sex: Sex
     height_cm: float | None = Field(default=None, gt=0, le=250)
+    #: Weight at the first visit; written to the weight diary, not to the card.
+    weight_kg: WeightKg | None = None
     allergies: list[str] = Field(default_factory=list)
     notes: str | None = None
 

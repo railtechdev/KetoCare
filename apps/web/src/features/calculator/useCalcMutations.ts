@@ -79,6 +79,9 @@ export function useSolveMutation() {
             per_ingredient_bounds: pinnedBounds(input.rows),
           },
           patient_id: input.patientId ?? null,
+          current_grams: Object.fromEntries(
+            input.rows.map((row) => [row.product.id, row.grams]),
+          ),
         },
       });
       if (error || !data) throw error ?? new Error("Empty solve response");

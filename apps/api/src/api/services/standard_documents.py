@@ -61,6 +61,10 @@ class DocumentLoadError(Exception):
     """The load cannot be done honestly; nothing is written."""
 
 
+class AlreadyLoadedError(DocumentLoadError):
+    """The standard is already in the database."""
+
+
 @dataclass
 class LoadReport:
     products: int = 0
@@ -78,8 +82,8 @@ def _read(path: Path) -> list[dict[str, str]]:
 
 
 async def _catalogue_food_ids(
-    session: AsyncSession, mapping: dict[str, str]
-) -> dict[str, uuid.UUID]:
+    session: AsyncSession, mapping: dict[str, str], *, require_all: bool
+) -> tuple[dict[str, uuid.UUID], list[str]]:
     wanted = {name for name in mapping.values() if name}
     rows = await session.execute(
         select(Product.name_ru, Product.food_id).where(
@@ -88,17 +92,24 @@ async def _catalogue_food_ids(
     )
     found: dict[str, uuid.UUID] = {name: food_id for name, food_id in rows}
     missing = sorted(wanted - found.keys())
-    if missing:
+    if missing and require_all:
         # A missed link means a child's exclusion would not reach this product.
         raise DocumentLoadError(f"В основном справочнике нет продуктов: {', '.join(missing)}")
-    return found
+    return found, missing
 
 
-async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -> LoadReport:
-    """Create the standard, its products, draft recipes and templates, then lock it."""
+async def load(
+    session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID, require_all_links: bool = True
+) -> LoadReport:
+    """Create the standard, its products, draft recipes and templates, then lock it.
+
+    `require_all_links=False` loads a standard even if some catalogue products
+    are absent; those links are reported. It is safe only while nothing of this
+    standard can reach a child's plan, which is true until stage 5.
+    """
 
     if await food_standards_repo.find_by_name(session, name=STANDARD_NAME) is not None:
-        raise DocumentLoadError("Стандарт уже загружен.")
+        raise AlreadyLoadedError("Стандарт уже загружен.")
 
     products_csv = _read(data_dir / "products.csv")
     mapping = {
@@ -107,7 +118,7 @@ async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -
     unmapped = sorted({row["name_ru"] for row in products_csv} - mapping.keys())
     if unmapped:
         raise DocumentLoadError(f"Нет строки соответствия: {', '.join(unmapped)}")
-    food_ids = await _catalogue_food_ids(session, mapping)
+    food_ids, unlinked = await _catalogue_food_ids(session, mapping, require_all=require_all_links)
 
     names = {row["key"]: row for row in _read(data_dir / "product_names.csv")}
     dishes = {row["raw"]: row for row in _read(data_dir / "dish_names.csv")}
@@ -115,7 +126,7 @@ async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -
         category.name_ru: category for category in await session.scalars(select(ProductCategory))
     }
 
-    report = LoadReport()
+    report = LoadReport(notes=[f"Нет в основном справочнике: {name}" for name in unlinked])
     standard = FoodStandard(
         name=STANDARD_NAME,
         publisher="Министерство дошкольного и школьного образования, Минздрав",
@@ -137,7 +148,7 @@ async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -
             await session.flush()
             categories[row["category"]] = category
         target = mapping[row["name_ru"]]
-        extra = {} if not target else {"food_id": food_ids[target]}
+        extra = {"food_id": food_ids[target]} if target in food_ids else {}
         product = await products_repo.create(
             session,
             changed_by=author_id,
@@ -158,7 +169,7 @@ async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -
         )
         by_name[row["name_ru"]] = product
         report.products += 1
-        report.linked_to_catalogue += 1 if target else 0
+        report.linked_to_catalogue += 1 if target in food_ids else 0
 
     # Rows of one dish instance, in the document's order.
     instances: dict[tuple[str, str, int, str, str], list[dict[str, str]]] = defaultdict(list)
@@ -278,6 +289,7 @@ async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -
             "products": report.products,
             "recipes": report.recipes,
             "templates": report.templates,
+            "unlinked": unlinked,
         },
     )
     await audit_repo.write_audit_log(
