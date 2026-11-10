@@ -33,6 +33,7 @@ from core.models.enums import (
     RecipeCategory,
     RecipeStatus,
 )
+from core.repositories import audit as audit_repo
 from core.repositories import food_standards as food_standards_repo
 from core.repositories import products as products_repo
 
@@ -264,4 +265,17 @@ async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -
 
     await session.flush()
     await food_standards_repo.lock(session, standard=standard)
+    await audit_repo.write_audit_log(
+        session,
+        user_id=author_id,
+        action="load_document",
+        entity="food_standards",
+        entity_id=standard.id,
+        after={
+            "products": report.products,
+            "recipes": report.recipes,
+            "templates": report.templates,
+            "locked": True,
+        },
+    )
     return report

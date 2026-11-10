@@ -1175,6 +1175,26 @@ class TestSolvePinnedMass:
         assert "broccoli" in error["message"]
         assert error["details"]["product_ids"] == ["broccoli"]
 
+    async def test_fractional_pin_is_refused_by_name(self, client, make_user, auth_headers):
+        # The solver returns whole grams, so 20.5 would come back as 20.
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {
+                    "ratio": 3.5,
+                    "kcal": 300,
+                    "per_ingredient_bounds": {"broccoli": [20.5, 20.5]},
+                },
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["details"]["product_ids"] == ["broccoli"]
+
     async def test_pin_that_makes_the_goal_unreachable_says_so(
         self, client, make_user, auth_headers
     ):

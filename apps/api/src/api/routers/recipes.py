@@ -163,6 +163,7 @@ async def upload_recipe_photo(
     """
 
     recipe = await _visible_recipe(session, recipe_id, user)
+    await _reject_locked(session, recipe)
 
     content = await file.read()
     mime = files_service.validate(content)

@@ -225,6 +225,11 @@ async def upsert_menu(
 DAYS_IN_WEEK = 7
 
 
+def _require_whole_week(start: date) -> None:
+    if start > date.max - timedelta(days=DAYS_IN_WEEK):
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Дата вне допустимого диапазона.")
+
+
 @router.get("/week", response_model=MenuWeekRead, summary="Меню на семь дней")
 async def get_week(
     patient_id: PatientIdPath,
@@ -232,6 +237,7 @@ async def get_week(
     _: PatientAccessDep,
     start: Annotated[date, Query(description="Первый день, YYYY-MM-DD")],
 ) -> MenuWeekRead:
+    _require_whole_week(start)
     days: list[MenuWeekDay] = []
     for offset in range(DAYS_IN_WEEK):
         day = start + timedelta(days=offset)
@@ -256,8 +262,11 @@ async def copy_week(
     as eaten, so replacing is not offered at all, the same as for one day.
     """
 
-    if payload.source_start == payload.target_start:
-        raise ApiError(ErrorCode.VALIDATION_ERROR, "Неделя не копируется сама в себя.")
+    _require_whole_week(payload.source_start)
+    _require_whole_week(payload.target_start)
+    # Overlapping weeks would make a day just filled the source of the next one.
+    if abs((payload.source_start - payload.target_start).days) < DAYS_IN_WEEK:
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Недели не должны пересекаться.")
 
     copied: list[date] = []
     skipped: list[MenuWeekCopySkip] = []
@@ -298,6 +307,12 @@ async def copy_week(
                     write_items=write_items,
                     user=user,
                 )
+                # A past day may have been agreed with the doctor and is only
+                # marked; a new day must not be planned with what is excluded.
+                excluded = (await menus_service.to_read(session, menu, items)).excluded_products
+                if excluded:
+                    names = ", ".join(product.name_ru for product in excluded)
+                    raise ApiError(ErrorCode.CONFLICT, f"Исключено этому ребёнку: {names}.")
         except ApiError as exc:
             skipped.append(
                 MenuWeekCopySkip(date=target_day, reason="not_available", message=exc.message)

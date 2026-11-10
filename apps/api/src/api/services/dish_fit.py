@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from starlette.concurrency import run_in_threadpool
 
@@ -26,11 +26,17 @@ NEAR_RECIPE_UPPER = 1.5
 
 
 def meal_targets(prescription: Prescription) -> Targets:
-    """Per-meal target from a prescription: the equal split of question 24."""
+    """Per-meal target from a prescription: the equal split of question 24.
+
+    The daily carbohydrate limit bounds a single meal as it stands: how it is
+    shared between meals is not decided (question 55), but no meal may exceed
+    the whole day's limit.
+    """
 
     return Targets(
         ratio=float(prescription.ratio),
         kcal=round(float(prescription.kcal_per_day) / prescription.meals_per_day),
+        carbs_max_g=float(prescription.carbs_limit_g),
     )
 
 
@@ -40,6 +46,8 @@ class Fit:
     #: The corridor around the recipe could not reach the target, so the
     #: proportions changed freely.
     reshaped: bool
+    #: Recipe mass to one meal. Seasonings are not solved and follow this.
+    factor: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,9 +91,9 @@ async def fit_composition(
         solved = await run_in_threadpool(
             solve,
             ingredients,
-            Targets(ratio=targets.ratio, kcal=targets.kcal, per_ingredient_bounds=near),
+            replace(targets, per_ingredient_bounds=near),
         )
-        return Fit(result=solved, reshaped=False), uncounted
+        return Fit(result=solved, reshaped=False, factor=factor), uncounted
     except InfeasibleError:
         pass
 
@@ -93,8 +101,8 @@ async def fit_composition(
         solved = await run_in_threadpool(
             solve,
             ingredients,
-            Targets(ratio=targets.ratio, kcal=targets.kcal, per_ingredient_bounds=anywhere),
+            replace(targets, per_ingredient_bounds=anywhere),
         )
     except InfeasibleError as exc:
         return FitFailure(exc.reason), uncounted
-    return Fit(result=solved, reshaped=True), uncounted
+    return Fit(result=solved, reshaped=True, factor=factor), uncounted

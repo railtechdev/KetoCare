@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from api.services import standard_documents
 from core.models import (
     DEFAULT_FOOD_STANDARD_ID,
+    AuditLog,
     MenuTemplate,
     Product,
     ProductCategory,
@@ -133,6 +134,18 @@ async def test_mapped_product_shares_identity_with_the_catalogue(session, loaded
         select(Product).where(Product.standard_id == standard.id, Product.name_ru == "Яблоко")
     )
     assert local.food_id == catalogue.food_id
+
+
+async def test_load_is_in_the_audit_log(session, loaded):
+    standard, _ = loaded
+
+    entry = await session.scalar(
+        select(AuditLog).where(
+            AuditLog.entity == "food_standards", AuditLog.entity_id == standard.id
+        )
+    )
+    assert entry is not None
+    assert entry.action == "load_document"
 
 
 async def test_second_load_is_refused(session, make_user, loaded):

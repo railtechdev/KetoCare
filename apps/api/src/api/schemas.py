@@ -979,6 +979,9 @@ class DishIngredientIn(BaseModel):
 class CustomDishWrite(BaseModel):
     title: RequiredName
     ingredients: list[DishIngredientIn] = Field(min_length=1, max_length=100)
+    #: Refuse a composition with what is excluded to this child. Sent when the
+    #: composition is a proposal: an exclusion may have appeared since it was made.
+    reject_excluded: bool | None = None
 
 
 class DishComputed(BaseModel):

@@ -219,6 +219,16 @@ async def solve_dish(
             details={"product_ids": too_small},
         )
 
+    fractional = calc_service.pins_not_whole(targets, ingredients.keys())
+    if fractional:
+        names = ", ".join(await _product_names(session, fractional))
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Подбор работает в целых граммах, а закреплена дробная масса: {names}. "
+            "Округлите её или снимите закрепление.",
+            details={"product_ids": fractional},
+        )
+
     # The person chose these products: a dish that silently loses one of them
     # is not the dish that was asked for (ADR-0058).
     keeping_all = calc_service.keeping_every_product(targets, ingredients.keys())

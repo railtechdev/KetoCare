@@ -53,7 +53,11 @@ export function useSaveFits(patientId: string) {
               path: { patient_id: patientId },
               header: { "Idempotency-Key": fit.idempotencyKey },
             },
-            body: { title: fit.title, ingredients: fit.ingredients },
+            body: {
+              title: fit.title,
+              ingredients: fit.ingredients,
+              reject_excluded: true,
+            },
           },
         );
         if (error || !data) throw error ?? new Error("Empty save response");

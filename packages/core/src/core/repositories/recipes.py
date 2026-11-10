@@ -293,6 +293,9 @@ async def titles_taken(session: AsyncSession, *, titles: list[str]) -> set[str]:
     # Мягкого удаления у рецептов нет (раздел 4.2): убирают их сменой статуса,
     # а название остаётся занятым.
     rows = await session.scalars(
-        select(Recipe.title).where(func.lower(func.btrim(Recipe.title)).in_(folded))
+        select(Recipe.title).where(
+            Recipe.standard_id == DEFAULT_FOOD_STANDARD_ID,
+            func.lower(func.btrim(Recipe.title)).in_(folded),
+        )
     )
     return {title.casefold().strip() for title in rows}

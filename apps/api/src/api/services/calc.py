@@ -125,6 +125,19 @@ def pins_too_small(targets: Targets, product_ids: Iterable[str]) -> list[str]:
     ]
 
 
+def pins_not_whole(targets: Targets, product_ids: Iterable[str]) -> list[str]:
+    """Pinned products with a fractional mass: the solver returns whole grams."""
+
+    bounds = targets.per_ingredient_bounds or {}
+    return [
+        product_id
+        for product_id in product_ids
+        if product_id in bounds
+        and bounds[product_id][0] == bounds[product_id][1]
+        and bounds[product_id][0] != round(bounds[product_id][0])
+    ]
+
+
 def missing_from_solution(dish: DishResult, product_ids: Iterable[str]) -> list[str]:
     """Products of the request that did not make it into a solved dish."""
 

@@ -1883,6 +1883,63 @@ class TestWeek:
         assert len(response.json()["copied"]) == 3
         assert deferred.count("notify_family_menu_composed") == 1
 
+    async def test_copy_skips_a_day_with_an_excluded_product(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        author = await make_user(role=UserRole.DIETITIAN)
+        butter = await _product(session, "Масло", **BUTTER)
+        recipe = await _recipe(session, author, ingredients=[(butter, 10)])
+        previous = self.MONDAY - timedelta(days=7)
+        await client.put(
+            _url(patient), json=self._body(previous, recipe), headers=auth_headers(parent)
+        )
+        patient.allergies = [str(butter.id)]
+        await session.flush()
+
+        response = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={"source_start": previous.isoformat(), "target_start": self.MONDAY.isoformat()},
+            headers=auth_headers(parent),
+        )
+
+        body = response.json()
+        assert body["copied"] == []
+        first = next(e for e in body["skipped"] if e["date"] == self.MONDAY.isoformat())
+        assert first["reason"] == "not_available"
+        assert butter.name_ru in first["message"]
+        kept = await client.get(
+            _url(patient), params={"date": self.MONDAY.isoformat()}, headers=auth_headers(parent)
+        )
+        assert kept.status_code == 404
+
+    async def test_overlapping_weeks_are_rejected(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={
+                "source_start": self.MONDAY.isoformat(),
+                "target_start": (self.MONDAY + timedelta(days=1)).isoformat(),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422
+
+    async def test_week_at_the_end_of_the_calendar_is_rejected(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.get(
+            f"{_url(patient)}/week", params={"start": "9999-12-31"}, headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 422
+
     async def test_copy_into_itself_is_rejected(
         self, client, session, auth_headers, make_user, make_patient
     ):
