@@ -53,6 +53,7 @@ export function ChildForm({
       birthDate: child?.birth_date ?? "",
       sex: (child?.sex as "m" | "f") ?? "m",
       heightCm: child?.height_cm === null ? "" : String(child?.height_cm ?? ""),
+      weightKg: "",
       // Свободные метки — в поле, продукты каталога — списком ниже: строка
       // «3f2a…, орехи» не читается никем.
       allergies: splitExclusions(child?.allergies ?? []).labels.join(", "),
@@ -65,6 +66,7 @@ export function ChildForm({
   const birthDateError = errors.birthDate && t("child.errors.birthDate");
   const sexError = errors.sex && t("child.errors.sex");
   const heightError = errors.heightCm && t("child.errors.heightCm");
+  const weightError = errors.weightKg && t("child.errors.weightKg");
 
   return (
     <form
@@ -125,6 +127,21 @@ export function ChildForm({
         error={heightError}
         {...register("heightCm")}
       />
+
+      {/* Only when the card is created: later weights go to the diary. */}
+      {child === null && (
+        <Field
+          id={`${ids}-weight`}
+          width="narrow"
+          type="number"
+          inputMode="decimal"
+          step="0.1"
+          optional
+          label={t("child.fields.weightKg")}
+          error={weightError}
+          {...register("weightKg")}
+        />
+      )}
 
       {/* Продукты — ссылками на каталог. Свободная строка сопоставима только
           с глазами человека: подбор раскладки и меню о ней не узнают, и

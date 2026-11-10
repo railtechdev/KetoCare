@@ -232,6 +232,21 @@ async def solve_dish(
     # The person chose these products: a dish that silently loses one of them
     # is not the dish that was asked for (ADR-0058).
     keeping_all = calc_service.keeping_every_product(targets, ingredients.keys())
+    near = calc_service.near_current(targets, keeping_all, ingredients, payload.current_grams)
+    if near is not None:
+        try:
+            nearby = await run_in_threadpool(solve, list(ingredients.values()), near)
+        except InfeasibleError:
+            pass
+        else:
+            return SolveResponse(
+                dish=calc_service.to_dish_out(nearby.dish),
+                ratio_within_tolerance=nearby.ratio_within_tolerance,
+                kcal_within_tolerance=nearby.kcal_within_tolerance,
+                excluded=excluded,
+                uncounted=skipped,
+            )
+
     try:
         # solve() синхронный и вычислительно тяжёлый (LP через HiGHS, а при
         # неразрешимости ещё несколько LP для диагностики). В event loop он
@@ -263,6 +278,7 @@ async def solve_dish(
         kcal_within_tolerance=result.kcal_within_tolerance,
         excluded=excluded,
         uncounted=skipped,
+        reshaped=near is not None,
     )
 
 

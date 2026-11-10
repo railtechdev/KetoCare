@@ -11,6 +11,7 @@ import menuRu from "../../locales/ru/menu.json";
 import recipesRu from "../../locales/ru/recipes.json";
 import { PatientRouter } from "../../test/PatientRouter";
 import { todayIso } from "../menu/dates";
+import { PatientDishesView } from "./PatientDishesView";
 import { PatientMenuTab } from "./PatientMenuTab";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -126,6 +127,26 @@ function renderFood() {
   });
 }
 
+function renderDishes() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <PatientRouter patientId={PATIENT_ID} view="menu">
+          {children}
+        </PatientRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  return render(<PatientDishesView patientId={PATIENT_ID} />, {
+    wrapper: Wrapper,
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   (api.GET as Mock).mockImplementation((path: string) =>
@@ -135,21 +156,10 @@ beforeEach(() => {
 });
 
 describe("питание пациента глазами специалиста", () => {
-  it("показывает блюда ребёнка, а не только план дня", async () => {
-    // Специалист передаёт раскладку из калькулятора «Передать пациенту», и до
-    // этого списка увидеть переданное в карте было негде: блюдо сохранялось,
-    // семья находила его при сборке меню, а тот, кто передал, — нет.
-    renderFood();
-
-    expect(
-      await screen.findByRole("heading", { name: "Блюда ребёнка" }),
-    ).toBeInTheDocument();
-  });
-
   it("называет блок по-чужому, а не «Мои блюда»", async () => {
     // Надпись от первого лица в чужой карте называет не того: блюда
     // принадлежат ребёнку, а читает их специалист.
-    renderFood();
+    renderDishes();
 
     expect(
       await screen.findByRole("heading", { name: "Блюда ребёнка" }),
@@ -162,7 +172,7 @@ describe("питание пациента глазами специалиста"
   it("ведёт блюдо в калькулятор ЭТОЙ карты, а не в общий", async () => {
     // В общем калькуляторе нет ни кетосоотношения ребёнка, ни его исключений,
     // и блюдо пациента он открыть не может — там нет пациента.
-    renderFood();
+    renderDishes();
 
     const link = await screen.findByRole("link", { name: /Завтрак 4:1/ });
     const href = decodeURIComponent(link.getAttribute("href") ?? "");

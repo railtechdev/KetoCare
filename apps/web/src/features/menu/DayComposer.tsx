@@ -334,12 +334,6 @@ export function DayComposer({
             {t("day.saving")}
           </p>
         )}
-
-        {items.length === 1 && (
-          <p className="m-0 text-sm text-muted-foreground">
-            {t("item.lastOne")}
-          </p>
-        )}
       </AsyncSection>
 
       <FormSheet

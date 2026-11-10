@@ -147,10 +147,29 @@ async def test_load_is_in_the_audit_log(session, loaded):
     assert set(actions) == {"create", "lock"}
 
 
+async def test_deploy_mode_loads_with_missing_links_and_reports_them(session, make_user):
+    author = await make_user(role=UserRole.DIETITIAN)
+    await _catalogue(session)
+    apple = await session.scalar(
+        select(Product).where(
+            Product.standard_id == DEFAULT_FOOD_STANDARD_ID, Product.name_ru == "Яблоко"
+        )
+    )
+    apple.name_ru = f"Яблоко {uuid.uuid4().hex[:6]}"
+    await session.flush()
+
+    report = await standard_documents.load(
+        session, data_dir=DATA, author_id=author.id, require_all_links=False
+    )
+
+    assert report.products == 36
+    assert any("Яблоко" in note for note in report.notes)
+
+
 async def test_second_load_is_refused(session, make_user, loaded):
     author = await make_user(role=UserRole.DIETITIAN)
 
-    with pytest.raises(standard_documents.DocumentLoadError):
+    with pytest.raises(standard_documents.AlreadyLoadedError):
         await standard_documents.load(session, data_dir=DATA, author_id=author.id)
 
 
@@ -271,3 +290,40 @@ async def test_patient_recipe_fit_skips_a_general_draft(
     )
 
     assert response.json()["items"][0]["status"] == "unavailable"
+
+
+class TestWeightAtCreation:
+    """Reader: the new patient form of the web cabinet."""
+
+    BODY = {"full_name": "Тест", "birth_date": "2019-03-04", "sex": "f"}
+
+    async def test_weight_goes_to_the_weight_diary(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        created = await client.post(
+            "/api/v1/patients", json={**self.BODY, "weight_kg": 18.5}, headers=auth_headers(doctor)
+        )
+
+        assert created.status_code == 201, created.text
+        logs = await client.get(
+            f"/api/v1/patients/{created.json()['id']}/logs/weight", headers=auth_headers(doctor)
+        )
+        assert [item["weight_kg"] for item in logs.json()["items"]] == [18.5]
+
+    async def test_weight_is_optional(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        created = await client.post(
+            "/api/v1/patients", json=self.BODY, headers=auth_headers(doctor)
+        )
+
+        assert created.status_code == 201, created.text
+
+    async def test_implausible_weight_is_rejected(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        created = await client.post(
+            "/api/v1/patients", json={**self.BODY, "weight_kg": 400}, headers=auth_headers(doctor)
+        )
+
+        assert created.status_code == 422
