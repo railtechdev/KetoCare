@@ -5,6 +5,9 @@ import {
   CALC_GRAMS_MAX,
   EmptyState,
   FieldShell,
+  formatRatio,
+  NativeSelect,
+  RATIO_CHOICES,
   Input,
   MacroBar,
   MacroFacts,
@@ -532,9 +535,9 @@ export function CalculatorScreen({ session }: { session: Session }) {
           и факт лежат в одном блоке. */}
       <Section title={t("calculator.calc")} density="compact">
         <div className="flex items-start gap-field">
-          <NumberField
-            id="ratio"
+          <RatioField
             label={t("calculator.ratio")}
+            placeholder={t("calculator.ratioPlaceholder")}
             value={ratio}
             hint={
               suggested !== null && ratio === String(suggested.ratio)
@@ -824,6 +827,43 @@ function namesOf(
  * они обязаны рядом: сложенные в столбик, они отодвигают показатели блюда за
  * сгиб телефона.
  */
+function RatioField({
+  label,
+  placeholder,
+  value,
+  hint,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  hint?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <FieldShell className="min-w-0 flex-1 text-sm" label={label} hint={hint}>
+      {({ describedBy }) => (
+        <NativeSelect
+          id="ratio"
+          className="w-full"
+          value={value}
+          aria-describedby={describedBy}
+          onChange={(event) => {
+            onChange(event.target.value);
+          }}
+        >
+          <option value="">{placeholder}</option>
+          {RATIO_CHOICES.map((choice) => (
+            <option key={choice} value={String(choice)}>
+              {formatRatio(choice)}
+            </option>
+          ))}
+        </NativeSelect>
+      )}
+    </FieldShell>
+  );
+}
+
 function NumberField({
   id,
   label,

@@ -265,6 +265,15 @@ function WeekPrint({
                 })}
               </p>
             )}
+            {(day.menu?.excluded_products ?? []).length > 0 && (
+              <p className="m-0 font-semibold">
+                {t("week.printExcluded", {
+                  names: (day.menu?.excluded_products ?? [])
+                    .map((product) => product.name_ru)
+                    .join(", "),
+                })}
+              </p>
+            )}
             {(day.menu?.items ?? []).map((item) => (
               <div key={item.id} className="mt-1">
                 <p className="m-0 font-medium">

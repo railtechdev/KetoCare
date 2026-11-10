@@ -356,3 +356,76 @@ class TestDishReview:
         response = await client.get(_review_url(patient), headers=auth_headers(stranger))
 
         assert response.status_code == 403
+
+
+async def test_seasoning_follows_the_recipe_scale(client, session, auth_headers, world):
+    doctor, patient = world
+    butter = await _product(session, "Масло", **BUTTER)
+    chicken = await _product(session, "Курица", **CHICKEN)
+    salt = await _product(
+        session, "Соль", kcal_100g=0, fat_100g=0, protein_100g=0, carbs_100g=0, fiber_100g=0
+    )
+    salt.counts_in_calculation = False
+    await session.flush()
+    # Four meals' worth of food: about 1200 kcal against a target of 300.
+    recipe = await _recipe(session, doctor, [(chicken, 200), (butter, 160), (salt, 8)])
+
+    response = await client.post(
+        _url(patient), json={"recipe_ids": [str(recipe.id)]}, headers=auth_headers(doctor)
+    )
+
+    fit = response.json()["items"][0]
+    grams = {item["product_id"]: item["grams"] for item in fit["ingredients"]}
+    assert grams[str(salt.id)] < 3
+
+
+async def test_a_meal_does_not_exceed_the_days_carb_limit(client, session, auth_headers, world):
+    doctor, patient = world
+    butter = await _product(session, "Масло", **BUTTER)
+    rice = await _product(
+        session,
+        "Рис",
+        kcal_100g=360,
+        fat_100g=0.6,
+        protein_100g=7,
+        carbs_100g=79,
+        fiber_100g=1,
+    )
+    await prescriptions_repo.create(
+        session,
+        patient_id=patient.id,
+        ratio=1.0,
+        kcal_per_day=1200,
+        protein_g=10.0,
+        carbs_limit_g=10.0,
+        meals_per_day=2,
+        author_id=doctor.id,
+        effective_from=date.today(),
+    )
+    recipe = await _recipe(session, doctor, [(rice, 50), (butter, 50)])
+
+    response = await client.post(
+        _url(patient), json={"recipe_ids": [str(recipe.id)]}, headers=auth_headers(doctor)
+    )
+
+    fit = response.json()["items"][0]
+    assert fit["status"] == "infeasible" or fit["dish"]["carbs_g"] <= 10
+
+
+async def test_saving_a_proposal_rechecks_exclusions(client, session, auth_headers, world):
+    doctor, patient = world
+    chicken = await _product(session, "Курица", **CHICKEN)
+    patient.allergies = [str(chicken.id)]
+    await session.flush()
+    body = {
+        "title": "Блюдо",
+        "ingredients": [{"product_id": str(chicken.id), "grams": 50}],
+        "reject_excluded": True,
+    }
+
+    response = await client.post(
+        f"/api/v1/patients/{patient.id}/custom-dishes", json=body, headers=auth_headers(doctor)
+    )
+
+    assert response.status_code == 409, response.text
+    assert chicken.name_ru in response.json()["error"]["message"]

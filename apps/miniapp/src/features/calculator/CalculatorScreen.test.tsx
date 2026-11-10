@@ -1197,8 +1197,7 @@ describe("калькулятор в Mini App", () => {
     await addProduct(user);
 
     const ratio = screen.getByLabelText("Кетосоотношение");
-    await user.clear(ratio);
-    await user.type(ratio, "2,5");
+    await user.selectOptions(ratio, "2.5");
 
     await waitFor(() => {
       expect(api.POST).toHaveBeenCalledWith(

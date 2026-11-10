@@ -146,6 +146,7 @@ export function MealGroup({
                       size="icon"
                       className="min-h-touch min-w-touch text-muted-foreground"
                       disabled={!canRemove || pending}
+                      title={canRemove ? undefined : t("item.lastOne")}
                       aria-label={t("item.remove", { name: title })}
                     >
                       <Trash2 aria-hidden="true" />

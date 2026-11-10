@@ -24,7 +24,10 @@ export function PrintButton({
     if (run === 0) return;
     const root = document.getElementById("root");
     root?.classList.add("print:hidden");
-    const done = () => setPrinting(false);
+    const done = () => {
+      root?.classList.remove("print:hidden");
+      setPrinting(false);
+    };
     window.addEventListener("afterprint", done);
     window.print();
     return () => {

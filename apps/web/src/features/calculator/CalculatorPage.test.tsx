@@ -189,7 +189,7 @@ describe("калькулятор", () => {
     // До этого в поле стояла четвёрка, зашитая во фронтенде, и вердикт
     // «выходит за допуски назначения» выносился относительно чужой цели.
     const ratio = await screen.findByLabelText(/Кетосоотношение/);
-    await waitFor(() => expect(ratio).toHaveValue(PRESCRIBED_RATIO));
+    await waitFor(() => expect(ratio).toHaveValue(String(PRESCRIBED_RATIO)));
     expect(
       screen.getByText(/Из активного назначения ребёнка/),
     ).toBeInTheDocument();
@@ -264,7 +264,7 @@ describe("калькулятор", () => {
     // устаревшей выдачи: по нему готовят еду ребёнку. Само число остаётся —
     // гасить его на каждое нажатие значит очищать экран, по которому сверяются.
     const ratio = screen.getByLabelText(/Кетосоотношение/);
-    await user.clear(ratio);
+    await user.selectOptions(ratio, "");
 
     await waitFor(() =>
       expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument(),

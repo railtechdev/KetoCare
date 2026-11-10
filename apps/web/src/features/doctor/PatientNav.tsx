@@ -23,10 +23,17 @@ import {
 import type { Patient, PatientOverview } from "./types";
 
 const GROUP_START_VIEWS: ReadonlySet<PatientView> = new Set([
+  "prescription",
   "diary",
   "notes",
-  "profile",
 ]);
+
+/** Подпись группы разделов; ключ — первый раздел группы. */
+const GROUP_TITLES: Partial<Record<PatientView, string>> = {
+  prescription: "workspace.groups.diet",
+  diary: "workspace.groups.observation",
+  notes: "workspace.groups.contact",
+};
 
 /**
  * Навигация по карте пациента.
@@ -140,6 +147,11 @@ export function PatientNav({
                   "lg:mt-1.5 lg:border-t lg:border-border/60 lg:pt-1.5",
               )}
             >
+              {GROUP_TITLES[viewItem] !== undefined && (
+                <span className="hidden px-3 pb-1 text-xs text-muted-foreground lg:block">
+                  {t(GROUP_TITLES[viewItem])}
+                </span>
+              )}
               <PatientViewLink
                 patientId={patient.id}
                 view={viewItem}

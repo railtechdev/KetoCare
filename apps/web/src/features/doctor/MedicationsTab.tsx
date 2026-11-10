@@ -178,17 +178,6 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
             icon={Pill}
             title={t("medications.empty")}
             description={t("medications.emptyDescription")}
-            action={
-              canWrite ? (
-                <Button
-                  type="button"
-                  onClick={() => openForm({ mode: "create" })}
-                >
-                  <Plus aria-hidden="true" />
-                  {t("medications.add")}
-                </Button>
-              ) : undefined
-            }
           />
         }
       >
