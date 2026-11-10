@@ -10,7 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { SectionLink } from "../../components/SectionLink";
 import { api, errorMessageOf } from "../../lib/api";
+import { incomingRecipe } from "../calculator/incomingItem";
 import { queryState } from "../../lib/queryState";
 import type { FoodStandard } from "./useFoodStandards";
 
@@ -138,6 +140,20 @@ export function MenuTemplatesSheet({
                           value: formatKcal(item.kcal),
                         })}
                       </span>
+                      {item.recipe_id != null && (
+                        <SectionLink
+                          section="calculator"
+                          item={incomingRecipe(item.recipe_id)}
+                          className="font-medium underline"
+                        >
+                          {t("standards.templates.toCalculator")}
+                          <span className="sr-only">
+                            {t("standards.templates.toCalculatorFor", {
+                              title: item.dish_title,
+                            })}
+                          </span>
+                        </SectionLink>
+                      )}
                     </>
                   ) : (
                     <span className="text-muted-foreground">

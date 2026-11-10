@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import productsRu from "../../locales/ru/products.json";
+import { SectionRouter } from "../../test/SectionRouter";
 import { MenuTemplatesSheet } from "./MenuTemplatesSheet";
 import type { FoodStandard } from "./useFoodStandards";
 
@@ -67,7 +68,9 @@ beforeEach(() => {
 function renderSheet() {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MenuTemplatesSheet standard={STANDARD} onClose={vi.fn()} />
+      <SectionRouter section="products">
+        <MenuTemplatesSheet standard={STANDARD} onClose={vi.fn()} />
+      </SectionRouter>
     </QueryClientProvider>,
   );
 }
@@ -91,5 +94,22 @@ describe("шаблоны меню стандарта", () => {
     expect(screen.getByText("190 ккал")).toBeInTheDocument();
     expect(screen.getByText("Мастава")).toBeInTheDocument();
     expect(screen.getByText("нет надёжных значений")).toBeInTheDocument();
+  });
+
+  it("открывает блюдо с числами в калькуляторе как заготовку", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.click(
+      await screen.findByRole("button", { name: TEMPLATE.title }),
+    );
+
+    const link = await screen.findByRole("link", {
+      name: /Сделать кето-версию: Омлет/,
+    });
+    expect(decodeURIComponent(link.getAttribute("href") ?? "")).toContain(
+      "item=recipe:r1",
+    );
+    expect(screen.queryByRole("link", { name: /Мастава/ })).toBeNull();
   });
 });
