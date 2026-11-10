@@ -14,7 +14,7 @@ from sqlalchemy import ColumnElement, Float, cast, func, or_, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import MenuItem, Recipe, RecipeIngredient
+from ..models import DEFAULT_FOOD_STANDARD_ID, MenuItem, Recipe, RecipeIngredient
 from ..models.enums import RecipeCategory, RecipeStatus
 
 
@@ -67,6 +67,7 @@ async def search(
     ratio_min: float | None = None,
     ratio_max: float | None = None,
     q: str | None = None,
+    standard_id: uuid.UUID = DEFAULT_FOOD_STANDARD_ID,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Recipe], int]:
@@ -76,7 +77,7 @@ async def search(
     вызывающая сторона (родителю доступны только опубликованные, раздел 5.3 ТЗ).
     """
 
-    conditions: list[ColumnElement[bool]] = []
+    conditions: list[ColumnElement[bool]] = [Recipe.standard_id == standard_id]
     if statuses is not None:
         conditions.append(Recipe.status.in_(list(statuses)))
     if category is not None:

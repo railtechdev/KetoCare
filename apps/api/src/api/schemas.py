@@ -18,7 +18,14 @@ from pydantic import (
 )
 
 from core.languages import Language
-from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, Sex, UserRole
+from core.models.enums import (
+    CarbsConvention,
+    FoodDietType,
+    FoodStandardKind,
+    RecipeStatus,
+    Sex,
+    UserRole,
+)
 from keto_engine import Ingredient, verify
 
 from .password_policy import check_new_password
@@ -1065,3 +1072,34 @@ class DishReviewResponse(BaseModel):
     target_kcal: float | None
     checked: int
     off_target: list[DishReviewItem]
+
+
+class MenuTemplateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    standard_id: uuid.UUID
+    title: str
+    season: str | None
+    cycle_days: int
+    status: RecipeStatus
+    source_ref: str | None
+
+
+class MenuTemplateItemRead(BaseModel):
+    cycle_day: int
+    meal_index: int
+    dish_title: str
+    recipe_id: uuid.UUID | None
+    #: `null` when the dish has no recipe: its products lack reliable values.
+    kcal: float | None
+    ratio: float | None
+
+
+class MenuTemplateDetail(BaseModel):
+    """Reader: the standards screen of the web cabinet, specialists only."""
+
+    template: MenuTemplateRead
+    #: The diet this menu was written for; `general` is not a ketogenic menu.
+    diet_type: FoodDietType
+    items: list[MenuTemplateItemRead]

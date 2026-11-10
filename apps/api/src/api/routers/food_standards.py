@@ -16,10 +16,19 @@ from core.models import DEFAULT_FOOD_STANDARD_ID, FoodStandard
 from core.models.enums import CarbsConvention, FoodStandardKind, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import food_standards as food_standards_repo
+from core.repositories import menu_templates as menu_templates_repo
+from core.repositories import recipes as recipes_repo
 
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
-from ..schemas import FoodStandardCreate, FoodStandardRead, FoodStandardUpdate
+from ..schemas import (
+    FoodStandardCreate,
+    FoodStandardRead,
+    FoodStandardUpdate,
+    MenuTemplateDetail,
+    MenuTemplateItemRead,
+    MenuTemplateRead,
+)
 
 router = APIRouter(prefix="/food-standards", tags=["food-standards"])
 
@@ -231,3 +240,57 @@ async def lock_standard(
     )
     counts = await food_standards_repo.count_products(session)
     return _read(locked, counts.get(standard_id, 0))
+
+
+#: Clinical content of a menu: specialists only, the administrator does not need it.
+_TEMPLATE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
+
+
+@router.get(
+    "/{standard_id}/menu-templates",
+    response_model=list[MenuTemplateRead],
+    summary="Шаблоны меню стандарта",
+    dependencies=[Depends(require_roles(*_TEMPLATE_ROLES))],
+)
+async def list_menu_templates(
+    standard_id: Annotated[uuid.UUID, Path()], session: SessionDep
+) -> list[MenuTemplateRead]:
+    await _standard_or_404(session, standard_id)
+    templates = await menu_templates_repo.list_for_standard(session, standard_id=standard_id)
+    return [MenuTemplateRead.model_validate(template) for template in templates]
+
+
+@router.get(
+    "/menu-templates/{template_id}",
+    response_model=MenuTemplateDetail,
+    summary="Шаблон меню по дням",
+    dependencies=[Depends(require_roles(*_TEMPLATE_ROLES))],
+)
+async def get_menu_template(
+    template_id: Annotated[uuid.UUID, Path()], session: SessionDep
+) -> MenuTemplateDetail:
+    template = await menu_templates_repo.get(session, template_id)
+    if template is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Шаблон меню не найден.")
+    standard = await _standard_or_404(session, template.standard_id)
+    rows = await menu_templates_repo.list_items(session, template_id=template.id)
+
+    items: list[MenuTemplateItemRead] = []
+    for row in rows:
+        recipe = None if row.recipe_id is None else await recipes_repo.get(session, row.recipe_id)
+        computed = recipe.computed if recipe is not None else None
+        items.append(
+            MenuTemplateItemRead(
+                cycle_day=row.cycle_day,
+                meal_index=row.meal_index,
+                dish_title=row.dish_title,
+                recipe_id=row.recipe_id,
+                kcal=None if computed is None else computed.get("kcal"),
+                ratio=None if computed is None else computed.get("ratio"),
+            )
+        )
+    return MenuTemplateDetail(
+        template=MenuTemplateRead.model_validate(template),
+        diet_type=standard.diet_type,
+        items=items,
+    )
