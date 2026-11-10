@@ -9,6 +9,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Numeric,
@@ -160,6 +161,23 @@ class RevokedSession(Base, CreatedAtMixin):
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
+
+
+class TrustedDevice(Base, UUIDPkMixin, CreatedAtMixin):
+    """A browser where the second factor is not asked again for a while (ADR-0061)."""
+
+    __tablename__ = "trusted_devices"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    #: sha256 of the password hash and the second factor secret at trust time.
+    binding: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    user_agent: Mapped[str | None] = mapped_column(String(255))
 
 
 class UserBackupCode(Base, UUIDPkMixin, CreatedAtMixin):

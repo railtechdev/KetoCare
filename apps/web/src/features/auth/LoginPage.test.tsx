@@ -72,6 +72,35 @@ describe("вход со вторым фактором", () => {
     expect(signIn).not.toHaveBeenCalled();
   });
 
+  it("предлагает запомнить устройство и передаёт выбор серверу", async () => {
+    post.mockResolvedValue({
+      data: { status: "totp_required", tokens: null, totp_setup_token: null },
+    });
+
+    renderPage();
+    const user = await submitCredentials();
+
+    await user.click(
+      await screen.findByRole("checkbox", {
+        name: authRu.login.rememberDevice,
+      }),
+    );
+    await user.type(
+      screen.getByLabelText(/Код из приложения-аутентификатора/),
+      "123456",
+    );
+    await user.click(screen.getByRole("button", { name: authRu.login.submit }));
+
+    await waitFor(() =>
+      expect(post).toHaveBeenLastCalledWith(
+        "/api/v1/auth/login",
+        expect.objectContaining({
+          body: expect.objectContaining({ remember_device: true }),
+        }),
+      ),
+    );
+  });
+
   it("фокус уходит в появившееся поле кода (правило П21)", async () => {
     // Иначе человек с клавиатуры остаётся на кнопке «Войти» и о новом поле
     // узнаёт, только пройдя форму заново.

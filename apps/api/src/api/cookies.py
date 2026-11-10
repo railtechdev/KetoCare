@@ -65,3 +65,16 @@ def clear_auth_cookies(response: Response) -> None:
 
     for name in ("access_token", "refresh_token"):
         response.delete_cookie(name, **_ATTRS)  # type: ignore[arg-type]
+
+
+#: Cookie of a remembered device (ADR-0061). It is sent only to the auth routes.
+TRUSTED_DEVICE_COOKIE = "trusted_device"
+_TRUSTED_ATTRS = {**_ATTRS, "samesite": "strict", "path": "/api/v1/auth"}
+
+
+def set_trusted_device_cookie(response: Response, token: str, max_age: int) -> None:
+    response.set_cookie(TRUSTED_DEVICE_COOKIE, token, max_age=max_age, **_TRUSTED_ATTRS)  # type: ignore[arg-type]
+
+
+def clear_trusted_device_cookie(response: Response) -> None:
+    response.delete_cookie(TRUSTED_DEVICE_COOKIE, **_TRUSTED_ATTRS)  # type: ignore[arg-type]

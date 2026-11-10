@@ -22,11 +22,18 @@ from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
 from core.repositories import sessions as sessions_repo
 from core.repositories import telegram as telegram_repo
+from core.repositories import trusted_devices as trusted_devices_repo
 from core.repositories import users as users_repo
 
 from .. import login_throttle
 from ..client_address import client_address
-from ..cookies import clear_auth_cookies, set_auth_cookies
+from ..cookies import (
+    TRUSTED_DEVICE_COOKIE,
+    clear_auth_cookies,
+    clear_trusted_device_cookie,
+    set_auth_cookies,
+    set_trusted_device_cookie,
+)
 from ..deps.auth import (
     CurrentUserDep,
     PasswordResetUserDep,
@@ -196,6 +203,7 @@ async def login(
     # разные вещи, и порядок вопросов важен; своих копий здесь быть не должно,
     # иначе карточка администратора и вход снова разойдутся (#219).
     needs_totp = user.role in ROLES_REQUIRING_TOTP or user.totp_enrolled
+    trusted = False
 
     if needs_totp and not user.totp_enrolled:
         # ПЕРВАЯ настройка: приглашённому врачу/диетологу/админу 2FA обязательна,
@@ -223,7 +231,15 @@ async def login(
         # `login_failed_totp` и съедал две попытки из пяти в `AUTH_RATE_LIMIT`.
         # Журнал, существующий чтобы заметить перебор кодов, содержал
         # фальшивый провал на каждый вход.
-        if not payload.totp_code and not payload.backup_code:
+        trusted = bool(
+            not payload.totp_code
+            and not payload.backup_code
+            and totp_secret_usable(user.totp_secret)
+            and await trusted_devices_repo.is_trusted(
+                session, user=user, token=request.cookies.get(TRUSTED_DEVICE_COOKIE)
+            )
+        )
+        if not trusted and not payload.totp_code and not payload.backup_code:
             # Сломанный фактор — тоже шаг входа, но другой: код из приложения не
             # сойдётся никогда, и просить его значит водить человека по кругу.
             # Ключ здесь один — резервный код; если и его нет, остаётся сброс
@@ -243,12 +259,16 @@ async def login(
         # учётной записи навсегда: отключить второй фактор нельзя, сброса не
         # было ни у кого. Код одноразовый и гасится атомарно.
         by_backup = False
-        if payload.backup_code:
+        if not trusted and payload.backup_code:
             by_backup = await backup_codes_repo.consume(
                 session, user_id=user.id, code=payload.backup_code
             )
 
-        outcome = "ok" if by_backup else await _consume_totp_code(session, user, payload.totp_code)
+        outcome = (
+            "ok"
+            if trusted or by_backup
+            else await _consume_totp_code(session, user, payload.totp_code)
+        )
         if outcome != "ok":
             await login_throttle.record_failure(payload.email, client_address(request))
             await audit_repo.write_audit_log_independent(
@@ -303,6 +323,18 @@ async def login(
     tokens = _issue_tokens(user)
     tokens = set_auth_cookies(response, tokens)
 
+    remembered = False
+    if needs_totp and payload.remember_device and not trusted:
+        token = await trusted_devices_repo.remember(
+            session, user=user, user_agent=request.headers.get("user-agent")
+        )
+        set_trusted_device_cookie(
+            response,
+            token,
+            max_age=int(trusted_devices_repo.TRUSTED_DEVICE_TTL.total_seconds()),
+        )
+        remembered = True
+
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,
@@ -310,8 +342,38 @@ async def login(
         entity="users",
         entity_id=user.id,
         ip=client_address(request),
+        after=(
+            {"trusted_device": True}
+            if trusted
+            else {"device_remembered": True}
+            if remembered
+            else None
+        ),
     )
     return LoginResponse(status="ok", tokens=tokens)
+
+
+@router.post(
+    "/trusted-devices/forget",
+    status_code=204,
+    summary="Снова спрашивать код на всех устройствах",
+)
+async def forget_trusted_devices(
+    request: Request, response: Response, user: CurrentUserDep, session: SessionDep
+) -> Response:
+    count = await trusted_devices_repo.forget_all(session, user_id=user.id)
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="trusted_devices_revoked",
+        entity="users",
+        entity_id=user.id,
+        ip=client_address(request),
+        after={"devices": count},
+    )
+    response.status_code = 204
+    clear_trusted_device_cookie(response)
+    return response
 
 
 #: Повтор кода, уже открывшего сессию (находка Н8, RFC 6238 §5.2).

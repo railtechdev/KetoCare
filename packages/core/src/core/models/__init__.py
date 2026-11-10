@@ -11,6 +11,7 @@ from .accounts import (
     ReminderSettings,
     RevokedSession,
     TelegramAccount,
+    TrustedDevice,
     User,
     UserBackupCode,
 )
@@ -70,6 +71,7 @@ __all__ = [
     "ReminderSettings",
     "TelegramAccount",
     "RevokedSession",
+    "TrustedDevice",
     "UserBackupCode",
     "AccessCode",
     # clinical

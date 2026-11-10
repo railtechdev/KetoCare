@@ -13,6 +13,7 @@ export const loginSchema = z.object({
   totpCode: z.string().optional(),
   /** Резервный код вместо кода приложения, когда телефон недоступен */
   backupCode: z.string().optional(),
+  rememberDevice: z.boolean().optional(),
 });
 
 export type LoginValues = z.infer<typeof loginSchema>;
