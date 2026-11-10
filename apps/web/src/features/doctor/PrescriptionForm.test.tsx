@@ -1,31 +1,94 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
+import { api } from "../../lib/api";
 import "../../lib/i18n";
 import { PrescriptionForm } from "./PrescriptionForm";
+
+vi.mock("../../lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/api")>();
+  return { ...actual, api: { POST: vi.fn() } };
+});
+
+const GOAL = {
+  day: { fat_g: 120, protein_g: 24, net_carbs_g: 10.3, non_fat_g: 34.3 },
+  meal: { fat_g: 30, protein_g: 6, net_carbs_g: 2.6, non_fat_g: 8.6 },
+  engine_version: "1.3.0",
+};
+
+beforeEach(() => {
+  (api.POST as Mock).mockReset();
+  (api.POST as Mock).mockResolvedValue({ data: GOAL });
+});
 
 function renderForm(
   onSubmit = vi.fn(),
   { ratio }: { ratio?: number } = { ratio: 3.5 },
 ) {
   render(
-    <PrescriptionForm
-      defaultValues={{
-        ratio,
-        kcalPerDay: 1200,
-        proteinG: 24,
-        carbsLimitG: 10,
-        mealsPerDay: 4,
-        effectiveFrom: "2026-09-09",
-      }}
-      pending={false}
-      error={null}
-      onSubmit={onSubmit}
-    />,
+    <QueryClientProvider client={new QueryClient()}>
+      <PrescriptionForm
+        defaultValues={{
+          ratio,
+          kcalPerDay: 1200,
+          proteinG: 24,
+          carbsLimitG: 10,
+          mealsPerDay: 4,
+          effectiveFrom: "2026-09-09",
+        }}
+        pending={false}
+        error={null}
+        onSubmit={onSubmit}
+      />
+    </QueryClientProvider>,
   );
   return onSubmit;
 }
+
+describe("предпросмотр назначения в граммах", () => {
+  it("показывает граммы от сервера на сутки и на приём", async () => {
+    renderForm();
+
+    expect(
+      await screen.findByText("Что это даёт в граммах"),
+    ).toBeInTheDocument();
+    const fat = screen.getByRole("row", { name: /Жир/ });
+    expect(fat).toHaveTextContent("120");
+    expect(fat).toHaveTextContent("30");
+    expect(api.POST).toHaveBeenCalledWith("/api/v1/calc/prescription-goal", {
+      body: {
+        ratio: 3.5,
+        kcal_per_day: 1200,
+        protein_g: 24,
+        meals_per_day: 4,
+      },
+    });
+  });
+
+  it("называет белок, который не помещается в назначение", async () => {
+    (api.POST as Mock).mockResolvedValue({
+      data: {
+        ...GOAL,
+        day: { ...GOAL.day, protein_g: null, net_carbs_g: null },
+        meal: { ...GOAL.meal, protein_g: null, net_carbs_g: null },
+      },
+    });
+    renderForm();
+
+    expect(
+      await screen.findByText(/Белка больше, чем позволяют/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /^Белок \d/ })).toBeNull();
+  });
+
+  it("не спрашивает сервер, пока соотношение не выбрано", () => {
+    renderForm(vi.fn(), { ratio: undefined });
+
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+});
 
 describe("кетосоотношение в назначении", () => {
   it("выбирается из списка и подписано как соотношение", async () => {

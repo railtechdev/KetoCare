@@ -111,6 +111,9 @@ beforeEach(() => {
       history = { items: [CREATED, ...history.items] };
       return Promise.resolve({ data: CREATED });
     }
+    if (path === "/api/v1/calc/prescription-goal") {
+      return Promise.resolve({ data: undefined });
+    }
     throw new Error(`Unexpected POST ${path}`);
   });
 });
@@ -168,7 +171,10 @@ describe("форма назначения", () => {
 
     // Ответ клиники на вопрос 5: сохранение открывает окно подтверждения, и
     // до него ничего не отправлено.
-    expect(api.POST).not.toHaveBeenCalled();
+    expect(api.POST).not.toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/prescriptions",
+      expect.anything(),
+    );
     await user.click(
       await screen.findByRole("button", { name: "Подтвердить назначение" }),
     );
@@ -229,7 +235,10 @@ describe("форма назначения", () => {
     await waitFor(() =>
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
     );
-    expect(api.POST).not.toHaveBeenCalled();
+    expect(api.POST).not.toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/prescriptions",
+      expect.anything(),
+    );
     // Форма осталась с введённым — врач правит дальше, а не набирает заново.
     expect(field().value).toBe("3.5");
   });

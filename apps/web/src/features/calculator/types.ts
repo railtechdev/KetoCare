@@ -4,6 +4,8 @@ import type { ProductOption } from "./useProducts";
 export interface DishRow {
   product: ProductOption;
   grams: number;
+  /** Подбор не меняет массу этой строки */
+  pinned?: boolean;
 }
 
 /**
@@ -32,6 +34,21 @@ export function toCalcIngredients(rows: DishRow[]) {
     carbs: row.product.carbs,
     fiber: row.product.fiber,
   }));
+}
+
+/**
+ * Границы подбора для закреплённых строк: нижняя равна верхней.
+ *
+ * `undefined`, когда закреплённых нет: границы не отправляются вовсе.
+ */
+export function pinnedBounds(
+  rows: DishRow[],
+): Record<string, [number, number]> | undefined {
+  const pinned = rows.filter((row) => row.pinned === true);
+  if (pinned.length === 0) return undefined;
+  return Object.fromEntries(
+    pinned.map((row) => [row.product.id, [row.grams, row.grams]]),
+  );
 }
 
 export function toCalcItems(rows: DishRow[]) {

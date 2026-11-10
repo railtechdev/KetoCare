@@ -129,6 +129,8 @@
   },
   "gramsDecrease": "Убавить 1 г: {{name}}",
   "gramsIncrease": "Прибавить 1 г: {{name}}",
+  "pinGrams": "Закрепить массу: {{name}}",
+  "pinGramsHint": "Подбор граммовки не будет менять эту массу",
   "goalTable": {
     "caption": "Факт блюда и цель приёма в граммах",
     "metric": "На приём, г",

@@ -19,12 +19,15 @@ from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from keto_engine import InfeasibleError, scale, solve, verify, within_tolerance
+from keto_engine.constants import MIN_INGREDIENT_GRAMS
 
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
 from ..schemas_calc import (
     CALC_GRAMS_MAX,
     ExcludedProductOut,
+    PrescriptionGoalRequest,
+    PrescriptionGoalResponse,
     ScaleRequest,
     ScaleResponse,
     SolveRequest,
@@ -206,6 +209,16 @@ async def solve_dish(
             details={"uncounted": [entry.product_id for entry in skipped]},
         )
 
+    too_small = calc_service.pins_too_small(targets, ingredients.keys())
+    if too_small:
+        names = ", ".join(await _product_names(session, too_small))
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Закреплённая масса слишком мала: {names}. "
+            f"Укажите не меньше {MIN_INGREDIENT_GRAMS:g} г или снимите закрепление.",
+            details={"product_ids": too_small},
+        )
+
     # The person chose these products: a dish that silently loses one of them
     # is not the dish that was asked for (ADR-0058).
     keeping_all = calc_service.keeping_every_product(targets, ingredients.keys())
@@ -241,6 +254,17 @@ async def solve_dish(
         excluded=excluded,
         uncounted=skipped,
     )
+
+
+@router.post(
+    "/prescription-goal",
+    response_model=PrescriptionGoalResponse,
+    summary="Граммы назначения на сутки и на приём",
+)
+async def prescription_goal(
+    payload: PrescriptionGoalRequest, _: CurrentUserDep
+) -> PrescriptionGoalResponse:
+    return calc_service.to_prescription_goal(payload)
 
 
 @router.post("/scale", response_model=ScaleResponse, summary="Пересчитать блюдо на порцию")

@@ -563,6 +563,18 @@ export function CalculatorView({
                   );
                   resetActions();
                 }}
+                onTogglePin={(productId) => {
+                  setRows((current) =>
+                    current.map((row) =>
+                      row.product.id === productId
+                        ? { ...row, pinned: row.pinned !== true }
+                        : row,
+                    ),
+                  );
+                  // A pin changes what the next solve may do, so a previous
+                  // refusal no longer applies.
+                  solve.reset();
+                }}
               />
             </Section>
 

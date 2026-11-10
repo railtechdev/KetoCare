@@ -8,7 +8,7 @@ import {
   cn,
   exceedsCalcGrams,
 } from "@ketocare/ui";
-import { Minus, Plus, X } from "lucide-react";
+import { Minus, Pin, PinOff, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { DishRow, ItemContribution } from "./types";
@@ -18,6 +18,8 @@ interface Props {
   /** Не передаются, когда состав только показывается: расчёт сервера не правят */
   onChangeGrams?: (productId: string, grams: number) => void;
   onRemove?: (productId: string) => void;
+  /** Закрепить массу строки на время подбора; без него кнопки нет */
+  onTogglePin?: (productId: string) => void;
   /** Массы задаёт сервер — поля только для чтения */
   readOnlyGrams?: boolean;
   /**
@@ -58,6 +60,7 @@ export function DishRows({
   rows,
   onChangeGrams,
   onRemove,
+  onTogglePin,
   readOnlyGrams,
   contributions,
   uncounted,
@@ -110,7 +113,7 @@ export function DishRows({
                 )}
               </span>
 
-              <div className="flex items-center gap-field sm:ml-auto">
+              <div className="flex flex-wrap items-center gap-field sm:ml-auto">
                 {!readOnlyGrams && onChangeGrams && (
                   <Button
                     type="button"
@@ -163,6 +166,26 @@ export function DishRows({
                     className="min-h-touch min-w-touch shrink-0"
                   >
                     <Plus aria-hidden="true" />
+                  </Button>
+                )}
+
+                {/* Приправы подбор не трогает (ADR-0054): закреплять нечего. */}
+                {onTogglePin && !uncounted?.has(row.product.id) && (
+                  <Button
+                    type="button"
+                    variant={row.pinned === true ? "secondary" : "ghost"}
+                    size="icon"
+                    aria-pressed={row.pinned === true}
+                    aria-label={t("pinGrams", { name: row.product.name })}
+                    title={t("pinGramsHint")}
+                    onClick={() => onTogglePin(row.product.id)}
+                    className="min-h-touch min-w-touch shrink-0"
+                  >
+                    {row.pinned === true ? (
+                      <PinOff aria-hidden="true" />
+                    ) : (
+                      <Pin aria-hidden="true" />
+                    )}
                   </Button>
                 )}
 
