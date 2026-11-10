@@ -1,6 +1,7 @@
 """`/products` — база продуктов (раздел 5.3 ТЗ).
 
-Запись доступна admin/dietitian; каждое изменение пишет ревизию и audit_log.
+Запись доступна администратору, диетологу и врачу (ADR-0057); каждое изменение
+пишет ревизию и audit_log.
 """
 
 from __future__ import annotations
@@ -24,13 +25,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
 from core.models import DEFAULT_FOOD_STANDARD_ID, FoodStandard, Product, ProductCategory
-from core.models.enums import LeadingMacro, UserRole
+from core.models.enums import FoodStandardKind, LeadingMacro, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import food_standards as food_standards_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
 
-from ..deps.auth import CurrentUserDep, SessionDep, require_roles
+from ..deps.auth import CurrentUser, CurrentUserDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import IMPORT_RATE_LIMIT, limiter
@@ -45,6 +46,7 @@ from ..schemas import (
     ProductCategoryRead,
     ProductCategoryWrite,
     ProductCreate,
+    ProductDerive,
     ProductImportReport,
     ProductRead,
     ProductRevisionPage,
@@ -56,7 +58,10 @@ from ..services.product_import import ValidRow, parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
 
-_EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN)
+#: Кто правит справочник. Врач добавлен решением 6 плана стандартов питания
+#: (ADR-0057): клиника попросила, чтобы свои продукты вели и врач, и диетолог.
+#: Импорт CSV остаётся у администратора — это массовая запись в базу.
+_EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN, UserRole.DOCTOR)
 
 #: Кому видно, кто и когда правил карточку. Само содержимое справочника открыто
 #: всем ролям, а вот имена сотрудников рядом с правками — сведения о работе
@@ -123,7 +128,7 @@ async def search_products(
         limit=page.limit,
         offset=page.offset,
     )
-    return Page(items=[ProductRead.model_validate(p) for p in items], total=total)
+    return Page(items=[_read_for(user, p) for p in items], total=total)
 
 
 # Объявлено до "/{product_id}": иначе FastAPI сопоставит "categories" с путевым
@@ -278,6 +283,19 @@ async def delete_category(
         before=before,
     )
     return Response(status_code=204)
+
+
+def _read_for(user: CurrentUser, product: Product) -> ProductRead:
+    """Семье не отдаётся ссылка на оригинал копии.
+
+    Оригинал лежит в стандарте, которого у неё нет: его идентификатор дал бы
+    посчитать своё блюдо по закрытой записи (ADR-0057).
+    """
+
+    read = ProductRead.model_validate(product)
+    if user.role is UserRole.PARENT:
+        return read.model_copy(update={"derived_from_id": None})
+    return read
 
 
 async def _standard_or_404(session: SessionDep, standard_id: uuid.UUID) -> FoodStandard:
@@ -453,7 +471,7 @@ async def get_product(
         user.role is UserRole.PARENT and product.standard_id != DEFAULT_FOOD_STANDARD_ID
     ):
         raise ApiError(ErrorCode.NOT_FOUND, "Продукт не найден.")
-    return ProductRead.model_validate(product)
+    return _read_for(user, product)
 
 
 @router.post(
@@ -540,7 +558,12 @@ async def update_product(
     return ProductRead.model_validate(updated)
 
 
-def _source_must_match_numbers(product: Product, payload: ProductUpdate) -> None:
+def _source_must_match_numbers(
+    product: Product,
+    payload: ProductUpdate | ProductDerive,
+    *,
+    require_new_source: bool = False,
+) -> None:
     """Числа изменились — источник обязан измениться вместе с ними.
 
     У каждой позиции справочника есть подпись: откуда взяты значения
@@ -553,6 +576,9 @@ def _source_must_match_numbers(product: Product, payload: ProductUpdate) -> None
     Это правило работы с базами состава продуктов (EuroFIR: у каждого значения
     прослеживаемый источник), а не наша выдумка. Запрета на правку здесь нет:
     менять числа можно, нельзя оставлять чужую подпись под своими числами.
+
+    `require_new_source` — для копии: новая версия того же документа законна при
+    обновлении базы, но поправленные специалистом числа документ не публиковал.
     """
 
     changed = [
@@ -563,7 +589,10 @@ def _source_must_match_numbers(product: Product, payload: ProductUpdate) -> None
     if not changed:
         return
 
-    if (product.source, product.source_version) != (payload.source, payload.source_version):
+    if require_new_source:
+        if product.source != payload.source:
+            return
+    elif (product.source, product.source_version) != (payload.source, payload.source_version):
         return
 
     raise ApiError(
@@ -573,6 +602,99 @@ def _source_must_match_numbers(product: Product, payload: ProductUpdate) -> None
         "записи значение уже не проверить.",
         details={"fields": changed, "source": product.source},
     )
+
+
+@router.post(
+    "/{product_id}/derive",
+    response_model=ProductRead,
+    status_code=201,
+    summary="Скорректировать: копия продукта в стандарте клиники",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def derive_product(
+    product_id: Annotated[uuid.UUID, Path()],
+    payload: ProductDerive,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> ProductRead:
+    """Значения закрытого стандарта не правятся (ADR-0056). Исправление — копия в
+    стандарте клиники со ссылкой на оригинал и тем же тождеством продукта:
+    исключение ребёнка действует на обе записи.
+
+    Копия подчиняется тому же правилу подписи, что правка: числа изменились —
+    источник обязан измениться вместе с ними. Иначе под поправленными числами
+    стояла бы подпись документа, который их не публиковал.
+    """
+
+    source = await products_repo.get(session, product_id)
+    if source is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Продукт не найден.")
+
+    standard_id = payload.standard_id or DEFAULT_FOOD_STANDARD_ID
+    target = await _standard_or_404(session, standard_id)
+    if target.locked_at is not None:
+        raise _standard_locked()
+    if not target.is_active:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Стандарт снят с оборота: копия в нём никому не будет предложена.",
+            details={"field": "standard_id"},
+        )
+    if target.kind is not FoodStandardKind.CLINIC:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Копия кладётся в стандарт клиники: внешний документ не дополняется.",
+            details={"field": "standard_id"},
+        )
+    if target.id == source.standard_id:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Продукт уже в этом стандарте — правьте его карточку.",
+            details={"field": "standard_id"},
+        )
+
+    _source_must_match_numbers(source, payload, require_new_source=True)
+
+    # До записи: после отказа индекса транзакция откатывается, и чтение атрибута
+    # загруженного стандарта падает вместо ответа 409.
+    target_name = target.name
+    fields = payload.model_dump(exclude={"standard_id"})
+    fiber_changed = products_repo.fiber_differs(source.fiber_100g, payload.fiber_100g)
+    try:
+        product = await products_repo.create(
+            session,
+            changed_by=user.id,
+            standard_id=target.id,
+            derived_from_id=source.id,
+            food_id=source.food_id,
+            # Клетчатка известна, если её знал источник или её вписали в копии.
+            fiber_known=source.fiber_known or fiber_changed,
+            **fields,
+        )
+        await session.flush()
+    except products_repo.StandardLockedError as error:
+        raise _standard_locked() from error
+    except IntegrityError as error:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            f"Продукт «{payload.name_ru}» уже есть в стандарте «{target_name}».",
+        ) from error
+
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="create",
+        entity="products",
+        entity_id=product.id,
+        after={
+            **payload.model_dump(mode="json"),
+            "standard_id": str(target.id),
+            "derived_from_id": str(source.id),
+            "food_id": str(product.food_id),
+            "fiber_known": product.fiber_known,
+        },
+    )
+    return ProductRead.model_validate(product)
 
 
 @router.get(

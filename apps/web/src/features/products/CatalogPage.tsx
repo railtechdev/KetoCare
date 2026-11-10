@@ -3,15 +3,18 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
-import { useAddressState } from "../../routes/useSectionTab";
+import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
 import { ProductsPanel } from "../admin/ProductsPanel";
+import { DEFAULT_FOOD_STANDARD_ID } from "../standards/useFoodStandards";
+import { StandardsPanel } from "../standards/StandardsPanel";
 import { ProductCategoriesPanel } from "./ProductCategoriesPanel";
 
-type CatalogView = "catalog" | "categories";
+type CatalogView = "catalog" | "categories" | "standards";
 
 export function CatalogPage() {
   const { t } = useTranslation("products");
   const address = useAddressState();
+  const patchAddress = useAddressPatch();
   const [view, setView] = useState<CatalogView>("catalog");
   const isEditingItem = address.item !== undefined && address.item !== "";
 
@@ -31,6 +34,7 @@ export function CatalogPage() {
             items={[
               { value: "catalog", label: t("catalog.title") },
               { value: "categories", label: t("categories.title") },
+              { value: "standards", label: t("standards.title") },
             ]}
           />
         </div>
@@ -41,6 +45,20 @@ export function CatalogPage() {
       )}
 
       {!isEditingItem && view === "categories" && <ProductCategoriesPanel />}
+
+      {!isEditingItem && view === "standards" && (
+        <StandardsPanel
+          onOpen={(standardId) => {
+            patchAddress({
+              standard:
+                standardId === DEFAULT_FOOD_STANDARD_ID
+                  ? undefined
+                  : standardId,
+            });
+            setView("catalog");
+          }}
+        />
+      )}
     </PageLayout>
   );
 }

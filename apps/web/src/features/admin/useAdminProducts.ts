@@ -6,7 +6,11 @@ import {
 } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
-import { type ProductCreateBody, type ProductUpdateBody } from "./types";
+import {
+  type ProductCreateBody,
+  type ProductDeriveBody,
+  type ProductUpdateBody,
+} from "./types";
 
 export interface ProductFilters {
   q: string;
@@ -37,6 +41,8 @@ export interface ProductFilters {
    * странице в 20 строк выдавал бы «жировых» из того, что попало на экран.
    */
   macro: LeadingMacro | "";
+  /** Стандарт питания: пустая строка — основной */
+  standardId: string;
 }
 
 /** Значения совпадают со схемой API (`LeadingMacro` на сервере). */
@@ -54,6 +60,7 @@ export const EMPTY_PRODUCT_FILTERS: ProductFilters = {
   includeInactive: false,
   macro: "",
   verifiedBefore: "",
+  standardId: "",
 };
 
 /**
@@ -98,6 +105,7 @@ export function useAdminProducts(filters: ProductFilters, page = 0) {
     include_inactive: filters.includeInactive || undefined,
     macro: filters.macro || undefined,
     verified_before: filters.verifiedBefore || undefined,
+    standard_id: filters.standardId || undefined,
     limit: PRODUCTS_PAGE_SIZE,
     offset: page * PRODUCTS_PAGE_SIZE,
   };
@@ -170,6 +178,26 @@ export function useUpdateProductMutation(productId: string | null) {
   });
 }
 
+/** «Скорректировать»: копия записи закрытого стандарта в стандарте клиники. */
+export function useDeriveProductMutation(productId: string | null) {
+  const invalidate = useProductsInvalidation();
+
+  return useMutation({
+    mutationFn: async (body: ProductDeriveBody) => {
+      if (productId === null)
+        throw new Error("productId is required to derive");
+
+      const { data, error } = await api.POST(
+        "/api/v1/products/{product_id}/derive",
+        { params: { path: { product_id: productId } }, body },
+      );
+      if (error || !data) throw error ?? new Error("Empty derive response");
+      return data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
 export function useImportProductsMutation() {
   const invalidate = useProductsInvalidation();
 
@@ -181,12 +209,15 @@ export function useImportProductsMutation() {
       // позицию, а не отбрасывается как дубль. По умолчанию выключен — обычный
       // импорт не должен внезапно начать переписывать базу.
       updateExisting?: boolean;
+      /** Куда загружать; не указан — основной стандарт */
+      standardId?: string;
     }) => {
       const { data, error } = await api.POST("/api/v1/products/import", {
         params: {
           query: {
             dry_run: input.dryRun,
             update_existing: input.updateExisting ?? false,
+            standard_id: input.standardId,
           },
         },
         // В OpenAPI поле файла описано строкой (binary), поэтому File

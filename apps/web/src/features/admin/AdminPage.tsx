@@ -3,17 +3,20 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
-import { useAddressState } from "../../routes/useSectionTab";
+import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { LeadsPanel } from "./LeadsPanel";
 import { ProductAnomaliesPanel } from "./ProductAnomaliesPanel";
 import { ProductsPanel } from "./ProductsPanel";
 import { ProductCategoriesPanel } from "../products/ProductCategoriesPanel";
+import { DEFAULT_FOOD_STANDARD_ID } from "../standards/useFoodStandards";
+import { StandardsPanel } from "../standards/StandardsPanel";
 import { UsersPanel } from "./UsersPanel";
 import { isAdminSection, type AdminSection } from "./types";
 
-type ProductsWorkspaceView = "catalog" | "categories" | "anomalies";
+type ProductsWorkspaceView =
+  "catalog" | "categories" | "standards" | "anomalies";
 
 /**
  * Администрирование (раздел 8.1 ТЗ: users, products, dictionaries, audit).
@@ -40,6 +43,7 @@ type ProductsWorkspaceView = "catalog" | "categories" | "anomalies";
 export function AdminPage({ section }: { section?: string }) {
   const { t } = useTranslation(["admin", "products"]);
   const address = useAddressState();
+  const patchAddress = useAddressPatch();
   const [productsView, setProductsView] =
     useState<ProductsWorkspaceView>("catalog");
 
@@ -75,6 +79,10 @@ export function AdminPage({ section }: { section?: string }) {
                       label: t("products:categories.title"),
                     },
                     {
+                      value: "standards",
+                      label: t("products:standards.title"),
+                    },
+                    {
                       value: "anomalies",
                       label: t("products.anomalies.title"),
                     },
@@ -89,6 +97,20 @@ export function AdminPage({ section }: { section?: string }) {
 
             {!isEditingProductItem && productsView === "categories" && (
               <ProductCategoriesPanel />
+            )}
+
+            {!isEditingProductItem && productsView === "standards" && (
+              <StandardsPanel
+                onOpen={(standardId) => {
+                  patchAddress({
+                    standard:
+                      standardId === DEFAULT_FOOD_STANDARD_ID
+                        ? undefined
+                        : standardId,
+                  });
+                  setProductsView("catalog");
+                }}
+              />
             )}
 
             {!isEditingProductItem && productsView === "anomalies" && (

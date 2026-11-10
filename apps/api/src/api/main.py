@@ -21,6 +21,7 @@ from .routers import (
     clinical,
     custom_dishes,
     dictionaries,
+    food_standards,
     intake,
     leads,
     logs,
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     v1.include_router(attachments.router)
     v1.include_router(prescriptions.router)
     v1.include_router(products.router)
+    v1.include_router(food_standards.router)
     v1.include_router(custom_dishes.router)
     v1.include_router(calc.router)
     v1.include_router(leads.router)

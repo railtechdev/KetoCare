@@ -10,6 +10,7 @@ import {
   formatNumber,
   toast,
   useDebouncedValue,
+  WarningBanner,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Apple, PackageSearch, Plus, Upload, X } from "lucide-react";
@@ -28,6 +29,10 @@ import { useTranslation } from "react-i18next";
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "../doctor/dates";
 import { useProductDetail } from "../products/useProductDetail";
+import {
+  DEFAULT_FOOD_STANDARD_ID,
+  useFoodStandards,
+} from "../standards/useFoodStandards";
 import { ProductEditor } from "./ProductEditor";
 import { ProductImportPanel } from "./ProductImportPanel";
 import { SubPageHeader } from "../../components/SubPageHeader";
@@ -107,6 +112,7 @@ export function ProductsPanel({
     q,
     verifiedBefore,
     categoryId: address.category ?? "",
+    standardId: address.standard ?? "",
     macro: address.macro ?? "",
     includeInactive: address.inactive === true,
   };
@@ -131,6 +137,7 @@ export function ProductsPanel({
     const next = update(filters);
     patchAddress({
       category: next.categoryId === "" ? undefined : next.categoryId,
+      standard: next.standardId === "" ? undefined : next.standardId,
       macro: next.macro === "" ? undefined : next.macro,
       inactive: next.includeInactive ? true : undefined,
     });
@@ -151,6 +158,19 @@ export function ProductsPanel({
   const pageCount = Math.max(
     1,
     Math.ceil((products.data?.total ?? 0) / PRODUCTS_PAGE_SIZE),
+  );
+
+  const standards = useFoodStandards();
+  const standardList = useMemo(() => standards.data ?? [], [standards.data]);
+  const currentStandard = standardList.find(
+    (standard) =>
+      standard.id === (filters.standardId || DEFAULT_FOOD_STANDARD_ID),
+  );
+  const locked = currentStandard?.locked_at != null;
+  const lockedStandards = useMemo(
+    () =>
+      new Set(standardList.filter((s) => s.locked_at != null).map((s) => s.id)),
+    [standardList],
   );
 
   const categories = useProductCategories();
@@ -216,7 +236,16 @@ export function ProductsPanel({
       {
         accessorKey: "fiber_100g",
         header: t("products.columns.fiber"),
-        cell: numeric(1),
+        // Ноль у стандарта, не указавшего клетчатку, значит «неизвестно», а не
+        // «нет»: диетолог, собирая кетогенное блюдо, обязан это различать.
+        cell: ({ row, getValue }) =>
+          row.original.fiber_known ? (
+            numeric(1)({ getValue })
+          ) : (
+            <span className="text-muted-foreground">
+              {t("products.fiberUnknown")}
+            </span>
+          ),
       },
       {
         accessorKey: "ratio",
@@ -288,18 +317,28 @@ export function ProductsPanel({
             size="sm"
             onClick={() => setItem(row.original.id)}
           >
-            {t("products.edit")}
+            {t(
+              lockedStandards.has(row.original.standard_id)
+                ? "products.derive"
+                : "products.edit",
+            )}
           </Button>
         ),
       },
     ],
-    [t, categoryNames, setItem, patchAddress],
+    [t, categoryNames, setItem, patchAddress, lockedStandards],
   );
 
   // Проверка и по адресу тоже: `?item=import` вводится руками, и без неё
   // диетолог попал бы на экран, чья ручка ответит ему 403.
   if (item === IMPORT_ITEM && canImport) {
-    return <ProductImportPanel onDone={() => setItem(undefined)} />;
+    return (
+      <ProductImportPanel
+        onDone={() => setItem(undefined)}
+        standardId={filters.standardId || undefined}
+        standardName={currentStandard?.name}
+      />
+    );
   }
 
   if (item !== undefined) {
@@ -319,7 +358,11 @@ export function ProductsPanel({
     // скелетоном навсегда: без объяснения и без выхода. Для такого
     // пользователя `import` — не идентификатор позиции, а неизвестный адрес, и
     // ниже он честно попадает в «Позиция не найдена» с кнопкой к списку.
-    if (missingFromRows && editing === null && fetched.isPending) {
+    if (
+      (missingFromRows && editing === null && fetched.isPending) ||
+      // Пока стандарты не пришли, неизвестно, правка это или копия.
+      standards.isPending
+    ) {
       return <TableSkeleton label={t("products.loading")} rows={4} />;
     }
 
@@ -360,9 +403,15 @@ export function ProductsPanel({
       <ProductEditor
         product={editing}
         categories={categories.data ?? []}
+        standards={standardList}
+        standardId={filters.standardId || undefined}
         onSaved={(product) => {
           setItem(undefined);
-          toast.success(t("products.saved", { name: product.name_ru }));
+          toast.success(
+            t(product.derived_from_id ? "products.derived" : "products.saved", {
+              name: product.name_ru,
+            }),
+          );
         }}
         onCancel={() => setItem(undefined)}
         // История доступна диетологу наравне с администратором: она читается
@@ -372,7 +421,8 @@ export function ProductsPanel({
     );
   }
 
-  const actions = (
+  // В закрытый стандарт не заводят и не загружают: сервер откажет.
+  const actions = locked ? null : (
     <>
       <Button type="button" onClick={() => setItem(NEW_ITEM)}>
         <Plus aria-hidden="true" />
@@ -470,6 +520,40 @@ export function ProductsPanel({
           </SelectField>
         </div>
 
+        <div className="min-w-56">
+          <SelectField
+            id="admin-product-standard"
+            width="wide"
+            label={t("products.filters.standard")}
+            value={filters.standardId || DEFAULT_FOOD_STANDARD_ID}
+            onChange={(event) =>
+              setFiltersAndResetPage((current) => ({
+                ...current,
+                standardId:
+                  event.target.value === DEFAULT_FOOD_STANDARD_ID
+                    ? ""
+                    : event.target.value,
+              }))
+            }
+          >
+            {/* Снятый с оборота не предлагается, но открытый по ссылке виден. */}
+            {standardList
+              .filter(
+                (standard) =>
+                  standard.is_active || standard.id === filters.standardId,
+              )
+              .map((standard) => (
+                <option key={standard.id} value={standard.id}>
+                  {standard.is_active
+                    ? standard.name
+                    : t("products.filters.standardRetired", {
+                        name: standard.name,
+                      })}
+                </option>
+              ))}
+          </SelectField>
+        </div>
+
         <div className="min-w-48">
           <SelectField
             id="admin-product-category"
@@ -560,6 +644,25 @@ export function ProductsPanel({
         </p>
       )}
 
+      {/* Подпись госоргана на обычном меню легко принять за разрешение кормить
+          по нему ребёнка на диете: сказать об этом надо там, где на него смотрят. */}
+      {currentStandard?.diet_type === "general" && (
+        <WarningBanner
+          level="warning"
+          title={t("products.standardBanner.generalTitle")}
+        >
+          {t("products.standardBanner.generalBody")}
+        </WarningBanner>
+      )}
+      {locked && (
+        <WarningBanner
+          level="info"
+          title={t("products.standardBanner.lockedTitle")}
+        >
+          {t("products.standardBanner.lockedBody")}
+        </WarningBanner>
+      )}
+
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection
         {...queryState(products)}
@@ -583,10 +686,12 @@ export function ProductsPanel({
             title={t("products.empty.title")}
             description={t("products.empty.description")}
             action={
-              <Button type="button" onClick={() => setItem(NEW_ITEM)}>
-                <Plus aria-hidden="true" />
-                {t("products.create")}
-              </Button>
+              locked ? undefined : (
+                <Button type="button" onClick={() => setItem(NEW_ITEM)}>
+                  <Plus aria-hidden="true" />
+                  {t("products.create")}
+                </Button>
+              )
             }
           />
         }
