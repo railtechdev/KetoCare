@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import replace
 
 from core.models import Prescription, Product
 from keto_engine import DishResult, Ingredient, Targets, meal_macro_goal
+from keto_engine.constants import DEFAULT_MAX_INGREDIENT_GRAMS, MIN_INGREDIENT_GRAMS
 
 from ..schemas_calc import (
     DishOut,
@@ -81,6 +83,27 @@ def to_targets(raw: TargetsIn) -> Targets:
         carbs_max_g=raw.carbs_max_g,
         per_ingredient_bounds=bounds,
     )
+
+
+def keeping_every_product(targets: Targets, product_ids: Iterable[str]) -> Targets:
+    """Targets under which the solver may not drop a product the person chose.
+
+    Bounds the caller set explicitly stay as they are.
+    """
+
+    bounds = {
+        product_id: (MIN_INGREDIENT_GRAMS, DEFAULT_MAX_INGREDIENT_GRAMS)
+        for product_id in product_ids
+    }
+    bounds.update(targets.per_ingredient_bounds or {})
+    return replace(targets, per_ingredient_bounds=bounds)
+
+
+def missing_from_solution(dish: DishResult, product_ids: Iterable[str]) -> list[str]:
+    """Products of the request that did not make it into a solved dish."""
+
+    kept = {item.ingredient.product_id for item in dish.items}
+    return [product_id for product_id in product_ids if product_id not in kept]
 
 
 def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:

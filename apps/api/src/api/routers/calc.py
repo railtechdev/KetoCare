@@ -93,6 +93,22 @@ async def _excluded_for(
     ]
 
 
+async def _product_names(session: SessionDep, product_ids: Sequence[str]) -> list[str]:
+    """Catalogue names for an error message; a free label stands for itself."""
+
+    parsed: dict[str, uuid.UUID] = {}
+    for raw in product_ids:
+        try:
+            parsed[raw] = uuid.UUID(raw)
+        except ValueError:
+            continue
+    products = await products_repo.get_by_ids(session, product_ids=list(parsed.values()))
+    return [
+        products[parsed[raw]].name_ru if raw in parsed and parsed[raw] in products else raw
+        for raw in product_ids
+    ]
+
+
 def _unknown_product(exc: KeyError) -> ApiError:
     return ApiError(
         ErrorCode.VALIDATION_ERROR,
@@ -190,13 +206,33 @@ async def solve_dish(
             details={"uncounted": [entry.product_id for entry in skipped]},
         )
 
+    # The person chose these products: a dish that silently loses one of them
+    # is not the dish that was asked for (ADR-0058).
+    keeping_all = calc_service.keeping_every_product(targets, ingredients.keys())
     try:
         # solve() синхронный и вычислительно тяжёлый (LP через HiGHS, а при
         # неразрешимости ещё несколько LP для диагностики). В event loop он
         # заблокировал бы весь воркер, поэтому уходит в threadpool.
-        result = await run_in_threadpool(solve, list(ingredients.values()), targets)
-    except InfeasibleError as exc:
-        raise ApiError(ErrorCode.INFEASIBLE_CALCULATION, exc.reason) from exc
+        result = await run_in_threadpool(solve, list(ingredients.values()), keeping_all)
+    except InfeasibleError as kept_all_failure:
+        # Whether the goal fails at all, or only with every product kept, are
+        # different answers: the second one can name what to remove.
+        try:
+            relaxed = await run_in_threadpool(solve, list(ingredients.values()), targets)
+        except InfeasibleError as exc:
+            raise ApiError(ErrorCode.INFEASIBLE_CALCULATION, exc.reason) from exc
+        dropped = calc_service.missing_from_solution(relaxed.dish, ingredients.keys())
+        if not dropped:
+            raise ApiError(
+                ErrorCode.INFEASIBLE_CALCULATION, kept_all_failure.reason
+            ) from kept_all_failure
+        names = ", ".join(await _product_names(session, dropped))
+        raise ApiError(
+            ErrorCode.INFEASIBLE_CALCULATION,
+            f"С этими продуктами цель не достигается: {names}. "
+            "Уберите их из состава или измените цель.",
+            details={"product_ids": dropped},
+        ) from kept_all_failure
 
     return SolveResponse(
         dish=calc_service.to_dish_out(result.dish),
