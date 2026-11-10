@@ -164,14 +164,15 @@ describe("кабинет семьи: смена ребёнка в шапке", (
     );
 
     await waitFor(
-      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue(3.5),
+      () =>
+        expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("3.5"),
       { timeout: 5000 },
     );
 
     await switchTo(SECOND);
 
     await waitFor(
-      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue(4),
+      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("4"),
       { timeout: 5000 },
     );
   }, 15000);

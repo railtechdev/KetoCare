@@ -7,6 +7,8 @@ import {
 } from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+
+import { AddSavedDishToPlan } from "./AddSavedDishToPlan";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
@@ -66,6 +68,7 @@ export function SaveDishForm({
   const [title, setTitle] = useState("");
   const update = useUpdateCustomDish(patientId);
   const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
   // The title follows the opened dish, and only when another dish is opened.
   const [editedId, setEditedId] = useState<string | null>(null);
   if ((editing?.id ?? null) !== editedId) {
@@ -92,17 +95,15 @@ export function SaveDishForm({
           // Успех — тост, а не зелёная строка навсегда в потоке страницы (П16
           // канона): форма остаётся на месте и готова принять следующее блюдо.
           toast.success(t("save.saved"));
-          if (editing !== null) {
-            // In the cache before the address changes: the calculator finds
-            // the opened dish in this list and would report it as missing.
-            queryClient.setQueryData<CustomDish[]>(
-              customDishesKey(patientId),
-              (current) => [...(current ?? []), created],
-            );
-            onSavedAsNew?.(created.id);
-          } else {
-            setTitle("");
-          }
+          // In the cache before the address changes: the calculator finds the
+          // opened dish in this list and would report it as missing. The saved
+          // dish stays open, so a second save edits it instead of duplicating.
+          queryClient.setQueryData<CustomDish[]>(
+            customDishesKey(patientId),
+            (current) => [...(current ?? []), created],
+          );
+          onSavedAsNew?.(created.id);
+          setSavedId(created.id);
           setSaved(true);
           void queryClient.invalidateQueries({
             queryKey: ["patient", patientId, "custom-dishes"],
@@ -125,6 +126,7 @@ export function SaveDishForm({
       {
         onSuccess: () => {
           toast.success(t("save.savedChanges"));
+          setSavedId(dishId);
           setSaved(true);
         },
       },
@@ -208,6 +210,10 @@ export function SaveDishForm({
                   : (waitingFor ?? undefined)))
           }
         />
+
+        {saved && savedId !== null && (
+          <AddSavedDishToPlan patientId={patientId} dishId={savedId} />
+        )}
 
         {saved && (
           <div className="flex flex-wrap items-center gap-field pt-1">

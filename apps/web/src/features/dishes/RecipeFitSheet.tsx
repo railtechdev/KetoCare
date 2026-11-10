@@ -173,6 +173,8 @@ function RecipeChoice({
         submitLabel={t("fromLibrary.fit", { count: selected.size })}
         pendingLabel={t("fromLibrary.fitPending")}
         pending={pending}
+        disabled={selected.size === 0}
+        reason={t("fromLibrary.pickRecipes")}
         onCancel={onCancel}
         cancelLabel={t("common:actions.cancel")}
       />
@@ -265,6 +267,8 @@ function FitReview({
         submitLabel={t("fromLibrary.save", { count: chosen.size })}
         pendingLabel={t("fromLibrary.savePending")}
         pending={save.isPending}
+        disabled={chosen.size === 0}
+        reason={t("fromLibrary.pickDishes")}
         onCancel={onBack}
         cancelLabel={t("fromLibrary.back")}
       />
@@ -309,6 +313,12 @@ function FitCard({
             />
             <span className="text-muted-foreground tabular-nums">
               {t("myDishes.kcal", { value: formatKcal(item.dish.kcal) })}
+            </span>
+            <span className="w-full text-sm text-muted-foreground tabular-nums">
+              {t("fromLibrary.macros", {
+                protein: formatMass(item.dish.protein_g),
+                carbs: formatMass(item.dish.carbs_g),
+              })}
             </span>
           </>
         )}

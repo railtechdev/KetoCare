@@ -5,6 +5,7 @@ import {
   EmptyState,
   formatGrams,
   formatKcal,
+  formatWeight,
   RatioBadge,
   Section,
   toast,
@@ -16,7 +17,12 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
+import { useDishReview } from "../dishes/useCustomDishes";
+import { PatientViewLink } from "./PatientViewLink";
+import { usePatientOverview } from "../patients/overview";
+import { RecordWeight } from "./RecordWeight";
 import { PrescriptionConfirm } from "./PrescriptionConfirm";
+import { PrescriptionPrintButton } from "./PrescriptionPrint";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { useCreatePrescription } from "./doctorMutations";
@@ -41,12 +47,16 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   const { session } = useSession();
 
   const history = usePrescriptionHistory(patientId);
+  const lastWeight = usePatientOverview(patientId).data?.last_weight;
   const create = useCreatePrescription(patientId);
 
   // Идентификатор созданной версии, а не её номер: номер берётся из
   // обновлённой истории, иначе пришлось бы считать «было плюс один», а пока
   // врач заполнял форму, версию мог создать коллега.
   const [createdId, setCreatedId] = useState<string | null>(null);
+  // Set once a version is saved: only then is "your dishes no longer fit" news.
+  const [savedThisVisit, setSavedThisVisit] = useState(false);
+  const review = useDishReview(savedThisVisit ? patientId : null);
 
   // Значения, ждущие подтверждения врача (ответ клиники на вопрос 5). Пока
   // окно открыто, ничего не отправлено: назначение append-only, и отменить
@@ -71,6 +81,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
       description: t("prescription.saved.body"),
     });
     setCreatedId(null);
+    setSavedThisVisit(true);
   }, [savedVersion, t]);
 
   const canWrite = canWritePrescriptions(session?.role);
@@ -158,6 +169,21 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="flex flex-col gap-section">
+      <div className="flex flex-wrap items-center gap-field">
+        <span>
+          {lastWeight == null
+            ? t("prescription.noWeight")
+            : t("prescription.weightOn", {
+                value: formatWeight(lastWeight.weight_kg),
+                date: formatTimestamp(lastWeight.occurred_at) ?? "",
+              })}
+        </span>
+        <RecordWeight patientId={patientId} />
+        {active !== null && active !== undefined && (
+          <PrescriptionPrintButton patientId={patientId} active={active} />
+        )}
+      </div>
+
       <Section title={t("prescription.historyTitle")}>
         {/* Правило пяти состояний — общим компонентом (П15): рукописная
             цепочка прятала уже загруженную историю назначений за красным
@@ -204,6 +230,21 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
           )}
         </AsyncSection>
       </Section>
+
+      {(review.data?.off_target.length ?? 0) > 0 && (
+        <p className="m-0">
+          {t("prescription.dishesOffTarget", {
+            count: review.data?.off_target.length,
+          })}{" "}
+          <PatientViewLink
+            patientId={patientId}
+            view="dishes"
+            className="font-medium underline"
+          >
+            {t("prescription.dishesOffTargetLink")}
+          </PatientViewLink>
+        </p>
+      )}
 
       {canWrite && (
         <Section

@@ -14,24 +14,28 @@ from fastapi import APIRouter, Depends, Path
 from core import exclusions
 from core.models import Product, Recipe
 from core.models.enums import RecipeStatus, UserRole
+from core.repositories import custom_dishes as dishes_repo
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from core.repositories import recipes as recipes_repo
-from keto_engine import ENGINE_VERSION, Targets
+from keto_engine import ENGINE_VERSION, Targets, verify, within_tolerance
 
 from ..deps.auth import CurrentUser, PatientAccessDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..schemas import (
+    DishReviewItem,
+    DishReviewResponse,
     RecipeFit,
     RecipeFitDish,
     RecipeFitIngredient,
     RecipeFitsRequest,
     RecipeFitsResponse,
 )
+from ..services import composition as composition_service
 from ..services import dish_fit
 
-router = APIRouter(prefix="/patients/{patient_id}/recipe-fits", tags=["custom-dishes"])
+router = APIRouter(prefix="/patients/{patient_id}", tags=["custom-dishes"])
 
 SpecialistDep = Annotated[CurrentUser, Depends(require_roles(UserRole.DOCTOR, UserRole.DIETITIAN))]
 
@@ -65,7 +69,7 @@ async def _fit_one(
 
     solved = outcome.result
     grams = {item.ingredient.product_id: item.grams for item in solved.dish.items}
-    seasoning = {item.product_id: item.grams for item in uncounted}
+    seasoning = {item.product_id: round(item.grams * outcome.factor, 1) for item in uncounted}
     lost = [
         products[pid].name_ru
         for pid, _ in composition
@@ -88,7 +92,7 @@ async def _fit_one(
             RecipeFitIngredient(
                 product_id=pid,
                 name_ru=products[pid].name_ru,
-                # Seasonings are not solved and keep the recipe's mass.
+                # Seasonings are not solved: they follow the recipe's scale.
                 grams=seasoning[pid] if pid in seasoning else grams[str(pid)],
             )
             for pid, _ in composition
@@ -106,7 +110,9 @@ async def _fit_one(
     )
 
 
-@router.post("", response_model=RecipeFitsResponse, summary="Подогнать рецепты под ребёнка")
+@router.post(
+    "/recipe-fits", response_model=RecipeFitsResponse, summary="Подогнать рецепты под ребёнка"
+)
 async def fit_recipes(
     patient_id: Annotated[uuid.UUID, Path()],
     payload: RecipeFitsRequest,
@@ -167,4 +173,66 @@ async def fit_recipes(
         target_kcal=targets.kcal,
         engine_version=ENGINE_VERSION,
         items=items,
+    )
+
+
+#: The page size of the dishes list the cabinet shows.
+_REVIEW_LIMIT = 200
+
+
+@router.get(
+    "/custom-dish-review",
+    response_model=DishReviewResponse,
+    summary="Блюда ребёнка, разошедшиеся с назначением",
+)
+async def review_dishes(
+    patient_id: Annotated[uuid.UUID, Path()],
+    session: SessionDep,
+    _access: PatientAccessDep,
+    _role: SpecialistDep,
+) -> DishReviewResponse:
+    prescription = await prescriptions_repo.get_active(session, patient_id=patient_id)
+    if prescription is None:
+        return DishReviewResponse(target_ratio=None, target_kcal=None, checked=0, off_target=[])
+
+    targets = dish_fit.meal_targets(prescription)
+    dishes, _total = await dishes_repo.list_for_patient(
+        session, patient_id=patient_id, limit=_REVIEW_LIMIT, offset=0
+    )
+    product_ids = list(
+        {uuid.UUID(row["product_id"]) for dish in dishes for row in dish.ingredients}
+    )
+    products = await products_repo.get_by_ids(session, product_ids=product_ids)
+
+    checked = 0
+    off_target: list[DishReviewItem] = []
+    for dish in dishes:
+        composition = [
+            (uuid.UUID(row["product_id"]), float(row["grams"])) for row in dish.ingredients
+        ]
+        # A product gone from the catalogue leaves nothing honest to compare.
+        if any(product_id not in products for product_id, _ in composition):
+            continue
+        counted, _uncounted = composition_service.split(
+            (products[product_id], grams) for product_id, grams in composition
+        )
+        if not counted:
+            continue
+        result = verify(counted)
+        ratio_ok, kcal_ok = within_tolerance(result, targets)
+        checked += 1
+        if ratio_ok is False or not kcal_ok:
+            off_target.append(
+                DishReviewItem(
+                    dish_id=dish.id,
+                    title=dish.title,
+                    ratio=result.ratio,
+                    kcal=result.kcal,
+                    ratio_within_tolerance=ratio_ok,
+                    kcal_within_tolerance=kcal_ok,
+                )
+            )
+
+    return DishReviewResponse(
+        target_ratio=targets.ratio, target_kcal=targets.kcal, checked=checked, off_target=off_target
     )

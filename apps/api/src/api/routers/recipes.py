@@ -16,10 +16,11 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from core.models import Recipe
+from core.models import DEFAULT_FOOD_STANDARD_ID, Recipe
 from core.models.enums import AttachmentOwnerKind, RecipeCategory, RecipeStatus, UserRole
 from core.repositories import attachments as attachments_repo
 from core.repositories import audit as audit_repo
+from core.repositories import food_standards as food_standards_repo
 from core.repositories import products as products_repo
 from core.repositories import recipes as recipes_repo
 
@@ -63,6 +64,18 @@ async def _visible_recipe(session: SessionDep, recipe_id: uuid.UUID, user: Curre
     return recipe
 
 
+async def _reject_locked(session: SessionDep, recipe: Recipe) -> None:
+    """A locked standard's dishes are a published document, for every role."""
+
+    standard = await food_standards_repo.get(session, recipe.standard_id)
+    if standard is not None and standard.locked_at is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            f"Блюдо относится к закрытому стандарту «{standard.name}» и не меняется.",
+            details={"standard_id": str(standard.id)},
+        )
+
+
 def _reject_duplicates(payload: RecipeWrite) -> None:
     duplicates = recipes_service.duplicate_product_ids(payload.ingredients)
     if duplicates:
@@ -87,6 +100,7 @@ async def search_recipes(
     ratio_min: Annotated[float | None, Query(ge=0)] = None,
     ratio_max: Annotated[float | None, Query(ge=0)] = None,
     q: str | None = None,
+    standard_id: uuid.UUID | None = None,
 ) -> Page[RecipeRead]:
     items, total = await recipes_repo.search(
         session,
@@ -95,6 +109,13 @@ async def search_recipes(
         ratio_min=ratio_min,
         ratio_max=ratio_max,
         q=q,
+        # A family never gets another standard: an ordinary menu must not read
+        # as permission to feed it to a child on the diet (ADR-0056).
+        standard_id=(
+            DEFAULT_FOOD_STANDARD_ID
+            if standard_id is None or user.role is UserRole.PARENT
+            else standard_id
+        ),
         limit=page.limit,
         offset=page.offset,
     )
@@ -142,6 +163,7 @@ async def upload_recipe_photo(
     """
 
     recipe = await _visible_recipe(session, recipe_id, user)
+    await _reject_locked(session, recipe)
 
     content = await file.read()
     mime = files_service.validate(content)
@@ -287,6 +309,7 @@ async def update_recipe(
     session: SessionDep,
 ) -> RecipeRead:
     recipe = await _visible_recipe(session, recipe_id, user)
+    await _reject_locked(session, recipe)
     _reject_duplicates(payload)
 
     before = await _read(session, recipe)
@@ -341,6 +364,7 @@ async def publish_recipe(
     """
 
     recipe = await _visible_recipe(session, recipe_id, user)
+    await _reject_locked(session, recipe)
     stored = await recipes_repo.list_ingredients(session, recipe_id=recipe.id)
     before = recipes_service.to_read(recipe, stored)
 
@@ -400,6 +424,7 @@ async def unpublish_recipe(
     """
 
     recipe = await _visible_recipe(session, recipe_id, user)
+    await _reject_locked(session, recipe)
     stored = await recipes_repo.list_ingredients(session, recipe_id=recipe.id)
     before = recipes_service.to_read(recipe, stored)
 
@@ -439,6 +464,7 @@ async def delete_recipe(
     recipe = await recipes_repo.get(session, recipe_id)
     if recipe is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Рецепт не найден.")
+    await _reject_locked(session, recipe)
 
     # Меню — история питания ребёнка, и врач смотрит её задним числом. Удалить
     # рецепт, на который ссылается позиция меню, значит потерять состав того

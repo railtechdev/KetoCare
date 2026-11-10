@@ -22,6 +22,29 @@ function isComplete(input: PrescriptionGoalInput): boolean {
   );
 }
 
+/** Граммы назначения от сервера; без полного ввода запроса нет. */
+export function usePrescriptionGoal(input: PrescriptionGoalInput) {
+  return useQuery({
+    queryKey: ["calc", "prescription-goal", input],
+    enabled: isComplete(input),
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const { data, error } = await api.POST("/api/v1/calc/prescription-goal", {
+        body: {
+          ratio: input.ratio,
+          kcal_per_day: input.kcalPerDay,
+          protein_g: input.proteinG,
+          meals_per_day: input.mealsPerDay,
+        },
+      });
+      if (error || !data) {
+        throw error ?? new Error("Empty prescription goal response");
+      }
+      return data;
+    },
+  });
+}
+
 /**
  * Назначение в граммах: жир, белок и чистые углеводы на сутки и на приём.
  *
@@ -35,32 +58,11 @@ export function PrescriptionGoalPreview({
 }) {
   const { t } = useTranslation("doctor");
   const debounced = useDebouncedValue(JSON.stringify(input), RECALC_DELAY_MS);
-  const current: PrescriptionGoalInput = JSON.parse(
-    debounced,
-  ) as PrescriptionGoalInput;
-  const enabled = isComplete(current);
+  const query = usePrescriptionGoal(
+    JSON.parse(debounced) as PrescriptionGoalInput,
+  );
 
-  const query = useQuery({
-    queryKey: ["calc", "prescription-goal", debounced],
-    enabled,
-    placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const { data, error } = await api.POST("/api/v1/calc/prescription-goal", {
-        body: {
-          ratio: current.ratio,
-          kcal_per_day: current.kcalPerDay,
-          protein_g: current.proteinG,
-          meals_per_day: current.mealsPerDay,
-        },
-      });
-      if (error || !data) {
-        throw error ?? new Error("Empty prescription goal response");
-      }
-      return data;
-    },
-  });
-
-  if (!enabled || query.data === undefined) return null;
+  if (query.data === undefined || !query.isEnabled) return null;
   const { day, meal } = query.data;
   const proteinFits = day.protein_g !== null;
 

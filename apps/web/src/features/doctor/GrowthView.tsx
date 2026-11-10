@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
 import { LinesSkeleton } from "./skeletons";
+import { RecordWeight } from "./RecordWeight";
 import { useGrowth, type GrowthIndicator } from "./therapyCourse";
 import { queryState } from "../../lib/queryState";
 
@@ -48,6 +49,10 @@ export function GrowthView({ patientId }: { patientId: string }) {
 
   return (
     <>
+      <div>
+        <RecordWeight patientId={patientId} />
+      </div>
+
       <Section
         title={t("growth.summaryTitle")}
         description={t("growth.summaryDescription", {

@@ -30,6 +30,8 @@ from .content import (
     DEFAULT_FOOD_STANDARD_ID,
     CustomDish,
     FoodStandard,
+    MenuTemplate,
+    MenuTemplateItem,
     Product,
     ProductCategory,
     ProductRevision,
@@ -86,6 +88,8 @@ __all__ = [
     "Product",
     "ProductRevision",
     "Recipe",
+    "MenuTemplate",
+    "MenuTemplateItem",
     "RecipeIngredient",
     "CustomDish",
     # diary

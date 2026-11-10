@@ -202,6 +202,50 @@ class Recipe(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     author_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
+    standard_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("food_standards.id"),
+        nullable=False,
+        index=True,
+        default=DEFAULT_FOOD_STANDARD_ID,
+        server_default=text(f"'{DEFAULT_FOOD_STANDARD_ID}'::uuid"),
+    )
+    #: Where the dish came from in an external document, for example a page.
+    source_ref: Mapped[str | None] = mapped_column(String(255))
+
+
+class MenuTemplate(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
+    """A multi-day menu published in a food standard (ADR-0060)."""
+
+    __tablename__ = "menu_templates"
+
+    standard_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("food_standards.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    season: Mapped[str | None] = mapped_column(String(64))
+    cycle_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[RecipeStatus] = mapped_column(
+        pg_enum(RecipeStatus, "recipe_status"), nullable=False, default=RecipeStatus.DRAFT
+    )
+    source_ref: Mapped[str | None] = mapped_column(String(255))
+
+
+class MenuTemplateItem(Base, UUIDPkMixin, CreatedAtMixin):
+    __tablename__ = "menu_template_items"
+
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("menu_templates.id"), nullable=False, index=True
+    )
+    cycle_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    meal_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: The dish name as the document gives it, also when there is no recipe.
+    dish_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: `NULL`: the dish uses products without reliable values, so it has no numbers.
+    recipe_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("recipes.id")
+    )
 
 
 class RecipeIngredient(Base, UUIDPkMixin, CreatedAtMixin):
