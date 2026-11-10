@@ -265,17 +265,26 @@ async def load(session: AsyncSession, *, data_dir: Path, author_id: uuid.UUID) -
 
     await session.flush()
     await food_standards_repo.lock(session, standard=standard)
+    # The same two actions as a standard created and locked by hand, so the
+    # journal's filter finds this one too.
     await audit_repo.write_audit_log(
         session,
         user_id=author_id,
-        action="load_document",
+        action="create",
         entity="food_standards",
         entity_id=standard.id,
         after={
+            "document": standard.document,
             "products": report.products,
             "recipes": report.recipes,
             "templates": report.templates,
-            "locked": True,
         },
+    )
+    await audit_repo.write_audit_log(
+        session,
+        user_id=author_id,
+        action="lock",
+        entity="food_standards",
+        entity_id=standard.id,
     )
     return report

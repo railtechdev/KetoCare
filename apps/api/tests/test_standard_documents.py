@@ -139,13 +139,12 @@ async def test_mapped_product_shares_identity_with_the_catalogue(session, loaded
 async def test_load_is_in_the_audit_log(session, loaded):
     standard, _ = loaded
 
-    entry = await session.scalar(
-        select(AuditLog).where(
+    actions = await session.scalars(
+        select(AuditLog.action).where(
             AuditLog.entity == "food_standards", AuditLog.entity_id == standard.id
         )
     )
-    assert entry is not None
-    assert entry.action == "load_document"
+    assert set(actions) == {"create", "lock"}
 
 
 async def test_second_load_is_refused(session, make_user, loaded):
