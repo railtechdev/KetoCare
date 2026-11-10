@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { MyDishesPanel } from "../dishes/MyDishesPanel";
 import { DayComposer } from "../menu/DayComposer";
+import { WeekGrid } from "../menu/WeekGrid";
 
 /**
  * План питания пациента у специалиста — составляется здесь же (ADR-0047).
@@ -29,6 +30,8 @@ export function PatientMenuTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="flex flex-col gap-section">
+      <WeekGrid patientId={patientId} />
+
       <DayComposer patientId={patientId} canMarkEaten={false}>
         {({ actions, content }) => (
           <>

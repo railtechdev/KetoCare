@@ -51,6 +51,7 @@ async def tell_family_about_plan(
     composer_id: uuid.UUID,
     items: int,
     ip: str | None,
+    notify: bool = True,
 ) -> None:
     """Специалист сохранил день — семья узнаёт об этом в Telegram (ADR-0047).
 
@@ -80,6 +81,8 @@ async def tell_family_about_plan(
             "items": items,
         },
     )
+    if not notify:
+        return
     after_commit.defer(
         session,
         "notify_family_menu_composed",

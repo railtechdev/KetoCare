@@ -129,6 +129,13 @@
   },
   "gramsDecrease": "Убавить 1 г: {{name}}",
   "gramsIncrease": "Прибавить 1 г: {{name}}",
+  "print": {
+    "button": "Печать карточки",
+    "untitled": "Блюдо",
+    "grams": "{{value}} г",
+    "kcal": "{{value}} ккал",
+    "macros": "Жиры {{fat}} г, белки {{protein}} г, углеводы {{carbs}} г"
+  },
   "pinGrams": "Закрепить массу: {{name}}",
   "pinGramsHint": "Подбор граммовки не будет менять эту массу",
   "goalTable": {

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Path, Query, Request
@@ -22,10 +22,21 @@ from core.repositories import menus as menus_repo
 from core.repositories import products as products_repo
 
 from ..client_address import client_address
-from ..deps.auth import PatientAccessDep, SessionDep
+from ..deps.auth import CurrentUser, PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import ProductRead
-from ..schemas_menus import MenuItemEatenWrite, MenuItemRead, MenuRead, MenuWrite
+from ..schemas_menus import (
+    MenuItemEatenWrite,
+    MenuItemRead,
+    MenuItemWrite,
+    MenuRead,
+    MenuWeekCopyRead,
+    MenuWeekCopySkip,
+    MenuWeekCopyWrite,
+    MenuWeekDay,
+    MenuWeekRead,
+    MenuWrite,
+)
 from ..services import menus as menus_service
 
 router = APIRouter(prefix="/patients/{patient_id}/menus", tags=["menus"])
@@ -112,17 +123,19 @@ async def recent_products(
     ][:RECENT_PRODUCTS_LIMIT]
 
 
-@router.put("", response_model=MenuRead, summary="Сохранить меню дня")
-async def upsert_menu(
-    patient_id: PatientIdPath,
-    payload: MenuWrite,
-    request: Request,
+async def _save_day(
     session: SessionDep,
-    user: PatientAccessDep,
-) -> MenuRead:
-    """Итоги дня пересчитываются при каждом сохранении: иначе после правки состава
-    в меню остались бы показатели прежнего плана, и семья готовила бы один набор
-    блюд, глядя на цифры другого."""
+    *,
+    patient_id: uuid.UUID,
+    day: date,
+    write_items: Sequence[MenuItemWrite],
+    user: CurrentUser,
+) -> tuple[Menu, list[MenuItem], bool]:
+    """Write one day whole. Returns the day, its items and whether the plan changed.
+
+    The one write path of a day: a single save and a copied week obey the same
+    rules, including the refusal to erase what was marked as eaten.
+    """
 
     # Порядок важен. Снимок собирается ДО записи — там же проверяется план
     # (рецепт опубликован, своё блюдо принадлежит пациенту, продукты есть), и
@@ -130,18 +143,18 @@ async def upsert_menu(
     # замены позиций: у переиспользованной позиции снимок остаётся прежним, и
     # до `replace_items` неизвестно, какие позиции переиспользованы.
     snapshots = await menus_service.build_snapshots(
-        session, patient_id=patient_id, items=payload.items
+        session, patient_id=patient_id, items=list(write_items)
     )
     menu = await menus_repo.upsert(
         session,
         patient_id=patient_id,
-        menu_date=payload.date,
+        menu_date=day,
         created_by=user.id,
         updated_by=user.id,
     )
     specs = [
         menus_service.to_spec(item, snapshot)
-        for item, snapshot in zip(payload.items, snapshots, strict=True)
+        for item, snapshot in zip(write_items, snapshots, strict=True)
     ]
 
     # Отметка «съедено» — запись о том, что ребёнок ел, а не часть плана
@@ -173,10 +186,32 @@ async def upsert_menu(
     menu = await menus_repo.set_totals(
         session, menu=menu, totals=totals, engine_version=engine_version
     )
+    return menu, items, plan_before != _plan_of(items)
+
+
+@router.put("", response_model=MenuRead, summary="Сохранить меню дня")
+async def upsert_menu(
+    patient_id: PatientIdPath,
+    payload: MenuWrite,
+    request: Request,
+    session: SessionDep,
+    user: PatientAccessDep,
+) -> MenuRead:
+    """Итоги дня пересчитываются при каждом сохранении: иначе после правки состава
+    в меню остались бы показатели прежнего плана, и семья готовила бы один набор
+    блюд, глядя на цифры другого."""
+
+    menu, items, plan_changed = await _save_day(
+        session,
+        patient_id=patient_id,
+        day=payload.date,
+        write_items=payload.items,
+        user=user,
+    )
 
     # Сообщение — только если план действительно поменялся: повторное
     # сохранение того же дня слало бы семье одно и то же снова и снова.
-    if user.role in SPECIALIST_ROLES and plan_before != _plan_of(items):
+    if user.role in SPECIALIST_ROLES and plan_changed:
         await menus_service.tell_family_about_plan(
             session,
             menu=menu,
@@ -185,6 +220,103 @@ async def upsert_menu(
             ip=client_address(request),
         )
     return await menus_service.to_read(session, menu, items)
+
+
+DAYS_IN_WEEK = 7
+
+
+@router.get("/week", response_model=MenuWeekRead, summary="Меню на семь дней")
+async def get_week(
+    patient_id: PatientIdPath,
+    session: SessionDep,
+    _: PatientAccessDep,
+    start: Annotated[date, Query(description="Первый день, YYYY-MM-DD")],
+) -> MenuWeekRead:
+    days: list[MenuWeekDay] = []
+    for offset in range(DAYS_IN_WEEK):
+        day = start + timedelta(days=offset)
+        menu = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=day)
+        days.append(
+            MenuWeekDay(date=day, menu=None if menu is None else await _read(session, menu))
+        )
+    return MenuWeekRead(start=start, days=days)
+
+
+@router.post("/week/copy", response_model=MenuWeekCopyRead, summary="Повторить неделю")
+async def copy_week(
+    patient_id: PatientIdPath,
+    payload: MenuWeekCopyWrite,
+    request: Request,
+    session: SessionDep,
+    user: PatientAccessDep,
+) -> MenuWeekCopyRead:
+    """Fills only empty days, each through the ordinary write path of a day.
+
+    Overwriting a planned day could erase what the family has already marked
+    as eaten, so replacing is not offered at all, the same as for one day.
+    """
+
+    if payload.source_start == payload.target_start:
+        raise ApiError(ErrorCode.VALIDATION_ERROR, "Неделя не копируется сама в себя.")
+
+    copied: list[date] = []
+    skipped: list[MenuWeekCopySkip] = []
+    for offset in range(DAYS_IN_WEEK):
+        source_day = payload.source_start + timedelta(days=offset)
+        target_day = payload.target_start + timedelta(days=offset)
+
+        target = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=target_day)
+        if target is not None and await menus_repo.list_items(session, menu_id=target.id):
+            skipped.append(MenuWeekCopySkip(date=target_day, reason="target_not_empty"))
+            continue
+
+        source = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=source_day)
+        source_items = (
+            [] if source is None else await menus_repo.list_items(session, menu_id=source.id)
+        )
+        if not source_items:
+            skipped.append(MenuWeekCopySkip(date=target_day, reason="source_empty"))
+            continue
+
+        write_items = [
+            MenuItemWrite(
+                meal_index=item.meal_index,
+                recipe_id=item.recipe_id,
+                custom_dish_id=item.custom_dish_id,
+                portion_factor=float(item.portion_factor),
+            )
+            for item in source_items
+        ]
+        try:
+            # A savepoint per day: a dish that has since been removed costs that
+            # day, not the rest of the week.
+            async with session.begin_nested():
+                menu, items, _changed = await _save_day(
+                    session,
+                    patient_id=patient_id,
+                    day=target_day,
+                    write_items=write_items,
+                    user=user,
+                )
+        except ApiError as exc:
+            skipped.append(
+                MenuWeekCopySkip(date=target_day, reason="not_available", message=exc.message)
+            )
+            continue
+
+        if user.role in SPECIALIST_ROLES:
+            await menus_service.tell_family_about_plan(
+                session,
+                menu=menu,
+                composer_id=user.id,
+                items=len(items),
+                ip=client_address(request),
+                # One message per copy: a week must not arrive as seven.
+                notify=not copied,
+            )
+        copied.append(target_day)
+
+    return MenuWeekCopyRead(copied=copied, skipped=skipped)
 
 
 @router.delete("", status_code=204, summary="Убрать план на день")

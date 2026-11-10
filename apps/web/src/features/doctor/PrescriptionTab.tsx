@@ -19,6 +19,7 @@ import { useSession } from "../auth/useSession";
 import { useDishReview } from "../dishes/useCustomDishes";
 import { PatientViewLink } from "./PatientViewLink";
 import { PrescriptionConfirm } from "./PrescriptionConfirm";
+import { PrescriptionPrintButton } from "./PrescriptionPrint";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { useCreatePrescription } from "./doctorMutations";
@@ -164,6 +165,12 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="flex flex-col gap-section">
+      {active !== null && active !== undefined && (
+        <div>
+          <PrescriptionPrintButton patientId={patientId} active={active} />
+        </div>
+      )}
+
       <Section title={t("prescription.historyTitle")}>
         {/* Правило пяти состояний — общим компонентом (П15): рукописная
             цепочка прятала уже загруженную историю назначений за красным

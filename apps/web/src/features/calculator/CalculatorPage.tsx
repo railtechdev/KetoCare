@@ -38,6 +38,8 @@ import { incomingDish as dishItem, parseIncoming } from "./incomingItem";
 import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
+import { PrintButton } from "../../components/PrintButton";
+import { DishPrint } from "./DishPrint";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
@@ -872,9 +874,18 @@ export function CalculatorView({
               </div>
 
               {dish !== null && (
-                <p className="m-0 text-xs text-muted-foreground">
-                  {t("engineVersion", { version: dish.engine_version })}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-field">
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {t("engineVersion", { version: dish.engine_version })}
+                  </p>
+                  <PrintButton label={t("print.button")} disabled={stale}>
+                    <DishPrint
+                      title={incomingDish.dishTitle ?? t("print.untitled")}
+                      rows={rows}
+                      dish={dish}
+                    />
+                  </PrintButton>
+                </div>
               )}
             </Section>
 
