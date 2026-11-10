@@ -18,7 +18,7 @@ from pydantic import (
 )
 
 from core.languages import Language
-from core.models.enums import Sex, UserRole
+from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, Sex, UserRole
 from keto_engine import Ingredient, verify
 
 from .password_policy import check_new_password
@@ -506,6 +506,59 @@ class InvitationRead(BaseModel):
     #: Идентификатор, а не имя: список видит и администратор, а к данным
     #: пациентов доступа у него нет (правило 5 CLAUDE.md).
     patient_id: uuid.UUID | None = None
+
+
+class ProductDerive(ProductBase):
+    """«Скорректировать»: копия записи закрытого стандарта в стандарте клиники (ADR-0057).
+
+    Тело — вся карточка, как при заведении: специалист правит в копии то, что
+    считает нужным, а что не тронул, остаётся от оригинала. Связь с оригиналом
+    (`derived_from_id`) и тождество продукта (`food_id`) ставит сервер.
+    """
+
+    #: Куда кладётся копия. Не указан — основной стандарт клиники.
+    standard_id: uuid.UUID | None = None
+
+
+# --- food standards -------------------------------------------------------
+
+
+class FoodStandardBase(BaseModel):
+    name: RequiredName
+    publisher: str | None = Field(default=None, max_length=255)
+    document: str | None = Field(default=None, max_length=255)
+    version: str | None = Field(default=None, max_length=64)
+    effective_on: date | None = None
+
+
+class FoodStandardCreate(FoodStandardBase):
+    """Свой стандарт клиники или внешний документ под загрузку (ADR-0057).
+
+    Вид, тип диеты и правило записи углеводов задаются один раз: от них зависит,
+    как прочитаны значения продуктов, и менять их у заведённого стандарта нельзя.
+    """
+
+    kind: FoodStandardKind = FoodStandardKind.CLINIC
+    diet_type: FoodDietType = FoodDietType.KETOGENIC
+    carbs_convention: CarbsConvention = CarbsConvention.TOTAL
+
+
+class FoodStandardUpdate(FoodStandardBase):
+    is_active: bool = True
+
+
+class FoodStandardRead(FoodStandardBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: FoodStandardKind
+    diet_type: FoodDietType
+    carbs_convention: CarbsConvention
+    locked_at: datetime | None = None
+    is_active: bool
+    #: Сколько позиций в стандарте. Считается отдельно и подставляется роутером.
+    products: int = 0
+    created_at: datetime
 
 
 class ProductCategoryWrite(BaseModel):

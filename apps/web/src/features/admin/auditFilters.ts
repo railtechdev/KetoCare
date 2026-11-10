@@ -37,6 +37,7 @@ export const AUDIT_ENTITIES = [
   "invitations",
   "products",
   "product_categories",
+  "food_standards",
   "recipes",
   "prescriptions",
   "medical_profiles",
@@ -74,6 +75,8 @@ export const AUDIT_ACTIONS = [
   "publish",
   "unpublish",
   "merge",
+  // Закрытие стандарта питания (ADR-0057).
+  "lock",
   "import",
   "invite",
   "revoke",

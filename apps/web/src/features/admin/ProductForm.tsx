@@ -18,7 +18,8 @@ import { useProductValuesCheck } from "./useProductValuesCheck";
 import type { ProductCategory } from "./types";
 
 interface Props {
-  mode: "create" | "edit";
+  /** `derive` — копия записи закрытого стандарта: те же поля, что у заведения */
+  mode: "create" | "edit" | "derive";
   defaultValues: DefaultValues<ProductFormValues>;
   /** Идентификаторы категорий, уже встречающиеся в справочнике — для подсказки */
   categories: readonly ProductCategory[];
@@ -175,11 +176,8 @@ export function ProductForm({
       />
 
       <SubPageHeader
-        title={
-          mode === "create"
-            ? t("products.form.createTitle")
-            : t("products.form.editTitle")
-        }
+        title={t(`products.form.${mode}Title`)}
+        intro={mode === "derive" ? t("products.form.deriveIntro") : undefined}
       />
 
       {error !== null && error !== undefined && (

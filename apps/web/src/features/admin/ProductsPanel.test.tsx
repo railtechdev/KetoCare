@@ -11,6 +11,7 @@ import type { ProductDetail } from "../products/useProductDetail";
 import adminRu from "../../locales/ru/admin.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { currentAddress } from "../../test/address";
+import type { FoodStandard } from "../standards/useFoodStandards";
 import { ProductsPanel } from "./ProductsPanel";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -55,7 +56,45 @@ const PRODUCT: ProductDetail = {
   ratio: 82.5 / (0.5 + 0.8),
 };
 
-function renderPanel(item?: string, canImport = true) {
+const LOCKED_ID = "44444444-4444-4444-8444-444444444444";
+const MAIN_STANDARD_ID = "00000000-0000-7000-8000-000000000001";
+
+function standardRow(extra: Partial<FoodStandard>): FoodStandard {
+  return {
+    id: MAIN_STANDARD_ID,
+    name: "Справочник клиники",
+    publisher: null,
+    document: null,
+    version: null,
+    effective_on: null,
+    kind: "clinic",
+    diet_type: "ketogenic",
+    carbs_convention: "total",
+    locked_at: null,
+    is_active: true,
+    products: 1,
+    created_at: "2026-11-09T00:00:00Z",
+    ...extra,
+  };
+}
+
+const standards: FoodStandard[] = [
+  standardRow({}),
+  standardRow({
+    id: LOCKED_ID,
+    name: "Меню детских садов 2025",
+    kind: "reference",
+    diet_type: "general",
+    carbs_convention: "unknown",
+    locked_at: "2026-11-10T00:00:00Z",
+  }),
+];
+
+function renderPanel(
+  item?: string,
+  canImport = true,
+  extraSearch: Record<string, string> = {},
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -67,7 +106,7 @@ function renderPanel(item?: string, canImport = true) {
             пустой строкой: она тоже «задана». */}
         <SectionRouter
           section="products"
-          search={item === undefined ? {} : { item }}
+          search={{ ...(item === undefined ? {} : { item }), ...extraSearch }}
         >
           {children}
         </SectionRouter>
@@ -89,6 +128,12 @@ beforeEach(() => {
     if (path === "/api/v1/products/categories") {
       return Promise.resolve({
         data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
+        response: { status: 200 },
+      });
+    }
+    if (path === "/api/v1/food-standards") {
+      return Promise.resolve({
+        data: standards,
         response: { status: 200 },
       });
     }
@@ -116,6 +161,9 @@ describe("карточка продукта вне текущей выборки
     // потому, что запрос карточки спотыкался на `response.status` и падал —
     // то есть про 404 она ничего не проверяла, хотя так и называется.
     (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/food-standards") {
+        return Promise.resolve({ data: standards, response: { status: 200 } });
+      }
       if (path === "/api/v1/products/{product_id}") {
         return Promise.resolve({
           error: { error: { code: "not_found", message: "Нет." } },
@@ -186,6 +234,9 @@ describe("карточка продукта вне текущей выборки
     // (правило: подделка обязана повторять контракт, а не представление о нём).
     let attempts = 0;
     (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/food-standards") {
+        return Promise.resolve({ data: standards, response: { status: 200 } });
+      }
       if (path === "/api/v1/products/{product_id}") {
         attempts += 1;
         return attempts === 1
@@ -442,5 +493,122 @@ describe("отборы справочника — в адресе", () => {
 
     await waitFor(() => expect(currentAddress().category).toBe(CATEGORY_ID));
     expect(currentAddress().inactive).toBe(true);
+  });
+});
+
+describe("стандарт питания в справочнике", () => {
+  const LOCKED_PRODUCT = { ...PRODUCT, standard_id: LOCKED_ID };
+
+  function withRows(rows: ProductDetail[]) {
+    const base = (api.GET as Mock).getMockImplementation()!;
+    (api.GET as Mock).mockImplementation((path: string, ...rest: unknown[]) =>
+      path === "/api/v1/products"
+        ? Promise.resolve({
+            data: { items: rows, total: rows.length },
+            response: { status: 200 },
+          })
+        : base(path, ...rest),
+    );
+  }
+
+  it("запрашивает выбранный стандарт и держит его в адресе", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await screen.findByRole("option", { name: "Меню детских садов 2025" });
+    await user.selectOptions(
+      screen.getByLabelText(adminRu.products.filters.standard),
+      LOCKED_ID,
+    );
+
+    await waitFor(() => expect(currentAddress().standard).toBe(LOCKED_ID));
+    await waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith("/api/v1/products", {
+        params: {
+          query: expect.objectContaining({ standard_id: LOCKED_ID }),
+        },
+      }),
+    );
+  });
+
+  it("закрытый обычный стандарт предупреждает и не предлагает добавить", async () => {
+    withRows([LOCKED_PRODUCT]);
+    renderPanel(undefined, true, { standard: LOCKED_ID });
+
+    expect(
+      await screen.findByText(adminRu.products.standardBanner.generalTitle),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(adminRu.products.standardBanner.lockedTitle),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: adminRu.products.derive }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: adminRu.products.edit }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: adminRu.products.create }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("клетчатка, которой источник не указал, не выглядит нулём", async () => {
+    withRows([{ ...PRODUCT, fiber_known: false }]);
+    renderPanel();
+
+    expect(
+      await screen.findByText(adminRu.products.fiberUnknown),
+    ).toBeInTheDocument();
+  });
+
+  it("запись закрытого стандарта сохраняется копией, а не правкой", async () => {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/food-standards") {
+        return Promise.resolve({ data: standards, response: { status: 200 } });
+      }
+      if (path === "/api/v1/products/{product_id}") {
+        return Promise.resolve({
+          data: LOCKED_PRODUCT,
+          response: { status: 200 },
+        });
+      }
+      if (path === "/api/v1/products/categories") {
+        return Promise.resolve({
+          data: [{ id: CATEGORY_ID, name_ru: "Жиры" }],
+          response: { status: 200 },
+        });
+      }
+      return Promise.resolve({
+        data: { items: [], total: 0 },
+        response: { status: 200 },
+      });
+    });
+    (api.POST as Mock).mockResolvedValue({
+      data: { ...LOCKED_PRODUCT, derived_from_id: OUTSIDE_ID },
+      response: { status: 201 },
+    });
+    const user = userEvent.setup();
+    renderPanel(OUTSIDE_ID);
+
+    expect(
+      await screen.findByText(adminRu.products.form.deriveTitle),
+    ).toBeInTheDocument();
+    // Оригинал из обычного стандарта, копия идёт в основной: её увидят семьи.
+    expect(
+      screen.getByText(adminRu.products.form.deriveGeneralTitle),
+    ).toBeInTheDocument();
+    await screen.findByRole("option", { name: "Жиры" });
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/products/{product_id}/derive",
+        expect.objectContaining({
+          params: { path: { product_id: OUTSIDE_ID } },
+          body: expect.objectContaining({ standard_id: MAIN_STANDARD_ID }),
+        }),
+      ),
+    );
+    expect(api.PUT).not.toHaveBeenCalled();
   });
 });
