@@ -16,6 +16,8 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
+import { useDishReview } from "../dishes/useCustomDishes";
+import { PatientViewLink } from "./PatientViewLink";
 import { PrescriptionConfirm } from "./PrescriptionConfirm";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
@@ -47,6 +49,9 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   // обновлённой истории, иначе пришлось бы считать «было плюс один», а пока
   // врач заполнял форму, версию мог создать коллега.
   const [createdId, setCreatedId] = useState<string | null>(null);
+  // Set once a version is saved: only then is "your dishes no longer fit" news.
+  const [savedThisVisit, setSavedThisVisit] = useState(false);
+  const review = useDishReview(savedThisVisit ? patientId : null);
 
   // Значения, ждущие подтверждения врача (ответ клиники на вопрос 5). Пока
   // окно открыто, ничего не отправлено: назначение append-only, и отменить
@@ -71,6 +76,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
       description: t("prescription.saved.body"),
     });
     setCreatedId(null);
+    setSavedThisVisit(true);
   }, [savedVersion, t]);
 
   const canWrite = canWritePrescriptions(session?.role);
@@ -204,6 +210,21 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
           )}
         </AsyncSection>
       </Section>
+
+      {(review.data?.off_target.length ?? 0) > 0 && (
+        <p className="m-0">
+          {t("prescription.dishesOffTarget", {
+            count: review.data?.off_target.length,
+          })}{" "}
+          <PatientViewLink
+            patientId={patientId}
+            view="menu"
+            className="font-medium underline"
+          >
+            {t("prescription.dishesOffTargetLink")}
+          </PatientViewLink>
+        </p>
+      )}
 
       {canWrite && (
         <Section

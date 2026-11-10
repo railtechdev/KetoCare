@@ -230,3 +230,129 @@ async def test_empty_list_is_rejected(client, auth_headers, world):
     )
 
     assert response.status_code == 422
+
+
+def _review_url(patient) -> str:
+    return f"/api/v1/patients/{patient.id}/custom-dish-review"
+
+
+async def _dish(client, doctor_headers, patient, parts, title="Блюдо"):
+    response = await client.post(
+        f"/api/v1/patients/{patient.id}/custom-dishes",
+        json={
+            "title": title,
+            "ingredients": [
+                {"product_id": str(product.id), "grams": grams} for product, grams in parts
+            ],
+        },
+        headers=doctor_headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+class TestDishReview:
+    """Reader: the child's dishes and the prescription screen."""
+
+    async def test_dish_off_target_is_listed(self, client, session, auth_headers, world):
+        doctor, patient = world
+        butter = await _product(session, "Масло", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        dish = await _dish(client, auth_headers(doctor), patient, [(chicken, 100), (butter, 5)])
+
+        response = await client.get(_review_url(patient), headers=auth_headers(doctor))
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["target_ratio"] == 3.5
+        assert body["target_kcal"] == 300
+        assert body["checked"] == 1
+        assert [item["dish_id"] for item in body["off_target"]] == [dish["id"]]
+        assert body["off_target"][0]["ratio_within_tolerance"] is False
+
+    async def test_fitted_dish_is_not_listed(self, client, session, auth_headers, world):
+        doctor, patient = world
+        butter = await _product(session, "Масло", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        recipe = await _recipe(session, doctor, [(chicken, 50), (butter, 40)])
+        fitted = await client.post(
+            _url(patient), json={"recipe_ids": [str(recipe.id)]}, headers=auth_headers(doctor)
+        )
+        grams = {
+            item["product_id"]: item["grams"] for item in fitted.json()["items"][0]["ingredients"]
+        }
+        await _dish(
+            client,
+            auth_headers(doctor),
+            patient,
+            [(chicken, grams[str(chicken.id)]), (butter, grams[str(butter.id)])],
+        )
+
+        response = await client.get(_review_url(patient), headers=auth_headers(doctor))
+
+        assert response.json()["checked"] == 1
+        assert response.json()["off_target"] == []
+
+    async def test_new_prescription_changes_the_verdict(self, client, session, auth_headers, world):
+        doctor, patient = world
+        butter = await _product(session, "Масло", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        recipe = await _recipe(session, doctor, [(chicken, 50), (butter, 40)])
+        fitted = await client.post(
+            _url(patient), json={"recipe_ids": [str(recipe.id)]}, headers=auth_headers(doctor)
+        )
+        grams = {
+            item["product_id"]: item["grams"] for item in fitted.json()["items"][0]["ingredients"]
+        }
+        await _dish(
+            client,
+            auth_headers(doctor),
+            patient,
+            [(chicken, grams[str(chicken.id)]), (butter, grams[str(butter.id)])],
+        )
+        await prescriptions_repo.create(
+            session,
+            patient_id=patient.id,
+            ratio=2.0,
+            kcal_per_day=1200,
+            protein_g=24.0,
+            carbs_limit_g=20.0,
+            meals_per_day=4,
+            author_id=doctor.id,
+            effective_from=date.today(),
+        )
+
+        response = await client.get(_review_url(patient), headers=auth_headers(doctor))
+
+        assert response.json()["target_ratio"] == 2.0
+        assert len(response.json()["off_target"]) == 1
+
+    async def test_no_prescription_has_no_targets(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.get(_review_url(patient), headers=auth_headers(doctor))
+
+        assert response.status_code == 200
+        assert response.json()["target_ratio"] is None
+        assert response.json()["off_target"] == []
+
+    async def test_family_is_refused(self, client, session, auth_headers, make_user, world):
+        _, patient = world
+        parent = await make_user(role=UserRole.PARENT)
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+
+        response = await client.get(_review_url(patient), headers=auth_headers(parent))
+
+        assert response.status_code == 403
+
+    async def test_another_doctors_patient_is_refused(self, client, auth_headers, make_user, world):
+        _, patient = world
+        stranger = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.get(_review_url(patient), headers=auth_headers(stranger))
+
+        assert response.status_code == 403

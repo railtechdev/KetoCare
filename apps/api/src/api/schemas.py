@@ -1043,3 +1043,25 @@ class RecipeFitsResponse(BaseModel):
     target_kcal: float
     engine_version: str
     items: list[RecipeFit]
+
+
+class DishReviewItem(BaseModel):
+    dish_id: uuid.UUID
+    title: str
+    ratio: float | None
+    kcal: float
+    ratio_within_tolerance: bool | None
+    kcal_within_tolerance: bool
+
+
+class DishReviewResponse(BaseModel):
+    """A child's dishes that miss the active prescription's per-meal target.
+
+    Reader: the child's dishes and the prescription screen in the web cabinet.
+    Both targets are `null` when there is no prescription.
+    """
+
+    target_ratio: float | None
+    target_kcal: float | None
+    checked: int
+    off_target: list[DishReviewItem]

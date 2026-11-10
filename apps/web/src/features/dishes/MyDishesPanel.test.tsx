@@ -119,3 +119,63 @@ describe("мои блюда", () => {
     expect(screen.getByText(/калькуляторе/)).toBeInTheDocument();
   });
 });
+
+describe("блюда ребёнка в карте после смены назначения", () => {
+  const REVIEW = {
+    target_ratio: 3.5,
+    target_kcal: 300,
+    checked: 1,
+    off_target: [
+      {
+        dish_id: "d1",
+        title: "Завтрак с авокадо",
+        ratio: 4.3,
+        kcal: 320,
+        ratio_within_tolerance: false,
+        kcal_within_tolerance: true,
+      },
+    ],
+  };
+
+  function renderInCard() {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      Promise.resolve({
+        data: path.endsWith("/custom-dish-review")
+          ? REVIEW
+          : { items: [DISH], total: 1 },
+      }),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <SectionRouter section="recipes">
+          <MyDishesPanel patientId={PATIENT_ID} openIn="card" />
+        </SectionRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("говорит, сколько блюд мимо цели, и называет следующее", async () => {
+    renderInCard();
+
+    expect(
+      await screen.findByText(/1 блюдо расходится с целью приёма/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("мимо цели")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Подогнать «Завтрак с авокадо»" }),
+    ).toBeInTheDocument();
+  });
+
+  it("семье проверку не запрашивает", async () => {
+    renderPanel();
+
+    await screen.findByText("Завтрак с авокадо");
+    expect(api.GET).not.toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/custom-dish-review",
+      expect.anything(),
+    );
+  });
+});
