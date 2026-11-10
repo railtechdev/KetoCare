@@ -59,6 +59,8 @@ export function SidebarNav({
     grouped.push({ group: "management", items: unclassified });
   }
 
+  const SHORT_MENU = 4;
+
   return (
     <nav aria-label={t("app.name")} className="flex-1 overflow-y-auto">
       <div className="flex flex-col gap-1">
@@ -74,17 +76,20 @@ export function SidebarNav({
                 aria-hidden="true"
               />
             )}
-            {(labels === "always" || labels === "responsive") && (
-              <div
-                className={cn(
-                  "px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground select-none",
-                  groupIndex === 0 ? "pt-1" : "pt-4",
-                  labels === "responsive" && "hidden lg:block",
-                )}
-              >
-                {t(`nav.groups.${group}`)}
-              </div>
-            )}
+            {/* A short menu needs no headings: three items under two
+                headings read as more structure than there is. */}
+            {visibleSections.length > SHORT_MENU &&
+              (labels === "always" || labels === "responsive") && (
+                <div
+                  className={cn(
+                    "px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground select-none",
+                    groupIndex === 0 ? "pt-1" : "pt-4",
+                    labels === "responsive" && "hidden lg:block",
+                  )}
+                >
+                  {t(`nav.groups.${group}`)}
+                </div>
+              )}
             <ul className="m-0 flex list-none flex-col gap-1 p-0">
               {items.map((section) => {
                 const Icon = SECTION_ICONS[section];

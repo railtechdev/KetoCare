@@ -52,13 +52,13 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
   // которым ничего нет (правило П3 канона). AI-сводка это пункт 21 ТЗ, этап 4;
   // раздел вернётся вместе со своей работой, как вернутся «Ассистент» и
   // «Отчёты» у родителя.
-  doctor: ["home", "patients", "calculator", "products", "recipes", "profile"],
+  doctor: ["patients", "recipes", "products", "calculator", "home", "profile"],
   dietitian: [
-    "home",
     "patients",
-    "calculator",
-    "products",
     "recipes",
+    "products",
+    "calculator",
+    "home",
     "profile",
   ],
   admin: [
@@ -72,3 +72,20 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
     "profile",
   ],
 };
+
+/**
+ * Разделы, которые остаются доступными по ссылке, но не стоят в меню.
+ *
+ * Специалист работает от пациента: вход ведёт в список, а меню из трёх пунктов
+ * (пациенты, база блюд, продукты) не заставляет выбирать между двумя
+ * калькуляторами и главной без действий (`docs/AUDIT_ROLES_PATHS_2026-11.md`).
+ */
+export const HIDDEN_FROM_NAV: Partial<Record<Role, ReadonlySet<string>>> = {
+  doctor: new Set(["home", "calculator", "profile"]),
+  dietitian: new Set(["home", "calculator", "profile"]),
+};
+
+export function navSectionsFor(role: Role): readonly string[] {
+  const hidden = HIDDEN_FROM_NAV[role];
+  return SECTIONS_BY_ROLE[role].filter((section) => !hidden?.has(section));
+}

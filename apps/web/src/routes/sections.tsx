@@ -281,7 +281,7 @@ export function getSectionGroup(section: string): SectionGroup {
 /** 4 самых частых раздела роли для быстрого мобильного TabBar */
 export const PRIMARY_MOBILE_SECTIONS: Record<Role, readonly string[]> = {
   parent: ["home", "diary", "calculator", "menu"],
-  doctor: ["home", "patients", "calculator", "products"],
-  dietitian: ["home", "patients", "calculator", "products"],
+  doctor: ["patients", "recipes", "products"],
+  dietitian: ["patients", "recipes", "products"],
   admin: ["home", "users", "leads", "products"],
 };

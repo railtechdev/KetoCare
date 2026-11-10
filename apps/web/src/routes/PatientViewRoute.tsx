@@ -44,7 +44,10 @@ export function PatientViewRoute() {
 
   return (
     <PageLayout
-      title={t(`workspace.views.${view}`)}
+      title={t("workspace.pageTitle", {
+        name: patient.data.full_name,
+        view: t(`workspace.views.${view}`),
+      })}
       // Ширина — роль раздела, а не одно число на всю карту (правило П34):
       // дневники сравнивают ряды, сводку читают.
       width={PATIENT_VIEW_WIDTH[view]}
