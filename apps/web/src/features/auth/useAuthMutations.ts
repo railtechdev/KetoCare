@@ -16,6 +16,7 @@ export function useLoginMutation() {
       password: string;
       totpCode?: string;
       backupCode?: string;
+      rememberDevice?: boolean;
     }) => {
       const { data, error } = await api.POST("/api/v1/auth/login", {
         body: {
@@ -27,6 +28,7 @@ export function useLoginMutation() {
           backup_code: input.backupCode?.trim()
             ? input.backupCode.trim()
             : null,
+          remember_device: input.rememberDevice === true,
         },
       });
       if (error || !data) throw error ?? new Error("Empty login response");

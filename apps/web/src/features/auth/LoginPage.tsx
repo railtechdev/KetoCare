@@ -346,6 +346,17 @@ export function LoginPage({
                   />
                 ))}
 
+              {totpRequired && (
+                <label className="flex min-h-touch items-center gap-field">
+                  <input
+                    type="checkbox"
+                    className="size-5 accent-primary"
+                    {...register("rememberDevice")}
+                  />
+                  {t("login.rememberDevice")}
+                </label>
+              )}
+
               {totpRequired && !factorBroken && (
                 <Button
                   type="button"

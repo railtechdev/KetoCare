@@ -21,6 +21,7 @@ import {
 } from "../../components/FormErrorSummary";
 import { PageLayout } from "../../components/PageLayout";
 import { BackupCodesSection } from "./BackupCodesSection";
+import { TrustedDevicesSection } from "./TrustedDevicesSection";
 import { PasswordSection } from "./PasswordSection";
 import { errorMessageOf } from "../../lib/api";
 import { useMe } from "../auth/useMe";
@@ -197,6 +198,8 @@ export function ProfilePage() {
       <PasswordSection />
 
       <BackupCodesSection />
+
+      <TrustedDevicesSection />
     </PageLayout>
   );
 }

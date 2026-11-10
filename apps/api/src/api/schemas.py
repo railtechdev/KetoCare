@@ -87,6 +87,8 @@ class LoginRequest(BaseModel):
         max_length=64,
         description="Резервный код вместо кода приложения, когда телефон недоступен",
     )
+    #: Do not ask for the second factor on this device for 30 days (ADR-0061).
+    remember_device: bool | None = None
 
 
 class TokenPair(BaseModel):

@@ -97,6 +97,7 @@ export const AUDIT_ACTIONS = [
   "totp_reset",
   "login_with_backup_code",
   "backup_codes_regenerated",
+  "trusted_devices_revoked",
   "password_changed",
   "password_change_failed",
   "password_reset",
