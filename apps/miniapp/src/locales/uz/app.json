@@ -340,6 +340,7 @@
     "empty": "Mahsulotlar qo‘shing — hisob shu yerda paydo bo‘ladi.",
     "calc": "Hisob",
     "ratio": "Keto nisbati",
+    "ratioPlaceholder": "Tanlang",
     "ratioFromPrescription": "Bolaning tayinlovidan",
     "mealKcal": "Bir ovqatlanishga kkal",
     "kcalFromPrescription": "Tayinlovdan: {{kcal}} kkal ÷ {{meals}} ovqatlanish",

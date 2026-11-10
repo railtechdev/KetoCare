@@ -17,6 +17,7 @@ import { errorMessageOf } from "../../lib/api";
 import { queryState } from "../../lib/queryState";
 import { TableSkeleton } from "../admin/TableSkeleton";
 import { useSession } from "../auth/useSession";
+import { MenuTemplatesSheet } from "./MenuTemplatesSheet";
 import { StandardFormSheet, type StandardEditing } from "./StandardFormSheet";
 import {
   DEFAULT_FOOD_STANDARD_ID,
@@ -43,6 +44,9 @@ export function StandardsPanel({
   const { session } = useSession();
   const standards = useFoodStandards();
   const [editing, setEditing] = useState<StandardEditing | null>(null);
+  const [viewing, setViewing] = useState<FoodStandard | null>(null);
+  // Шаблоны меню — клиническое содержание: администратору сервер их не отдаёт.
+  const canViewTemplates = session?.role !== "admin";
   const canLock = session?.role === "admin";
 
   const rows = useMemo(() => standards.data ?? [], [standards.data]);
@@ -114,11 +118,12 @@ export function StandardsPanel({
             canLock={canLock}
             onOpen={onOpen}
             onEdit={setEditing}
+            onViewTemplates={canViewTemplates ? setViewing : undefined}
           />
         ),
       },
     ],
-    [t, canLock, onOpen],
+    [t, canLock, canViewTemplates, onOpen],
   );
 
   return (
@@ -171,6 +176,13 @@ export function StandardsPanel({
       {editing !== null && (
         <StandardFormSheet editing={editing} onClose={() => setEditing(null)} />
       )}
+
+      {viewing !== null && (
+        <MenuTemplatesSheet
+          standard={viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </Section>
   );
 }
@@ -180,11 +192,13 @@ function StandardActions({
   canLock,
   onOpen,
   onEdit,
+  onViewTemplates,
 }: {
   standard: FoodStandard;
   canLock: boolean;
   onOpen: (standardId: string) => void;
   onEdit: (editing: StandardEditing) => void;
+  onViewTemplates?: (standard: FoodStandard) => void;
 }) {
   const { t } = useTranslation("products");
   const lock = useLockStandardMutation();
@@ -218,6 +232,18 @@ function StandardActions({
       >
         {openLabel}
       </Button>
+
+      {onViewTemplates !== undefined && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={forRow(t("standards.templates.open"))}
+          onClick={() => onViewTemplates(standard)}
+        >
+          {t("standards.templates.open")}
+        </Button>
+      )}
 
       {!locked && (
         <Button

@@ -1773,3 +1773,208 @@ class TestSpecialistComposesDay:
             _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
         )
         assert read.json()["updated_by_name"] == dietitian.full_name
+
+
+class TestWeek:
+    """Readers: the weekly grid and the printed plan in the patient card."""
+
+    MONDAY = date(2026, 11, 9)
+
+    async def _recipe_for(self, session, make_user):
+        author = await make_user(role=UserRole.DIETITIAN)
+        butter = await _product(session, "Масло", **BUTTER)
+        return await _recipe(session, author, ingredients=[(butter, 10)])
+
+    def _body(self, day, recipe):
+        return {
+            "date": day.isoformat(),
+            "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
+        }
+
+    async def test_week_has_seven_days_with_empty_ones_null(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        recipe = await self._recipe_for(session, make_user)
+        await client.put(
+            _url(patient), json=self._body(self.MONDAY, recipe), headers=auth_headers(parent)
+        )
+
+        response = await client.get(
+            f"{_url(patient)}/week",
+            params={"start": self.MONDAY.isoformat()},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        days = response.json()["days"]
+        assert len(days) == 7
+        assert days[0]["menu"]["items"][0]["meal_index"] == 1
+        assert all(day["menu"] is None for day in days[1:])
+
+    async def test_copy_fills_only_empty_days(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        recipe = await self._recipe_for(session, make_user)
+        previous = self.MONDAY - timedelta(days=7)
+        for offset in (0, 1):
+            await client.put(
+                _url(patient),
+                json=self._body(previous + timedelta(days=offset), recipe),
+                headers=auth_headers(parent),
+            )
+        other = await _recipe(
+            session,
+            await make_user(role=UserRole.DIETITIAN),
+            ingredients=[(await _product(session, "Сливки", **BUTTER), 20)],
+        )
+        await client.put(
+            _url(patient),
+            json=self._body(self.MONDAY + timedelta(days=1), other),
+            headers=auth_headers(parent),
+        )
+
+        response = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={"source_start": previous.isoformat(), "target_start": self.MONDAY.isoformat()},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["copied"] == [self.MONDAY.isoformat()]
+        reasons = {entry["date"]: entry["reason"] for entry in body["skipped"]}
+        assert reasons[(self.MONDAY + timedelta(days=1)).isoformat()] == "target_not_empty"
+        assert reasons[(self.MONDAY + timedelta(days=2)).isoformat()] == "source_empty"
+        kept = await client.get(
+            _url(patient),
+            params={"date": (self.MONDAY + timedelta(days=1)).isoformat()},
+            headers=auth_headers(parent),
+        )
+        assert kept.json()["items"][0]["recipe_id"] == str(other.id)
+
+    async def test_family_hears_once_about_a_copied_week(
+        self, client, session, auth_headers, make_user, make_patient, monkeypatch
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        recipe = await self._recipe_for(session, make_user)
+        previous = self.MONDAY - timedelta(days=7)
+        for offset in (0, 1, 2):
+            await client.put(
+                _url(patient),
+                json=self._body(previous + timedelta(days=offset), recipe),
+                headers=auth_headers(doctor),
+            )
+        deferred: list[str] = []
+        monkeypatch.setattr(
+            "api.services.menus.after_commit.defer",
+            lambda _session, task, *args, **kwargs: deferred.append(task),
+        )
+
+        response = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={"source_start": previous.isoformat(), "target_start": self.MONDAY.isoformat()},
+            headers=auth_headers(doctor),
+        )
+
+        assert len(response.json()["copied"]) == 3
+        assert deferred.count("notify_family_menu_composed") == 1
+
+    async def test_copy_skips_a_day_with_an_excluded_product(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        author = await make_user(role=UserRole.DIETITIAN)
+        butter = await _product(session, "Масло", **BUTTER)
+        recipe = await _recipe(session, author, ingredients=[(butter, 10)])
+        previous = self.MONDAY - timedelta(days=7)
+        await client.put(
+            _url(patient), json=self._body(previous, recipe), headers=auth_headers(parent)
+        )
+        patient.allergies = [str(butter.id)]
+        await session.flush()
+
+        response = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={"source_start": previous.isoformat(), "target_start": self.MONDAY.isoformat()},
+            headers=auth_headers(parent),
+        )
+
+        body = response.json()
+        assert body["copied"] == []
+        first = next(e for e in body["skipped"] if e["date"] == self.MONDAY.isoformat())
+        assert first["reason"] == "not_available"
+        assert butter.name_ru in first["message"]
+        kept = await client.get(
+            _url(patient), params={"date": self.MONDAY.isoformat()}, headers=auth_headers(parent)
+        )
+        assert kept.status_code == 404
+
+    async def test_overlapping_weeks_are_rejected(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={
+                "source_start": self.MONDAY.isoformat(),
+                "target_start": (self.MONDAY + timedelta(days=1)).isoformat(),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422
+
+    async def test_week_at_the_end_of_the_calendar_is_rejected(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.get(
+            f"{_url(patient)}/week", params={"start": "9999-12-31"}, headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 422
+
+    async def test_copy_into_itself_is_rejected(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+
+        response = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={
+                "source_start": self.MONDAY.isoformat(),
+                "target_start": self.MONDAY.isoformat(),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422
+
+    async def test_stranger_is_refused(
+        self, client, session, auth_headers, make_user, make_patient
+    ):
+        _, patient = await _linked_parent(session, make_user, make_patient)
+        stranger = await make_user(role=UserRole.DOCTOR)
+
+        week = await client.get(
+            f"{_url(patient)}/week",
+            params={"start": self.MONDAY.isoformat()},
+            headers=auth_headers(stranger),
+        )
+        copy = await client.post(
+            f"{_url(patient)}/week/copy",
+            json={
+                "source_start": self.MONDAY.isoformat(),
+                "target_start": (self.MONDAY + timedelta(days=7)).isoformat(),
+            },
+            headers=auth_headers(stranger),
+        )
+
+        assert week.status_code == 403
+        assert copy.status_code == 403

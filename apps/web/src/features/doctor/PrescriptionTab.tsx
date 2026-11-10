@@ -5,6 +5,7 @@ import {
   EmptyState,
   formatGrams,
   formatKcal,
+  formatWeight,
   RatioBadge,
   Section,
   toast,
@@ -18,7 +19,10 @@ import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { useDishReview } from "../dishes/useCustomDishes";
 import { PatientViewLink } from "./PatientViewLink";
+import { usePatientOverview } from "../patients/overview";
+import { RecordWeight } from "./RecordWeight";
 import { PrescriptionConfirm } from "./PrescriptionConfirm";
+import { PrescriptionPrintButton } from "./PrescriptionPrint";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { useCreatePrescription } from "./doctorMutations";
@@ -43,6 +47,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   const { session } = useSession();
 
   const history = usePrescriptionHistory(patientId);
+  const lastWeight = usePatientOverview(patientId).data?.last_weight;
   const create = useCreatePrescription(patientId);
 
   // Идентификатор созданной версии, а не её номер: номер берётся из
@@ -164,6 +169,21 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="flex flex-col gap-section">
+      <div className="flex flex-wrap items-center gap-field">
+        <span>
+          {lastWeight == null
+            ? t("prescription.noWeight")
+            : t("prescription.weightOn", {
+                value: formatWeight(lastWeight.weight_kg),
+                date: formatTimestamp(lastWeight.occurred_at) ?? "",
+              })}
+        </span>
+        <RecordWeight patientId={patientId} />
+        {active !== null && active !== undefined && (
+          <PrescriptionPrintButton patientId={patientId} active={active} />
+        )}
+      </div>
+
       <Section title={t("prescription.historyTitle")}>
         {/* Правило пяти состояний — общим компонентом (П15): рукописная
             цепочка прятала уже загруженную историю назначений за красным
@@ -218,7 +238,7 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
           })}{" "}
           <PatientViewLink
             patientId={patientId}
-            view="menu"
+            view="dishes"
             className="font-medium underline"
           >
             {t("prescription.dishesOffTargetLink")}

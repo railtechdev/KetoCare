@@ -69,7 +69,7 @@ async def _fit_one(
 
     solved = outcome.result
     grams = {item.ingredient.product_id: item.grams for item in solved.dish.items}
-    seasoning = {item.product_id: item.grams for item in uncounted}
+    seasoning = {item.product_id: round(item.grams * outcome.factor, 1) for item in uncounted}
     lost = [
         products[pid].name_ru
         for pid, _ in composition
@@ -92,7 +92,7 @@ async def _fit_one(
             RecipeFitIngredient(
                 product_id=pid,
                 name_ru=products[pid].name_ru,
-                # Seasonings are not solved and keep the recipe's mass.
+                # Seasonings are not solved: they follow the recipe's scale.
                 grams=seasoning[pid] if pid in seasoning else grams[str(pid)],
             )
             for pid, _ in composition

@@ -20,6 +20,10 @@ export const HEIGHT_MAX_CM = 250;
  * собственном результате — рост приходил числом там, где ждали строку. Форма при
  * этом молча не отправлялась и ошибки не показывала.
  */
+/** Границы те же, что у записи веса в API (`WEIGHT_MIN_KG`, `WEIGHT_MAX_KG`). */
+const WEIGHT_MIN_KG = 2;
+const WEIGHT_MAX_KG = 150;
+
 export const childSchema = z.object({
   fullName: z.string().trim().min(1).max(255),
   birthDate: z.string().refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)),
@@ -27,6 +31,9 @@ export const childSchema = z.object({
   heightCm: z
     .string()
     .refine((value) => value.trim() === "" || isPlausibleHeight(value)),
+  weightKg: z
+    .string()
+    .refine((value) => value.trim() === "" || isPlausibleWeight(value)),
   allergies: z.string(),
   /**
    * Исключённые продукты каталога — идентификаторами.
@@ -41,6 +48,15 @@ export const childSchema = z.object({
 });
 
 export type ChildValues = z.infer<typeof childSchema>;
+
+function isPlausibleWeight(value: string): boolean {
+  const weight = Number(value.replace(",", "."));
+  return (
+    Number.isFinite(weight) &&
+    weight >= WEIGHT_MIN_KG &&
+    weight <= WEIGHT_MAX_KG
+  );
+}
 
 function isPlausibleHeight(value: string): boolean {
   const height = Number(value);
@@ -97,11 +113,14 @@ export function parseAllergies(value: string): string[] {
 /** Значения формы → тело создания. */
 export function toChildBody(values: ChildValues) {
   const height = optional(values.heightCm);
+  const weight = optional(values.weightKg);
   return {
     full_name: values.fullName.trim(),
     birth_date: values.birthDate,
     sex: values.sex,
     height_cm: height === null ? null : Number(height),
+    // weight:raw — тело запроса, а не показ
+    weight_kg: weight === null ? null : Number(weight.replace(",", ".")),
     // Продукты идут первыми: порядок сохраняется как есть, и в карточке
     // сначала видно то, что сопоставлено с каталогом.
     allergies: [
@@ -121,6 +140,7 @@ export function toChildBody(values: ChildValues) {
  * что схема на сервере не изменится.
  */
 export function toChildUpdateBody(values: ChildValues) {
+  // Weight is a diary entry written once at creation, not a field of the card.
   const { full_name, height_cm, allergies, notes } = toChildBody(values);
   return { full_name, height_cm, allergies, notes };
 }
