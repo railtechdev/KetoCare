@@ -33,6 +33,7 @@ import {
   type CustomDish,
 } from "./useCustomDishes";
 import { queryState } from "../../lib/queryState";
+import { RecipeFitSheet } from "./RecipeFitSheet";
 
 /**
  * Блюда ребёнка — раскладки, сохранённые из калькулятора.
@@ -73,6 +74,8 @@ export function MyDishesPanel({
       title={t(inCard ? "myDishes.patientTitle" : "myDishes.title")}
       description={t(inCard ? "myDishes.patientIntro" : "myDishes.intro")}
     >
+      {inCard && patientId !== null && <RecipeFitSheet patientId={patientId} />}
+
       <AsyncSection
         {...queryState(dishes)}
         skeleton={null}

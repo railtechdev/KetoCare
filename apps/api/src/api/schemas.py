@@ -997,3 +997,49 @@ class CustomDishRead(BaseModel):
     computed: DishComputed | None
     engine_version: str | None
     created_at: datetime
+
+
+class RecipeFitsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recipe_ids: list[uuid.UUID] = Field(min_length=1, max_length=20)
+
+
+class RecipeFitIngredient(BaseModel):
+    product_id: uuid.UUID
+    name_ru: str
+    grams: float
+
+
+class RecipeFitDish(BaseModel):
+    kcal: float
+    fat_g: float
+    protein_g: float
+    carbs_g: float
+    fiber_g: float
+    ratio: float | None
+
+
+class RecipeFit(BaseModel):
+    """One recipe's proposal. Reader: «Из библиотеки» in the patient card."""
+
+    recipe_id: uuid.UUID
+    title: str
+    status: Literal["fitted", "excluded", "infeasible", "unavailable"]
+    #: Why there is no proposal, in words for the specialist.
+    reason: str | None = None
+    #: The target was out of reach near the recipe's proportions.
+    reshaped: bool = False
+    #: Products withdrawn from the catalogue that the composition still uses.
+    withdrawn: list[str] = []
+    ingredients: list[RecipeFitIngredient] = []
+    dish: RecipeFitDish | None = None
+    ratio_within_tolerance: bool | None = None
+    kcal_within_tolerance: bool | None = None
+
+
+class RecipeFitsResponse(BaseModel):
+    target_ratio: float
+    target_kcal: float
+    engine_version: str
+    items: list[RecipeFit]
