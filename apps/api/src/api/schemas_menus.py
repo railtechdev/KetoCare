@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
@@ -193,3 +193,34 @@ class MenuRead(BaseModel):
     #: Роль сохранившего: экран подписывает специалиста ролью («диетолог»), а
     #: Mini App показывает строку только под планом специалиста.
     updated_by_role: UserRole | None = None
+
+
+class MenuWeekDay(BaseModel):
+    date: date
+    #: `null` when the day has no plan.
+    menu: MenuRead | None
+
+
+class MenuWeekRead(BaseModel):
+    """Seven consecutive days. Readers: the weekly grid and the printed plan."""
+
+    start: date
+    days: list[MenuWeekDay]
+
+
+class MenuWeekCopyWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_start: date
+    target_start: date
+
+
+class MenuWeekCopySkip(BaseModel):
+    date: date
+    reason: Literal["source_empty", "target_not_empty", "not_available"]
+    message: str | None = None
+
+
+class MenuWeekCopyRead(BaseModel):
+    copied: list[date]
+    skipped: list[MenuWeekCopySkip]

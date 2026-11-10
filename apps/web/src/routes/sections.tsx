@@ -255,7 +255,7 @@ export const SECTION_GROUPS: Record<string, SectionGroup> = {
   menu: "nutrition",
   recipes: "nutrition",
   products: "nutrition",
-  patients: "clinical",
+  patients: "daily",
   reports: "clinical",
   child: "management",
   assistant: "management",

@@ -15,6 +15,7 @@ const VALID = {
   birthDate: "2019-04-12",
   sex: "f" as const,
   heightCm: "121.5",
+  weightKg: "",
   allergies: "орехи, молоко",
   excludedProductIds: [],
   notes: "",
@@ -55,6 +56,7 @@ describe("toChildBody", () => {
       birth_date: "2019-04-12",
       sex: "f",
       height_cm: 121.5,
+      weight_kg: null,
       allergies: ["орехи", "молоко"],
       notes: null,
     });

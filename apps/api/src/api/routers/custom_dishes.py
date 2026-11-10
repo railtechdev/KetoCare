@@ -11,8 +11,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Request, Response
 
+from core import exclusions
 from core.models import CustomDish
 from core.repositories import custom_dishes as dishes_repo
+from core.repositories import patients as patients_repo
+from core.repositories import products as products_repo
 
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..deps.idempotency import IdempotencyKeyDep
@@ -32,6 +35,28 @@ def _reject_duplicates(payload: CustomDishWrite) -> None:
             ErrorCode.VALIDATION_ERROR,
             "Один и тот же продукт указан в составе несколько раз.",
             details={"product_ids": [str(pid) for pid in duplicates]},
+        )
+
+
+async def _reject_excluded(
+    session: SessionDep, patient_id: uuid.UUID, payload: CustomDishWrite
+) -> None:
+    patient = await patients_repo.get(session, patient_id)
+    if patient is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
+    excluded = await products_repo.same_food_ids(
+        session, product_ids=exclusions.excluded_ids(patient.allergies)
+    )
+    found = exclusions.contains_excluded(
+        [item.product_id for item in payload.ingredients], excluded
+    )
+    if found:
+        products = await products_repo.get_by_ids(session, product_ids=found)
+        names = ", ".join(products[pid].name_ru for pid in found if pid in products)
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            f"Исключено этому ребёнку: {names}.",
+            details={"product_ids": [str(pid) for pid in found]},
         )
 
 
@@ -60,6 +85,8 @@ async def create_dish(
     # Доступ проверен зависимостью, состав — до брони: отказ 403 или 422 ключ не
     # занимает, и исправленный запрос с тем же ключом пройдёт.
     _reject_duplicates(payload)
+    if payload.reject_excluded:
+        await _reject_excluded(session, patient_id, payload)
     reservation: uuid.UUID | None = None
     if idempotency_key is not None:
         outcome = await idempotency.begin(

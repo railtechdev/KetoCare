@@ -1175,6 +1175,26 @@ class TestSolvePinnedMass:
         assert "broccoli" in error["message"]
         assert error["details"]["product_ids"] == ["broccoli"]
 
+    async def test_fractional_pin_is_refused_by_name(self, client, make_user, auth_headers):
+        # The solver returns whole grams, so 20.5 would come back as 20.
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {
+                    "ratio": 3.5,
+                    "kcal": 300,
+                    "per_ingredient_bounds": {"broccoli": [20.5, 20.5]},
+                },
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["details"]["product_ids"] == ["broccoli"]
+
     async def test_pin_that_makes_the_goal_unreachable_says_so(
         self, client, make_user, auth_headers
     ):
@@ -1247,3 +1267,79 @@ class TestPrescriptionGoal:
         )
 
         assert response.status_code == 422
+
+
+class TestSolveNearCurrentGrams:
+    """Reader: «Подобрать граммовку» in the web cabinet's calculator."""
+
+    async def test_vegetable_is_not_pushed_to_the_minimum(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {"ratio": 3.5, "kcal": 300},
+                "current_grams": {"chicken": 25, "butter": 33, "broccoli": 40},
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        grams = {item["product_id"]: item["grams"] for item in body["dish"]["items"]}
+        assert grams["broccoli"] >= 15
+        assert body["reshaped"] is False
+        assert body["ratio_within_tolerance"] is True
+        assert body["kcal_within_tolerance"] is True
+
+    async def test_unreachable_corridor_falls_back_and_says_so(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {"ratio": 3.5, "kcal": 300},
+                "current_grams": {"chicken": 200, "butter": 2, "broccoli": 100},
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["reshaped"] is True
+
+    async def test_pin_stays_inside_the_corridor_search(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {
+                    "ratio": 3.5,
+                    "kcal": 300,
+                    "per_ingredient_bounds": {"broccoli": [30, 30]},
+                },
+                "current_grams": {"chicken": 25, "butter": 33, "broccoli": 30},
+            },
+            headers=auth_headers(doctor),
+        )
+
+        grams = {item["product_id"]: item["grams"] for item in response.json()["dish"]["items"]}
+        assert grams["broccoli"] == pytest.approx(30, abs=0.05)
+
+    async def test_without_masses_nothing_changes(self, client, make_user, auth_headers):
+        # Reader: the Mini App, which does not send masses yet.
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={"ingredients": [CHICKEN, BUTTER], "targets": {"ratio": 3.5, "kcal": 300}},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["reshaped"] is False

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
+import { customDishesKey } from "../dishes/useCustomDishes";
 import { patientOverviewKey } from "../patients/overview";
 import {
   careTeamKey,
@@ -44,6 +45,10 @@ export function useCreatePrescription(patientId: string) {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: prescriptionsKey(patientId),
+        }),
+        // New targets change which of the child's dishes miss them.
+        queryClient.invalidateQueries({
+          queryKey: customDishesKey(patientId),
         }),
         queryClient.invalidateQueries({
           queryKey: patientOverviewKey(patientId),

@@ -127,7 +127,8 @@ describe("раздел карты пациента", () => {
     );
 
     await waitFor(
-      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue(3.5),
+      () =>
+        expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("3.5"),
       { timeout: 5000 },
     );
 
@@ -136,7 +137,7 @@ describe("раздел карты пациента", () => {
     );
 
     await waitFor(
-      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue(4),
+      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("4"),
       { timeout: 5000 },
     );
     // Явный предел теста: два ожидания по 5 с плюс ленивая загрузка экрана не

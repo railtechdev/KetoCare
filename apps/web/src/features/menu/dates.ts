@@ -41,6 +41,21 @@ export function shiftIsoDate(value: string, days: number): string {
   return toIsoDate(date);
 }
 
+/** Понедельник недели, в которой лежит дата. */
+export function weekStartOf(value: string): string {
+  // getDay() считает от воскресенья, неделя в сетке — от понедельника.
+  const fromMonday = (parseIsoDate(value).getDay() + 6) % 7;
+  return shiftIsoDate(value, -fromMonday);
+}
+
+/** Короткая подпись столбца недели: «пн, 9». */
+export function formatWeekday(value: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    weekday: "short",
+    day: "numeric",
+  }).format(parseIsoDate(value));
+}
+
 /** Подпись дня для заголовка: «пт, 28 августа 2026 г.». */
 export function formatDayLabel(value: string): string {
   return new Intl.DateTimeFormat("ru-RU", {
