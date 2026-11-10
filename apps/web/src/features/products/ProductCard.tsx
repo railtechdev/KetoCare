@@ -134,7 +134,9 @@ export function ProductCard({
                 carbsG={data.carbs_100g}
               />
               <p className="m-0 text-sm text-muted-foreground tabular-nums">
-                {t("card.fiber", { value: formatGrams(data.fiber_100g) })}
+                {data.fiber_known
+                  ? t("card.fiber", { value: formatGrams(data.fiber_100g) })
+                  : t("card.fiberUnknown")}
               </p>
             </Section>
 

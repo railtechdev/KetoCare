@@ -11,6 +11,7 @@ export type DictionaryEntryUpdateBody = Schemas["DictionaryEntryUpdate"];
 export type Product = Schemas["ProductRead"];
 export type ProductCreateBody = Schemas["ProductCreate"];
 export type ProductUpdateBody = Schemas["ProductUpdate"];
+export type ProductDeriveBody = Schemas["ProductDerive"];
 export type ImportReport = Schemas["ProductImportReport"];
 export type ImportRowError = Schemas["ImportRowError"];
 

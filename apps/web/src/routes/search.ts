@@ -97,6 +97,8 @@ export interface FilterSearch {
   therapy?: "ended";
   /** Категория продукта (идентификатор) или рецепта (код) */
   category?: string;
+  /** Справочник продуктов: стандарт питания; без параметра — основной */
+  standard?: string;
   /** Справочник продуктов: ведущий макронутриент */
   macro?: "fat" | "protein" | "carbs";
   /** Справочник продуктов: показывать выведенные из оборота */
@@ -161,6 +163,7 @@ function validateFilters(search: Record<string, unknown>): FilterSearch {
   return {
     therapy: search.therapy === "ended" ? ("ended" as const) : undefined,
     category: matching(search.category, /^[\w-]{1,64}$/),
+    standard: matching(search.standard, UUID),
     macro: (["fat", "protein", "carbs"] as const).find(
       (value) => value === search.macro,
     ),

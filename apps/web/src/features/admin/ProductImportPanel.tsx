@@ -28,7 +28,16 @@ import type { ImportRowError } from "./types";
  * есть главная ценность экрана: база продуктов задаёт числа, по которым
  * считается меню ребёнка, и «залить и посмотреть» тут не работает.
  */
-export function ProductImportPanel({ onDone }: { onDone: () => void }) {
+export function ProductImportPanel({
+  onDone,
+  standardId,
+  standardName,
+}: {
+  onDone: () => void;
+  /** Куда загружается файл; не задан — основной стандарт */
+  standardId?: string;
+  standardName?: string;
+}) {
   const { t } = useTranslation("admin");
   const ids = useId();
 
@@ -107,6 +116,12 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
         intro={t("products.import.intro")}
       />
 
+      {standardName !== undefined && (
+        <p className="m-0 text-sm font-medium">
+          {t("products.import.target", { name: standardName })}
+        </p>
+      )}
+
       {/* Список колонок повторяет REQUIRED_COLUMNS из
           apps/api/src/api/services/product_import.py — это подсказка к формату
           файла, сами колонки проверяет сервер. */}
@@ -157,7 +172,12 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
           onClick={() => {
             if (file !== null) {
               commit.reset();
-              preview.mutate({ file, dryRun: true, updateExisting });
+              preview.mutate({
+                file,
+                dryRun: true,
+                updateExisting,
+                standardId,
+              });
             }
           }}
         >
@@ -282,7 +302,7 @@ export function ProductImportPanel({ onDone }: { onDone: () => void }) {
                   onClick={() => {
                     if (file === null) return;
                     commit.mutate(
-                      { file, dryRun: false, updateExisting },
+                      { file, dryRun: false, updateExisting, standardId },
                       {
                         onSuccess: (result) => {
                           if (result.imported > 0) {

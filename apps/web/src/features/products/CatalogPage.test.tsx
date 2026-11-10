@@ -12,11 +12,11 @@ import { canEditCatalog } from "./types";
  * (право проверяет сервер), но приведёт человека к кнопке, за которой 403.
  */
 describe("кто правит справочник продуктов", () => {
-  it.each(["admin", "dietitian"] as const)("%s правит", (role) => {
+  it.each(["admin", "dietitian", "doctor"] as const)("%s правит", (role) => {
     expect(canEditCatalog(role)).toBe(true);
   });
 
-  it.each(["doctor", "parent"] as const)("%s только читает", (role) => {
+  it.each(["parent"] as const)("%s только читает", (role) => {
     expect(canEditCatalog(role)).toBe(false);
   });
 

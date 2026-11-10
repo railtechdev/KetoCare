@@ -24,6 +24,7 @@ from ..models import (
     ProductRevision,
 )
 from ..models.enums import CarbsConvention, LeadingMacro
+from . import audit as audit_repo
 
 
 class StandardLockedError(Exception):
@@ -211,12 +212,20 @@ async def count_by_state(session: AsyncSession, *, verified_before: date) -> tup
 
 
 async def _unlocked_standard(session: AsyncSession, standard_id: uuid.UUID) -> FoodStandard:
-    standard = await session.get(FoodStandard, standard_id)
+    # Разделяемая блокировка: запись, начатая до закрытия стандарта, не должна
+    # закоммититься после него (ADR-0057, `food_standards.lock`).
+    standard = await session.get(FoodStandard, standard_id, with_for_update={"read": True})
     if standard is None:
         raise LookupError(f"Food standard {standard_id} does not exist")
     if standard.locked_at is not None:
         raise StandardLockedError(str(standard_id))
     return standard
+
+
+def fiber_differs(current: Any, written: Any) -> bool:
+    """С точностью колонки: «0.004» ляжет нулём и ничего о клетчатке не утверждает."""
+
+    return round(float(current), 2) != round(float(written), 2)
 
 
 async def _food_id_for_name(
@@ -241,7 +250,8 @@ async def create(session: AsyncSession, *, changed_by: uuid.UUID, **fields: Any)
     standard_id = fields.setdefault("standard_id", DEFAULT_FOOD_STANDARD_ID)
     standard = await _unlocked_standard(session, standard_id)
     fields.setdefault("fiber_known", standard.carbs_convention is not CarbsConvention.UNKNOWN)
-    if fields.get("food_id") is None:
+    inherited_food = fields.get("food_id") is not None
+    if not inherited_food:
         fields.pop("food_id", None)
         food_id = await _food_id_for_name(session, str(fields["name_ru"]))
         if food_id is not None:
@@ -250,6 +260,10 @@ async def create(session: AsyncSession, *, changed_by: uuid.UUID, **fields: Any)
     product = Product(**fields)
     session.add(product)
     await session.flush()
+    # Копия несёт тождество оригинала, но её могли назвать как другой продукт:
+    # связь держится на совпадении названий, и пропуск отключил бы исключение.
+    if inherited_food:
+        await _join_food_of_same_name(session, product, changed_by=changed_by)
     await _write_revision(session, product=product, changed_by=changed_by)
     return product
 
@@ -261,29 +275,48 @@ async def update(
 
     await _unlocked_standard(session, product.standard_id)
     previous_name = product.name_ru
+    # Вписанная клетчатка перестаёт быть неизвестной, иначе экран показывал бы
+    # «не указана» рядом с числом, которое по-настоящему идёт в расчёт.
+    if "fiber_100g" in fields and fiber_differs(product.fiber_100g, fields["fiber_100g"]):
+        fields["fiber_known"] = True
     for key, value in fields.items():
         setattr(product, key, value)
     await session.flush()
     if product.name_ru.casefold().strip() != previous_name.casefold().strip():
-        await _join_food_of_same_name(session, product)
+        await _join_food_of_same_name(session, product, changed_by=changed_by)
     await _write_revision(session, product=product, changed_by=changed_by)
     return product
 
 
-async def _join_food_of_same_name(session: AsyncSession, product: Product) -> None:
+async def _join_food_of_same_name(
+    session: AsyncSession, product: Product, *, changed_by: uuid.UUID
+) -> None:
     """Новое название совпало с продуктом другого стандарта — это один продукт.
 
-    Объединяются все записи, а не одна: иначе переименованная запись потеряла бы
-    связь с прежними, и исключение ребёнка перестало бы на них действовать.
+    Объединяются все записи, а не одна: иначе переименованная запись потеряла
+    бы связь с прежними, и исключение ребёнка перестало бы на них действовать.
+    Слияние необратимо, поэтому прежние группы остаются в журнале: восстановить
+    их больше не из чего.
     """
 
     target = await _food_id_for_name(session, product.name_ru, excluding=product.id)
     if target is None or target == product.food_id:
         return
+    previous = product.food_id
+    moved = list(await session.scalars(select(Product.id).where(Product.food_id == previous)))
     await session.execute(
-        sql_update(Product).where(Product.food_id == product.food_id).values(food_id=target)
+        sql_update(Product).where(Product.food_id == previous).values(food_id=target)
     )
     await session.refresh(product)
+    await audit_repo.write_audit_log(
+        session,
+        user_id=changed_by,
+        action="merge",
+        entity="products",
+        entity_id=product.id,
+        before={"food_id": str(previous)},
+        after={"food_id": str(target), "product_ids": [str(item) for item in moved]},
+    )
 
 
 async def _write_revision(
