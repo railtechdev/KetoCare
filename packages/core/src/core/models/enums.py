@@ -18,6 +18,26 @@ class UserRole(enum.StrEnum):
     PARENT = "parent"
 
 
+class FoodStandardKind(enum.StrEnum):
+    """`reference` — внешний документ, `clinic` — своя база клиники."""
+
+    REFERENCE = "reference"
+    CLINIC = "clinic"
+
+
+class FoodDietType(enum.StrEnum):
+    KETOGENIC = "ketogenic"
+    GENERAL = "general"
+
+
+class CarbsConvention(enum.StrEnum):
+    """Как в стандарте записаны углеводы: с клетчаткой, без неё, неизвестно."""
+
+    TOTAL = "total"
+    NET = "net"
+    UNKNOWN = "unknown"
+
+
 class Sex(enum.StrEnum):
     M = "m"
     F = "f"

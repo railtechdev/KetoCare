@@ -13,6 +13,7 @@ from core.clock import local_today
 from core.models import (
     AuditLog,
     CustomDish,
+    FoodStandard,
     Menu,
     MenuItem,
     Product,
@@ -20,7 +21,14 @@ from core.models import (
     Recipe,
     RecipeIngredient,
 )
-from core.models.enums import RecipeCategory, RecipeStatus, UserRole
+from core.models.enums import (
+    CarbsConvention,
+    FoodDietType,
+    FoodStandardKind,
+    RecipeCategory,
+    RecipeStatus,
+    UserRole,
+)
 from core.repositories import patients as patients_repo
 from keto_engine import ENGINE_VERSION
 
@@ -966,6 +974,44 @@ class TestExcludedProductsAreNamed:
         assert body["totals"] is not None
         assert [e["name_ru"] for e in body["excluded_products"]] == [butter.name_ru]
         assert body["excluded_products"][0]["item_ids"] == [body["items"][0]["id"]]
+
+    async def test_exclusion_marks_the_same_food_from_another_standard(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        recipe = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+        await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+        standard = FoodStandard(
+            name=f"Стандарт {uuid.uuid4().hex[:8]}",
+            kind=FoodStandardKind.REFERENCE,
+            diet_type=FoodDietType.GENERAL,
+            carbs_convention=CarbsConvention.UNKNOWN,
+        )
+        session.add(standard)
+        await session.flush()
+        twin = await _product(
+            session,
+            "Масло сливочное",
+            **{**BUTTER, "standard_id": standard.id, "food_id": butter.food_id},
+        )
+
+        patient.allergies = [str(twin.id)]
+        await session.flush()
+
+        response = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        assert response.status_code == 200, response.text
+        assert [e["product_id"] for e in response.json()["excluded_products"]] == [str(butter.id)]
 
     async def test_free_label_alone_marks_nothing(
         self, client, session, make_user, make_patient, auth_headers

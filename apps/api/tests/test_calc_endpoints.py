@@ -17,8 +17,8 @@ from sqlalchemy import select
 
 from api.schemas import DishIngredientIn
 from api.schemas_calc import CALC_GRAMS_MAX
-from core.models import Product, ProductCategory
-from core.models.enums import UserRole
+from core.models import FoodStandard, Product, ProductCategory
+from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, UserRole
 from core.repositories import patients as patients_repo
 from keto_engine import ENGINE_VERSION
 
@@ -678,6 +678,68 @@ class TestChildExclusionsReachTheSolver:
         parent, patient, peanut = await self._patient_with_exclusion(
             session, make_user, make_patient
         )
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [
+                    CHICKEN,
+                    BROCCOLI,
+                    {
+                        "product_id": str(peanut.id),
+                        "kcal": 884,
+                        "fat": 99.9,
+                        "protein": 0.0,
+                        "carbs": 0.0,
+                        "fiber": 0.0,
+                    },
+                ],
+                "targets": {"ratio": 4.0, "kcal": 400},
+                "patient_id": str(patient.id),
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "infeasible_calculation"
+
+    async def test_exclusion_works_across_standards(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Продукт исключён записью другого стандарта: решатель его тоже не видит.
+
+        Тот же приём, что и выше: без исключённого жира задача неразрешима.
+        """
+
+        parent, patient, peanut = await self._patient_with_exclusion(
+            session, make_user, make_patient
+        )
+        standard = FoodStandard(
+            name=f"Стандарт {uuid.uuid4().hex[:8]}",
+            kind=FoodStandardKind.REFERENCE,
+            diet_type=FoodDietType.GENERAL,
+            carbs_convention=CarbsConvention.UNKNOWN,
+        )
+        session.add(standard)
+        await session.flush()
+        twin = Product(
+            standard_id=standard.id,
+            food_id=peanut.food_id,
+            name_ru=peanut.name_ru,
+            category_id=peanut.category_id,
+            kcal_100g=peanut.kcal_100g,
+            fat_100g=peanut.fat_100g,
+            protein_100g=peanut.protein_100g,
+            carbs_100g=peanut.carbs_100g,
+            fiber_100g=peanut.fiber_100g,
+            source=peanut.source,
+            source_version=peanut.source_version,
+            verified_at=peanut.verified_at,
+        )
+        session.add(twin)
+        await session.flush()
+        patient.allergies = [str(twin.id)]
+        await session.flush()
 
         response = await client.post(
             "/api/v1/calc/solve",

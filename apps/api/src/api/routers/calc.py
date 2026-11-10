@@ -75,7 +75,10 @@ async def _excluded_for(
             # нечем, и притворяться, что сопоставили, нельзя.
             continue
 
-    found = exclusions.contains_excluded(parsed, patient.allergies)
+    excluded = await products_repo.same_food_ids(
+        session, product_ids=exclusions.excluded_ids(patient.allergies)
+    )
+    found = exclusions.contains_excluded(parsed, excluded)
     if not found:
         return []
 

@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 
 
 def parse(allergies: Iterable[str]) -> tuple[set[uuid.UUID], list[str]]:
@@ -47,9 +47,13 @@ def excluded_ids(allergies: Iterable[str]) -> set[uuid.UUID]:
 
 
 def contains_excluded(
-    product_ids: Sequence[uuid.UUID], allergies: Iterable[str]
+    product_ids: Sequence[uuid.UUID], excluded: Collection[uuid.UUID]
 ) -> list[uuid.UUID]:
-    """Какие из продуктов состава ребёнку исключены — в порядке состава."""
+    """Какие из продуктов состава ребёнку исключены — в порядке состава.
 
-    excluded = excluded_ids(allergies)
+    `excluded` — уже развёрнутый по всем стандартам набор
+    (`products.same_food_ids`): исключённое молоко не должно пройти под записью
+    из другого стандарта (ADR-0056).
+    """
+
     return [pid for pid in dict.fromkeys(product_ids) if pid in excluded]

@@ -27,7 +27,9 @@ from .clinical import (
     Prescription,
 )
 from .content import (
+    DEFAULT_FOOD_STANDARD_ID,
     CustomDish,
+    FoodStandard,
     Product,
     ProductCategory,
     ProductRevision,
@@ -79,6 +81,8 @@ __all__ = [
     "ClinicalNote",
     # content
     "ProductCategory",
+    "DEFAULT_FOOD_STANDARD_ID",
+    "FoodStandard",
     "Product",
     "ProductRevision",
     "Recipe",

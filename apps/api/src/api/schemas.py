@@ -397,7 +397,8 @@ class ProductBase(BaseModel):
 
 
 class ProductCreate(ProductBase):
-    pass
+    #: Не указан — основной стандарт.
+    standard_id: uuid.UUID | None = None
 
 
 class ProductUpdate(ProductBase):
@@ -409,6 +410,10 @@ class ProductRead(ProductBase):
 
     id: uuid.UUID
     is_active: bool
+    standard_id: uuid.UUID
+    food_id: uuid.UUID
+    derived_from_id: uuid.UUID | None = None
+    fiber_known: bool
 
     @computed_field  # type: ignore[prop-decorator]
     @property

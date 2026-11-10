@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -16,8 +16,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from keto_engine.constants import KCAL_PER_G_CARBS, KCAL_PER_G_FAT, KCAL_PER_G_PROTEIN
 
-from ..models import Product, ProductCategory, ProductRevision
-from ..models.enums import LeadingMacro
+from ..models import (
+    DEFAULT_FOOD_STANDARD_ID,
+    FoodStandard,
+    Product,
+    ProductCategory,
+    ProductRevision,
+)
+from ..models.enums import CarbsConvention, LeadingMacro
+
+
+class StandardLockedError(Exception):
+    """Значения закрытого стандарта не меняются ни для какой роли (ADR-0056)."""
+
 
 _SNAPSHOT_FIELDS = (
     "name_ru",
@@ -34,6 +45,7 @@ _SNAPSHOT_FIELDS = (
     "verified_at",
     "is_active",
     "counts_in_calculation",
+    "fiber_known",
 )
 
 
@@ -136,6 +148,7 @@ async def search(
     macro: LeadingMacro | None = None,
     only_active: bool = True,
     verified_before: date | None = None,
+    standard_id: uuid.UUID = DEFAULT_FOOD_STANDARD_ID,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Product], int]:
@@ -155,9 +168,12 @@ async def search(
     Используется `websearch_to_tsquery`, а не `to_tsquery`: последний падает на
     произвольном вводе (`&`, `|`, `!`, `:` — синтаксис запроса), и строка поиска
     из формы роняла бы запрос. `websearch_to_tsquery` принимает что угодно.
+
+    Поиск идёт внутри одного стандарта, по умолчанию основного. Поэтому разбор
+    еды и семья не получат одно молоко несколько раз и не увидят чужой стандарт.
     """
 
-    conditions: list[ColumnElement[bool]] = []
+    conditions: list[ColumnElement[bool]] = [Product.standard_id == standard_id]
     if only_active:
         conditions.append(Product.is_active.is_(True))
     if category_id is not None:
@@ -194,7 +210,43 @@ async def count_by_state(session: AsyncSession, *, verified_before: date) -> tup
     return int(total), int(active), int(stale)
 
 
+async def _unlocked_standard(session: AsyncSession, standard_id: uuid.UUID) -> FoodStandard:
+    standard = await session.get(FoodStandard, standard_id)
+    if standard is None:
+        raise LookupError(f"Food standard {standard_id} does not exist")
+    if standard.locked_at is not None:
+        raise StandardLockedError(str(standard_id))
+    return standard
+
+
+async def _food_id_for_name(
+    session: AsyncSession, name_ru: str, *, excluding: uuid.UUID | None = None
+) -> uuid.UUID | None:
+    """Тот же продукт в другом стандарте — по названию без учёта регистра.
+
+    Ложное совпадение лишь исключит ребёнку лишнее. Самая ранняя запись берётся,
+    чтобы повторный импорт всегда находил одно и то же.
+    """
+
+    conditions = [func.lower(func.btrim(Product.name_ru)) == name_ru.casefold().strip()]
+    if excluding is not None:
+        conditions.append(Product.id != excluding)
+    food_id: uuid.UUID | None = await session.scalar(
+        select(Product.food_id).where(*conditions).order_by(Product.created_at, Product.id).limit(1)
+    )
+    return food_id
+
+
 async def create(session: AsyncSession, *, changed_by: uuid.UUID, **fields: Any) -> Product:
+    standard_id = fields.setdefault("standard_id", DEFAULT_FOOD_STANDARD_ID)
+    standard = await _unlocked_standard(session, standard_id)
+    fields.setdefault("fiber_known", standard.carbs_convention is not CarbsConvention.UNKNOWN)
+    if fields.get("food_id") is None:
+        fields.pop("food_id", None)
+        food_id = await _food_id_for_name(session, str(fields["name_ru"]))
+        if food_id is not None:
+            fields["food_id"] = food_id
+
     product = Product(**fields)
     session.add(product)
     await session.flush()
@@ -207,11 +259,31 @@ async def update(
 ) -> Product:
     """Обновляет продукт и пишет ревизию с новым состоянием."""
 
+    await _unlocked_standard(session, product.standard_id)
+    previous_name = product.name_ru
     for key, value in fields.items():
         setattr(product, key, value)
     await session.flush()
+    if product.name_ru.casefold().strip() != previous_name.casefold().strip():
+        await _join_food_of_same_name(session, product)
     await _write_revision(session, product=product, changed_by=changed_by)
     return product
+
+
+async def _join_food_of_same_name(session: AsyncSession, product: Product) -> None:
+    """Новое название совпало с продуктом другого стандарта — это один продукт.
+
+    Объединяются все записи, а не одна: иначе переименованная запись потеряла бы
+    связь с прежними, и исключение ребёнка перестало бы на них действовать.
+    """
+
+    target = await _food_id_for_name(session, product.name_ru, excluding=product.id)
+    if target is None or target == product.food_id:
+        return
+    await session.execute(
+        sql_update(Product).where(Product.food_id == product.food_id).values(food_id=target)
+    )
+    await session.refresh(product)
 
 
 async def _write_revision(
@@ -344,12 +416,18 @@ async def get_or_create_category(session: AsyncSession, *, name_ru: str) -> Prod
     return await create_category(session, name_ru=name_ru)
 
 
-async def get_by_names(session: AsyncSession, *, names: list[str]) -> dict[str, Product]:
+async def get_by_names(
+    session: AsyncSession,
+    *,
+    names: list[str],
+    standard_id: uuid.UUID = DEFAULT_FOOD_STANDARD_ID,
+) -> dict[str, Product]:
     """Продукты по нормализованным именам — для обновляющего импорта.
 
     Ключ словаря — имя, приведённое так же, как в уникальном индексе: файл
     новой версии базы состава приходит с другим написанием («Масло сливочное»
-    и «масло сливочное»), а это одна и та же позиция.
+    и «масло сливочное»), а это одна и та же позиция. Название однозначно
+    только внутри стандарта.
     """
 
     if not names:
@@ -357,7 +435,10 @@ async def get_by_names(session: AsyncSession, *, names: list[str]) -> dict[str, 
 
     folded = {name.casefold().strip() for name in names}
     rows = await session.scalars(
-        select(Product).where(func.lower(func.trim(Product.name_ru)).in_(folded))
+        select(Product).where(
+            Product.standard_id == standard_id,
+            func.lower(func.trim(Product.name_ru)).in_(folded),
+        )
     )
     return {product.name_ru.casefold().strip(): product for product in rows}
 
@@ -396,6 +477,23 @@ async def get_by_ids(
 
     rows = await session.scalars(select(Product).where(Product.id.in_(list(product_ids))))
     return {product.id: product for product in rows}
+
+
+async def same_food_ids(
+    session: AsyncSession, *, product_ids: Collection[uuid.UUID]
+) -> set[uuid.UUID]:
+    """Записи того же продукта во всех стандартах, включая переданные.
+
+    Переданные остаются в ответе, даже если записи уже нет: исключение не должно
+    пропасть из-за того, что каталог изменился.
+    """
+
+    if not product_ids:
+        return set()
+
+    foods = select(Product.food_id).where(Product.id.in_(list(product_ids)))
+    rows = await session.scalars(select(Product.id).where(Product.food_id.in_(foods)))
+    return {*rows, *product_ids}
 
 
 @dataclass(frozen=True, slots=True)
