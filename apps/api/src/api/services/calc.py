@@ -91,7 +91,7 @@ def keeping_every_product(targets: Targets, product_ids: Iterable[str]) -> Targe
     Bounds the caller set explicitly stay as they are.
     """
 
-    bounds = {
+    bounds: dict[str, tuple[float, float | None]] = {
         product_id: (MIN_INGREDIENT_GRAMS, DEFAULT_MAX_INGREDIENT_GRAMS)
         for product_id in product_ids
     }
