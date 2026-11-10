@@ -140,7 +140,7 @@ export const PATIENT_VIEW_SCREENS: Record<PatientView, PatientViewScreen> = {
   summary: (patient) => <SummaryView patient={patient} />,
   prescription: (patient) => <PrescriptionView patientId={patient.id} />,
   menu: (patient) => <MenuView patientId={patient.id} />,
-  calculator: (patient) => <CalculatorView patientId={patient.id} />,
+  calculator: (patient) => <CalculatorView patientId={patient.id} inCard />,
   diary: (patient) => <DiaryView patientId={patient.id} />,
   growth: (patient) => <GrowthScreen patientId={patient.id} />,
   course: (patient, role) => (

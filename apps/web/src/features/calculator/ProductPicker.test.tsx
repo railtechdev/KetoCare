@@ -149,9 +149,7 @@ describe("поиск продукта в калькуляторе", () => {
     );
   });
 
-  it("не зовёт в рецепты того, у кого этого раздела нет", async () => {
-    // У врача раздела «Рецепты» нет (`SECTIONS_BY_ROLE`), и ссылка увела бы его
-    // на главную — тупик того же рода, который здесь и закрывается (П3).
+  it("зовёт врача в рецепты: раздел у него есть на чтение", async () => {
     const user = userEvent.setup();
     (api.GET as Mock).mockResolvedValue({
       data: { items: [], total: 0 },
@@ -173,13 +171,7 @@ describe("поиск продукта в калькуляторе", () => {
     await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
 
     expect(
-      await screen.findByText(/По запросу «фуагра» ничего не нашлось/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /Искать в рецептах/ }),
-    ).toBeNull();
-    expect(
-      screen.getByRole("link", { name: /Искать в справочнике/ }),
+      await screen.findByRole("link", { name: /Искать в рецептах/ }),
     ).toBeInTheDocument();
   });
 

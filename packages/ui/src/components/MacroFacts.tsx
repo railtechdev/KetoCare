@@ -33,6 +33,11 @@ interface CountedFacts extends MacroFactsCommon {
   fatG: number;
   proteinG: number;
   carbsG: number;
+  /**
+   * Extra gram cells after the four standard ones. Labels come from the
+   * calling screen; only the specialist's calculator needs them today.
+   */
+  extras?: { full: string; short: string; grams: number }[];
 }
 
 interface UncountedFacts extends MacroFactsCommon {
@@ -91,14 +96,15 @@ export function MacroFacts(props: MacroFactsProps) {
     );
   }
 
-  const { kcal, fatG, proteinG, carbsG } = props;
+  const { kcal, fatG, proteinG, carbsG, extras = [] } = props;
   return (
     <div
       role="group"
       aria-label={label}
       aria-busy={stale}
       className={cn(
-        "grid grid-cols-4 gap-x-3 text-sm tabular-nums text-muted-foreground",
+        "grid gap-x-3 text-sm tabular-nums text-muted-foreground",
+        extras.length > 0 ? "grid-cols-3 @md:grid-cols-6" : "grid-cols-4",
         stale && "opacity-60 transition-opacity",
         className,
       )}
@@ -164,6 +170,14 @@ export function MacroFacts(props: MacroFactsProps) {
             : undefined
         }
       />
+      {extras.map((extra) => (
+        <Cell
+          key={extra.short}
+          full={extra.full}
+          short={extra.short}
+          value={formatGrams(extra.grams)}
+        />
+      ))}
     </div>
   );
 }

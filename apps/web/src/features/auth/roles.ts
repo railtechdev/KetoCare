@@ -52,7 +52,7 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
   // которым ничего нет (правило П3 канона). AI-сводка это пункт 21 ТЗ, этап 4;
   // раздел вернётся вместе со своей работой, как вернутся «Ассистент» и
   // «Отчёты» у родителя.
-  doctor: ["home", "patients", "calculator", "products", "profile"],
+  doctor: ["home", "patients", "calculator", "products", "recipes", "profile"],
   dietitian: [
     "home",
     "patients",

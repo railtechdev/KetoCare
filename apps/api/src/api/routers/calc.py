@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 
 from core import exclusions
 from core.repositories import patients as patients_repo
+from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from keto_engine import InfeasibleError, scale, solve, verify, within_tolerance
 
@@ -136,6 +137,13 @@ async def verify_dish(
         # Цели переданы; сравнимо ли соотношение — решает наличие самого
         # соотношения у блюда (#216).
         response.ratio_comparable = ratio_ok is not None
+        # Access to the patient was checked by `_excluded_for` above.
+        prescription = (
+            None
+            if payload.patient_id is None
+            else await prescriptions_repo.get_active(session, patient_id=payload.patient_id)
+        )
+        response.meal_goal = calc_service.to_meal_goal(payload.targets, prescription)
 
     return response
 

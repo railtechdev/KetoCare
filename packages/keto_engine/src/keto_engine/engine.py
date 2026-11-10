@@ -19,7 +19,15 @@ import numpy as np
 from scipy.optimize import OptimizeResult, linprog
 
 from . import constants
-from .types import DishResult, InfeasibleError, Ingredient, ItemAmount, SolveResult, Targets
+from .types import (
+    DishResult,
+    InfeasibleError,
+    Ingredient,
+    ItemAmount,
+    MealMacroGoal,
+    SolveResult,
+    Targets,
+)
 
 # Сколько продуктов двигаем при починке округления и на сколько шагов.
 # 4 продукта по 5 вариантов — 625 комбинаций, каждая считается арифметикой;
@@ -103,6 +111,7 @@ def verify(items: Sequence[tuple[Ingredient, float]]) -> DishResult:
                 protein_g=item_protein,
                 carbs_g=item_carbs,
                 fiber_g=item_fiber,
+                net_carbs_g=item_net_carbs,
             )
         )
         fat_g += item_fat
@@ -195,6 +204,40 @@ def max_non_fat_grams(ratio: float, kcal: float) -> float:
 
     denominator = ratio * constants.KCAL_PER_G_FAT + constants.KCAL_PER_G_PROTEIN
     return kcal / denominator
+
+
+def meal_macro_goal(
+    ratio: float,
+    kcal: float,
+    *,
+    day_protein_g: float | None = None,
+    day_kcal: float | None = None,
+) -> MealMacroGoal:
+    """Fat, protein and net carbs one meal should contain.
+
+    Fat and the protein-plus-net-carbs sum follow from the ratio and calories.
+    Protein is the daily target's share of this meal's calories, which for
+    equal meals is the daily target divided by their number. Net carbs are what
+    remains of the sum.
+
+    TODO(med): confirm the equal split of protein across meals (question 55 in
+    docs/medical/OPEN_QUESTIONS.md). The goal is a hint on screen and does not
+    take part in any verdict.
+    """
+
+    non_fat = max_non_fat_grams(ratio, kcal)
+    fat = ratio * non_fat
+    if day_protein_g is None or day_kcal is None:
+        return MealMacroGoal(fat_g=fat, protein_g=None, net_carbs_g=None, non_fat_g=non_fat)
+    if day_kcal <= 0:
+        raise ValueError("Суточная калорийность должна быть положительной")
+
+    protein = day_protein_g * kcal / day_kcal
+    if protein > non_fat:
+        return MealMacroGoal(fat_g=fat, protein_g=None, net_carbs_g=None, non_fat_g=non_fat)
+    return MealMacroGoal(
+        fat_g=fat, protein_g=protein, net_carbs_g=non_fat - protein, non_fat_g=non_fat
+    )
 
 
 def _default_bounds(

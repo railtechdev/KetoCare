@@ -48,14 +48,48 @@ export function useRenameCustomDish(patientId: string) {
       dish: CustomDish;
       title: string;
     }) => {
-      // Состав уходит прежним: ручка принимает блюдо целиком, и отправить одно
-      // название значит стереть раскладку. Правка состава — это калькулятор,
-      // и она сохраняется отдельным блюдом.
+      // The endpoint takes the whole dish, so the composition goes back as is:
+      // sending only the title would erase it.
       const { data, error } = await api.PUT(
         "/api/v1/patients/{patient_id}/custom-dishes/{dish_id}",
         {
           params: { path: { patient_id: patientId, dish_id: dish.id } },
           body: { title, ingredients: dish.ingredients },
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty dish response");
+      return data;
+    },
+    onSuccess: () => invalidate(queryClient, patientId),
+  });
+}
+
+/**
+ * Replaces the composition of a saved dish.
+ *
+ * Days already composed keep their own snapshot of the dish, so past and
+ * planned days do not change (`menu_items.snapshot`).
+ */
+export function useUpdateCustomDish(patientId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    networkMode: "always",
+    retry: false,
+    mutationFn: async ({
+      dishId,
+      title,
+      ingredients,
+    }: {
+      dishId: string;
+      title: string;
+      ingredients: CustomDish["ingredients"];
+    }) => {
+      const { data, error } = await api.PUT(
+        "/api/v1/patients/{patient_id}/custom-dishes/{dish_id}",
+        {
+          params: { path: { patient_id: patientId, dish_id: dishId } },
+          body: { title, ingredients },
         },
       );
       if (error || !data) throw error ?? new Error("Empty dish response");

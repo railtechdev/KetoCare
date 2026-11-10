@@ -20,6 +20,7 @@ from api.schemas_calc import CALC_GRAMS_MAX
 from core.models import FoodStandard, Product, ProductCategory
 from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, UserRole
 from core.repositories import patients as patients_repo
+from core.repositories import prescriptions as prescriptions_repo
 from keto_engine import ENGINE_VERSION
 
 pytestmark = pytest.mark.asyncio
@@ -106,6 +107,7 @@ class TestVerify:
             "protein_g",
             "carbs_g",
             "fiber_g",
+            "net_carbs_g",
         }
         assert butter["product_id"] == "butter"
         assert butter["grams"] == 50
@@ -900,3 +902,102 @@ class TestChildExclusionsReachTheSolver:
 
         assert response.status_code == 422, response.text
         assert response.json()["error"]["code"] == "validation_error"
+
+
+class TestMealGoal:
+    """Reader: the Fact / Goal table of the calculator in `apps/web`."""
+
+    @staticmethod
+    def _body(patient_id=None, ratio=4.0, kcal=400):
+        return {
+            "ingredients": [BUTTER, CHICKEN],
+            "items": [
+                {"product_id": "butter", "grams": 30},
+                {"product_id": "chicken", "grams": 40},
+            ],
+            "targets": {"ratio": ratio, "kcal": kcal},
+            "patient_id": None if patient_id is None else str(patient_id),
+        }
+
+    async def _patient_with_prescription(self, session, make_user, make_patient, protein=24.0):
+        parent = await make_user(role=UserRole.PARENT)
+        doctor = await make_user(role=UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        await prescriptions_repo.create(
+            session,
+            patient_id=patient.id,
+            ratio=4.0,
+            kcal_per_day=1600,
+            protein_g=protein,
+            carbs_limit_g=20.0,
+            meals_per_day=4,
+            author_id=doctor.id,
+            effective_from=date.today(),
+        )
+        return parent, patient
+
+    async def test_goal_uses_the_prescription_protein(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await self._patient_with_prescription(session, make_user, make_patient)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(patient.id), headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 200, response.text
+        goal = response.json()["meal_goal"]
+        assert set(goal) == {"fat_g", "protein_g", "net_carbs_g", "non_fat_g"}
+        assert goal["fat_g"] == pytest.approx(40.0)
+        assert goal["protein_g"] == pytest.approx(6.0)
+        assert goal["net_carbs_g"] == pytest.approx(4.0)
+        assert goal["non_fat_g"] == pytest.approx(10.0)
+
+    async def test_without_a_patient_only_the_ratio_part_is_known(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(), headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 200, response.text
+        goal = response.json()["meal_goal"]
+        assert goal["fat_g"] == pytest.approx(40.0)
+        assert goal["protein_g"] is None
+        assert goal["net_carbs_g"] is None
+
+    async def test_no_targets_means_no_goal(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+        body = self._body()
+        del body["targets"]
+
+        response = await client.post("/api/v1/calc/verify", json=body, headers=auth_headers(doctor))
+
+        assert response.status_code == 200, response.text
+        assert response.json()["meal_goal"] is None
+
+    async def test_foreign_patient_is_refused(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, patient = await self._patient_with_prescription(session, make_user, make_patient)
+        stranger = await make_user(role=UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(patient.id), headers=auth_headers(stranger)
+        )
+
+        assert response.status_code == 403, response.text
+
+    async def test_position_carries_net_carbs(self, client, make_user, auth_headers):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._body(), headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 200, response.text
+        for item in response.json()["dish"]["items"]:
+            assert "net_carbs_g" in item

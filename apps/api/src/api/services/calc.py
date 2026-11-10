@@ -8,10 +8,18 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from core.models import Product
-from keto_engine import DishResult, Ingredient, Targets
+from core.models import Prescription, Product
+from keto_engine import DishResult, Ingredient, Targets, meal_macro_goal
 
-from ..schemas_calc import DishOut, IngredientIn, ItemIn, ItemOut, TargetsIn, UncountedItemOut
+from ..schemas_calc import (
+    DishOut,
+    IngredientIn,
+    ItemIn,
+    ItemOut,
+    MealGoalOut,
+    TargetsIn,
+    UncountedItemOut,
+)
 
 
 def to_ingredients(raw: list[IngredientIn]) -> dict[str, Ingredient]:
@@ -75,6 +83,21 @@ def to_targets(raw: TargetsIn) -> Targets:
     )
 
 
+def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
+    goal = meal_macro_goal(
+        targets.ratio,
+        targets.kcal,
+        day_protein_g=None if prescription is None else float(prescription.protein_g),
+        day_kcal=None if prescription is None else float(prescription.kcal_per_day),
+    )
+    return MealGoalOut(
+        fat_g=goal.fat_g,
+        protein_g=goal.protein_g,
+        net_carbs_g=goal.net_carbs_g,
+        non_fat_g=goal.non_fat_g,
+    )
+
+
 def to_dish_out(dish: DishResult) -> DishOut:
     return DishOut(
         items=[
@@ -86,6 +109,7 @@ def to_dish_out(dish: DishResult) -> DishOut:
                 protein_g=item.protein_g,
                 carbs_g=item.carbs_g,
                 fiber_g=item.fiber_g,
+                net_carbs_g=item.net_carbs_g,
             )
             for item in dish.items
         ],

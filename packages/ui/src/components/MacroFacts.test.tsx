@@ -27,6 +27,23 @@ describe("MacroFacts", () => {
     expect(group).toHaveTextContent("0,1");
   });
 
+  it("adds extra gram cells with the labels of the calling screen", () => {
+    render(
+      <MacroFacts
+        label={LABEL}
+        kcal={21}
+        fatG={0.2}
+        proteinG={1.4}
+        carbsG={3.3}
+        extras={[{ full: "Чистые углеводы", short: "чист.", grams: 2.14 }]}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: LABEL });
+    expect(group).toHaveTextContent("чист.2,1");
+    expect(screen.getByText("Чистые углеводы")).toHaveClass("sr-only");
+  });
+
   it("называет нутриенты словами для вспомогательной технологии", () => {
     // Глазу — «Ж 40,5»: на 360 px четыре полных слова в строку не встают.
     // Читающему с экрана набор букв не говорит ничего.

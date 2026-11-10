@@ -18,6 +18,8 @@ export interface ItemContribution {
   fat_g: number;
   protein_g: number;
   carbs_g: number;
+  fiber_g: number;
+  net_carbs_g: number;
 }
 
 /** Продукты в формате, который ожидает `/calc/*`: значения на 100 г. */
