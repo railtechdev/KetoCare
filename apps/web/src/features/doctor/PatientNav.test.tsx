@@ -5,7 +5,7 @@ import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
 import { PatientNav } from "./PatientNav";
-import { patientViewsFor } from "./patientViews";
+import { PATIENT_VIEW_GROUPS } from "./patientViews";
 import type { Patient } from "./types";
 
 i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
@@ -64,7 +64,7 @@ describe("навигация карты пациента", () => {
   it("ведёт в разделы того же пациента", async () => {
     renderNav();
 
-    const diary = await screen.findByRole("link", { name: /Дневники/ });
+    const diary = await screen.findByRole("link", { name: /Наблюдение/ });
     expect(diary.getAttribute("href")).toBe(
       `/app/patients/${PATIENT_ID}/diary`,
     );
@@ -79,28 +79,26 @@ describe("навигация карты пациента", () => {
     const nav = await screen.findByRole("list");
     const current = within(nav).getAllByRole("link", { current: "page" });
     expect(current).toHaveLength(1);
-    expect(current[0]).toHaveTextContent("Назначение");
+    expect(current[0]).toHaveTextContent("Диета");
   });
 
-  it("не показывает диетологу заметок врача", async () => {
-    // Сервер отдаёт их одной роли. Пункт меню, ведущий в заведомый 403, — это
-    // тупик, а не ограничение прав.
+  it("ведёт группу «Карта» диетолога в профиль, а не в заметки врача", async () => {
+    // Заметки сервер отдаёт одной роли: пункт, ведущий в заведомый 403, — тупик.
     renderNav({ role: "dietitian" });
 
-    const nav = await screen.findByRole("list");
-    expect(within(nav).queryByText("Заметки")).not.toBeInTheDocument();
-    expect(within(nav).getByText("Сводка")).toBeInTheDocument();
+    const card = await screen.findByRole("link", { name: /Карта/ });
+    expect(card.getAttribute("href")).toBe(
+      `/app/patients/${PATIENT_ID}/profile`,
+    );
   });
 
-  it("показывает врачу все разделы карты", async () => {
-    // Число берётся из реестра, а не записано здесь: иначе новый раздел
-    // добавляли бы, правя тест, — то есть проверка перестала бы что-либо
-    // проверять.
+  it("показывает шесть разделов карты", async () => {
+    // Число берётся из реестра: новый раздел добавляют, не правя тест.
     renderNav();
 
     const nav = await screen.findByRole("list");
     expect(within(nav).getAllByRole("listitem")).toHaveLength(
-      patientViewsFor("doctor").length,
+      PATIENT_VIEW_GROUPS.length,
     );
   });
 });
