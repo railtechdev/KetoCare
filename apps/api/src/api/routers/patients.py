@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
 from core import exclusions
-from core.models import Patient
+from core.models import Patient, WeightLog
 from core.models.enums import UserRole
 from core.repositories import access_codes as access_codes_repo
 from core.repositories import audit as audit_repo
@@ -38,8 +39,10 @@ from ..schemas import (
     PatientRead,
     PatientUpdate,
 )
+from ..schemas_logs import WeightLogCreate, WeightLogRead
 from ..services import family as family_service
 from ..services import family_nudge as family_nudge_service
+from ..services import logs as logs_service
 
 CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 
@@ -184,6 +187,16 @@ async def create_patient(
     # значит он её и ведёт. Иначе он не прошёл бы `require_patient_access` и не
     # смог бы прочитать только что заведённую карту.
     await patients_repo.link_doctor(session, doctor_id=user.id, patient_id=patient.id)
+
+    if payload.weight_kg is not None:
+        await logs_service.create_log(
+            session,
+            WeightLog,
+            WeightLogRead,
+            patient_id=patient.id,
+            payload=WeightLogCreate(occurred_at=datetime.now(UTC), weight_kg=payload.weight_kg),
+            author=user,
+        )
 
     # Заведение карты — появление клинической записи о ребёнке, и правило 7
     # требует следа: кто и когда завёл. Прежде запись создавала семья, и след

@@ -122,3 +122,21 @@ function invalidate(
   // без сброса переименованное блюдо осталось бы там под старым именем.
   void queryClient.invalidateQueries({ queryKey: customDishesKey(patientId) });
 }
+
+export type DishReview = components["schemas"]["DishReviewResponse"];
+
+/** Блюда ребёнка, разошедшиеся с действующим назначением. Только специалисту. */
+export function useDishReview(patientId: string | null) {
+  return useQuery({
+    queryKey: [...customDishesKey(patientId ?? "none"), "review"],
+    enabled: patientId !== null,
+    queryFn: async (): Promise<DishReview> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/custom-dish-review",
+        { params: { path: { patient_id: patientId as string } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty review response");
+      return data;
+    },
+  });
+}

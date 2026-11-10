@@ -35,6 +35,40 @@ const DISH = {
   engine_version: "1.3.0",
 };
 
+describe("DishRows pin", () => {
+  it("toggles a pin and shows its state", async () => {
+    const user = userEvent.setup();
+    const onTogglePin = vi.fn();
+    render(
+      <DishRows
+        rows={[{ ...ROW, pinned: true }]}
+        onChangeGrams={vi.fn()}
+        onTogglePin={onTogglePin}
+      />,
+    );
+
+    const pin = screen.getByRole("button", { name: /Закрепить массу/ });
+    expect(pin).toHaveAttribute("aria-pressed", "true");
+    await user.click(pin);
+    expect(onTogglePin).toHaveBeenCalledWith("broccoli");
+  });
+
+  it("has no pin on a seasoning, which the solver does not touch", () => {
+    render(
+      <DishRows
+        rows={[ROW]}
+        onChangeGrams={vi.fn()}
+        onTogglePin={vi.fn()}
+        uncounted={new Set(["broccoli"])}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /Закрепить массу/ }),
+    ).toBeNull();
+  });
+});
+
 describe("DishRows stepper", () => {
   it("adds and removes one gram, keeping tenths from the solver", async () => {
     const user = userEvent.setup();

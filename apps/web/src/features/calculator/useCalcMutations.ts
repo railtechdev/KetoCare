@@ -1,7 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
-import { toCalcIngredients, toCalcItems, type DishRow } from "./types";
+import {
+  pinnedBounds,
+  toCalcIngredients,
+  toCalcItems,
+  type DishRow,
+} from "./types";
 
 export interface TargetsInput {
   ratio: number;
@@ -69,8 +74,14 @@ export function useSolveMutation() {
       const { data, error } = await api.POST("/api/v1/calc/solve", {
         body: {
           ingredients: toCalcIngredients(input.rows),
-          targets: targetsBody(input.targets),
+          targets: {
+            ...targetsBody(input.targets),
+            per_ingredient_bounds: pinnedBounds(input.rows),
+          },
           patient_id: input.patientId ?? null,
+          current_grams: Object.fromEntries(
+            input.rows.map((row) => [row.product.id, row.grams]),
+          ),
         },
       });
       if (error || !data) throw error ?? new Error("Empty solve response");

@@ -11,6 +11,7 @@ import {
   StickyNote,
   UserRound,
   type LucideIcon,
+  CookingPot,
 } from "lucide-react";
 import { lazy, type ReactElement } from "react";
 
@@ -41,6 +42,11 @@ const SummaryView = lazy(() =>
 );
 const PrescriptionView = lazy(() =>
   import("./PrescriptionView").then((m) => ({ default: m.PrescriptionView })),
+);
+const DishesView = lazy(() =>
+  import("./PatientDishesView").then((module) => ({
+    default: module.PatientDishesView,
+  })),
 );
 const MenuView = lazy(() =>
   import("./PatientMenuTab").then((m) => ({ default: m.PatientMenuTab })),
@@ -92,8 +98,9 @@ const ProfileView = lazy(() =>
 export const PATIENT_VIEWS = [
   "summary",
   "prescription",
-  "menu",
+  "dishes",
   "calculator",
+  "menu",
   "diary",
   "growth",
   "course",
@@ -139,6 +146,7 @@ export type PatientViewScreen = (
 export const PATIENT_VIEW_SCREENS: Record<PatientView, PatientViewScreen> = {
   summary: (patient) => <SummaryView patient={patient} />,
   prescription: (patient) => <PrescriptionView patientId={patient.id} />,
+  dishes: (patient) => <DishesView patientId={patient.id} />,
   menu: (patient) => <MenuView patientId={patient.id} />,
   calculator: (patient) => <CalculatorView patientId={patient.id} inCard />,
   diary: (patient) => <DiaryView patientId={patient.id} />,
@@ -178,6 +186,7 @@ export const PATIENT_VIEW_WIDTH: Record<
 > = {
   summary: "wide",
   prescription: "wide",
+  dishes: "wide",
   menu: "wide",
   // Калькулятор — одна колонка состава и результата под ней: считают по нему
   // построчно, а не сравнивают ряды.
@@ -200,6 +209,7 @@ export const PATIENT_VIEW_WIDTH: Record<
 export const PATIENT_VIEW_ICONS: Record<PatientView, LucideIcon> = {
   summary: Gauge,
   prescription: ClipboardList,
+  dishes: CookingPot,
   menu: CalendarDays,
   calculator: Calculator,
   diary: NotebookPen,

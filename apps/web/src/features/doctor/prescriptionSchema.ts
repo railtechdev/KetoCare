@@ -1,3 +1,4 @@
+import { RATIO_CHOICES, RATIO_MAX, RATIO_MIN, RATIO_STEP } from "@ketocare/ui";
 import type { DefaultValues } from "react-hook-form";
 import { z } from "zod";
 
@@ -16,31 +17,9 @@ import type {
  * Это границы ввода, а не медицинские допуски: допуски соответствия назначению
  * живут в ядре и на клиент не копируются (правило 2 CLAUDE.md).
  */
-export const RATIO_MIN = 1;
-export const RATIO_MAX = 5;
-export const RATIO_STEP = 0.5;
+export { RATIO_CHOICES, RATIO_MAX, RATIO_MIN, RATIO_STEP };
 export const KCAL_MIN = 500;
 export const KCAL_MAX = 3000;
-
-/**
- * Кетосоотношения, из которых выбирает врач.
- *
- * Список, а не свободное число: врач мыслит «4 : 1», а поле показывало «4» —
- * и это класс ошибок, а не косметика (пометка заказчицы «4:1 3:1» на снимке
- * формы назначения). Значения ровно те же, что уже разрешены схемой: шаг 0,5
- * от 1 до 5, новых состояний не появляется.
- *
- * Порядок — от высокого к низкому: терапию начинают с более жёсткого
- * соотношения и снижают, и в списке первым стоит то, что назначают чаще.
- *
- * Шаг 0,25, как в KetoDietCalculator, остаётся открытым вопросом K7
- * (`docs/AUDIT_KDC.md`): если клинике нужны 3,25 : 1, меняются и этот список,
- * и серверная схема, и проверка выполнимости — одной правкой, а не по месту.
- */
-export const RATIO_CHOICES: readonly number[] = Array.from(
-  { length: Math.round((RATIO_MAX - RATIO_MIN) / RATIO_STEP) + 1 },
-  (_, index) => RATIO_MAX - index * RATIO_STEP,
-);
 
 /** Кратность шагу 0.5 с поправкой на двоичное представление дробей. */
 export function isRatioOnStep(value: number): boolean {

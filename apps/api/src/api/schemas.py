@@ -18,10 +18,18 @@ from pydantic import (
 )
 
 from core.languages import Language
-from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, Sex, UserRole
+from core.models.enums import (
+    CarbsConvention,
+    FoodDietType,
+    FoodStandardKind,
+    RecipeStatus,
+    Sex,
+    UserRole,
+)
 from keto_engine import Ingredient, verify
 
 from .password_policy import check_new_password
+from .schemas_logs import WeightKg
 from .services.product_import import macro_sum_exceeds_limit, macro_sum_message
 
 
@@ -230,6 +238,8 @@ class PatientCreate(BaseModel):
     birth_date: date
     sex: Sex
     height_cm: float | None = Field(default=None, gt=0, le=250)
+    #: Weight at the first visit; written to the weight diary, not to the card.
+    weight_kg: WeightKg | None = None
     allergies: list[str] = Field(default_factory=list)
     notes: str | None = None
 
@@ -972,6 +982,9 @@ class DishIngredientIn(BaseModel):
 class CustomDishWrite(BaseModel):
     title: RequiredName
     ingredients: list[DishIngredientIn] = Field(min_length=1, max_length=100)
+    #: Refuse a composition with what is excluded to this child. Sent when the
+    #: composition is a proposal: an exclusion may have appeared since it was made.
+    reject_excluded: bool | None = None
 
 
 class DishComputed(BaseModel):
@@ -997,3 +1010,102 @@ class CustomDishRead(BaseModel):
     computed: DishComputed | None
     engine_version: str | None
     created_at: datetime
+
+
+class RecipeFitsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recipe_ids: list[uuid.UUID] = Field(min_length=1, max_length=20)
+
+
+class RecipeFitIngredient(BaseModel):
+    product_id: uuid.UUID
+    name_ru: str
+    grams: float
+
+
+class RecipeFitDish(BaseModel):
+    kcal: float
+    fat_g: float
+    protein_g: float
+    carbs_g: float
+    fiber_g: float
+    ratio: float | None
+
+
+class RecipeFit(BaseModel):
+    """One recipe's proposal. Reader: «Из библиотеки» in the patient card."""
+
+    recipe_id: uuid.UUID
+    title: str
+    status: Literal["fitted", "excluded", "infeasible", "unavailable"]
+    #: Why there is no proposal, in words for the specialist.
+    reason: str | None = None
+    #: The target was out of reach near the recipe's proportions.
+    reshaped: bool = False
+    #: Products withdrawn from the catalogue that the composition still uses.
+    withdrawn: list[str] = []
+    ingredients: list[RecipeFitIngredient] = []
+    dish: RecipeFitDish | None = None
+    ratio_within_tolerance: bool | None = None
+    kcal_within_tolerance: bool | None = None
+
+
+class RecipeFitsResponse(BaseModel):
+    target_ratio: float
+    target_kcal: float
+    engine_version: str
+    items: list[RecipeFit]
+
+
+class DishReviewItem(BaseModel):
+    dish_id: uuid.UUID
+    title: str
+    ratio: float | None
+    kcal: float
+    ratio_within_tolerance: bool | None
+    kcal_within_tolerance: bool
+
+
+class DishReviewResponse(BaseModel):
+    """A child's dishes that miss the active prescription's per-meal target.
+
+    Reader: the child's dishes and the prescription screen in the web cabinet.
+    Both targets are `null` when there is no prescription.
+    """
+
+    target_ratio: float | None
+    target_kcal: float | None
+    checked: int
+    off_target: list[DishReviewItem]
+
+
+class MenuTemplateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    standard_id: uuid.UUID
+    title: str
+    season: str | None
+    cycle_days: int
+    status: RecipeStatus
+    source_ref: str | None
+
+
+class MenuTemplateItemRead(BaseModel):
+    cycle_day: int
+    meal_index: int
+    dish_title: str
+    recipe_id: uuid.UUID | None
+    #: `null` when the dish has no recipe: its products lack reliable values.
+    kcal: float | None
+    ratio: float | None
+
+
+class MenuTemplateDetail(BaseModel):
+    """Reader: the standards screen of the web cabinet, specialists only."""
+
+    template: MenuTemplateRead
+    #: The diet this menu was written for; `general` is not a ketogenic menu.
+    diet_type: FoodDietType
+    items: list[MenuTemplateItemRead]

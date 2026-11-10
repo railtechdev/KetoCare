@@ -10,6 +10,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .schemas import MAX_MEALS_PER_DAY
 from .schemas_recipes import RecipeIngredientIn
 from .services.product_import import KCAL_MAX, MACRO_MAX
 
@@ -220,6 +221,11 @@ class SolveRequest(BaseModel):
     #: предложить его ребёнку, и человеку останется заметить это глазами.
     #: Доступ к пациенту проверяется, чужой идентификатор даёт 403.
     patient_id: uuid.UUID | None = None
+    #: Masses now in the form. With them the solver stays near the composition
+    #: the person assembled instead of pushing products to their minimum.
+    current_grams: dict[str, Annotated[float, Field(ge=0, le=CALC_GRAMS_MAX)]] | None = Field(
+        default=None, max_length=MAX_INGREDIENTS
+    )
 
 
 class SolveResponse(BaseModel):
@@ -234,6 +240,28 @@ class SolveResponse(BaseModel):
     #: Приправы набора (ADR-0054): решатель их не подбирает, и их масса
     #: остаётся той, что ввёл человек. В `dish.items` их нет.
     uncounted: list[UncountedProductOut] = []
+    #: The goal was out of reach near the entered masses, so proportions changed.
+    reshaped: bool = False
+
+
+class PrescriptionGoalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    ratio: Annotated[float, Field(ge=1.0, le=5.0)]
+    kcal_per_day: Annotated[float, Field(gt=0, le=5000)]
+    protein_g: Annotated[float, Field(ge=0, le=1000)]
+    meals_per_day: Annotated[int, Field(ge=1, le=MAX_MEALS_PER_DAY)]
+
+
+class PrescriptionGoalResponse(BaseModel):
+    """Grams a prescription amounts to, per day and per meal.
+
+    Reader: the preview in the web cabinet's prescription form.
+    """
+
+    day: MealGoalOut
+    meal: MealGoalOut
+    engine_version: str
 
 
 class ScaleRequest(BaseModel):

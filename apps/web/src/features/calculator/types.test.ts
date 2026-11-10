@@ -1,7 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { toCalcIngredients, toCalcItems, type DishRow } from "./types";
+import {
+  pinnedBounds,
+  toCalcIngredients,
+  toCalcItems,
+  type DishRow,
+} from "./types";
 
 const ROWS: DishRow[] = [
   {
@@ -76,5 +81,17 @@ describe("подготовка состава для /calc", () => {
   it("пустой состав даёт пустые списки", () => {
     expect(toCalcIngredients([])).toEqual([]);
     expect(toCalcItems([])).toEqual([]);
+  });
+});
+
+describe("pinnedBounds", () => {
+  it("sends no bounds when nothing is pinned", () => {
+    expect(pinnedBounds(ROWS)).toBeUndefined();
+  });
+
+  it("holds a pinned row at its current mass", () => {
+    expect(pinnedBounds([{ ...ROWS[0]!, pinned: true }, ROWS[1]!])).toEqual({
+      p1: [50, 50],
+    });
   });
 });

@@ -8,6 +8,7 @@ import {
   RatioBadge,
   Section,
   formatKcal,
+  formatRatio,
   toast,
 } from "@ketocare/ui";
 import {
@@ -29,10 +30,13 @@ import { errorMessageOf } from "../../lib/api";
 import {
   useCustomDishes,
   useDeleteCustomDish,
+  useDishReview,
   useRenameCustomDish,
   type CustomDish,
+  type DishReview,
 } from "./useCustomDishes";
 import { queryState } from "../../lib/queryState";
+import { RecipeFitSheet } from "./RecipeFitSheet";
 
 /**
  * Блюда ребёнка — раскладки, сохранённые из калькулятора.
@@ -61,6 +65,11 @@ export function MyDishesPanel({
   const { t } = useTranslation("recipes");
   const inCard = openIn === "card";
   const dishes = useCustomDishes(patientId);
+  // Цель есть только у специалиста в карте: семье сервер этого не отдаёт.
+  const review = useDishReview(inCard ? patientId : null);
+  const offTarget = new Set(
+    (review.data?.off_target ?? []).map((item) => item.dish_id),
+  );
   const [renaming, setRenaming] = useState<CustomDish | null>(null);
 
   const rename = useRenameCustomDish(patientId ?? "");
@@ -73,6 +82,12 @@ export function MyDishesPanel({
       title={t(inCard ? "myDishes.patientTitle" : "myDishes.title")}
       description={t(inCard ? "myDishes.patientIntro" : "myDishes.intro")}
     >
+      {inCard && patientId !== null && <RecipeFitSheet patientId={patientId} />}
+
+      {inCard && patientId !== null && review.data !== undefined && (
+        <OffTargetNotice patientId={patientId} review={review.data} />
+      )}
+
       <AsyncSection
         {...queryState(dishes)}
         skeleton={null}
@@ -103,6 +118,12 @@ export function MyDishesPanel({
               className="flex flex-wrap items-center gap-field rounded-xl border border-border p-3"
             >
               <span className="flex-1 font-semibold">{dish.title}</span>
+
+              {offTarget.has(dish.id) && (
+                <span className="text-sm text-warning-strong">
+                  {t("myDishes.offTargetMark")}
+                </span>
+              )}
 
               {dish.computed !== null && (
                 <>
@@ -266,6 +287,49 @@ export function MyDishesPanel({
         )}
       </FormSheet>
     </Section>
+  );
+}
+
+/**
+ * Сколько блюд разошлось с назначением и с какого начать. Подгоняются по
+ * одному в калькуляторе: подобранные граммы проверяет человек, а исправленное
+ * блюдо уходит из этого списка.
+ */
+function OffTargetNotice({
+  patientId,
+  review,
+}: {
+  patientId: string;
+  review: DishReview;
+}) {
+  const { t } = useTranslation("recipes");
+  const first = review.off_target[0];
+  if (
+    first === undefined ||
+    review.target_ratio == null ||
+    review.target_kcal == null
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-warning bg-warning/10 p-3">
+      <p className="m-0">
+        {t("myDishes.offTarget", {
+          count: review.off_target.length,
+          ratio: formatRatio(review.target_ratio),
+          kcal: formatKcal(review.target_kcal),
+        })}
+      </p>
+      <PatientViewLink
+        patientId={patientId}
+        view="calculator"
+        item={incomingDish(first.dish_id)}
+        className="font-medium underline"
+      >
+        {t("myDishes.offTargetNext", { title: first.title })}
+      </PatientViewLink>
+    </div>
   );
 }
 

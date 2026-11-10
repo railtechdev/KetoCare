@@ -10,7 +10,15 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
 from core.models import Prescription, Product
-from keto_engine import DishResult, Ingredient, Targets, meal_macro_goal
+from keto_engine import (
+    ENGINE_VERSION,
+    DishResult,
+    Ingredient,
+    MealMacroGoal,
+    Targets,
+    meal_macro_goal,
+    verify,
+)
 from keto_engine.constants import DEFAULT_MAX_INGREDIENT_GRAMS, MIN_INGREDIENT_GRAMS
 
 from ..schemas_calc import (
@@ -19,6 +27,8 @@ from ..schemas_calc import (
     ItemIn,
     ItemOut,
     MealGoalOut,
+    PrescriptionGoalRequest,
+    PrescriptionGoalResponse,
     TargetsIn,
     UncountedItemOut,
 )
@@ -99,6 +109,106 @@ def keeping_every_product(targets: Targets, product_ids: Iterable[str]) -> Targe
     return replace(targets, per_ingredient_bounds=bounds)
 
 
+#: How far each product may move from the composition. A search bound, not a
+#: clinical limit: the solver tends to its bounds and without a corridor it
+#: pushes vegetables to the minimum mass.
+NEAR_LOWER = 0.5
+NEAR_UPPER = 1.5
+
+
+def near_grams(grams: float, factor: float) -> tuple[float, float | None]:
+    """Search corridor for one product at `grams`, after scaling by `factor`."""
+
+    def clamped(value: float) -> float:
+        return max(MIN_INGREDIENT_GRAMS, min(value, DEFAULT_MAX_INGREDIENT_GRAMS))
+
+    return clamped(grams * factor * NEAR_LOWER), clamped(grams * factor * NEAR_UPPER)
+
+
+def near_current(
+    caller: Targets,
+    keeping_all: Targets,
+    ingredients: Mapping[str, Ingredient],
+    current_grams: Mapping[str, float] | None,
+) -> Targets | None:
+    """Targets that keep the solver near the masses in the form, if any are known.
+
+    Products with a bound from the caller (pins) keep it and do not scale.
+    """
+
+    if not current_grams:
+        return None
+    pinned = caller.per_ingredient_bounds or {}
+    known = [
+        (ingredient, current_grams[product_id])
+        for product_id, ingredient in ingredients.items()
+        if current_grams.get(product_id, 0) > 0
+    ]
+    free = [
+        (ingredient, grams) for ingredient, grams in known if ingredient.product_id not in pinned
+    ]
+    if not free:
+        return None
+
+    free_kcal = verify(free).kcal
+    fixed_kcal = (
+        verify(
+            [(ingredient, bounds[0]) for ingredient, bounds in _pinned_items(ingredients, pinned)]
+        ).kcal
+        if pinned
+        else 0.0
+    )
+    remaining = caller.kcal - fixed_kcal
+    if free_kcal <= 0 or remaining <= 0:
+        return None
+
+    factor = remaining / free_kcal
+    bounds = dict(keeping_all.per_ingredient_bounds or {})
+    bounds.update({ingredient.product_id: near_grams(grams, factor) for ingredient, grams in free})
+    return replace(keeping_all, per_ingredient_bounds=bounds)
+
+
+def _pinned_items(
+    ingredients: Mapping[str, Ingredient],
+    pinned: Mapping[str, tuple[float, float | None]],
+) -> list[tuple[Ingredient, tuple[float, float | None]]]:
+    return [
+        (ingredient, pinned[product_id])
+        for product_id, ingredient in ingredients.items()
+        if product_id in pinned
+    ]
+
+
+def pins_too_small(targets: Targets, product_ids: Iterable[str]) -> list[str]:
+    """Products whose upper bound keeps them under the solver's minimum mass.
+
+    The solver leaves such a product out of the dish without saying so, and a
+    pinned product is exactly the one that must not disappear.
+    """
+
+    bounds = targets.per_ingredient_bounds or {}
+    return [
+        product_id
+        for product_id in product_ids
+        if product_id in bounds
+        and (upper := bounds[product_id][1]) is not None
+        and upper < MIN_INGREDIENT_GRAMS
+    ]
+
+
+def pins_not_whole(targets: Targets, product_ids: Iterable[str]) -> list[str]:
+    """Pinned products with a fractional mass: the solver returns whole grams."""
+
+    bounds = targets.per_ingredient_bounds or {}
+    return [
+        product_id
+        for product_id in product_ids
+        if product_id in bounds
+        and bounds[product_id][0] == bounds[product_id][1]
+        and bounds[product_id][0] != round(bounds[product_id][0])
+    ]
+
+
 def missing_from_solution(dish: DishResult, product_ids: Iterable[str]) -> list[str]:
     """Products of the request that did not make it into a solved dish."""
 
@@ -106,18 +216,42 @@ def missing_from_solution(dish: DishResult, product_ids: Iterable[str]) -> list[
     return [product_id for product_id in product_ids if product_id not in kept]
 
 
-def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
-    goal = meal_macro_goal(
-        targets.ratio,
-        targets.kcal,
-        day_protein_g=None if prescription is None else float(prescription.protein_g),
-        day_kcal=None if prescription is None else float(prescription.kcal_per_day),
-    )
+def _goal_out(goal: MealMacroGoal) -> MealGoalOut:
     return MealGoalOut(
         fat_g=goal.fat_g,
         protein_g=goal.protein_g,
         net_carbs_g=goal.net_carbs_g,
         non_fat_g=goal.non_fat_g,
+    )
+
+
+def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
+    return _goal_out(
+        meal_macro_goal(
+            targets.ratio,
+            targets.kcal,
+            day_protein_g=None if prescription is None else float(prescription.protein_g),
+            day_kcal=None if prescription is None else float(prescription.kcal_per_day),
+        )
+    )
+
+
+def to_prescription_goal(raw: PrescriptionGoalRequest) -> PrescriptionGoalResponse:
+    """A prescription's numbers in grams, for the day and for one equal meal.
+
+    The equal split is the assumption of question 55, the same one the
+    calculator's per-meal goal rests on (ADR-0058).
+    """
+
+    def goal(kcal: float) -> MealGoalOut:
+        return _goal_out(
+            meal_macro_goal(raw.ratio, kcal, day_protein_g=raw.protein_g, day_kcal=raw.kcal_per_day)
+        )
+
+    return PrescriptionGoalResponse(
+        day=goal(raw.kcal_per_day),
+        meal=goal(raw.kcal_per_day / raw.meals_per_day),
+        engine_version=ENGINE_VERSION,
     )
 
 

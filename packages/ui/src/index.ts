@@ -3,6 +3,12 @@ export { CALC_GRAMS_MAX, exceedsCalcGrams } from "./lib/calcLimits";
 export { RECALC_DELAY_MS } from "./lib/calcTiming";
 export { SEARCH_DELAY_MS } from "./lib/searchTiming";
 export { useDebouncedValue } from "./lib/useDebouncedValue";
+export {
+  RATIO_CHOICES,
+  RATIO_MAX,
+  RATIO_MIN,
+  RATIO_STEP,
+} from "./lib/ratioChoices";
 export { useAttemptKey } from "./lib/useAttemptKey";
 export { useFrozenAttempt } from "./lib/useFrozenAttempt";
 export type { FrozenAttempt } from "./lib/useFrozenAttempt";

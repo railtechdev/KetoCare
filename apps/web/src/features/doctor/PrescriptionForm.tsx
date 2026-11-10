@@ -12,6 +12,7 @@ import {
 } from "../../components/FormErrorSummary";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import { PrescriptionGoalPreview } from "./PrescriptionGoalPreview";
 import {
   KCAL_MAX,
   KCAL_MIN,
@@ -71,6 +72,7 @@ export function PrescriptionForm({
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, submitCount },
   } = useForm<PrescriptionFormValues>({
     resolver: zodResolver(prescriptionFormSchema),
@@ -188,6 +190,15 @@ export function PrescriptionForm({
           {...register("effectiveFrom")}
         />
       </div>
+
+      <PrescriptionGoalPreview
+        input={{
+          ratio: watch("ratio"),
+          kcalPerDay: watch("kcalPerDay"),
+          proteinG: watch("proteinG"),
+          mealsPerDay: watch("mealsPerDay"),
+        }}
+      />
 
       <TextAreaField
         id={`${ids}-restrictions`}

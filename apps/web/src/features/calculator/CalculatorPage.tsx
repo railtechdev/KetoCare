@@ -15,6 +15,8 @@ import {
   exceedsCalcGrams,
   mealTargetsFrom,
   useDebouncedValue,
+  RATIO_CHOICES,
+  formatRatio,
 } from "@ketocare/ui";
 import { onlineManager } from "@tanstack/react-query";
 import {
@@ -28,7 +30,7 @@ import {
 
 import { useTranslation } from "react-i18next";
 
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
@@ -38,6 +40,8 @@ import { incomingDish as dishItem, parseIncoming } from "./incomingItem";
 import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
+import { PrintButton } from "../../components/PrintButton";
+import { DishPrint } from "./DishPrint";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
@@ -563,6 +567,18 @@ export function CalculatorView({
                   );
                   resetActions();
                 }}
+                onTogglePin={(productId) => {
+                  setRows((current) =>
+                    current.map((row) =>
+                      row.product.id === productId
+                        ? { ...row, pinned: row.pinned !== true }
+                        : row,
+                    ),
+                  );
+                  // A pin changes what the next solve may do, so a previous
+                  // refusal no longer applies.
+                  solve.reset();
+                }}
               />
             </Section>
 
@@ -860,11 +876,24 @@ export function CalculatorView({
               </div>
 
               {dish !== null && (
-                <p className="m-0 text-xs text-muted-foreground">
-                  {t("engineVersion", { version: dish.engine_version })}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-field">
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {t("engineVersion", { version: dish.engine_version })}
+                  </p>
+                  <PrintButton label={t("print.button")} disabled={stale}>
+                    <DishPrint
+                      title={incomingDish.dishTitle ?? t("print.untitled")}
+                      rows={rows}
+                      dish={dish}
+                    />
+                  </PrintButton>
+                </div>
               )}
             </Section>
+
+            {solve.data?.reshaped === true && (
+              <p className="m-0 text-sm text-warning-strong">{t("reshaped")}</p>
+            )}
 
             {infeasible && (
               <WarningBanner level="danger" title={t("infeasible.title")}>
@@ -947,7 +976,7 @@ function GoalFields({
           сами поля. */}
       <div className="grid grid-cols-2 items-start gap-field">
         <div className="min-w-0">
-          <Field
+          <SelectField
             id="ratio"
             width="narrow"
             label={t("targets.ratio")}
@@ -956,11 +985,6 @@ function GoalFields({
                 ? t("goal.ratioFromPrescription")
                 : undefined
             }
-            type="number"
-            inputMode="decimal"
-            min={1}
-            max={5}
-            step={0.5}
             value={ratio ?? ""}
             onChange={(e) =>
               onChange({
@@ -968,8 +992,14 @@ function GoalFields({
                 kcal,
               })
             }
-            className="tabular-nums"
-          />
+          >
+            <option value="">{t("targets.ratioPlaceholder")}</option>
+            {RATIO_CHOICES.map((value) => (
+              <option key={value} value={value}>
+                {formatRatio(value)}
+              </option>
+            ))}
+          </SelectField>
         </div>
         <div className="min-w-0">
           <Field

@@ -19,12 +19,15 @@ from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from keto_engine import InfeasibleError, scale, solve, verify, within_tolerance
+from keto_engine.constants import MIN_INGREDIENT_GRAMS
 
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
 from ..schemas_calc import (
     CALC_GRAMS_MAX,
     ExcludedProductOut,
+    PrescriptionGoalRequest,
+    PrescriptionGoalResponse,
     ScaleRequest,
     ScaleResponse,
     SolveRequest,
@@ -206,9 +209,44 @@ async def solve_dish(
             details={"uncounted": [entry.product_id for entry in skipped]},
         )
 
+    too_small = calc_service.pins_too_small(targets, ingredients.keys())
+    if too_small:
+        names = ", ".join(await _product_names(session, too_small))
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Закреплённая масса слишком мала: {names}. "
+            f"Укажите не меньше {MIN_INGREDIENT_GRAMS:g} г или снимите закрепление.",
+            details={"product_ids": too_small},
+        )
+
+    fractional = calc_service.pins_not_whole(targets, ingredients.keys())
+    if fractional:
+        names = ", ".join(await _product_names(session, fractional))
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Подбор работает в целых граммах, а закреплена дробная масса: {names}. "
+            "Округлите её или снимите закрепление.",
+            details={"product_ids": fractional},
+        )
+
     # The person chose these products: a dish that silently loses one of them
     # is not the dish that was asked for (ADR-0058).
     keeping_all = calc_service.keeping_every_product(targets, ingredients.keys())
+    near = calc_service.near_current(targets, keeping_all, ingredients, payload.current_grams)
+    if near is not None:
+        try:
+            nearby = await run_in_threadpool(solve, list(ingredients.values()), near)
+        except InfeasibleError:
+            pass
+        else:
+            return SolveResponse(
+                dish=calc_service.to_dish_out(nearby.dish),
+                ratio_within_tolerance=nearby.ratio_within_tolerance,
+                kcal_within_tolerance=nearby.kcal_within_tolerance,
+                excluded=excluded,
+                uncounted=skipped,
+            )
+
     try:
         # solve() синхронный и вычислительно тяжёлый (LP через HiGHS, а при
         # неразрешимости ещё несколько LP для диагностики). В event loop он
@@ -240,7 +278,19 @@ async def solve_dish(
         kcal_within_tolerance=result.kcal_within_tolerance,
         excluded=excluded,
         uncounted=skipped,
+        reshaped=near is not None,
     )
+
+
+@router.post(
+    "/prescription-goal",
+    response_model=PrescriptionGoalResponse,
+    summary="Граммы назначения на сутки и на приём",
+)
+async def prescription_goal(
+    payload: PrescriptionGoalRequest, _: CurrentUserDep
+) -> PrescriptionGoalResponse:
+    return calc_service.to_prescription_goal(payload)
 
 
 @router.post("/scale", response_model=ScaleResponse, summary="Пересчитать блюдо на порцию")
