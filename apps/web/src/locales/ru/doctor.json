@@ -530,6 +530,7 @@
     }
   },
   "workspace": {
+    "pageTitle": "{{name}} · {{view}}",
     "groups": {
       "diet": "Диета",
       "observation": "Наблюдение",

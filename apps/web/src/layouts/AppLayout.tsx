@@ -15,7 +15,7 @@ import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AccountNotices } from "../features/auth/AccountNotices";
-import { type Role, SECTIONS_BY_ROLE } from "../features/auth/roles";
+import { type Role, navSectionsFor } from "../features/auth/roles";
 import { NAV } from "./navWidth";
 import { useSession } from "../features/auth/useSession";
 import { isPatientView } from "../features/doctor/patientViews";
@@ -67,7 +67,7 @@ export function AppLayout() {
 
   if (session === null) return null;
 
-  const sections = SECTIONS_BY_ROLE[session.role];
+  const sections = navSectionsFor(session.role);
   const nav = inPatient ? NAV.patient : NAV.sections;
 
   return (
@@ -77,15 +77,12 @@ export function AppLayout() {
         <aside
           className={cn(
             "fixed inset-y-0 left-0 hidden flex-col gap-screen border-r border-sidebar-border bg-sidebar p-2 md:flex",
-            !inPatient && "lg:p-4",
+            "lg:p-4",
             nav.aside,
           )}
         >
-          <Brand labels={inPatient ? "never" : "responsive"} />
-          <SidebarNav
-            sections={sections}
-            labels={inPatient ? "never" : "responsive"}
-          />
+          <Brand labels="responsive" />
+          <SidebarNav sections={sections} labels="responsive" />
         </aside>
 
         <div className={nav.content}>
