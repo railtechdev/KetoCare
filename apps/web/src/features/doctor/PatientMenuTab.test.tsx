@@ -74,6 +74,16 @@ const MENU = {
 };
 
 function respond(path: string) {
+  if (path === "/api/v1/patients/{patient_id}/custom-dish-review") {
+    return {
+      data: {
+        target_ratio: null,
+        target_kcal: null,
+        checked: 0,
+        off_target: [],
+      },
+    };
+  }
   if (path === "/api/v1/patients/{patient_id}/menus") return { data: MENU };
   if (path === "/api/v1/patients/{patient_id}/custom-dishes") {
     return { data: { items: [DISH], total: 1 } };
