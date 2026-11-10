@@ -23,9 +23,10 @@ from fastapi import (
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
-from core.models import Product, ProductCategory
+from core.models import DEFAULT_FOOD_STANDARD_ID, FoodStandard, Product, ProductCategory
 from core.models.enums import LeadingMacro, UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import food_standards as food_standards_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
 
@@ -88,6 +89,10 @@ async def search_products(
         date | None,
         Query(description="Только позиции, сверявшиеся с источником раньше этой даты"),
     ] = None,
+    standard_id: Annotated[
+        uuid.UUID | None,
+        Query(description="Стандарт питания. Не указан — основной. Семье доступен только основной"),
+    ] = None,
 ) -> Page[ProductRead]:
     """`include_inactive` доступен только тем, кто ведёт справочник.
 
@@ -97,9 +102,16 @@ async def search_products(
     ниоткуда, поэтому снятие флажка было НЕОБРАТИМЫМ — позиция исчезала из
     выдачи для всех, включая администратора, и вернуть её можно было только
     через базу.
+
+    `standard_id` от семьи не принимается: обычное питание ребёнку на кетодиете
+    назначает только специалист (ADR-0055).
     """
 
     only_active = not (include_inactive and user.role in _EDITOR_ROLES)
+    if user.role is UserRole.PARENT or standard_id is None:
+        standard_id = DEFAULT_FOOD_STANDARD_ID
+    else:
+        await _standard_or_404(session, standard_id)
     items, total = await products_repo.search(
         session,
         q=q,
@@ -107,6 +119,7 @@ async def search_products(
         macro=macro,
         only_active=only_active,
         verified_before=verified_before,
+        standard_id=standard_id,
         limit=page.limit,
         offset=page.offset,
     )
@@ -267,6 +280,21 @@ async def delete_category(
     return Response(status_code=204)
 
 
+async def _standard_or_404(session: SessionDep, standard_id: uuid.UUID) -> FoodStandard:
+    standard = await food_standards_repo.get(session, standard_id)
+    if standard is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Стандарт питания не найден.")
+    return standard
+
+
+def _standard_locked() -> ApiError:
+    return ApiError(
+        ErrorCode.CONFLICT,
+        "Стандарт закрыт: его значения не меняются. Скорректировать продукт можно "
+        "копией в стандарте клиники.",
+    )
+
+
 async def _category_or_404(session: SessionDep, category_id: uuid.UUID) -> ProductCategory:
     category = await products_repo.get_category(session, category_id)
     if category is None:
@@ -417,10 +445,13 @@ async def check_product_values(
 
 @router.get("/{product_id}", response_model=ProductRead, summary="Карточка продукта")
 async def get_product(
-    product_id: Annotated[uuid.UUID, Path()], session: SessionDep, _: CurrentUserDep
+    product_id: Annotated[uuid.UUID, Path()], session: SessionDep, user: CurrentUserDep
 ) -> ProductRead:
     product = await products_repo.get(session, product_id)
-    if product is None:
+    # Для семьи записи другого стандарта нет, как и в поиске.
+    if product is None or (
+        user.role is UserRole.PARENT and product.standard_id != DEFAULT_FOOD_STANDARD_ID
+    ):
         raise ApiError(ErrorCode.NOT_FOUND, "Продукт не найден.")
     return ProductRead.model_validate(product)
 
@@ -443,9 +474,18 @@ async def create_product(
     # Проверка «прочитать, затем вставить» тут не годится: два одновременных
     # заведения проходят её оба, а индекс — последняя защита от двух записей с
     # одним названием и разными числами.
+    standard_id = payload.standard_id or DEFAULT_FOOD_STANDARD_ID
+    await _standard_or_404(session, standard_id)
     try:
-        product = await products_repo.create(session, changed_by=user.id, **payload.model_dump())
+        product = await products_repo.create(
+            session,
+            changed_by=user.id,
+            standard_id=standard_id,
+            **payload.model_dump(exclude={"standard_id"}),
+        )
         await session.flush()
+    except products_repo.StandardLockedError as error:
+        raise _standard_locked() from error
     except IntegrityError as error:
         raise ApiError(
             ErrorCode.CONFLICT,
@@ -481,9 +521,12 @@ async def update_product(
     _source_must_match_numbers(product, payload)
 
     before = ProductRead.model_validate(product).model_dump(mode="json")
-    updated = await products_repo.update(
-        session, product=product, changed_by=user.id, **payload.model_dump()
-    )
+    try:
+        updated = await products_repo.update(
+            session, product=product, changed_by=user.id, **payload.model_dump()
+        )
+    except products_repo.StandardLockedError as error:
+        raise _standard_locked() from error
 
     await audit_repo.write_audit_log(
         session,
@@ -598,6 +641,7 @@ async def import_products(
     file: Annotated[UploadFile, File()],
     dry_run: bool = True,
     update_existing: bool = False,
+    standard_id: uuid.UUID = DEFAULT_FOOD_STANDARD_ID,
 ) -> ProductImportReport:
     """`dry_run=true` (по умолчанию) — только превью и построчный отчёт об ошибках.
 
@@ -608,7 +652,14 @@ async def import_products(
 
     Запись выполняется единой транзакцией: файл с ошибками не импортируется
     частично.
+
+    Файл попадает в один стандарт, и совпадения ищутся только в нём. В закрытый
+    стандарт импорт отказывает сразу, ещё на превью.
     """
+
+    standard = await _standard_or_404(session, standard_id)
+    if standard.locked_at is not None:
+        raise _standard_locked()
 
     content = await uploads.read_within_limit(file)
 
@@ -618,7 +669,7 @@ async def import_products(
     ]
 
     existing = await products_repo.get_by_names(
-        session, names=[row.values["name_ru"] for row in report.valid_rows]
+        session, names=[row.values["name_ru"] for row in report.valid_rows], standard_id=standard_id
     )
 
     def _key(row: ValidRow) -> str:
@@ -708,7 +759,13 @@ async def import_products(
         category = await products_repo.get_or_create_category(
             session, name_ru=values.pop("category")
         )
-        await products_repo.create(session, changed_by=user.id, category_id=category.id, **values)
+        await products_repo.create(
+            session,
+            changed_by=user.id,
+            category_id=category.id,
+            standard_id=standard_id,
+            **values,
+        )
         imported += 1
 
     updated = 0
@@ -742,7 +799,12 @@ async def import_products(
         user_id=user.id,
         action="import",
         entity="products",
-        after={"imported": imported, "updated": updated, "filename": file.filename},
+        after={
+            "imported": imported,
+            "updated": updated,
+            "filename": file.filename,
+            "standard_id": str(standard_id),
+        },
     )
 
     return ProductImportReport(

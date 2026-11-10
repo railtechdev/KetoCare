@@ -135,6 +135,9 @@ describe("toProductFormValues", () => {
       verified_at: "2026-03-01",
       is_active: false,
       counts_in_calculation: false,
+      standard_id: "00000000-0000-7000-8000-000000000001",
+      food_id: "00000000-0000-4000-8000-0000000000f1",
+      fiber_known: true,
       // Считается сервером на чтении: 81.1 / (0.9 + 0.1).
       ratio: 81.1,
     };

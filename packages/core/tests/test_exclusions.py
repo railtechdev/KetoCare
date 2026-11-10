@@ -34,16 +34,14 @@ class TestParse:
 class TestContainsExcluded:
     def test_names_excluded_products_in_composition_order(self) -> None:
         other = uuid.uuid4()
-        found = exclusions.contains_excluded(
-            [other, PEANUT, BUTTER], [str(BUTTER), str(PEANUT), "орехи"]
-        )
+        found = exclusions.contains_excluded([other, PEANUT, BUTTER], {BUTTER, PEANUT})
         assert found == [PEANUT, BUTTER]
 
     def test_repeated_product_is_named_once(self) -> None:
-        found = exclusions.contains_excluded([PEANUT, PEANUT], [str(PEANUT)])
+        found = exclusions.contains_excluded([PEANUT, PEANUT], {PEANUT})
         assert found == [PEANUT]
 
     def test_free_labels_never_match_a_product(self) -> None:
         # Сопоставить «орехи» с каталогом нечем — это и есть причина, по которой
         # исключения понадобилось хранить идентификаторами.
-        assert exclusions.contains_excluded([PEANUT], ["орехи", "арахис"]) == []
+        assert exclusions.excluded_ids(["орехи", "арахис"]) == set()

@@ -194,7 +194,9 @@ async def _excluded_products(
     by_item = _product_ids_by_item(items, live)
     names = {pid: product.name_ru for rows in live.values() for pid, _, product in rows}
 
-    excluded = exclusions.excluded_ids(patient.allergies)
+    excluded = await products_repo.same_food_ids(
+        session, product_ids=exclusions.excluded_ids(patient.allergies)
+    )
     item_ids: dict[uuid.UUID, list[uuid.UUID]] = {}
     for item_id, ids in by_item.items():
         for pid in dict.fromkeys(ids):

@@ -6,13 +6,25 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, SoftDeleteMixin, UpdatedAtMixin, UUIDPkMixin
-from .enums import RecipeCategory, RecipeStatus, pg_enum
+from .enums import (
+    CarbsConvention,
+    FoodDietType,
+    FoodStandardKind,
+    RecipeCategory,
+    RecipeStatus,
+    pg_enum,
+)
+
+#: Стандарт, в который миграция сложила весь прежний справочник (ADR-0056).
+#: Постоянный идентификатор: на него опираются умолчания схемы и поиск, а
+#: искать «главный» стандарт по названию значило бы зависеть от его написания.
+DEFAULT_FOOD_STANDARD_ID = uuid.UUID("00000000-0000-7000-8000-000000000001")
 
 
 class ProductCategory(Base, UUIDPkMixin):
@@ -37,6 +49,43 @@ class ProductCategory(Base, UUIDPkMixin):
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class FoodStandard(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
+    """Набор значений продуктов, по которому специалист собирает меню (ADR-0056).
+
+    Закрыт стандарт, у которого стоит `locked_at`: его значения не правит никто.
+    Вид и закрытость разделены, потому что внешний документ сначала загружается,
+    и только потом закрывается.
+    """
+
+    __tablename__ = "food_standards"
+    __table_args__ = (
+        Index(
+            "uq_food_standards_name_normalized",
+            text("lower(btrim(name))"),
+            unique=True,
+        ),
+    )
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    publisher: Mapped[str | None] = mapped_column(String(255))
+    document: Mapped[str | None] = mapped_column(String(255))
+    version: Mapped[str | None] = mapped_column(String(64))
+    effective_on: Mapped[date | None] = mapped_column(Date)
+    kind: Mapped[FoodStandardKind] = mapped_column(
+        pg_enum(FoodStandardKind, "food_standard_kind"), nullable=False
+    )
+    diet_type: Mapped[FoodDietType] = mapped_column(
+        pg_enum(FoodDietType, "food_diet_type"), nullable=False
+    )
+    carbs_convention: Mapped[CarbsConvention] = mapped_column(
+        pg_enum(CarbsConvention, "carbs_convention"), nullable=False
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
 class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "products"
     __table_args__ = (
@@ -50,13 +99,40 @@ class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
         # одновременных импортов — а две записи с одним названием и разными
         # значениями означают риск выбрать «не тот» продукт при расчёте меню.
         # Функциональный индекс, потому что name_ru — String, а не CITEXT.
+        # Внутри стандарта: в разных стандартах у одного названия свои значения.
         Index(
-            "uq_products_name_ru_normalized",
+            "uq_products_standard_name_normalized",
+            text("standard_id"),
             text("lower(btrim(name_ru))"),
             unique=True,
         ),
+        Index("ix_products_food_id", "food_id"),
     )
 
+    standard_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("food_standards.id"),
+        nullable=False,
+        default=DEFAULT_FOOD_STANDARD_ID,
+        server_default=text(f"'{DEFAULT_FOOD_STANDARD_ID}'::uuid"),
+    )
+    #: Что это за продукт, независимо от стандарта: одно и то же молоко в разных
+    #: стандартах носит один `food_id`, и исключение ребёнка действует на все
+    #: его записи. Общий идентификатор, а не ссылка на таблицу (ADR-0056).
+    food_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        nullable=False,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    #: Запись, с которой снята эта копия при корректировке закрытого стандарта.
+    derived_from_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("products.id")
+    )
+    #: `false` — источник клетчатку не указал и `fiber_100g` = 0 значит «неизвестно».
+    fiber_known: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
     name_uz: Mapped[str | None] = mapped_column(String(255))
     name_en: Mapped[str | None] = mapped_column(String(255))
