@@ -469,6 +469,9 @@ function choicesOf(children: ReactNode): Choice[] {
 }
 
 /**
+ * Оформленный список без подписи — для места, где подпись стоит рядом, а не
+ * над полем (переключатель ребёнка в шапке). В форме — `SelectField`.
+ *
  * Выбор из списка — оформленный список кита (docs/PLAN_UI_ORDER_2026-11.md,
  * этап 2): та же высота, рамка и фокус, что у поля ввода, и своё меню вместо
  * системного.
@@ -481,11 +484,9 @@ function choicesOf(children: ReactNode): Choice[] {
  * Подпись, пояснение и ошибка связаны с кнопкой списка — её фокусирует сводка
  * ошибок формы и её объявляет программа чтения с экрана.
  */
-export function SelectField({
-  label,
+export function KitSelect({
   error,
   hint,
-  optional,
   id,
   className,
   width = "full",
@@ -494,7 +495,8 @@ export function SelectField({
   onChange,
   "aria-describedby": describedBy,
   ...props
-}: FieldBaseProps & ComponentProps<"select">) {
+}: Pick<FieldBaseProps, "error" | "hint" | "width"> &
+  ComponentProps<"select">) {
   const native = useRef<HTMLSelectElement | null>(null);
   const choices = choicesOf(children);
   const controlled = props.value !== undefined;
@@ -539,13 +541,7 @@ export function SelectField({
   const placeholder = choices.find((c) => c.value === "")?.label;
 
   return (
-    <FieldShell
-      label={label}
-      error={error}
-      hint={hint}
-      optional={optional}
-      id={id}
-    >
+    <>
       <select
         {...props}
         id={id === undefined ? undefined : `${id}-native`}
@@ -598,6 +594,40 @@ export function SelectField({
           ))}
         </SelectContent>
       </Select>
+    </>
+  );
+}
+
+/**
+ * Выбор из списка — оформленный список кита (docs/PLAN_UI_ORDER_2026-11.md,
+ * этап 2): та же высота, рамка и фокус, что у поля ввода, и своё меню вместо
+ * системного.
+ *
+ * Значение живёт в скрытом системном `<select>`: его регистрирует
+ * react-hook-form (`register()`, `valueAsNumber`), он же получает событие
+ * `change` при выборе. Так устроен и сам Radix Select. Вызовы поля не меняются:
+ * варианты по-прежнему передаются `<option>`.
+ *
+ * Подпись, пояснение и ошибка связаны с кнопкой списка — её фокусирует сводка
+ * ошибок формы и её объявляет программа чтения с экрана.
+ */
+export function SelectField({
+  label,
+  error,
+  hint,
+  optional,
+  id,
+  ...props
+}: FieldBaseProps & ComponentProps<"select">) {
+  return (
+    <FieldShell
+      label={label}
+      error={error}
+      hint={hint}
+      optional={optional}
+      id={id}
+    >
+      <KitSelect id={id} error={error} hint={hint} {...props} />
     </FieldShell>
   );
 }
