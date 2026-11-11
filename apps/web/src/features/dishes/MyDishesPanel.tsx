@@ -18,6 +18,7 @@ import {
   Pencil,
   Trash2,
   Utensils,
+  Plus,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -82,7 +83,17 @@ export function MyDishesPanel({
       title={t(inCard ? "myDishes.patientTitle" : "myDishes.title")}
       description={t(inCard ? "myDishes.patientIntro" : "myDishes.intro")}
     >
-      {inCard && patientId !== null && <RecipeFitSheet patientId={patientId} />}
+      {inCard && patientId !== null && (
+        <div className="flex flex-wrap gap-field">
+          <Button asChild className="min-h-touch">
+            <PatientViewLink patientId={patientId} view="calculator">
+              <Plus aria-hidden="true" />
+              {t("myDishes.new")}
+            </PatientViewLink>
+          </Button>
+          <RecipeFitSheet patientId={patientId} />
+        </div>
+      )}
 
       {inCard && patientId !== null && review.data !== undefined && (
         <OffTargetNotice patientId={patientId} review={review.data} />

@@ -116,7 +116,7 @@ describe("мои блюда", () => {
     renderPanel();
 
     expect(await screen.findByText("Своих блюд пока нет")).toBeInTheDocument();
-    expect(screen.getByText(/калькуляторе/)).toBeInTheDocument();
+    expect(screen.getByText(/Соберите новое блюдо/)).toBeInTheDocument();
   });
 });
 
