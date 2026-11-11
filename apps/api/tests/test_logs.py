@@ -1012,3 +1012,36 @@ class TestRepeatIsNotADuplicate:
         )
 
         assert response.status_code == 201
+
+
+class TestSpecialistRecordsAtVisit:
+    """Ведущий специалист записывает замер, сделанный на приёме (этап 5 перестройки)."""
+
+    @pytest.mark.parametrize("kind", ["ketones", "weight"])
+    async def test_care_doctor_records(
+        self, client, session, make_user, make_patient, auth_headers, kind
+    ):
+        _, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        payload = await _payload(session, kind, patient=patient, author=doctor)
+
+        response = await client.post(
+            _url(patient.id, kind), json=payload, headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 201, response.text
+        assert response.json()["created_by"] == str(doctor.id)
+
+    async def test_stranger_doctor_cannot(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        payload = await _payload(session, "ketones", patient=patient, author=doctor)
+
+        response = await client.post(
+            _url(patient.id, "ketones"), json=payload, headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 403

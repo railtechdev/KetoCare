@@ -1,17 +1,21 @@
 import {
   AsyncSection,
+  Button,
   EmptyState,
+  FormSheet,
+  toast,
   TrendChart,
   type PrescriptionMarker,
   type TrendPoint,
 } from "@ketocare/ui";
 import { CalendarSearch } from "lucide-react";
-import { useId, useMemo } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SelectField } from "../../components/Field";
 import { errorMessageOf } from "../../lib/api";
 import { useSectionTab } from "../../routes/useSectionTab";
+import { DiaryForm } from "../diary/DiaryForm";
 import { DiaryList } from "../diary/DiaryList";
 import { SeizureDiaryGrid } from "../diary/SeizureDiaryGrid";
 import { usePeriodSearch } from "../diary/usePeriodSearch";
@@ -20,6 +24,7 @@ import { CHART_KINDS, DIARY_KINDS, type DiaryKind } from "../diary/diaryApi";
 import { formatChartDate } from "../diary/time";
 import {
   useDiaryLogs,
+  useDiaryMutations,
   usePrescriptionVersions,
   useDurationOptions,
   useSeizureTypes,
@@ -36,7 +41,8 @@ import { queryState } from "../../lib/queryState";
  * вторая реализация тех же карточек разошлась бы с первой, и одна и та же
  * запись выглядела бы у врача и у родителя по-разному.
  *
- * Записи только читаются: правка и мягкое удаление принадлежат автору записи,
+ * Замер и событие, увиденные на приёме, специалист записывает сам («Записать
+ * на приёме»). Правка и мягкое удаление принадлежат автору записи,
  * то есть семье. `DiaryList` показывает действия лишь автору, поэтому
  * `currentUserId` здесь намеренно null.
  */
@@ -78,6 +84,18 @@ export function PatientDiaryTab({ patientId }: { patientId: string }) {
 }
 
 const noop = () => undefined;
+
+/**
+ * Что специалист записывает на приёме (этап 5 AUDIT_ROLES_PATHS_2026-11):
+ * замер и событие, увиденные на приёме. Еду и приём препаратов отмечает семья —
+ * первое идёт через план дня, второе требует схемы в форме семьи.
+ */
+const VISIT_KINDS: readonly DiaryKind[] = [
+  "seizures",
+  "ketones",
+  "weight",
+  "side-effects",
+];
 
 function DiaryKindView({
   kind,
@@ -182,8 +200,50 @@ function DiaryKindView({
     [medications.data, t],
   );
 
+  const [adding, setAdding] = useState(false);
+  const { create } = useDiaryMutations(patientId, kind);
+  const canRecord = VISIT_KINDS.includes(kind);
+
   return (
     <div className="flex flex-col gap-section">
+      {canRecord && (
+        <div>
+          <Button
+            type="button"
+            className="min-h-touch"
+            onClick={() => setAdding(true)}
+          >
+            {t("diary.recordAtVisit")}
+          </Button>
+          <FormSheet
+            closeLabel={t("common:actions.close")}
+            open={adding}
+            onOpenChange={setAdding}
+            title={t("diary.recordAtVisit")}
+            description={t(`diary.kinds.${kind}`)}
+          >
+            <DiaryForm
+              kind={kind}
+              editing={null}
+              seizureTypes={seizureTypes.data ?? []}
+              durationOptions={durationOptions.data ?? []}
+              medications={[]}
+              onSubmit={(body, onSaved) =>
+                create.mutate(body, {
+                  onSuccess: () => {
+                    toast.success(t("diary.recorded"));
+                    onSaved();
+                    setAdding(false);
+                  },
+                })
+              }
+              onCancel={() => setAdding(false)}
+              pending={create.isPending}
+              error={create.error}
+            />
+          </FormSheet>
+        </div>
+      )}
       <PeriodPicker
         preset={preset}
         onPresetChange={setPreset}
