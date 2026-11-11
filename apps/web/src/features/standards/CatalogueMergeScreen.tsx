@@ -332,10 +332,15 @@ function ValueCell({
 
   let note: string;
   if (field.manual) {
+    // Число без отслеженного источника защищено так же, как правка, но
+    // называть его правкой — приписать человеку то, чего он не делал.
+    const kept = field.untracked ? "kept" : "manual";
     note =
       field.conflict && field.merged != null
-        ? t("merge.note.conflict", { value: formatValue(name, field.merged) })
-        : t("merge.note.manual");
+        ? t(`merge.note.${kept}Conflict`, {
+            value: formatValue(name, field.merged),
+          })
+        : t(`merge.note.${kept}`);
   } else if (field.value == null) {
     note = "";
   } else if (field.source_standard_name == null) {

@@ -20,6 +20,14 @@
 - **Правка человека сильнее слияния.** Число с источником `manual` не
   перезаписывается; если источники дают другое — это расхождение, его видно,
   но оно не применяется.
+- **Число без отслеженного источника тоже не перезаписывается.** Строки
+  основного стандарта, заведённые до `value_sources` (сиды, форма, импорт),
+  пометки `manual` не несут, хотя их вписал человек. Перезаписывается только
+  число, которое положила запись источника (`kind = product`: слияние или
+  копия); остальное — расхождение, как правка.
+- **Одна строка цели — одному продукту.** Совпадение по названию с уже
+  занятой строкой или второй новой строкой того же названия — расхождение
+  без записи (`name_taken`), а не перезапись и не отказ уникального индекса.
 """
 
 from __future__ import annotations
@@ -52,6 +60,9 @@ REQUIRED_FIELDS = ("kcal_100g", "fat_100g", "protein_100g", "carbs_100g")
 #: больше углеводов из другого. Чистые углеводы ушли бы в ноль молча.
 FIBER_EXCEEDS_CARBS = "fiber_exceeds_carbs"
 
+#: Название уже занято в цели другим продуктом — строка не пишется.
+NAME_TAKEN = "name_taken"
+
 
 @dataclass(frozen=True, slots=True)
 class Source:
@@ -78,8 +89,10 @@ class FieldValue:
     value: float | None
     source: Source | None = None
     product_id: uuid.UUID | None = None
-    #: Число вписал человек; слияние его не трогает.
+    #: Число вписал человек или его источник не отслежен; слияние его не трогает.
     manual: bool = False
+    #: Источник числа не отслежен (строка заведена до `value_sources`).
+    untracked: bool = False
     #: Число человека расходится с тем, что дают источники.
     conflict: bool = False
     #: Что дали бы источники (при `manual`).
@@ -121,10 +134,25 @@ def _number(value: Any) -> float | None:
 
 
 def _is_manual(target: Product | None, name: str) -> bool:
+    """Число цели защищено от слияния: его положил не источник.
+
+    Защищено всё, что не помечено `kind = product`, — и правка (`manual`), и
+    число без пометки. Пустые отходы защищать нечего: их можно заполнить.
+    """
+
+    if target is None:
+        return False
+    if name == "waste_pct" and target.waste_pct is None:
+        return False
+    entry = (target.value_sources or {}).get(name)
+    return not (isinstance(entry, dict) and entry.get("kind") == "product")
+
+
+def _is_untracked(target: Product | None, name: str) -> bool:
     if target is None:
         return False
     entry = (target.value_sources or {}).get(name)
-    return isinstance(entry, dict) and entry.get("kind") == "manual"
+    return not isinstance(entry, dict)
 
 
 def merge_food(
@@ -182,7 +210,9 @@ def merge_food(
             value=round(raw + fiber, 2) if source.carbs_net else round(raw, 2),
             source=source,
             product_id=product.id,
-            net_plus_fiber=source.carbs_net,
+            # Пометка — только если что-то прибавлено: «+ клетчатка» при нуле
+            # обещала бы поправку, которой не было.
+            net_plus_fiber=source.carbs_net and fiber > 0,
         )
 
     # Правка человека: число остаётся, расхождение показывается.
@@ -195,6 +225,7 @@ def merge_food(
         fields[name] = FieldValue(
             value=current,
             manual=True,
+            untracked=_is_untracked(target, name),
             merged=merged.value,
             conflict=merged.value is not None and merged.value != current,
         )
@@ -271,6 +302,9 @@ def _changes(
     for name, value in fields.items():
         if value.manual:
             continue
+        if name == "waste_pct" and value.value is None and target is not None:
+            # Источники отходов не знают — известное значение цели остаётся.
+            continue
         if value.product_id is None:
             sources.pop(name, None)
         else:
@@ -331,16 +365,47 @@ async def plan(
 
     accepted = set(accept)
     rows: list[MergeRow] = []
-    for food_id, records in by_food.items():
-        present = sorted(
-            ((by_id[standard_id], product) for standard_id, product in records.items()),
-            key=lambda item: rank[item[0].id],
+    groups = [
+        (
+            food_id,
+            sorted(
+                ((by_id[standard_id], product) for standard_id, product in records.items()),
+                key=lambda item: rank[item[0].id],
+            ),
         )
-        first = present[0][1]
-        existing = target_by_food.get(food_id) or target_by_name.get(
-            first.name_ru.casefold().strip()
+        for food_id, records in by_food.items()
+    ]
+    # Совпадение по `food_id` надёжнее совпадения по названию: такие строки
+    # занимают цель первыми.
+    claimed: set[uuid.UUID] = {food_id for food_id, _ in groups if food_id in target_by_food}
+    claimed_targets = {target_by_food[food_id].id for food_id in claimed}
+    new_names: set[str] = set()
+    for food_id, present in groups:
+        name = present[0][1].name_ru.casefold().strip()
+        taken = False
+        existing = target_by_food.get(food_id)
+        if existing is None:
+            by_name = target_by_name.get(name)
+            if by_name is not None:
+                if by_name.id in claimed_targets:
+                    taken = True
+                else:
+                    existing = by_name
+                    claimed_targets.add(by_name.id)
+            elif name in new_names:
+                taken = True
+            else:
+                new_names.add(name)
+        row = merge_food(
+            food_id, present, None if taken else existing, accepted=food_id in accepted
         )
-        rows.append(merge_food(food_id, present, existing, accepted=food_id in accepted))
+        if taken:
+            # Строка с этим названием уже занята другим продуктом: запись
+            # перезаписала бы её или упёрлась в уникальный индекс.
+            row.status = "conflict"
+            row.write = False
+            row.anomalies.append(NAME_TAKEN)
+        rows.append(row)
 
     rows.sort(key=lambda row: row.name_ru.casefold())
     return MergePlan(rows=rows)

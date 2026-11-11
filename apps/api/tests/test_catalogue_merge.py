@@ -350,7 +350,11 @@ async def test_manual_field_is_kept_and_reported_as_conflict(
         protein=14,
         carbs=0,
         value_sources={
-            "fat_100g": {"kind": "manual", "user_id": str(dietitian.id), "at": "2026-11-01"}
+            **{
+                name: {"kind": "product", "product_id": str(uuid.uuid4())}
+                for name in ("kcal_100g", "protein_100g", "carbs_100g", "fiber_100g")
+            },
+            "fat_100g": {"kind": "manual", "user_id": str(dietitian.id), "at": "2026-11-01"},
         },
     )
 
@@ -374,6 +378,80 @@ async def test_manual_field_is_kept_and_reported_as_conflict(
     assert existing.value_sources["fat_100g"]["kind"] == "manual"
     assert float(existing.kcal_100g) == 154
     assert float(existing.protein_100g) == 15
+
+
+async def test_untracked_values_of_existing_row_are_kept(
+    client, session, world, make_user, auth_headers
+):
+    """Строка, заведённая до `value_sources` (форма, импорт, сиды), — числа
+    человека без пометки `manual`. Слияние их не перезаписывает."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    food = await _beef(session, world)
+    beef_name = await session.scalar(
+        select(Product.name_ru).where(Product.standard_id == world.mz.id, Product.food_id == food)
+    )
+    # Своё `food_id`: строка связана с источником только названием.
+    existing = await _product(
+        session,
+        world.target,
+        world.category,
+        name=beef_name,
+        food_id=uuid.uuid4(),
+        kcal=150,
+        fat=10,
+        protein=14,
+        carbs=0,
+    )
+
+    response = await _merge(client, auth_headers(dietitian), world, dry_run=False)
+
+    assert response.status_code == 200, response.text
+    row = _row(response.json(), food)
+    assert row["status"] == "conflict"
+    assert row["product_id"] == str(existing.id)
+    protein = row["fields"]["protein_100g"]
+    assert protein["value"] == 14
+    assert protein["untracked"] is True
+    assert protein["conflict"] is True
+    assert protein["merged"] == 15
+    # Отходов у строки не было — их заполнить можно.
+    assert row["fields"]["waste_pct"]["value"] == 25
+    await session.refresh(existing)
+    assert float(existing.kcal_100g) == 150
+    assert float(existing.protein_100g) == 14
+    assert float(existing.waste_pct) == 25
+
+
+async def test_name_taken_by_another_food_is_not_written(
+    client, session, world, make_user, auth_headers
+):
+    """Два разных продукта с одним названием не пишутся в одну строку."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    name = _name("Творог")
+    first, second = uuid.uuid4(), uuid.uuid4()
+    for standard, food in ((world.mz, first), (world.usda, second)):
+        await _product(
+            session,
+            standard,
+            world.category,
+            name=name,
+            food_id=food,
+            kcal=116,
+            fat=5,
+            protein=16,
+            carbs=1.8,
+        )
+
+    response = await _merge(client, auth_headers(dietitian), world, dry_run=False)
+
+    assert response.status_code == 200, response.text
+    rows = [row for row in response.json()["rows"] if row["name_ru"] == name]
+    assert sorted(row["status"] for row in rows) == ["conflict", "new"]
+    taken = next(row for row in rows if row["status"] == "conflict")
+    assert taken["anomalies"] == ["name_taken"]
+    assert taken["write"] is False
 
 
 async def test_row_without_data_in_any_source_is_skipped(

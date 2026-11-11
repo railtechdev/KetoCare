@@ -72,6 +72,7 @@ function field(
     source_standard_name: source?.name ?? null,
     source_product_id: null,
     manual: false,
+    untracked: false,
     conflict: false,
     merged: null,
     net_plus_fiber: false,
@@ -232,7 +233,7 @@ describe("сборка рабочего справочника", () => {
     ).toBeInTheDocument();
     expect(
       within(butter).getByText(
-        labels.note.conflict.replace("{{value}}", "81,0"),
+        labels.note.manualConflict.replace("{{value}}", "81,0"),
       ),
     ).toBeInTheDocument();
   });

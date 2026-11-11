@@ -659,6 +659,9 @@ class CatalogueMergeField(BaseModel):
     source_standard_name: str | None = None
     source_product_id: uuid.UUID | None = None
     manual: bool = False
+    #: Защищённое число без отслеженного источника (строка заведена до
+    #: `value_sources`); слияние его не трогает, как правку.
+    untracked: bool = False
     conflict: bool = False
     merged: float | None = None
     net_plus_fiber: bool = False

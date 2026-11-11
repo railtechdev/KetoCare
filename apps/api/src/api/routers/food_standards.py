@@ -11,6 +11,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path
+from sqlalchemy.exc import IntegrityError
 
 from core.models import DEFAULT_FOOD_STANDARD_ID, FoodStandard
 from core.models.enums import CarbsConvention, FoodStandardKind, UserRole
@@ -265,6 +266,7 @@ def _merge_row(row: catalogue_merge.MergeRow) -> CatalogueMergeRow:
                 source_standard_name=value.source.name if value.source is not None else None,
                 source_product_id=value.product_id,
                 manual=value.manual,
+                untracked=value.untracked,
                 conflict=value.conflict,
                 merged=value.merged,
                 net_plus_fiber=value.net_plus_fiber,
@@ -349,6 +351,11 @@ async def merge_sources(
         except products_repo.StandardLockedError as error:
             raise ApiError(
                 ErrorCode.CONFLICT, "Стандарт закрыт: его значения не меняются."
+            ) from error
+        except IntegrityError as error:
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Справочник изменился во время сборки: обновите превью и примените снова.",
             ) from error
         totals = _merge_totals(plan.rows)
         await audit_repo.write_audit_log(
