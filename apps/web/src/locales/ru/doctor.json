@@ -730,5 +730,8 @@
     },
     "kg": "{{value}} кг",
     "cm": "{{value}} см"
+  },
+  "familyPrint": {
+    "button": "Печать для семьи"
   }
 }

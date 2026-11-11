@@ -247,7 +247,7 @@ export function WeekGrid({ patientId }: { patientId: string }) {
   );
 }
 
-function WeekPrint({
+export function WeekPrint({
   week,
   patientName,
 }: {
