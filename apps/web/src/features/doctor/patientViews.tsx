@@ -222,6 +222,63 @@ export const PATIENT_VIEW_ICONS: Record<PatientView, LucideIcon> = {
 };
 
 /**
+ * Шесть разделов карты, которые видит врач (`docs/AUDIT_ROLES_PATHS_2026-11.md`).
+ *
+ * Двенадцать экранов остаются адресуемыми — на них ведут закладки и ссылки из
+ * списка пациентов, — но в навигации стоят шесть пунктов: больше шести разделов
+ * у одного предмета не читают глазами. Экраны одной группы переключаются
+ * подписанными вкладками над содержимым.
+ */
+export const PATIENT_VIEW_GROUPS = [
+  "overview",
+  "diet",
+  "dishes",
+  "menu",
+  "observation",
+  "record",
+] as const;
+
+export type PatientViewGroup = (typeof PATIENT_VIEW_GROUPS)[number];
+
+export const PATIENT_GROUP_VIEWS: Record<
+  PatientViewGroup,
+  readonly PatientView[]
+> = {
+  overview: ["summary"],
+  diet: ["prescription"],
+  dishes: ["dishes", "calculator"],
+  menu: ["menu"],
+  observation: ["diary", "growth", "course", "reports"],
+  record: ["profile", "notes", "questions"],
+};
+
+export const PATIENT_GROUP_ICONS: Record<PatientViewGroup, LucideIcon> = {
+  overview: Gauge,
+  diet: ClipboardList,
+  dishes: CookingPot,
+  menu: CalendarDays,
+  observation: NotebookPen,
+  record: UserRound,
+};
+
+export function groupOfView(view: PatientView): PatientViewGroup {
+  const group = PATIENT_VIEW_GROUPS.find((g) =>
+    PATIENT_GROUP_VIEWS[g].includes(view),
+  );
+  if (group === undefined) throw new Error(`View without a group: ${view}`);
+  return group;
+}
+
+/** Экраны группы, доступные роли, в порядке группы. */
+export function groupViewsFor(
+  group: PatientViewGroup,
+  role: Role | undefined,
+): readonly PatientView[] {
+  const allowed = patientViewsFor(role);
+  return PATIENT_GROUP_VIEWS[group].filter((view) => allowed.includes(view));
+}
+
+/**
  * Раздел по прежнему параметру `?tab=`.
  *
  * Нужен ради ссылок, которые уже разосланы: карта пациента жила по адресу

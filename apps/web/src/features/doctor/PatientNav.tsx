@@ -15,25 +15,13 @@ import type { Role } from "../auth/roles";
 import { PatientViewLink } from "./PatientViewLink";
 import { ageInMonths } from "./dates";
 import {
-  PATIENT_VIEW_ICONS,
+  PATIENT_GROUP_ICONS,
+  PATIENT_VIEW_GROUPS,
+  groupOfView,
+  groupViewsFor,
   isPatientView,
-  patientViewsFor,
-  type PatientView,
 } from "./patientViews";
 import type { Patient, PatientOverview } from "./types";
-
-const GROUP_START_VIEWS: ReadonlySet<PatientView> = new Set([
-  "prescription",
-  "diary",
-  "notes",
-]);
-
-/** Подпись группы разделов; ключ — первый раздел группы. */
-const GROUP_TITLES: Partial<Record<PatientView, string>> = {
-  prescription: "workspace.groups.diet",
-  diary: "workspace.groups.observation",
-  notes: "workspace.groups.contact",
-};
 
 /**
  * Навигация по карте пациента.
@@ -66,7 +54,8 @@ export function PatientNav({
   // (`/app/patients/<id>`, ведёт на сводку) дочернего совпадения ещё нет, и
   // привязка к нему уронила бы навигацию в момент перехода.
   const { view } = useParams({ strict: false });
-  const current = view !== undefined && isPatientView(view) ? view : null;
+  const current =
+    view !== undefined && isPatientView(view) ? groupOfView(view) : null;
 
   const prescription = overview?.prescription ?? null;
   const lastWeight = overview?.last_weight ?? null;
@@ -134,27 +123,18 @@ export function PatientNav({
       </div>
 
       <WorkspaceNav>
-        {patientViewsFor(role).map((viewItem) => {
-          const Icon = PATIENT_VIEW_ICONS[viewItem];
-          const open = viewItem === current;
-          const startsNewGroup = GROUP_START_VIEWS.has(viewItem);
+        {PATIENT_VIEW_GROUPS.map((group) => {
+          const views = groupViewsFor(group, role);
+          const first = views[0];
+          if (first === undefined) return null;
+          const Icon = PATIENT_GROUP_ICONS[group];
+          const open = group === current;
 
           return (
-            <li
-              key={viewItem}
-              className={cn(
-                startsNewGroup &&
-                  "lg:mt-1.5 lg:border-t lg:border-border/60 lg:pt-1.5",
-              )}
-            >
-              {GROUP_TITLES[viewItem] !== undefined && (
-                <span className="hidden px-3 pb-1 text-xs text-muted-foreground lg:block">
-                  {t(GROUP_TITLES[viewItem])}
-                </span>
-              )}
+            <li key={group}>
               <PatientViewLink
                 patientId={patient.id}
-                view={viewItem}
+                view={first}
                 current={open}
                 className={cn(
                   "flex min-h-touch items-center gap-field rounded-lg px-2.5 text-xs font-medium sm:text-sm lg:min-h-9 lg:px-3",
@@ -169,7 +149,7 @@ export function PatientNav({
                   aria-hidden="true"
                   className="hidden size-4 shrink-0 lg:block"
                 />
-                {t(`workspace.views.${viewItem}`)}
+                {t(`workspace.groupNames.${group}`)}
               </PatientViewLink>
             </li>
           );

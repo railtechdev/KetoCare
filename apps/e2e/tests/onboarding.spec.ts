@@ -42,7 +42,7 @@ test("врач заводит карту и выдаёт код, семья вх
   await expect(doctor).toHaveURL(/\/app\/patients\/[0-9a-f-]+\/prescription/);
   await doctor
     .getByRole("navigation", { name: /Разделы карты пациента/ })
-    .getByRole("link", { name: "Профиль" })
+    .getByRole("link", { name: "Карта" })
     .click();
   await expect(doctor).toHaveURL(/\/app\/patients\/[0-9a-f-]+\/profile/);
 

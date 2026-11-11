@@ -8,8 +8,11 @@ import { useSession } from "../features/auth/useSession";
 import {
   PATIENT_VIEW_SCREENS,
   PATIENT_VIEW_WIDTH,
+  groupOfView,
+  groupViewsFor,
   isPatientView,
 } from "../features/doctor/patientViews";
+import { PatientViewLink } from "../features/doctor/PatientViewLink";
 import { usePatient } from "../features/patients/usePatient";
 
 /**
@@ -42,11 +45,14 @@ export function PatientViewRoute() {
   // его в пустую страницу.
   if (!isPatientView(view)) return null;
 
+  const group = groupOfView(view);
+  const siblings = groupViewsFor(group, session?.role);
+
   return (
     <PageLayout
       title={t("workspace.pageTitle", {
         name: patient.data.full_name,
-        view: t(`workspace.views.${view}`),
+        view: t(`workspace.groupNames.${group}`),
       })}
       // Ширина — роль раздела, а не одно число на всю карту (правило П34):
       // дневники сравнивают ряды, сводку читают.
@@ -63,6 +69,28 @@ export function PatientViewRoute() {
           адресе: выбранные периоды дневника и отчёта, открытая и не
           сохранённая форма. Параметры адреса к другому пациенту тоже не
           переходят — переключатель ведёт на раздел без них. */}
+      {siblings.length > 1 && (
+        <nav aria-label={t(`workspace.groupNames.${group}`)}>
+          <ul className="m-0 flex list-none flex-wrap gap-1 border-b border-border p-0">
+            {siblings.map((sibling) => (
+              <li key={sibling}>
+                <PatientViewLink
+                  patientId={patient.data.id}
+                  view={sibling}
+                  current={sibling === view}
+                  className={
+                    sibling === view
+                      ? "-mb-px flex min-h-touch items-center border-b-2 border-primary px-4 text-sm font-semibold text-foreground no-underline"
+                      : "-mb-px flex min-h-touch items-center border-b-2 border-transparent px-4 text-sm text-muted-foreground no-underline hover:text-foreground"
+                  }
+                >
+                  {t(`workspace.views.${sibling}`)}
+                </PatientViewLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
       <Suspense key={patient.data.id} fallback={<ViewSkeleton />}>
         {PATIENT_VIEW_SCREENS[view](patient.data, session?.role)}
       </Suspense>
