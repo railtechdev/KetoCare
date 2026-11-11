@@ -1,5 +1,6 @@
 import {
   AsyncSection,
+  Checkbox,
   FormFooter,
   Section,
   Skeleton,
@@ -502,9 +503,7 @@ function DrugPicker({
         {drugs.map((drug) => (
           <li key={drug.id}>
             <label className="flex min-h-touch items-center gap-field text-sm">
-              <input
-                type="checkbox"
-                className="size-5 shrink-0 accent-primary"
+              <Checkbox
                 checked={selected.includes(drug.id)}
                 onChange={(event) => onToggle(drug.id, event.target.checked)}
               />

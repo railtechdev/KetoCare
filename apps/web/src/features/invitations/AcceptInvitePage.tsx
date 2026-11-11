@@ -8,7 +8,7 @@ import {
   CardTitle,
   FormFooter,
 } from "@ketocare/ui";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -79,8 +79,10 @@ export function AcceptInvitePage() {
     // «готово», кнопка «Войти» уже была (правило П15 канона).
     return (
       <Shell title={t("accept.title")} description={t("accept.noToken")}>
-        <Button type="button" onClick={() => void navigate({ to: "/login" })}>
-          {t("accept.toLogin")}
+        {/* Переход — ссылка, а не кнопка: открывается в новой вкладке и
+            объявляется как ссылка (docs/PLAN_UI_ORDER_2026-11.md, правило 5). */}
+        <Button asChild>
+          <Link to="/login">{t("accept.toLogin")}</Link>
         </Button>
       </Shell>
     );
@@ -96,8 +98,10 @@ export function AcceptInvitePage() {
   ) {
     return (
       <Shell title={t("accept.expiredTitle")} description={t("accept.expired")}>
-        <Button type="button" onClick={() => void navigate({ to: "/login" })}>
-          {t("accept.toLogin")}
+        {/* Переход — ссылка, а не кнопка: открывается в новой вкладке и
+            объявляется как ссылка (docs/PLAN_UI_ORDER_2026-11.md, правило 5). */}
+        <Button asChild>
+          <Link to="/login">{t("accept.toLogin")}</Link>
         </Button>
       </Shell>
     );

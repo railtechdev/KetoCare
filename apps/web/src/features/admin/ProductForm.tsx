@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Button,
-  FormFooter,
-  WarningBanner,
+  Checkbox,
   formatKcal,
+  FormFooter,
   toPer100,
   toPerGram,
+  WarningBanner,
 } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
@@ -267,10 +268,8 @@ export function ProductForm({
               htmlFor={seasoningId}
               className="flex min-h-touch items-center gap-field text-sm font-medium"
             >
-              <input
+              <Checkbox
                 id={seasoningId}
-                type="checkbox"
-                className="size-5 accent-primary"
                 aria-describedby={`${seasoningId}-hint`}
                 {...register("seasoning")}
               />
@@ -367,12 +366,7 @@ export function ProductForm({
             htmlFor={activeId}
             className="flex min-h-touch items-center gap-field text-sm font-medium"
           >
-            <input
-              id={activeId}
-              type="checkbox"
-              className="size-5 accent-primary"
-              {...register("isActive")}
-            />
+            <Checkbox id={activeId} {...register("isActive")} />
             {t("products.form.isActive")}
           </label>
         )}

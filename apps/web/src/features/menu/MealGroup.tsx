@@ -1,4 +1,11 @@
-import { Badge, Button, ConfirmDialog, cn, formatMass } from "@ketocare/ui";
+import {
+  Badge,
+  Button,
+  Checkbox,
+  cn,
+  ConfirmDialog,
+  formatMass,
+} from "@ketocare/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -101,9 +108,7 @@ export function MealGroup({
               >
                 {onToggleEaten ? (
                   <label className="flex min-h-touch cursor-pointer items-center gap-field text-sm font-medium">
-                    <input
-                      type="checkbox"
-                      className="size-5 accent-primary"
+                    <Checkbox
                       checked={item.eaten}
                       aria-label={t("item.eatenFor", { name: title })}
                       onChange={(event) =>

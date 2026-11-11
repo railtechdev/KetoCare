@@ -1,12 +1,13 @@
 import {
   Button,
+  Checkbox,
   EmptyState,
-  FormFooter,
-  FormSheet,
-  RatioBadge,
   formatKcal,
   formatMass,
   formatRatio,
+  FormFooter,
+  FormSheet,
+  RatioBadge,
   toast,
 } from "@ketocare/ui";
 import { BookOpen } from "lucide-react";
@@ -151,9 +152,7 @@ function RecipeChoice({
           {recipes.map((recipe) => (
             <li key={recipe.id}>
               <label className="flex min-h-touch items-center gap-field">
-                <input
-                  type="checkbox"
-                  className="size-5 accent-primary"
+                <Checkbox
                   checked={selected.has(recipe.id)}
                   onChange={() => toggle(recipe.id)}
                 />
@@ -293,14 +292,7 @@ function FitCard({
   return (
     <li className="flex flex-col gap-1.5 rounded-xl border border-border p-3">
       <label className="flex min-h-touch flex-wrap items-center gap-field">
-        {isFitted && (
-          <input
-            type="checkbox"
-            className="size-5 accent-primary"
-            checked={checked}
-            onChange={onToggle}
-          />
-        )}
+        {isFitted && <Checkbox checked={checked} onChange={onToggle} />}
         <span className="min-w-0 flex-1 font-semibold break-words">
           {item.title}
         </span>

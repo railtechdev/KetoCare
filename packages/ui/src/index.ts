@@ -368,3 +368,5 @@ export {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+export { Checkbox } from "./components/controls/Checkbox";
+export { Switch } from "./components/controls/Switch";

@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FormFooter, Section, WarningBanner } from "@ketocare/ui";
+import { Checkbox, FormFooter, Section, WarningBanner } from "@ketocare/ui";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -132,12 +132,7 @@ export function UserAccountForm({
           htmlFor={activeId}
           className="flex min-h-touch items-center gap-field text-sm font-medium"
         >
-          <input
-            id={activeId}
-            type="checkbox"
-            className="size-5 accent-primary"
-            {...register("isActive")}
-          />
+          <Checkbox id={activeId} {...register("isActive")} />
           {t("users.form.isActive")}
         </label>
 
