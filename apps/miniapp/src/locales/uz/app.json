@@ -420,7 +420,9 @@
       "dessert": "Desert",
       "drink": "Ichimlik",
       "bakery": "Pishiriqlar",
-      "bread": "Non"
+      "bread": "Non",
+      "salad": "Salatlar",
+      "smoothie": "Smuzi"
     },
     "title": "Retseptlar",
     "search": "Retseptni toping",
