@@ -7,6 +7,7 @@ import {
   formatKcal,
   formatWeight,
   RatioBadge,
+  Columns,
   Section,
   toast,
 } from "@ketocare/ui";
@@ -185,125 +186,143 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         )}
       </div>
 
-      <Section title={t("prescription.historyTitle")}>
-        {/* Правило пяти состояний — общим компонентом (П15): рукописная
-            цепочка прятала уже загруженную историю назначений за красным
-            блоком при неудачном фоновом обновлении. */}
-        <AsyncSection
-          {...queryState(history)}
-          skeleton={
-            <TableSkeleton label={t("prescription.loading")} rows={3} />
-          }
-          error={
-            history.isError
-              ? {
-                  title: t("prescription.loadError"),
-                  description:
-                    errorMessageOf(history.error) ??
-                    t("common:errors.unexpected"),
-                }
-              : null
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void history.refetch()}
-          isEmpty={history.data === undefined}
-          empty={null}
-        >
-          {history.data !== undefined && (
-            <DataTable
-              columns={columns}
-              data={versions}
-              caption={t("prescription.caption")}
-              emptyState={
-                <EmptyState
-                  icon={ClipboardList}
-                  title={t("prescription.empty")}
-                  description={t("prescription.emptyDescription")}
-                />
-              }
-              labels={{
-                previousPage: t("table.previousPage"),
-                nextPage: t("table.nextPage"),
-                pageStatus: (page, total) =>
-                  t("table.pageStatus", { page, total }),
-              }}
-            />
-          )}
-        </AsyncSection>
-      </Section>
-
-      {(review.data?.off_target.length ?? 0) > 0 && (
-        <p className="m-0">
-          {t("prescription.dishesOffTarget", {
-            count: review.data?.off_target.length,
-          })}{" "}
-          <PatientViewLink
-            patientId={patientId}
-            view="dishes"
-            className="font-medium underline"
-          >
-            {t("prescription.dishesOffTargetLink")}
-          </PatientViewLink>
-        </p>
-      )}
-
-      {canWrite && (
-        <Section
-          title={t("prescription.formTitle")}
-          description={t("prescription.formHint")}
-        >
-          {/* Форма — только после истории: новая версия строится от
-              действующей. Пока история не пришла (или не пришла вовсе),
-              форма открывалась пустой как «первое назначение», и врач мог
-              записать версию, не видя действующей. */}
-          {history.data === undefined ? (
-            <p className="m-0 text-sm text-muted-foreground" role="status">
-              {t("prescription.formWaiting")}
-            </p>
-          ) : (
-            <PrescriptionForm
-              // Ключ по идентификатору действующей версии: после сохранения
-              // форма пересоздаётся уже с новыми значениями, иначе врач увидел
-              // бы в ней предыдущее назначение.
-              key={active?.id ?? "first"}
-              defaultValues={prescriptionFormValues(active, new Date())}
-              pending={create.isPending}
-              error={create.error}
-              onSubmit={setPendingValues}
-              kcalHint={(apply) => (
-                <EnergyHint patientId={patientId} onApply={apply} />
-              )}
-            />
-          )}
-          <ConfirmDialog
-            open={pendingValues !== null}
-            onOpenChange={(open) => {
-              if (!open) setPendingValues(null);
-            }}
-            title={
-              // «Первое» — только по ответу сервера, что версий нет вовсе.
-              history.data?.total === 0
-                ? t("prescription.confirm.titleFirst")
-                : t("prescription.confirm.title")
-            }
-            description={t("prescription.confirm.description")}
-            confirmLabel={t("prescription.confirm.action")}
-            cancelLabel={t("prescription.confirm.cancel")}
-            destructive={false}
-            onConfirm={() => {
-              if (pendingValues === null) return;
-              create.mutate(toPrescriptionBody(pendingValues), {
-                onSuccess: (created) => setCreatedId(created.id),
-              });
-              setPendingValues(null);
-            }}
-          >
-            {pendingValues !== null && (
-              <PrescriptionConfirm values={pendingValues} previous={active} />
+      {/* Форма — основное, история версий — справка рядом с ней: столбиком
+          они давали прокрутку при пустой правой половине экрана. */}
+      <Columns
+        from="xl"
+        asideWidth="wide"
+        asideLabel={t("prescription.historyTitle")}
+        main={
+          <div className="flex min-w-0 flex-col gap-section">
+            {(review.data?.off_target.length ?? 0) > 0 && (
+              <p className="m-0">
+                {t("prescription.dishesOffTarget", {
+                  count: review.data?.off_target.length,
+                })}{" "}
+                <PatientViewLink
+                  patientId={patientId}
+                  view="dishes"
+                  className="font-medium underline"
+                >
+                  {t("prescription.dishesOffTargetLink")}
+                </PatientViewLink>
+              </p>
             )}
-          </ConfirmDialog>
-        </Section>
-      )}
+
+            {canWrite && (
+              <Section
+                title={t("prescription.formTitle")}
+                description={t("prescription.formHint")}
+              >
+                {/* Форма — только после истории: новая версия строится от
+                    действующей. Пока история не пришла (или не пришла вовсе),
+                    форма открывалась пустой как «первое назначение», и врач мог
+                    записать версию, не видя действующей. */}
+                {history.data === undefined ? (
+                  <p
+                    className="m-0 text-sm text-muted-foreground"
+                    role="status"
+                  >
+                    {t("prescription.formWaiting")}
+                  </p>
+                ) : (
+                  <PrescriptionForm
+                    // Ключ по идентификатору действующей версии: после сохранения
+                    // форма пересоздаётся уже с новыми значениями, иначе врач увидел
+                    // бы в ней предыдущее назначение.
+                    key={active?.id ?? "first"}
+                    defaultValues={prescriptionFormValues(active, new Date())}
+                    pending={create.isPending}
+                    error={create.error}
+                    onSubmit={setPendingValues}
+                    kcalHint={(apply) => (
+                      <EnergyHint patientId={patientId} onApply={apply} />
+                    )}
+                  />
+                )}
+                <ConfirmDialog
+                  open={pendingValues !== null}
+                  onOpenChange={(open) => {
+                    if (!open) setPendingValues(null);
+                  }}
+                  title={
+                    // «Первое» — только по ответу сервера, что версий нет вовсе.
+                    history.data?.total === 0
+                      ? t("prescription.confirm.titleFirst")
+                      : t("prescription.confirm.title")
+                  }
+                  description={t("prescription.confirm.description")}
+                  confirmLabel={t("prescription.confirm.action")}
+                  cancelLabel={t("prescription.confirm.cancel")}
+                  destructive={false}
+                  onConfirm={() => {
+                    if (pendingValues === null) return;
+                    create.mutate(toPrescriptionBody(pendingValues), {
+                      onSuccess: (created) => setCreatedId(created.id),
+                    });
+                    setPendingValues(null);
+                  }}
+                >
+                  {pendingValues !== null && (
+                    <PrescriptionConfirm
+                      values={pendingValues}
+                      previous={active}
+                    />
+                  )}
+                </ConfirmDialog>
+              </Section>
+            )}
+          </div>
+        }
+        aside={
+          <Section title={t("prescription.historyTitle")}>
+            {/* Правило пяти состояний — общим компонентом (П15): рукописная
+                  цепочка прятала уже загруженную историю назначений за красным
+                  блоком при неудачном фоновом обновлении. */}
+            <AsyncSection
+              {...queryState(history)}
+              skeleton={
+                <TableSkeleton label={t("prescription.loading")} rows={3} />
+              }
+              error={
+                history.isError
+                  ? {
+                      title: t("prescription.loadError"),
+                      description:
+                        errorMessageOf(history.error) ??
+                        t("common:errors.unexpected"),
+                    }
+                  : null
+              }
+              retryLabel={t("common:actions.retry")}
+              onRetry={() => void history.refetch()}
+              isEmpty={history.data === undefined}
+              empty={null}
+            >
+              {history.data !== undefined && (
+                <DataTable
+                  columns={columns}
+                  data={versions}
+                  caption={t("prescription.caption")}
+                  emptyState={
+                    <EmptyState
+                      icon={ClipboardList}
+                      title={t("prescription.empty")}
+                      description={t("prescription.emptyDescription")}
+                    />
+                  }
+                  labels={{
+                    previousPage: t("table.previousPage"),
+                    nextPage: t("table.nextPage"),
+                    pageStatus: (page, total) =>
+                      t("table.pageStatus", { page, total }),
+                  }}
+                />
+              )}
+            </AsyncSection>
+          </Section>
+        }
+      />
     </div>
   );
 }

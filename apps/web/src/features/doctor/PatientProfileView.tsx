@@ -9,6 +9,7 @@ import {
   Metric,
   MetricRow,
   Section,
+  Tiles,
   formatOccurredAt,
   toast,
   formatWeight,
@@ -256,41 +257,49 @@ export function PatientProfileView({
         />
       </FormSheet>
 
-      {/* Анкета — рядом с медицинским профилем: врачебная часть анамнеза и
-          часть, заполненная семьёй, читаются вместе. Доступ к ней даёт сам
-          доступ к пациенту, поэтому диетолог её тоже видит — и, как врач,
-          заполняет на приёме за семью из Telegram (ADR-0046). */}
-      <IntakeView
-        patientId={patient.id}
-        childName={patient.full_name}
-        editable={clinicalAllowed}
-      />
+      {/* На широком экране анамнез и «кто и что вокруг ребёнка» стоят рядом:
+          шесть блоков столбиком давали 1424 px прокрутки при пустой правой
+          половине. На узком экране колонка одна, порядок прежний. */}
+      <Tiles min="lg" className="items-start">
+        <div className="flex min-w-0 flex-col gap-section">
+          {/* Анкета — рядом с медицинским профилем: врачебная часть анамнеза и
+              часть, заполненная семьёй, читаются вместе. Доступ к ней даёт сам
+              доступ к пациенту, поэтому диетолог её тоже видит — и, как врач,
+              заполняет на приёме за семью из Telegram (ADR-0046). */}
+          <IntakeView
+            patientId={patient.id}
+            childName={patient.full_name}
+            editable={clinicalAllowed}
+          />
 
-      {clinicalAllowed && (
-        <MedicalProfilePanel
-          patientId={patient.id}
-          editable={clinicalEditable}
-        />
-      )}
+          {clinicalAllowed && (
+            <MedicalProfilePanel
+              patientId={patient.id}
+              editable={clinicalEditable}
+            />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-section">
+          {/* Документы — сразу после анкеты и профиля: анамнез и то, чем он
+              подтверждён, читаются вместе. */}
+          <AttachmentsPanel patientId={patient.id} />
 
-      {/* Документы — сразу после анкеты и профиля: анамнез и то, чем он
-          подтверждён, читаются вместе. */}
-      <AttachmentsPanel patientId={patient.id} />
+          {/* Два ответа на один вопрос «с кем говорить»: кто ведёт ребёнка дома
+              и кто ведёт его в клинике. Семья первой — к ней обращаются, когда
+              дневники пусты, а это самый частый повод. */}
+          <FamilyPanel patientId={patient.id} />
 
-      {/* Два ответа на один вопрос «с кем говорить»: кто ведёт ребёнка дома
-          и кто ведёт его в клинике. Семья первой — к ней обращаются, когда
-          дневники пусты, а это самый частый повод. */}
-      <FamilyPanel patientId={patient.id} />
-
-      <CareTeamPanel
-        patientId={patient.id}
-        onSelfRemoved={() =>
-          void navigate({
-            to: "/app/$section",
-            params: { section: "patients" },
-          })
-        }
-      />
+          <CareTeamPanel
+            patientId={patient.id}
+            onSelfRemoved={() =>
+              void navigate({
+                to: "/app/$section",
+                params: { section: "patients" },
+              })
+            }
+          />
+        </div>
+      </Tiles>
     </>
   );
 }

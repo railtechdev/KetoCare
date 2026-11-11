@@ -172,13 +172,11 @@ export const PATIENT_VIEW_SCREENS: Record<PatientView, PatientViewScreen> = {
 };
 
 /**
- * Ширина раздела — его роль, а не одно число на всю карту (правило П34).
+ * Ширина у всех разделов карты одна (docs/PLAN_UI_ORDER_2026-11.md, правило 1).
  *
- * Разделы карты — это разные страницы, и это видно на широком мониторе:
- * дневники, питание и отчёт сравнивают ряды и требуют места; сводка, профиль и
- * заметки читаются, и растянутая на 96rem пара «подпись — значение» оставляет
- * между ними полметра пустоты. Раньше вся карта была одной страницей и роль у
- * неё была одна.
+ * Раньше читаемые разделы шли с пределом 72rem, рабочие — 96rem, и при переходе
+ * между вкладками правая граница содержимого прыгала на 384 px. Узкое
+ * содержимое теперь не сужает страницу, а раскладывается внутри неё в колонки.
  */
 export const PATIENT_VIEW_WIDTH: Record<
   PatientView,
@@ -188,17 +186,14 @@ export const PATIENT_VIEW_WIDTH: Record<
   prescription: "wide",
   dishes: "wide",
   menu: "wide",
-  // Калькулятор — одна колонка состава и результата под ней: считают по нему
-  // построчно, а не сравнивают ряды.
-  calculator: "content",
+  calculator: "wide",
   diary: "wide",
   growth: "wide",
-  course: "content",
+  course: "wide",
   reports: "wide",
-  notes: "content",
-  // Переписку читают, как заметки.
-  questions: "content",
-  profile: "content",
+  notes: "wide",
+  questions: "wide",
+  profile: "wide",
 };
 
 /**
