@@ -20,11 +20,15 @@
 - **Правка человека сильнее слияния.** Число с источником `manual` не
   перезаписывается; если источники дают другое — это расхождение, его видно,
   но оно не применяется.
-- **Число без отслеженного источника тоже не перезаписывается.** Строки
+- **Перезаписывается только число из справочника-источника.** Строки
   основного стандарта, заведённые до `value_sources` (сиды, форма, импорт),
-  пометки `manual` не несут, хотя их вписал человек. Перезаписывается только
-  число, которое положила запись источника (`kind = product`: слияние или
-  копия); остальное — расхождение, как правка.
+  пометки `manual` не несут, хотя их вписал человек; копия из записи другого
+  стандарта клиники несёт `kind = product`, но это тоже число человека.
+  Слияние заменяет число, только если его источник — запись внешнего
+  документа (`reference`); остальное — расхождение, как правка.
+- **Углеводы и клетчатка защищаются вместе.** Чистые углеводы — их разность;
+  смени слияние одно из двух при защищённом другом, и соотношение сдвинулось
+  бы без человека.
 - **Одна строка цели — одному продукту.** Совпадение по названию с уже
   занятой строкой или второй новой строкой того же названия — расхождение
   без записи (`name_taken`), а не перезапись и не отказ уникального индекса.
@@ -63,6 +67,9 @@ FIBER_EXCEEDS_CARBS = "fiber_exceeds_carbs"
 #: Название уже занято в цели другим продуктом — строка не пишется.
 NAME_TAKEN = "name_taken"
 
+#: Чистые углеводы — разность этих полей: защищаются только вместе.
+CARBS_PAIR = frozenset({"carbs_100g", "fiber_100g"})
+
 
 @dataclass(frozen=True, slots=True)
 class Source:
@@ -75,6 +82,10 @@ class Source:
 
     @classmethod
     def of(cls, standard: FoodStandard) -> Source:
+        # TODO(med): подтвердить у медицинской команды — вопрос 47 (Д3): как
+        # записаны углеводы в таблицах Минздрава РУз. До ответа «неизвестно»
+        # читается как «без клетчатки»: прибавка клетчатки может только
+        # занизить соотношение, но не завысить его (ADR-0068, решение 3).
         return cls(
             id=standard.id,
             name=standard.name,
@@ -133,19 +144,48 @@ def _number(value: Any) -> float | None:
     return None if value is None else round(float(value), 2)
 
 
-def _is_manual(target: Product | None, name: str) -> bool:
-    """Число цели защищено от слияния: его положил не источник.
+def _is_empty(target: Product, name: str) -> bool:
+    """Значения у цели нет: пустые отходы, прочерк, неизвестная клетчатка."""
 
-    Защищено всё, что не помечено `kind = product`, — и правка (`manual`), и
-    число без пометки. Пустые отходы защищать нечего: их можно заполнить.
+    if name == "waste_pct":
+        return target.waste_pct is None
+    if name in (target.unknown_fields or []):
+        return True
+    return name == "fiber_100g" and not target.fiber_known
+
+
+def _from_reference(entry: Any, reference_products: Collection[uuid.UUID]) -> bool:
+    if not (isinstance(entry, dict) and entry.get("kind") == "product"):
+        return False
+    try:
+        return uuid.UUID(str(entry.get("product_id"))) in reference_products
+    except ValueError:
+        return False
+
+
+def protected_fields(target: Product | None, reference_products: Collection[uuid.UUID]) -> set[str]:
+    """Числа цели, которые слияние не трогает.
+
+    Перезаписывается только число, взятое из записи внешнего документа
+    (`reference`): его же положило бы и слияние. Правка (`manual`), число без
+    пометки и копия из записи стандарта клиники — числа человека. Пустое
+    защищать нечего — кроме клетчатки и углеводов, которые защищаются парой.
     """
 
     if target is None:
-        return False
-    if name == "waste_pct" and target.waste_pct is None:
-        return False
-    entry = (target.value_sources or {}).get(name)
-    return not (isinstance(entry, dict) and entry.get("kind") == "product")
+        return set()
+    sources = target.value_sources or {}
+    protected = {
+        name
+        for name in VALUE_FIELDS
+        if not _is_empty(target, name)
+        and not _from_reference(sources.get(name), reference_products)
+    }
+    if protected & CARBS_PAIR:
+        # Чистые углеводы — разность пары: новое число в одном поле при
+        # защищённом другом сдвинуло бы соотношение без человека.
+        protected |= CARBS_PAIR
+    return protected
 
 
 def _is_untracked(target: Product | None, name: str) -> bool:
@@ -161,6 +201,7 @@ def merge_food(
     target: Product | None,
     *,
     accepted: bool,
+    reference_products: Collection[uuid.UUID] = (),
 ) -> MergeRow:
     """Одна строка рабочего справочника из записей источников по порядку.
 
@@ -168,6 +209,7 @@ def merge_food(
     продукта в источниках, уже в порядке слияния.
     """
 
+    protected = protected_fields(target, reference_products)
     picks: dict[str, tuple[Source, Product] | None] = {
         name: next(((source, p) for source, p in present if _known(p, name)), None)
         for name in VALUE_FIELDS
@@ -188,7 +230,7 @@ def merge_food(
         fields[name] = proposed(name)
 
     # Клетчатка, которая окажется в строке: правка человека сильнее источника.
-    if _is_manual(target, "fiber_100g"):
+    if "fiber_100g" in protected:
         assert target is not None
         fiber = float(target.fiber_100g)
         fiber_known = bool(target.fiber_known)
@@ -217,7 +259,7 @@ def merge_food(
 
     # Правка человека: число остаётся, расхождение показывается.
     for name in VALUE_FIELDS:
-        if not _is_manual(target, name):
+        if name not in protected:
             continue
         assert target is not None
         current = _number(getattr(target, name))
@@ -257,10 +299,11 @@ def merge_food(
 
     values = {name: fields[name].value for name in VALUE_FIELDS}
     kcal, fat, protein, carbs = (float(values[name] or 0) for name in REQUIRED_FIELDS)
-    # Сверка 9–4–4 по ЧИСТЫМ углеводам: так их считает ядро (ADR-0030).
-    checked = product_checks.Values(
-        kcal=kcal, fat=fat, protein=protein, carbs=max(carbs - fiber, 0.0), fiber=fiber
-    )
+    # Та же сверка и те же входы, что у списка подозрительных продуктов
+    # (`routers/products._anomalies_of`): углеводы — как хранятся, общие.
+    # Иначе только что собранная строка тут же появлялась бы в этом списке
+    # (ADR-0068, решение 5).
+    checked = product_checks.Values(kcal=kcal, fat=fat, protein=protein, carbs=carbs, fiber=fiber)
     row.anomalies = [str(finding.kind) for finding in product_checks.check(checked)]
     if fiber > carbs:
         row.anomalies.append(FIBER_EXCEEDS_CARBS)
@@ -322,8 +365,10 @@ def _changes(
     }
     if not fields["fiber_100g"].manual and bool(target.fiber_known) != fiber_known:
         changes["fiber_known"] = fiber_known
-    if target.unknown_fields:
-        changes["unknown_fields"] = []
+    # Пометка «нет данных» остаётся только у числа, которое слияние не тронуло.
+    unknown = [name for name in (target.unknown_fields or []) if fields[name].manual]
+    if list(target.unknown_fields or []) != unknown:
+        changes["unknown_fields"] = unknown
     if sources != previous:
         changes["value_sources"] = sources
     return changes
@@ -363,6 +408,18 @@ async def plan(
         target_by_food.setdefault(product.food_id, product)
         target_by_name.setdefault(product.name_ru.casefold().strip(), product)
 
+    referenced: set[uuid.UUID] = set()
+    for product in target_rows:
+        for entry in (product.value_sources or {}).values():
+            if isinstance(entry, dict) and entry.get("kind") == "product":
+                try:
+                    referenced.add(uuid.UUID(str(entry.get("product_id"))))
+                except ValueError:
+                    continue
+    reference_products = await products_repo.ids_in_reference_standards(
+        session, product_ids=referenced
+    )
+
     accepted = set(accept)
     rows: list[MergeRow] = []
     groups = [
@@ -397,7 +454,11 @@ async def plan(
             else:
                 new_names.add(name)
         row = merge_food(
-            food_id, present, None if taken else existing, accepted=food_id in accepted
+            food_id,
+            present,
+            None if taken else existing,
+            accepted=food_id in accepted,
+            reference_products=reference_products,
         )
         if taken:
             # Строка с этим названием уже занята другим продуктом: запись
@@ -418,16 +479,20 @@ def _signature(row: MergeRow) -> tuple[str, str]:
 
 async def apply(
     session: AsyncSession, *, target: FoodStandard, plan: MergePlan, changed_by: uuid.UUID
-) -> None:
-    """Записывает строки плана, у которых `write`. Ревизии пишет репозиторий."""
+) -> list[uuid.UUID]:
+    """Записывает строки плана, у которых `write`. Ревизии пишет репозиторий.
 
+    Возвращает записи рабочего справочника, которые созданы или изменены.
+    """
+
+    written: list[uuid.UUID] = []
     for row in plan.rows:
         if not row.write:
             continue
         source, version = _signature(row)
         if row.target is None:
             template = row.template
-            await products_repo.create(
+            created = await products_repo.create(
                 session,
                 changed_by=changed_by,
                 standard_id=target.id,
@@ -443,6 +508,7 @@ async def apply(
                 verified_at=local_today(),
                 **row.changes,
             )
+            written.append(created.id)
         else:
             changes = dict(row.changes)
             if any(name in changes for name in VALUE_FIELDS):
@@ -450,3 +516,5 @@ async def apply(
             await products_repo.update(
                 session, product=row.target, changed_by=changed_by, **changes
             )
+            written.append(row.target.id)
+    return written

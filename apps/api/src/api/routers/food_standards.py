@@ -317,6 +317,12 @@ async def merge_sources(
         )
     if target.locked_at is not None:
         raise ApiError(ErrorCode.CONFLICT, "Стандарт закрыт: его значения не меняются.")
+    if not target.is_active:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Стандарт снят с оборота: собранные строки никому не будут предложены.",
+            details={"field": "standard_id"},
+        )
 
     if len(set(payload.source_ids)) != len(payload.source_ids):
         raise ApiError(
@@ -347,7 +353,9 @@ async def merge_sources(
     )
     if not payload.dry_run:
         try:
-            await catalogue_merge.apply(session, target=target, plan=plan, changed_by=user.id)
+            written = await catalogue_merge.apply(
+                session, target=target, plan=plan, changed_by=user.id
+            )
         except products_repo.StandardLockedError as error:
             raise ApiError(
                 ErrorCode.CONFLICT, "Стандарт закрыт: его значения не меняются."
@@ -368,6 +376,7 @@ async def merge_sources(
                 "source_ids": [str(source.id) for source in sources],
                 "accepted": [str(row.food_id) for row in plan.rows if row.accepted and row.write],
                 "totals": totals.model_dump(),
+                "product_ids": [str(product_id) for product_id in written],
             },
         )
 

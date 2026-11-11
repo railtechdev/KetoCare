@@ -75,7 +75,7 @@ async def _product(
         protein_100g=protein,
         carbs_100g=carbs,
         fiber_100g=fiber,
-        fiber_known="fiber_100g" not in unknown,
+        fiber_known=extra.pop("fiber_known", "fiber_100g" not in unknown),
         unknown_fields=unknown,
         waste_pct=waste,
         source="Документ",
@@ -141,6 +141,49 @@ async def _beef(session, world: World) -> uuid.UUID:
         fiber=0,
     )
     return food
+
+
+def _ref(product_id: uuid.UUID) -> dict[str, str]:
+    return {"kind": "product", "product_id": str(product_id)}
+
+
+async def _record(session, standard: FoodStandard, food: uuid.UUID) -> uuid.UUID:
+    product_id: uuid.UUID = await session.scalar(
+        select(Product.id).where(Product.standard_id == standard.id, Product.food_id == food)
+    )
+    return product_id
+
+
+async def _cabbage(session, world: World) -> tuple[uuid.UUID, str]:
+    """Капуста: углеводы Минздрава (чистые), клетчатка USDA; сборка — 7,2 и 2,5."""
+
+    food = uuid.uuid4()
+    name = _name("Капуста")
+    await _product(
+        session,
+        world.mz,
+        world.category,
+        name=name,
+        food_id=food,
+        kcal=37,
+        fat=0.1,
+        protein=1.8,
+        carbs=4.7,
+        unknown=["fiber_100g"],
+    )
+    await _product(
+        session,
+        world.usda,
+        world.category,
+        name=name,
+        food_id=food,
+        kcal=25,
+        fat=0.1,
+        protein=1.28,
+        carbs=5.8,
+        fiber=2.5,
+    )
+    return food, name
 
 
 async def _merge(client, headers, world: World, **body: Any):
@@ -253,7 +296,7 @@ async def test_net_carbs_source_gets_fiber_added(client, session, world, make_us
         world.category,
         name=name,
         food_id=food,
-        kcal=28,
+        kcal=37,
         fat=0.1,
         protein=1.8,
         carbs=4.7,
@@ -339,6 +382,8 @@ async def test_manual_field_is_kept_and_reported_as_conflict(
     beef_name = await session.scalar(
         select(Product.name_ru).where(Product.standard_id == world.mz.id, Product.food_id == food)
     )
+    mz_beef = await _record(session, world.mz, food)
+    usda_beef = await _record(session, world.usda, food)
     existing = await _product(
         session,
         world.target,
@@ -350,10 +395,10 @@ async def test_manual_field_is_kept_and_reported_as_conflict(
         protein=14,
         carbs=0,
         value_sources={
-            **{
-                name: {"kind": "product", "product_id": str(uuid.uuid4())}
-                for name in ("kcal_100g", "protein_100g", "carbs_100g", "fiber_100g")
-            },
+            "kcal_100g": _ref(mz_beef),
+            "protein_100g": _ref(mz_beef),
+            "carbs_100g": _ref(usda_beef),
+            "fiber_100g": _ref(usda_beef),
             "fat_100g": {"kind": "manual", "user_id": str(dietitian.id), "at": "2026-11-01"},
         },
     )
@@ -527,3 +572,217 @@ async def test_unknown_target_is_404(client, world, make_user, auth_headers):
     )
 
     assert response.status_code == 404
+
+
+async def test_copy_from_a_clinic_record_is_protected(
+    client, session, world, make_user, auth_headers
+):
+    """Копия из записи другого стандарта клиники несёт `kind = product`, но это
+    числа человека: слияние их не заменяет (ADR-0068)."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    food = await _beef(session, world)
+    beef_name = await _name_of(session, world.mz, food)
+    older = await _standard(session, kind=FoodStandardKind.CLINIC, name="Прежний")
+    origin = await _product(
+        session,
+        older,
+        world.category,
+        name=beef_name,
+        food_id=food,
+        kcal=150,
+        fat=10.3,
+        protein=14,
+        carbs=0,
+    )
+    derived = await client.post(
+        f"/api/v1/products/{origin.id}/derive",
+        json={
+            "standard_id": str(world.target.id),
+            "name_ru": beef_name,
+            "category_id": str(world.category.id),
+            "kcal_100g": 150,
+            "fat_100g": 10.3,
+            "protein_100g": 14,
+            "carbs_100g": 0,
+            "fiber_100g": 0,
+            "source": "Документ",
+            "source_version": "2025",
+            "verified_at": "2026-01-01",
+        },
+        headers=auth_headers(dietitian),
+    )
+    assert derived.status_code == 201, derived.text
+    assert derived.json()["value_sources"]["fat_100g"]["kind"] == "product"
+
+    response = await _merge(client, auth_headers(dietitian), world, dry_run=False)
+
+    assert response.status_code == 200, response.text
+    row = _row(response.json(), food)
+    assert row["status"] == "conflict"
+    assert row["fields"]["fat_100g"]["value"] == 10.3
+    assert row["fields"]["fat_100g"]["conflict"] is True
+    assert row["fields"]["kcal_100g"]["value"] == 150
+    copy = await session.get(Product, uuid.UUID(derived.json()["id"]))
+    await session.refresh(copy)
+    assert float(copy.fat_100g) == 10.3
+    assert float(copy.kcal_100g) == 150
+    assert float(copy.protein_100g) == 14
+
+
+async def _name_of(session, standard: FoodStandard, food: uuid.UUID) -> str:
+    name: str = await session.scalar(
+        select(Product.name_ru).where(Product.standard_id == standard.id, Product.food_id == food)
+    )
+    return name
+
+
+async def test_manual_carbs_protect_source_fiber(client, session, world, make_user, auth_headers):
+    """Углеводы человека — клетчатка из источника остаётся прежней: иначе
+    чистые углеводы сдвинулись бы без человека."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    food, name = await _cabbage(session, world)
+    mz = await _record(session, world.mz, food)
+    usda = await _record(session, world.usda, food)
+    existing = await _product(
+        session,
+        world.target,
+        world.category,
+        name=name,
+        food_id=food,
+        kcal=37,
+        fat=0.1,
+        protein=1.8,
+        carbs=7.2,
+        fiber=1.0,
+        value_sources={
+            "kcal_100g": _ref(mz),
+            "fat_100g": _ref(mz),
+            "protein_100g": _ref(mz),
+            "carbs_100g": {"kind": "manual", "user_id": str(dietitian.id), "at": "2026-11-01"},
+            "fiber_100g": _ref(usda),
+        },
+    )
+
+    response = await _merge(client, auth_headers(dietitian), world, dry_run=False)
+
+    assert response.status_code == 200, response.text
+    row = _row(response.json(), food)
+    assert row["status"] == "conflict"
+    fiber = row["fields"]["fiber_100g"]
+    assert (fiber["value"], fiber["merged"], fiber["conflict"]) == (1.0, 2.5, True)
+    assert row["fields"]["carbs_100g"]["value"] == 7.2
+    await session.refresh(existing)
+    assert float(existing.carbs_100g) == 7.2
+    assert float(existing.fiber_100g) == 1.0
+
+
+async def test_manual_fiber_protects_source_carbs(client, session, world, make_user, auth_headers):
+    dietitian = await make_user(UserRole.DIETITIAN)
+    food, name = await _cabbage(session, world)
+    mz = await _record(session, world.mz, food)
+    existing = await _product(
+        session,
+        world.target,
+        world.category,
+        name=name,
+        food_id=food,
+        kcal=37,
+        fat=0.1,
+        protein=1.8,
+        carbs=7.0,
+        fiber=2.5,
+        value_sources={
+            "kcal_100g": _ref(mz),
+            "fat_100g": _ref(mz),
+            "protein_100g": _ref(mz),
+            "carbs_100g": _ref(mz),
+            "fiber_100g": {"kind": "manual", "user_id": str(dietitian.id), "at": "2026-11-01"},
+        },
+    )
+
+    response = await _merge(client, auth_headers(dietitian), world, dry_run=False)
+
+    assert response.status_code == 200, response.text
+    row = _row(response.json(), food)
+    assert row["status"] == "conflict"
+    carbs = row["fields"]["carbs_100g"]
+    assert (carbs["value"], carbs["merged"], carbs["conflict"]) == (7.0, 7.2, True)
+    await session.refresh(existing)
+    assert float(existing.carbs_100g) == 7.0
+    assert float(existing.fiber_100g) == 2.5
+
+
+async def test_unknown_target_fiber_is_filled_not_protected(
+    client, session, world, make_user, auth_headers
+):
+    """Неизвестная клетчатка цели — пустое место, а не число человека."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    food, name = await _cabbage(session, world)
+    mz = await _record(session, world.mz, food)
+    existing = await _product(
+        session,
+        world.target,
+        world.category,
+        name=name,
+        food_id=food,
+        kcal=37,
+        fat=0.1,
+        protein=1.8,
+        carbs=4.7,
+        fiber=0,
+        fiber_known=False,
+        value_sources={
+            "kcal_100g": _ref(mz),
+            "fat_100g": _ref(mz),
+            "protein_100g": _ref(mz),
+            "carbs_100g": _ref(mz),
+        },
+    )
+
+    response = await _merge(client, auth_headers(dietitian), world, dry_run=False)
+
+    assert response.status_code == 200, response.text
+    assert _row(response.json(), food)["status"] == "update"
+    await session.refresh(existing)
+    assert float(existing.fiber_100g) == 2.5
+    assert existing.fiber_known is True
+    assert float(existing.carbs_100g) == 7.2
+
+
+async def test_locked_target_is_409(client, session, world, make_user, auth_headers):
+    dietitian = await make_user(UserRole.DIETITIAN)
+    world.target.locked_at = datetime.now(UTC)
+    await session.flush()
+
+    response = await _merge(client, auth_headers(dietitian), world)
+
+    assert response.status_code == 409, response.text
+
+
+async def test_inactive_target_is_refused(client, session, world, make_user, auth_headers):
+    dietitian = await make_user(UserRole.DIETITIAN)
+    world.target.is_active = False
+    await session.flush()
+
+    response = await _merge(client, auth_headers(dietitian), world)
+
+    assert response.status_code == 422, response.text
+
+
+async def test_audit_lists_written_products(client, session, world, make_user, auth_headers):
+    dietitian = await make_user(UserRole.DIETITIAN)
+    food = await _beef(session, world)
+
+    response = await _merge(client, auth_headers(dietitian), world, dry_run=False)
+
+    assert response.status_code == 200, response.text
+    product = await _target_product(session, world, food)
+    audit = await session.scalar(
+        select(AuditLog).where(
+            AuditLog.action == "merge_sources", AuditLog.entity_id == world.target.id
+        )
+    )
+    assert str(product.id) in audit.after["product_ids"]
