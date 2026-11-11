@@ -280,6 +280,9 @@ export function DayComposer({
                 tolerance={dayTolerance.tolerance}
                 toleranceGap={dayTolerance.gap}
                 targets={targets}
+                // Подбор — у семьи: ссылки ведут в её разделы рецептов и
+                // калькулятора, у специалиста они открыли бы общие, без ребёнка.
+                patientId={canMarkEaten ? patientId : null}
               />
             ) : null
           }
