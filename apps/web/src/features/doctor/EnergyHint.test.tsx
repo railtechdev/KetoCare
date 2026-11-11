@@ -48,7 +48,8 @@ describe("калорийность по весу и возрасту", () => {
         kcal_per_kg_min: 65,
         kcal_per_kg_max: 68,
         protein_g: 18,
-        engine_version: "1.4.0",
+        fluid_ml: 1400,
+        engine_version: "1.6.0",
       },
     });
     const onApply = renderHint();
@@ -62,7 +63,7 @@ describe("калорийность по весу и возрасту", () => {
     const apply = screen.getByRole("button", { name: /Макс\. 1\s?224/ });
     expect(screen.getByText(/1\s?170–1\s?224 ккал/)).toBeInTheDocument();
     await userEvent.click(apply);
-    expect(onApply).toHaveBeenCalledWith(1224, 18);
+    expect(onApply).toHaveBeenCalledWith(1224, 18, 1400);
     expect((api.POST as Mock).mock.calls[0]![1].body.weight_kg).toBe(18);
   });
 

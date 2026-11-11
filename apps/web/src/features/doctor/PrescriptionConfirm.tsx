@@ -3,6 +3,7 @@ import {
   FactList,
   formatMass,
   formatKcal,
+  formatNumber,
   formatRatio,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
@@ -40,6 +41,10 @@ export function PrescriptionConfirm({
   const { t } = useTranslation("doctor");
 
   const date = (value: string) => formatIsoDate(value) ?? value;
+  const fluid = (value: number | null | undefined) =>
+    value == null || Number.isNaN(value)
+      ? t("prescription.confirm.notSet")
+      : t("prescription.confirm.ml", { value: formatNumber(value, 0) });
   const rows: Row[] = [
     {
       key: "ratio",
@@ -91,6 +96,12 @@ export function PrescriptionConfirm({
       label: t("fields.meals"),
       value: String(values.mealsPerDay),
       previous: previous === null ? null : String(previous.meals_per_day),
+    },
+    {
+      key: "fluid",
+      label: t("fields.fluid"),
+      value: fluid(values.fluidMlPerDay),
+      previous: previous === null ? null : fluid(previous.fluid_ml_per_day),
     },
     {
       key: "effectiveFrom",

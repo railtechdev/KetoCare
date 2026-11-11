@@ -194,3 +194,92 @@ describe("углеводы считаются сами, как в KDC", () => {
     expect(valueControl(carbs)).toHaveValue(8);
   });
 });
+
+describe("жидкость по весу (Холлидей — Сегар)", () => {
+  function renderWithHint(
+    onSubmit = vi.fn(),
+    carried: { proteinG?: number; fluidMlPerDay?: number } = {},
+  ) {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PrescriptionForm
+          defaultValues={{
+            ratio: 3.5,
+            kcalPerDay: 1200,
+            proteinG: carried.proteinG ?? Number.NaN,
+            carbsLimitG: 10,
+            mealsPerDay: 4,
+            fluidMlPerDay: carried.fluidMlPerDay ?? Number.NaN,
+            effectiveFrom: "2026-09-09",
+            restrictions: "",
+          }}
+          pending={false}
+          error={null}
+          onSubmit={onSubmit}
+          kcalHint={(apply) => (
+            <button type="button" onClick={() => apply(1224, 18, 1400)}>
+              Подставить
+            </button>
+          )}
+        />
+      </QueryClientProvider>,
+    );
+    return onSubmit;
+  }
+
+  it("необязательна: пустое поле не мешает сохранить", async () => {
+    const onSubmit = renderWithHint(vi.fn(), { proteinG: 24 });
+    const user = userEvent.setup();
+    const fluid = screen.getByLabelText(/Жидкость/);
+    expect(valueControl(fluid)).toHaveValue(null);
+    await user.click(screen.getByRole("button", { name: /Сохранить/ }));
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(Number.isNaN(onSubmit.mock.calls[0]![0].fluidMlPerDay)).toBe(true);
+  });
+
+  it("пустое поле заполняется из подсказки, пока не правили руками", async () => {
+    renderWithHint();
+    const user = userEvent.setup();
+    const fluid = screen.getByLabelText(/Жидкость/);
+    const protein = screen.getByLabelText(/Белок/);
+    // Пояснение о формуле — только у числа, которое поставила формула.
+    expect(screen.queryByText(/формула Холлидея — Сегара/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Подставить" }));
+    expect(valueControl(fluid)).toHaveValue(1400);
+    expect(valueControl(protein)).toHaveValue(18);
+    expect(screen.getByText(/формула Холлидея — Сегара/)).toBeInTheDocument();
+    expect(screen.getByText(/1 г на кг/)).toBeInTheDocument();
+
+    await user.clear(fluid);
+    await user.type(fluid, "1000");
+    await user.click(screen.getByRole("button", { name: "Подставить" }));
+    expect(valueControl(fluid)).toHaveValue(1000);
+    expect(screen.queryByText(/формула Холлидея — Сегара/)).toBeNull();
+  });
+
+  it("значения из прежней версии подсказка не перезаписывает", async () => {
+    renderWithHint(vi.fn(), { proteinG: 24, fluidMlPerDay: 1200 });
+    const user = userEvent.setup();
+    const fluid = screen.getByLabelText(/Жидкость/);
+    const protein = screen.getByLabelText(/Белок/);
+    await user.click(screen.getByRole("button", { name: "Подставить" }));
+    expect(valueControl(screen.getByLabelText(/Калорийность/))).toHaveValue(
+      1224,
+    );
+    expect(valueControl(fluid)).toHaveValue(1200);
+    expect(valueControl(protein)).toHaveValue(24);
+    expect(screen.queryByText(/формула Холлидея — Сегара/)).toBeNull();
+    expect(screen.queryByText(/1 г на кг/)).toBeNull();
+  });
+
+  it("вне границ 100-4000 мл — ошибка у поля", async () => {
+    const onSubmit = renderWithHint();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/Жидкость/), "50");
+    await user.click(screen.getByRole("button", { name: /Сохранить/ }));
+    expect(
+      (await screen.findAllByText(/от 100 до 4000 мл/)).length,
+    ).toBeGreaterThan(0);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});

@@ -24,12 +24,15 @@ class TestEnergyRequirement:
         assert body["kcal_per_kg_min"] == pytest.approx(65)
         # Protein follows weight, 1 g per kg (clinic's answer of 2026-11-11).
         assert body["protein_g"] == pytest.approx(18)
+        # Fluid by Holliday-Segar: 1000 mL for 10 kg + 50 mL x 8 kg (ADR-0069).
+        assert body["fluid_ml"] == pytest.approx(1400)
         assert set(body) == {
             "kcal_min",
             "kcal_max",
             "kcal_per_kg_min",
             "kcal_per_kg_max",
             "protein_g",
+            "fluid_ml",
             "engine_version",
         }
 

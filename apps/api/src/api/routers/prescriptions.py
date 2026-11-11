@@ -92,6 +92,7 @@ async def create_prescription(
         author_id=user.id,
         effective_from=payload.effective_from,
         restrictions=payload.restrictions,
+        fluid_ml_per_day=payload.fluid_ml_per_day,
     )
 
     await audit_repo.write_audit_log(
@@ -107,6 +108,7 @@ async def create_prescription(
             "protein_g": float(prescription.protein_g),
             "carbs_limit_g": float(prescription.carbs_limit_g),
             "meals_per_day": prescription.meals_per_day,
+            "fluid_ml_per_day": prescription.fluid_ml_per_day,
         },
     )
 

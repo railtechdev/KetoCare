@@ -328,6 +328,9 @@ class PrescriptionCreate(BaseModel):
     meals_per_day: Annotated[int, Field(ge=1, le=MAX_MEALS_PER_DAY)]
     effective_from: date
     restrictions: str | None = None
+    #: Daily fluid in mL, optional (ADR-0069). The bounds catch typos only:
+    #: Holliday-Segar gives 100 mL for 1 kg and 3000 mL for 85 kg.
+    fluid_ml_per_day: Annotated[int, Field(ge=100, le=4000)] | None = None
 
 
 class PrescriptionRead(BaseModel):
@@ -340,6 +343,7 @@ class PrescriptionRead(BaseModel):
     protein_g: float
     carbs_limit_g: float
     meals_per_day: int
+    fluid_ml_per_day: int | None = None
     restrictions: str | None
     author_id: uuid.UUID
     effective_from: date

@@ -20,6 +20,12 @@ import type {
 export { RATIO_CHOICES, RATIO_MAX, RATIO_MIN, RATIO_STEP };
 export const KCAL_MIN = 500;
 export const KCAL_MAX = 3000;
+/**
+ * Границы суточной жидкости — те же, что у сервера (`PrescriptionCreate`,
+ * ADR-0069). Они ловят опечатку, а не судят о норме.
+ */
+export const FLUID_MIN = 100;
+export const FLUID_MAX = 4000;
 
 /** Кратность шагу 0.5 с поправкой на двоичное представление дробей. */
 export function isRatioOnStep(value: number): boolean {
@@ -36,6 +42,8 @@ export const prescriptionFormSchema = z.object({
   proteinG: z.number().positive(),
   carbsLimitG: z.number().min(0),
   mealsPerDay: z.number().int().positive(),
+  // Необязательное поле: пустое число из `valueAsNumber` — NaN, это «не задано».
+  fluidMlPerDay: z.number().int().min(FLUID_MIN).max(FLUID_MAX).or(z.nan()),
   effectiveFrom: z.string().refine((value) => parseDateInput(value) !== null),
   restrictions: z.string(),
 });
@@ -55,7 +63,11 @@ export function prescriptionFormValues(
   today: Date,
 ): DefaultValues<PrescriptionFormValues> {
   if (active === null) {
-    return { effectiveFrom: toDateInput(today), restrictions: "" };
+    return {
+      effectiveFrom: toDateInput(today),
+      restrictions: "",
+      fluidMlPerDay: Number.NaN,
+    };
   }
 
   return {
@@ -64,6 +76,7 @@ export function prescriptionFormValues(
     proteinG: active.protein_g,
     carbsLimitG: active.carbs_limit_g,
     mealsPerDay: active.meals_per_day,
+    fluidMlPerDay: active.fluid_ml_per_day ?? Number.NaN,
     effectiveFrom: toDateInput(today),
     restrictions: active.restrictions ?? "",
   };
@@ -87,6 +100,9 @@ export function toPrescriptionBody(
     protein_g: values.proteinG,
     carbs_limit_g: values.carbsLimitG,
     meals_per_day: values.mealsPerDay,
+    fluid_ml_per_day: Number.isNaN(values.fluidMlPerDay)
+      ? null
+      : values.fluidMlPerDay,
     effective_from: values.effectiveFrom,
     restrictions: restrictions === "" ? null : restrictions,
   };

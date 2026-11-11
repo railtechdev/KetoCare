@@ -18,6 +18,8 @@ import {
   usePrescriptionGoal,
 } from "./PrescriptionGoalPreview";
 import {
+  FLUID_MAX,
+  FLUID_MIN,
   KCAL_MAX,
   KCAL_MIN,
   prescriptionFormSchema,
@@ -35,6 +37,7 @@ const VALIDATED_FIELDS = [
   { name: "proteinG", anchor: "protein", messageKey: "protein" },
   { name: "carbsLimitG", anchor: "carbs", messageKey: "carbsLimit" },
   { name: "mealsPerDay", anchor: "meals", messageKey: "meals" },
+  { name: "fluidMlPerDay", anchor: "fluid", messageKey: "fluid" },
   {
     name: "effectiveFrom",
     anchor: "effective-from",
@@ -45,6 +48,24 @@ const VALIDATED_FIELDS = [
   anchor: string;
   messageKey: string;
 }[];
+
+/** Пустое числовое поле: `valueAsNumber` даёт NaN, незаполненное — undefined. */
+function isEmptyNumber(value: number | undefined): boolean {
+  return value === undefined || Number.isNaN(value);
+}
+
+/** Число в поле поставила подсказка, и с тех пор его не меняли. */
+function fromHint(value: number | undefined, filled: number | null): boolean {
+  return filled !== null && value === filled;
+}
+
+/**
+ * Подсказка пишет в поле, только если оно пусто или в нём её же прежнее число.
+ * Перенесённое из прежней версии или набранное руками — выбор врача.
+ */
+function hintMayFill(value: number | undefined, filled: number | null) {
+  return isEmptyNumber(value) || fromHint(value, filled);
+}
 
 /**
  * Форма назначения (раздел 8.3 ТЗ, «Врач / Назначение»).
@@ -67,7 +88,9 @@ export function PrescriptionForm({
 }: {
   defaultValues: DefaultValues<PrescriptionFormValues>;
   /** Подсказка под калорийностью; получает функцию, ставящую число в поле */
-  kcalHint?: (apply: (kcal: number, proteinG: number) => void) => ReactNode;
+  kcalHint?: (
+    apply: (kcal: number, proteinG: number, fluidMl: number) => void,
+  ) => ReactNode;
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
@@ -81,6 +104,7 @@ export function PrescriptionForm({
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors, submitCount, dirtyFields },
   } = useForm<PrescriptionFormValues>({
     resolver: zodResolver(prescriptionFormSchema),
@@ -98,7 +122,14 @@ export function PrescriptionForm({
     mealsPerDay: watch("mealsPerDay"),
   });
   const [carbsByHand, setCarbsByHand] = useState(false);
-  const [proteinByHand, setProteinByHand] = useState(false);
+  // Белок и жидкость из подсказки калорийности: число, которое подсказка
+  // поставила в поле в этой форме. Подставлять можно только в пустое поле или
+  // поверх своего же прежнего числа. Значение, перенесённое из действующей
+  // версии назначения, — выбор врача, и подсказка его не перезаписывает.
+  const [proteinFromHint, setProteinFromHint] = useState<number | null>(null);
+  const [fluidFromHint, setFluidFromHint] = useState<number | null>(null);
+  const proteinValue = watch("proteinG");
+  const fluidValue = watch("fluidMlPerDay");
   const derivedCarbs = goal.data?.day.net_carbs_g ?? null;
   const inputsChanged =
     dirtyFields.kcalPerDay === true ||
@@ -178,18 +209,26 @@ export function PrescriptionForm({
           error={errors.kcalPerDay && t("prescription.errors.kcal")}
           {...register("kcalPerDay", { valueAsNumber: true })}
         />
-        {kcalHint?.((kcal, proteinG) => {
+        {kcalHint?.((kcal, proteinG, fluidMl) => {
           setValue("kcalPerDay", kcal, {
             shouldDirty: true,
             shouldValidate: true,
           });
-          // Белок идёт за калорийностью, как в KDC: 1 г на кг веса. Правка
-          // руками выключает подстановку до конца этой формы.
-          if (!proteinByHand) {
+          // Белок идёт за калорийностью, как в KDC: 1 г на кг веса.
+          if (hintMayFill(getValues("proteinG"), proteinFromHint)) {
             setValue("proteinG", proteinG, {
               shouldDirty: true,
               shouldValidate: true,
             });
+            setProteinFromHint(proteinG);
+          }
+          // Жидкость — тоже по весу (Холлидей — Сегар, ADR-0069).
+          if (hintMayFill(getValues("fluidMlPerDay"), fluidFromHint)) {
+            setValue("fluidMlPerDay", fluidMl, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+            setFluidFromHint(fluidMl);
           }
         })}
 
@@ -202,11 +241,12 @@ export function PrescriptionForm({
           step={0.1}
           label={t("fields.proteinInput")}
           error={errors.proteinG && t("prescription.errors.protein")}
-          hint={proteinByHand ? undefined : t("prescription.proteinDerived")}
-          {...register("proteinG", {
-            valueAsNumber: true,
-            onChange: () => setProteinByHand(true),
-          })}
+          hint={
+            fromHint(proteinValue, proteinFromHint)
+              ? t("prescription.proteinDerived")
+              : undefined
+          }
+          {...register("proteinG", { valueAsNumber: true })}
         />
 
         <Field
@@ -235,6 +275,27 @@ export function PrescriptionForm({
           label={t("fields.meals")}
           error={errors.mealsPerDay && t("prescription.errors.meals")}
           {...register("mealsPerDay", { valueAsNumber: true })}
+        />
+
+        {/* Необязательное: пустое поле — жидкость не назначена, и семья её
+            нигде не видит. */}
+        <Field
+          id={`${ids}-fluid`}
+          width="narrow"
+          type="number"
+          inputMode="numeric"
+          min={FLUID_MIN}
+          max={FLUID_MAX}
+          step={1}
+          optional
+          label={t("fields.fluidInput")}
+          error={errors.fluidMlPerDay && t("prescription.errors.fluid")}
+          hint={
+            fromHint(fluidValue, fluidFromHint)
+              ? t("prescription.fluidDerived")
+              : undefined
+          }
+          {...register("fluidMlPerDay", { valueAsNumber: true })}
         />
 
         <Field

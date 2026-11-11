@@ -169,6 +169,44 @@ describe("сводка пациента", () => {
         expect(
           screen.queryByText(doctorRu.summary.day.offRatio),
         ).not.toBeInTheDocument();
+        // Жидкость не задана — строки о ней нет (ADR-0069).
+        expect(screen.queryByText(doctorRu.fields.fluid)).toBeNull();
       });
+  });
+
+  it("показывает жидкость, если врач её задал (ADR-0069)", async () => {
+    vi.mocked(api.GET).mockResolvedValueOnce({
+      data: {
+        patient_id: PATIENT.id,
+        date: "2026-09-01",
+        prescription: {
+          id: "rx1",
+          patient_id: PATIENT.id,
+          ratio: 3.5,
+          kcal_per_day: 1200,
+          protein_g: 12,
+          carbs_limit_g: 35,
+          meals_per_day: 4,
+          fluid_ml_per_day: 1400,
+          restrictions: null,
+          author_id: "u1",
+          effective_from: "2026-08-01",
+          created_at: "2026-08-01T10:00:00Z",
+        },
+        day: null,
+        last_ketone: null,
+        last_weight: null,
+        seizures_today: { entries: 0, count: 0 },
+        seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
+        last_reading_on: null,
+        monitoring_phase: "routine",
+        family_activated: true,
+      } satisfies PatientOverview,
+    } as never);
+
+    renderSummary();
+
+    expect(await screen.findByText(doctorRu.fields.fluid)).toBeInTheDocument();
+    expect(screen.getByText(/1\s?400 мл в сутки/)).toBeInTheDocument();
   });
 });

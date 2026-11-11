@@ -701,3 +701,30 @@ class TestProteinRequirement:
 
         with pytest.raises(ValueError):
             protein_requirement(weight)
+
+
+class TestFluidRequirement:
+    """Holliday-Segar: 100 mL/kg to 10 kg, +50 mL/kg to 20 kg, +20 mL/kg above."""
+
+    @pytest.mark.parametrize(
+        ("weight", "expected"),
+        [
+            (5.0, 500.0),
+            (10.0, 1000.0),
+            (15.0, 1250.0),
+            (20.0, 1500.0),
+            (30.0, 1700.0),
+            (0.5, 50.0),
+        ],
+    )
+    def test_bands(self, weight, expected):
+        from keto_engine import fluid_requirement
+
+        assert fluid_requirement(weight) == pytest.approx(expected)
+
+    @pytest.mark.parametrize("weight", [0.0, -1.0])
+    def test_rejects_impossible_weight(self, weight):
+        from keto_engine import fluid_requirement
+
+        with pytest.raises(ValueError):
+            fluid_requirement(weight)

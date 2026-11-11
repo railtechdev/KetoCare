@@ -5,6 +5,7 @@ import {
   EmptyState,
   formatGrams,
   formatKcal,
+  formatNumber,
   formatWeight,
   RatioBadge,
   Columns,
@@ -154,6 +155,19 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
             {row.original.prescription.meals_per_day}
           </span>
         ),
+      },
+      {
+        id: "fluid",
+        accessorFn: (row) => row.prescription.fluid_ml_per_day ?? null,
+        header: t("fields.fluid"),
+        cell: ({ row }) => {
+          const fluid = row.original.prescription.fluid_ml_per_day;
+          return (
+            <span className="tabular-nums">
+              {fluid == null ? "—" : formatNumber(fluid, 0)}
+            </span>
+          );
+        },
       },
       {
         id: "createdAt",

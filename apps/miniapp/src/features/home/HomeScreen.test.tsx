@@ -131,6 +131,34 @@ describe("сводка в Mini App", () => {
         "Набрано 600 из 1 200 ккал. Чтобы набрать суточную норму, добавьте ещё 600 ккал.",
       ),
     ).toBeInTheDocument();
+    // Жидкость не задана — о ней ни слова (ADR-0069).
+    expect(screen.queryByText(/жидкость/)).toBeNull();
+  });
+
+  it("показывает жидкость из назначения, если врач её задал (ADR-0069)", async () => {
+    serveOverview({
+      data: {
+        patient_id: SESSION.patientId,
+        date: "2026-10-05",
+        prescription: {
+          ratio: 4,
+          kcal_per_day: 1200,
+          protein_g: 20,
+          carbs_limit_g: 10,
+          meals_per_day: 4,
+          fluid_ml_per_day: 1400,
+        },
+        day: null,
+        seizures_today: { count: 0 },
+        seizure_trend: { direction: "flat" },
+        last_reading_on: null,
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/жидкость 1\s?400 мл в сутки/),
+    ).toBeInTheDocument();
   });
 
   it("громкая кнопка на главной — не больше одной (правило П31)", async () => {
