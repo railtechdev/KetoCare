@@ -36,7 +36,9 @@
     "dessert": "Десерт",
     "drink": "Напиток",
     "bakery": "Выпечка",
-    "bread": "Хлеб"
+    "bread": "Хлеб",
+    "salad": "Салаты",
+    "smoothie": "Смузи"
   },
   "status": {
     "draft": "Черновик",

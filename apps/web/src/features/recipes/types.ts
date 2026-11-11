@@ -18,9 +18,11 @@ export const RECIPE_CATEGORIES = [
   "breakfast",
   "lunch",
   "dinner",
+  "salad",
   "snack",
   "dessert",
   "drink",
+  "smoothie",
   "bakery",
   "bread",
 ] as const satisfies readonly RecipeCategory[];
