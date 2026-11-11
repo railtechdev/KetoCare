@@ -129,6 +129,13 @@ class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     derived_from_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("products.id")
     )
+    #: Происхождение отдельных чисел: ключ — поле значения (`kcal_100g` …),
+    #: значение — `{"kind": "product", "product_id"}` (взято из записи стандарта)
+    #: или `{"kind": "manual", "user_id", "at"}` (вписано человеком). Нет ключа —
+    #: число подписано источником всей строки (`source`/`source_version`).
+    value_sources: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     #: `false` — источник клетчатку не указал и `fiber_100g` = 0 значит «неизвестно».
     fiber_known: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")

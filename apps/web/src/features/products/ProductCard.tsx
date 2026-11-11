@@ -20,7 +20,11 @@ import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { formatIsoDate } from "../doctor/dates";
 import { ProductRevisions } from "./ProductRevisions";
-import { fetchProductDetail, productDetailKey } from "./useProductDetail";
+import {
+  fetchProductDetail,
+  productDetailKey,
+  type ProductDetail,
+} from "./useProductDetail";
 import { canSeeProductHistory } from "./types";
 import { queryState } from "../../lib/queryState";
 
@@ -61,6 +65,27 @@ export function ProductCard({
   });
 
   const data = product.data ?? undefined;
+
+  // Происхождение отдельного числа (ADR-0067). Нет пометки — число подписано
+  // источником всей строки, он стоит в паспорте ниже, и повторять его у
+  // каждого числа незачем.
+  const sourceNote = (
+    detail: ProductDetail,
+    field: ValueField,
+  ): string | null => {
+    const source = detail.value_sources?.[field];
+    if (!source) return null;
+    if (source.kind === "product") {
+      return source.label
+        ? t("card.valueSource.standard", { name: source.label })
+        : t("card.valueSource.standardUnknown");
+    }
+    const date = source.at ? formatIsoDate(source.at.slice(0, 10)) : null;
+    return t("card.valueSource.manual", {
+      name: source.label ?? t("card.valueSource.unknownAuthor"),
+      date: date ?? "",
+    });
+  };
 
   return (
     <PageLayout
@@ -131,26 +156,51 @@ export function ProductCard({
               <FactList>
                 <Fact
                   label={t("card.perGramRows.kcal")}
-                  value={formatPerGram(data.kcal_100g)}
+                  value={
+                    <ValueWithSource
+                      value={formatPerGram(data.kcal_100g)}
+                      source={sourceNote(data, "kcal_100g")}
+                    />
+                  }
                 />
                 <Fact
                   label={t("card.perGramRows.fat")}
-                  value={formatPerGram(data.fat_100g)}
+                  value={
+                    <ValueWithSource
+                      value={formatPerGram(data.fat_100g)}
+                      source={sourceNote(data, "fat_100g")}
+                    />
+                  }
                 />
                 <Fact
                   label={t("card.perGramRows.protein")}
-                  value={formatPerGram(data.protein_100g)}
+                  value={
+                    <ValueWithSource
+                      value={formatPerGram(data.protein_100g)}
+                      source={sourceNote(data, "protein_100g")}
+                    />
+                  }
                 />
                 <Fact
                   label={t("card.perGramRows.carbs")}
-                  value={formatPerGram(data.carbs_100g)}
+                  value={
+                    <ValueWithSource
+                      value={formatPerGram(data.carbs_100g)}
+                      source={sourceNote(data, "carbs_100g")}
+                    />
+                  }
                 />
                 <Fact
                   label={t("card.perGramRows.fiber")}
                   value={
-                    data.fiber_known
-                      ? formatPerGram(data.fiber_100g)
-                      : t("card.fiberUnknown")
+                    <ValueWithSource
+                      value={
+                        data.fiber_known
+                          ? formatPerGram(data.fiber_100g)
+                          : t("card.fiberUnknown")
+                      }
+                      source={sourceNote(data, "fiber_100g")}
+                    />
                   }
                 />
               </FactList>
@@ -200,5 +250,25 @@ export function ProductCard({
         )}
       </AsyncSection>
     </PageLayout>
+  );
+}
+
+type ValueField =
+  "kcal_100g" | "fat_100g" | "protein_100g" | "carbs_100g" | "fiber_100g";
+
+/** Число и под ним — откуда оно взято, если это известно отдельно от строки. */
+function ValueWithSource({
+  value,
+  source,
+}: {
+  value: string;
+  source: string | null;
+}) {
+  if (!source) return <>{value}</>;
+  return (
+    <span className="flex flex-col">
+      <span>{value}</span>
+      <span className="text-xs text-muted-foreground">{source}</span>
+    </span>
   );
 }

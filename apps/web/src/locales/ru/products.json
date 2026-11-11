@@ -96,6 +96,12 @@
       "state": "Состояние"
     },
     "fiberUnknown": "Клетчатка: источник не указал",
+    "valueSource": {
+      "standard": "из стандарта «{{name}}»",
+      "standardUnknown": "из стандарта-источника",
+      "manual": "правка: {{name}}, {{date}}",
+      "unknownAuthor": "сотрудник"
+    },
     "perGram": "Значения на 1 г продукта.",
     "perGramRows": {
       "kcal": "Ккал",
