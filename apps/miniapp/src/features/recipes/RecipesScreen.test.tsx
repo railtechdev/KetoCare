@@ -233,7 +233,7 @@ describe("рецепты в Mini App", () => {
     // И не «выведен из оборота»: это разные события. Вывод говорит, что числа
     // продукта признаны неверными; удаление — что продукта в справочнике нет
     // вовсе. Сказать первое про второе значит выдумать про него утверждение.
-    expect(screen.queryByText("выведен из оборота")).toBeNull();
+    expect(screen.queryByText("в архиве")).toBeNull();
     expect(screen.getByText("120 г")).toBeInTheDocument();
   });
 
@@ -278,12 +278,12 @@ describe("рецепты в Mini App", () => {
     await user.click(await screen.findByRole("button", { name: /Омлет/ }));
 
     // Пометка стоит у той строки, к которой относится.
-    const marks = await screen.findAllByText("выведен из оборота");
+    const marks = await screen.findAllByText("в архиве");
     expect(marks).toHaveLength(1);
     expect(marks[0]?.parentElement).toHaveTextContent("Сливки 33%");
     // И предупреждение над составом — чтобы это увидели до готовки.
     expect(
-      screen.getByText(/В составе есть выведенный продукт/),
+      screen.getByText(/В составе есть продукт из архива/),
     ).toBeInTheDocument();
     // Имя названо и в строке состава, и в самом предупреждении — обе ссылки на
     // один продукт, поэтому ищем все вхождения, а не одно.

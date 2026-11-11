@@ -240,9 +240,9 @@ describe("пометки строки и легенда говорят одно 
     const stale = document.querySelector(
       '[data-legend="stale"]',
     )?.nextElementSibling;
-    expect(stale).toHaveTextContent(/3 и более дня назад/);
+    expect(stale).toHaveTextContent(/3 дня и больше/);
     expect(stale).toHaveTextContent(/первый месяц терапии/);
-    expect(stale).toHaveTextContent(/2 и более дня назад/);
+    expect(stale).toHaveTextContent(/месяц терапии — 2 дня и больше/);
   });
 
   it("спокойная строка называет давность данных, а не молчит", () => {

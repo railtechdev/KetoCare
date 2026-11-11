@@ -366,7 +366,7 @@ describe("«Добавить запись» в Mini App", () => {
     });
 
     expect(
-      await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+      await screen.findByText("Нет связи. Проверьте интернет."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
     await user.type(screen.getByLabelText("Кетоны, ммоль/л"), "{Enter}");
