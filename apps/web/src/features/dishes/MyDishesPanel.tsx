@@ -145,12 +145,7 @@ export function MyDishesPanel({
               {/* `asChild`: `data-size` до `<a>` не доходит — ссылка принимает
                   закрытый список пропов, — а с ним и тач-ширина из темы.
                   Поэтому здесь она классом. */}
-              <Button
-                asChild
-                variant="ghost"
-                size="icon"
-                className="min-w-touch"
-              >
+              <Button asChild variant="ghost" size="sm" className="min-h-touch">
                 {openIn === "card" && patientId !== null ? (
                   <PatientViewLink
                     patientId={patientId}
@@ -161,6 +156,7 @@ export function MyDishesPanel({
                     })}
                   >
                     <Calculator aria-hidden="true" className="size-4" />
+                    <span>{t("myDishes.short.edit")}</span>
                   </PatientViewLink>
                 ) : (
                   <SectionLink
@@ -171,6 +167,7 @@ export function MyDishesPanel({
                     })}
                   >
                     <Calculator aria-hidden="true" className="size-4" />
+                    <span>{t("myDishes.short.edit")}</span>
                   </SectionLink>
                 )}
               </Button>
@@ -180,8 +177,8 @@ export function MyDishesPanel({
                   <Button
                     asChild
                     variant="ghost"
-                    size="icon"
-                    className="min-w-touch"
+                    size="sm"
+                    className="min-h-touch"
                   >
                     <SectionLink
                       section="menu"
@@ -189,14 +186,15 @@ export function MyDishesPanel({
                       title={t("myDishes.toMenu", { title: dish.title })}
                     >
                       <CalendarPlus aria-hidden="true" className="size-4" />
+                      <span>{t("myDishes.short.menu")}</span>
                     </SectionLink>
                   </Button>
 
                   <Button
                     asChild
                     variant="ghost"
-                    size="icon"
-                    className="min-w-touch"
+                    size="sm"
+                    className="min-h-touch"
                   >
                     <SectionLink
                       section="diary"
@@ -206,6 +204,7 @@ export function MyDishesPanel({
                       title={t("myDishes.eaten", { title: dish.title })}
                     >
                       <Utensils aria-hidden="true" className="size-4" />
+                      <span>{t("myDishes.short.eaten")}</span>
                     </SectionLink>
                   </Button>
                 </>
@@ -214,21 +213,23 @@ export function MyDishesPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
+                size="sm"
                 aria-label={t("myDishes.rename", { title: dish.title })}
                 onClick={() => setRenaming(dish)}
               >
                 <Pencil aria-hidden="true" className="size-4" />
+                <span>{t("myDishes.short.rename")}</span>
               </Button>
               <ConfirmDialog
                 trigger={
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     aria-label={t("myDishes.delete", { title: dish.title })}
                   >
                     <Trash2 aria-hidden="true" className="size-4" />
+                    <span>{t("myDishes.short.delete")}</span>
                   </Button>
                 }
                 // Заголовок называет объект: «Удалить?» без имени — это
