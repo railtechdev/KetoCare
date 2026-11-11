@@ -236,12 +236,14 @@ describe("AdminPage — импорт продуктов", () => {
     );
 
     renderPage("products");
-    await user.click(await screen.findByRole("button", { name: "Импорт CSV" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Загрузить продукты" }),
+    );
 
     const file = new File(["name_ru,category\n"], "products.csv", {
       type: "text/csv",
     });
-    await user.upload(screen.getByLabelText("Файл CSV"), file);
+    await user.upload(screen.getByLabelText("Файл CSV или Excel"), file);
     await user.click(screen.getByRole("button", { name: "Проверить файл" }));
 
     // Отчёт построчный: номер строки, колонка и причина — по нему исправляют файл.
@@ -324,12 +326,14 @@ describe("AdminPage — обновляющий импорт", () => {
     });
 
     renderPage("products");
-    await user.click(await screen.findByRole("button", { name: "Импорт CSV" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Загрузить продукты" }),
+    );
 
     const file = new File(["name_ru,category\n"], "products.csv", {
       type: "text/csv",
     });
-    await user.upload(screen.getByLabelText("Файл CSV"), file);
+    await user.upload(screen.getByLabelText("Файл CSV или Excel"), file);
     await user.click(
       screen.getByRole("checkbox", { name: /Обновить существующие/ }),
     );
@@ -406,11 +410,13 @@ describe("AdminPage — превью импорта", () => {
     });
 
     renderPage("products");
-    await user.click(await screen.findByRole("button", { name: "Импорт CSV" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Загрузить продукты" }),
+    );
     const file = new File(["name_ru,category\n"], "products.csv", {
       type: "text/csv",
     });
-    await user.upload(screen.getByLabelText("Файл CSV"), file);
+    await user.upload(screen.getByLabelText("Файл CSV или Excel"), file);
     await user.click(screen.getByRole("button", { name: "Проверить файл" }));
 
     expect(await screen.findByText(/будет заведено: 3/)).toBeInTheDocument();
@@ -444,11 +450,13 @@ describe("AdminPage — превью импорта", () => {
     });
 
     renderPage("products");
-    await user.click(await screen.findByRole("button", { name: "Импорт CSV" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Загрузить продукты" }),
+    );
     const file = new File(["name_ru,category\n"], "products.csv", {
       type: "text/csv",
     });
-    await user.upload(screen.getByLabelText("Файл CSV"), file);
+    await user.upload(screen.getByLabelText("Файл CSV или Excel"), file);
     await user.click(screen.getByRole("button", { name: "Проверить файл" }));
 
     expect(

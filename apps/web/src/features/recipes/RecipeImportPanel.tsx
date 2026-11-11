@@ -135,7 +135,7 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
           <Field
             id={`${ids}-file`}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             label={t("import.file")}
             hint={t("import.formatHint")}
             onChange={(event) => {

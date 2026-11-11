@@ -19,6 +19,7 @@ dependencies = [
     "arq>=0.26",
     "ketocare-core",
     "keto-engine",
+    "openpyxl>=3.1.5",
 ]
 
 [tool.uv.sources]
