@@ -110,13 +110,10 @@ def make_recipe(client, session, make_user, auth_headers):
 
 
 class TestWriteAccess:
-    @pytest.mark.parametrize("role", [UserRole.PARENT, UserRole.DOCTOR])
-    async def test_only_admin_and_dietitian_write(
-        self, client, session, make_user, auth_headers, role
-    ):
-        """Раздел 5.3 ТЗ: CRUD рецептов — admin/dietitian."""
+    async def test_parent_cannot_write(self, client, session, make_user, auth_headers):
+        """Раздел 5.3 ТЗ; врач добавлен к редакторам ADR-0063."""
 
-        user = await make_user(role)
+        user = await make_user(UserRole.PARENT)
         butter = await _product(session, "Масло сливочное", **BUTTER)
 
         response = await client.post(
@@ -133,6 +130,17 @@ class TestWriteAccess:
             f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(parent)
         )
         assert response.status_code == 403
+
+    async def test_doctor_may_write(self, client, session, make_user, auth_headers):
+        """ADR-0063: врач создаёт рецепты наравне с диетологом."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+
+        response = await client.post(
+            "/api/v1/recipes", json=_payload((butter, 100)), headers=auth_headers(doctor)
+        )
+        assert response.status_code == 201, response.text
 
     async def test_admin_may_write(self, client, session, make_user, auth_headers):
         admin = await make_user(UserRole.ADMIN)

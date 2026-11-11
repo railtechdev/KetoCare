@@ -1,7 +1,7 @@
 """`/recipes` — общая база рецептов (раздел 5.3 ТЗ).
 
 Читают все авторизованные, но родителю видны только опубликованные рецепты.
-Пишут admin/dietitian; каждая правка попадает в audit_log (раздел 4.2 ТЗ).
+Пишут admin, dietitian и doctor (ADR-0063); каждая правка попадает в audit_log (раздел 4.2 ТЗ).
 Итоги рецепта считает только расчётное ядро и сохраняются они вместе с
 `engine_version` (раздел 4.1 ТЗ).
 """
@@ -37,7 +37,8 @@ from ..services import recipes as recipes_service
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
-_EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN)
+# Врач — редактор наравне с диетологом (ADR-0063, отступление от раздела 5.3 ТЗ).
+_EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN, UserRole.DOCTOR)
 
 
 def _visible_statuses(user: CurrentUser) -> tuple[RecipeStatus, ...] | None:
