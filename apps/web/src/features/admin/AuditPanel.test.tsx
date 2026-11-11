@@ -11,6 +11,7 @@ import { SectionRouter } from "../../test/SectionRouter";
 import { currentAddress } from "../../test/address";
 import type { SectionSearch } from "../../routes/search";
 import { AuditPanel } from "./AuditPanel";
+import { valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -133,8 +134,12 @@ describe("отбор журнала", () => {
     expect(
       await screen.findByRole("button", { name: /Админ Демо/ }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Объект")).toHaveValue("products");
-    expect(screen.getByLabelText("С даты")).toHaveValue("2026-09-01");
+    expect(valueControl(screen.getByLabelText("Объект"))).toHaveValue(
+      "products",
+    );
+    expect(valueControl(screen.getByLabelText("С даты"))).toHaveValue(
+      "2026-09-01",
+    );
     await waitFor(() =>
       expect(auditQueries()).toContainEqual(
         expect.objectContaining({ user_id: ADMIN_ID, entity: "products" }),
@@ -145,7 +150,9 @@ describe("отбор журнала", () => {
   it("неизвестный автор и объект в адресе — отбора нет, а не пустая выдача", async () => {
     renderPanel({ user: "иванов", entity: "no_such_table" });
 
-    expect(await screen.findByLabelText("Объект")).toHaveValue("");
+    expect(valueControl(await screen.findByLabelText("Объект"))).toHaveValue(
+      "",
+    );
     await waitFor(() => expect(auditQueries().length).toBeGreaterThan(0));
     expect(auditQueries()[0]).toMatchObject({
       user_id: undefined,
@@ -174,7 +181,9 @@ describe("отбор журнала", () => {
       ),
     );
 
-    await user.click(await screen.findByRole("option", { name: /Админ Демо/ }));
+    await user.click(
+      await screen.findByRole("option", { hidden: true, name: /Админ Демо/ }),
+    );
     await waitFor(() => expect(currentAddress().user).toBe(ADMIN_ID));
   });
 });

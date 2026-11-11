@@ -176,7 +176,7 @@ describe("передача состава пациенту", () => {
     );
     await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
     await user.click(
-      await screen.findByRole("option", { name: /Иван Петров/ }),
+      await screen.findByRole("option", { hidden: true, name: /Иван Петров/ }),
     );
     await user.click(screen.getByRole("button", { name: "Передать" }));
 
@@ -219,7 +219,7 @@ describe("передача состава пациенту", () => {
     await user.type(title, "Завтрак 4:1");
     await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
     await user.click(
-      await screen.findByRole("option", { name: /Иван Петров/ }),
+      await screen.findByRole("option", { hidden: true, name: /Иван Петров/ }),
     );
 
     await user.click(screen.getByRole("button", { name: "Передать" }));
@@ -257,7 +257,7 @@ describe("передача состава пациенту", () => {
     );
     await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
     await user.click(
-      await screen.findByRole("option", { name: /Иван Петров/ }),
+      await screen.findByRole("option", { hidden: true, name: /Иван Петров/ }),
     );
 
     try {
@@ -300,7 +300,7 @@ describe("передача состава пациенту", () => {
     );
     await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
     await user.click(
-      await screen.findByRole("option", { name: /Иван Петров/ }),
+      await screen.findByRole("option", { hidden: true, name: /Иван Петров/ }),
     );
 
     await user.click(screen.getByRole("button", { name: "Передать" }));
@@ -333,7 +333,10 @@ describe("передача состава пациенту", () => {
           await screen.findByRole("button", { name: /Выбрать пациента/ }),
         );
         await user.click(
-          await screen.findByRole("option", { name: /Иван Петров/ }),
+          await screen.findByRole("option", {
+            hidden: true,
+            name: /Иван Петров/,
+          }),
         );
       }
     }
@@ -395,7 +398,7 @@ describe("передача состава пациенту", () => {
     );
     await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
     await user.click(
-      await screen.findByRole("option", { name: /Иван Петров/ }),
+      await screen.findByRole("option", { hidden: true, name: /Иван Петров/ }),
     );
 
     const handOff = screen.getByRole("button", { name: "Передать" });

@@ -9,6 +9,7 @@ import { api } from "../../lib/api";
 import doctorRu from "../../locales/ru/doctor.json";
 import { GrowthView } from "./GrowthView";
 import { TherapyCourseView } from "./TherapyCourseView";
+import { nativeSelect } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -120,7 +121,9 @@ describe("ход терапии (вопросы 17, 18, 34)", () => {
     expect(api.PUT).not.toHaveBeenCalled();
 
     await user.selectOptions(
-      screen.getByLabelText(doctorRu.course.fields.reason, { exact: false }),
+      nativeSelect(
+        screen.getByLabelText(doctorRu.course.fields.reason, { exact: false }),
+      ),
       "other",
     );
     await user.click(

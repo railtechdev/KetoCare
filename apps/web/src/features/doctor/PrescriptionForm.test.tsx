@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { api } from "../../lib/api";
 import "../../lib/i18n";
 import { PrescriptionForm } from "./PrescriptionForm";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -97,9 +98,19 @@ describe("кетосоотношение в назначении", () => {
     renderForm();
 
     const field = screen.getByLabelText(/Кетосоотношение/);
-    expect(field.tagName).toBe("SELECT");
-    expect(screen.getByRole("option", { name: "4.0 : 1" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "3.5 : 1" })).toBeInTheDocument();
+    expect(field).toHaveAttribute("role", "combobox");
+    expect(
+      within(nativeSelect(field)).getByRole("option", {
+        hidden: true,
+        name: "4.0 : 1",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(nativeSelect(field)).getByRole("option", {
+        hidden: true,
+        name: "3.5 : 1",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("предлагает ровно те значения, что разрешает схема", async () => {
@@ -108,8 +119,10 @@ describe("кетосоотношение в назначении", () => {
     // как в KetoDietCalculator, остаётся вопросом K7.
     renderForm();
 
-    const options = screen
-      .getAllByRole("option")
+    const options = within(
+      nativeSelect(screen.getByLabelText(/Кетосоотношение/)),
+    )
+      .getAllByRole("option", { hidden: true })
       .map((option) => (option as HTMLOptionElement).value);
     expect(options).toEqual([
       "",
@@ -130,7 +143,10 @@ describe("кетосоотношение в назначении", () => {
     const user = userEvent.setup();
     const onSubmit = renderForm();
 
-    await user.selectOptions(screen.getByLabelText(/Кетосоотношение/), "4");
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText(/Кетосоотношение/)),
+      "4",
+    );
     await user.click(screen.getByRole("button", { name: /Сохранить|Создать/ }));
 
     // Второй аргумент — событие формы, поэтому сверяется первый.
@@ -143,9 +159,9 @@ describe("кетосоотношение в назначении", () => {
     const user = userEvent.setup();
     const onSubmit = renderForm(vi.fn(), {});
 
-    expect(
-      (screen.getByLabelText(/Кетосоотношение/) as HTMLSelectElement).value,
-    ).toBe("");
+    expect(nativeSelect(screen.getByLabelText(/Кетосоотношение/)).value).toBe(
+      "",
+    );
     await user.click(screen.getByRole("button", { name: /Сохранить|Создать/ }));
 
     expect(onSubmit).not.toHaveBeenCalled();
@@ -156,7 +172,7 @@ describe("углеводы считаются сами, как в KDC", () => {
   it("в записанном назначении не трогаются, пока не поменяли калорийность", async () => {
     renderForm();
     await screen.findByText(/120,0 г/);
-    expect(screen.getByLabelText(/Углеводы/)).toHaveValue(10);
+    expect(valueControl(screen.getByLabelText(/Углеводы/))).toHaveValue(10);
   });
 
   it("пересчитываются после правки калорийности и не после ручной правки", async () => {
@@ -166,7 +182,7 @@ describe("углеводы считаются сами, как в KDC", () => {
     await user.clear(kcal);
     await user.type(kcal, "1300");
     const carbs = screen.getByLabelText(/Углеводы/);
-    await vi.waitFor(() => expect(carbs).toHaveValue(10.3));
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
 
     await user.clear(carbs);
     await user.type(carbs, "8");
@@ -175,6 +191,6 @@ describe("углеводы считаются сами, как в KDC", () => {
     });
     await user.type(kcal, "0");
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(carbs).toHaveValue(8);
+    expect(valueControl(carbs)).toHaveValue(8);
   });
 });

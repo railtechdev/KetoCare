@@ -22,6 +22,7 @@ import { SectionRouter } from "../../test/SectionRouter";
 import { RECALC_DELAY_MS } from "@ketocare/ui";
 import { CalculatorPage, CalculatorView } from "./CalculatorPage";
 import type { PatientOverview } from "../patients/overview";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -164,7 +165,9 @@ function renderCalculator(patientId?: string) {
 
 async function addButter(user: ReturnType<typeof userEvent.setup>) {
   await user.type(await screen.findByLabelText(/Добавить продукт/), "масло");
-  await user.click(await screen.findByRole("option", { name: /Масло/ }));
+  await user.click(
+    await screen.findByRole("option", { hidden: true, name: /Масло/ }),
+  );
 }
 
 // Заглушки API — на весь файл, а не на первый блок: тесты других блоков
@@ -189,7 +192,9 @@ describe("калькулятор", () => {
     // До этого в поле стояла четвёрка, зашитая во фронтенде, и вердикт
     // «выходит за допуски назначения» выносился относительно чужой цели.
     const ratio = await screen.findByLabelText(/Кетосоотношение/);
-    await waitFor(() => expect(ratio).toHaveValue(String(PRESCRIBED_RATIO)));
+    await waitFor(() =>
+      expect(valueControl(ratio)).toHaveValue(String(PRESCRIBED_RATIO)),
+    );
     expect(
       screen.getByText(/Из активного назначения ребёнка/),
     ).toBeInTheDocument();
@@ -264,7 +269,7 @@ describe("калькулятор", () => {
     // устаревшей выдачи: по нему готовят еду ребёнку. Само число остаётся —
     // гасить его на каждое нажатие значит очищать экран, по которому сверяются.
     const ratio = screen.getByLabelText(/Кетосоотношение/);
-    await user.selectOptions(ratio, "");
+    await user.selectOptions(nativeSelect(ratio), "");
 
     await waitFor(() =>
       expect(screen.queryByText("Цель не достигнута")).not.toBeInTheDocument(),
@@ -1006,7 +1011,7 @@ describe("калькулятор", () => {
     const grams = await screen.findByLabelText(
       /Масса продукта «Масло сливочное»/,
     );
-    await waitFor(() => expect(grams).toHaveValue(29));
+    await waitFor(() => expect(valueControl(grams)).toHaveValue(29));
     expect(grams).not.toHaveAttribute("readonly");
   });
 
@@ -1036,7 +1041,9 @@ describe("калькулятор", () => {
       });
       await waitFor(() =>
         expect(
-          screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+          valueControl(
+            screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+          ),
         ).toHaveValue(29),
       );
       expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
@@ -1084,7 +1091,9 @@ describe("калькулятор", () => {
       });
       await waitFor(() =>
         expect(
-          screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+          valueControl(
+            screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+          ),
         ).toHaveValue(100),
       );
       expect(screen.queryByText(WAITING)).not.toBeInTheDocument();
@@ -1125,7 +1134,7 @@ describe("калькулятор", () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(
-        screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+        valueControl(screen.getByLabelText(/Масса продукта «Масло сливочное»/)),
       ).toHaveValue(50);
     } finally {
       onlineManager.setOnline(true);
@@ -1175,7 +1184,7 @@ describe("калькулятор", () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(
-        screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+        valueControl(screen.getByLabelText(/Масса продукта «Масло сливочное»/)),
       ).toHaveValue(50);
     } finally {
       onlineManager.setOnline(true);
@@ -1501,7 +1510,9 @@ describe("калькулятор", () => {
     // на месте, и после исправления массы и нового расчёта сохранить снова можно.
     await user.clear(grams);
     await user.type(grams, "50");
-    expect(screen.getByLabelText(/Название блюда/)).toHaveValue("Суп");
+    expect(valueControl(screen.getByLabelText(/Название блюда/))).toHaveValue(
+      "Суп",
+    );
     await waitFor(
       () =>
         expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled(),
@@ -1698,7 +1709,7 @@ describe("калькулятор", () => {
     renderCalculator(PATIENT_ID);
 
     const kcal = await screen.findByLabelText(/Калорийность/);
-    await waitFor(() => expect(kcal).toHaveValue(400));
+    await waitFor(() => expect(valueControl(kcal)).toHaveValue(400));
     expect(
       screen.getByText("Из назначения: 1 200 ккал ÷ 3 приёма"),
     ).toBeInTheDocument();
@@ -1739,7 +1750,7 @@ describe("калькулятор без выбранного ребёнка", ()
     await user.type(screen.getByLabelText("Название блюда"), "Завтрак");
     await user.click(screen.getByRole("button", { name: /Выбрать пациента/ }));
     await user.click(
-      await screen.findByRole("option", { name: /Иван Петров/ }),
+      await screen.findByRole("option", { hidden: true, name: /Иван Петров/ }),
     );
     const handOff = screen.getByRole("button", { name: "Передать" });
     await waitFor(() => expect(handOff).toBeEnabled());
@@ -1785,7 +1796,9 @@ describe("калькулятор без выбранного ребёнка", ()
 
     await addButter(user);
 
-    expect(await screen.findByLabelText(/Калорийность/)).toHaveValue(null);
+    expect(
+      valueControl(await screen.findByLabelText(/Калорийность/)),
+    ).toHaveValue(null);
     expect(
       screen.getByText(/Цель не задана: показатели считаются/),
     ).toBeInTheDocument();
@@ -1956,7 +1969,9 @@ describe("приправы в калькуляторе (ADR-0054)", () => {
 
   async function addPepper(user: ReturnType<typeof userEvent.setup>) {
     await user.type(await screen.findByLabelText(/Добавить продукт/), "перец");
-    await user.click(await screen.findByRole("option", { name: /Перец/ }));
+    await user.click(
+      await screen.findByRole("option", { hidden: true, name: /Перец/ }),
+    );
   }
 
   it("строка приправы говорит, что она вне расчёта, вместо вклада", async () => {
@@ -1999,11 +2014,11 @@ describe("приправы в калькуляторе (ADR-0054)", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByLabelText(/Масса продукта «Перец чёрный»/),
+        valueControl(screen.getByLabelText(/Масса продукта «Перец чёрный»/)),
       ).toHaveValue(4),
     );
     expect(
-      screen.getByLabelText(/Масса продукта «Масло сливочное»/),
+      valueControl(screen.getByLabelText(/Масса продукта «Масло сливочное»/)),
     ).toHaveValue(100);
     // Цель осталась на один приём — и экран это говорит, иначе «не
     // достигнута» после пересчёта читалась как ошибка.

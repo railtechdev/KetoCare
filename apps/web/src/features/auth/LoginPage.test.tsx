@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import authRu from "../../locales/ru/auth.json";
 import commonRu from "../../locales/ru/common.json";
 import { LoginPage } from "./LoginPage";
+import { valueControl } from "../../test/nativeSelect";
 
 const signIn = vi.fn();
 
@@ -238,9 +239,9 @@ describe("вход со вторым фактором", () => {
     // набирать почту второй раз незачем.
     renderPage("new@example.com");
 
-    expect(screen.getByLabelText(/Электронная почта/)).toHaveValue(
-      "new@example.com",
-    );
+    expect(
+      valueControl(screen.getByLabelText(/Электронная почта/)),
+    ).toHaveValue("new@example.com");
   });
 });
 

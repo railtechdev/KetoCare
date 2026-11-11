@@ -90,10 +90,13 @@ describe("кто ведёт пациента", () => {
       await screen.findByRole("button", { name: /Выберите специалиста/ }),
     );
     expect(
-      await screen.findByRole("option", { name: /Анна Диетолог/ }),
+      await screen.findByRole("option", {
+        hidden: true,
+        name: /Анна Диетолог/,
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: /Иван Врач/ }),
+      screen.queryByRole("option", { hidden: true, name: /Иван Врач/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -117,7 +120,10 @@ describe("кто ведёт пациента", () => {
     );
     await user.type(screen.getByPlaceholderText("Имя специалиста"), "Анна");
     await user.click(
-      await screen.findByRole("option", { name: /Анна Диетолог/ }),
+      await screen.findByRole("option", {
+        hidden: true,
+        name: /Анна Диетолог/,
+      }),
     );
 
     expect(

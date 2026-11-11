@@ -243,6 +243,7 @@ export {
 export { Badge, badgeVariants } from "./components/ui/badge";
 export { Button, buttonVariants } from "./components/ui/button";
 export { Calendar, CalendarDayButton } from "./components/ui/calendar";
+export { DateCalendar } from "./components/DateCalendar";
 export {
   Card,
   CardAction,

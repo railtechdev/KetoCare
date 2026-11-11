@@ -6,6 +6,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import adminRu from "../../locales/ru/admin.json";
 import { ProductForm } from "./ProductForm";
+import { valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -159,7 +160,7 @@ describe("карточка продукта: контроль калорийно
     fireEvent.click(substituteButton);
 
     const kcalInput = screen.getByLabelText(adminRu.products.form.kcal);
-    expect(kcalInput).toHaveValue(3.4);
+    expect(valueControl(kcalInput)).toHaveValue(3.4);
 
     // После подстановки расхождение устранено — баннер исчезает
     expect(

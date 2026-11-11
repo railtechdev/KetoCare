@@ -9,6 +9,7 @@ import { api } from "../../lib/api";
 import doctorRu from "../../locales/ru/doctor.json";
 import { MedicalProfileForm } from "./MedicalProfileForm";
 import type { MedicalProfile } from "./types";
+import { valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -89,7 +90,7 @@ describe("медицинский профиль: дата начала тера�
       { wrapper },
     );
 
-    await screen.findByRole("option", { name: "3 и более" });
+    await screen.findAllByRole("option", { hidden: true, name: "3 и более" });
     await user.clear(screen.getByLabelText(/Диагноз/));
     await user.type(screen.getByLabelText(/Диагноз/), "Уточнён");
     await user.click(screen.getByRole("button", { name: /Сохранить/ }));
@@ -112,7 +113,9 @@ describe("медицинский профиль: дата начала тера�
     );
 
     expect(
-      await screen.findByLabelText(/Дата начала кетодиетотерапии/),
+      valueControl(
+        await screen.findByLabelText(/Дата начала кетодиетотерапии/),
+      ),
     ).toHaveValue("2026-04-15");
   });
 });
@@ -142,7 +145,7 @@ describe("медицинский профиль: число сменённых �
       { wrapper },
     );
 
-    await screen.findByRole("option", { name: "3 и более" });
+    await screen.findAllByRole("option", { hidden: true, name: "3 и более" });
     await user.clear(screen.getByLabelText(/Диагноз/));
     await user.type(screen.getByLabelText(/Диагноз/), "Уточнён");
     await user.click(screen.getByRole("button", { name: /Сохранить/ }));
@@ -165,7 +168,12 @@ describe("медицинский профиль: число сменённых �
 
     // Скрыть выбранный вариант — значит подменить прежний ответ пустотой.
     expect(
-      await screen.findByRole("option", { name: "Прежняя шкала" }),
+      (
+        await screen.findAllByRole("option", {
+          hidden: true,
+          name: "Прежняя шкала",
+        })
+      )[0],
     ).toBeInTheDocument();
   });
 });

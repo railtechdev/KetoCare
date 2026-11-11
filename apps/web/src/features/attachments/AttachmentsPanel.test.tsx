@@ -9,6 +9,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import attachmentsRu from "../../locales/ru/attachments.json";
 import { AttachmentsPanel } from "./AttachmentsPanel";
+import { nativeSelect } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -85,7 +86,10 @@ describe("документы ребёнка", () => {
 
     const file = new File(["%PDF"], "eeg.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/^Файл/), file);
-    await user.selectOptions(screen.getByLabelText(/Вид документа/), "eeg");
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText(/Вид документа/)),
+      "eeg",
+    );
 
     expect(api.POST).not.toHaveBeenCalled();
 

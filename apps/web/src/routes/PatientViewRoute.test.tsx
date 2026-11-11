@@ -12,6 +12,7 @@ import { patientKey } from "../features/patients/usePatient";
 import { PatientRouter } from "../test/PatientRouter";
 import { PatientViewRoute } from "./PatientViewRoute";
 import type { PatientOverview } from "../features/patients/overview";
+import { valueControl } from "../test/nativeSelect";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
@@ -128,7 +129,9 @@ describe("раздел карты пациента", () => {
 
     await waitFor(
       () =>
-        expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("3.5"),
+        expect(
+          valueControl(screen.getByLabelText(/^Кетосоотношение/)),
+        ).toHaveValue("3.5"),
       { timeout: 5000 },
     );
 
@@ -137,7 +140,10 @@ describe("раздел карты пациента", () => {
     );
 
     await waitFor(
-      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("4"),
+      () =>
+        expect(
+          valueControl(screen.getByLabelText(/^Кетосоотношение/)),
+        ).toHaveValue("4"),
       { timeout: 5000 },
     );
     // Явный предел теста: два ожидания по 5 с плюс ленивая загрузка экрана не

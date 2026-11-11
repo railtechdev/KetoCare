@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import productsRu from "../../locales/ru/products.json";
 import { ProductCategoriesPanel } from "./ProductCategoriesPanel";
+import { nativeSelect } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -92,7 +93,7 @@ describe("справочник категорий", () => {
     );
 
     await user.selectOptions(
-      await screen.findByLabelText("Куда перенести"),
+      nativeSelect(await screen.findByLabelText("Куда перенести")),
       EMPTY,
     );
     await user.click(screen.getByRole("button", { name: "Слить" }));
