@@ -1,9 +1,12 @@
 import { SegmentedControl } from "@ketocare/ui";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
-import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
+import {
+  useAddressPatch,
+  useAddressState,
+  useSectionTab,
+} from "../../routes/useSectionTab";
 import { ProductsPanel } from "../admin/ProductsPanel";
 import { DEFAULT_FOOD_STANDARD_ID } from "../standards/useFoodStandards";
 import { StandardsPanel } from "../standards/StandardsPanel";
@@ -15,7 +18,12 @@ export function CatalogPage() {
   const { t } = useTranslation("products");
   const address = useAddressState();
   const patchAddress = useAddressPatch();
-  const [view, setView] = useState<CatalogView>("catalog");
+  // Вид живёт в адресе (П30): на «Стандарты питания» ведёт ссылка из базы блюд.
+  const [view, setView] = useSectionTab<CatalogView>(
+    "tab",
+    ["catalog", "categories", "standards"],
+    "catalog",
+  );
   const isEditingItem = address.item !== undefined && address.item !== "";
 
   return (

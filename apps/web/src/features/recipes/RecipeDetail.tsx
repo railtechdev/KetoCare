@@ -24,7 +24,9 @@ import {
   Pencil,
   Trash2,
   Upload,
+  UserPlus,
 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -32,6 +34,7 @@ import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { incomingRecipe } from "../calculator/incomingItem";
+import { PatientPicker } from "../patients/PatientPicker";
 import { errorMessageOf } from "../../lib/api";
 import { productLabel } from "./productLabel";
 import { FileField } from "../../components/Field";
@@ -50,6 +53,8 @@ interface Props {
   canEdit: boolean;
   /** Есть ли у роли калькулятор: у администратора его нет */
   canCalculate?: boolean;
+  /** Специалист отдаёт рецепт ребёнку из карточки, не уходя в общий калькулятор */
+  canAddToChild?: boolean;
   onBack: () => void;
   onEdit: (recipeId: string) => void;
 }
@@ -59,10 +64,12 @@ export function RecipeDetail({
   recipeId,
   canEdit,
   canCalculate = true,
+  canAddToChild = false,
   onBack,
   onEdit,
 }: Props) {
   const { t } = useTranslation("recipes");
+  const navigate = useNavigate();
 
   const recipe = useRecipe(recipeId);
   const productNames = useProductNames(
@@ -134,6 +141,27 @@ export function RecipeDetail({
               составом, и вкладка «Пересчитать» наконец получает источник. */}
           {/* Калькулятора у администратора нет: ссылка вела бы в раздел,
               который роутер тут же подменяет первым доступным (правило П3). */}
+          {/* «Добавить ребёнку» открывает рецепт в калькуляторе ЕГО карты: там
+              блюдо сверяется с назначением и исключёнными продуктами и
+              сохраняется в блюда ребёнка (этап 4 AUDIT_ROLES_PATHS_2026-11). */}
+          {canAddToChild && (
+            <PatientPicker
+              label={t("actions.addToChild")}
+              trigger={
+                <>
+                  <UserPlus aria-hidden="true" />
+                  {t("actions.addToChild")}
+                </>
+              }
+              onSelect={(patient) =>
+                void navigate({
+                  to: "/app/patients/$patientId/$view",
+                  params: { patientId: patient.id, view: "calculator" },
+                  search: { item: incomingRecipe(data.id) },
+                })
+              }
+            />
+          )}
           {canCalculate && (
             <Button asChild variant="outline" className="min-h-touch">
               <SectionLink section="calculator" item={incomingRecipe(data.id)}>

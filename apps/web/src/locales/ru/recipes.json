@@ -101,7 +101,9 @@
     },
     "toCalculator": "В калькулятор",
     "more": "Ещё",
-    "import": "Импорт CSV"
+    "import": "Импорт CSV",
+    "addToChild": "Добавить ребёнку",
+    "ministryMenus": "Меню Минздрава"
   },
   "form": {
     "createTitle": "Новый рецепт",
