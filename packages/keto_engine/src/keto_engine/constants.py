@@ -94,9 +94,9 @@ ENGINE_VERSION = "1.5.0"
 # "Nutritional requirement for KD", sent by the clinic's dietitian on 2026-10-27
 # and 2026-11-11 with the instruction to use it as the basis of the calculation.
 # Rows: (upper bound of age in whole years, exclusive; kcal/kg min; kcal/kg max).
-# TODO(med): the slide also says "initial prescription 85-95% of daily
-# requirement"; the table values are taken as the requirement itself, without a
-# further 85-95% cut, until the clinic says otherwise (question 56).
+# The slide also says "initial prescription 85-95% of daily requirement"; the
+# clinic confirmed on 2026-11-11 that the table itself is the prescription
+# range, without a further 85-95% cut (question 56, closed).
 ENERGY_KCAL_PER_KG_BY_AGE: tuple[tuple[float, float, float], ...] = (
     (1, 75.0, 85.0),
     (4, 70.0, 75.0),
