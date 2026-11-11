@@ -246,7 +246,7 @@ export const PATIENT_GROUP_VIEWS: Record<
 > = {
   overview: ["summary"],
   diet: ["prescription"],
-  dishes: ["dishes", "calculator"],
+  dishes: ["dishes"],
   menu: ["menu"],
   observation: ["diary", "growth", "course", "reports"],
   record: ["profile", "notes", "questions"],
@@ -261,7 +261,19 @@ export const PATIENT_GROUP_ICONS: Record<PatientViewGroup, LucideIcon> = {
   record: UserRound,
 };
 
+/**
+ * Экраны, открываемые из раздела, но без своей вкладки. Редактор блюда — часть
+ * «Блюд»: «Новое блюдо» и «Изменить» открывают его на месте списка, а вернуться
+ * к списку — кнопкой над редактором, не соседней вкладкой.
+ */
+export const PATIENT_SUBVIEWS: Partial<Record<PatientView, PatientViewGroup>> =
+  {
+    calculator: "dishes",
+  };
+
 export function groupOfView(view: PatientView): PatientViewGroup {
+  const parent = PATIENT_SUBVIEWS[view];
+  if (parent !== undefined) return parent;
   const group = PATIENT_VIEW_GROUPS.find((g) =>
     PATIENT_GROUP_VIEWS[g].includes(view),
   );

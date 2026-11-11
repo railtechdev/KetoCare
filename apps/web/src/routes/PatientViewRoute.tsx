@@ -1,5 +1,6 @@
 import { Skeleton } from "@ketocare/ui";
-import { useParams } from "@tanstack/react-router";
+import { useParams, useSearch } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { Suspense } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -34,6 +35,7 @@ export function PatientViewRoute() {
     from: "/app/patients/$patientId/$view",
   });
   const { session } = useSession();
+  const { item } = useSearch({ strict: false });
   const patient = usePatient(patientId);
 
   // Родительский маршрут не показывает содержимое, пока пациент не загружен,
@@ -53,7 +55,14 @@ export function PatientViewRoute() {
     <PageLayout
       title={t("workspace.pageTitle", {
         name: patient.data.full_name,
-        view: t(`workspace.groupNames.${group}`),
+        view:
+          view === "calculator"
+            ? t(
+                typeof item === "string" && item.startsWith("dish:")
+                  ? "workspace.editDish"
+                  : "workspace.newDish",
+              )
+            : t(`workspace.groupNames.${group}`),
       })}
       // Ширина — роль раздела, а не одно число на всю карту (правило П34):
       // дневники сравнивают ряды, сводку читают.
@@ -71,6 +80,16 @@ export function PatientViewRoute() {
           адресе: выбранные периоды дневника и отчёта, открытая и не
           сохранённая форма. Параметры адреса к другому пациенту тоже не
           переходят — переключатель ведёт на раздел без них. */}
+      {view === "calculator" && (
+        <PatientViewLink
+          patientId={patient.data.id}
+          view="dishes"
+          className="-ml-2 flex min-h-touch items-center gap-field self-start rounded-lg px-2 text-sm text-muted-foreground no-underline hover:bg-accent hover:text-accent-foreground"
+        >
+          <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
+          {t("workspace.backToDishes")}
+        </PatientViewLink>
+      )}
       {siblings.length > 1 && (
         <nav aria-label={t(`workspace.groupNames.${group}`)}>
           <ul className="m-0 flex list-none flex-wrap gap-1 border-b border-border p-0">

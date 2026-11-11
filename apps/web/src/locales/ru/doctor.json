@@ -570,7 +570,10 @@
       "menu": "Меню",
       "observation": "Наблюдение",
       "record": "Карта"
-    }
+    },
+    "backToDishes": "Блюда ребёнка",
+    "editDish": "Изменить блюдо",
+    "newDish": "Новое блюдо"
   },
   "questions": {
     "listTitle": "Разговоры с помощником",
