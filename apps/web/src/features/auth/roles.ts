@@ -83,6 +83,10 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
 export const HIDDEN_FROM_NAV: Partial<Record<Role, ReadonlySet<string>>> = {
   doctor: new Set(["home", "calculator", "profile"]),
   dietitian: new Set(["home", "calculator", "profile"]),
+  // Пять пунктов семьи: Главная, Меню, Дневник, Отчёт, Помощник. Калькулятор и
+  // рецепты открываются из меню дня, продукты — из калькулятора, «Ребёнок» и
+  // профиль — из меню учётной записи.
+  parent: new Set(["calculator", "recipes", "products", "child", "profile"]),
 };
 
 export function navSectionsFor(role: Role): readonly string[] {
