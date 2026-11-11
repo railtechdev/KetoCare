@@ -389,7 +389,9 @@
     "chartEmpty": "За выбранный период замеров нет — график пуст.",
     "marker": "Назначение, версия {{version}}",
     "markersUnavailable": "Историю назначений загрузить не удалось: на графике нет маркеров смены назначения.",
-    "medicationOption": "{{name}}, {{dose}}"
+    "medicationOption": "{{name}}, {{dose}}",
+    "recordAtVisit": "Записать на приёме",
+    "recorded": "Запись добавлена в дневник"
   },
   "notes": {
     "addTitle": "Новая заметка",

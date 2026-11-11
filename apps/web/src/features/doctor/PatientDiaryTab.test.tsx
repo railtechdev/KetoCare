@@ -65,3 +65,36 @@ describe("период дневника в карте — в адресе", () =
     expect(await screen.findByRole("radio", { name: "Неделя" })).toBeChecked();
   });
 });
+
+describe("запись на приёме", () => {
+  function renderKind(kind: string) {
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<PatientDiaryTab patientId="p1" />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <PatientRouter patientId="p1" view="diary" search={{ kind }}>
+            {children}
+          </PatientRouter>
+        </QueryClientProvider>
+      ),
+    });
+  }
+
+  it("специалист записывает кетоны сам", async () => {
+    renderKind("ketones");
+    expect(
+      await screen.findByRole("button", { name: doctorRu.diary.recordAtVisit }),
+    ).toBeInTheDocument();
+  });
+
+  it("еду отмечает семья через план дня, а не специалист", async () => {
+    renderKind("meals");
+    await screen.findByText(doctorRu.diary.empty);
+    expect(
+      screen.queryByRole("button", { name: doctorRu.diary.recordAtVisit }),
+    ).not.toBeInTheDocument();
+  });
+});
