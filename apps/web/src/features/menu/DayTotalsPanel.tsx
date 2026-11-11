@@ -12,6 +12,8 @@ import {
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
+import { RemainingPicks } from "./RemainingPicks";
+
 import { DayTargetBars } from "./DayTargetBars";
 import type { DayTargets, DayTotals } from "./useMenu";
 
@@ -29,9 +31,14 @@ interface Props {
   toleranceGap: ToleranceGap | null;
   /** Нормы назначения; `null` — сравнивать не с чем, остаток не показывается */
   targets: DayTargets | null;
+  /** Ребёнок — для «Подобрать блюдо на остаток»; без него подбора нет */
+  patientId?: string | null;
 }
 
 /** Числа в русской записи: «12,5 г», а не «12.5 г» (правило П22 канона). */
+
+/** Меньше этого остатка подбирать нечего: такое блюдо — ложка масла. */
+const MIN_REMAINING_KCAL = 50;
 
 /** Итоги дня против назначения (раздел 8.3 ТЗ, строка «Меню»). */
 export function DayTotalsPanel({
@@ -40,6 +47,7 @@ export function DayTotalsPanel({
   tolerance,
   toleranceGap,
   targets,
+  patientId = null,
 }: Props) {
   const { t } = useTranslation("menu");
 
@@ -89,6 +97,15 @@ export function DayTotalsPanel({
           carbsLimit={targets.carbsLimitG}
         />
       )}
+
+      {patientId !== null &&
+        targets !== null &&
+        targets.kcalPerDay - totals.kcal >= MIN_REMAINING_KCAL && (
+          <RemainingPicks
+            patientId={patientId}
+            remainingKcal={targets.kcalPerDay - totals.kcal}
+          />
+        )}
 
       {verdict.ratioOffTolerance && (
         <WarningBanner level="warning" title={t("offTolerance.title")}>
