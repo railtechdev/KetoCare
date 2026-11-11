@@ -49,6 +49,24 @@ const VALIDATED_FIELDS = [
   messageKey: string;
 }[];
 
+/** Пустое числовое поле: `valueAsNumber` даёт NaN, незаполненное — undefined. */
+function isEmptyNumber(value: number | undefined): boolean {
+  return value === undefined || Number.isNaN(value);
+}
+
+/** Число в поле поставила подсказка, и с тех пор его не меняли. */
+function fromHint(value: number | undefined, filled: number | null): boolean {
+  return filled !== null && value === filled;
+}
+
+/**
+ * Подсказка пишет в поле, только если оно пусто или в нём её же прежнее число.
+ * Перенесённое из прежней версии или набранное руками — выбор врача.
+ */
+function hintMayFill(value: number | undefined, filled: number | null) {
+  return isEmptyNumber(value) || fromHint(value, filled);
+}
+
 /**
  * Форма назначения (раздел 8.3 ТЗ, «Врач / Назначение»).
  *
@@ -86,6 +104,7 @@ export function PrescriptionForm({
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors, submitCount, dirtyFields },
   } = useForm<PrescriptionFormValues>({
     resolver: zodResolver(prescriptionFormSchema),
@@ -103,8 +122,14 @@ export function PrescriptionForm({
     mealsPerDay: watch("mealsPerDay"),
   });
   const [carbsByHand, setCarbsByHand] = useState(false);
-  const [proteinByHand, setProteinByHand] = useState(false);
-  const [fluidByHand, setFluidByHand] = useState(false);
+  // Белок и жидкость из подсказки калорийности: число, которое подсказка
+  // поставила в поле в этой форме. Подставлять можно только в пустое поле или
+  // поверх своего же прежнего числа. Значение, перенесённое из действующей
+  // версии назначения, — выбор врача, и подсказка его не перезаписывает.
+  const [proteinFromHint, setProteinFromHint] = useState<number | null>(null);
+  const [fluidFromHint, setFluidFromHint] = useState<number | null>(null);
+  const proteinValue = watch("proteinG");
+  const fluidValue = watch("fluidMlPerDay");
   const derivedCarbs = goal.data?.day.net_carbs_g ?? null;
   const inputsChanged =
     dirtyFields.kcalPerDay === true ||
@@ -189,21 +214,21 @@ export function PrescriptionForm({
             shouldDirty: true,
             shouldValidate: true,
           });
-          // Белок идёт за калорийностью, как в KDC: 1 г на кг веса. Правка
-          // руками выключает подстановку до конца этой формы.
-          if (!proteinByHand) {
+          // Белок идёт за калорийностью, как в KDC: 1 г на кг веса.
+          if (hintMayFill(getValues("proteinG"), proteinFromHint)) {
             setValue("proteinG", proteinG, {
               shouldDirty: true,
               shouldValidate: true,
             });
+            setProteinFromHint(proteinG);
           }
-          // Жидкость — тоже по весу (Холлидей — Сегар, ADR-0069) и тоже
-          // только пока врач не правил поле руками.
-          if (!fluidByHand) {
+          // Жидкость — тоже по весу (Холлидей — Сегар, ADR-0069).
+          if (hintMayFill(getValues("fluidMlPerDay"), fluidFromHint)) {
             setValue("fluidMlPerDay", fluidMl, {
               shouldDirty: true,
               shouldValidate: true,
             });
+            setFluidFromHint(fluidMl);
           }
         })}
 
@@ -216,11 +241,12 @@ export function PrescriptionForm({
           step={0.1}
           label={t("fields.proteinInput")}
           error={errors.proteinG && t("prescription.errors.protein")}
-          hint={proteinByHand ? undefined : t("prescription.proteinDerived")}
-          {...register("proteinG", {
-            valueAsNumber: true,
-            onChange: () => setProteinByHand(true),
-          })}
+          hint={
+            fromHint(proteinValue, proteinFromHint)
+              ? t("prescription.proteinDerived")
+              : undefined
+          }
+          {...register("proteinG", { valueAsNumber: true })}
         />
 
         <Field
@@ -264,11 +290,12 @@ export function PrescriptionForm({
           optional
           label={t("fields.fluidInput")}
           error={errors.fluidMlPerDay && t("prescription.errors.fluid")}
-          hint={fluidByHand ? undefined : t("prescription.fluidDerived")}
-          {...register("fluidMlPerDay", {
-            valueAsNumber: true,
-            onChange: () => setFluidByHand(true),
-          })}
+          hint={
+            fromHint(fluidValue, fluidFromHint)
+              ? t("prescription.fluidDerived")
+              : undefined
+          }
+          {...register("fluidMlPerDay", { valueAsNumber: true })}
         />
 
         <Field

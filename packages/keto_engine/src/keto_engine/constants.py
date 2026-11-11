@@ -121,6 +121,7 @@ PROTEIN_G_PER_KG = 1.0
 # "Recommended Fluids by Holliday-Segar" (docs/AUDIT_KDC.md, K1); the owner chose
 # the international standard without waiting for the clinic (question 53, ADR-0069).
 # Rows: (upper bound of the band in kg, exclusive of the next band; mL per kg).
+# TODO(med): подтвердить у медицинской команды (вопрос 53, Н7)
 FLUID_ML_PER_KG_BANDS: tuple[tuple[float, float], ...] = (
     (10.0, 100.0),
     (20.0, 50.0),

@@ -1,6 +1,7 @@
 import {
   formatGrams,
   formatKcal,
+  formatNumber,
   AsyncSection,
   MacroBar,
   RatioBadge,
@@ -148,6 +149,15 @@ function Summary({ overview }: { overview: Overview }) {
                 carbs: formatGrams(prescription.carbs_limit_g),
               })}
             </span>
+            {/* Жидкость врач задаёт не всегда (ADR-0069): та же строка, что в
+                кабинете семьи, и только если она есть. */}
+            {prescription.fluid_ml_per_day != null && (
+              <span className="text-muted-foreground tabular-nums">
+                {t("home.prescription.fluid", {
+                  value: formatNumber(prescription.fluid_ml_per_day, 0),
+                })}
+              </span>
+            )}
           </div>
         )}
       </Section>
