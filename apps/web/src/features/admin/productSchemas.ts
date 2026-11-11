@@ -1,3 +1,4 @@
+import { toPer100, toPerGram } from "@ketocare/ui";
 import type { DefaultValues } from "react-hook-form";
 import { z } from "zod";
 
@@ -5,7 +6,11 @@ import type { Product, ProductCreateBody, ProductUpdateBody } from "./types";
 
 const requiredText = z.string().trim().min(1);
 
-/** Пищевая ценность на 100 г: отрицательной не бывает, ноль допустим (вода, соль). */
+/**
+ * Пищевая ценность НА 1 Г — так её вводит диетолог (ADR-0065). В тело запроса
+ * уходит на 100 г: хранение и расчёт не меняются. Отрицательной не бывает,
+ * ноль допустим (вода, соль).
+ */
 const per100g = z.number().nonnegative();
 
 /**
@@ -69,11 +74,11 @@ export function toProductFormValues(product: Product): ProductFormValues {
     nameUz: product.name_uz ?? "",
     nameEn: product.name_en ?? "",
     categoryId: product.category_id,
-    kcal: product.kcal_100g,
-    fat: product.fat_100g,
-    protein: product.protein_100g,
-    carbs: product.carbs_100g,
-    fiber: product.fiber_100g,
+    kcal: toPerGram(product.kcal_100g),
+    fat: toPerGram(product.fat_100g),
+    protein: toPerGram(product.protein_100g),
+    carbs: toPerGram(product.carbs_100g),
+    fiber: toPerGram(product.fiber_100g),
     source: product.source,
     sourceVersion: product.source_version,
     verifiedAt: product.verified_at,
@@ -99,11 +104,11 @@ export function toProductCreateBody(
     name_uz: nameUz === "" ? null : nameUz,
     name_en: nameEn === "" ? null : nameEn,
     category_id: values.categoryId.trim(),
-    kcal_100g: values.kcal,
-    fat_100g: values.fat,
-    protein_100g: values.protein,
-    carbs_100g: values.carbs,
-    fiber_100g: values.fiber,
+    kcal_100g: toPer100(values.kcal),
+    fat_100g: toPer100(values.fat),
+    protein_100g: toPer100(values.protein),
+    carbs_100g: toPer100(values.carbs),
+    fiber_100g: toPer100(values.fiber),
     source: values.source.trim(),
     source_version: values.sourceVersion.trim(),
     verified_at: values.verifiedAt,

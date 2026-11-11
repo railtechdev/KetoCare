@@ -1,15 +1,14 @@
 import {
-  formatGrams,
+  formatPerGram,
   AsyncSection,
   Badge,
   Button,
   EmptyState,
+  Fact,
   FactList,
-  MacroBar,
   Section,
   Skeleton,
   WarningBanner,
-  formatKcal,
 } from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Calculator } from "lucide-react";
@@ -124,20 +123,37 @@ export function ProductCard({
               </WarningBanner>
             )}
 
-            <Section title={t("card.nutrition")} description={t("card.per100")}>
-              <p className="m-0 text-page-title font-semibold tabular-nums">
-                {t("card.kcal", { value: formatKcal(data.kcal_100g) })}
-              </p>
-              <MacroBar
-                fatG={data.fat_100g}
-                proteinG={data.protein_100g}
-                carbsG={data.carbs_100g}
-              />
-              <p className="m-0 text-sm text-muted-foreground tabular-nums">
-                {data.fiber_known
-                  ? t("card.fiber", { value: formatGrams(data.fiber_100g) })
-                  : t("card.fiberUnknown")}
-              </p>
+            {/* На 1 г, как вводит диетолог (ADR-0065); хранится на 100 г. */}
+            <Section
+              title={t("card.nutrition")}
+              description={t("card.perGram")}
+            >
+              <FactList>
+                <Fact
+                  label={t("card.perGramRows.kcal")}
+                  value={formatPerGram(data.kcal_100g)}
+                />
+                <Fact
+                  label={t("card.perGramRows.fat")}
+                  value={formatPerGram(data.fat_100g)}
+                />
+                <Fact
+                  label={t("card.perGramRows.protein")}
+                  value={formatPerGram(data.protein_100g)}
+                />
+                <Fact
+                  label={t("card.perGramRows.carbs")}
+                  value={formatPerGram(data.carbs_100g)}
+                />
+                <Fact
+                  label={t("card.perGramRows.fiber")}
+                  value={
+                    data.fiber_known
+                      ? formatPerGram(data.fiber_100g)
+                      : t("card.fiberUnknown")
+                  }
+                />
+              </FactList>
             </Section>
 
             {/* Паспорт записи. Раньше эти три поля видел только администратор в

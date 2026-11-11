@@ -53,7 +53,7 @@ from ..schemas import (
     ProductRevisionRead,
     ProductUpdate,
 )
-from ..services import product_checks, uploads
+from ..services import product_checks, spreadsheet, uploads
 from ..services.product_import import ValidRow, parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -752,7 +752,7 @@ async def list_product_revisions(
 @router.post(
     "/import",
     response_model=ProductImportReport,
-    summary="Импорт продуктов из CSV (с превью)",
+    summary="Импорт продуктов из CSV или Excel (с превью)",
     # Загружают те же, кто правит справочник (ADR-0064): диетолог вела базу по
     # одной карточке, хотя импорт с превью уже был.
     dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
@@ -786,6 +786,11 @@ async def import_products(
         raise _standard_locked()
 
     content = await uploads.read_within_limit(file)
+    if spreadsheet.is_xlsx(content):
+        try:
+            content = spreadsheet.xlsx_to_csv(content)
+        except spreadsheet.SpreadsheetError as exc:
+            raise ApiError(ErrorCode.VALIDATION_ERROR, str(exc)) from exc
 
     report = parse_csv(content)
     errors = [

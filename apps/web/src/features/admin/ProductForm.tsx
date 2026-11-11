@@ -1,5 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, FormFooter, WarningBanner, formatKcal } from "@ketocare/ui";
+import {
+  Button,
+  FormFooter,
+  WarningBanner,
+  formatKcal,
+  toPer100,
+  toPerGram,
+} from "@ketocare/ui";
 import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -106,7 +113,11 @@ export function ProductForm({
 
   // Проверка значений по мере ввода (ответ клиники на вопрос 1): предупреждение,
   // а не запрет — сохранить карточку можно и с ним, если источник так и пишет.
-  const [kcal, fat, protein, carbs, fiber] = watch(NUTRIENTS);
+  // Поля — на 1 г (ADR-0065); проверки и формула Этуотера считают на 100 г,
+  // как сервер и источники.
+  const [kcal, fat, protein, carbs, fiber] = watch(NUTRIENTS).map((value) =>
+    value === undefined || Number.isNaN(value) ? value : toPer100(value),
+  ) as [number, number, number, number, number];
   const check = useProductValuesCheck({ kcal, fat, protein, carbs, fiber });
   const findings = check.data ?? [];
 
@@ -242,7 +253,7 @@ export function ProductForm({
               width="narrow"
               type="number"
               min={0}
-              step="0.1"
+              step="0.0001"
               inputMode="decimal"
               label={t(`products.form.${nutrient}`)}
               error={fieldError(nutrient)}
@@ -289,7 +300,7 @@ export function ProductForm({
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setValue("kcal", roundedExpectedKcal, {
+                    setValue("kcal", toPerGram(roundedExpectedKcal), {
                       shouldValidate: true,
                       shouldDirty: true,
                     });

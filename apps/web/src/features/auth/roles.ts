@@ -87,6 +87,10 @@ export const HIDDEN_FROM_NAV: Partial<Record<Role, ReadonlySet<string>>> = {
   // рецепты открываются из меню дня, продукты — из калькулятора, «Ребёнок» и
   // профиль — из меню учётной записи.
   parent: new Set(["calculator", "recipes", "products", "child", "profile"]),
+  // Администратор ведёт людей и справочники, а не клиническое содержимое:
+  // продукты и рецепты ведут и загружают диетолог и врач (ADR-0064). По ссылке
+  // разделы открываются — на них ведёт проверка аномалий с главной.
+  admin: new Set(["products", "recipes", "profile"]),
 };
 
 export function navSectionsFor(role: Role): readonly string[] {

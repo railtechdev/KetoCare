@@ -7,7 +7,7 @@ import {
   RatioBadge,
   SEARCH_DELAY_MS,
   Skeleton,
-  formatNumber,
+  formatPerGram,
   useDebouncedValue,
 } from "@ketocare/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -323,12 +323,13 @@ function ProductsSkeleton({ label }: { label: string }) {
 }
 
 /** Числовая ячейка с фиксированным числом знаков и моноширинными цифрами. */
-function numeric(digits: number) {
+// На 1 г, как в справочнике диетолога (ADR-0065); хранится на 100 г.
+function numeric(_digits: number) {
   return function NumericCell({ getValue }: { getValue: () => unknown }) {
     const value = getValue();
     return (
       <span className="tabular-nums">
-        {typeof value === "number" ? formatNumber(value, digits) : "—"}
+        {typeof value === "number" ? formatPerGram(value) : "—"}
       </span>
     );
   };

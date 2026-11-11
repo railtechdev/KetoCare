@@ -130,7 +130,7 @@ export function ProductImportPanel({
           ref={fileInput}
           id={`${ids}-file`}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           label={t("products.import.file")}
           hint={t("products.import.formatHint")}
           onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
