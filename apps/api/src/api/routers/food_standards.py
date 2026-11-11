@@ -17,11 +17,18 @@ from core.models.enums import CarbsConvention, FoodStandardKind, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import food_standards as food_standards_repo
 from core.repositories import menu_templates as menu_templates_repo
+from core.repositories import products as products_repo
 from core.repositories import recipes as recipes_repo
 
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..schemas import (
+    CatalogueMergeField,
+    CatalogueMergeRequest,
+    CatalogueMergeResult,
+    CatalogueMergeRow,
+    CatalogueMergeSource,
+    CatalogueMergeTotals,
     FoodStandardCreate,
     FoodStandardRead,
     FoodStandardUpdate,
@@ -29,6 +36,7 @@ from ..schemas import (
     MenuTemplateItemRead,
     MenuTemplateRead,
 )
+from ..services import catalogue_merge
 
 router = APIRouter(prefix="/food-standards", tags=["food-standards"])
 
@@ -240,6 +248,129 @@ async def lock_standard(
     )
     counts = await food_standards_repo.count_products(session)
     return _read(locked, counts.get(standard_id, 0))
+
+
+def _merge_row(row: catalogue_merge.MergeRow) -> CatalogueMergeRow:
+    return CatalogueMergeRow(
+        food_id=row.food_id,
+        name_ru=row.name_ru,
+        product_id=row.target.id if row.target is not None else None,
+        status=row.status,
+        write=row.write,
+        accepted=row.accepted,
+        fields={
+            name: CatalogueMergeField(
+                value=value.value,
+                source_standard_id=value.source.id if value.source is not None else None,
+                source_standard_name=value.source.name if value.source is not None else None,
+                source_product_id=value.product_id,
+                manual=value.manual,
+                conflict=value.conflict,
+                merged=value.merged,
+                net_plus_fiber=value.net_plus_fiber,
+            )
+            for name, value in row.fields.items()
+        },
+        anomalies=row.anomalies,
+        missing=row.missing,
+        fiber_known=row.fiber_known,
+    )
+
+
+def _merge_totals(rows: list[catalogue_merge.MergeRow]) -> CatalogueMergeTotals:
+    totals = CatalogueMergeTotals()
+    for row in rows:
+        setattr(totals, row.status, getattr(totals, row.status) + 1)
+        if row.write:
+            totals.written += 1
+    return totals
+
+
+@router.post(
+    "/{standard_id}/merge",
+    response_model=CatalogueMergeResult,
+    summary="Собрать рабочий справочник из источников",
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def merge_sources(
+    standard_id: Annotated[uuid.UUID, Path()],
+    payload: CatalogueMergeRequest,
+    user: CurrentUserDep,
+    session: SessionDep,
+) -> CatalogueMergeResult:
+    """Превью (`dry_run`, по умолчанию) или запись слияния (ADR-0067, ADR-0068).
+
+    Цель — стандарт клиники: по нему считают еду ребёнку. Источники — внешние
+    документы, по порядку: число берётся из первого, где оно известно. Строки,
+    не прошедшие сверку 9–4–4, пишутся только из `accept`; числа, вписанные
+    человеком, слияние не трогает и показывает расхождение.
+    """
+
+    target = await _standard_or_404(session, standard_id)
+    if target.kind is not FoodStandardKind.CLINIC:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Собирается только стандарт клиники: внешний документ не дополняется.",
+            details={"field": "standard_id"},
+        )
+    if target.locked_at is not None:
+        raise ApiError(ErrorCode.CONFLICT, "Стандарт закрыт: его значения не меняются.")
+
+    if len(set(payload.source_ids)) != len(payload.source_ids):
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Источник указан дважды.",
+            details={"field": "source_ids"},
+        )
+    sources: list[FoodStandard] = []
+    for source_id in payload.source_ids:
+        source = await food_standards_repo.get(session, source_id)
+        if source is None:
+            raise ApiError(
+                ErrorCode.VALIDATION_ERROR,
+                "Стандарт-источник не найден.",
+                details={"field": "source_ids", "standard_id": str(source_id)},
+            )
+        if source.kind is not FoodStandardKind.REFERENCE:
+            raise ApiError(
+                ErrorCode.VALIDATION_ERROR,
+                f"«{source.name}» — не внешний документ. Источником слияния служит "
+                "только справочник-источник.",
+                details={"field": "source_ids", "standard_id": str(source_id)},
+            )
+        sources.append(source)
+
+    plan = await catalogue_merge.plan(
+        session, target=target, sources=sources, accept=payload.accept
+    )
+    if not payload.dry_run:
+        try:
+            await catalogue_merge.apply(session, target=target, plan=plan, changed_by=user.id)
+        except products_repo.StandardLockedError as error:
+            raise ApiError(
+                ErrorCode.CONFLICT, "Стандарт закрыт: его значения не меняются."
+            ) from error
+        totals = _merge_totals(plan.rows)
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="merge_sources",
+            entity="food_standards",
+            entity_id=target.id,
+            after={
+                "source_ids": [str(source.id) for source in sources],
+                "accepted": [str(row.food_id) for row in plan.rows if row.accepted and row.write],
+                "totals": totals.model_dump(),
+            },
+        )
+
+    return CatalogueMergeResult(
+        target_id=target.id,
+        sources=[CatalogueMergeSource(id=source.id, name=source.name) for source in sources],
+        applied=not payload.dry_run,
+        rows=[_merge_row(row) for row in plan.rows],
+        totals=_merge_totals(plan.rows),
+    )
 
 
 #: Clinical content of a menu: specialists only, the administrator does not need it.

@@ -79,6 +79,7 @@
       "login_with_backup_code": "Вход резервным кодом",
       "merge": "Объединение",
       "lock": "Закрытие",
+      "merge_sources": "Сборка рабочего справочника",
       "password_change_failed": "Неудачная смена пароля",
       "password_changed": "Смена пароля",
       "password_reset": "Выдача временного пароля",

@@ -561,6 +561,26 @@ async def get_by_ids(
     return {product.id: product for product in rows}
 
 
+async def list_in_standards(
+    session: AsyncSession, *, standard_ids: Collection[uuid.UUID]
+) -> list[Product]:
+    """Все записи указанных стандартов — для слияния источников (ADR-0068).
+
+    Выведенные из оборота входят: слияние сопоставляет записи по `food_id`, и
+    выведенная запись рабочего справочника иначе считалась бы отсутствующей —
+    слияние завело бы рядом вторую с тем же названием.
+    """
+
+    if not standard_ids:
+        return []
+    rows = await session.scalars(
+        select(Product)
+        .where(Product.standard_id.in_(list(standard_ids)))
+        .order_by(Product.name_ru, Product.created_at, Product.id)
+    )
+    return list(rows)
+
+
 async def same_food_ids(
     session: AsyncSession, *, product_ids: Collection[uuid.UUID]
 ) -> set[uuid.UUID]:
