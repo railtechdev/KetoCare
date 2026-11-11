@@ -224,9 +224,16 @@
     "offTarget_few": "{{count}} блюда расходятся с целью приёма ({{ratio}}, {{kcal}} ккал).",
     "offTarget_many": "{{count}} блюд расходятся с целью приёма ({{ratio}}, {{kcal}} ккал).",
     "offTargetNext": "Подогнать «{{title}}»",
-    "toCalculator": "Пересчитать «{{title}}» в калькуляторе",
-    "toMenu": "Добавить «{{title}}» в меню",
-    "eaten": "Записать «{{title}}» в дневник"
+    "toCalculator": "Изменить «{{title}}»",
+    "toMenu": "В меню: «{{title}}»",
+    "eaten": "Съели «{{title}}»: записать в дневник",
+    "short": {
+      "edit": "Изменить",
+      "menu": "В меню",
+      "eaten": "Съели",
+      "rename": "Переименовать",
+      "delete": "Удалить"
+    }
   },
   "import": {
     "title": "Импорт рецептов",
