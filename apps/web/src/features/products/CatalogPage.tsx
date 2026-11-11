@@ -49,7 +49,7 @@ export function CatalogPage() {
       )}
 
       {(isEditingItem || view === "catalog") && (
-        <ProductsPanel canImport={false} chrome="screen" />
+        <ProductsPanel chrome="screen" />
       )}
 
       {!isEditingItem && view === "categories" && <ProductCategoriesPanel />}

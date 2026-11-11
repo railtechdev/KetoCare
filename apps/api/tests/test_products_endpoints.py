@@ -664,14 +664,15 @@ class TestCsvImportEndpoint:
         content = ("\n".join([CSV_HEADER, *unique_rows]) + "\n").encode("utf-8")
         return {"file": ("products.csv", content, "text/csv")}
 
-    async def test_non_admin_forbidden(self, client, session, make_user, auth_headers):
+    async def test_dietitian_previews_import(self, client, session, make_user, auth_headers):
+        """ADR-0064: диетолог загружает продукты сама."""
         dietitian = await make_user(UserRole.DIETITIAN)
         response = await client.post(
             "/api/v1/products/import",
             files=self._file("Масло,Жиры,717,81.1,0.9,0.1,0,USDA,SR28,2026-01-01"),
             headers=auth_headers(dietitian),
         )
-        assert response.status_code == 403
+        assert response.status_code == 200, response.text
 
     async def test_preview_warns_about_kcal_off_by_more_than_five(
         self, client, make_user, auth_headers

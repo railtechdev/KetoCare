@@ -753,7 +753,9 @@ async def list_product_revisions(
     "/import",
     response_model=ProductImportReport,
     summary="Импорт продуктов из CSV или Excel (с превью)",
-    dependencies=[Depends(require_roles(UserRole.ADMIN))],
+    # Загружают те же, кто правит справочник (ADR-0064): диетолог вела базу по
+    # одной карточке, хотя импорт с превью уже был.
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
 )
 @limiter.limit(IMPORT_RATE_LIMIT)
 async def import_products(
