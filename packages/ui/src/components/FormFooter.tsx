@@ -52,7 +52,17 @@ export function FormFooter({
   const blocked = disabled && !pending && reason !== undefined;
 
   return (
-    <div className={cn("flex flex-col gap-field", className)}>
+    <div
+      data-slot="form-footer"
+      className={cn(
+        "flex flex-col gap-field",
+        // В боковой панели действия закреплены внизу (Material, Fluent,
+        // shadcn Sheet): в длинной форме до «Сохранить» не прокручивают, в
+        // короткой кнопки не висят посреди панели.
+        "[[data-slot=sheet-content]_&]:sticky [[data-slot=sheet-content]_&]:bottom-0 [[data-slot=sheet-content]_&]:z-10 [[data-slot=sheet-content]_&]:-mx-4 [[data-slot=sheet-content]_&]:-mb-4 [[data-slot=sheet-content]_&]:mt-auto [[data-slot=sheet-content]_&]:border-t [[data-slot=sheet-content]_&]:border-border [[data-slot=sheet-content]_&]:bg-background [[data-slot=sheet-content]_&]:px-4 [[data-slot=sheet-content]_&]:py-3",
+        className,
+      )}
+    >
       <div className="flex flex-wrap items-center gap-3">
         {/* min-h-touch явно: кнопка подтверждения формы — то, во что целятся
           чаще всего, и 36 px кита здесь мало даже на мыши (раздел 8.2 ТЗ). */}

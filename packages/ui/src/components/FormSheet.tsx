@@ -133,7 +133,12 @@ export function FormSheet({
           </SheetClose>
         </SheetHeader>
 
-        <div ref={bodyRef} className="flex flex-col gap-section px-4 pb-4">
+        {/* Тело тянется на всю высоту панели, а форма — на всё тело: так
+            подвал формы (`FormFooter`) встаёт к нижнему краю. */}
+        <div
+          ref={bodyRef}
+          className="flex flex-1 flex-col gap-section px-4 pb-4 [&>form]:flex-1"
+        >
           {children}
         </div>
       </SheetContent>
