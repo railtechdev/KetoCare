@@ -6,7 +6,7 @@ import { errorMessageOf } from "./api";
 describe("объяснение отказа в Mini App", () => {
   it("отказ сети называет связь", () => {
     expect(errorMessageOf(new NetworkError())).toBe(
-      "Нет связи с сервером. Проверьте подключение.",
+      "Нет связи. Проверьте интернет.",
     );
   });
 

@@ -234,12 +234,10 @@ describe("план дня в Mini App", () => {
     // нескольких приёмов баннер оказывался ниже сгиба.
     const row = within(checkbox.closest("li")!);
     expect(await row.findByText("Отметка не сохранилась")).toBeInTheDocument();
-    expect(
-      row.getByText("Нет связи с сервером. Проверьте подключение."),
-    ).toBeInTheDocument();
+    expect(row.getByText("Нет связи. Проверьте интернет.")).toBeInTheDocument();
     expect(screen.getAllByText("Отметка не сохранилась")).toHaveLength(1);
     // Причина читается и при фокусе на самой позиции.
-    expect(checkbox).toHaveAccessibleDescription(/Нет связи с сервером/);
+    expect(checkbox).toHaveAccessibleDescription(/Проверьте интернет/);
 
     // Следующее нажатие уводит баннер: он о последней отметке, а не о первой.
     await user.click(screen.getByRole("checkbox", { name: /Суфле/ }));
@@ -1158,7 +1156,7 @@ describe("соответствие дня назначению", () => {
 
   it.each([
     ["no_prescription", "Сравнивать итоги не с чем: активного назначения нет."],
-    ["engine_changed", /прежней версией расчётного ядра/],
+    ["engine_changed", /по прежнему правилу расчёта/],
     ["engine_unknown", /не записана версия расчёта/],
   ])("причина «%s» называется своими словами", async (gap, text) => {
     withVerdict({ tolerance: null, tolerance_gap: gap });
@@ -1195,7 +1193,7 @@ describe("соответствие дня назначению", () => {
     await user.click(screen.getByRole("button", { name: "Завтра" }));
 
     expect(
-      await screen.findByText(/сервер сообщает только для сегодняшнего дня/),
+      await screen.findByText(/показывается только для сегодняшнего дня/),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Кетосоотношение дня соответствует назначению."),

@@ -288,7 +288,7 @@ describe("сводка в Mini App", () => {
     renderScreen();
 
     expect(
-      await screen.findByText(/прежней версией расчётного ядра/),
+      await screen.findByText(/по прежнему правилу расчёта/),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/активного назначения нет/),
