@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { FIELD_CONTROL } from "../../components/Field";
+import { KitSelect } from "../../components/Field";
 import { useSelectedPatient } from "./useSelectedPatient";
 
 /**
@@ -30,18 +30,19 @@ export function PatientSwitcher() {
       <label className="text-sm text-muted-foreground" htmlFor={id}>
         {t("nav.patient")}
       </label>
-      <select
+      <KitSelect
         id={id}
+        width="wide"
+        className="w-auto"
         value={patientId ?? ""}
         onChange={(event) => select(event.target.value)}
-        className={`${FIELD_CONTROL} w-auto`}
       >
         {patients.map((patient) => (
           <option key={patient.id} value={patient.id}>
             {patient.full_name}
           </option>
         ))}
-      </select>
+      </KitSelect>
     </div>
   );
 }
