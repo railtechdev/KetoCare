@@ -69,7 +69,7 @@ title,category,yield_g,servings,instructions,product_name,grams
 
 Шапка заполняется в первой строке рецепта, дальше остаётся пустой — пустая
 ячейка значит «то же, что выше». `category` — одно из: `breakfast`, `lunch`,
-`dinner`, `snack`, `dessert`, `drink`, `bakery` (выпечка), `bread` (хлеб).
+`dinner`, `salad` (салаты), `snack`, `dessert`, `drink`, `smoothie` (смузи), `bakery` (выпечка), `bread` (хлеб).
 `servings` — только целое число порций, не меньше одной: меню делит состав
 рецепта на это число.
 
