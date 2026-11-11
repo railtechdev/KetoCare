@@ -411,14 +411,6 @@ export function RecipeDetail({
           <span>{t("detail.yield", { grams: formatMass(data.yield_g) })}</span>
           <span>{t("detail.servings", { value: data.servings })}</span>
         </p>
-
-        {/* Версия ядра видна рядом с показателями: расчёты разных версий могут
-                отличаться, и понять это нужно до того, как по рецепту накормят. */}
-        <p className="m-0 text-xs text-muted-foreground">
-          {data.engine_version === null
-            ? t("detail.engineVersionUnknown")
-            : t("detail.engineVersion", { version: data.engine_version })}
-        </p>
       </Section>
 
       {/* Показатели рецепта посчитаны в том числе по выведенному продукту —

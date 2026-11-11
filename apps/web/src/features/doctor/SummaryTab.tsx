@@ -185,12 +185,6 @@ function OverviewPanels({
                     })}
                   </p>
                 )}
-
-                {day.engine_version && (
-                  <p className="m-0 text-xs text-muted-foreground">
-                    {t("units.engineVersion", { version: day.engine_version })}
-                  </p>
-                )}
               </div>
             )}
           </Section>

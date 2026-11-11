@@ -126,7 +126,7 @@ describe("препараты из анкеты семьи", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
 
     const drug = await screen.findByLabelText("Препарат");
@@ -181,7 +181,7 @@ describe("препараты из анкеты семьи", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
     await user.click(await screen.findByRole("button", { name: "Сохранить" }));
 
@@ -198,7 +198,7 @@ describe("препараты из анкеты семьи", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
 
     const dialog = await screen.findByRole("dialog");
@@ -239,7 +239,7 @@ describe("кратность приёма из списка", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "300");
@@ -391,7 +391,7 @@ describe("доза числом и единицей", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "250");
@@ -407,7 +407,7 @@ describe("доза числом и единицей", () => {
 
     await user.click(screen.getByRole("button", { name: "Отмена" }));
     const [open] = await screen.findAllByRole("button", {
-      name: "Назначить препарат",
+      name: "Добавить препарат",
     });
     await user.click(open!);
 
@@ -421,7 +421,7 @@ describe("доза числом и единицей", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "2,5");
@@ -445,7 +445,7 @@ describe("доза числом и единицей", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "300 мг");
@@ -472,7 +472,7 @@ describe("доза числом и единицей", () => {
     renderTab();
 
     await user.click(
-      await screen.findByRole("button", { name: "Назначить препарат" }),
+      await screen.findByRole("button", { name: "Добавить препарат" }),
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.selectOptions(

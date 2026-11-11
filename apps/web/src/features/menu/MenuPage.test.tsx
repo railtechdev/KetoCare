@@ -493,7 +493,7 @@ describe("MenuPage", () => {
     expect(screen.getByText("Каша на кокосовом масле")).toBeInTheDocument();
 
     // Пометка стоит у той позиции, где продукт действительно есть.
-    const marks = screen.getAllByText(/Выведен из оборота: Масло льняное/);
+    const marks = screen.getAllByText(/В архиве: Масло льняное/);
     expect(marks).toHaveLength(1);
   });
 

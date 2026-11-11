@@ -19,7 +19,6 @@ import type { DayTargets, DayTotals } from "./useMenu";
 
 interface Props {
   totals: DayTotals | null;
-  engineVersion: string | null;
   /** Вердикт о допусках приходит от сервера; на клиенте он не вычисляется */
   tolerance: DayTolerance | null;
   /**
@@ -43,7 +42,6 @@ const MIN_REMAINING_KCAL = 50;
 /** Итоги дня против назначения (раздел 8.3 ТЗ, строка «Меню»). */
 export function DayTotalsPanel({
   totals,
-  engineVersion,
   tolerance,
   toleranceGap,
   targets,
@@ -124,14 +122,6 @@ export function DayTotalsPanel({
       {verdict.unavailable && (
         <p className="m-0 text-sm text-muted-foreground">
           {t(`totals.${toleranceGapKey(verdict.unavailableReason)}`)}
-        </p>
-      )}
-
-      {/* Версия ядра показывается рядом с итогами: расчёт, сделанный разными
-            версиями, может отличаться, и это должно быть видно. */}
-      {engineVersion !== null && (
-        <p className="m-0 text-xs text-muted-foreground">
-          {t("totals.engineVersion", { version: engineVersion })}
         </p>
       )}
     </Section>

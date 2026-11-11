@@ -142,14 +142,6 @@ export function DayTotalsCard({
               })}
             </p>
           )}
-
-        {/* Версия ядра показывается рядом с числами: итоги, посчитанные разными
-            версиями, могут отличаться, и это должно быть видно. */}
-        {day.engine_version && (
-          <p className="m-0 text-xs text-muted-foreground">
-            {t("day.engineVersion", { version: day.engine_version })}
-          </p>
-        )}
       </div>
     </Panel>
   );

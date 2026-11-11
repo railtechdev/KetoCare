@@ -123,7 +123,9 @@ describe("без детей", () => {
       (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
       renderPage({});
 
-      expect(await screen.findByText(/Нет связи/)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/Нет связи\. Данные загрузятся/),
+      ).toBeInTheDocument();
       expect(screen.queryByText(childRu.children.empty)).toBeNull();
     } finally {
       onlineManager.setOnline(true);
