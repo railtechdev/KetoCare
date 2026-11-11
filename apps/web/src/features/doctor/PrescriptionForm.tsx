@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
@@ -13,7 +13,10 @@ import {
 } from "../../components/FormErrorSummary";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
-import { PrescriptionGoalPreview } from "./PrescriptionGoalPreview";
+import {
+  PrescriptionGoalPreview,
+  usePrescriptionGoal,
+} from "./PrescriptionGoalPreview";
 import {
   KCAL_MAX,
   KCAL_MIN,
@@ -78,11 +81,36 @@ export function PrescriptionForm({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, submitCount },
+    formState: { errors, submitCount, dirtyFields },
   } = useForm<PrescriptionFormValues>({
     resolver: zodResolver(prescriptionFormSchema),
     defaultValues,
   });
+
+  // Углеводы считаются сами, как в KDC: (белок + углеводы) из калорийности и
+  // соотношения минус белок. Поле остаётся правимым: правка руками выключает
+  // пересчёт до конца этой формы. В уже записанном назначении число не
+  // трогается, пока врач не поменял калорийность, соотношение или белок.
+  const goal = usePrescriptionGoal({
+    ratio: watch("ratio"),
+    kcalPerDay: watch("kcalPerDay"),
+    proteinG: watch("proteinG"),
+    mealsPerDay: watch("mealsPerDay"),
+  });
+  const [carbsByHand, setCarbsByHand] = useState(false);
+  const derivedCarbs = goal.data?.day.net_carbs_g ?? null;
+  const inputsChanged =
+    dirtyFields.kcalPerDay === true ||
+    dirtyFields.ratio === true ||
+    dirtyFields.proteinG === true;
+  const carbsEmpty = Number.isNaN(defaultValues.carbsLimitG ?? Number.NaN);
+  useEffect(() => {
+    if (derivedCarbs === null || carbsByHand) return;
+    if (!inputsChanged && !carbsEmpty) return;
+    setValue("carbsLimitG", Math.round(derivedCarbs * 10) / 10, {
+      shouldValidate: true,
+    });
+  }, [derivedCarbs, carbsByHand, inputsChanged, carbsEmpty, setValue]);
 
   // Сводка появляется только после неудачной отправки и повторяет тексты из-под
   // полей (правило П8 канона). Без неё врач, отправивший форму с клавиатуры,
@@ -177,7 +205,11 @@ export function PrescriptionForm({
           step={0.1}
           label={t("fields.carbsLimit")}
           error={errors.carbsLimitG && t("prescription.errors.carbsLimit")}
-          {...register("carbsLimitG", { valueAsNumber: true })}
+          hint={carbsByHand ? undefined : t("prescription.carbsDerived")}
+          {...register("carbsLimitG", {
+            valueAsNumber: true,
+            onChange: () => setCarbsByHand(true),
+          })}
         />
 
         <Field

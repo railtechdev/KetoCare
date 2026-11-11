@@ -151,3 +151,30 @@ describe("кетосоотношение в назначении", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe("углеводы считаются сами, как в KDC", () => {
+  it("в записанном назначении не трогаются, пока не поменяли калорийность", async () => {
+    renderForm();
+    await screen.findByText(/120,0 г/);
+    expect(screen.getByLabelText(/Углеводы/)).toHaveValue(10);
+  });
+
+  it("пересчитываются после правки калорийности и не после ручной правки", async () => {
+    renderForm();
+    const user = userEvent.setup();
+    const kcal = screen.getByLabelText(/Калорийность/);
+    await user.clear(kcal);
+    await user.type(kcal, "1300");
+    const carbs = screen.getByLabelText(/Углеводы/);
+    await vi.waitFor(() => expect(carbs).toHaveValue(10.3));
+
+    await user.clear(carbs);
+    await user.type(carbs, "8");
+    (api.POST as Mock).mockResolvedValue({
+      data: { ...GOAL, day: { ...GOAL.day, net_carbs_g: 12 } },
+    });
+    await user.type(kcal, "0");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(carbs).toHaveValue(8);
+  });
+});

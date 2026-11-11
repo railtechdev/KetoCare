@@ -39,7 +39,7 @@ function renderHint(onApply = vi.fn()) {
 }
 
 describe("калорийность по весу и возрасту", () => {
-  it("показывает диапазон и подставляет его середину", async () => {
+  it("даёт выбрать минимум, середину или максимум диапазона", async () => {
     weight = { weight_kg: 18, occurred_at: "2026-11-01T09:00:00Z" };
     (api.POST as Mock).mockResolvedValue({
       data: {
@@ -52,12 +52,16 @@ describe("калорийность по весу и возрасту", () => {
     });
     const onApply = renderHint();
 
-    const apply = await screen.findByRole("button", {
-      name: /Подставить 1\s?200 ккал/,
-    });
+    expect(
+      await screen.findByRole("button", { name: /Мин\. 1\s?170/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Середина 1\s?200/ }),
+    ).toBeInTheDocument();
+    const apply = screen.getByRole("button", { name: /Макс\. 1\s?224/ });
     expect(screen.getByText(/1\s?170–1\s?224 ккал/)).toBeInTheDocument();
     await userEvent.click(apply);
-    expect(onApply).toHaveBeenCalledWith(1200);
+    expect(onApply).toHaveBeenCalledWith(1224);
     expect((api.POST as Mock).mock.calls[0]![1].body.weight_kg).toBe(18);
   });
 
