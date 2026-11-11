@@ -206,6 +206,24 @@ def max_non_fat_grams(ratio: float, kcal: float) -> float:
     return kcal / denominator
 
 
+def energy_requirement(age_years: int, weight_kg: float) -> tuple[float, float]:
+    """Daily calorie range for a child of this age and weight (question 56).
+
+    The table row is picked by full years of age; the range is weight times the
+    row's kcal per kilogram. A hint for the prescription form: the doctor enters
+    the prescribed number.
+    """
+
+    if age_years < 0:
+        raise ValueError("Возраст не может быть отрицательным")
+    if weight_kg <= 0:
+        raise ValueError("Вес должен быть положительным")
+    for upper, low, high in constants.ENERGY_KCAL_PER_KG_BY_AGE:
+        if age_years < upper:
+            return weight_kg * low, weight_kg * high
+    raise AssertionError("the last row covers every age")  # pragma: no cover
+
+
 def meal_macro_goal(
     ratio: float,
     kcal: float,

@@ -80,7 +80,25 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # `None` означает «сказать нечего» (у блюда нет соотношения), и это больше не
 # схлопывается в «не соответствует». Minor: числа те же, меняется форма ответа —
 # у дня без соотношения вместо ложного «вне допуска» приходит «не определено».
+# 1.4.0 — `energy_requirement()` gives the daily calorie range from age and weight
+# (Yonsei table, question 56). Minor: a new function, nothing else changes.
 # 1.3.0 — `ItemAmount` carries the net carbs of its position, and `meal_macro_goal()`
 # gives the grams one meal should contain. Minor: new contract fields and a new
 # function, the results of verify() and solve() do not change.
-ENGINE_VERSION = "1.3.0"
+ENGINE_VERSION = "1.4.0"
+
+
+# Daily calories per kilogram on the ketogenic diet by age: Yonsei University,
+# "Nutritional requirement for KD", sent by the clinic's dietitian on 2026-10-27
+# and 2026-11-11 with the instruction to use it as the basis of the calculation.
+# Rows: (upper bound of age in whole years, exclusive; kcal/kg min; kcal/kg max).
+# TODO(med): the slide also says "initial prescription 85-95% of daily
+# requirement"; the table values are taken as the requirement itself, without a
+# further 85-95% cut, until the clinic says otherwise (question 56).
+ENERGY_KCAL_PER_KG_BY_AGE: tuple[tuple[float, float, float], ...] = (
+    (1, 75.0, 85.0),
+    (4, 70.0, 75.0),
+    (7, 65.0, 68.0),
+    (11, 55.0, 60.0),
+    (float("inf"), 30.0, 40.0),
+)

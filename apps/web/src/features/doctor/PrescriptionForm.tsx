@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useId } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
@@ -59,8 +60,11 @@ export function PrescriptionForm({
   pending,
   error,
   onSubmit,
+  kcalHint,
 }: {
   defaultValues: DefaultValues<PrescriptionFormValues>;
+  /** Подсказка под калорийностью; получает функцию, ставящую число в поле */
+  kcalHint?: (apply: (kcal: number) => void) => ReactNode;
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
@@ -73,6 +77,7 @@ export function PrescriptionForm({
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, submitCount },
   } = useForm<PrescriptionFormValues>({
     resolver: zodResolver(prescriptionFormSchema),
@@ -144,6 +149,12 @@ export function PrescriptionForm({
           error={errors.kcalPerDay && t("prescription.errors.kcal")}
           {...register("kcalPerDay", { valueAsNumber: true })}
         />
+        {kcalHint?.((kcal) =>
+          setValue("kcalPerDay", kcal, {
+            shouldDirty: true,
+            shouldValidate: true,
+          }),
+        )}
 
         <Field
           id={`${ids}-protein`}
