@@ -117,7 +117,7 @@ describe("карточка продукта", () => {
     expect(
       await screen.findByText(productsRu.card.notFound as string),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/717 ккал/)).not.toBeInTheDocument();
+    expect(screen.queryByText("7,17")).not.toBeInTheDocument();
   });
 
   it("показывает происхождение значений, а не только числа", async () => {
@@ -126,7 +126,7 @@ describe("карточка продукта", () => {
     // числам, по которым считают еду ребёнку.
     renderCard();
 
-    expect(await screen.findByText("717 ккал")).toBeInTheDocument();
+    expect(await screen.findByText("7,17")).toBeInTheDocument();
     expect(
       screen.getByText("SR Legacy 2018-04, fdc 173410"),
     ).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe("карточка продукта", () => {
 
     // «Жиры 82.5 → 81.1» отвечает на вопрос, ради которого сюда приходят;
     // полный список из одиннадцати полей его прячет.
-    await screen.findByText(/Жиры, г/);
+    await screen.findByRole("list", { name: "История изменений" });
 
     // Именно записи истории: на экране есть и другие списки (расшифровка
     // макросов), а внутри самой записи — вложенный список изменённых полей.
@@ -151,9 +151,9 @@ describe("карточка продукта", () => {
     // по такой истории и восстанавливают, что было до инцидента.
     const latest = entries[0]?.textContent ?? "";
     expect(latest).toContain("Жиры, г");
-    // Числа русской записью (П45): «82,5», а не «82.5».
-    expect(latest.indexOf("82,5")).toBeGreaterThan(-1);
-    expect(latest.indexOf("82,5")).toBeLessThan(latest.indexOf("81,1"));
+    // Числа русской записью (П45) и на 1 г, как в карточке (ADR-0065).
+    expect(latest.indexOf("0,825")).toBeGreaterThan(-1);
+    expect(latest.indexOf("0,825")).toBeLessThan(latest.indexOf("0,811"));
 
     // Автор назван у каждой записи: идентификатор без имени отвечает «кто-то».
     expect(screen.getAllByText("Анна Диетолог")).toHaveLength(2);
@@ -167,7 +167,7 @@ describe("карточка продукта", () => {
     role = "parent";
     renderCard();
 
-    expect(await screen.findByText("717 ккал")).toBeInTheDocument();
+    expect(await screen.findByText("7,17")).toBeInTheDocument();
     expect(screen.queryByText(/История изменений/)).not.toBeInTheDocument();
     expect(api.GET).not.toHaveBeenCalledWith(
       "/api/v1/products/{product_id}/revisions",

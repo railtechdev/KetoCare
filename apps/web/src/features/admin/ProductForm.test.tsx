@@ -67,7 +67,13 @@ describe("карточка продукта: проверка значений �
       ],
     });
 
-    renderForm({ kcal: 717, fat: 81.1, protein: 0.9, carbs: 0.1, fiber: 0 });
+    renderForm({
+      kcal: 7.17,
+      fat: 0.811,
+      protein: 0.009,
+      carbs: 0.001,
+      fiber: 0,
+    });
 
     expect(
       await screen.findByText(adminRu.products.form.checkTitle),
@@ -88,7 +94,13 @@ describe("карточка продукта: проверка значений �
   it("незаполненную карточку сервер не спрашивает", async () => {
     (api.POST as Mock).mockResolvedValue({ data: [] });
 
-    renderForm({ kcal: 717, fat: 81.1, protein: 0.9, carbs: 0.1, fiber: 0 });
+    renderForm({
+      kcal: 7.17,
+      fat: 0.811,
+      protein: 0.009,
+      carbs: 0.001,
+      fiber: 0,
+    });
     await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByLabelText(adminRu.products.form.fat), {
@@ -133,7 +145,7 @@ describe("карточка продукта: контроль калорийно
 
   it("показывает предупреждение при расхождении БЖУ и позволяет подставить расчётную калорийность", async () => {
     // 10*4 + 20*9 + 30*4 = 340 ккал. Задаём kcal = 100 (расхождение 240 ккал).
-    renderForm({ kcal: 100, fat: 20, protein: 10, carbs: 30, fiber: 0 });
+    renderForm({ kcal: 1, fat: 0.2, protein: 0.1, carbs: 0.3, fiber: 0 });
 
     expect(
       screen.getByText(adminRu.products.form.atwaterTitle),
@@ -147,7 +159,7 @@ describe("карточка продукта: контроль калорийно
     fireEvent.click(substituteButton);
 
     const kcalInput = screen.getByLabelText(adminRu.products.form.kcal);
-    expect(kcalInput).toHaveValue(340);
+    expect(kcalInput).toHaveValue(3.4);
 
     // После подстановки расхождение устранено — баннер исчезает
     expect(
@@ -159,7 +171,13 @@ describe("карточка продукта: контроль калорийно
     // Огурцы: белки 0.8г, жиры 0.1г, углеводы 2.5г -> по Этуотеру 14.1 ккал (~14 ккал).
     // Заявленная калорийность 16 ккал. Относительное расхождение 13.5% (> 10%), но разница всего 1.9 ккал (<= 15 ккал).
     // По логическому «И» предупреждение не должно срабатывать.
-    renderForm({ kcal: 16, fat: 0.1, protein: 0.8, carbs: 2.5, fiber: 0.5 });
+    renderForm({
+      kcal: 0.16,
+      fat: 0.001,
+      protein: 0.008,
+      carbs: 0.025,
+      fiber: 0.005,
+    });
 
     expect(
       screen.queryByText(adminRu.products.form.atwaterTitle),
