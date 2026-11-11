@@ -441,6 +441,10 @@ class ProductValueSourceRead(BaseModel):
     label: str | None = None
 
 
+ENERGY_UNKNOWN = ("fat_100g", "protein_100g", "carbs_100g")
+"""Поля, без которых соотношение продукта не определено."""
+
+
 class ProductRead(ProductBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -481,6 +485,12 @@ class ProductRead(ProductBase):
         макронутриентами позиции, а сохранённая копия однажды разошлась бы с
         ними после правки.
         """
+
+        # Неизвестный жир, белок или углевод хранится нулём, и соотношение с
+        # ним было бы утверждением о том, чего источник не публиковал: мясо без
+        # углеводов выглядело бы жирнее, чем есть. «Соотношения нет» честнее.
+        if any(field in ENERGY_UNKNOWN for field in self.unknown_fields):
+            return None
 
         return verify(
             [

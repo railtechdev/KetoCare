@@ -89,6 +89,9 @@ async def test_reference_import_records_unknown_fields_and_waste(
     read = card.json()
     assert sorted(read["unknown_fields"]) == ["carbs_100g", "fiber_100g"]
     assert read["waste_pct"] == 25.0
+    # Соотношения с неизвестными углеводами нет: ноль на их месте завысил бы
+    # его в столбце справочника.
+    assert read["ratio"] is None
 
 
 async def test_clinic_standard_rejects_empty_value(client, session, make_user, auth_headers):
