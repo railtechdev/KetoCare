@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import doctorRu from "../../locales/ru/doctor.json";
 import { MedicationsTab } from "./MedicationsTab";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -133,13 +134,19 @@ describe("препараты из анкеты семьи", () => {
     await user.clear(drug);
     await user.type(drug, "депакин");
     await user.click(
-      await screen.findByRole("option", { name: /Вальпроат натрия/ }),
+      await screen.findByRole("option", {
+        hidden: true,
+        name: /Вальпроат натрия/,
+      }),
     );
 
     await user.type(screen.getByLabelText(/Разовая доза/), "300");
-    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
     await user.selectOptions(
-      screen.getByLabelText("Кратность"),
+      nativeSelect(screen.getByLabelText(/Единица дозы/)),
+      "мг",
+    );
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Кратность")),
       "2 раза в сутки",
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -243,9 +250,12 @@ describe("кратность приёма из списка", () => {
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "300");
-    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
     await user.selectOptions(
-      screen.getByLabelText("Кратность"),
+      nativeSelect(screen.getByLabelText(/Единица дозы/)),
+      "мг",
+    );
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Кратность")),
       "Другая схема",
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -325,10 +335,10 @@ describe("кратность приёма из списка", () => {
     expect(
       await screen.findByText(doctorRu.medications.frequencyLegacyHint),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Кратность")).toHaveValue("");
-    expect(screen.getByLabelText(/Уточнение к кратности/)).toHaveValue(
-      "3 раза в день",
-    );
+    expect(valueControl(screen.getByLabelText("Кратность"))).toHaveValue("");
+    expect(
+      valueControl(screen.getByLabelText(/Уточнение к кратности/)),
+    ).toHaveValue("3 раза в день");
 
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
@@ -366,7 +376,7 @@ describe("кратность приёма из списка", () => {
       }),
     );
     await user.selectOptions(
-      await screen.findByLabelText("Кратность"),
+      nativeSelect(await screen.findByLabelText("Кратность")),
       "1 раз в сутки",
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -395,9 +405,12 @@ describe("доза числом и единицей", () => {
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "250");
-    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
     await user.selectOptions(
-      screen.getByLabelText("Кратность"),
+      nativeSelect(screen.getByLabelText(/Единица дозы/)),
+      "мг",
+    );
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Кратность")),
       "2 раза в сутки",
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -425,9 +438,12 @@ describe("доза числом и единицей", () => {
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "2,5");
-    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мл");
     await user.selectOptions(
-      screen.getByLabelText("Кратность"),
+      nativeSelect(screen.getByLabelText(/Единица дозы/)),
+      "мл",
+    );
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Кратность")),
       "2 раза в сутки",
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -449,9 +465,12 @@ describe("доза числом и единицей", () => {
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.type(screen.getByLabelText(/Разовая доза/), "300 мг");
-    await user.selectOptions(screen.getByLabelText(/Единица дозы/), "мг");
     await user.selectOptions(
-      screen.getByLabelText("Кратность"),
+      nativeSelect(screen.getByLabelText(/Единица дозы/)),
+      "мг",
+    );
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Кратность")),
       "2 раза в сутки",
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -476,13 +495,13 @@ describe("доза числом и единицей", () => {
     );
     await user.type(await screen.findByLabelText("Препарат"), "Вальпроат");
     await user.selectOptions(
-      screen.getByLabelText(/Единица дозы/),
+      nativeSelect(screen.getByLabelText(/Единица дозы/)),
       "другая единица",
     );
     expect(screen.queryByLabelText(/Разовая доза/)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/Доза словами/), "30 мг/кг/сут");
     await user.selectOptions(
-      screen.getByLabelText("Кратность"),
+      nativeSelect(screen.getByLabelText("Кратность")),
       "2 раза в сутки",
     );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -526,8 +545,8 @@ describe("доза числом и единицей", () => {
     expect(
       await screen.findByText(/Раньше доза записывалась строкой/),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText(/Единица дозы/)).toHaveValue("");
-    expect(screen.getByLabelText(/Разовая доза/)).toHaveValue("");
+    expect(valueControl(screen.getByLabelText(/Единица дозы/))).toHaveValue("");
+    expect(valueControl(screen.getByLabelText(/Разовая доза/))).toHaveValue("");
 
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 

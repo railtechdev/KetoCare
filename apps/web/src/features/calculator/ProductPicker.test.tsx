@@ -227,7 +227,10 @@ describe("поиск продукта в калькуляторе", () => {
     render(<ProductPicker onPick={() => {}} excludeIds={[]} />, { wrapper });
     await user.type(await screen.findByLabelText(/Добавить продукт/), "масло");
 
-    await screen.findByRole("option", { name: /Масло сливочное/ });
+    await screen.findByRole("option", {
+      hidden: true,
+      name: /Масло сливочное/,
+    });
     expect(screen.queryByText(/ничего не нашлось/)).not.toBeInTheDocument();
   });
 });

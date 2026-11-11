@@ -15,6 +15,7 @@ import type { SectionSearch } from "../router";
 import { SectionRouter } from "../test/SectionRouter";
 import { SectionRoute } from "./SectionRoute";
 import type { PatientOverview } from "../features/patients/overview";
+import { nativeSelect, valueControl } from "../test/nativeSelect";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
@@ -144,7 +145,9 @@ async function switchTo(patientId: string) {
   // По подписи, а не первым полем выбора: на экране калькулятора свои
   // списки, а связь подписи с полем переключателя проверяется заодно.
   await user.selectOptions(
-    await screen.findByRole("combobox", { name: commonRu.nav.patient }),
+    nativeSelect(
+      await screen.findByRole("combobox", { name: commonRu.nav.patient }),
+    ),
     patientId,
   );
 }
@@ -165,14 +168,19 @@ describe("кабинет семьи: смена ребёнка в шапке", (
 
     await waitFor(
       () =>
-        expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("3.5"),
+        expect(
+          valueControl(screen.getByLabelText(/^Кетосоотношение/)),
+        ).toHaveValue("3.5"),
       { timeout: 5000 },
     );
 
     await switchTo(SECOND);
 
     await waitFor(
-      () => expect(screen.getByLabelText(/^Кетосоотношение/)).toHaveValue("4"),
+      () =>
+        expect(
+          valueControl(screen.getByLabelText(/^Кетосоотношение/)),
+        ).toHaveValue("4"),
       { timeout: 5000 },
     );
   }, 15000);

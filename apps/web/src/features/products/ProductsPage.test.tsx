@@ -11,6 +11,7 @@ import { SectionRouter } from "../../test/SectionRouter";
 import { currentAddress } from "../../test/address";
 import type { SectionSearch } from "../../routes/search";
 import { ProductsPage } from "./ProductsPage";
+import { nativeSelect } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -118,7 +119,10 @@ describe("справочник продуктов", () => {
 
     await screen.findByText("Продукт 1");
     await user.click(screen.getByRole("button", { name: "Вперёд" }));
-    await user.selectOptions(screen.getByLabelText("Категория"), CATEGORY_ID);
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Категория")),
+      CATEGORY_ID,
+    );
 
     expect(lastQuery.category_id).toBe(CATEGORY_ID);
     // Иначе выдача из двух строк открылась бы на седьмой странице — пустой.
@@ -130,7 +134,10 @@ describe("справочник продуктов", () => {
     renderPage();
 
     await screen.findByText("Продукт 1");
-    await user.selectOptions(screen.getByLabelText("Категория"), CATEGORY_ID);
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Категория")),
+      CATEGORY_ID,
+    );
     await waitFor(() => expect(currentAddress().category).toBe(CATEGORY_ID));
   });
 

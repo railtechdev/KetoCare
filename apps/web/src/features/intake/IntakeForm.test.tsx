@@ -7,6 +7,7 @@ import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import intakeRu from "../../locales/ru/intake.json";
 import { IntakeForm } from "./IntakeForm";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -157,7 +158,7 @@ describe("IntakeForm", () => {
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(/Как часто бывают приступы/),
+      nativeSelect(await screen.findByLabelText(/Как часто бывают приступы/)),
       "o-freq",
     );
     await user.click(screen.getByRole("button", { name: "Далее" }));
@@ -213,7 +214,7 @@ describe("свобода от приступов измеряется сроко
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.frequency),
+      nativeSelect(await screen.findByLabelText(intakeRu.fields.frequency)),
       "o-freq-none",
     );
     await user.click(screen.getByRole("button", { name: intakeRu.next }));
@@ -233,11 +234,11 @@ describe("свобода от приступов измеряется сроко
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.frequency),
+      nativeSelect(await screen.findByLabelText(intakeRu.fields.frequency)),
       "o-freq-none",
     );
     await user.selectOptions(
-      screen.getByLabelText(intakeRu.fields.lastSeizureOn),
+      nativeSelect(screen.getByLabelText(intakeRu.fields.lastSeizureOn)),
       intakeRu.lastSeizurePrecision.day,
     );
     await user.type(
@@ -288,7 +289,7 @@ describe("свобода от приступов измеряется сроко
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.frequency),
+      nativeSelect(await screen.findByLabelText(intakeRu.fields.frequency)),
       "o-freq-none",
     );
 
@@ -304,7 +305,7 @@ describe("свобода от приступов измеряется сроко
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.frequency),
+      nativeSelect(await screen.findByLabelText(intakeRu.fields.frequency)),
       "o-freq",
     );
     await user.click(screen.getByRole("button", { name: intakeRu.next }));
@@ -342,19 +343,19 @@ describe("дата последнего приступа с той точнос�
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.frequency),
+      nativeSelect(await screen.findByLabelText(intakeRu.fields.frequency)),
       "o-freq-none",
     );
     await user.selectOptions(
-      screen.getByLabelText(intakeRu.fields.lastSeizureOn),
+      nativeSelect(screen.getByLabelText(intakeRu.fields.lastSeizureOn)),
       intakeRu.lastSeizurePrecision.month,
     );
     await user.selectOptions(
-      screen.getByLabelText(intakeRu.fields.lastSeizureYear),
+      nativeSelect(screen.getByLabelText(intakeRu.fields.lastSeizureYear)),
       "2025",
     );
     await user.selectOptions(
-      screen.getByLabelText(intakeRu.fields.lastSeizureMonth),
+      nativeSelect(screen.getByLabelText(intakeRu.fields.lastSeizureMonth)),
       "март",
     );
 
@@ -368,11 +369,11 @@ describe("дата последнего приступа с той точнос�
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.lastSeizureOn),
+      nativeSelect(await screen.findByLabelText(intakeRu.fields.lastSeizureOn)),
       intakeRu.lastSeizurePrecision.year,
     );
     await user.selectOptions(
-      screen.getByLabelText(intakeRu.fields.lastSeizureYear),
+      nativeSelect(screen.getByLabelText(intakeRu.fields.lastSeizureYear)),
       "2024",
     );
 
@@ -407,7 +408,7 @@ describe("дата последнего приступа с той точнос�
     renderForm();
 
     const field = await screen.findByLabelText(intakeRu.fields.lastSeizureOn);
-    expect(field).toHaveValue("unknown");
+    expect(valueControl(field)).toHaveValue("unknown");
 
     const body = await finish(user);
     expect(body.last_seizure_precision).toBe("unknown");
@@ -419,7 +420,7 @@ describe("дата последнего приступа с той точнос�
     renderForm();
 
     await user.selectOptions(
-      await screen.findByLabelText(intakeRu.fields.lastSeizureOn),
+      nativeSelect(await screen.findByLabelText(intakeRu.fields.lastSeizureOn)),
       intakeRu.lastSeizurePrecision.year,
     );
     await user.click(screen.getByRole("button", { name: intakeRu.next }));
@@ -447,11 +448,13 @@ describe("дата последнего приступа с той точнос�
     renderForm();
 
     expect(
-      await screen.findByLabelText(intakeRu.fields.lastSeizureMonth),
+      valueControl(
+        await screen.findByLabelText(intakeRu.fields.lastSeizureMonth),
+      ),
     ).toHaveValue("3");
-    expect(screen.getByLabelText(intakeRu.fields.lastSeizureYear)).toHaveValue(
-      "2026",
-    );
+    expect(
+      valueControl(screen.getByLabelText(intakeRu.fields.lastSeizureYear)),
+    ).toHaveValue("2026");
     expect(screen.queryByLabelText(intakeRu.fields.lastSeizureDay)).toBeNull();
   });
 });

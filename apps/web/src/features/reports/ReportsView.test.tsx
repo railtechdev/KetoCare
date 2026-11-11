@@ -10,6 +10,7 @@ import reportsRu from "../../locales/ru/reports.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { currentAddress } from "../../test/address";
 import { ReportsView } from "./ReportsView";
+import { valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -167,7 +168,9 @@ describe("период отчёта — в адресе", () => {
   it("F5 возвращает период из адреса", async () => {
     renderView({ from: "2026-08-01", to: "2026-08-31" });
 
-    expect(await screen.findByLabelText(/^С/)).toHaveValue("2026-08-01");
+    expect(valueControl(await screen.findByLabelText(/^С/))).toHaveValue(
+      "2026-08-01",
+    );
     await waitFor(() =>
       expect(reportQueries()[0]).toMatchObject({
         from: "2026-08-01",

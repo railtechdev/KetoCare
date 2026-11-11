@@ -12,6 +12,7 @@ import i18n from "../../lib/i18n";
 import adminRu from "../../locales/ru/admin.json";
 import { api } from "../../lib/api";
 import { AdminPage } from "./AdminPage";
+import { nativeSelect } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -201,7 +202,10 @@ describe("AdminPage — учётные записи", () => {
     const form = within(
       screen.getByRole("button", { name: "Сохранить" }).closest("form")!,
     );
-    await user.selectOptions(form.getByLabelText("Роль"), "doctor");
+    await user.selectOptions(
+      nativeSelect(form.getByLabelText("Роль")),
+      "doctor",
+    );
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(api.PATCH).toHaveBeenCalledWith(

@@ -13,6 +13,7 @@ import { SectionRouter } from "../../test/SectionRouter";
 import { currentAddress } from "../../test/address";
 import type { FoodStandard } from "../standards/useFoodStandards";
 import { ProductsPanel } from "./ProductsPanel";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -331,7 +332,7 @@ describe("отбор по ведущему макронутриенту", () => 
 
     await screen.findByLabelText(adminRu.products.filters.macro);
     await user.selectOptions(
-      screen.getByLabelText(adminRu.products.filters.macro),
+      nativeSelect(screen.getByLabelText(adminRu.products.filters.macro)),
       "protein",
     );
 
@@ -369,7 +370,7 @@ describe("отбор по ведущему макронутриенту", () => 
     const select = await screen.findByLabelText(adminRu.products.filters.macro);
     expect(screen.queryByText(/больше всего калорий/)).not.toBeInTheDocument();
 
-    await user.selectOptions(select, "fat");
+    await user.selectOptions(nativeSelect(select), "fat");
 
     const explains = await screen.findByText(/больше всего калорий/);
     // Название макронутриента подставляется в строку: без него она читается
@@ -390,7 +391,9 @@ describe("отбор по ведущему макронутриенту", () => 
 
     const select = await screen.findByLabelText(adminRu.products.filters.macro);
     expect(
-      [...select.querySelectorAll("option")].map((o) => o.textContent),
+      [...nativeSelect(select).querySelectorAll("option")].map(
+        (o) => o.textContent,
+      ),
     ).toEqual([
       adminRu.products.filters.macroAny,
       adminRu.products.filters.macroValue.fat,
@@ -430,7 +433,9 @@ describe("отборы справочника — в адресе", () => {
     });
 
     expect(
-      await screen.findByLabelText(adminRu.products.filters.macro),
+      valueControl(
+        await screen.findByLabelText(adminRu.products.filters.macro),
+      ),
     ).toHaveValue("fat");
     expect(
       screen.getByLabelText(adminRu.products.filters.includeInactive),
@@ -450,7 +455,9 @@ describe("отборы справочника — в адресе", () => {
     renderPanel();
 
     await user.selectOptions(
-      await screen.findByLabelText(adminRu.products.filters.macro),
+      nativeSelect(
+        await screen.findByLabelText(adminRu.products.filters.macro),
+      ),
       "protein",
     );
     await waitFor(() => expect(currentAddress().macro).toBe("protein"));
@@ -515,9 +522,12 @@ describe("стандарт питания в справочнике", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await screen.findByRole("option", { name: "Меню детских садов 2025" });
+    await screen.findByRole("option", {
+      hidden: true,
+      name: "Меню детских садов 2025",
+    });
     await user.selectOptions(
-      screen.getByLabelText(adminRu.products.filters.standard),
+      nativeSelect(screen.getByLabelText(adminRu.products.filters.standard)),
       LOCKED_ID,
     );
 
@@ -597,7 +607,7 @@ describe("стандарт питания в справочнике", () => {
     expect(
       screen.getByText(adminRu.products.form.deriveGeneralTitle),
     ).toBeInTheDocument();
-    await screen.findByRole("option", { name: "Жиры" });
+    await screen.findAllByRole("option", { hidden: true, name: "Жиры" });
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() =>

@@ -1,6 +1,25 @@
-import { Input, Label, Textarea, cn } from "@ketocare/ui";
+import {
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+  cn,
+} from "@ketocare/ui";
 import { Eye, EyeOff } from "lucide-react";
-import { useState, type ComponentProps, type ReactNode } from "react";
+import {
+  Children,
+  Fragment,
+  isValidElement,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -195,6 +214,49 @@ export function Field({
 
 export const PasswordField = Field;
 
+/** Пустое значение `<option value="">` — у пункта списка кита оно запрещено. */
+const EMPTY = "__empty__";
+
+interface Choice {
+  value: string;
+  label: ReactNode;
+  disabled: boolean;
+}
+
+/** Варианты берутся из `<option>`, как у системного списка: вызовы не меняются. */
+function choicesOf(children: ReactNode): Choice[] {
+  const out: Choice[] = [];
+  Children.forEach(children, (child) => {
+    if (!isValidElement<ComponentProps<"option">>(child)) return;
+    if (child.type === Fragment) {
+      out.push(
+        ...choicesOf((child.props as { children?: ReactNode }).children),
+      );
+      return;
+    }
+    if (child.type !== "option") return;
+    out.push({
+      value: String(child.props.value ?? ""),
+      label: child.props.children,
+      disabled: child.props.disabled === true,
+    });
+  });
+  return out;
+}
+
+/**
+ * Выбор из списка — оформленный список кита (docs/PLAN_UI_ORDER_2026-11.md,
+ * этап 2): та же высота, рамка и фокус, что у поля ввода, и своё меню вместо
+ * системного.
+ *
+ * Значение живёт в скрытом системном `<select>`: его регистрирует
+ * react-hook-form (`register()`, `valueAsNumber`), он же получает событие
+ * `change` при выборе. Так устроен и сам Radix Select. Вызовы поля не меняются:
+ * варианты по-прежнему передаются `<option>`.
+ *
+ * Подпись, пояснение и ошибка связаны с кнопкой списка — её фокусирует сводка
+ * ошибок формы и её объявляет программа чтения с экрана.
+ */
 export function SelectField({
   label,
   error,
@@ -204,8 +266,54 @@ export function SelectField({
   className,
   width = "full",
   children,
+  ref,
+  onChange,
+  "aria-describedby": describedBy,
   ...props
 }: FieldBaseProps & ComponentProps<"select">) {
+  const native = useRef<HTMLSelectElement | null>(null);
+  const choices = choicesOf(children);
+  const controlled = props.value !== undefined;
+  const [current, setCurrent] = useState<string>(() =>
+    String(props.value ?? props.defaultValue ?? ""),
+  );
+
+  // Значение могли записать в обход события — `reset()` и значения по
+  // умолчанию react-hook-form ставит прямо в элемент. Сверка после каждой
+  // отрисовки дешёвая и не даёт кнопке показать устаревший выбор.
+  // Без списка зависимостей намеренно: запись в обход события не меняет ни
+  // одного пропа. Цикла нет — состояние меняется, только пока оно расходится
+  // с элементом, и после одной записи совпадает.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const value = native.current?.value;
+    if (value !== undefined && value !== current) setCurrent(value);
+  });
+
+  const shown = controlled ? String(props.value) : current;
+
+  function choose(next: string) {
+    const element = native.current;
+    // Пустую строку Radix присылает сам, когда его внутренний скрытый список
+    // ещё не знает выбранного варианта (меню закрыто, пункты не отрисованы).
+    // Это не выбор человека: пустой вариант у нас приходит как `EMPTY`, и
+    // принять "" значило бы молча стереть значение формы — так терялось
+    // кетосоотношение назначения.
+    if (next === "") return;
+    const value = next === EMPTY ? "" : next;
+    if (element === null || value === element.value) return;
+    // Сеттер прототипа, а не `element.value =`: React следит за значением
+    // управляемого элемента и иначе проглотил бы событие.
+    Object.getOwnPropertyDescriptor(
+      HTMLSelectElement.prototype,
+      "value",
+    )?.set?.call(element, value);
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    setCurrent(value);
+  }
+
+  const placeholder = choices.find((c) => c.value === "")?.label;
+
   return (
     <FieldShell
       label={label}
@@ -214,19 +322,58 @@ export function SelectField({
       optional={optional}
       id={id}
     >
-      {/* Нативный select, а не составной Select кита: он работает с
-          `register()` из react-hook-form напрямую и открывается системным
-          списком на телефоне. Составной нужен там, где требуется поиск или
-          свои строки — там он и берётся из кита отдельно. */}
       <select
-        id={id}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={getDescribedBy(id, error, hint)}
-        className={cn(FIELD_CONTROL, WIDTH_CLASS[width], className)}
         {...props}
+        id={id === undefined ? undefined : `${id}-native`}
+        ref={(element) => {
+          native.current = element;
+          if (typeof ref === "function") ref(element);
+          else if (ref) ref.current = element;
+        }}
+        onChange={(event) => {
+          setCurrent(event.target.value);
+          onChange?.(event);
+        }}
+        aria-hidden="true"
+        tabIndex={-1}
+        className="sr-only"
       >
         {children}
       </select>
+      <Select
+        value={shown === "" ? EMPTY : shown}
+        onValueChange={choose}
+        disabled={props.disabled}
+      >
+        <SelectTrigger
+          id={id}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [getDescribedBy(id, error, hint), describedBy]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+          className={cn(
+            FIELD_CONTROL,
+            "h-auto justify-between text-base shadow-none",
+            WIDTH_CLASS[width],
+            className,
+          )}
+        >
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {choices.map((choice) => (
+            <SelectItem
+              key={choice.value === "" ? EMPTY : choice.value}
+              value={choice.value === "" ? EMPTY : choice.value}
+              disabled={choice.disabled}
+            >
+              {choice.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </FieldShell>
   );
 }

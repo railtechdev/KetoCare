@@ -11,6 +11,7 @@ import { shiftIsoDate, todayIso } from "./dates";
 import { SectionRouter } from "../../test/SectionRouter";
 import { currentAddress } from "../../test/address";
 import type { SectionSearch } from "../../routes/search";
+import { valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -657,7 +658,9 @@ describe("добавление блюда", () => {
       within(dialog).getByRole("combobox", { name: /Блюдо/ }),
       "Омлет",
     );
-    await user.click(await screen.findByRole("option", { name: /Омлет/ }));
+    await user.click(
+      await screen.findByRole("option", { hidden: true, name: /Омлет/ }),
+    );
     await user.click(within(dialog).getByRole("button", { name: "Добавить" }));
     return dialog;
   }
@@ -677,9 +680,9 @@ describe("добавление блюда", () => {
       await within(dialog).findByText("День изменён в другом окне."),
     ).toBeVisible();
     expect(screen.getByRole("dialog", { name: /Приём 2/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole("combobox", { name: /Блюдо/ })).toHaveValue(
-      "Омлет на сливках",
-    );
+    expect(
+      valueControl(within(dialog).getByRole("combobox", { name: /Блюдо/ })),
+    ).toHaveValue("Омлет на сливках");
   });
 
   it("после успеха панель закрывается", async () => {

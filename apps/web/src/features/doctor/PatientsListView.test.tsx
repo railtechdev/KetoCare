@@ -13,6 +13,7 @@ import type { SectionSearch } from "../../routes/search";
 import { SessionProvider } from "../auth/session";
 import { PatientsListView } from "./PatientsListView";
 import type { Patient, PatientOverview } from "./types";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -300,11 +301,11 @@ describe("поиск и отбор реестра — в адресе", () => {
     renderList({ q: "Иван", therapy: "ended" });
 
     expect(
-      await screen.findByLabelText(doctorRu.list.search.label),
+      valueControl(await screen.findByLabelText(doctorRu.list.search.label)),
     ).toHaveValue("Иван");
-    expect(screen.getByLabelText(doctorRu.list.therapy.label)).toHaveValue(
-      "ended",
-    );
+    expect(
+      valueControl(screen.getByLabelText(doctorRu.list.therapy.label)),
+    ).toHaveValue("ended");
     await waitFor(() =>
       expect(patientQueries()).toContainEqual(
         expect.objectContaining({ q: "Иван", therapy: "ended" }),
@@ -323,13 +324,13 @@ describe("поиск и отбор реестра — в адресе", () => {
     await waitFor(() => expect(currentAddress().q).toBe("Ив"));
 
     await user.selectOptions(
-      screen.getByLabelText(doctorRu.list.therapy.label),
+      nativeSelect(screen.getByLabelText(doctorRu.list.therapy.label)),
       "ended",
     );
     await waitFor(() => expect(currentAddress().therapy).toBe("ended"));
 
     await user.selectOptions(
-      screen.getByLabelText(doctorRu.list.therapy.label),
+      nativeSelect(screen.getByLabelText(doctorRu.list.therapy.label)),
       "active",
     );
     await waitFor(() => expect(currentAddress().therapy).toBeUndefined());

@@ -82,7 +82,9 @@ function renderForm() {
 
 async function addButter(user: ReturnType<typeof userEvent.setup>) {
   await user.type(await screen.findByLabelText(/Добавить продукт/), "масло");
-  await user.click(await screen.findByRole("option", { name: /Масло/ }));
+  await user.click(
+    await screen.findByRole("option", { hidden: true, name: /Масло/ }),
+  );
 }
 
 beforeEach(() => {
