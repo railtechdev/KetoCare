@@ -16,7 +16,10 @@ vi.mock("../../lib/api", async (importOriginal) => {
 vi.mock("../patients/usePatient", () => ({
   usePatient: () => ({ data: { birth_date: "2020-01-15" } }),
 }));
-let weight: { weight_kg: number } | null = { weight_kg: 18 };
+let weight: { weight_kg: number; occurred_at: string } | null = {
+  weight_kg: 18,
+  occurred_at: "2026-11-01T09:00:00Z",
+};
 vi.mock("../patients/overview", () => ({
   usePatientOverview: () => ({ data: { last_weight: weight } }),
 }));
@@ -37,7 +40,7 @@ function renderHint(onApply = vi.fn()) {
 
 describe("калорийность по весу и возрасту", () => {
   it("показывает диапазон и подставляет его середину", async () => {
-    weight = { weight_kg: 18 };
+    weight = { weight_kg: 18, occurred_at: "2026-11-01T09:00:00Z" };
     (api.POST as Mock).mockResolvedValue({
       data: {
         kcal_min: 1170,

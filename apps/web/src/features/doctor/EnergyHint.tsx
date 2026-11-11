@@ -1,4 +1,9 @@
-import { Button, formatKcal, formatWeight } from "@ketocare/ui";
+import {
+  Button,
+  formatKcal,
+  formatOccurredAt,
+  formatWeight,
+} from "@ketocare/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
@@ -57,7 +62,21 @@ export function EnergyHint({
       </p>
     );
   }
-  if (range.data === undefined || years === null) return null;
+  if (years === null) {
+    return (
+      <p className="m-0 text-sm text-muted-foreground">
+        {t("prescription.energy.noBirthDate")}
+      </p>
+    );
+  }
+  if (range.isError) {
+    return (
+      <p className="m-0 text-sm text-muted-foreground">
+        {t("prescription.energy.failed")}
+      </p>
+    );
+  }
+  if (range.data === undefined) return null;
 
   const middle =
     Math.round((range.data.kcal_min + range.data.kcal_max) / 20) * 10;
@@ -67,6 +86,8 @@ export function EnergyHint({
       <p className="m-0">
         {t("prescription.energy.range", {
           weight: formatWeight(weight.weight_kg),
+          // Дата взвешивания рядом: по устаревшему весу подставили бы не то.
+          at: formatOccurredAt(new Date(weight.occurred_at)),
           age: t("age.years", { count: years }),
           min: formatKcal(range.data.kcal_min),
           max: formatKcal(range.data.kcal_max),
