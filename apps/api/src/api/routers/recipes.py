@@ -32,7 +32,7 @@ from ..ratelimit import IMPORT_RATE_LIMIT, limiter
 from ..schemas import ImportRowError, Page
 from ..schemas_recipes import RecipeRead, RecipeWrite
 from ..services import attachments as files_service
-from ..services import recipe_import, uploads
+from ..services import recipe_import, spreadsheet, uploads
 from ..services import recipes as recipes_service
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
@@ -543,6 +543,11 @@ async def import_recipes(
     """
 
     content = await uploads.read_within_limit(file)
+    if spreadsheet.is_xlsx(content):
+        try:
+            content = spreadsheet.xlsx_to_csv(content)
+        except spreadsheet.SpreadsheetError as exc:
+            raise ApiError(ErrorCode.VALIDATION_ERROR, str(exc)) from exc
     report = recipe_import.parse_csv(content)
     errors = [
         ImportRowError(line=e.line, column=e.column, message=e.message) for e in report.errors
