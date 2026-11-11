@@ -12,6 +12,7 @@ import {
   groupViewsFor,
   isPatientView,
 } from "../features/doctor/patientViews";
+import { FamilyPrintButton } from "../features/doctor/FamilyPrintButton";
 import { PatientViewLink } from "../features/doctor/PatientViewLink";
 import { usePatient } from "../features/patients/usePatient";
 
@@ -60,6 +61,7 @@ export function PatientViewRoute() {
       // Плотность объявляется один раз на экран и наследуется блоками
       // (правило П26 канона).
       density="compact"
+      actions={<FamilyPrintButton patientId={patient.data.id} />}
     >
       {/* Ключ — пациент. Переключатель в шапке карты меняет пациента в адресе,
           а раздел оставляет, и без ключа React сохранял экран раздела вместе с
