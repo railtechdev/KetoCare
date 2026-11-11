@@ -284,4 +284,19 @@ describe("сборка рабочего справочника", () => {
       }),
     );
   });
+
+  it("все строки на проверку подтверждаются одной кнопкой и так же снимаются", async () => {
+    const user = userEvent.setup();
+    renderSection({ tab: "standards", kind: "merge", standard: CLINIC.id });
+
+    const all = await screen.findByRole("button", {
+      name: labels.acceptAll.replace("{{count}}", "1"),
+    });
+    await user.click(all);
+    const odd = screen.getByText(ODD.name_ru).closest("tr") as HTMLElement;
+    expect(within(odd).getByRole("checkbox")).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: labels.acceptNone }));
+    expect(within(odd).getByRole("checkbox")).not.toBeChecked();
+  });
 });
