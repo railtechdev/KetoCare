@@ -31,7 +31,8 @@ export const RECIPE_CATEGORIES = [
  * Скрытие кнопок — только UX: сами ручки закрыты `require_roles` на сервере
  * (правило 5 CLAUDE.md), и обход проверки в браузере ничего не даёт.
  */
-const RECIPE_EDITOR_ROLES: readonly Role[] = ["admin", "dietitian"];
+// Врач создаёт рецепты наравне с диетологом (ADR-0063).
+const RECIPE_EDITOR_ROLES: readonly Role[] = ["admin", "dietitian", "doctor"];
 
 export function canEditRecipes(role: Role | undefined): boolean {
   return role !== undefined && RECIPE_EDITOR_ROLES.includes(role);

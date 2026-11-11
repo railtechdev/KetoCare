@@ -333,7 +333,8 @@ class RecipeDraftResponse(BaseModel):
     "/recipe-draft",
     response_model=RecipeDraftResponse,
     summary="Черновик способа приготовления",
-    dependencies=[Depends(require_roles(UserRole.ADMIN, UserRole.DIETITIAN))],
+    # Тот же круг, что у правки рецептов (ADR-0063).
+    dependencies=[Depends(require_roles(UserRole.ADMIN, UserRole.DIETITIAN, UserRole.DOCTOR))],
 )
 @limiter.limit(AI_RATE_LIMIT)
 async def draft_recipe(

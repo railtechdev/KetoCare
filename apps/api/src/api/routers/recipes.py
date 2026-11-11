@@ -37,7 +37,8 @@ from ..services import recipes as recipes_service
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
-_EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN)
+# Врач — редактор наравне с диетологом (ADR-0063, отступление от раздела 5.3 ТЗ).
+_EDITOR_ROLES = (UserRole.ADMIN, UserRole.DIETITIAN, UserRole.DOCTOR)
 
 
 def _visible_statuses(user: CurrentUser) -> tuple[RecipeStatus, ...] | None:
