@@ -154,6 +154,27 @@ describe("карточка продукта", () => {
     expect(screen.getByText("из стандарта «СанПиН 2025»")).toBeInTheDocument();
   });
 
+  it("прочерк источника — «нет данных», а не ноль; отходы — процентом", async () => {
+    // ADR-0067: в таблице Минздрава РУз у мяса прочерк в углеводах, и ноль
+    // в колонке значит «источник не приводит», а не «углеводов нет».
+    (api.GET as Mock).mockImplementation(async () => ({
+      data: {
+        ...PRODUCT,
+        name_ru: "Говядина I категории",
+        carbs_100g: 0,
+        fiber_known: false,
+        unknown_fields: ["carbs_100g", "fiber_100g"],
+        waste_pct: 25,
+      },
+      error: undefined,
+      response: { status: 200 },
+    }));
+    renderCard();
+
+    expect(await screen.findByText("Отходы: 25 %")).toBeInTheDocument();
+    expect(screen.getAllByText(productsRu.card.noData)).toHaveLength(2);
+  });
+
   it("показывает происхождение значений, а не только числа", async () => {
     // Раньше `source_version` и дату сверки видел только администратор в форме
     // правки — при том что именно они отвечают на вопрос, можно ли доверять

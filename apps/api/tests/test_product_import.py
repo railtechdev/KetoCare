@@ -275,3 +275,77 @@ class TestSeedFile:
 
         assert report.ok, report.errors[:5]
         assert report.total_rows == 36
+
+    def test_source_files_import_into_reference_standards(self) -> None:
+        """Файлы источников (ADR-0067, `docs/import/sources`) грузятся в справочник-источник.
+
+        Минздрав РУз — с прочерками (34 в углеводах, 8 в жирах, клетчатки нет
+        вовсе); в рабочий справочник такой файл не пройдёт. USDA связывается с
+        Минздравом по названию: каждое название USDA есть в файле Минздрава.
+        """
+
+        sources = Path(__file__).resolve().parents[3] / "docs" / "import" / "sources"
+        mz = parse_csv((sources / "mz-ruz.csv").read_bytes(), allow_unknown=True)
+        usda = parse_csv((sources / "usda-sr-legacy.csv").read_bytes(), allow_unknown=True)
+
+        assert mz.ok, mz.errors[:5]
+        assert usda.ok, usda.errors[:5]
+        assert mz.total_rows == 77
+        unknown = [field for row in mz.valid_rows for field in row.values["unknown_fields"]]
+        assert unknown.count("carbs_100g") == 34
+        assert unknown.count("fat_100g") == 8
+        assert unknown.count("fiber_100g") == 77
+        assert not parse_csv((sources / "mz-ruz.csv").read_bytes()).ok
+        mz_names = {row.values["name_ru"] for row in mz.valid_rows}
+        assert {row.values["name_ru"] for row in usda.valid_rows} <= mz_names
+
+
+class TestUnknownValues:
+    """Прочерк источника — пустая ячейка, только для справочника-источника (ADR-0067)."""
+
+    ROW = "Говядина,Белковые,218,7,18.9,,,МЗ РУз,действующая редакция,2026-11-11"
+
+    def test_empty_value_is_an_error_by_default(self) -> None:
+        report = parse_csv(_csv(self.ROW))
+        assert {e.column for e in report.errors} == {"carbs_100g", "fiber_100g"}
+
+    def test_reference_records_unknown_as_zero(self) -> None:
+        report = parse_csv(_csv(self.ROW), allow_unknown=True)
+        assert report.ok, report.errors
+        values = report.valid_rows[0].values
+        assert values["unknown_fields"] == ["carbs_100g", "fiber_100g"]
+        assert values["carbs_100g"] == 0.0
+
+    def test_kcal_is_never_unknown(self) -> None:
+        report = parse_csv(
+            _csv("Говядина,Белковые,,7,18.9,0,0,МЗ РУз,1,2026-11-11"), allow_unknown=True
+        )
+        assert [e.column for e in report.errors] == ["kcal_100g"]
+
+    def test_fiber_over_unknown_carbs_is_not_compared(self) -> None:
+        report = parse_csv(_csv("Лук,Овощи,20,0.1,1,,2,МЗ РУз,1,2026-11-11"), allow_unknown=True)
+        assert report.ok, report.errors
+
+    def test_known_values_have_empty_unknown_list(self) -> None:
+        assert parse_csv(_csv(GOOD_ROW)).valid_rows[0].values["unknown_fields"] == []
+
+
+class TestWaste:
+    HEADER_W = HEADER + ",waste_pct"
+
+    def _csv(self, waste: str) -> bytes:
+        return f"{self.HEADER_W}\n{GOOD_ROW},{waste}\n".encode()
+
+    def test_waste_parsed(self) -> None:
+        report = parse_csv(self._csv('"25,5"'))
+        assert report.ok, report.errors
+        assert report.valid_rows[0].values["waste_pct"] == 25.5
+
+    def test_empty_waste_is_not_set(self) -> None:
+        report = parse_csv(self._csv(""))
+        assert "waste_pct" not in report.valid_rows[0].values
+
+    @pytest.mark.parametrize("waste", ["-1", "100", "много"])
+    def test_bad_waste_rejected(self, waste: str) -> None:
+        report = parse_csv(self._csv(waste))
+        assert [e.column for e in report.errors] == ["waste_pct"]

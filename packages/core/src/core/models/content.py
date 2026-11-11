@@ -4,9 +4,21 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -107,6 +119,13 @@ class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
             unique=True,
         ),
         Index("ix_products_food_id", "food_id"),
+        CheckConstraint(
+            "jsonb_typeof(unknown_fields) = 'array'", name="ck_products_unknown_fields_is_array"
+        ),
+        CheckConstraint(
+            "waste_pct IS NULL OR (waste_pct >= 0 AND waste_pct < 100)",
+            name="ck_products_waste_pct_range",
+        ),
     )
 
     standard_id: Mapped[uuid.UUID] = mapped_column(
@@ -164,6 +183,17 @@ class Product(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     counts_in_calculation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
+    #: Поля значения, которых в источнике нет (прочерк в таблице, ADR-0067):
+    #: в числовой колонке лежит 0, но это «нет данных», а не ноль. Заполняет
+    #: импорт в справочник-источник (`kind = reference`); слияние берёт такие
+    #: поля из следующего источника.
+    unknown_fields: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    #: Отходы при холодной обработке, % массы брутто — как их приводит источник.
+    #: Значения продукта при этом на 100 г съедобной части; ядро отходы не
+    #: учитывает, число стоит рядом для того, кто закупает и взвешивает.
+    waste_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
 
 
 class ProductRevision(Base, UUIDPkMixin):

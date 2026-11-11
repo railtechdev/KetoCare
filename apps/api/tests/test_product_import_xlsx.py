@@ -49,6 +49,18 @@ def test_first_sheet_becomes_csv_with_iso_dates_and_plain_numbers():
     assert len(text.splitlines()) == 2
 
 
+def test_empty_cells_stay_empty_for_unknown_values():
+    """Прочерк источника в Excel — пустая ячейка, и в CSV она остаётся пустой (ADR-0067)."""
+
+    content = _book(
+        [*HEADER, "waste_pct"],
+        ["Говядина", "Белковые", 218, 7, 18.9, None, None, "МЗ РУз", "1", "2026-11-11", 25],
+    )
+
+    lines = spreadsheet.xlsx_to_csv(content).decode().splitlines()
+    assert lines[1] == "Говядина,Белковые,218,7,18.9,,,МЗ РУз,1,2026-11-11,25"
+
+
 def test_broken_zip_is_a_clear_error():
     with pytest.raises(spreadsheet.SpreadsheetError):
         spreadsheet.xlsx_to_csv(b"PK\x03\x04garbage")

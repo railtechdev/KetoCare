@@ -446,6 +446,12 @@ class ProductRead(ProductBase):
     #: Ключ — поле значения (`kcal_100g` …). Нет ключа — число подписано
     #: источником всей строки (`source` / `source_version`).
     value_sources: dict[str, ProductValueSourceRead] = Field(default_factory=dict)
+    #: Поля значения, которых в источнике нет (прочерк, ADR-0067): число в них
+    #: 0, но показывать его надо как «нет данных».
+    unknown_fields: list[str] = Field(default_factory=list)
+    #: Отходы при холодной обработке, % массы брутто, — как приводит источник.
+    #: Значения выше — на 100 г съедобной части.
+    waste_pct: float | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -1,4 +1,5 @@
 import {
+  formatMass,
   formatPerGram,
   AsyncSection,
   Badge,
@@ -87,6 +88,13 @@ export function ProductCard({
     });
   };
 
+  // Прочерк в источнике (ADR-0067): в числе лежит 0, но это «нет данных», и
+  // напечатать ноль значило бы утверждать то, чего источник не утверждал.
+  const valueOf = (detail: ProductDetail, field: ValueField): string =>
+    detail.unknown_fields?.includes(field)
+      ? t("card.noData")
+      : formatPerGram(detail[field]);
+
   return (
     <PageLayout
       title={data?.name_ru ?? t("card.titleFallback")}
@@ -158,7 +166,7 @@ export function ProductCard({
                   label={t("card.perGramRows.kcal")}
                   value={
                     <ValueWithSource
-                      value={formatPerGram(data.kcal_100g)}
+                      value={valueOf(data, "kcal_100g")}
                       source={sourceNote(data, "kcal_100g")}
                     />
                   }
@@ -167,7 +175,7 @@ export function ProductCard({
                   label={t("card.perGramRows.fat")}
                   value={
                     <ValueWithSource
-                      value={formatPerGram(data.fat_100g)}
+                      value={valueOf(data, "fat_100g")}
                       source={sourceNote(data, "fat_100g")}
                     />
                   }
@@ -176,7 +184,7 @@ export function ProductCard({
                   label={t("card.perGramRows.protein")}
                   value={
                     <ValueWithSource
-                      value={formatPerGram(data.protein_100g)}
+                      value={valueOf(data, "protein_100g")}
                       source={sourceNote(data, "protein_100g")}
                     />
                   }
@@ -185,7 +193,7 @@ export function ProductCard({
                   label={t("card.perGramRows.carbs")}
                   value={
                     <ValueWithSource
-                      value={formatPerGram(data.carbs_100g)}
+                      value={valueOf(data, "carbs_100g")}
                       source={sourceNote(data, "carbs_100g")}
                     />
                   }
@@ -195,8 +203,9 @@ export function ProductCard({
                   value={
                     <ValueWithSource
                       value={
-                        data.fiber_known
-                          ? formatPerGram(data.fiber_100g)
+                        data.fiber_known ||
+                        data.unknown_fields?.includes("fiber_100g")
+                          ? valueOf(data, "fiber_100g")
                           : t("card.fiberUnknown")
                       }
                       source={sourceNote(data, "fiber_100g")}
@@ -204,6 +213,13 @@ export function ProductCard({
                   }
                 />
               </FactList>
+              {/* Отходы при обработке — как их приводит источник; числа выше
+                  на съедобную часть. */}
+              {data.waste_pct != null && (
+                <p className="text-muted-foreground">
+                  {t("card.waste", { value: formatMass(data.waste_pct) })}
+                </p>
+              )}
             </Section>
 
             {/* Паспорт записи. Раньше эти три поля видел только администратор в

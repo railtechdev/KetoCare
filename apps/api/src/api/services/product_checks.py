@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -93,8 +94,20 @@ def expected_kcal(values: Values) -> float:
     )
 
 
-def check(values: Values) -> list[ProductAnomaly]:
-    """Все находки по продукту, от самой определённой к самой спорной."""
+#: Поля, из которых складывается калорийность по 9 — 4 — 4.
+_ENERGY_FIELDS = frozenset({"fat_100g", "protein_100g", "carbs_100g"})
+
+
+def check(values: Values, *, unknown: Collection[str] = ()) -> list[ProductAnomaly]:
+    """Все находки по продукту, от самой определённой к самой спорной.
+
+    `unknown` — поля, которых в источнике нет (прочерк, ADR-0067): в числе там
+    0, и это «нет данных», а не ноль. Если такое поле входит в 9 — 4 — 4,
+    сверка калорийности не проводится: расчётная вышла бы занижена на
+    неизвестную величину, и пометка ничего бы не сообщала. Строка не
+    отклоняется — пробел закроет слияние со следующим источником, и сверка
+    пройдёт уже по собранной строке.
+    """
 
     found: list[ProductAnomaly] = []
 
@@ -115,6 +128,9 @@ def check(values: Values) -> list[ProductAnomaly]:
 
     if values.kcal > KCAL_MAX:
         found.append(ProductAnomaly(Anomaly.KCAL_RANGE, {"kcal": round(values.kcal, 2)}))
+
+    if _ENERGY_FIELDS.intersection(unknown):
+        return found
 
     if macro_sum == 0 and values.kcal > 0:
         # Калории без единого макронутриента: либо колонки пусты, либо продукт

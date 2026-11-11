@@ -47,6 +47,8 @@ _SNAPSHOT_FIELDS = (
     "is_active",
     "counts_in_calculation",
     "fiber_known",
+    "unknown_fields",
+    "waste_pct",
 )
 
 
@@ -60,6 +62,8 @@ def _snapshot(product: Product) -> dict[str, Any]:
             value = str(value)
         elif isinstance(value, date | datetime):
             value = value.isoformat()
+        elif isinstance(value, list):
+            value = list(value)
         elif value is not None and not isinstance(value, str | int | float | bool):
             value = float(value)  # Numeric -> Decimal
         result[field] = value
@@ -277,8 +281,10 @@ async def update(
     previous_name = product.name_ru
     # Вписанная клетчатка перестаёт быть неизвестной, иначе экран показывал бы
     # «не указана» рядом с числом, которое по-настоящему идёт в расчёт.
+    # Явное `fiber_known` вызывающего сильнее: импорт источника с прочерком в
+    # клетчатке пишет 0 и «неизвестно» одновременно.
     if "fiber_100g" in fields and fiber_differs(product.fiber_100g, fields["fiber_100g"]):
-        fields["fiber_known"] = True
+        fields.setdefault("fiber_known", True)
     for key, value in fields.items():
         setattr(product, key, value)
     await session.flush()
@@ -541,6 +547,8 @@ class ProductValues:
     protein_100g: float
     carbs_100g: float
     fiber_100g: float
+    #: Поля, которых в источнике нет (прочерк): число 0 в них — «нет данных».
+    unknown_fields: tuple[str, ...] = ()
 
 
 async def list_values(session: AsyncSession) -> list[ProductValues]:
@@ -564,6 +572,7 @@ async def list_values(session: AsyncSession) -> list[ProductValues]:
             Product.protein_100g,
             Product.carbs_100g,
             Product.fiber_100g,
+            Product.unknown_fields,
         ).order_by(Product.name_ru)
     )
     return [
@@ -576,6 +585,7 @@ async def list_values(session: AsyncSession) -> list[ProductValues]:
             protein_100g=float(row[5]),
             carbs_100g=float(row[6]),
             fiber_100g=float(row[7]),
+            unknown_fields=tuple(row[8] or ()),
         )
         for row in rows
     ]

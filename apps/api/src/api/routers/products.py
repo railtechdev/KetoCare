@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -409,7 +410,9 @@ class ProductValuesCheck(BaseModel):
     fiber_100g: Annotated[float, Field(ge=0, le=1000)] = 0
 
 
-def _anomalies_of(values: ProductValuesCheck | dict[str, Any]) -> list[ProductAnomalyRead]:
+def _anomalies_of(
+    values: ProductValuesCheck | dict[str, Any], *, unknown: Collection[str] = ()
+) -> list[ProductAnomalyRead]:
     """Находки по значениям — одна дорога для списка, карточки и импорта."""
 
     raw = values.model_dump() if isinstance(values, BaseModel) else values
@@ -422,7 +425,8 @@ def _anomalies_of(values: ProductValuesCheck | dict[str, Any]) -> list[ProductAn
                 protein=float(raw["protein_100g"]),
                 carbs=float(raw["carbs_100g"]),
                 fiber=float(raw.get("fiber_100g") or 0),
-            )
+            ),
+            unknown=unknown,
         )
     ]
 
@@ -476,7 +480,8 @@ async def list_anomalies(
                         "protein_100g": row.protein_100g,
                         "carbs_100g": row.carbs_100g,
                         "fiber_100g": row.fiber_100g,
-                    }
+                    },
+                    unknown=row.unknown_fields,
                 ),
             )
             for row in rows
@@ -587,16 +592,20 @@ async def update_product(
     before = ProductRead.model_validate(product).model_dump(mode="json")
     # Поправленное число подписывается автором правки; нетронутые сохраняют
     # прежнее происхождение. Словарь новый — изменение JSONB на месте ORM не видит.
+    changed = _changed_values(product, payload)
     value_sources = {
         **(product.value_sources or {}),
-        **{field: _manual_source(user.id) for field in _changed_values(product, payload)},
+        **{field: _manual_source(user.id) for field in changed},
     }
+    # Вписанное человеком число перестаёт быть «нет данных».
+    unknown_fields = [field for field in product.unknown_fields or [] if field not in changed]
     try:
         updated = await products_repo.update(
             session,
             product=product,
             changed_by=user.id,
             value_sources=value_sources,
+            unknown_fields=unknown_fields,
             **payload.model_dump(),
         )
     except products_repo.StandardLockedError as error:
@@ -729,6 +738,9 @@ async def derive_product(
             # Клетчатка известна, если её знал источник или её вписали в копии.
             fiber_known=source.fiber_known or fiber_changed,
             value_sources=value_sources,
+            # Прочерк источника остаётся прочерком, пока число не вписали.
+            unknown_fields=[field for field in source.unknown_fields or [] if field not in changed],
+            waste_pct=source.waste_pct,
             **fields,
         )
         await session.flush()
@@ -753,6 +765,8 @@ async def derive_product(
             "food_id": str(product.food_id),
             "fiber_known": product.fiber_known,
             "value_sources": value_sources,
+            "unknown_fields": product.unknown_fields,
+            "waste_pct": float(product.waste_pct) if product.waste_pct is not None else None,
         },
     )
     return await _labelled_read_for(session, user, product)
@@ -853,7 +867,9 @@ async def import_products(
         except spreadsheet.SpreadsheetError as exc:
             raise ApiError(ErrorCode.VALIDATION_ERROR, str(exc)) from exc
 
-    report = parse_csv(content)
+    # Пустая ячейка значения — «нет данных» — допустима только в
+    # справочнике-источнике (ADR-0067): рабочий справочник требует числа.
+    report = parse_csv(content, allow_unknown=standard.kind is FoodStandardKind.REFERENCE)
     errors = [
         ImportRowError(line=e.line, column=e.column, message=e.message) for e in report.errors
     ]
@@ -884,7 +900,7 @@ async def import_products(
             [*report.valid_rows, *(matched if update_existing else [])],
             key=lambda item: item.line,
         )
-        for anomaly in _anomalies_of(row.values)
+        for anomaly in _anomalies_of(row.values, unknown=row.values["unknown_fields"])
         if anomaly.kind == product_checks.Anomaly.KCAL_MISMATCH
     ]
 
@@ -949,6 +965,9 @@ async def import_products(
         category = await products_repo.get_or_create_category(
             session, name_ru=values.pop("category")
         )
+        if "fiber_100g" in values["unknown_fields"]:
+            # Прочерк в клетчатке — тот же случай, что источник без клетчатки.
+            values["fiber_known"] = False
         await products_repo.create(
             session,
             changed_by=user.id,
@@ -966,6 +985,12 @@ async def import_products(
             session, name_ru=values.pop("category")
         )
         product = existing[_key(row)]
+        if "fiber_100g" in values["unknown_fields"]:
+            values["fiber_known"] = False
+        elif "fiber_100g" in (product.unknown_fields or []):
+            # Прежде прочерк, теперь число: клетчатка стала известной, даже
+            # если число совпало с нулём, который лежал на месте прочерка.
+            values["fiber_known"] = True
         before = ProductRead.model_validate(product).model_dump(mode="json")
         # Импорт подписывает всю строку своим источником: прежние пометки
         # отдельных чисел описывали бы уже не те значения.
@@ -1030,6 +1055,9 @@ _IMPORT_FIELDS = (
     "verified_at",
     # Только когда колонка в файле есть и ячейка не пуста (`product_import`).
     "counts_in_calculation",
+    "waste_pct",
+    # Поля с прочерком в источнике: тот же 0 в числе, но другое утверждение.
+    "unknown_fields",
 )
 
 
@@ -1066,6 +1094,9 @@ def _format_value(value: object) -> str:
     if isinstance(value, bool):
         # Отметка «учитывается в расчёте» — словами, как её и пишут в файле.
         return "да" if value else "нет"
+    if isinstance(value, list):
+        # Поля без данных — именами колонок файла, как их видит загружающий.
+        return ", ".join(str(item) for item in value)
     if isinstance(value, Decimal | float | int) and not isinstance(value, bool):
         return f"{float(value):g}"
     return str(value)
