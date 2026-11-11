@@ -158,8 +158,12 @@ export function AppLayout() {
             tabIndex={-1}
             className="p-4 pb-24 outline-none sm:p-6 md:pb-6 xl:px-8"
           >
-            <AccountNotices userId={session.userId} />
-            <Outlet />
+            {/* Один предел ширины на весь кабинет, по центру: на мониторе шире
+                предела поля слева и справа равны, а не одна пустота справа. */}
+            <div className="mx-auto w-full max-w-shell">
+              <AccountNotices userId={session.userId} />
+              <Outlet />
+            </div>
           </main>
         </div>
 

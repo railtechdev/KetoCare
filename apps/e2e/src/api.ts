@@ -88,7 +88,29 @@ export async function clearMenu(
   patientId: string,
   date: string,
 ): Promise<void> {
-  await request.delete(`/api/v1/patients/${patientId}/menus?date=${date}`);
+  // Сервер не удаляет день с отметкой «съедено» (409): отметка — запись
+  // семьи о том, что ребёнок ел. Прошлый прогон её оставил, поэтому сначала
+  // отметки снимаются. Без этого блюда копились от прогона к прогону, и
+  // повторный локальный запуск падал на трёх одинаковых флажках.
+  const base = `/api/v1/patients/${patientId}/menus`;
+  const day = await request.get(`${base}?date=${date}`);
+  if (day.ok()) {
+    const menu = (await day.json()) as {
+      items?: { id: string; eaten: boolean }[];
+    };
+    for (const item of menu.items ?? []) {
+      if (!item.eaten) continue;
+      await request.post(`${base}/items/${item.id}/eaten`, {
+        data: { eaten: false },
+      });
+    }
+  }
+  const removed = await request.delete(`${base}?date=${date}`);
+  if (!removed.ok() && removed.status() !== 404) {
+    throw new Error(
+      `День не очищен: ${removed.status()} ${await removed.text()}`,
+    );
+  }
 }
 
 /**

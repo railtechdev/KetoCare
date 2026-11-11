@@ -17,8 +17,8 @@ export interface PageLayoutProps {
    * Ширина — роль страницы, а не число (правило П34 канона):
    *
    * - `form` (42rem) — форма и связный текст: длинная строка читается плохо;
-   * - `content` (72rem) — одна колонка содержимого, умолчание;
-   * - `wide` (96rem) — таблица и список: страница, на которой работают;
+   * - `content` (72rem) — одна колонка текста, который читают;
+   * - `wide` — вся рабочая область, умолчание: страница, на которой работают;
    * - `full` — предела нет, ширину задают колонки внутри (панель, сводка).
    */
   width?: "form" | "content" | "wide" | "full";
@@ -35,7 +35,10 @@ export interface PageLayoutProps {
 const WIDTH = {
   form: "max-w-form",
   content: "max-w-content",
-  wide: "max-w-wide",
+  // Рабочая страница занимает всю рабочую область: предел у области один на
+  // весь кабинет (`max-w-shell` в `AppLayout`), и граница содержимого не
+  // прыгает между разделами (docs/PLAN_UI_ORDER_2026-11.md, правило 1).
+  wide: "max-w-none",
   full: "max-w-none",
 } as const;
 
@@ -57,7 +60,7 @@ export function PageLayout({
   actions,
   onBack,
   backLabel,
-  width = "content",
+  width = "wide",
   density = "comfortable",
   children,
 }: PageLayoutProps) {

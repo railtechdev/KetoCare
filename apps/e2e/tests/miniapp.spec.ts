@@ -59,6 +59,11 @@ test("семья из Telegram собирает вчерашний день и �
   // Блюдо заводит семья, а не врач: своих блюд у врача нет (ADR-0027), и сид
   // их не сеет — их создаёт тот, кто готовит.
   await ensureDish(parentPage.request, patient, DISH);
+  // Хвост прошлого прогона: план на вчера остался бы, и «Собрать день» легло
+  // бы поверх — тест проверял бы историю запусков, а не результат. Чистит
+  // семья: отметку «съедено» снимает только она, а день с отметкой сервер не
+  // удаляет.
+  await clearMenu(parentPage.request, patient, yesterday());
   await parentPage.close();
 
   const doctorPage = await page.context().newPage();
@@ -66,9 +71,6 @@ test("семья из Telegram собирает вчерашний день и �
   const doctor = doctorPage.request;
   const targets = await ensurePrescription(doctor, patient);
   await ensureTelegramLink(doctor, patient);
-  // Хвост прошлого прогона: план на вчера остался бы, и «Собрать день» легло
-  // бы поверх — тест проверял бы историю запусков, а не результат.
-  await clearMenu(doctor, patient, yesterday());
   await doctorPage.close();
 
   // Предусловия израсходовали часть лимита на `telegram-init` — дальше идёт
