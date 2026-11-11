@@ -99,6 +99,12 @@ export interface FilterSearch {
   category?: string;
   /** Справочник продуктов: стандарт питания; без параметра — основной */
   standard?: string;
+  /**
+   * Сборка рабочего справочника (ADR-0068): стандарты-источники по порядку,
+   * идентификаторы через запятую. В адресе — потому что от порядка зависит
+   * каждое число превью, и ссылка коллеге обязана показать то же самое.
+   */
+  sources?: string;
   /** Справочник продуктов: ведущий макронутриент */
   macro?: "fat" | "protein" | "carbs";
   /** Справочник продуктов: показывать выведенные из оборота */
@@ -115,6 +121,9 @@ export interface FilterSearch {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** До десяти идентификаторов через запятую — столько источников принимает API. */
+const UUID_LIST =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}){0,9}$/i;
 const RATIO_BOUND = /^\d{1,2}(?:[.,]\d{1,2})?$/;
 
 /** Календарная дата, которая существует: `2026-02-30` — не дата, а опечатка. */
@@ -164,6 +173,7 @@ function validateFilters(search: Record<string, unknown>): FilterSearch {
     therapy: search.therapy === "ended" ? ("ended" as const) : undefined,
     category: matching(search.category, /^[\w-]{1,64}$/),
     standard: matching(search.standard, UUID),
+    sources: matching(search.sources, UUID_LIST),
     macro: (["fat", "protein", "carbs"] as const).find(
       (value) => value === search.macro,
     ),

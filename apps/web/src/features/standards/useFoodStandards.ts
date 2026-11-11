@@ -92,3 +92,56 @@ export function useLockStandardMutation() {
     onSuccess: invalidate,
   });
 }
+
+export type CatalogueMergeResult =
+  components["schemas"]["CatalogueMergeResult"];
+export type CatalogueMergeRow = components["schemas"]["CatalogueMergeRow"];
+export type CatalogueMergeField = components["schemas"]["CatalogueMergeField"];
+
+async function postMerge(
+  targetId: string,
+  body: components["schemas"]["CatalogueMergeRequest"],
+): Promise<CatalogueMergeResult> {
+  const { data, error } = await api.POST(
+    "/api/v1/food-standards/{standard_id}/merge",
+    { params: { path: { standard_id: targetId } }, body },
+  );
+  if (error || !data) throw error ?? new Error("Empty merge response");
+  return data;
+}
+
+/**
+ * Превью слияния источников в рабочий справочник (ADR-0068).
+ *
+ * Запрос — POST, но ничего не пишет (`dry_run`): это чтение, и живёт оно как
+ * запрос, а не как мутация — после F5 экран сверки восстанавливается сам.
+ */
+export function useCatalogueMergePreview(
+  targetId: string,
+  sourceIds: readonly string[],
+) {
+  return useQuery({
+    queryKey: ["products", "standards", "merge", targetId, ...sourceIds],
+    enabled: sourceIds.length > 0,
+    queryFn: () =>
+      postMerge(targetId, {
+        source_ids: [...sourceIds],
+        accept: [],
+        dry_run: true,
+      }),
+  });
+}
+
+export function useApplyCatalogueMergeMutation(targetId: string) {
+  const invalidate = useStandardsInvalidation();
+
+  return useMutation({
+    mutationFn: (body: { sourceIds: readonly string[]; accept: string[] }) =>
+      postMerge(targetId, {
+        source_ids: [...body.sourceIds],
+        accept: body.accept,
+        dry_run: false,
+      }),
+    onSuccess: invalidate,
+  });
+}

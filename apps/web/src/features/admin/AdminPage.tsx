@@ -11,7 +11,7 @@ import { ProductAnomaliesPanel } from "./ProductAnomaliesPanel";
 import { ProductsPanel } from "./ProductsPanel";
 import { ProductCategoriesPanel } from "../products/ProductCategoriesPanel";
 import { DEFAULT_FOOD_STANDARD_ID } from "../standards/useFoodStandards";
-import { StandardsPanel } from "../standards/StandardsPanel";
+import { StandardsSection } from "../standards/StandardsSection";
 import { UsersPanel } from "./UsersPanel";
 import { isAdminSection, type AdminSection } from "./types";
 
@@ -44,8 +44,11 @@ export function AdminPage({ section }: { section?: string }) {
   const { t } = useTranslation(["admin", "products"]);
   const address = useAddressState();
   const patchAddress = useAddressPatch();
-  const [productsView, setProductsView] =
-    useState<ProductsWorkspaceView>("catalog");
+  // Сборка рабочего справочника живёт в адресе (`?kind=merge`, ADR-0068):
+  // F5 на ней возвращает к стандартам, а не к перечню продуктов.
+  const [productsView, setProductsView] = useState<ProductsWorkspaceView>(() =>
+    address.kind === "merge" ? "standards" : "catalog",
+  );
 
   const current = sectionFromRoute(section);
   const isEditingProductItem =
@@ -100,7 +103,7 @@ export function AdminPage({ section }: { section?: string }) {
             )}
 
             {!isEditingProductItem && productsView === "standards" && (
-              <StandardsPanel
+              <StandardsSection
                 onOpen={(standardId) => {
                   patchAddress({
                     standard:

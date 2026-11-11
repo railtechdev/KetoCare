@@ -36,9 +36,12 @@ import { toStandardUpdateBody, toStandardValues } from "./standardSchema";
  */
 export function StandardsPanel({
   onOpen,
+  onMerge,
 }: {
   /** Показать продукты стандарта в справочнике */
   onOpen: (standardId: string) => void;
+  /** Собрать рабочий справочник из источников (ADR-0068) */
+  onMerge?: (standardId: string) => void;
 }) {
   const { t } = useTranslation("products");
   const { session } = useSession();
@@ -117,13 +120,14 @@ export function StandardsPanel({
             standard={row.original}
             canLock={canLock}
             onOpen={onOpen}
+            onMerge={onMerge}
             onEdit={setEditing}
             onViewTemplates={canViewTemplates ? setViewing : undefined}
           />
         ),
       },
     ],
-    [t, canLock, canViewTemplates, onOpen],
+    [t, canLock, canViewTemplates, onOpen, onMerge],
   );
 
   return (
@@ -191,12 +195,14 @@ function StandardActions({
   standard,
   canLock,
   onOpen,
+  onMerge,
   onEdit,
   onViewTemplates,
 }: {
   standard: FoodStandard;
   canLock: boolean;
   onOpen: (standardId: string) => void;
+  onMerge?: (standardId: string) => void;
   onEdit: (editing: StandardEditing) => void;
   onViewTemplates?: (standard: FoodStandard) => void;
 }) {
@@ -232,6 +238,19 @@ function StandardActions({
       >
         {openLabel}
       </Button>
+
+      {/* Собирается только открытый стандарт клиники: сервер откажет иначе. */}
+      {onMerge !== undefined && standard.kind === "clinic" && !locked && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={forRow(t("standards.actions.merge"))}
+          onClick={() => onMerge(standard.id)}
+        >
+          {t("standards.actions.merge")}
+        </Button>
+      )}
 
       {onViewTemplates !== undefined && (
         <Button

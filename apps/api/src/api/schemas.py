@@ -439,6 +439,9 @@ class ProductValueSourceRead(BaseModel):
     user_id: uuid.UUID | None = None
     at: datetime | None = None
     label: str | None = None
+    #: Углеводы взяты чистыми из источника, и к ним прибавлена клетчатка
+    #: (слияние, ADR-0068).
+    net_plus_fiber: bool = False
 
 
 ENERGY_UNKNOWN = ("fat_100g", "protein_100g", "carbs_100g")
@@ -616,6 +619,93 @@ class FoodStandardRead(FoodStandardBase):
     #: Сколько позиций в стандарте. Считается отдельно и подставляется роутером.
     products: int = 0
     created_at: datetime
+
+
+class CatalogueMergeRequest(BaseModel):
+    """Слияние источников в рабочий справочник (ADR-0068).
+
+    `source_ids` — стандарты-источники по порядку: число берётся из первого,
+    где оно известно. `accept` — продукты (`food_id`), не прошедшие сверку
+    9–4–4, которые диетолог подтвердил. По умолчанию — только превью.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    accept: list[uuid.UUID] = Field(default_factory=list, max_length=5000)
+    dry_run: bool = True
+
+
+CatalogueMergeStatus = Literal["new", "update", "unchanged", "needs_review", "no_data", "conflict"]
+
+
+class CatalogueMergeSource(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class CatalogueMergeField(BaseModel):
+    """Число строки и его происхождение.
+
+    `value` — что окажется в рабочем справочнике (`null` — нет ни в одном
+    источнике). `manual` — число вписал человек, слияние его не трогает;
+    `merged` — что дали бы источники, `conflict` — оно другое.
+    `net_plus_fiber` — углеводы источника прочитаны чистыми и к ним прибавлена
+    клетчатка (ADR-0068, решение 3).
+    """
+
+    value: float | None
+    source_standard_id: uuid.UUID | None = None
+    source_standard_name: str | None = None
+    source_product_id: uuid.UUID | None = None
+    manual: bool = False
+    #: Защищённое число без отслеженного источника (строка заведена до
+    #: `value_sources`); слияние его не трогает, как правку.
+    untracked: bool = False
+    conflict: bool = False
+    merged: float | None = None
+    net_plus_fiber: bool = False
+
+
+class CatalogueMergeRow(BaseModel):
+    food_id: uuid.UUID
+    name_ru: str
+    #: Запись рабочего справочника, если она уже есть.
+    product_id: uuid.UUID | None = None
+    status: CatalogueMergeStatus
+    #: Строка будет записана (превью) или записана (применение).
+    write: bool
+    #: Диетолог подтвердил строку, не прошедшую сверку.
+    accepted: bool
+    #: Ключ — поле значения (`kcal_100g`, …, `waste_pct`).
+    fields: dict[str, CatalogueMergeField]
+    #: Находки сверки: коды `product_checks.Anomaly` и `fiber_exceeds_carbs`.
+    anomalies: list[str] = Field(default_factory=list)
+    #: Поля, которых нет ни в одном источнике (`no_data`).
+    missing: list[str] = Field(default_factory=list)
+    fiber_known: bool
+
+
+class CatalogueMergeTotals(BaseModel):
+    new: int = 0
+    update: int = 0
+    unchanged: int = 0
+    needs_review: int = 0
+    no_data: int = 0
+    conflict: int = 0
+    #: Сколько строк записано (или будет записано).
+    written: int = 0
+
+
+class CatalogueMergeResult(BaseModel):
+    """Потребитель — экран сверки в кабинете
+    (`apps/web/src/features/standards/CatalogueMergeScreen.tsx`)."""
+
+    target_id: uuid.UUID
+    sources: list[CatalogueMergeSource]
+    applied: bool
+    rows: list[CatalogueMergeRow]
+    totals: CatalogueMergeTotals
 
 
 class ProductCategoryWrite(BaseModel):

@@ -9,7 +9,7 @@ import {
 } from "../../routes/useSectionTab";
 import { ProductsPanel } from "../admin/ProductsPanel";
 import { DEFAULT_FOOD_STANDARD_ID } from "../standards/useFoodStandards";
-import { StandardsPanel } from "../standards/StandardsPanel";
+import { StandardsSection } from "../standards/StandardsSection";
 import { ProductCategoriesPanel } from "./ProductCategoriesPanel";
 
 type CatalogView = "catalog" | "categories" | "standards";
@@ -55,7 +55,7 @@ export function CatalogPage() {
       {!isEditingItem && view === "categories" && <ProductCategoriesPanel />}
 
       {!isEditingItem && view === "standards" && (
-        <StandardsPanel
+        <StandardsSection
           onOpen={(standardId) => {
             patchAddress({
               standard:

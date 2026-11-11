@@ -77,6 +77,8 @@ export const AUDIT_ACTIONS = [
   "merge",
   // Закрытие стандарта питания (ADR-0057).
   "lock",
+  // Сборка рабочего справочника из источников (ADR-0068).
+  "merge_sources",
   "import",
   "invite",
   "revoke",
