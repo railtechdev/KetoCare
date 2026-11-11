@@ -116,6 +116,19 @@ class TestRecipeDraft:
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
 
+    async def test_doctor_may_ask_for_a_draft(self, client, make_user, auth_headers):
+        """ADR-0063: врач проходит проверку роли; незнакомый продукт — 422, а не 403."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/ai/recipe-draft",
+            json=_draft_body(uuid.uuid4()),
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422
+
     async def test_parent_may_not_ask_for_a_draft(self, client, session, make_user, auth_headers):
         parent = await make_user(UserRole.PARENT)
         product = await _product(session)

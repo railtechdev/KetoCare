@@ -91,7 +91,7 @@ export function RecipesPage() {
   const [tab, setTab] = useSectionTab<Tab>("tab", TABS, "recipes");
   const { patientId } = useSelectedPatient();
 
-  // Кнопки правки видят только admin/dietitian (раздел 5.3 ТЗ). Это UX:
+  // Кнопки правки видят admin, dietitian и doctor (ADR-0063). Это UX:
   // сами ручки закрыты ролевой проверкой на сервере.
   const canEdit = canEditRecipes(session?.role);
 
