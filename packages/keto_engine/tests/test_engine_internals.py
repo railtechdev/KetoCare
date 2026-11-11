@@ -656,3 +656,33 @@ class TestMealMacroGoal:
     def test_rejects_non_positive_daily_calories(self) -> None:
         with pytest.raises(ValueError):
             meal_macro_goal(4.0, 400.0, day_protein_g=24.0, day_kcal=0.0)
+
+
+class TestEnergyRequirement:
+    """Yonsei table, question 56: kcal range = weight x kcal/kg of the age row."""
+
+    @pytest.mark.parametrize(
+        ("age", "weight", "expected"),
+        [
+            (0, 8.0, (600.0, 680.0)),
+            (1, 10.0, (700.0, 750.0)),
+            (3, 10.0, (700.0, 750.0)),
+            (4, 18.0, (1170.0, 1224.0)),
+            (6, 18.0, (1170.0, 1224.0)),
+            (7, 25.0, (1375.0, 1500.0)),
+            (10, 25.0, (1375.0, 1500.0)),
+            (11, 40.0, (1200.0, 1600.0)),
+            (17, 50.0, (1500.0, 2000.0)),
+        ],
+    )
+    def test_rows_by_full_years(self, age, weight, expected):
+        from keto_engine import energy_requirement
+
+        assert energy_requirement(age, weight) == pytest.approx(expected)
+
+    @pytest.mark.parametrize(("age", "weight"), [(-1, 10.0), (5, 0.0), (5, -3.0)])
+    def test_rejects_impossible_input(self, age, weight):
+        from keto_engine import energy_requirement
+
+        with pytest.raises(ValueError):
+            energy_requirement(age, weight)

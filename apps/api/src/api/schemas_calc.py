@@ -264,6 +264,26 @@ class PrescriptionGoalResponse(BaseModel):
     engine_version: str
 
 
+class EnergyRequirementRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    age_years: Annotated[int, Field(ge=0, le=25)]
+    weight_kg: Annotated[float, Field(gt=0, le=200)]
+
+
+class EnergyRequirementResponse(BaseModel):
+    """Daily calorie range by age and weight (Yonsei table, question 56).
+
+    Reader: the hint in the web cabinet's prescription form.
+    """
+
+    kcal_min: float
+    kcal_max: float
+    kcal_per_kg_min: float
+    kcal_per_kg_max: float
+    engine_version: str
+
+
 class ScaleRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 

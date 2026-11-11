@@ -23,6 +23,7 @@ import { usePatientOverview } from "../patients/overview";
 import { RecordWeight } from "./RecordWeight";
 import { PrescriptionConfirm } from "./PrescriptionConfirm";
 import { PrescriptionPrintButton } from "./PrescriptionPrint";
+import { EnergyHint } from "./EnergyHint";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
 import { useCreatePrescription } from "./doctorMutations";
@@ -269,6 +270,9 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
               pending={create.isPending}
               error={create.error}
               onSubmit={setPendingValues}
+              kcalHint={(apply) => (
+                <EnergyHint patientId={patientId} onApply={apply} />
+              )}
             />
           )}
           <ConfirmDialog

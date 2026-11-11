@@ -18,13 +18,23 @@ from core import exclusions
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
-from keto_engine import InfeasibleError, scale, solve, verify, within_tolerance
+from keto_engine import (
+    ENGINE_VERSION,
+    InfeasibleError,
+    energy_requirement,
+    scale,
+    solve,
+    verify,
+    within_tolerance,
+)
 from keto_engine.constants import MIN_INGREDIENT_GRAMS
 
 from ..deps.auth import CurrentUserDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
 from ..schemas_calc import (
     CALC_GRAMS_MAX,
+    EnergyRequirementRequest,
+    EnergyRequirementResponse,
     ExcludedProductOut,
     PrescriptionGoalRequest,
     PrescriptionGoalResponse,
@@ -291,6 +301,22 @@ async def prescription_goal(
     payload: PrescriptionGoalRequest, _: CurrentUserDep
 ) -> PrescriptionGoalResponse:
     return calc_service.to_prescription_goal(payload)
+
+
+@router.post(
+    "/energy-requirement",
+    response_model=EnergyRequirementResponse,
+    summary="Суточная калорийность по возрасту и весу",
+)
+async def energy(payload: EnergyRequirementRequest, _: CurrentUserDep) -> EnergyRequirementResponse:
+    low, high = energy_requirement(payload.age_years, payload.weight_kg)
+    return EnergyRequirementResponse(
+        kcal_min=low,
+        kcal_max=high,
+        kcal_per_kg_min=low / payload.weight_kg,
+        kcal_per_kg_max=high / payload.weight_kg,
+        engine_version=ENGINE_VERSION,
+    )
 
 
 @router.post("/scale", response_model=ScaleResponse, summary="Пересчитать блюдо на порцию")

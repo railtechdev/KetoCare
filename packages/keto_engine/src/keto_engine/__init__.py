@@ -1,7 +1,15 @@
 """Изолированное расчётное ядро KetoCare (раздел 6 ТЗ). Никаких импортов из core/api."""
 
 from .constants import ENGINE_VERSION
-from .engine import max_non_fat_grams, meal_macro_goal, scale, solve, verify, within_tolerance
+from .engine import (
+    energy_requirement,
+    max_non_fat_grams,
+    meal_macro_goal,
+    scale,
+    solve,
+    verify,
+    within_tolerance,
+)
 from .types import (
     DishResult,
     InfeasibleError,
@@ -14,6 +22,7 @@ from .types import (
 
 __all__ = [
     "ENGINE_VERSION",
+    "energy_requirement",
     "DishResult",
     "Ingredient",
     "InfeasibleError",
