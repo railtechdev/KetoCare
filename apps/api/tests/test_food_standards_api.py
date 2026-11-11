@@ -714,13 +714,26 @@ class TestDoctorEditsCatalogue:
         )
         assert edited.status_code == 200, edited.text
 
-    async def test_import_stays_with_admin(self, client, make_user, auth_headers):
-        doctor = await make_user(UserRole.DOCTOR)
+    @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.DIETITIAN])
+    async def test_editors_import(self, client, make_user, auth_headers, role):
+        """ADR-0064: загружают все, кто правит справочник; превью ничего не пишет."""
+        editor = await make_user(role)
 
         response = await client.post(
             "/api/v1/products/import",
             files={"file": ("products.csv", b"name_ru\n", "text/csv")},
-            headers=auth_headers(doctor),
+            headers=auth_headers(editor),
+        )
+
+        assert response.status_code != 403, response.text
+
+    async def test_parent_cannot_import(self, client, make_user, auth_headers):
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.post(
+            "/api/v1/products/import",
+            files={"file": ("products.csv", b"name_ru\n", "text/csv")},
+            headers=auth_headers(parent),
         )
 
         assert response.status_code == 403, response.text
