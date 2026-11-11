@@ -417,6 +417,23 @@ class ProductUpdate(ProductBase):
     is_active: bool = True
 
 
+class ProductValueSourceRead(BaseModel):
+    """Откуда взято одно число продукта (`products.value_sources`).
+
+    `product` — значение совпало с записью стандарта `product_id`, с которой
+    снята копия; `manual` — его вписал человек `user_id` в момент `at`.
+    `label` сервер собирает сам: для `product` — название стандарта записи,
+    для `manual` — имя автора правки. Потребитель — карточка продукта в
+    кабинете (`apps/web/src/features/products/ProductCard.tsx`).
+    """
+
+    kind: Literal["product", "manual"]
+    product_id: uuid.UUID | None = None
+    user_id: uuid.UUID | None = None
+    at: datetime | None = None
+    label: str | None = None
+
+
 class ProductRead(ProductBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -426,6 +443,9 @@ class ProductRead(ProductBase):
     food_id: uuid.UUID
     derived_from_id: uuid.UUID | None = None
     fiber_known: bool
+    #: Ключ — поле значения (`kcal_100g` …). Нет ключа — число подписано
+    #: источником всей строки (`source` / `source_version`).
+    value_sources: dict[str, ProductValueSourceRead] = Field(default_factory=dict)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

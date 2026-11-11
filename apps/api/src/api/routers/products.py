@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -24,7 +24,7 @@ from fastapi import (
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
-from core.models import DEFAULT_FOOD_STANDARD_ID, FoodStandard, Product, ProductCategory
+from core.models import DEFAULT_FOOD_STANDARD_ID, FoodStandard, Product, ProductCategory, User
 from core.models.enums import FoodStandardKind, LeadingMacro, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import food_standards as food_standards_repo
@@ -294,8 +294,54 @@ def _read_for(user: CurrentUser, product: Product) -> ProductRead:
 
     read = ProductRead.model_validate(product)
     if user.role is UserRole.PARENT:
-        return read.model_copy(update={"derived_from_id": None})
+        # Происхождение чисел ссылается на ту же закрытую запись и на сотрудников.
+        return read.model_copy(update={"derived_from_id": None, "value_sources": {}})
     return read
+
+
+async def _labelled_read_for(
+    session: SessionDep, user: CurrentUser, product: Product
+) -> ProductRead:
+    """`_read_for` с подписями происхождения чисел, собранными на сервере.
+
+    Карточке нужно «Стандарт X» или «правка: имя, дата» рядом с числом; без
+    подписи ей пришлось бы ходить за стандартом и сотрудником отдельными
+    запросами на каждое поле.
+    """
+
+    read = _read_for(user, product)
+    if not read.value_sources:
+        return read
+    labels: dict[uuid.UUID, str | None] = {}
+    for item in read.value_sources.values():
+        if item.kind == "product" and item.product_id and item.product_id not in labels:
+            origin = await session.get(Product, item.product_id)
+            standard = (
+                await session.get(FoodStandard, origin.standard_id) if origin is not None else None
+            )
+            labels[item.product_id] = standard.name if standard is not None else None
+        elif item.kind == "manual" and item.user_id and item.user_id not in labels:
+            author = await session.get(User, item.user_id)
+            labels[item.user_id] = author.full_name if author is not None else None
+    sources = {
+        field: item.model_copy(
+            update={"label": labels.get(item.product_id or item.user_id)}  # type: ignore[arg-type]
+        )
+        for field, item in read.value_sources.items()
+    }
+    return read.model_copy(update={"value_sources": sources})
+
+
+def _manual_source(user_id: uuid.UUID) -> dict[str, str]:
+    return {"kind": "manual", "user_id": str(user_id), "at": datetime.now(UTC).isoformat()}
+
+
+def _changed_values(product: Product, payload: BaseModel) -> list[str]:
+    return [
+        field
+        for field in _MACRO_FIELDS
+        if abs(float(getattr(product, field)) - float(getattr(payload, field))) > 1e-9
+    ]
 
 
 async def _standard_or_404(session: SessionDep, standard_id: uuid.UUID) -> FoodStandard:
@@ -471,7 +517,7 @@ async def get_product(
         user.role is UserRole.PARENT and product.standard_id != DEFAULT_FOOD_STANDARD_ID
     ):
         raise ApiError(ErrorCode.NOT_FOUND, "Продукт не найден.")
-    return _read_for(user, product)
+    return await _labelled_read_for(session, user, product)
 
 
 @router.post(
@@ -539,9 +585,19 @@ async def update_product(
     _source_must_match_numbers(product, payload)
 
     before = ProductRead.model_validate(product).model_dump(mode="json")
+    # Поправленное число подписывается автором правки; нетронутые сохраняют
+    # прежнее происхождение. Словарь новый — изменение JSONB на месте ORM не видит.
+    value_sources = {
+        **(product.value_sources or {}),
+        **{field: _manual_source(user.id) for field in _changed_values(product, payload)},
+    }
     try:
         updated = await products_repo.update(
-            session, product=product, changed_by=user.id, **payload.model_dump()
+            session,
+            product=product,
+            changed_by=user.id,
+            value_sources=value_sources,
+            **payload.model_dump(),
         )
     except products_repo.StandardLockedError as error:
         raise _standard_locked() from error
@@ -555,7 +611,7 @@ async def update_product(
         before=before,
         after=ProductRead.model_validate(updated).model_dump(mode="json"),
     )
-    return ProductRead.model_validate(updated)
+    return await _labelled_read_for(session, user, updated)
 
 
 def _source_must_match_numbers(
@@ -581,11 +637,7 @@ def _source_must_match_numbers(
     обновлении базы, но поправленные специалистом числа документ не публиковал.
     """
 
-    changed = [
-        field
-        for field in _MACRO_FIELDS
-        if abs(float(getattr(product, field)) - float(getattr(payload, field))) > 1e-9
-    ]
+    changed = _changed_values(product, payload)
     if not changed:
         return
 
@@ -660,6 +712,13 @@ async def derive_product(
     target_name = target.name
     fields = payload.model_dump(exclude={"standard_id"})
     fiber_changed = products_repo.fiber_differs(source.fiber_100g, payload.fiber_100g)
+    changed = set(_changed_values(source, payload))
+    value_sources = {
+        field: _manual_source(user.id)
+        if field in changed
+        else {"kind": "product", "product_id": str(source.id)}
+        for field in _MACRO_FIELDS
+    }
     try:
         product = await products_repo.create(
             session,
@@ -669,6 +728,7 @@ async def derive_product(
             food_id=source.food_id,
             # Клетчатка известна, если её знал источник или её вписали в копии.
             fiber_known=source.fiber_known or fiber_changed,
+            value_sources=value_sources,
             **fields,
         )
         await session.flush()
@@ -692,9 +752,10 @@ async def derive_product(
             "derived_from_id": str(source.id),
             "food_id": str(product.food_id),
             "fiber_known": product.fiber_known,
+            "value_sources": value_sources,
         },
     )
-    return ProductRead.model_validate(product)
+    return await _labelled_read_for(session, user, product)
 
 
 @router.get(
@@ -906,8 +967,15 @@ async def import_products(
         )
         product = existing[_key(row)]
         before = ProductRead.model_validate(product).model_dump(mode="json")
+        # Импорт подписывает всю строку своим источником: прежние пометки
+        # отдельных чисел описывали бы уже не те значения.
         changed = await products_repo.update(
-            session, product=product, changed_by=user.id, category_id=category.id, **values
+            session,
+            product=product,
+            changed_by=user.id,
+            category_id=category.id,
+            value_sources={},
+            **values,
         )
         # Каждая правка — своя запись аудита с before/after: «обновлено 412
         # позиций» одной строкой не отвечает на вопрос, что именно изменилось в

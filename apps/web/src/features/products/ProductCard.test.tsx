@@ -120,6 +120,40 @@ describe("карточка продукта", () => {
     expect(screen.queryByText("7,17")).not.toBeInTheDocument();
   });
 
+  it("у числа с отдельным происхождением стоит подпись источника", async () => {
+    // ADR-0067: число копии взято из стандарта либо вписано человеком, и
+    // карточка обязана это сказать рядом с самим числом.
+    (api.GET as Mock).mockImplementation(async () => ({
+      data: {
+        ...PRODUCT,
+        value_sources: {
+          fat_100g: {
+            kind: "manual",
+            product_id: null,
+            user_id: USER_ID,
+            at: "2026-11-10T09:00:00Z",
+            label: "Анна Диетолог",
+          },
+          protein_100g: {
+            kind: "product",
+            product_id: "p0",
+            user_id: null,
+            at: null,
+            label: "СанПиН 2025",
+          },
+        },
+      },
+      error: undefined,
+      response: { status: 200 },
+    }));
+    renderCard();
+
+    expect(
+      await screen.findByText("правка: Анна Диетолог, 10.11.2026"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("из стандарта «СанПиН 2025»")).toBeInTheDocument();
+  });
+
   it("показывает происхождение значений, а не только числа", async () => {
     // Раньше `source_version` и дату сверки видел только администратор в форме
     // правки — при том что именно они отвечают на вопрос, можно ли доверять
