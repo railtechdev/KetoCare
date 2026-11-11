@@ -12,6 +12,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { SectionLink } from "../../components/SectionLink";
 import {
   useAddressPatch,
   useAddressState,
@@ -177,6 +178,10 @@ export function RecipesPage() {
     );
   }
 
+  const canAddToChildRole =
+    session !== null &&
+    (session.role === "doctor" || session.role === "dietitian");
+
   if (openId === IMPORT_ITEM && canEdit) {
     return <RecipeImportPanel onDone={() => setOpenId(undefined)} />;
   }
@@ -186,6 +191,7 @@ export function RecipesPage() {
       <RecipeDetail
         recipeId={openId}
         canEdit={canEdit}
+        canAddToChild={canAddToChildRole}
         canCalculate={
           session !== null &&
           SECTIONS_BY_ROLE[session.role].includes("calculator")
@@ -205,31 +211,40 @@ export function RecipesPage() {
       intro={t("intro")}
       width="wide"
       actions={
-        canEdit && (
-          <>
-            <Button
-              type="button"
-              className="min-h-touch"
-              onClick={() => setForm({ recipeId: null })}
-            >
-              <Plus aria-hidden="true" />
-              {t("actions.create")}
+        <>
+          {canAddToChildRole && (
+            <Button asChild variant="outline" className="min-h-touch">
+              <SectionLink section="products" tab="standards">
+                {t("actions.ministryMenus")}
+              </SectionLink>
             </Button>
-            {/* Вторичное действие рядом с первичным — как у справочника
+          )}
+          {canEdit && (
+            <>
+              <Button
+                type="button"
+                className="min-h-touch"
+                onClick={() => setForm({ recipeId: null })}
+              >
+                <Plus aria-hidden="true" />
+                {t("actions.create")}
+              </Button>
+              {/* Вторичное действие рядом с первичным — как у справочника
                 продуктов. Импорт заводит сборник разом, при заведении клиники;
                 создание рецепта — ежедневная работа, и первичное действие
                 остаётся за ней (правило П14 канона). */}
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-touch"
-              onClick={() => setOpenId(IMPORT_ITEM)}
-            >
-              <Upload aria-hidden="true" />
-              {t("actions.import")}
-            </Button>
-          </>
-        )
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                onClick={() => setOpenId(IMPORT_ITEM)}
+              >
+                <Upload aria-hidden="true" />
+                {t("actions.import")}
+              </Button>
+            </>
+          )}
+        </>
       }
     >
       {familyView ? (
