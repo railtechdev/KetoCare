@@ -173,7 +173,7 @@ export function PrescriptionForm({
           min={KCAL_MIN}
           max={KCAL_MAX}
           step={10}
-          label={t("fields.kcal")}
+          label={t("fields.kcalInput")}
           error={errors.kcalPerDay && t("prescription.errors.kcal")}
           {...register("kcalPerDay", { valueAsNumber: true })}
         />
@@ -191,7 +191,7 @@ export function PrescriptionForm({
           inputMode="decimal"
           min={0}
           step={0.1}
-          label={t("fields.protein")}
+          label={t("fields.proteinInput")}
           error={errors.proteinG && t("prescription.errors.protein")}
           {...register("proteinG", { valueAsNumber: true })}
         />
@@ -203,7 +203,7 @@ export function PrescriptionForm({
           inputMode="decimal"
           min={0}
           step={0.1}
-          label={t("fields.carbsLimit")}
+          label={t("fields.carbsLimitInput")}
           error={errors.carbsLimitG && t("prescription.errors.carbsLimit")}
           hint={carbsByHand ? undefined : t("prescription.carbsDerived")}
           {...register("carbsLimitG", {
