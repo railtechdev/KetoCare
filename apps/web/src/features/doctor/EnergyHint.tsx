@@ -16,8 +16,7 @@ import { ageInMonths } from "./dates";
  * Суточная калорийность по весу и возрасту (вопрос 56, таблица Yonsei).
  *
  * Считает ядро через API: таблица — медицинская константа. Подсказка ничего не
- * подставляет сама: число в поле вводит врач, кнопка лишь переносит середину
- * диапазона, округлённую до 10 ккал.
+ * подставляет сама: врач выбирает минимум, середину или максимум диапазона.
  */
 export function EnergyHint({
   patientId,
@@ -78,8 +77,15 @@ export function EnergyHint({
   }
   if (range.data === undefined) return null;
 
-  const middle =
-    Math.round((range.data.kcal_min + range.data.kcal_max) / 20) * 10;
+  // Три варианта, как в KDC: врач выбирает по телосложению ребёнка. Числа —
+  // целые ккал, середина округлена до 10.
+  const low = Math.round(range.data.kcal_min);
+  const high = Math.round(range.data.kcal_max);
+  const options = [
+    { key: "min", kcal: low },
+    { key: "middle", kcal: Math.round((low + high) / 20) * 10 },
+    { key: "max", kcal: high },
+  ] as const;
 
   return (
     <div className="flex flex-wrap items-center gap-field text-sm">
@@ -93,14 +99,21 @@ export function EnergyHint({
           max: formatKcal(range.data.kcal_max),
         })}
       </p>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => onApply(middle)}
-      >
-        {t("prescription.energy.apply", { kcal: formatKcal(middle) })}
-      </Button>
+      <div className="flex flex-wrap gap-field">
+        {options.map((option) => (
+          <Button
+            key={option.key}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onApply(option.kcal)}
+          >
+            {t(`prescription.energy.${option.key}`, {
+              kcal: formatKcal(option.kcal),
+            })}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }
