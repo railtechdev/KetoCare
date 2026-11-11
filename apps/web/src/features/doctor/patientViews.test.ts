@@ -121,10 +121,17 @@ describe("разделы карты пациента", () => {
 
 describe("группы разделов карты", () => {
   it("кладут каждый экран ровно в одну группу, не больше шести групп", async () => {
-    const { PATIENT_VIEWS, PATIENT_VIEW_GROUPS, PATIENT_GROUP_VIEWS } =
-      await import("./patientViews");
+    const {
+      PATIENT_VIEWS,
+      PATIENT_VIEW_GROUPS,
+      PATIENT_GROUP_VIEWS,
+      PATIENT_SUBVIEWS,
+    } = await import("./patientViews");
     expect(PATIENT_VIEW_GROUPS.length).toBeLessThanOrEqual(6);
-    const grouped = PATIENT_VIEW_GROUPS.flatMap((g) => PATIENT_GROUP_VIEWS[g]);
+    const grouped = [
+      ...PATIENT_VIEW_GROUPS.flatMap((g) => PATIENT_GROUP_VIEWS[g]),
+      ...Object.keys(PATIENT_SUBVIEWS),
+    ];
     expect([...grouped].sort()).toEqual([...PATIENT_VIEWS].sort());
   });
 });
