@@ -54,7 +54,9 @@ describe("PatientGate", () => {
       new QueryClient({ defaultOptions: { queries: { retry: false } } }),
     );
 
-    expect(await screen.findByText(/Нет связи/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Нет связи\. Данные загрузятся/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Ребёнка ещё нет/)).toBeNull();
   });
 

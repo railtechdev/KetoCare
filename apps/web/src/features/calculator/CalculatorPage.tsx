@@ -876,10 +876,9 @@ export function CalculatorView({
               </div>
 
               {dish !== null && (
-                <div className="flex flex-wrap items-center justify-between gap-field">
-                  <p className="m-0 text-xs text-muted-foreground">
-                    {t("engineVersion", { version: dish.engine_version })}
-                  </p>
+                <div className="flex flex-wrap items-center justify-end gap-field">
+                  {/* Версия расчёта — в печатной форме, не на экране (правило 6
+                      PLAN_UI_TEXT_2026-11). */}
                   <PrintButton label={t("print.button")} disabled={stale}>
                     <DishPrint
                       title={incomingDish.dishTitle ?? t("print.untitled")}

@@ -224,7 +224,7 @@ describe("передача состава пациенту", () => {
 
     await user.click(screen.getByRole("button", { name: "Передать" }));
     expect(
-      await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+      await screen.findByText("Нет связи. Проверьте интернет."),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Передать" }));
     await waitFor(() => {
@@ -267,7 +267,7 @@ describe("передача состава пациенту", () => {
       await user.click(screen.getByRole("button", { name: "Передать" }));
 
       expect(
-        await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+        await screen.findByText("Нет связи. Проверьте интернет."),
       ).toBeInTheDocument();
       expect(api.POST).toHaveBeenCalledTimes(1);
 
@@ -307,7 +307,7 @@ describe("передача состава пациенту", () => {
     expect(
       await screen.findByText("Что-то пошло не так. Попробуйте ещё раз."),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Нет связи/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Проверьте интернет/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Передать" }));
     expect(

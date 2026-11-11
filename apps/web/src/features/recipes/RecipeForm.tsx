@@ -435,14 +435,6 @@ export function RecipeForm({
               <p className="m-0 text-sm text-muted-foreground">
                 {t("form.computedHint")}
               </p>
-              {/* Версия ядра — рядом с любыми его числами, как в калькуляторе,
-                  карточке рецепта и итогах дня: расчёт разных версий может
-                  отличаться, и это должно быть видно. */}
-              <p className="m-0 text-xs text-muted-foreground">
-                {t("form.engineVersion", {
-                  version: computed.dish.engine_version,
-                })}
-              </p>
             </div>
           )}
 

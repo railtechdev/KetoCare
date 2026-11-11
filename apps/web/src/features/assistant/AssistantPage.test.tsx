@@ -173,9 +173,7 @@ describe("помощник в кабинете", () => {
       );
       await user.click(screen.getByRole("button", { name: "Спросить" }));
 
-      expect(
-        await screen.findByText(/Нет связи с сервером/),
-      ).toBeInTheDocument();
+      expect(await screen.findByText(/Проверьте интернет/)).toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }

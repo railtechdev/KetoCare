@@ -262,7 +262,7 @@ describe("карточка продукта вне текущей выборки
       await screen.findByText(adminRu.products.cardError as string),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Нет связи с сервером. Проверьте подключение."),
+      screen.getByText("Нет связи. Проверьте интернет."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Позиция не найдена")).toBeNull();
 

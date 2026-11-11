@@ -293,7 +293,9 @@ describe("состояния, которые не врут", () => {
       );
       renderPage({ kind: "weight" });
 
-      expect(await screen.findByText(/Нет связи/)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/Нет связи\. Данные загрузятся/),
+      ).toBeInTheDocument();
       expect(screen.queryByText("Записей за этот период нет")).toBeNull();
     } finally {
       onlineManager.setOnline(true);

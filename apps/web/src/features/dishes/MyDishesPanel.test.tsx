@@ -115,7 +115,7 @@ describe("мои блюда", () => {
     (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
     renderPanel();
 
-    expect(await screen.findByText("Своих блюд пока нет")).toBeInTheDocument();
+    expect(await screen.findByText("Блюд пока нет")).toBeInTheDocument();
     expect(screen.getByText(/Соберите новое блюдо/)).toBeInTheDocument();
   });
 });

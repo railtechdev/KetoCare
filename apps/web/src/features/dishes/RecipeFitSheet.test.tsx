@@ -77,7 +77,9 @@ async function openReview() {
       <Toaster />
     </QueryClientProvider>,
   );
-  await user.click(screen.getByRole("button", { name: /Из библиотеки/ }));
+  await user.click(
+    screen.getByRole("button", { name: /Добавить из рецептов/ }),
+  );
   await user.click(
     await screen.findByRole("checkbox", { name: /Курица с брокколи/ }),
   );
@@ -101,7 +103,9 @@ describe("блюда из библиотеки", () => {
         <RecipeFitSheet patientId={PATIENT_ID} />
       </QueryClientProvider>,
     );
-    await user.click(screen.getByRole("button", { name: /Из библиотеки/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Добавить из рецептов/ }),
+    );
 
     await screen.findByRole("checkbox", { name: /Курица с брокколи/ });
     expect(screen.queryByRole("checkbox", { name: /Черновик/ })).toBeNull();

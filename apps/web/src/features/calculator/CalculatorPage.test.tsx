@@ -479,9 +479,7 @@ describe("калькулятор", () => {
       const busy = await screen.findByRole("button", { name: "Повторяем…" });
       expect(busy).toHaveFocus();
       expect(await screen.findAllByText(WAITING)).toHaveLength(1);
-      expect(
-        screen.queryByText(/Нет связи с сервером/),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/Проверьте интернет/)).not.toBeInTheDocument();
       expect(
         screen
           .getAllByRole("status")
@@ -543,9 +541,7 @@ describe("калькулятор", () => {
         screen.getByRole("button", { name: "Повторяем…" }),
       ).toBeInTheDocument();
       expect(screen.getAllByText(WAITING)).toHaveLength(1);
-      expect(
-        screen.queryByText(/Нет связи с сервером/),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/Проверьте интернет/)).not.toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }
@@ -580,13 +576,11 @@ describe("калькулятор", () => {
         onlineManager.setOnline(true);
       });
 
-      expect(await screen.findAllByText(/Нет связи с сервером/)).toHaveLength(
-        1,
-      );
+      expect(await screen.findAllByText(/Проверьте интернет/)).toHaveLength(1);
       expect(
         screen
           .getAllByRole("status")
-          .some((el) => el.textContent?.includes("Нет связи с сервером")),
+          .some((el) => el.textContent?.includes("Нет связи")),
       ).toBe(false);
     } finally {
       onlineManager.setOnline(true);
@@ -870,7 +864,7 @@ describe("калькулятор", () => {
       }),
     ).toBeInTheDocument();
 
-    const factor = screen.getByLabelText("Коэффициент порции");
+    const factor = screen.getByLabelText("Порция");
     await user.clear(factor);
     await user.type(factor, "2");
     await user.click(
@@ -920,7 +914,7 @@ describe("калькулятор", () => {
       ),
     ).toBeInTheDocument();
 
-    const factor = screen.getByLabelText("Коэффициент порции");
+    const factor = screen.getByLabelText("Порция");
     await user.clear(factor);
     await user.type(factor, "2");
     await user.click(
@@ -1165,7 +1159,7 @@ describe("калькулятор", () => {
         screen.getByRole("button", { name: /Пересчитать порции/ }),
       );
       await screen.findByRole("button", { name: "Пересчитываем…" });
-      const factor = screen.getByLabelText(/Коэффициент порции/);
+      const factor = screen.getByLabelText(/Порция/);
       await user.clear(factor);
       await user.type(factor, "3");
 
@@ -1863,7 +1857,7 @@ describe("калькулятор без выбранного ребёнка", ()
       await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
       expect(
-        await screen.findByText("Нет связи с сервером. Проверьте подключение."),
+        await screen.findByText("Нет связи. Проверьте интернет."),
       ).toBeInTheDocument();
       expect(saves()).toBe(1);
 

@@ -38,6 +38,10 @@ export function DishPrint({
           carbs: formatGrams(dish.carbs_g),
         })}
       </p>
+      {/* Версия расчёта — на бумаге, не на экране (правило 6 PLAN_UI_TEXT). */}
+      <p className="m-0 text-xs">
+        {t("engineVersion", { version: dish.engine_version })}
+      </p>
     </div>
   );
 }

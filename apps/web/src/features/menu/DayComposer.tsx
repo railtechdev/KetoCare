@@ -276,7 +276,6 @@ export function DayComposer({
             items.length > 0 ? (
               <DayTotalsPanel
                 totals={menu.data?.totals ?? null}
-                engineVersion={menu.data?.engine_version ?? null}
                 tolerance={dayTolerance.tolerance}
                 toleranceGap={dayTolerance.gap}
                 targets={targets}
