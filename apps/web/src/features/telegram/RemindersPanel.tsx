@@ -1,4 +1,10 @@
-import { AsyncSection, FormFooter, Section, toast } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Checkbox,
+  FormFooter,
+  Section,
+  toast,
+} from "@ketocare/ui";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -93,9 +99,7 @@ export function RemindersPanel({ patientId }: { patientId: string }) {
           >
             <div className="flex flex-col gap-1">
               <label className="flex min-h-touch items-center gap-field">
-                <input
-                  type="checkbox"
-                  className="size-5 accent-primary"
+                <Checkbox
                   checked={form.enabled}
                   aria-describedby={`${ids}-enabled-hint`}
                   onChange={(event) =>

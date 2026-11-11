@@ -15,6 +15,10 @@ let search: { token?: string } = {};
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
   useSearch: () => search,
+  // Переход ко входу — ссылка: в тесте это обычный `<a>` с адресом.
+  Link: ({ to, children }: { to: string; children: ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -48,8 +52,8 @@ describe("приглашение без токена", () => {
     renderPage();
 
     expect(
-      await screen.findByRole("button", { name: /Перейти ко входу/ }),
-    ).toBeInTheDocument();
+      await screen.findByRole("link", { name: /Перейти ко входу/ }),
+    ).toHaveAttribute("href", "/login");
   });
 });
 
@@ -82,7 +86,7 @@ describe("приглашение по ссылке", () => {
       await screen.findByText(invitationsRu.accept.expiredTitle),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Перейти ко входу/ }),
+      screen.getByRole("link", { name: /Перейти ко входу/ }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/Пароль ещё раз/)).toBeNull();
   });

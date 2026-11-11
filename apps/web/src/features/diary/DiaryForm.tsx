@@ -1,38 +1,39 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  EmptyState,
-  FormFooter,
-  StatusNote,
-  WarningBanner,
+  Checkbox,
   cn,
+  EmptyState,
   formatMeasured,
   formatNumber,
   formatWeight,
-  OCCURRED_AT_FUTURE,
+  FormFooter,
   KETONE_MAX_MMOL,
   KETONE_MIN_MMOL,
-  SEIZURE_COUNT_MIN,
-  WEIGHT_MAX_KG,
-  WEIGHT_MIN_KG,
   ketoneBody,
   ketoneSchema,
   mealBody,
   mealSchema,
   medicationBody,
   medicationSchema,
+  OCCURRED_AT_FUTURE,
+  SEIZURE_COUNT_MIN,
   seizureBody,
   seizureSchema,
   sideEffectBody,
   sideEffectSchema,
+  StatusNote,
   toDateTimeLocalInput,
-  weightBody,
-  weightSchema,
   type KetoneValues,
   type MealValues,
   type MedicationValues,
   type SeizureValues,
   type SideEffectValues,
   type WeightValues,
+  WarningBanner,
+  WEIGHT_MAX_KG,
+  WEIGHT_MIN_KG,
+  weightBody,
+  weightSchema,
 } from "@ketocare/ui";
 import { Pill } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -830,11 +831,7 @@ function MedicationForm({
         ))}
       </SelectField>
       <label className="flex min-h-touch items-center gap-section text-sm font-medium">
-        <input
-          type="checkbox"
-          className="size-5 accent-primary"
-          {...register("taken")}
-        />
+        <Checkbox {...register("taken")} />
         {t("medications.taken")}
       </label>
     </FormShell>

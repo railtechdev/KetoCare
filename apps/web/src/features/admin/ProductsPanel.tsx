@@ -4,10 +4,11 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  formatPerGram,
   RatioBadge,
   SEARCH_DELAY_MS,
   Section,
-  formatPerGram,
+  Switch,
   toast,
   useDebouncedValue,
   WarningBanner,
@@ -578,9 +579,7 @@ export function ProductsPanel({
         {/* Без этого флажка снятие «активен» было необратимым: позиция
             исчезала из выдачи для всех, включая того, кто её вывел. */}
         <label className="mb-section flex min-h-touch cursor-pointer items-center gap-field rounded-lg border border-border/70 bg-muted/20 px-3 text-sm">
-          <input
-            type="checkbox"
-            className="size-4 accent-primary"
+          <Switch
             checked={filters.includeInactive}
             onChange={(event) =>
               setFiltersAndResetPage((current) => ({

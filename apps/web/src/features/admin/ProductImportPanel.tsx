@@ -1,6 +1,7 @@
 import {
   ActionReason,
   Button,
+  Checkbox,
   DataTable,
   Section,
   toast,
@@ -141,9 +142,8 @@ export function ProductImportPanel({
           не то же самое, что превью обычного, — там различия существующих
           позиций, а здесь список пропущенных дублей. */}
       <label className="flex items-start gap-field text-sm">
-        <input
-          type="checkbox"
-          className="mt-1 size-5 accent-primary"
+        <Checkbox
+          className="mt-1"
           checked={updateExisting}
           onChange={(event) => {
             setUpdateExisting(event.target.checked);
