@@ -3,6 +3,7 @@ import {
   Badge,
   EmptyState,
   formatMass,
+  formatPerGram,
   formatOccurredAt,
   Section,
   Skeleton,
@@ -172,10 +173,14 @@ function formatValue(
   }
   // Пищевая ценность приходит числом — и печаталась бы английской записью,
   // «52.5» в истории рядом с «52,5» в карточке над ней (правило П45).
+  // Пищевая ценность — на 1 г, как в карточке над историей (ADR-0065).
+  if (typeof value === "number" && NUMERIC_FIELDS.has(field)) {
+    return formatPerGram(value);
+  }
   if (typeof value === "number") return formatMass(value);
   if (typeof value === "string" && NUMERIC_FIELDS.has(field)) {
     const parsed = Number(value);
-    if (Number.isFinite(parsed)) return formatMass(parsed);
+    if (Number.isFinite(parsed)) return formatPerGram(parsed);
   }
   return String(value);
 }
