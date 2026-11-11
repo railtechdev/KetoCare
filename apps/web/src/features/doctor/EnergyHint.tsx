@@ -23,7 +23,8 @@ export function EnergyHint({
   onApply,
 }: {
   patientId: string;
-  onApply: (kcal: number) => void;
+  /** Калорийность и белок по весу (1 г на кг, ответ клиники 11.11.2026). */
+  onApply: (kcal: number, proteinG: number) => void;
 }) {
   const { t } = useTranslation("doctor");
   const patient = usePatient(patientId);
@@ -106,7 +107,9 @@ export function EnergyHint({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => onApply(option.kcal)}
+            onClick={() =>
+              onApply(option.kcal, Math.round(range.data.protein_g * 10) / 10)
+            }
           >
             {t(`prescription.energy.${option.key}`, {
               kcal: formatKcal(option.kcal),

@@ -686,3 +686,18 @@ class TestEnergyRequirement:
 
         with pytest.raises(ValueError):
             energy_requirement(age, weight)
+
+
+class TestProteinRequirement:
+    @pytest.mark.parametrize(("weight", "expected"), [(23.0, 23.0), (18.5, 18.5), (4.2, 4.2)])
+    def test_one_gram_per_kilogram(self, weight, expected):
+        from keto_engine import protein_requirement
+
+        assert protein_requirement(weight) == pytest.approx(expected)
+
+    @pytest.mark.parametrize("weight", [0.0, -1.0])
+    def test_rejects_impossible_weight(self, weight):
+        from keto_engine import protein_requirement
+
+        with pytest.raises(ValueError):
+            protein_requirement(weight)

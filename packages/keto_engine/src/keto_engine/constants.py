@@ -85,7 +85,9 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # 1.3.0 — `ItemAmount` carries the net carbs of its position, and `meal_macro_goal()`
 # gives the grams one meal should contain. Minor: new contract fields and a new
 # function, the results of verify() and solve() do not change.
-ENGINE_VERSION = "1.4.0"
+# 1.5.0 — `protein_requirement()` gives the daily protein target from weight
+# (1 g per kg, clinic's answer of 2026-11-11). Minor: a new function.
+ENGINE_VERSION = "1.5.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,
@@ -102,3 +104,9 @@ ENERGY_KCAL_PER_KG_BY_AGE: tuple[tuple[float, float, float], ...] = (
     (11, 55.0, 60.0),
     (float("inf"), 30.0, 40.0),
 )
+
+
+# Daily protein target on the ketogenic diet: 1 g per kilogram of body weight.
+# Confirmed by the clinic on 2026-11-11 ("верно, правило 1 г на кг"), as in KDC,
+# where protein is derived rather than entered.
+PROTEIN_G_PER_KG = 1.0

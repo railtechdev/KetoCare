@@ -281,6 +281,7 @@ class EnergyRequirementResponse(BaseModel):
     kcal_max: float
     kcal_per_kg_min: float
     kcal_per_kg_max: float
+    protein_g: float
     engine_version: str
 
 

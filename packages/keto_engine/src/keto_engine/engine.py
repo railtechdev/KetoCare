@@ -224,6 +224,14 @@ def energy_requirement(age_years: int, weight_kg: float) -> tuple[float, float]:
     raise AssertionError("the last row covers every age")  # pragma: no cover
 
 
+def protein_requirement(weight_kg: float) -> float:
+    """Daily protein target in grams: weight times `PROTEIN_G_PER_KG`."""
+
+    if weight_kg <= 0:
+        raise ValueError("Вес должен быть положительным")
+    return weight_kg * constants.PROTEIN_G_PER_KG
+
+
 def meal_macro_goal(
     ratio: float,
     kcal: float,
