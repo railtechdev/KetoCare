@@ -352,6 +352,26 @@ async def _standard_or_404(session: SessionDep, standard_id: uuid.UUID) -> FoodS
     return standard
 
 
+#: Подписи полей для сообщений — как в форме продукта.
+_FIELD_NAMES = {
+    "kcal_100g": "калорийность",
+    "fat_100g": "жиры",
+    "protein_100g": "белки",
+    "carbs_100g": "углеводы",
+    "fiber_100g": "клетчатка",
+}
+
+
+def _unknown_in_clinic(fields: list[str]) -> ApiError:
+    names = ", ".join(_FIELD_NAMES.get(field, field) for field in fields)
+    return ApiError(
+        ErrorCode.VALIDATION_ERROR,
+        f"В источнике нет данных: {names}. В стандарте клиники по этим числам "
+        "считают еду ребёнку — впишите значение или подтвердите, что оно верно.",
+        details={"fields": fields},
+    )
+
+
 def _standard_locked() -> ApiError:
     return ApiError(
         ErrorCode.CONFLICT,
@@ -555,6 +575,8 @@ async def create_product(
         await session.flush()
     except products_repo.StandardLockedError as error:
         raise _standard_locked() from error
+    except products_repo.UnknownValueInClinicError as error:
+        raise _unknown_in_clinic(error.fields) from error
     except IntegrityError as error:
         raise ApiError(
             ErrorCode.CONFLICT,
@@ -592,13 +614,19 @@ async def update_product(
     before = ProductRead.model_validate(product).model_dump(mode="json")
     # Поправленное число подписывается автором правки; нетронутые сохраняют
     # прежнее происхождение. Словарь новый — изменение JSONB на месте ORM не видит.
-    changed = _changed_values(product, payload)
+    unknown_before = list(product.unknown_fields or [])
+    # Подтверждённое человеком число — его правка, даже если оно не изменилось.
+    confirmed = [field for field in payload.confirmed_fields if field in unknown_before]
+    changed = list(dict.fromkeys([*_changed_values(product, payload), *confirmed]))
     value_sources = {
         **(product.value_sources or {}),
         **{field: _manual_source(user.id) for field in changed},
     }
-    # Вписанное человеком число перестаёт быть «нет данных».
-    unknown_fields = [field for field in product.unknown_fields or [] if field not in changed]
+    # Вписанное или подтверждённое человеком число перестаёт быть «нет данных».
+    unknown_fields = [field for field in unknown_before if field not in changed]
+    extra: dict[str, Any] = {}
+    if "fiber_100g" in confirmed:
+        extra["fiber_known"] = True
     try:
         updated = await products_repo.update(
             session,
@@ -606,10 +634,13 @@ async def update_product(
             changed_by=user.id,
             value_sources=value_sources,
             unknown_fields=unknown_fields,
-            **payload.model_dump(),
+            **extra,
+            **payload.model_dump(exclude={"confirmed_fields"}),
         )
     except products_repo.StandardLockedError as error:
         raise _standard_locked() from error
+    except products_repo.UnknownValueInClinicError as error:
+        raise _unknown_in_clinic(error.fields) from error
 
     await audit_repo.write_audit_log(
         session,
@@ -719,9 +750,21 @@ async def derive_product(
     # До записи: после отказа индекса транзакция откатывается, и чтение атрибута
     # загруженного стандарта падает вместо ответа 409.
     target_name = target.name
-    fields = payload.model_dump(exclude={"standard_id"})
+    fields = payload.model_dump(exclude={"standard_id", "confirmed_fields"})
     fiber_changed = products_repo.fiber_differs(source.fiber_100g, payload.fiber_100g)
-    changed = set(_changed_values(source, payload))
+    unknown_before = list(source.unknown_fields or [])
+    confirmed = {field for field in payload.confirmed_fields if field in unknown_before}
+    changed = set(_changed_values(source, payload)) | confirmed
+    # Копия ложится в стандарт клиники, по которому считают ребёнку: прочерк
+    # источника в жирах, белках или углеводах там не остаётся. Его надо
+    # вписать или подтвердить — иначе 0 на месте «нет данных» ушёл бы в расчёт.
+    unknown_energy = [
+        field
+        for field in unknown_before
+        if field in products_repo.ENERGY_FIELDS and field not in changed
+    ]
+    if unknown_energy:
+        raise _unknown_in_clinic(unknown_energy)
     value_sources = {
         field: _manual_source(user.id)
         if field in changed
@@ -736,16 +779,19 @@ async def derive_product(
             derived_from_id=source.id,
             food_id=source.food_id,
             # Клетчатка известна, если её знал источник или её вписали в копии.
-            fiber_known=source.fiber_known or fiber_changed,
+            fiber_known=source.fiber_known or fiber_changed or "fiber_100g" in confirmed,
             value_sources=value_sources,
-            # Прочерк источника остаётся прочерком, пока число не вписали.
-            unknown_fields=[field for field in source.unknown_fields or [] if field not in changed],
+            # Остаться может только клетчатка: репозиторий снимет пометку и
+            # оставит `fiber_known = false`.
+            unknown_fields=[field for field in unknown_before if field not in changed],
             waste_pct=source.waste_pct,
             **fields,
         )
         await session.flush()
     except products_repo.StandardLockedError as error:
         raise _standard_locked() from error
+    except products_repo.UnknownValueInClinicError as error:
+        raise _unknown_in_clinic(error.fields) from error
     except IntegrityError as error:
         raise ApiError(
             ErrorCode.CONFLICT,

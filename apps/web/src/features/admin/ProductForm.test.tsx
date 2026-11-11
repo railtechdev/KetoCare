@@ -185,3 +185,53 @@ describe("карточка продукта: контроль калорийно
     ).not.toBeInTheDocument();
   });
 });
+
+describe("карточка продукта: прочерк источника (ADR-0067)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.POST as Mock).mockResolvedValue({ data: [] });
+  });
+
+  it("помечает поле «нет данных» и даёт подтвердить ноль", async () => {
+    const onSubmit = vi.fn();
+    const categoryId = "6f1e5c34-9b7a-4c2d-8f10-2a3b4c5d6e7f";
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProductForm
+          mode="derive"
+          defaultValues={{
+            nameRu: "Говядина I категории",
+            nameUz: "",
+            nameEn: "",
+            categoryId,
+            kcal: 2.18,
+            fat: 0.07,
+            protein: 0.189,
+            carbs: 0,
+            fiber: 0,
+            source: "Минздрав РУз",
+            sourceVersion: "действующая редакция",
+            verifiedAt: "2026-11-11",
+            isActive: true,
+            seasoning: false,
+          }}
+          categories={[
+            { id: categoryId, name_ru: "Белковые", sort: 0, products: 1 },
+          ]}
+          unknownNutrients={["carbs"]}
+          pending={false}
+          error={null}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText(adminRu.products.form.noData)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(adminRu.products.form.confirmValue));
+    fireEvent.click(screen.getByRole("button", { name: /Сохранить/ }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0]?.[0].confirmed.carbs).toBe(true);
+  });
+});

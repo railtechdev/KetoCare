@@ -45,7 +45,41 @@ export const productFormSchema = z.object({
    * клиника. В теле запроса — обратное `counts_in_calculation`.
    */
   seasoning: z.boolean(),
+  /**
+   * Поля с прочерком источника (ADR-0067), число в которых человек
+   * подтвердил как есть. Без отметки настоящий ноль на месте прочерка не
+   * отличить от «нет данных»: пометка снимается только сменой числа.
+   */
+  // Флажок стоит только у поля с прочерком: у остальных значения нет вовсе.
+  confirmed: z
+    .object({
+      kcal: z.boolean().optional(),
+      fat: z.boolean().optional(),
+      protein: z.boolean().optional(),
+      carbs: z.boolean().optional(),
+      fiber: z.boolean().optional(),
+    })
+    .optional(),
 });
+
+/** Поле формы → поле значения API. */
+export const NUTRIENT_FIELDS = {
+  kcal: "kcal_100g",
+  fat: "fat_100g",
+  protein: "protein_100g",
+  carbs: "carbs_100g",
+  fiber: "fiber_100g",
+} as const;
+
+export type Nutrient = keyof typeof NUTRIENT_FIELDS;
+
+const NO_CONFIRMED = {
+  kcal: false,
+  fat: false,
+  protein: false,
+  carbs: false,
+  fiber: false,
+};
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;
 
@@ -66,6 +100,7 @@ export const EMPTY_PRODUCT_FORM_VALUES: DefaultValues<ProductFormValues> = {
   // Какие продукты приправы, решает тот, кто заводит карточку: по умолчанию
   // продукт считается.
   seasoning: false,
+  confirmed: NO_CONFIRMED,
 };
 
 export function toProductFormValues(product: Product): ProductFormValues {
@@ -84,7 +119,25 @@ export function toProductFormValues(product: Product): ProductFormValues {
     verifiedAt: product.verified_at,
     isActive: product.is_active,
     seasoning: !product.counts_in_calculation,
+    confirmed: NO_CONFIRMED,
   };
+}
+
+/** Поля формы, у которых в источнике прочерк. */
+export function unknownNutrients(product: Product | null): Nutrient[] {
+  const unknown = product?.unknown_fields ?? [];
+  return (Object.keys(NUTRIENT_FIELDS) as Nutrient[]).filter((nutrient) =>
+    unknown.includes(NUTRIENT_FIELDS[nutrient]),
+  );
+}
+
+/** Подтверждённые человеком поля — в тело правки и «Скорректировать». */
+export function confirmedFields(
+  values: ProductFormValues,
+): (typeof NUTRIENT_FIELDS)[Nutrient][] {
+  return (Object.keys(NUTRIENT_FIELDS) as Nutrient[])
+    .filter((nutrient) => values.confirmed?.[nutrient] === true)
+    .map((nutrient) => NUTRIENT_FIELDS[nutrient]);
 }
 
 /**
@@ -120,5 +173,9 @@ export function toProductCreateBody(
 export function toProductUpdateBody(
   values: ProductFormValues,
 ): ProductUpdateBody {
-  return { ...toProductCreateBody(values), is_active: values.isActive };
+  return {
+    ...toProductCreateBody(values),
+    is_active: values.isActive,
+    confirmed_fields: confirmedFields(values),
+  };
 }

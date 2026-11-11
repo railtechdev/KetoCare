@@ -11,13 +11,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 
-from core.models import FoodStandard
+from core.models import FoodStandard, Product, ProductCategory
 from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, UserRole
+from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
 
 pytestmark = pytest.mark.asyncio
@@ -256,45 +257,226 @@ async def test_source_files_load_and_link_by_name(client, session, make_user, au
     assert float(usda[0].carbs_100g) == 3.89
 
 
-async def test_derived_copy_keeps_unknown_until_a_number_is_written(
-    client, session, make_user, auth_headers
-):
-    """«Скорректировать»: прочерк источника остаётся прочерком, вписанное — нет."""
+async def _locked_beef(client, session, user, auth_headers) -> Product:
+    """Говядина Минздрава с прочерком в углеводах — в закрытом справочнике-источнике."""
 
-    dietitian = await make_user(UserRole.DIETITIAN)
     reference = await _standard(session, FoodStandardKind.REFERENCE)
-    clinic = await _standard(session, FoodStandardKind.CLINIC)
     name = f"Говядина {uuid.uuid4().hex[:6]}"
     await client.post(
         "/api/v1/products/import",
         params={"standard_id": str(reference.id), "dry_run": "false"},
         files=_file(_beef(name)),
-        headers=auth_headers(dietitian),
+        headers=auth_headers(user),
     )
     items, _ = await products_repo.search(session, q=name, standard_id=reference.id)
-    source = items[0]
     reference.locked_at = datetime.now(UTC)
     await session.flush()
+    return items[0]
+
+
+def _derive_body(source: Product, clinic: FoodStandard, **changes) -> dict:
+    body = {
+        "standard_id": str(clinic.id),
+        "name_ru": source.name_ru,
+        "category_id": str(source.category_id),
+        "kcal_100g": 218,
+        "fat_100g": 7,
+        "protein_100g": 18.9,
+        "carbs_100g": 0,
+        "fiber_100g": 0,
+        "source": "Правка диетолога",
+        "source_version": "2026-11",
+        "verified_at": "2026-11-11",
+    }
+    body.update(changes)
+    return body
+
+
+async def test_copy_with_carbs_left_unknown_is_refused(client, session, make_user, auth_headers):
+    """Прочерк в углеводах, оставленный как есть, в стандарт клиники не попадает.
+
+    Форма подставляет 0 на место прочерка; без отказа этот 0 ушёл бы в расчёт
+    ребёнку как настоящее число.
+    """
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    source = await _locked_beef(client, session, dietitian, auth_headers)
+    clinic = await _standard(session, FoodStandardKind.CLINIC)
 
     response = await client.post(
         f"/api/v1/products/{source.id}/derive",
-        json={
-            "standard_id": str(clinic.id),
-            "name_ru": name,
-            "category_id": str(source.category_id),
-            "kcal_100g": 218,
-            "fat_100g": 7,
-            "protein_100g": 18.9,
-            "carbs_100g": 0.5,
-            "fiber_100g": 0,
-            "source": "Правка диетолога",
-            "source_version": "2026-11",
-            "verified_at": "2026-11-11",
-        },
+        json=_derive_body(source, clinic),
+        headers=auth_headers(dietitian),
+    )
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["details"]["fields"] == ["carbs_100g"]
+    assert "углеводы" in error["message"]
+
+
+async def test_copy_with_written_carbs_is_clinic_clean(client, session, make_user, auth_headers):
+    """Вписанные углеводы — копия заводится; неизвестная клетчатка — `fiber_known=false`."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    source = await _locked_beef(client, session, dietitian, auth_headers)
+    clinic = await _standard(session, FoodStandardKind.CLINIC)
+
+    response = await client.post(
+        f"/api/v1/products/{source.id}/derive",
+        json=_derive_body(source, clinic, carbs_100g=0.5),
         headers=auth_headers(dietitian),
     )
 
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["unknown_fields"] == ["fiber_100g"]
+    assert body["unknown_fields"] == []
+    assert body["fiber_known"] is False
     assert body["waste_pct"] == 25.0
+
+
+async def test_true_zero_is_confirmed_explicitly(client, session, make_user, auth_headers):
+    """Настоящий ноль на месте прочерка подтверждается явно (`confirmed_fields`)."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    source = await _locked_beef(client, session, dietitian, auth_headers)
+    clinic = await _standard(session, FoodStandardKind.CLINIC)
+
+    response = await client.post(
+        f"/api/v1/products/{source.id}/derive",
+        json=_derive_body(source, clinic, confirmed_fields=["carbs_100g"]),
+        headers=auth_headers(dietitian),
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["unknown_fields"] == []
+    assert body["value_sources"]["carbs_100g"]["kind"] == "manual"
+
+
+async def test_edit_confirms_zero_in_a_reference_record(client, session, make_user, auth_headers):
+    dietitian = await make_user(UserRole.DIETITIAN)
+    standard = await _standard(session, FoodStandardKind.REFERENCE)
+    name = f"Говядина {uuid.uuid4().hex[:6]}"
+    await client.post(
+        "/api/v1/products/import",
+        params={"standard_id": str(standard.id), "dry_run": "false"},
+        files=_file(_beef(name)),
+        headers=auth_headers(dietitian),
+    )
+    items, _ = await products_repo.search(session, q=name, standard_id=standard.id)
+    product = items[0]
+
+    response = await client.put(
+        f"/api/v1/products/{product.id}",
+        json={
+            **_derive_body(product, standard),
+            "confirmed_fields": ["carbs_100g", "fiber_100g"],
+        },
+        headers=auth_headers(dietitian),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["unknown_fields"] == []
+    assert body["fiber_known"] is True
+
+
+async def test_repository_keeps_clinic_standard_free_of_unknown_energy(session, make_user):
+    """Инвариант держит и репозиторий, а не только ручка."""
+
+    admin = await make_user(UserRole.ADMIN)
+    clinic = await _standard(session, FoodStandardKind.CLINIC)
+    category = ProductCategory(name_ru=f"Категория {uuid.uuid4().hex[:6]}", sort=0)
+    session.add(category)
+    await session.flush()
+    values = dict(
+        name_ru=f"Говядина {uuid.uuid4().hex[:6]}",
+        category_id=category.id,
+        kcal_100g=218,
+        fat_100g=7,
+        protein_100g=18.9,
+        carbs_100g=0,
+        fiber_100g=0,
+        source="Минздрав РУз",
+        source_version="1",
+        verified_at=date(2026, 11, 11),
+    )
+
+    with pytest.raises(products_repo.UnknownValueInClinicError):
+        await products_repo.create(
+            session,
+            changed_by=admin.id,
+            standard_id=clinic.id,
+            unknown_fields=["carbs_100g"],
+            **values,
+        )
+
+    product = await products_repo.create(
+        session,
+        changed_by=admin.id,
+        standard_id=clinic.id,
+        unknown_fields=["fiber_100g"],
+        **{**values, "name_ru": values["name_ru"] + " 2"},
+    )
+    assert product.unknown_fields == []
+    assert product.fiber_known is False
+
+    with pytest.raises(products_repo.UnknownValueInClinicError):
+        await products_repo.update(
+            session, product=product, changed_by=admin.id, unknown_fields=["fat_100g"]
+        )
+
+
+async def test_calculator_refuses_product_with_unknown_energy(
+    client, session, make_user, auth_headers
+):
+    """Значения `/calc` приходят телом, но прочерк — отметка базы: отказ 422."""
+
+    dietitian = await make_user(UserRole.DIETITIAN)
+    source = await _locked_beef(client, session, dietitian, auth_headers)
+    ingredient = {
+        "product_id": str(source.id),
+        "kcal": 218,
+        "fat": 7,
+        "protein": 18.9,
+        "carbs": 0,
+        "fiber": 0,
+    }
+
+    response = await client.post(
+        "/api/v1/calc/verify",
+        json={
+            "ingredients": [ingredient],
+            "items": [{"product_id": str(source.id), "grams": 100}],
+        },
+        headers=auth_headers(dietitian),
+    )
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert source.name_ru in error["message"]
+    assert error["details"]["product_ids"] == [str(source.id)]
+
+
+async def test_dish_with_unknown_energy_product_is_not_saved(
+    client, session, make_user, make_patient, auth_headers
+):
+    dietitian = await make_user(UserRole.DIETITIAN)
+    source = await _locked_beef(client, session, dietitian, auth_headers)
+    parent = await make_user(UserRole.PARENT)
+    patient = await make_patient()
+    await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+
+    response = await client.post(
+        f"/api/v1/patients/{patient.id}/custom-dishes",
+        json={
+            "title": "Обед",
+            "ingredients": [{"product_id": str(source.id), "grams": 100}],
+        },
+        headers=auth_headers(parent),
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["details"]["product_ids"] == [str(source.id)]

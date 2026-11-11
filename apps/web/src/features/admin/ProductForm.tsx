@@ -21,7 +21,11 @@ import {
 } from "../../components/FormErrorSummary";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { anomalyDetail } from "./productAnomalyText";
-import { productFormSchema, type ProductFormValues } from "./productSchemas";
+import {
+  productFormSchema,
+  type Nutrient,
+  type ProductFormValues,
+} from "./productSchemas";
 import { useProductValuesCheck } from "./useProductValuesCheck";
 import type { ProductCategory } from "./types";
 
@@ -31,6 +35,8 @@ interface Props {
   defaultValues: DefaultValues<ProductFormValues>;
   /** Идентификаторы категорий, уже встречающиеся в справочнике — для подсказки */
   categories: readonly ProductCategory[];
+  /** Поля с прочерком в источнике (ADR-0067): в числе 0, это «нет данных» */
+  unknownNutrients?: readonly Nutrient[];
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
@@ -86,6 +92,7 @@ export function ProductForm({
   mode,
   defaultValues,
   categories,
+  unknownNutrients = [],
   pending,
   error,
   onSubmit,
@@ -247,20 +254,40 @@ export function ProductForm({
             вроде «мин/макс», и в две колонки порядок их чтения перестаёт
             совпадать с порядком колонок в источнике, откуда их переносят. */}
         <div className="flex flex-col gap-section">
-          {NUTRIENTS.map((nutrient) => (
-            <Field
-              key={nutrient}
-              id={fieldId(nutrient)}
-              width="narrow"
-              type="number"
-              min={0}
-              step="0.0001"
-              inputMode="decimal"
-              label={t(`products.form.${nutrient}`)}
-              error={fieldError(nutrient)}
-              {...register(nutrient, { valueAsNumber: true })}
-            />
-          ))}
+          {NUTRIENTS.map((nutrient) => {
+            const unknown = unknownNutrients.includes(nutrient);
+            const confirmId = `${ids}-confirm-${nutrient}`;
+            return (
+              <div key={nutrient} className="flex flex-col gap-1">
+                <Field
+                  id={fieldId(nutrient)}
+                  width="narrow"
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  inputMode="decimal"
+                  label={t(`products.form.${nutrient}`)}
+                  // Прочерк источника лежит нулём: без подсказки его
+                  // нельзя отличить от настоящего нуля (ADR-0067).
+                  hint={unknown ? t("products.form.noData") : undefined}
+                  error={fieldError(nutrient)}
+                  {...register(nutrient, { valueAsNumber: true })}
+                />
+                {unknown && (
+                  <label
+                    htmlFor={confirmId}
+                    className="flex min-h-touch items-center gap-field text-sm"
+                  >
+                    <Checkbox
+                      id={confirmId}
+                      {...register(`confirmed.${nutrient}`)}
+                    />
+                    {t("products.form.confirmValue")}
+                  </label>
+                )}
+              </div>
+            );
+          })}
           {/* Рядом с пищевой ценностью, а не в происхождении: отметка решает,
               пойдут ли эти числа в расчёт ребёнку (ADR-0054). */}
           <div className="flex flex-col gap-1">

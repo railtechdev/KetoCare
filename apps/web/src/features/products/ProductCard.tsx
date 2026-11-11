@@ -101,7 +101,12 @@ export function ProductCard({
       onBack={onBack}
       backLabel={t("card.back")}
       actions={
-        data && (
+        // Прочерк в жирах, белках или углеводах (ADR-0067): сервер такой
+        // продукт в расчёт не пустит, и кнопка вела бы в отказ.
+        data &&
+        !ENERGY_FIELDS.some((field) =>
+          data.unknown_fields?.includes(field),
+        ) && (
           // Справочник без выхода в расчёт — тупик: продукт найден, а сделать
           // с ним нечего.
           <Button asChild className="min-h-touch">
@@ -268,6 +273,8 @@ export function ProductCard({
     </PageLayout>
   );
 }
+
+const ENERGY_FIELDS = ["fat_100g", "protein_100g", "carbs_100g"] as const;
 
 type ValueField =
   "kcal_100g" | "fat_100g" | "protein_100g" | "carbs_100g" | "fiber_100g";

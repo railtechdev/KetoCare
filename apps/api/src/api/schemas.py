@@ -408,6 +408,9 @@ class ProductBase(BaseModel):
         return self
 
 
+ProductValueField = Literal["kcal_100g", "fat_100g", "protein_100g", "carbs_100g", "fiber_100g"]
+
+
 class ProductCreate(ProductBase):
     #: Не указан — основной стандарт.
     standard_id: uuid.UUID | None = None
@@ -415,6 +418,10 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(ProductBase):
     is_active: bool = True
+    #: Поля из `unknown_fields`, число в которых человек подтвердил как есть
+    #: (ADR-0067). Иначе настоящий ноль на месте прочерка подтвердить нельзя:
+    #: пометка снимается только сменой числа.
+    confirmed_fields: list[ProductValueField] = Field(default_factory=list)
 
 
 class ProductValueSourceRead(BaseModel):
@@ -556,6 +563,8 @@ class ProductDerive(ProductBase):
 
     #: Куда кладётся копия. Не указан — основной стандарт клиники.
     standard_id: uuid.UUID | None = None
+    #: Поля с прочерком в оригинале, число в которых подтверждено как есть.
+    confirmed_fields: list[ProductValueField] = Field(default_factory=list)
 
 
 # --- food standards -------------------------------------------------------

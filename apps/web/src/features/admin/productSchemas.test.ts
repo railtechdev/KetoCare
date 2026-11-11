@@ -24,6 +24,13 @@ const VALID: ProductFormValues = {
   verifiedAt: "2026-03-01",
   isActive: true,
   seasoning: false,
+  confirmed: {
+    kcal: false,
+    fat: false,
+    protein: false,
+    carbs: false,
+    fiber: false,
+  },
 };
 
 describe("productFormSchema", () => {
@@ -102,6 +109,15 @@ describe("toProductCreateBody", () => {
 });
 
 describe("toProductUpdateBody", () => {
+  it("подтверждённый прочерк уходит в confirmed_fields (ADR-0067)", () => {
+    const body = toProductUpdateBody({
+      ...VALID,
+      confirmed: { ...VALID.confirmed, carbs: true },
+    });
+    expect(body.confirmed_fields).toEqual(["carbs_100g"]);
+    expect(toProductUpdateBody(VALID).confirmed_fields).toEqual([]);
+  });
+
   it("отметка приправы уходит обратным counts_in_calculation (ADR-0054)", () => {
     expect(toProductCreateBody(VALID).counts_in_calculation).toBe(true);
     expect(

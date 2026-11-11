@@ -12,10 +12,12 @@ import {
 import { ProductForm } from "./ProductForm";
 import { ProductRevisions } from "../products/ProductRevisions";
 import {
+  confirmedFields,
   EMPTY_PRODUCT_FORM_VALUES,
   toProductCreateBody,
   toProductFormValues,
   toProductUpdateBody,
+  unknownNutrients,
 } from "./productSchemas";
 import {
   useCreateProductMutation,
@@ -137,6 +139,7 @@ export function ProductEditor({
             : toProductFormValues(product)
         }
         categories={categories}
+        unknownNutrients={unknownNutrients(product)}
         pending={create.isPending || update.isPending || derive.isPending}
         error={create.error ?? update.error ?? derive.error}
         onCancel={onCancel}
@@ -148,7 +151,11 @@ export function ProductEditor({
             );
           } else if (deriving) {
             derive.mutate(
-              { ...toProductCreateBody(values), standard_id: target },
+              {
+                ...toProductCreateBody(values),
+                standard_id: target,
+                confirmed_fields: confirmedFields(values),
+              },
               { onSuccess: onSaved },
             );
           } else {

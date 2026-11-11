@@ -23,12 +23,51 @@ from ..models import (
     ProductCategory,
     ProductRevision,
 )
-from ..models.enums import CarbsConvention, LeadingMacro
+from ..models.enums import CarbsConvention, FoodStandardKind, LeadingMacro
 from . import audit as audit_repo
 
 
 class StandardLockedError(Exception):
     """Значения закрытого стандарта не меняются ни для какой роли (ADR-0056)."""
+
+
+#: Поля, из которых складываются соотношение и калорийность. Неизвестное среди
+#: них (прочерк источника, лежит нулём) превратило бы расчёт в выдумку.
+ENERGY_FIELDS = ("fat_100g", "protein_100g", "carbs_100g")
+
+
+class UnknownValueInClinicError(Exception):
+    """В стандарте клиники по продукту считают еду ребёнку (ADR-0067).
+
+    Прочерк источника в жирах, белках или углеводах там недопустим: ноль на
+    месте неизвестного ушёл бы в расчёт как настоящее число. `fields` — какие
+    поля надо заполнить.
+    """
+
+    def __init__(self, fields: list[str]) -> None:
+        super().__init__(", ".join(fields))
+        self.fields = fields
+
+
+def _clinic_values_known(
+    standard: FoodStandard, fields: dict[str, Any], unknown: list[str]
+) -> None:
+    """Инвариант стандарта клиники: неизвестных жиров, белков и углеводов нет.
+
+    Неизвестная клетчатка допустима: 0 в ней — осторожная сторона (соотношение
+    не завышается), и это ровно `fiber_known = false`. Пометку «нет данных»
+    такая клетчатка теряет, чтобы `unknown_fields` в стандарте клиники был
+    пуст всегда.
+    """
+
+    if standard.kind is not FoodStandardKind.CLINIC:
+        return
+    energy = [field for field in unknown if field in ENERGY_FIELDS]
+    if energy:
+        raise UnknownValueInClinicError(energy)
+    if "fiber_100g" in unknown:
+        fields["unknown_fields"] = [field for field in unknown if field != "fiber_100g"]
+        fields["fiber_known"] = False
 
 
 _SNAPSHOT_FIELDS = (
@@ -254,6 +293,7 @@ async def create(session: AsyncSession, *, changed_by: uuid.UUID, **fields: Any)
     standard_id = fields.setdefault("standard_id", DEFAULT_FOOD_STANDARD_ID)
     standard = await _unlocked_standard(session, standard_id)
     fields.setdefault("fiber_known", standard.carbs_convention is not CarbsConvention.UNKNOWN)
+    _clinic_values_known(standard, fields, list(fields.get("unknown_fields") or []))
     inherited_food = fields.get("food_id") is not None
     if not inherited_food:
         fields.pop("food_id", None)
@@ -277,7 +317,7 @@ async def update(
 ) -> Product:
     """Обновляет продукт и пишет ревизию с новым состоянием."""
 
-    await _unlocked_standard(session, product.standard_id)
+    standard = await _unlocked_standard(session, product.standard_id)
     previous_name = product.name_ru
     # Вписанная клетчатка перестаёт быть неизвестной, иначе экран показывал бы
     # «не указана» рядом с числом, которое по-настоящему идёт в расчёт.
@@ -285,6 +325,9 @@ async def update(
     # клетчатке пишет 0 и «неизвестно» одновременно.
     if "fiber_100g" in fields and fiber_differs(product.fiber_100g, fields["fiber_100g"]):
         fields.setdefault("fiber_known", True)
+    _clinic_values_known(
+        standard, fields, list(fields.get("unknown_fields", product.unknown_fields) or [])
+    )
     for key, value in fields.items():
         setattr(product, key, value)
     await session.flush()

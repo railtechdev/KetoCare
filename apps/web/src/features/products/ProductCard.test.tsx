@@ -173,6 +173,10 @@ describe("карточка продукта", () => {
 
     expect(await screen.findByText("Отходы: 25 %")).toBeInTheDocument();
     expect(screen.getAllByText(productsRu.card.noData)).toHaveLength(2);
+    // Сервер такой продукт в расчёт не пустит — кнопки в калькулятор нет.
+    expect(
+      screen.queryByText(productsRu.actions.toCalculator),
+    ).not.toBeInTheDocument();
   });
 
   it("показывает происхождение значений, а не только числа", async () => {

@@ -66,6 +66,46 @@ def counts_in_calculation(product: Product) -> bool:
     return product.counts_in_calculation is not False
 
 
+#: Подписи полей для сообщения об отказе.
+_ENERGY_NAMES = {"fat_100g": "жиры", "protein_100g": "белки", "carbs_100g": "углеводы"}
+
+
+def unknown_energy(product: Product) -> list[str]:
+    """Жиры, белки, углеводы, которых в источнике продукта нет (ADR-0067).
+
+    В числе там 0, и это «нет данных»: на вход ядра такой продукт идти не
+    может — соотношение и калорийность получились бы правдоподобными и
+    неверными. Отметка читается из базы, не из тела запроса.
+    """
+
+    unknown = product.unknown_fields or []
+    return [field for field in products_repo.ENERGY_FIELDS if field in unknown]
+
+
+def refuse_unknown_energy(products: Iterable[Product]) -> None:
+    """422, если в расчёт идёт продукт с прочерком в жирах, белках или углеводах.
+
+    Одна проверка на все дороги к ядру: калькулятор, свои блюда, рецепты,
+    меню. Такие записи бывают только в справочниках-источниках; в рабочем
+    справочнике их не допускает репозиторий.
+    """
+
+    found = {product.id: product for product in products if unknown_energy(product)}
+    if not found:
+        return
+    described = "; ".join(
+        f"«{product.name_ru}» — "
+        + ", ".join(_ENERGY_NAMES[field] for field in unknown_energy(product))
+        for product in found.values()
+    )
+    raise ApiError(
+        ErrorCode.VALIDATION_ERROR,
+        f"В источнике нет данных: {described}. С таким продуктом блюдо не "
+        "посчитать — возьмите его из стандарта клиники.",
+        details={"product_ids": [str(pid) for pid in found]},
+    )
+
+
 def snapshot_row_counts(row: Mapping[str, Any]) -> bool:
     """То же для строки снимка позиции меню.
 
@@ -89,6 +129,8 @@ def split(
 
     counted: list[tuple[Ingredient, float]] = []
     uncounted: list[UncountedItem] = []
+    rows = list(rows)
+    refuse_unknown_energy(product for product, _ in rows if counts_in_calculation(product))
     for product, grams in rows:
         if counts_in_calculation(product):
             counted.append((to_ingredient(product), grams))
@@ -118,6 +160,11 @@ async def uncounted_products(
             continue
 
     products = await products_repo.get_by_ids(session, product_ids=list(parsed))
+    # Значения `/calc` приходят телом, но прочерк источника — отметка базы:
+    # продукт с неизвестными жирами, белками или углеводами в расчёт не идёт.
+    refuse_unknown_energy(
+        product for product in products.values() if counts_in_calculation(product)
+    )
     return {
         parsed[pid]: product
         for pid, product in products.items()
