@@ -67,7 +67,7 @@ export function PrescriptionForm({
 }: {
   defaultValues: DefaultValues<PrescriptionFormValues>;
   /** Подсказка под калорийностью; получает функцию, ставящую число в поле */
-  kcalHint?: (apply: (kcal: number) => void) => ReactNode;
+  kcalHint?: (apply: (kcal: number, proteinG: number) => void) => ReactNode;
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
@@ -98,6 +98,7 @@ export function PrescriptionForm({
     mealsPerDay: watch("mealsPerDay"),
   });
   const [carbsByHand, setCarbsByHand] = useState(false);
+  const [proteinByHand, setProteinByHand] = useState(false);
   const derivedCarbs = goal.data?.day.net_carbs_g ?? null;
   const inputsChanged =
     dirtyFields.kcalPerDay === true ||
@@ -177,12 +178,20 @@ export function PrescriptionForm({
           error={errors.kcalPerDay && t("prescription.errors.kcal")}
           {...register("kcalPerDay", { valueAsNumber: true })}
         />
-        {kcalHint?.((kcal) =>
+        {kcalHint?.((kcal, proteinG) => {
           setValue("kcalPerDay", kcal, {
             shouldDirty: true,
             shouldValidate: true,
-          }),
-        )}
+          });
+          // Белок идёт за калорийностью, как в KDC: 1 г на кг веса. Правка
+          // руками выключает подстановку до конца этой формы.
+          if (!proteinByHand) {
+            setValue("proteinG", proteinG, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+          }
+        })}
 
         <Field
           id={`${ids}-protein`}
@@ -193,7 +202,11 @@ export function PrescriptionForm({
           step={0.1}
           label={t("fields.proteinInput")}
           error={errors.proteinG && t("prescription.errors.protein")}
-          {...register("proteinG", { valueAsNumber: true })}
+          hint={proteinByHand ? undefined : t("prescription.proteinDerived")}
+          {...register("proteinG", {
+            valueAsNumber: true,
+            onChange: () => setProteinByHand(true),
+          })}
         />
 
         <Field

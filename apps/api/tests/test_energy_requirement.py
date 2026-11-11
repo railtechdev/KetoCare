@@ -22,11 +22,14 @@ class TestEnergyRequirement:
         assert body["kcal_min"] == pytest.approx(1170)
         assert body["kcal_max"] == pytest.approx(1224)
         assert body["kcal_per_kg_min"] == pytest.approx(65)
+        # Protein follows weight, 1 g per kg (clinic's answer of 2026-11-11).
+        assert body["protein_g"] == pytest.approx(18)
         assert set(body) == {
             "kcal_min",
             "kcal_max",
             "kcal_per_kg_min",
             "kcal_per_kg_max",
+            "protein_g",
             "engine_version",
         }
 
