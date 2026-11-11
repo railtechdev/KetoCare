@@ -26,6 +26,7 @@ import {
   weekStartOf,
 } from "./dates";
 import { useMealsPerDay } from "./useMenu";
+import { WeekCellAdd } from "./WeekCellAdd";
 import { useCopyWeek, useWeekQuery, type MenuWeek } from "./useWeek";
 
 /**
@@ -205,6 +206,13 @@ export function WeekGrid({ patientId }: { patientId: string }) {
                             )}
                           </p>
                         ))}
+                      <WeekCellAdd
+                        patientId={patientId}
+                        date={day.date}
+                        mealIndex={meal}
+                        dayItems={day.menu?.items}
+                        dayLabel={formatDayLabel(day.date)}
+                      />
                     </td>
                   ))}
                 </tr>

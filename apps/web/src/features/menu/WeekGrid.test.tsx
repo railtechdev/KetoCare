@@ -13,7 +13,7 @@ import { WeekGrid } from "./WeekGrid";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
-  return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
+  return { ...actual, api: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() } };
 });
 
 i18n.addResourceBundle("ru", "menu", menuRu, true, true);
@@ -39,6 +39,8 @@ function week(start: string) {
                 {
                   id: "i1",
                   meal_index: 2,
+                  recipe_id: null,
+                  custom_dish_id: "d0",
                   title: "Омлет",
                   portion_factor: 1,
                   ingredients: [
@@ -74,7 +76,9 @@ beforeEach(() => {
       Promise.resolve(
         path.endsWith("/week")
           ? { data: week(options.params.query.start) }
-          : { data: { prescription: { meals_per_day: 3 } } },
+          : path.endsWith("/custom-dishes")
+            ? { data: { items: [{ id: "d1", title: "Каша" }], total: 1 } }
+            : { data: { prescription: { meals_per_day: 3 } } },
       ),
   );
   (api.POST as Mock).mockResolvedValue({
@@ -139,5 +143,40 @@ describe("начало недели", () => {
   it("воскресенье относится к неделе, начатой в понедельник", () => {
     expect(weekStartOf("2026-11-15")).toBe("2026-11-09");
     expect(weekStartOf("2026-11-09")).toBe("2026-11-09");
+  });
+});
+
+describe("ячейка недели", () => {
+  it("ставит блюдо ребёнка в приём, сохраняя прежние позиции дня", async () => {
+    const start = weekStartOf(new Date().toLocaleDateString("sv-SE"));
+    (api.PUT as Mock).mockResolvedValue({
+      data: { date: start, items: [], totals: null },
+    });
+    renderGrid();
+    const user = userEvent.setup();
+
+    const addButtons = await screen.findAllByRole("button", {
+      name: /Добавить блюдо: .*приём 1/,
+    });
+    await user.click(addButtons[0]!);
+    await user.click(await screen.findByRole("button", { name: "Каша" }));
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalled());
+    const body = (api.PUT as Mock).mock.calls[0]![1].body;
+    expect(body.date).toBe(start);
+    expect(body.items).toEqual([
+      {
+        meal_index: 2,
+        recipe_id: null,
+        custom_dish_id: "d0",
+        portion_factor: 1,
+      },
+      {
+        meal_index: 1,
+        recipe_id: null,
+        custom_dish_id: "d1",
+        portion_factor: 1,
+      },
+    ]);
   });
 });
