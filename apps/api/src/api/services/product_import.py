@@ -36,6 +36,16 @@ OPTIONAL_COLUMNS = ("name_uz", "name_en")
 #: трогает. Иначе файл старого образца молча возвращал бы соль в расчёт.
 COUNTS_COLUMN = "counts_in_calculation"
 
+#: Необязательная колонка: отходы при холодной обработке, % массы брутто
+#: (ADR-0067). Значения продукта — на 100 г съедобной части, отходы стоят
+#: рядом. Пустая ячейка — источник отходов не приводит.
+WASTE_COLUMN = "waste_pct"
+
+#: Поля значения, которые справочник-источник вправе оставить пустыми: прочерк в
+#: таблице — «нет данных», а не ноль (ADR-0067). Калорийность в этот список не
+#: входит: без неё строка не описывает продукт вовсе.
+UNKNOWABLE_COLUMNS = ("fat_100g", "protein_100g", "carbs_100g", "fiber_100g")
+
 _TRUE_WORDS = frozenset({"да", "1", "true", "yes", "ha"})
 _FALSE_WORDS = frozenset({"нет", "0", "false", "no", "yo'q", "yoq"})
 
@@ -130,8 +140,15 @@ class ImportReport:
         return not self.errors
 
 
-def parse_csv(content: bytes) -> ImportReport:
-    """Разбирает CSV, проверяя каждую строку. Не пишет в БД."""
+def parse_csv(content: bytes, *, allow_unknown: bool = False) -> ImportReport:
+    """Разбирает CSV, проверяя каждую строку. Не пишет в БД.
+
+    `allow_unknown` — файл идёт в справочник-источник (`kind = reference`):
+    пустая ячейка жиров, белков, углеводов или клетчатки там значит «в
+    источнике прочерк». Число в колонке тогда 0, а поле попадает в
+    `unknown_fields`. В рабочий справочник такая строка не пройдёт: по нему
+    считают еду ребёнку, и ноль вместо неизвестного исказил бы расчёт молча.
+    """
 
     report = ImportReport()
 
@@ -155,7 +172,7 @@ def parse_csv(content: bytes) -> ImportReport:
 
     for line_no, raw_row in enumerate(reader, start=2):
         report.total_rows += 1
-        parsed, row_errors = _parse_row(raw_row, line_no)
+        parsed, row_errors = _parse_row(raw_row, line_no, allow_unknown=allow_unknown)
         if row_errors:
             report.errors.extend(row_errors)
         else:
@@ -231,9 +248,12 @@ def _text_field(
     return value, errors
 
 
-def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any], list[RowError]]:
+def _parse_row(
+    row: dict[str, str | None], line_no: int, *, allow_unknown: bool = False
+) -> tuple[dict[str, Any], list[RowError]]:
     errors: list[RowError] = []
     parsed: dict[str, Any] = {}
+    unknown: list[str] = []
 
     name, name_errors = _text_field(
         row, "name_ru", line_no, required=True, required_message="Название обязательно."
@@ -259,6 +279,21 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
         ("fiber_100g", MACRO_MAX),
     ):
         raw_value = (row.get(column) or "").strip()
+        if not raw_value and column in UNKNOWABLE_COLUMNS:
+            if allow_unknown:
+                unknown.append(column)
+                parsed[column] = 0.0
+            else:
+                errors.append(
+                    RowError(
+                        line_no,
+                        column,
+                        "Пустая ячейка («нет данных») допускается только в "
+                        "справочнике-источнике. В рабочем справочнике нужно число: "
+                        "по нему считают еду ребёнку.",
+                    )
+                )
+            continue
         # Не `float`: он принимает «nan», «inf», «1e2» и «1_00», и NaN не
         # проходит ни одно сравнение ниже (`csv_numbers`).
         number = parse_decimal(raw_value)
@@ -272,6 +307,26 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
                 RowError(line_no, column, f"Значение {number:g} превышает допустимое ({limit:g}).")
             )
         parsed[column] = number
+
+    parsed["unknown_fields"] = unknown
+
+    raw_waste = (row.get(WASTE_COLUMN) or "").strip()
+    if raw_waste:
+        waste = parse_decimal(raw_waste)
+        if waste is None:
+            errors.append(
+                RowError(line_no, WASTE_COLUMN, f"Ожидалось число, получено: {raw_waste!r}.")
+            )
+        elif not 0 <= waste < 100:
+            errors.append(
+                RowError(
+                    line_no,
+                    WASTE_COLUMN,
+                    f"Отходы — процент массы брутто, от 0 до 100; получено {waste:g}.",
+                )
+            )
+        else:
+            parsed[WASTE_COLUMN] = waste
 
     raw_counts = (row.get(COUNTS_COLUMN) or "").strip().casefold()
     if raw_counts in _TRUE_WORDS:
@@ -319,7 +374,13 @@ def _parse_row(row: dict[str, str | None], line_no: int) -> tuple[dict[str, Any]
     # (см. infra/seed/README.md), и такую таблицу пересчитывать надо построчно.
     fiber = parsed.get("fiber_100g")
     carbs = parsed.get("carbs_100g")
-    if isinstance(fiber, float) and isinstance(carbs, float) and fiber > carbs:
+    # Неизвестные углеводы лежат нулём, и сравнивать с ними клетчатку незачем.
+    if (
+        "carbs_100g" not in unknown
+        and isinstance(fiber, float)
+        and isinstance(carbs, float)
+        and fiber > carbs
+    ):
         errors.append(
             RowError(
                 line_no,

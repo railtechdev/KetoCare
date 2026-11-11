@@ -23,12 +23,51 @@ from ..models import (
     ProductCategory,
     ProductRevision,
 )
-from ..models.enums import CarbsConvention, LeadingMacro
+from ..models.enums import CarbsConvention, FoodStandardKind, LeadingMacro
 from . import audit as audit_repo
 
 
 class StandardLockedError(Exception):
     """Значения закрытого стандарта не меняются ни для какой роли (ADR-0056)."""
+
+
+#: Поля, из которых складываются соотношение и калорийность. Неизвестное среди
+#: них (прочерк источника, лежит нулём) превратило бы расчёт в выдумку.
+ENERGY_FIELDS = ("fat_100g", "protein_100g", "carbs_100g")
+
+
+class UnknownValueInClinicError(Exception):
+    """В стандарте клиники по продукту считают еду ребёнку (ADR-0067).
+
+    Прочерк источника в жирах, белках или углеводах там недопустим: ноль на
+    месте неизвестного ушёл бы в расчёт как настоящее число. `fields` — какие
+    поля надо заполнить.
+    """
+
+    def __init__(self, fields: list[str]) -> None:
+        super().__init__(", ".join(fields))
+        self.fields = fields
+
+
+def _clinic_values_known(
+    standard: FoodStandard, fields: dict[str, Any], unknown: list[str]
+) -> None:
+    """Инвариант стандарта клиники: неизвестных жиров, белков и углеводов нет.
+
+    Неизвестная клетчатка допустима: 0 в ней — осторожная сторона (соотношение
+    не завышается), и это ровно `fiber_known = false`. Пометку «нет данных»
+    такая клетчатка теряет, чтобы `unknown_fields` в стандарте клиники был
+    пуст всегда.
+    """
+
+    if standard.kind is not FoodStandardKind.CLINIC:
+        return
+    energy = [field for field in unknown if field in ENERGY_FIELDS]
+    if energy:
+        raise UnknownValueInClinicError(energy)
+    if "fiber_100g" in unknown:
+        fields["unknown_fields"] = [field for field in unknown if field != "fiber_100g"]
+        fields["fiber_known"] = False
 
 
 _SNAPSHOT_FIELDS = (
@@ -47,6 +86,8 @@ _SNAPSHOT_FIELDS = (
     "is_active",
     "counts_in_calculation",
     "fiber_known",
+    "unknown_fields",
+    "waste_pct",
 )
 
 
@@ -60,6 +101,8 @@ def _snapshot(product: Product) -> dict[str, Any]:
             value = str(value)
         elif isinstance(value, date | datetime):
             value = value.isoformat()
+        elif isinstance(value, list):
+            value = list(value)
         elif value is not None and not isinstance(value, str | int | float | bool):
             value = float(value)  # Numeric -> Decimal
         result[field] = value
@@ -250,6 +293,7 @@ async def create(session: AsyncSession, *, changed_by: uuid.UUID, **fields: Any)
     standard_id = fields.setdefault("standard_id", DEFAULT_FOOD_STANDARD_ID)
     standard = await _unlocked_standard(session, standard_id)
     fields.setdefault("fiber_known", standard.carbs_convention is not CarbsConvention.UNKNOWN)
+    _clinic_values_known(standard, fields, list(fields.get("unknown_fields") or []))
     inherited_food = fields.get("food_id") is not None
     if not inherited_food:
         fields.pop("food_id", None)
@@ -273,12 +317,17 @@ async def update(
 ) -> Product:
     """Обновляет продукт и пишет ревизию с новым состоянием."""
 
-    await _unlocked_standard(session, product.standard_id)
+    standard = await _unlocked_standard(session, product.standard_id)
     previous_name = product.name_ru
     # Вписанная клетчатка перестаёт быть неизвестной, иначе экран показывал бы
     # «не указана» рядом с числом, которое по-настоящему идёт в расчёт.
+    # Явное `fiber_known` вызывающего сильнее: импорт источника с прочерком в
+    # клетчатке пишет 0 и «неизвестно» одновременно.
     if "fiber_100g" in fields and fiber_differs(product.fiber_100g, fields["fiber_100g"]):
-        fields["fiber_known"] = True
+        fields.setdefault("fiber_known", True)
+    _clinic_values_known(
+        standard, fields, list(fields.get("unknown_fields", product.unknown_fields) or [])
+    )
     for key, value in fields.items():
         setattr(product, key, value)
     await session.flush()
@@ -541,6 +590,8 @@ class ProductValues:
     protein_100g: float
     carbs_100g: float
     fiber_100g: float
+    #: Поля, которых в источнике нет (прочерк): число 0 в них — «нет данных».
+    unknown_fields: tuple[str, ...] = ()
 
 
 async def list_values(session: AsyncSession) -> list[ProductValues]:
@@ -564,6 +615,7 @@ async def list_values(session: AsyncSession) -> list[ProductValues]:
             Product.protein_100g,
             Product.carbs_100g,
             Product.fiber_100g,
+            Product.unknown_fields,
         ).order_by(Product.name_ru)
     )
     return [
@@ -576,6 +628,7 @@ async def list_values(session: AsyncSession) -> list[ProductValues]:
             protein_100g=float(row[5]),
             carbs_100g=float(row[6]),
             fiber_100g=float(row[7]),
+            unknown_fields=tuple(row[8] or ()),
         )
         for row in rows
     ]

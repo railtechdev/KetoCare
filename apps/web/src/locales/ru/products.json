@@ -96,6 +96,8 @@
       "state": "Состояние"
     },
     "fiberUnknown": "Клетчатка: источник не указал",
+    "noData": "нет данных",
+    "waste": "Отходы: {{value}} %",
     "valueSource": {
       "standard": "из стандарта «{{name}}»",
       "standardUnknown": "из стандарта-источника",

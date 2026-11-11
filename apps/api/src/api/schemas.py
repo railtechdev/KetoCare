@@ -408,6 +408,9 @@ class ProductBase(BaseModel):
         return self
 
 
+ProductValueField = Literal["kcal_100g", "fat_100g", "protein_100g", "carbs_100g", "fiber_100g"]
+
+
 class ProductCreate(ProductBase):
     #: Не указан — основной стандарт.
     standard_id: uuid.UUID | None = None
@@ -415,6 +418,10 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(ProductBase):
     is_active: bool = True
+    #: Поля из `unknown_fields`, число в которых человек подтвердил как есть
+    #: (ADR-0067). Иначе настоящий ноль на месте прочерка подтвердить нельзя:
+    #: пометка снимается только сменой числа.
+    confirmed_fields: list[ProductValueField] = Field(default_factory=list)
 
 
 class ProductValueSourceRead(BaseModel):
@@ -434,6 +441,10 @@ class ProductValueSourceRead(BaseModel):
     label: str | None = None
 
 
+ENERGY_UNKNOWN = ("fat_100g", "protein_100g", "carbs_100g")
+"""Поля, без которых соотношение продукта не определено."""
+
+
 class ProductRead(ProductBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -446,6 +457,12 @@ class ProductRead(ProductBase):
     #: Ключ — поле значения (`kcal_100g` …). Нет ключа — число подписано
     #: источником всей строки (`source` / `source_version`).
     value_sources: dict[str, ProductValueSourceRead] = Field(default_factory=dict)
+    #: Поля значения, которых в источнике нет (прочерк, ADR-0067): число в них
+    #: 0, но показывать его надо как «нет данных».
+    unknown_fields: list[str] = Field(default_factory=list)
+    #: Отходы при холодной обработке, % массы брутто, — как приводит источник.
+    #: Значения выше — на 100 г съедобной части.
+    waste_pct: float | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -468,6 +485,12 @@ class ProductRead(ProductBase):
         макронутриентами позиции, а сохранённая копия однажды разошлась бы с
         ними после правки.
         """
+
+        # Неизвестный жир, белок или углевод хранится нулём, и соотношение с
+        # ним было бы утверждением о том, чего источник не публиковал: мясо без
+        # углеводов выглядело бы жирнее, чем есть. «Соотношения нет» честнее.
+        if any(field in ENERGY_UNKNOWN for field in self.unknown_fields):
+            return None
 
         return verify(
             [
@@ -550,6 +573,8 @@ class ProductDerive(ProductBase):
 
     #: Куда кладётся копия. Не указан — основной стандарт клиники.
     standard_id: uuid.UUID | None = None
+    #: Поля с прочерком в оригинале, число в которых подтверждено как есть.
+    confirmed_fields: list[ProductValueField] = Field(default_factory=list)
 
 
 # --- food standards -------------------------------------------------------

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -351,6 +352,26 @@ async def _standard_or_404(session: SessionDep, standard_id: uuid.UUID) -> FoodS
     return standard
 
 
+#: Подписи полей для сообщений — как в форме продукта.
+_FIELD_NAMES = {
+    "kcal_100g": "калорийность",
+    "fat_100g": "жиры",
+    "protein_100g": "белки",
+    "carbs_100g": "углеводы",
+    "fiber_100g": "клетчатка",
+}
+
+
+def _unknown_in_clinic(fields: list[str]) -> ApiError:
+    names = ", ".join(_FIELD_NAMES.get(field, field) for field in fields)
+    return ApiError(
+        ErrorCode.VALIDATION_ERROR,
+        f"В источнике нет данных: {names}. В стандарте клиники по этим числам "
+        "считают еду ребёнку — впишите значение или подтвердите, что оно верно.",
+        details={"fields": fields},
+    )
+
+
 def _standard_locked() -> ApiError:
     return ApiError(
         ErrorCode.CONFLICT,
@@ -409,7 +430,9 @@ class ProductValuesCheck(BaseModel):
     fiber_100g: Annotated[float, Field(ge=0, le=1000)] = 0
 
 
-def _anomalies_of(values: ProductValuesCheck | dict[str, Any]) -> list[ProductAnomalyRead]:
+def _anomalies_of(
+    values: ProductValuesCheck | dict[str, Any], *, unknown: Collection[str] = ()
+) -> list[ProductAnomalyRead]:
     """Находки по значениям — одна дорога для списка, карточки и импорта."""
 
     raw = values.model_dump() if isinstance(values, BaseModel) else values
@@ -422,7 +445,8 @@ def _anomalies_of(values: ProductValuesCheck | dict[str, Any]) -> list[ProductAn
                 protein=float(raw["protein_100g"]),
                 carbs=float(raw["carbs_100g"]),
                 fiber=float(raw.get("fiber_100g") or 0),
-            )
+            ),
+            unknown=unknown,
         )
     ]
 
@@ -476,7 +500,8 @@ async def list_anomalies(
                         "protein_100g": row.protein_100g,
                         "carbs_100g": row.carbs_100g,
                         "fiber_100g": row.fiber_100g,
-                    }
+                    },
+                    unknown=row.unknown_fields,
                 ),
             )
             for row in rows
@@ -550,6 +575,8 @@ async def create_product(
         await session.flush()
     except products_repo.StandardLockedError as error:
         raise _standard_locked() from error
+    except products_repo.UnknownValueInClinicError as error:
+        raise _unknown_in_clinic(error.fields) from error
     except IntegrityError as error:
         raise ApiError(
             ErrorCode.CONFLICT,
@@ -587,20 +614,33 @@ async def update_product(
     before = ProductRead.model_validate(product).model_dump(mode="json")
     # Поправленное число подписывается автором правки; нетронутые сохраняют
     # прежнее происхождение. Словарь новый — изменение JSONB на месте ORM не видит.
+    unknown_before = list(product.unknown_fields or [])
+    # Подтверждённое человеком число — его правка, даже если оно не изменилось.
+    confirmed = [field for field in payload.confirmed_fields if field in unknown_before]
+    changed = list(dict.fromkeys([*_changed_values(product, payload), *confirmed]))
     value_sources = {
         **(product.value_sources or {}),
-        **{field: _manual_source(user.id) for field in _changed_values(product, payload)},
+        **{field: _manual_source(user.id) for field in changed},
     }
+    # Вписанное или подтверждённое человеком число перестаёт быть «нет данных».
+    unknown_fields = [field for field in unknown_before if field not in changed]
+    extra: dict[str, Any] = {}
+    if "fiber_100g" in confirmed:
+        extra["fiber_known"] = True
     try:
         updated = await products_repo.update(
             session,
             product=product,
             changed_by=user.id,
             value_sources=value_sources,
-            **payload.model_dump(),
+            unknown_fields=unknown_fields,
+            **extra,
+            **payload.model_dump(exclude={"confirmed_fields"}),
         )
     except products_repo.StandardLockedError as error:
         raise _standard_locked() from error
+    except products_repo.UnknownValueInClinicError as error:
+        raise _unknown_in_clinic(error.fields) from error
 
     await audit_repo.write_audit_log(
         session,
@@ -710,9 +750,21 @@ async def derive_product(
     # До записи: после отказа индекса транзакция откатывается, и чтение атрибута
     # загруженного стандарта падает вместо ответа 409.
     target_name = target.name
-    fields = payload.model_dump(exclude={"standard_id"})
+    fields = payload.model_dump(exclude={"standard_id", "confirmed_fields"})
     fiber_changed = products_repo.fiber_differs(source.fiber_100g, payload.fiber_100g)
-    changed = set(_changed_values(source, payload))
+    unknown_before = list(source.unknown_fields or [])
+    confirmed = {field for field in payload.confirmed_fields if field in unknown_before}
+    changed = set(_changed_values(source, payload)) | confirmed
+    # Копия ложится в стандарт клиники, по которому считают ребёнку: прочерк
+    # источника в жирах, белках или углеводах там не остаётся. Его надо
+    # вписать или подтвердить — иначе 0 на месте «нет данных» ушёл бы в расчёт.
+    unknown_energy = [
+        field
+        for field in unknown_before
+        if field in products_repo.ENERGY_FIELDS and field not in changed
+    ]
+    if unknown_energy:
+        raise _unknown_in_clinic(unknown_energy)
     value_sources = {
         field: _manual_source(user.id)
         if field in changed
@@ -727,13 +779,19 @@ async def derive_product(
             derived_from_id=source.id,
             food_id=source.food_id,
             # Клетчатка известна, если её знал источник или её вписали в копии.
-            fiber_known=source.fiber_known or fiber_changed,
+            fiber_known=source.fiber_known or fiber_changed or "fiber_100g" in confirmed,
             value_sources=value_sources,
+            # Остаться может только клетчатка: репозиторий снимет пометку и
+            # оставит `fiber_known = false`.
+            unknown_fields=[field for field in unknown_before if field not in changed],
+            waste_pct=source.waste_pct,
             **fields,
         )
         await session.flush()
     except products_repo.StandardLockedError as error:
         raise _standard_locked() from error
+    except products_repo.UnknownValueInClinicError as error:
+        raise _unknown_in_clinic(error.fields) from error
     except IntegrityError as error:
         raise ApiError(
             ErrorCode.CONFLICT,
@@ -753,6 +811,8 @@ async def derive_product(
             "food_id": str(product.food_id),
             "fiber_known": product.fiber_known,
             "value_sources": value_sources,
+            "unknown_fields": product.unknown_fields,
+            "waste_pct": float(product.waste_pct) if product.waste_pct is not None else None,
         },
     )
     return await _labelled_read_for(session, user, product)
@@ -853,7 +913,9 @@ async def import_products(
         except spreadsheet.SpreadsheetError as exc:
             raise ApiError(ErrorCode.VALIDATION_ERROR, str(exc)) from exc
 
-    report = parse_csv(content)
+    # Пустая ячейка значения — «нет данных» — допустима только в
+    # справочнике-источнике (ADR-0067): рабочий справочник требует числа.
+    report = parse_csv(content, allow_unknown=standard.kind is FoodStandardKind.REFERENCE)
     errors = [
         ImportRowError(line=e.line, column=e.column, message=e.message) for e in report.errors
     ]
@@ -884,7 +946,7 @@ async def import_products(
             [*report.valid_rows, *(matched if update_existing else [])],
             key=lambda item: item.line,
         )
-        for anomaly in _anomalies_of(row.values)
+        for anomaly in _anomalies_of(row.values, unknown=row.values["unknown_fields"])
         if anomaly.kind == product_checks.Anomaly.KCAL_MISMATCH
     ]
 
@@ -949,6 +1011,9 @@ async def import_products(
         category = await products_repo.get_or_create_category(
             session, name_ru=values.pop("category")
         )
+        if "fiber_100g" in values["unknown_fields"]:
+            # Прочерк в клетчатке — тот же случай, что источник без клетчатки.
+            values["fiber_known"] = False
         await products_repo.create(
             session,
             changed_by=user.id,
@@ -966,6 +1031,12 @@ async def import_products(
             session, name_ru=values.pop("category")
         )
         product = existing[_key(row)]
+        if "fiber_100g" in values["unknown_fields"]:
+            values["fiber_known"] = False
+        elif "fiber_100g" in (product.unknown_fields or []):
+            # Прежде прочерк, теперь число: клетчатка стала известной, даже
+            # если число совпало с нулём, который лежал на месте прочерка.
+            values["fiber_known"] = True
         before = ProductRead.model_validate(product).model_dump(mode="json")
         # Импорт подписывает всю строку своим источником: прежние пометки
         # отдельных чисел описывали бы уже не те значения.
@@ -1030,6 +1101,9 @@ _IMPORT_FIELDS = (
     "verified_at",
     # Только когда колонка в файле есть и ячейка не пуста (`product_import`).
     "counts_in_calculation",
+    "waste_pct",
+    # Поля с прочерком в источнике: тот же 0 в числе, но другое утверждение.
+    "unknown_fields",
 )
 
 
@@ -1066,6 +1140,9 @@ def _format_value(value: object) -> str:
     if isinstance(value, bool):
         # Отметка «учитывается в расчёте» — словами, как её и пишут в файле.
         return "да" if value else "нет"
+    if isinstance(value, list):
+        # Поля без данных — именами колонок файла, как их видит загружающий.
+        return ", ".join(str(item) for item in value)
     if isinstance(value, Decimal | float | int) and not isinstance(value, bool):
         return f"{float(value):g}"
     return str(value)
