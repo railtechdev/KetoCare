@@ -1,6 +1,10 @@
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@ketocare/ui";
+import { Calculator, CookingPot } from "lucide-react";
+
 import { PageLayout } from "../../components/PageLayout";
+import { SectionLink } from "../../components/SectionLink";
 import { DayComposer } from "./DayComposer";
 
 /**
@@ -22,6 +26,25 @@ export function MenuPage({ patientId }: { patientId: string }) {
           width="wide"
           actions={actions}
         >
+          {/* Калькулятор и рецепты у семьи — части сборки меню, а не пункты
+              бокового меню (этап 6 AUDIT_ROLES_PATHS_2026-11). */}
+          <nav
+            aria-label={t("tools.label")}
+            className="flex flex-wrap gap-field"
+          >
+            <Button asChild variant="outline" className="min-h-touch">
+              <SectionLink section="calculator">
+                <Calculator aria-hidden="true" />
+                {t("tools.calculator")}
+              </SectionLink>
+            </Button>
+            <Button asChild variant="outline" className="min-h-touch">
+              <SectionLink section="recipes">
+                <CookingPot aria-hidden="true" />
+                {t("tools.recipes")}
+              </SectionLink>
+            </Button>
+          </nav>
           {content}
         </PageLayout>
       )}

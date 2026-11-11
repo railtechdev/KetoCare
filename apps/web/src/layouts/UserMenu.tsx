@@ -20,6 +20,7 @@ import {
   Monitor,
   Moon,
   Sun,
+  Baby,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
@@ -93,6 +94,21 @@ export function UserMenu({ session }: { session: Session }) {
           <UserRound aria-hidden="true" />
           {t("nav.profile")}
         </DropdownMenuItem>
+
+        {session.role === "parent" && (
+          <DropdownMenuItem
+            onSelect={() => {
+              void navigate({
+                to: "/app/$section",
+                params: { section: "child" },
+                search: (previous) => previous,
+              });
+            }}
+          >
+            <Baby aria-hidden="true" />
+            {t("nav.child")}
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSeparator />
 
