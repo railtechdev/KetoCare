@@ -225,40 +225,63 @@ function MergePreview({
   const failed = (error: unknown) =>
     toast.error(errorMessageOf(error) ?? t("common:errors.unexpected"));
   const willWrite = (totals?.written ?? 0) + accepted.size;
+  // Строки «на проверку» диетолог подтверждает списком после просмотра: при
+  // первой сборке их десятки, и сорок отдельных флажков подряд — лишняя работа.
+  const reviewIds = (preview.data?.rows ?? [])
+    .filter((row) => row.status === "needs_review")
+    .map((row) => row.food_id);
+  const allAccepted =
+    reviewIds.length > 0 && reviewIds.every((id) => accepted.has(id));
 
   return (
     <Section
       title={t("merge.previewTitle")}
       description={t("merge.previewIntro")}
       action={
-        <ConfirmDialog
-          trigger={
+        <div className="flex flex-wrap items-center gap-field">
+          {reviewIds.length > 0 && (
             <Button
               type="button"
-              disabled={!preview.data || apply.isPending || willWrite === 0}
+              variant="outline"
+              disabled={apply.isPending}
+              onClick={() =>
+                setAccepted(allAccepted ? new Set() : new Set(reviewIds))
+              }
             >
-              {t("merge.apply")}
+              {allAccepted
+                ? t("merge.acceptNone")
+                : t("merge.acceptAll", { count: reviewIds.length })}
             </Button>
-          }
-          title={t("merge.confirm.title", { name: targetName })}
-          description={t("merge.confirm.body")}
-          confirmLabel={t("merge.apply")}
-          cancelLabel={t("common:actions.cancel")}
-          onConfirm={() =>
-            apply.mutate(
-              { sourceIds, accept: [...accepted] },
-              {
-                onSuccess: (result) => {
-                  setAccepted(new Set());
-                  toast.success(
-                    t("merge.applied", { count: result.totals.written }),
-                  );
+          )}
+          <ConfirmDialog
+            trigger={
+              <Button
+                type="button"
+                disabled={!preview.data || apply.isPending || willWrite === 0}
+              >
+                {t("merge.apply")}
+              </Button>
+            }
+            title={t("merge.confirm.title", { name: targetName })}
+            description={t("merge.confirm.body")}
+            confirmLabel={t("merge.apply")}
+            cancelLabel={t("common:actions.cancel")}
+            onConfirm={() =>
+              apply.mutate(
+                { sourceIds, accept: [...accepted] },
+                {
+                  onSuccess: (result) => {
+                    setAccepted(new Set());
+                    toast.success(
+                      t("merge.applied", { count: result.totals.written }),
+                    );
+                  },
+                  onError: failed,
                 },
-                onError: failed,
-              },
-            )
-          }
-        />
+              )
+            }
+          />
+        </div>
       }
     >
       <AsyncSection
