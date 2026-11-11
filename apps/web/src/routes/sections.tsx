@@ -283,5 +283,5 @@ export const PRIMARY_MOBILE_SECTIONS: Record<Role, readonly string[]> = {
   parent: ["home", "menu", "diary", "assistant"],
   doctor: ["patients", "recipes", "products"],
   dietitian: ["patients", "recipes", "products"],
-  admin: ["home", "users", "leads", "products"],
+  admin: ["home", "users", "leads", "dictionaries"],
 };
