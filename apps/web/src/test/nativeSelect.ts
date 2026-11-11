@@ -20,11 +20,15 @@ export function nativeSelect(element: HTMLElement): HTMLSelectElement {
 
 /**
  * Элемент, у которого есть значение: системный список за кнопкой
- * `SelectField` или само поле. Для `toHaveValue`, когда в одном тесте
+ * `SelectField`, системное поле даты за полем `Field type="date"` (оно
+ * показывает «ДД.ММ.ГГГГ», а значение формы — «ГГГГ-ММ-ДД») или само поле. Для `toHaveValue`, когда в одном тесте
  * сверяются и списки, и поля ввода.
  */
 export function valueControl(element: HTMLElement): HTMLElement {
   const native =
     element.id === "" ? null : document.getElementById(`${element.id}-native`);
-  return native instanceof HTMLSelectElement ? native : element;
+  return native instanceof HTMLSelectElement ||
+    native instanceof HTMLInputElement
+    ? native
+    : element;
 }

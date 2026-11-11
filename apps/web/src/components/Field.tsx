@@ -1,6 +1,11 @@
 import {
+  Button,
+  DateCalendar,
   Input,
   Label,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Select,
   SelectContent,
   SelectItem,
@@ -9,7 +14,7 @@ import {
   Textarea,
   cn,
 } from "@ketocare/ui";
-import { Eye, EyeOff } from "lucide-react";
+import { CalendarDays, Eye, EyeOff } from "lucide-react";
 import {
   Children,
   Fragment,
@@ -156,6 +161,27 @@ export function Field({
   const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
 
+  if (type === "date") {
+    return (
+      <FieldShell
+        label={label}
+        error={error}
+        hint={hint}
+        optional={optional}
+        id={id}
+      >
+        <DateInput
+          id={id}
+          error={error}
+          hint={hint}
+          width={width}
+          className={className}
+          {...props}
+        />
+      </FieldShell>
+    );
+  }
+
   const isPassword = type === "password";
   const effectiveType = isPassword
     ? showPassword
@@ -209,6 +235,204 @@ export function Field({
         />
       )}
     </FieldShell>
+  );
+}
+
+/** «2026-11-11» → «11.11.2026». */
+function isoToText(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return match ? `${match[3]}.${match[2]}.${match[1]}` : "";
+}
+
+/**
+ * Набранное → «ГГГГ-ММ-ДД» или `null`. Понимает «11.11.2026», «1.9.2026»,
+ * разделители «/» и «-», и ISO как есть. Несуществующая дата — `null`.
+ */
+function textToIso(text: string): string | null {
+  const value = text.trim();
+  let year: number, month: number, day: number;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(value);
+  const ru = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(value);
+  if (iso) [year, month, day] = [+iso[1]!, +iso[2]!, +iso[3]!];
+  else if (ru) [day, month, year] = [+ru[1]!, +ru[2]!, +ru[3]!];
+  else return null;
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+function isoToDate(iso: string | undefined): Date | undefined {
+  if (!iso) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return match ? new Date(+match[1]!, +match[2]! - 1, +match[3]!) : undefined;
+}
+
+function dateToIso(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * Поле даты: набор с клавиатуры «ДД.ММ.ГГГГ» и календарь кита рядом
+ * (docs/PLAN_UI_ORDER_2026-11.md, этап 2) вместо системного поля, которое
+ * выглядит по-разному в каждом браузере и пишет дату по языку системы.
+ *
+ * Значение живёт в скрытом системном `<input type="date">`: его регистрирует
+ * react-hook-form, у него `min`/`max`, он получает событие `input`. Вызовы
+ * поля не меняются.
+ */
+function DateInput({
+  id,
+  error,
+  hint,
+  width,
+  className,
+  ref,
+  onChange,
+  disabled,
+  min,
+  max,
+  "aria-describedby": describedBy,
+  ...props
+}: {
+  error?: ReactNode;
+  hint?: ReactNode;
+  width: keyof typeof WIDTH_CLASS;
+} & Omit<ComponentProps<"input">, "type">) {
+  const { t } = useTranslation();
+  const native = useRef<HTMLInputElement | null>(null);
+  const visible = useRef<HTMLInputElement | null>(null);
+  const [text, setText] = useState(() =>
+    isoToText(String(props.value ?? props.defaultValue ?? "")),
+  );
+  const [open, setOpen] = useState(false);
+  const shown = useRef("");
+
+  // Значение могли записать в обход набора — `reset()`, значения по умолчанию
+  // react-hook-form, управляемый `value`. Текст догоняет элемент, только когда
+  // изменился сам элемент: иначе недонабранная дата стиралась бы на лету.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const value = native.current?.value ?? "";
+    if (value !== shown.current) {
+      shown.current = value;
+      setText(isoToText(value));
+    }
+  });
+
+  function write(iso: string) {
+    const element = native.current;
+    if (element === null || element.value === iso) return;
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set?.call(element, iso);
+    shown.current = iso;
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  const selected = isoToDate(native.current?.value || undefined);
+  const disabledDays = [
+    ...(min ? [{ before: isoToDate(String(min))! }] : []),
+    ...(max ? [{ after: isoToDate(String(max))! }] : []),
+  ].filter((rule) => Object.values(rule)[0] !== undefined);
+
+  return (
+    <div className={cn("flex items-center gap-2", WIDTH_CLASS[width])}>
+      <input
+        {...props}
+        type="date"
+        id={id === undefined ? undefined : `${id}-native`}
+        min={min}
+        max={max}
+        disabled={disabled}
+        ref={(element) => {
+          native.current = element;
+          if (typeof ref === "function") ref(element);
+          else if (ref) ref.current = element;
+        }}
+        onChange={(event) => {
+          shown.current = event.target.value;
+          setText(isoToText(event.target.value));
+          onChange?.(event);
+        }}
+        aria-hidden="true"
+        tabIndex={-1}
+        className="sr-only"
+      />
+      <Input
+        ref={visible}
+        id={id}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder={t("form.datePlaceholder")}
+        value={text}
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={
+          [getDescribedBy(id, error, hint), describedBy]
+            .filter(Boolean)
+            .join(" ") || undefined
+        }
+        className={cn("min-h-touch min-w-0 flex-1 tabular-nums", className)}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          if (next.trim() === "") write("");
+          else {
+            const iso = textToIso(next);
+            if (iso !== null) write(iso);
+          }
+        }}
+        onBlur={() => {
+          // Недонабранная или несуществующая дата не остаётся прежним
+          // значением под новым текстом: поле пустеет, и проверка формы
+          // говорит об ошибке у поля.
+          if (text.trim() !== "" && textToIso(text) === null) write("");
+          native.current?.dispatchEvent(
+            new Event("focusout", { bubbles: true }),
+          );
+        }}
+      />
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            disabled={disabled}
+            className="min-h-touch min-w-touch shrink-0"
+            aria-label={t("form.pickDate")}
+          >
+            <CalendarDays aria-hidden="true" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <DateCalendar
+            mode="single"
+            selected={selected}
+            defaultMonth={selected}
+            disabled={disabledDays}
+            onSelect={(date) => {
+              if (date === undefined) return;
+              const iso = dateToIso(date);
+              write(iso);
+              setText(isoToText(iso));
+              setOpen(false);
+              visible.current?.focus();
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
 
