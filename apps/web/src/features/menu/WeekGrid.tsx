@@ -25,7 +25,7 @@ import {
   todayIso,
   weekStartOf,
 } from "./dates";
-import { useMealsPerDay } from "./useMenu";
+import { DEFAULT_MEAL_COUNT, useMealsPerDay } from "./useMenu";
 import { WeekCellAdd } from "./WeekCellAdd";
 import { useCopyWeek, useWeekQuery, type MenuWeek } from "./useWeek";
 
@@ -44,7 +44,9 @@ export function WeekGrid({ patientId }: { patientId: string }) {
 
   const week = useWeekQuery(patientId, start);
   const copy = useCopyWeek(patientId);
-  const mealsPerDay = useMealsPerDay(patientId) ?? 0;
+  // Без назначения — то же число приёмов, что у сборки дня под сеткой:
+  // иначе сетка пустела и ставить блюдо было некуда.
+  const mealsPerDay = useMealsPerDay(patientId) ?? DEFAULT_MEAL_COUNT;
   const patient = usePatient(patientId);
 
   const select = (date: string) =>
