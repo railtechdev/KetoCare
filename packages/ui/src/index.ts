@@ -90,6 +90,7 @@ export {
   setFormatLanguage,
 } from "./lib/format";
 export type { FormatLanguage } from "./lib/format";
+export { formatPerGram, toPer100, toPerGram } from "./lib/perGram";
 
 export {
   DEFAULT_KIT_LABELS,

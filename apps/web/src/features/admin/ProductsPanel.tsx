@@ -7,7 +7,7 @@ import {
   RatioBadge,
   SEARCH_DELAY_MS,
   Section,
-  formatNumber,
+  formatPerGram,
   toast,
   useDebouncedValue,
   WarningBanner,
@@ -724,12 +724,13 @@ export function ProductsPanel({
 }
 
 /** Числовая ячейка с фиксированным числом знаков и моноширинными цифрами. */
-function numeric(digits: number) {
+// Значения справочника — на 1 г (ADR-0065); хранятся на 100 г.
+function numeric(_digits: number) {
   return function NumericCell({ getValue }: { getValue: () => unknown }) {
     const value = getValue();
     return (
       <span className="tabular-nums">
-        {typeof value === "number" ? formatNumber(value, digits) : "—"}
+        {typeof value === "number" ? formatPerGram(value) : "—"}
       </span>
     );
   };
