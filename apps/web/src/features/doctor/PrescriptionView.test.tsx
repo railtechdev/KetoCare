@@ -16,6 +16,7 @@ import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
 import { PrescriptionView } from "./PrescriptionView";
+import { nativeSelect } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -130,8 +131,7 @@ describe("форма назначения", () => {
     // (`key={active?.id}` в `PrescriptionTab`), поэтому поле берётся заново
     // после того, как оно подставилось: узел, взятый раньше, к этому моменту
     // уже откреплён от документа.
-    const field = () =>
-      screen.getByLabelText<HTMLInputElement>("Кетосоотношение");
+    const field = () => nativeSelect(screen.getByLabelText("Кетосоотношение"));
     await waitFor(() => expect(field().value).toBe("4"));
     const ratio = field();
 
@@ -158,7 +158,10 @@ describe("форма назначения", () => {
       (node) => node.tagName === "A",
     ) as HTMLAnchorElement;
     expect(summaryLink).toBeDefined();
-    expect(summaryLink.getAttribute("href")).toBe(`#${ratio.id}`);
+    // Сводка ведёт на кнопку списка, а не на скрытый системный список.
+    expect(summaryLink.getAttribute("href")).toBe(
+      `#${screen.getByLabelText("Кетосоотношение").id}`,
+    );
     expect(api.POST).not.toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/prescriptions",
       expect.anything(),
@@ -206,8 +209,7 @@ describe("форма назначения", () => {
     const user = userEvent.setup();
     renderView();
 
-    const field = () =>
-      screen.getByLabelText<HTMLInputElement>("Кетосоотношение");
+    const field = () => nativeSelect(screen.getByLabelText("Кетосоотношение"));
     await waitFor(() => expect(field().value).toBe("4"));
     fireEvent.change(field(), { target: { value: "3.5" } });
     await user.click(

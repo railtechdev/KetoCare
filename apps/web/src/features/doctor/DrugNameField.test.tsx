@@ -125,7 +125,10 @@ describe("поле названия препарата", () => {
 
     await user.type(screen.getByLabelText("Препарат"), "кеппра");
     await user.click(
-      await screen.findByRole("option", { name: /Леветирацетам/ }),
+      await screen.findByRole("option", {
+        hidden: true,
+        name: /Леветирацетам/,
+      }),
     );
 
     expect(screen.getByTestId("value")).toHaveTextContent("Леветирацетам");
@@ -140,7 +143,9 @@ describe("поле названия препарата", () => {
     await user.type(screen.getByLabelText("Препарат"), "Топирамат-АКОС");
 
     expect(screen.getByTestId("value")).toHaveTextContent("Топирамат-АКОС");
-    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { hidden: true }),
+    ).not.toBeInTheDocument();
   });
 
   it("выбирается с клавиатуры, а не только мышью", async () => {
@@ -214,7 +219,7 @@ describe("поле названия препарата", () => {
     render(<Harness />);
 
     await user.type(screen.getByLabelText("Препарат"), "ам");
-    const options = await screen.findAllByRole("option");
+    const options = await screen.findAllByRole("option", { hidden: true });
     expect(options).toHaveLength(2);
 
     await user.keyboard("{ArrowUp}{Enter}");
@@ -292,7 +297,9 @@ describe("поле названия препарата", () => {
     const live = await screen.findByRole("status");
     expect(live).toHaveTextContent(/Подсказка/);
 
-    await user.click(screen.getByRole("option", { name: /Леветирацетам/ }));
+    await user.click(
+      screen.getByRole("option", { hidden: true, name: /Леветирацетам/ }),
+    );
     expect(live).toHaveTextContent(/Подставлено название.*Леветирацетам/);
   });
 
@@ -303,6 +310,8 @@ describe("поле названия препарата", () => {
 
     await user.click(screen.getByLabelText("Препарат"));
 
-    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { hidden: true }),
+    ).not.toBeInTheDocument();
   });
 });

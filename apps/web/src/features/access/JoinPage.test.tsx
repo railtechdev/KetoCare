@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import accessRu from "../../locales/ru/access.json";
 import invitationsRu from "../../locales/ru/invitations.json";
 import { JoinPage } from "./JoinPage";
+import { valueControl } from "../../test/nativeSelect";
 
 const navigate = vi.fn();
 let search: { code?: string } = {};
@@ -52,7 +53,9 @@ describe("активация кода доступа семьёй", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText(/Код доступа/)).toHaveValue("TRWX4K92");
+    expect(
+      valueControl(await screen.findByLabelText(/Код доступа/)),
+    ).toHaveValue("TRWX4K92");
   });
 
   it("заполненная форма заводит учётную запись и ведёт ко входу", async () => {

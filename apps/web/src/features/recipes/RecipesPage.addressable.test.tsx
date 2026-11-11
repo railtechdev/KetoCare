@@ -10,6 +10,7 @@ import recipesRu from "../../locales/ru/recipes.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { currentAddress } from "../../test/address";
 import { RecipesPage } from "./RecipesPage";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -98,7 +99,7 @@ describe("строка поиска в адресе", () => {
     renderPage({ q: "омлет" });
 
     const field = await screen.findByLabelText(/Поиск|Название/i);
-    expect(field).toHaveValue("омлет");
+    expect(valueControl(field)).toHaveValue("омлет");
     await waitFor(() =>
       expect(api.GET).toHaveBeenCalledWith(
         "/api/v1/recipes",
@@ -116,9 +117,15 @@ describe("отборы выдачи в адресе", () => {
   it("F5 возвращает категорию и границы соотношения", async () => {
     renderPage({ category: "breakfast", ratioMin: "3", ratioMax: "4.5" });
 
-    expect(await screen.findByLabelText("Категория")).toHaveValue("breakfast");
-    expect(screen.getByLabelText("Соотношение от")).toHaveValue(3);
-    expect(screen.getByLabelText("Соотношение до")).toHaveValue(4.5);
+    expect(valueControl(await screen.findByLabelText("Категория"))).toHaveValue(
+      "breakfast",
+    );
+    expect(valueControl(screen.getByLabelText("Соотношение от"))).toHaveValue(
+      3,
+    );
+    expect(valueControl(screen.getByLabelText("Соотношение до"))).toHaveValue(
+      4.5,
+    );
     await waitFor(() =>
       expect(api.GET).toHaveBeenCalledWith(
         "/api/v1/recipes",
@@ -140,7 +147,7 @@ describe("отборы выдачи в адресе", () => {
     renderPage({});
 
     await user.selectOptions(
-      await screen.findByLabelText("Категория"),
+      nativeSelect(await screen.findByLabelText("Категория")),
       "breakfast",
     );
     await waitFor(() => expect(currentAddress().category).toBe("breakfast"));
@@ -152,7 +159,9 @@ describe("отборы выдачи в адресе", () => {
   it("незнакомая категория в адресе — любая", async () => {
     renderPage({ category: "dessert-of-the-day" });
 
-    expect(await screen.findByLabelText("Категория")).toHaveValue("");
+    expect(valueControl(await screen.findByLabelText("Категория"))).toHaveValue(
+      "",
+    );
   });
 });
 

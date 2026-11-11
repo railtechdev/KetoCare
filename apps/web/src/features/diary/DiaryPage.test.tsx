@@ -16,6 +16,7 @@ import type { SectionSearch } from "../../routes/search";
 import { SessionProvider } from "../auth/session";
 import { DiaryPage } from "./DiaryPage";
 import { toDateTimeLocalInput } from "./time";
+import { valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -363,8 +364,12 @@ describe("период дневника — в адресе", () => {
     expect(
       await screen.findByRole("radio", { name: "Произвольный" }),
     ).toBeChecked();
-    expect(screen.getByLabelText("С даты")).toHaveValue("2026-08-01");
-    expect(screen.getByLabelText("По дату")).toHaveValue("2026-08-31");
+    expect(valueControl(screen.getByLabelText("С даты"))).toHaveValue(
+      "2026-08-01",
+    );
+    expect(valueControl(screen.getByLabelText("По дату"))).toHaveValue(
+      "2026-08-31",
+    );
     await screen.findAllByText(/3,2/);
     expect(ketoneQueries()[0]?.from).toBe(new Date(2026, 7, 1).toISOString());
   });

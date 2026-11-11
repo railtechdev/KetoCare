@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import adminRu from "../../locales/ru/admin.json";
 import { UsersPanel } from "./UsersPanel";
+import { nativeSelect } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -81,7 +82,10 @@ describe("учётные записи", () => {
     renderPanel();
 
     await screen.findByText("Ольга Диетолог");
-    await user.selectOptions(screen.getByLabelText("Роль"), "doctor");
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Роль")),
+      "doctor",
+    );
 
     await waitFor(() => {
       expect(api.GET).toHaveBeenCalledWith(
@@ -159,9 +163,9 @@ describe("отключение специалиста", () => {
     const role = within(dialog).getByLabelText(adminRu.users.form.role, {
       exact: false,
     });
-    expect(
-      Array.from((role as HTMLSelectElement).options).map((o) => o.value),
-    ).toEqual(["parent"]);
+    expect(Array.from(nativeSelect(role).options).map((o) => o.value)).toEqual([
+      "parent",
+    ]);
   });
 
   it("передаёт детей ушедшего специалиста коллеге — выход из тупика (ADR-0045)", async () => {
@@ -190,7 +194,7 @@ describe("отключение специалиста", () => {
       (await screen.findAllByRole("button", { name: "Изменить" }))[0]!,
     );
     await user.selectOptions(
-      await screen.findByLabelText("Кому передать"),
+      nativeSelect(await screen.findByLabelText("Кому передать")),
       "u2",
     );
     await user.click(

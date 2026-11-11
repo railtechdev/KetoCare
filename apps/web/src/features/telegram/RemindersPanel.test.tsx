@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import telegramRu from "../../locales/ru/telegram.json";
 import { RemindersPanel } from "./RemindersPanel";
+import { valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -72,9 +73,9 @@ describe("настройки напоминаний", () => {
     renderPanel();
 
     expect(
-      await screen.findByLabelText(/Если за день нет записей/),
+      valueControl(await screen.findByLabelText(/Если за день нет записей/)),
     ).toHaveValue("20:00:00");
-    expect(screen.getByLabelText(/^Кетоны/)).toHaveValue("");
+    expect(valueControl(screen.getByLabelText(/^Кетоны/))).toHaveValue("");
   });
 
   it("пустое поле уходит как «выключено», а не как пустая строка", async () => {

@@ -51,7 +51,9 @@ test("врач назначает, семья ведёт день, отчёт с
   // Соотношение выбирается из списка (5:1 … 1:1 шагом 0,5): врач мыслит
   // «4 : 1», а поле показывало «4». `fill` по `<select>` невозможен —
   // именно на нём сценарий и падал каждую ночь с 08.09.
-  await doctor.getByLabel("Кетосоотношение").selectOption("3.5");
+  // Список оформлен китом, а не системный: выбирают так же, как человек.
+  await doctor.getByLabel("Кетосоотношение").click();
+  await doctor.getByRole("option", { name: "3.5 : 1" }).click();
   await doctor.getByLabel("Калорийность").fill("1200");
   await doctor.getByLabel("Белок").fill("22");
   await doctor.getByLabel("Углеводы не более").fill("10");
