@@ -3,6 +3,7 @@ import {
   AsyncSection,
   Badge,
   Button,
+  Columns,
   ConfirmDialog,
   EmptyState,
   Fact,
@@ -72,186 +73,205 @@ export function TherapyCourseView({
 
   return (
     <>
-      <Section
-        title={t("course.status.title")}
-        density="compact"
-        action={
-          editable &&
-          (endedOn === null ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEndOpen(true)}
+      {/* Визиты — основное, состояние терапии и перечни анализов — справка
+          рядом: столбиком узкие пары «подпись — значение» растягивались на
+          всю ширину экрана. */}
+      <Columns
+        from="xl"
+        asideWidth="wide"
+        asideLabel={t("course.status.title")}
+        main={
+          <>
+            <Section
+              title={t("course.visits.title")}
+              description={t("course.visits.description")}
+              density="compact"
+              action={
+                editable && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        startedOn === null || mutations.buildSchedule.isPending
+                      }
+                      aria-describedby={buildReasonId}
+                      onClick={() =>
+                        mutations.buildSchedule.mutate(undefined, {
+                          onSuccess: (created) =>
+                            toast.success(
+                              created.length === 0
+                                ? t("course.visits.scheduleUpToDate")
+                                : t("course.visits.scheduleBuilt", {
+                                    count: created.length,
+                                  }),
+                            ),
+                          onError: (error) =>
+                            toast.error(
+                              errorMessageOf(error) ??
+                                t("common:errors.unexpected"),
+                            ),
+                        })
+                      }
+                    >
+                      {t("course.visits.build")}
+                    </Button>
+                    <Button type="button" onClick={() => setVisitOpen(true)}>
+                      <Plus aria-hidden="true" />
+                      {t("course.visits.add")}
+                    </Button>
+                  </div>
+                )
+              }
             >
-              {t("course.status.end")}
-            </Button>
-          ) : (
-            <ConfirmDialog
-              trigger={
-                <Button type="button" variant="outline">
-                  {t("course.status.resume")}
-                </Button>
-              }
-              title={t("course.status.resumeTitle")}
-              description={t("course.status.resumeDescription")}
-              confirmLabel={t("course.status.resume")}
-              cancelLabel={t("common:actions.cancel")}
-              onConfirm={() =>
-                mutations.resumeTherapy.mutate(undefined, {
-                  onSuccess: () => toast.success(t("course.status.resumed")),
-                  onError: (error) =>
-                    toast.error(
-                      errorMessageOf(error) ?? t("common:errors.unexpected"),
-                    ),
-                })
-              }
-            />
-          ))
-        }
-      >
-        <FactList>
-          <Fact
-            label={t("course.status.state")}
-            value={
-              endedOn === null
-                ? t("course.status.active")
-                : t("course.status.ended", {
-                    date: formatIsoDate(endedOn) ?? endedOn,
-                  })
-            }
-          />
-          <Fact
-            label={t("course.status.startedOn")}
-            value={startedOn === null ? null : formatIsoDate(startedOn)}
-          />
-          {endedOn !== null && profile.data?.therapy_end_reason && (
-            <Fact
-              label={t("course.status.reason")}
-              value={t(`course.reasons.${profile.data.therapy_end_reason}`)}
-            />
-          )}
-          {endedOn !== null && profile.data?.therapy_end_note && (
-            <Fact
-              label={t("course.status.note")}
-              value={profile.data.therapy_end_note}
-              multiline
-            />
-          )}
-        </FactList>
-        {endedOn !== null && (
-          <p className="m-0 mt-2 text-sm text-muted-foreground">
-            {t("course.status.endedHint")}
-          </p>
-        )}
-      </Section>
-
-      <Section
-        title={t("course.visits.title")}
-        description={t("course.visits.description")}
-        density="compact"
-        action={
-          editable && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={
-                  startedOn === null || mutations.buildSchedule.isPending
+              {/* Причина отключённой «Построить график» (П44) связана с кнопкой:
+                  прежде это был абзац, и программа чтения экрана о нём у кнопки не
+                  сообщала. Живая область стоит в разметке постоянно. */}
+              {editable && (
+                <ActionReason id={buildReasonId} className="mb-2">
+                  {startedOn === null ? t("course.visits.noStart") : null}
+                </ActionReason>
+              )}
+              <AsyncSection
+                {...queryState(schedule)}
+                skeleton={
+                  <LinesSkeleton label={t("course.visits.loading")} lines={4} />
                 }
-                aria-describedby={buildReasonId}
-                onClick={() =>
-                  mutations.buildSchedule.mutate(undefined, {
-                    onSuccess: (created) =>
-                      toast.success(
-                        created.length === 0
-                          ? t("course.visits.scheduleUpToDate")
-                          : t("course.visits.scheduleBuilt", {
-                              count: created.length,
-                            }),
-                      ),
-                    onError: (error) =>
-                      toast.error(
-                        errorMessageOf(error) ?? t("common:errors.unexpected"),
-                      ),
-                  })
+                error={
+                  schedule.isError
+                    ? {
+                        title: t("course.visits.loadError"),
+                        description:
+                          errorMessageOf(schedule.error) ??
+                          t("common:errors.unexpected"),
+                      }
+                    : null
+                }
+                retryLabel={t("common:actions.retry")}
+                onRetry={() => void schedule.refetch()}
+                isEmpty={visits.length === 0}
+                empty={
+                  <EmptyState
+                    icon={CalendarClock}
+                    title={t("course.visits.empty")}
+                    description={t("course.visits.emptyDescription")}
+                  />
                 }
               >
-                {t("course.visits.build")}
-              </Button>
-              <Button type="button" onClick={() => setVisitOpen(true)}>
-                <Plus aria-hidden="true" />
-                {t("course.visits.add")}
-              </Button>
-            </div>
-          )
+                <ul className="m-0 flex list-none flex-col gap-section p-0">
+                  {visits.map((visit) => (
+                    <li key={visit.id}>
+                      <VisitItem
+                        visit={visit}
+                        editable={editable}
+                        patientId={patientId}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </AsyncSection>
+            </Section>
+          </>
         }
-      >
-        {/* Причина отключённой «Построить график» (П44) связана с кнопкой:
-            прежде это был абзац, и программа чтения экрана о нём у кнопки не
-            сообщала. Живая область стоит в разметке постоянно. */}
-        {editable && (
-          <ActionReason id={buildReasonId} className="mb-2">
-            {startedOn === null ? t("course.visits.noStart") : null}
-          </ActionReason>
-        )}
-        <AsyncSection
-          {...queryState(schedule)}
-          skeleton={
-            <LinesSkeleton label={t("course.visits.loading")} lines={4} />
-          }
-          error={
-            schedule.isError
-              ? {
-                  title: t("course.visits.loadError"),
-                  description:
-                    errorMessageOf(schedule.error) ??
-                    t("common:errors.unexpected"),
-                }
-              : null
-          }
-          retryLabel={t("common:actions.retry")}
-          onRetry={() => void schedule.refetch()}
-          isEmpty={visits.length === 0}
-          empty={
-            <EmptyState
-              icon={CalendarClock}
-              title={t("course.visits.empty")}
-              description={t("course.visits.emptyDescription")}
-            />
-          }
-        >
-          <ul className="m-0 flex list-none flex-col gap-section p-0">
-            {visits.map((visit) => (
-              <li key={visit.id}>
-                <VisitItem
-                  visit={visit}
-                  editable={editable}
-                  patientId={patientId}
+        aside={
+          <div className="flex min-w-0 flex-col gap-section">
+            <Section
+              title={t("course.status.title")}
+              density="compact"
+              action={
+                editable &&
+                (endedOn === null ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEndOpen(true)}
+                  >
+                    {t("course.status.end")}
+                  </Button>
+                ) : (
+                  <ConfirmDialog
+                    trigger={
+                      <Button type="button" variant="outline">
+                        {t("course.status.resume")}
+                      </Button>
+                    }
+                    title={t("course.status.resumeTitle")}
+                    description={t("course.status.resumeDescription")}
+                    confirmLabel={t("course.status.resume")}
+                    cancelLabel={t("common:actions.cancel")}
+                    onConfirm={() =>
+                      mutations.resumeTherapy.mutate(undefined, {
+                        onSuccess: () =>
+                          toast.success(t("course.status.resumed")),
+                        onError: (error) =>
+                          toast.error(
+                            errorMessageOf(error) ??
+                              t("common:errors.unexpected"),
+                          ),
+                      })
+                    }
+                  />
+                ))
+              }
+            >
+              <FactList>
+                <Fact
+                  label={t("course.status.state")}
+                  value={
+                    endedOn === null
+                      ? t("course.status.active")
+                      : t("course.status.ended", {
+                          date: formatIsoDate(endedOn) ?? endedOn,
+                        })
+                  }
                 />
-              </li>
-            ))}
-          </ul>
-        </AsyncSection>
-      </Section>
-
-      {schedule.data && (
-        <Section
-          title={t("course.labs.title")}
-          description={t("course.labs.description")}
-          density="compact"
-        >
-          <FactList>
-            <Fact
-              label={t("course.labs.weekly")}
-              value={schedule.data.weekly_labs.join(", ")}
-            />
-            <Fact
-              label={t("course.labs.periodic")}
-              value={schedule.data.periodic_labs.join(", ")}
-            />
-          </FactList>
-        </Section>
-      )}
+                <Fact
+                  label={t("course.status.startedOn")}
+                  value={startedOn === null ? null : formatIsoDate(startedOn)}
+                />
+                {endedOn !== null && profile.data?.therapy_end_reason && (
+                  <Fact
+                    label={t("course.status.reason")}
+                    value={t(
+                      `course.reasons.${profile.data.therapy_end_reason}`,
+                    )}
+                  />
+                )}
+                {endedOn !== null && profile.data?.therapy_end_note && (
+                  <Fact
+                    label={t("course.status.note")}
+                    value={profile.data.therapy_end_note}
+                    multiline
+                  />
+                )}
+              </FactList>
+              {endedOn !== null && (
+                <p className="m-0 mt-2 text-sm text-muted-foreground">
+                  {t("course.status.endedHint")}
+                </p>
+              )}
+            </Section>
+            {schedule.data && (
+              <Section
+                title={t("course.labs.title")}
+                description={t("course.labs.description")}
+                density="compact"
+              >
+                <FactList>
+                  <Fact
+                    label={t("course.labs.weekly")}
+                    value={schedule.data.weekly_labs.join(", ")}
+                  />
+                  <Fact
+                    label={t("course.labs.periodic")}
+                    value={schedule.data.periodic_labs.join(", ")}
+                  />
+                </FactList>
+              </Section>
+            )}
+          </div>
+        }
+      />
 
       {editable && (
         <>

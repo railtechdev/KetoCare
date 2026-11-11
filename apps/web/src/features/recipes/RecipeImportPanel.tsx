@@ -127,7 +127,7 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
     <PageLayout
       title={t("import.title")}
       intro={t("import.intro")}
-      width="content"
+      width="wide"
       onBack={onDone}
     >
       <div className="flex flex-col gap-section">
