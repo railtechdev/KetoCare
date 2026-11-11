@@ -1,4 +1,9 @@
-import { formatGrams, formatKcal, formatRatio } from "@ketocare/ui";
+import {
+  formatGrams,
+  formatKcal,
+  formatNumber,
+  formatRatio,
+} from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 import { PrintButton } from "../../components/PrintButton";
@@ -84,6 +89,14 @@ export function PrescriptionSheet({
       <p className="m-0">
         {t("fields.meals")}: {active.meals_per_day}
       </p>
+      {active.fluid_ml_per_day != null && (
+        <p className="m-0">
+          {t("fields.fluid")}:{" "}
+          {t("units.mlPerDay", {
+            value: formatNumber(active.fluid_ml_per_day, 0),
+          })}
+        </p>
+      )}
       {goal.data !== undefined && (
         <table className="w-full max-w-form">
           <thead>

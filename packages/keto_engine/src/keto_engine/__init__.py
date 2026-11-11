@@ -3,6 +3,7 @@
 from .constants import ENGINE_VERSION
 from .engine import (
     energy_requirement,
+    fluid_requirement,
     max_non_fat_grams,
     meal_macro_goal,
     protein_requirement,
@@ -24,6 +25,7 @@ from .types import (
 __all__ = [
     "ENGINE_VERSION",
     "energy_requirement",
+    "fluid_requirement",
     "protein_requirement",
     "DishResult",
     "Ingredient",

@@ -180,6 +180,56 @@ class TestPrescriptionAuthorization:
         )
 
 
+class TestPrescriptionFluid:
+    """Optional daily fluid in the prescription (ADR-0069, question 53)."""
+
+    async def test_fluid_is_stored_returned_and_audited(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        from sqlalchemy import select
+
+        from core.models import AuditLog
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json={**VALID_PRESCRIPTION, "fluid_ml_per_day": 1400},
+            headers=auth_headers(doctor),
+        )
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["fluid_ml_per_day"] == 1400
+
+        audit = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.entity == "prescriptions", AuditLog.entity_id == uuid.UUID(body["id"])
+            )
+        )
+        assert audit is not None
+        assert audit.after["fluid_ml_per_day"] == 1400
+
+        overview = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(doctor)
+        )
+        assert overview.json()["prescription"]["fluid_ml_per_day"] == 1400
+
+    async def test_fluid_is_optional(self, client, session, make_user, make_patient, auth_headers):
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json=VALID_PRESCRIPTION,
+            headers=auth_headers(doctor),
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["fluid_ml_per_day"] is None
+
+
 class TestPrescriptionValidation:
     @pytest.mark.parametrize(
         "field,value",
@@ -190,6 +240,8 @@ class TestPrescriptionValidation:
             ("kcal_per_day", 5000),  # выше 3000
             ("meals_per_day", 0),
             ("protein_g", -1),
+            ("fluid_ml_per_day", 50),  # below 100 mL
+            ("fluid_ml_per_day", 5000),  # above 4000 mL
         ],
     )
     async def test_out_of_range_values_rejected(

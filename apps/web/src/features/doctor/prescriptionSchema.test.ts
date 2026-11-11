@@ -16,6 +16,7 @@ const VALID: PrescriptionFormValues = {
   proteinG: 25,
   carbsLimitG: 10,
   mealsPerDay: 4,
+  fluidMlPerDay: Number.NaN,
   effectiveFrom: "2026-08-28",
   restrictions: "  ",
 };
@@ -67,6 +68,19 @@ describe("prescriptionFormSchema", () => {
     }
   });
 
+  it("жидкость необязательна, а заданная — в границах 100-4000 мл", () => {
+    expect(prescriptionFormSchema.safeParse(VALID).success).toBe(true);
+    expect(
+      prescriptionFormSchema.safeParse({ ...VALID, fluidMlPerDay: 1400 })
+        .success,
+    ).toBe(true);
+    for (const fluidMlPerDay of [50, 5000, 1400.5]) {
+      expect(
+        prescriptionFormSchema.safeParse({ ...VALID, fluidMlPerDay }).success,
+      ).toBe(false);
+    }
+  });
+
   it("отвергает несуществующую дату вступления в силу", () => {
     expect(
       prescriptionFormSchema.safeParse({
@@ -103,6 +117,16 @@ describe("prescriptionFormValues", () => {
     expect(values.kcalPerDay).toBe(1400);
     expect(values.restrictions).toBe("без глютена");
     expect(values.effectiveFrom).toBe("2026-08-28");
+    expect(values.fluidMlPerDay).toBeNaN();
+  });
+
+  it("переносит жидкость действующего назначения", () => {
+    const values = prescriptionFormValues(
+      prescription({ fluid_ml_per_day: 1400 }),
+      new Date(2026, 7, 28),
+    );
+
+    expect(values.fluidMlPerDay).toBe(1400);
   });
 
   it("для первого назначения числовые поля пусты", () => {
@@ -116,6 +140,13 @@ describe("prescriptionFormValues", () => {
 describe("toPrescriptionBody", () => {
   it("пустые ограничения уходят как null, а не как пробелы", () => {
     expect(toPrescriptionBody(VALID).restrictions).toBeNull();
+  });
+
+  it("незаданная жидкость уходит как null, заданная — числом", () => {
+    expect(toPrescriptionBody(VALID).fluid_ml_per_day).toBeNull();
+    expect(
+      toPrescriptionBody({ ...VALID, fluidMlPerDay: 1400 }).fluid_ml_per_day,
+    ).toBe(1400);
   });
 });
 

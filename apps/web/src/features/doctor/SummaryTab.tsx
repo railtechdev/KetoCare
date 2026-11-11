@@ -16,6 +16,7 @@ import {
   formatKcal,
   formatOccurredAt,
   formatMeasured,
+  formatNumber,
   formatWeight,
 } from "@ketocare/ui";
 import { CalendarOff, ClipboardList } from "lucide-react";
@@ -285,6 +286,18 @@ function OverviewPanels({
 
               <dt className="text-muted-foreground">{t("fields.meals")}</dt>
               <dd className="m-0 tabular-nums">{prescription.meals_per_day}</dd>
+
+              {/* Жидкость необязательна (ADR-0069): не задана — строки нет. */}
+              {prescription.fluid_ml_per_day != null && (
+                <>
+                  <dt className="text-muted-foreground">{t("fields.fluid")}</dt>
+                  <dd className="m-0 tabular-nums">
+                    {t("units.mlPerDay", {
+                      value: formatNumber(prescription.fluid_ml_per_day, 0),
+                    })}
+                  </dd>
+                </>
+              )}
 
               <dt className="text-muted-foreground">
                 {t("fields.effectiveFrom")}

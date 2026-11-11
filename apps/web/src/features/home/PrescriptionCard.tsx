@@ -5,6 +5,7 @@ import {
   MetricRow,
   RatioBadge,
   formatKcal,
+  formatNumber,
 } from "@ketocare/ui";
 import { ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -72,6 +73,15 @@ export function PrescriptionCard({
           label={t("prescription.meals")}
           value={prescription.meals_per_day}
         />
+        {/* Жидкость врач задаёт не всегда (ADR-0069): нет — нет и показателя. */}
+        {prescription.fluid_ml_per_day != null && (
+          <Metric
+            label={t("prescription.fluid")}
+            value={t("prescription.mlValue", {
+              value: formatNumber(prescription.fluid_ml_per_day, 0),
+            })}
+          />
+        )}
       </MetricRow>
     </Panel>
   );

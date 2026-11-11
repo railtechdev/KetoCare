@@ -28,6 +28,7 @@ async def create(
     author_id: uuid.UUID,
     effective_from: date,
     restrictions: str | None = None,
+    fluid_ml_per_day: int | None = None,
 ) -> Prescription:
     """Создаёт НОВУЮ версию назначения. Существующие строки не трогает."""
 
@@ -38,6 +39,7 @@ async def create(
         protein_g=protein_g,
         carbs_limit_g=carbs_limit_g,
         meals_per_day=meals_per_day,
+        fluid_ml_per_day=fluid_ml_per_day,
         restrictions=restrictions,
         author_id=author_id,
         effective_from=effective_from,

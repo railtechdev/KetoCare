@@ -176,6 +176,8 @@ class Prescription(Base, UUIDPkMixin):
     protein_g: Mapped[float] = mapped_column(Numeric(6, 1), nullable=False)
     carbs_limit_g: Mapped[float] = mapped_column(Numeric(6, 1), nullable=False)
     meals_per_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Daily fluid in mL; optional — the doctor may leave it empty (ADR-0069).
+    fluid_ml_per_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     restrictions: Mapped[str | None]
     author_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False

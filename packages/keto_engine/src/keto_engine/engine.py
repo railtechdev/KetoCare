@@ -232,6 +232,25 @@ def protein_requirement(weight_kg: float) -> float:
     return weight_kg * constants.PROTEIN_G_PER_KG
 
 
+def fluid_requirement(weight_kg: float) -> float:
+    """Daily fluid volume in mL by the Holliday-Segar method (question 53).
+
+    Each band of `FLUID_ML_PER_KG_BANDS` contributes its mL per kg for the
+    kilograms of weight that fall into it. A hint for the prescription form.
+    """
+
+    if weight_kg <= 0:
+        raise ValueError("Вес должен быть положительным")
+    total = 0.0
+    lower = 0.0
+    for upper, ml_per_kg in constants.FLUID_ML_PER_KG_BANDS:
+        if weight_kg <= lower:
+            break
+        total += (min(weight_kg, upper) - lower) * ml_per_kg
+        lower = upper
+    return total
+
+
 def meal_macro_goal(
     ratio: float,
     kcal: float,

@@ -87,7 +87,9 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # function, the results of verify() and solve() do not change.
 # 1.5.0 — `protein_requirement()` gives the daily protein target from weight
 # (1 g per kg, clinic's answer of 2026-11-11). Minor: a new function.
-ENGINE_VERSION = "1.5.0"
+# 1.6.0 — `fluid_requirement()` gives the daily fluid volume from weight by the
+# Holliday-Segar method (question 53, ADR-0069). Minor: a new function.
+ENGINE_VERSION = "1.6.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,
@@ -110,3 +112,17 @@ ENERGY_KCAL_PER_KG_BY_AGE: tuple[tuple[float, float, float], ...] = (
 # Confirmed by the clinic on 2026-11-11 ("верно, правило 1 г на кг"), as in KDC,
 # where protein is derived rather than entered.
 PROTEIN_G_PER_KG = 1.0
+
+
+# Daily fluid requirement by weight, Holliday-Segar method: Holliday MA, Segar WE.
+# "The maintenance need for water in parenteral fluid therapy". Pediatrics
+# 1957;19:823-832. 100 mL/kg for the first 10 kg, plus 50 mL/kg for each kg from
+# 10 to 20, plus 20 mL/kg for each kg above 20. KDC shows the same number as
+# "Recommended Fluids by Holliday-Segar" (docs/AUDIT_KDC.md, K1); the owner chose
+# the international standard without waiting for the clinic (question 53, ADR-0069).
+# Rows: (upper bound of the band in kg, exclusive of the next band; mL per kg).
+FLUID_ML_PER_KG_BANDS: tuple[tuple[float, float], ...] = (
+    (10.0, 100.0),
+    (20.0, 50.0),
+    (float("inf"), 20.0),
+)

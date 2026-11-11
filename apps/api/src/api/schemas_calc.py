@@ -282,6 +282,8 @@ class EnergyRequirementResponse(BaseModel):
     kcal_per_kg_min: float
     kcal_per_kg_max: float
     protein_g: float
+    #: Daily fluid in mL by the Holliday-Segar method (question 53, ADR-0069).
+    fluid_ml: float
     engine_version: str
 
 

@@ -22,6 +22,7 @@ from keto_engine import (
     ENGINE_VERSION,
     InfeasibleError,
     energy_requirement,
+    fluid_requirement,
     protein_requirement,
     scale,
     solve,
@@ -317,6 +318,7 @@ async def energy(payload: EnergyRequirementRequest, _: CurrentUserDep) -> Energy
         kcal_per_kg_min=low / payload.weight_kg,
         kcal_per_kg_max=high / payload.weight_kg,
         protein_g=protein_requirement(payload.weight_kg),
+        fluid_ml=fluid_requirement(payload.weight_kg),
         engine_version=ENGINE_VERSION,
     )
 

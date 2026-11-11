@@ -23,8 +23,11 @@ export function EnergyHint({
   onApply,
 }: {
   patientId: string;
-  /** Калорийность и белок по весу (1 г на кг, ответ клиники 11.11.2026). */
-  onApply: (kcal: number, proteinG: number) => void;
+  /**
+   * Калорийность, белок по весу (1 г на кг, ответ клиники 11.11.2026) и
+   * жидкость по весу (Холлидей — Сегар, ADR-0069).
+   */
+  onApply: (kcal: number, proteinG: number, fluidMl: number) => void;
 }) {
   const { t } = useTranslation("doctor");
   const patient = usePatient(patientId);
@@ -108,7 +111,12 @@ export function EnergyHint({
             variant="outline"
             size="sm"
             onClick={() =>
-              onApply(option.kcal, Math.round(range.data.protein_g * 10) / 10)
+              onApply(
+                option.kcal,
+                Math.round(range.data.protein_g * 10) / 10,
+                // Целые миллилитры: поле назначения хранит целое число.
+                Math.round(range.data.fluid_ml),
+              )
             }
           >
             {t(`prescription.energy.${option.key}`, {

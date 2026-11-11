@@ -18,6 +18,8 @@ import {
   usePrescriptionGoal,
 } from "./PrescriptionGoalPreview";
 import {
+  FLUID_MAX,
+  FLUID_MIN,
   KCAL_MAX,
   KCAL_MIN,
   prescriptionFormSchema,
@@ -35,6 +37,7 @@ const VALIDATED_FIELDS = [
   { name: "proteinG", anchor: "protein", messageKey: "protein" },
   { name: "carbsLimitG", anchor: "carbs", messageKey: "carbsLimit" },
   { name: "mealsPerDay", anchor: "meals", messageKey: "meals" },
+  { name: "fluidMlPerDay", anchor: "fluid", messageKey: "fluid" },
   {
     name: "effectiveFrom",
     anchor: "effective-from",
@@ -67,7 +70,9 @@ export function PrescriptionForm({
 }: {
   defaultValues: DefaultValues<PrescriptionFormValues>;
   /** Подсказка под калорийностью; получает функцию, ставящую число в поле */
-  kcalHint?: (apply: (kcal: number, proteinG: number) => void) => ReactNode;
+  kcalHint?: (
+    apply: (kcal: number, proteinG: number, fluidMl: number) => void,
+  ) => ReactNode;
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
@@ -99,6 +104,7 @@ export function PrescriptionForm({
   });
   const [carbsByHand, setCarbsByHand] = useState(false);
   const [proteinByHand, setProteinByHand] = useState(false);
+  const [fluidByHand, setFluidByHand] = useState(false);
   const derivedCarbs = goal.data?.day.net_carbs_g ?? null;
   const inputsChanged =
     dirtyFields.kcalPerDay === true ||
@@ -178,7 +184,7 @@ export function PrescriptionForm({
           error={errors.kcalPerDay && t("prescription.errors.kcal")}
           {...register("kcalPerDay", { valueAsNumber: true })}
         />
-        {kcalHint?.((kcal, proteinG) => {
+        {kcalHint?.((kcal, proteinG, fluidMl) => {
           setValue("kcalPerDay", kcal, {
             shouldDirty: true,
             shouldValidate: true,
@@ -187,6 +193,14 @@ export function PrescriptionForm({
           // руками выключает подстановку до конца этой формы.
           if (!proteinByHand) {
             setValue("proteinG", proteinG, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+          }
+          // Жидкость — тоже по весу (Холлидей — Сегар, ADR-0069) и тоже
+          // только пока врач не правил поле руками.
+          if (!fluidByHand) {
+            setValue("fluidMlPerDay", fluidMl, {
               shouldDirty: true,
               shouldValidate: true,
             });
@@ -235,6 +249,26 @@ export function PrescriptionForm({
           label={t("fields.meals")}
           error={errors.mealsPerDay && t("prescription.errors.meals")}
           {...register("mealsPerDay", { valueAsNumber: true })}
+        />
+
+        {/* Необязательное: пустое поле — жидкость не назначена, и семья её
+            нигде не видит. */}
+        <Field
+          id={`${ids}-fluid`}
+          width="narrow"
+          type="number"
+          inputMode="numeric"
+          min={FLUID_MIN}
+          max={FLUID_MAX}
+          step={1}
+          optional
+          label={t("fields.fluidInput")}
+          error={errors.fluidMlPerDay && t("prescription.errors.fluid")}
+          hint={fluidByHand ? undefined : t("prescription.fluidDerived")}
+          {...register("fluidMlPerDay", {
+            valueAsNumber: true,
+            onChange: () => setFluidByHand(true),
+          })}
         />
 
         <Field
