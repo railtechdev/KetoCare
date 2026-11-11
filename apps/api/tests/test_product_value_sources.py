@@ -95,6 +95,7 @@ async def test_derive_marks_kept_values_by_source_and_changed_by_author(
             "user_id": None,
             "at": None,
             "label": locked.name,
+            "net_plus_fiber": False,
         }
     for field in ("fat_100g", "kcal_100g"):
         assert sources[field]["kind"] == "manual"
