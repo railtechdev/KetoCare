@@ -35,7 +35,14 @@ import { useCopyWeek, useWeekQuery, type MenuWeek } from "./useWeek";
  * Выбранный день живёт в адресе и общий с `DayComposer` под сеткой: нажатие на
  * день открывает его сборку, а неделя всегда та, в которой этот день.
  */
-export function WeekGrid({ patientId }: { patientId: string }) {
+export function WeekGrid({
+  patientId,
+  dayAnchorId,
+}: {
+  patientId: string;
+  /** Блок сборки дня под сеткой: нажатие на день открывает его и ведёт к нему. */
+  dayAnchorId?: string;
+}) {
   const { t } = useTranslation("menu");
   const address = useAddressState();
   const patchAddress = useAddressPatch();
@@ -51,6 +58,15 @@ export function WeekGrid({ patientId }: { patientId: string }) {
 
   const select = (date: string) =>
     patchAddress({ date: date === todayIso() ? undefined : date });
+  const openDay = (date: string) => {
+    select(date);
+    if (dayAnchorId === undefined) return;
+    requestAnimationFrame(() =>
+      document
+        .getElementById(dayAnchorId)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
 
   const plannedMeals = (week.data?.days ?? []).flatMap((day) =>
     (day.menu?.items ?? []).map((item) => item.meal_index),
@@ -170,7 +186,7 @@ export function WeekGrid({ patientId }: { patientId: string }) {
                       aria-label={t("week.openDay", {
                         date: formatDayLabel(day.date),
                       })}
-                      onClick={() => select(day.date)}
+                      onClick={() => openDay(day.date)}
                     >
                       {formatWeekday(day.date)}
                     </Button>

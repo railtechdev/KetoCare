@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { DayComposer } from "../menu/DayComposer";
 import { WeekGrid } from "../menu/WeekGrid";
+import { formatDayLabel, todayIso } from "../menu/dates";
+import { useAddressState } from "../../routes/useSectionTab";
 
 /**
  * План питания пациента у специалиста — составляется здесь же (ADR-0047).
@@ -23,25 +25,33 @@ import { WeekGrid } from "../menu/WeekGrid";
  *
  * Блюда ребёнка — отдельный раздел карты, в день они попадают через выбор блюда.
  */
+const DAY_ANCHOR = "patient-menu-day";
+
 export function PatientMenuTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
+  const address = useAddressState();
 
   return (
     <div className="flex flex-col gap-section">
-      <WeekGrid patientId={patientId} />
+      <WeekGrid patientId={patientId} dayAnchorId={DAY_ANCHOR} />
 
       <DayComposer patientId={patientId} canMarkEaten={false}>
         {({ actions, content }) => (
-          <>
+          <div
+            id={DAY_ANCHOR}
+            className="flex scroll-mt-4 flex-col gap-section"
+          >
             {/* Заголовок страницы — раздел карты («Питание»); действиям над днём
                 нужно своё место, и оно — шапка содержимого. */}
             <SubPageHeader
-              title={t("menu.title")}
+              title={t("menu.dayTitle", {
+                date: formatDayLabel(address.date ?? todayIso()),
+              })}
               intro={t("menu.intro")}
               actions={actions}
             />
             {content}
-          </>
+          </div>
         )}
       </DayComposer>
     </div>
