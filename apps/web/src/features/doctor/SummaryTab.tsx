@@ -316,6 +316,16 @@ function OverviewPanels({
               )}
             </FactList>
           )}
+          {prescription !== null && (
+            // The dietitian looked for a way to change the prescription here and
+            // found none: the form lives in the «Диета» section. One link keeps
+            // the path a single click, as for the first prescription above.
+            <Button asChild variant="outline" className="self-start">
+              <PatientViewLink patientId={patientId} view="prescription">
+                {t("summary.prescription.edit")}
+              </PatientViewLink>
+            </Button>
+          )}
         </Section>
       }
     />
