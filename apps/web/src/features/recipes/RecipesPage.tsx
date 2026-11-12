@@ -12,7 +12,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
-import { SectionLink } from "../../components/SectionLink";
 import {
   useAddressPatch,
   useAddressState,
@@ -212,13 +211,6 @@ export function RecipesPage() {
       width="wide"
       actions={
         <>
-          {canAddToChildRole && (
-            <Button asChild variant="outline" className="min-h-touch">
-              <SectionLink section="products" tab="standards">
-                {t("actions.ministryMenus")}
-              </SectionLink>
-            </Button>
-          )}
           {canEdit && (
             <>
               <Button

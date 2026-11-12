@@ -206,6 +206,21 @@ def max_non_fat_grams(ratio: float, kcal: float) -> float:
     return kcal / denominator
 
 
+def dietary_unit_kcal(ratio: float) -> float:
+    """Energy of one dietary unit at this ratio: R g of fat plus 1 g of protein
+    with net carbs, at 9 and 4 kcal per gram (4:1 -> 40 kcal, 3:1 -> 31 kcal).
+
+    The same identity as `max_non_fat_grams`: daily calories divided by this
+    number is the count of units, and that count is the grams of protein with
+    net carbs. Shown so the doctor can follow the arithmetic as on the clinic's
+    Yonsei slide.
+    """
+
+    if ratio <= 0:
+        raise ValueError("Соотношение должно быть положительным")
+    return ratio * constants.KCAL_PER_G_FAT + constants.KCAL_PER_G_PROTEIN
+
+
 def energy_requirement(age_years: int, weight_kg: float) -> tuple[float, float]:
     """Daily calorie range for a child of this age and weight (question 56).
 

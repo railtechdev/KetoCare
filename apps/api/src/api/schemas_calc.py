@@ -250,7 +250,10 @@ class PrescriptionGoalRequest(BaseModel):
     ratio: Annotated[float, Field(ge=1.0, le=5.0)]
     kcal_per_day: Annotated[float, Field(gt=0, le=5000)]
     protein_g: Annotated[float, Field(ge=0, le=1000)]
-    meals_per_day: Annotated[int, Field(ge=1, le=MAX_MEALS_PER_DAY)]
+    #: Optional: without it the day is still computed and `meal` is null. The
+    #: form derives the carb limit from the day, and a doctor who has not yet
+    #: typed the number of meals got an empty carb field (2026-11-12).
+    meals_per_day: Annotated[int, Field(ge=1, le=MAX_MEALS_PER_DAY)] | None = None
 
 
 class PrescriptionGoalResponse(BaseModel):
@@ -260,7 +263,10 @@ class PrescriptionGoalResponse(BaseModel):
     """
 
     day: MealGoalOut
-    meal: MealGoalOut
+    meal: MealGoalOut | None
+    #: Energy of one dietary unit (R g fat + 1 g protein with net carbs); the day's
+    #: `non_fat_g` is the number of units. Shown as the slide's arithmetic.
+    dietary_unit_kcal: float
     engine_version: str
 
 

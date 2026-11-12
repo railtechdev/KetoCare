@@ -118,7 +118,9 @@ export function PrescriptionSheet({
                 {t("prescription.goal.fat")}
               </th>
               <td className="text-right">{grams(goal.data.day.fat_g)}</td>
-              <td className="text-right">{grams(goal.data.meal.fat_g)}</td>
+              <td className="text-right">
+                {grams(goal.data.meal?.fat_g ?? null)}
+              </td>
             </tr>
             {goal.data.day.protein_g !== null && (
               <>
@@ -130,7 +132,7 @@ export function PrescriptionSheet({
                     {grams(goal.data.day.protein_g)}
                   </td>
                   <td className="text-right">
-                    {grams(goal.data.meal.protein_g)}
+                    {grams(goal.data.meal?.protein_g ?? null)}
                   </td>
                 </tr>
                 <tr>
@@ -141,7 +143,7 @@ export function PrescriptionSheet({
                     {grams(goal.data.day.net_carbs_g)}
                   </td>
                   <td className="text-right">
-                    {grams(goal.data.meal.net_carbs_g)}
+                    {grams(goal.data.meal?.net_carbs_g ?? null)}
                   </td>
                 </tr>
               </>

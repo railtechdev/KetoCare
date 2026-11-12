@@ -89,7 +89,10 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # (1 g per kg, clinic's answer of 2026-11-11). Minor: a new function.
 # 1.6.0 — `fluid_requirement()` gives the daily fluid volume from weight by the
 # Holliday-Segar method (question 53, ADR-0069). Minor: a new function.
-ENGINE_VERSION = "1.6.0"
+# 1.7.0 — `dietary_unit_kcal()` gives the energy of one dietary unit at a ratio
+# (R g fat + 1 g protein with net carbs), the way the clinic's Yonsei slide
+# explains the calculation. Minor: a new function, nothing else changes.
+ENGINE_VERSION = "1.7.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,
