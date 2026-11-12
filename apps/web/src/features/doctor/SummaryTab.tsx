@@ -229,18 +229,26 @@ function OverviewPanels({
             <MetricRow label={t("summary.readings.title")}>
               <Metric
                 label={t("summary.readings.ketone")}
+                // Крупно — само измерение, мелко под ним — способ и время.
+                // Одной строкой «2,4 ммоль/л, по крови, 12.11.2026, 21:47»
+                // плитка на ноутбуке рвалась посреди единицы измерения.
                 value={
                   data.last_ketone == null
                     ? t("summary.readings.noKetone")
-                    : t("summary.readings.ketoneValue", {
+                    : t("summary.readings.ketoneAmount", {
                         value: formatMeasured(data.last_ketone.value),
-                        method: t(
-                          `summary.readings.method.${data.last_ketone.method}`,
-                        ),
-                        at: formatOccurredAt(
-                          new Date(data.last_ketone.occurred_at),
-                        ),
                       })
+                }
+                hint={
+                  data.last_ketone != null &&
+                  t("summary.readings.ketoneWhen", {
+                    method: t(
+                      `summary.readings.method.${data.last_ketone.method}`,
+                    ),
+                    at: formatOccurredAt(
+                      new Date(data.last_ketone.occurred_at),
+                    ),
+                  })
                 }
               />
               <Metric
@@ -248,18 +256,21 @@ function OverviewPanels({
                 value={
                   data.last_weight == null
                     ? t("summary.readings.noWeight")
-                    : t("summary.readings.weightValue", {
+                    : t("summary.readings.weightAmount", {
                         value: formatWeight(data.last_weight.weight_kg),
-                        at: formatOccurredAt(
-                          new Date(data.last_weight.occurred_at),
-                        ),
                       })
+                }
+                hint={
+                  data.last_weight != null &&
+                  formatOccurredAt(new Date(data.last_weight.occurred_at))
                 }
               />
               <Metric
                 label={t("summary.readings.seizures")}
                 value={t("summary.readings.seizuresValue", {
                   count: data.seizures_today.count,
+                })}
+                hint={t("summary.readings.seizuresEntries", {
                   entries: data.seizures_today.entries,
                 })}
               />

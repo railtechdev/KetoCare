@@ -71,10 +71,14 @@ export interface MetricProps {
  * `tabular-nums` не по желанию, а всегда: столбец чисел с пропорциональными
  * цифрами прыгает по горизонтали, и сравнивать соседние строки глазом
  * становится нельзя.
+ *
+ * Значение стоит сразу под подписью, а не прижато к низу плитки: в одном ряду
+ * у одних показателей есть пояснение, у других нет, и при `justify-between`
+ * числа соседних плиток оказывались на разной высоте.
  */
 export function Metric({ label, value, unit, hint, emphasis }: MetricProps) {
   return (
-    <div className="flex min-w-0 flex-col justify-between gap-1 rounded-lg border border-border/70 bg-muted/25 px-3.5 py-2.5">
+    <div className="flex min-w-0 flex-col justify-start gap-1 rounded-lg border border-border/70 bg-muted/25 px-3.5 py-2.5">
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="m-0 flex flex-wrap items-baseline gap-1">
         <span

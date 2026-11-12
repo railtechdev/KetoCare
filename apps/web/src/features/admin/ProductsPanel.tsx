@@ -190,9 +190,24 @@ export function ProductsPanel({
       {
         accessorKey: "name_ru",
         header: t("products.columns.name"),
+        // Состояние — пометкой под названием, а не своей колонкой: почти все
+        // строки «Активен», и колонка ради редкого «В архиве» выталкивала
+        // источник за край таблицы на ноутбуке.
         cell: ({ row }) => (
-          <span className="block max-w-36 whitespace-normal font-medium leading-snug">
-            {row.original.name_ru}
+          <span className="flex max-w-40 flex-col whitespace-normal leading-snug">
+            <span className="font-medium">{row.original.name_ru}</span>
+            {!row.original.is_active && (
+              <span className="text-xs text-muted-foreground italic">
+                {t("products.status.inactive")}
+              </span>
+            )}
+            {/* Приправа (ADR-0054) — рядом с названием: диетолог ищет
+                глазами, что из справочника не идёт в расчёт. */}
+            {!row.original.counts_in_calculation && (
+              <span className="text-xs text-muted-foreground">
+                {t("products.status.uncounted")}
+              </span>
+            )}
           </span>
         ),
       },
@@ -299,30 +314,6 @@ export function ProductsPanel({
             </Tooltip>
           );
         },
-      },
-      {
-        accessorKey: "is_active",
-        header: t("products.columns.status"),
-        cell: ({ row }) => (
-          <span className="flex flex-col leading-tight">
-            {row.original.is_active ? (
-              <span className="text-success">
-                {t("products.status.active")}
-              </span>
-            ) : (
-              <span className="text-muted-foreground italic">
-                {t("products.status.inactive")}
-              </span>
-            )}
-            {/* Приправа (ADR-0054) — рядом со статусом: диетолог ищет
-                глазами, что из справочника не идёт в расчёт. */}
-            {!row.original.counts_in_calculation && (
-              <span className="max-w-36 whitespace-normal text-xs text-muted-foreground">
-                {t("products.status.uncounted")}
-              </span>
-            )}
-          </span>
-        ),
       },
       {
         id: "actions",
@@ -679,6 +670,10 @@ export function ProductsPanel({
           {t("products.standardBanner.lockedBody")}
         </WarningBanner>
       )}
+
+      <p className="m-0 text-sm text-muted-foreground">
+        {t("products.table.perGram")}
+      </p>
 
       {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
       <AsyncSection

@@ -104,6 +104,9 @@ export const PASSWORD = value(
   "e2e correct horse battery staple",
 );
 export const DOCTOR_EMAIL = "e2e-doctor@example.com";
+/** Диетолог и администратор — тот же пароль и второй фактор, что у врача. */
+export const DIETITIAN_EMAIL = "e2e-dietitian@example.com";
+export const ADMIN_EMAIL = "e2e-admin@example.com";
 export const PARENT_EMAIL = "e2e-parent@example.com";
 
 /**

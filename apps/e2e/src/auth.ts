@@ -1,6 +1,8 @@
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 
 import {
+  ADMIN_EMAIL,
+  DIETITIAN_EMAIL,
   DOCTOR_EMAIL,
   DOCTOR_TOTP_SECRET,
   PARENT_EMAIL,
@@ -46,7 +48,20 @@ export async function loginAsParent(page: Page): Promise<void> {
  * побочным действием каждого входа.
  */
 export async function loginAsDoctor(page: Page): Promise<void> {
-  let response = await postDoctorLogin(page);
+  await loginAsStaff(page, DOCTOR_EMAIL);
+}
+
+/** Диетолог и администратор входят так же, как врач: пароль и второй фактор. */
+export async function loginAsDietitian(page: Page): Promise<void> {
+  await loginAsStaff(page, DIETITIAN_EMAIL);
+}
+
+export async function loginAsAdmin(page: Page): Promise<void> {
+  await loginAsStaff(page, ADMIN_EMAIL);
+}
+
+async function loginAsStaff(page: Page, email: string): Promise<void> {
+  let response = await postStaffLogin(page, email);
   // Страховка на случай, когда отметка шага в памяти потеряна (Playwright
   // перезапустил процесс после упавшего теста): сервер сам говорит, что шаг
   // занят, и ждать нужно ровно до следующего — не дольше 30 секунд.
@@ -56,14 +71,14 @@ export async function loginAsDoctor(page: Page): Promise<void> {
     attempt++
   ) {
     await waitForNextStep();
-    response = await postDoctorLogin(page);
+    response = await postStaffLogin(page, email);
   }
   if (!response.ok()) {
     // Тело отказа безопасно: токенов в нём нет, а без него «401» не говорит
     // ничего. Подсказка про переменную — потому что первая же причина
     // расхождения кода с базой именно она.
     throw new Error(
-      `Врач не вошёл: ${response.status()} ${await response.text()} ` +
+      `${email} не вошёл: ${response.status()} ${await response.text()} ` +
         "(сверьте E2E_TOTP_SECRET: сид и прогон должны читать одно значение)",
     );
   }
@@ -73,12 +88,12 @@ export async function loginAsDoctor(page: Page): Promise<void> {
   // Тело наружу не выводится: в нём токены.
   const body = await response.json();
   if (body.status !== "ok") {
-    throw new Error(`Вход врача не дал сессию: ${String(body.status)}`);
+    throw new Error(`Вход ${email} не дал сессию: ${String(body.status)}`);
   }
 }
 
 /**
- * Шаг TOTP, которым врач входил последним в этом процессе.
+ * Шаг TOTP, которым каждый специалист входил последним в этом процессе.
  *
  * Код одноразовый (RFC 6238 §5.2, находка Н8): сервер запоминает принятый шаг
  * и второй вход тем же кодом отвергает. Сценарии входят врачом по нескольку
@@ -86,7 +101,7 @@ export async function loginAsDoctor(page: Page): Promise<void> {
  * (`workers: 1` в playwright.config.ts), и отметки в памяти достаточно; на
  * случай перезапуска процесса есть повтор по `totp_reused` выше.
  */
-let lastDoctorStep = -1;
+const lastStep = new Map<string, number>();
 
 function currentStep(): number {
   return Math.floor(Date.now() / 1000 / TOTP_STEP_SECONDS);
@@ -98,12 +113,12 @@ async function waitForNextStep(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, next - Date.now() + 500));
 }
 
-async function postDoctorLogin(page: Page): Promise<APIResponse> {
-  if (currentStep() <= lastDoctorStep) await waitForNextStep();
-  lastDoctorStep = currentStep();
+async function postStaffLogin(page: Page, email: string): Promise<APIResponse> {
+  if (currentStep() <= (lastStep.get(email) ?? -1)) await waitForNextStep();
+  lastStep.set(email, currentStep());
   return page.request.post("/api/v1/auth/login", {
     data: {
-      email: DOCTOR_EMAIL,
+      email,
       password: PASSWORD,
       totp_code: totp(DOCTOR_TOTP_SECRET),
     },

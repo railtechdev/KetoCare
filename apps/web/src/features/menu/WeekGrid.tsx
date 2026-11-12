@@ -182,8 +182,11 @@ export function WeekGrid({
         isEmpty={false}
         empty={null}
       >
+        {/* 52rem — меньше всего, при котором «+ Добавить» встаёт в день одной
+            строкой. При 56rem неделя в карте пациента на ноутбуке 1280 px
+            уходила в прокрутку из-за последних девяти пикселей воскресенья. */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[56rem] table-fixed border-collapse text-sm">
+          <table className="w-full min-w-[52rem] table-fixed border-collapse text-sm">
             <caption className="sr-only">{t("week.title")}</caption>
             <thead>
               <tr>

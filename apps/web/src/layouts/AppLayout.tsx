@@ -23,7 +23,7 @@ import { PatientSwitcher } from "../features/patients/PatientSwitcher";
 import { PRIMARY_MOBILE_SECTIONS, SECTION_ICONS } from "../routes/sections";
 import { SectionLink } from "../components/SectionLink";
 import { AppToaster } from "./AppToaster";
-import { SidebarNav } from "./SidebarNav";
+import { SidebarNav, type NavLabels } from "./SidebarNav";
 import { MAIN_CONTENT_ID, SkipLink } from "./SkipLink";
 import { UserMenu } from "./UserMenu";
 
@@ -48,8 +48,9 @@ const DoctorPatientSwitcher = lazy(() =>
  * Три ширины, а не две. Раньше их было две — «телефон» и «1024 и шире», — и
  * между ними лежал провал: на 1000 px (ноутбук в окне, планшет альбомом)
  * приложение показывало телефонную раскладку с гамбургером, отдавая всю ширину
- * одной колонке. Теперь с 768 px боковая панель возвращается полосой значков, а
- * подписи к ним появляются с 1024 px, когда для них есть место.
+ * одной колонке. Теперь с 768 px боковая панель возвращается полосой значков с
+ * подписями, а полное меню — с 1536 px, когда для него есть место (на ноутбуке
+ * его 16rem отнимали у таблиц и карты пациента).
  */
 export function AppLayout() {
   const { t } = useTranslation();
@@ -69,6 +70,7 @@ export function AppLayout() {
 
   const sections = navSectionsFor(session.role);
   const nav = inPatient ? NAV.patient : NAV.sections;
+  const navLabels: NavLabels = inPatient ? "stacked" : "responsive";
 
   return (
     <TooltipProvider>
@@ -77,12 +79,12 @@ export function AppLayout() {
         <aside
           className={cn(
             "fixed inset-y-0 left-0 hidden flex-col gap-screen border-r border-sidebar-border bg-sidebar p-2 md:flex",
-            "lg:p-4",
+            !inPatient && "2xl:p-4",
             nav.aside,
           )}
         >
-          <Brand labels="responsive" />
-          <SidebarNav sections={sections} labels="responsive" />
+          <Brand labels={navLabels} />
+          <SidebarNav sections={sections} labels={navLabels} />
         </aside>
 
         <div className={nav.content}>
@@ -254,14 +256,14 @@ function MobileBottomNav({
  * скринридеру: полоса значков — та же навигация, и она обязана называть, куда
  * пользователь попал.
  */
-function Brand({ labels }: { labels: "responsive" | "always" | "never" }) {
+function Brand({ labels }: { labels: NavLabels }) {
   const { t } = useTranslation();
 
   return (
     <div
       className={cn(
         "flex items-center justify-center gap-field",
-        labels === "responsive" && "lg:justify-start",
+        labels === "responsive" && "2xl:justify-start",
         labels === "always" && "justify-start",
       )}
     >
@@ -271,8 +273,8 @@ function Brand({ labels }: { labels: "responsive" | "always" | "never" }) {
       <span
         className={cn(
           "text-lg font-bold text-foreground",
-          labels === "responsive" && "sr-only lg:not-sr-only",
-          labels === "never" && "sr-only",
+          labels === "responsive" && "sr-only 2xl:not-sr-only",
+          (labels === "never" || labels === "stacked") && "sr-only",
         )}
       >
         {t("app.name")}
