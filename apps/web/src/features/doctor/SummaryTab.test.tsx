@@ -171,6 +171,14 @@ describe("сводка пациента", () => {
         ).not.toBeInTheDocument();
         // Жидкость не задана — строки о ней нет (ADR-0069).
         expect(screen.queryByText(doctorRu.fields.fluid)).toBeNull();
+        // The active prescription leads to its form: the dietitian looked
+        // for a way to change it from the overview and found none.
+        const edit = screen.getByRole("link", {
+          name: doctorRu.summary.prescription.edit,
+        });
+        expect(edit.getAttribute("href")).toBe(
+          `/app/patients/${PATIENT.id}/prescription`,
+        );
       });
   });
 
