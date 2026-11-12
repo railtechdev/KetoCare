@@ -34,6 +34,52 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+const ISSUED = {
+  code: "NEWC0D3S",
+  expires_at: "2026-10-08T10:00:00Z",
+  deep_link: null,
+  join_url: "https://app.example.org/join?code=NEWC0D3S",
+};
+
+describe("выпуск кода при открытии", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as Mock).mockResolvedValue({ data: [] });
+  });
+
+  it("код выпускается сам, один раз, а кнопка выпускает следующий", async () => {
+    // Аудит продукта 12.11.2026: панель открывают ради кода, и вторая кнопка
+    // «Дать доступ семье» внутри неё была лишним нажатием.
+    (api.POST as Mock).mockResolvedValue({ data: ISSUED, error: undefined });
+    const user = userEvent.setup();
+    render(<AccessCodePanel patientId={PATIENT_ID} audience="specialist" />, {
+      wrapper,
+    });
+
+    expect(await screen.findByText("NEWC0D3S")).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Ещё один код" }));
+    await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(2));
+  });
+
+  it("отказ выпуска оставляет кнопку повтора", async () => {
+    (api.POST as Mock).mockResolvedValue({
+      error: { error: { code: "internal", message: "Сервер недоступен." } },
+    });
+    render(<AccessCodePanel patientId={PATIENT_ID} audience="specialist" />, {
+      wrapper,
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Сервер недоступен.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Выдать код" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("отзыв кода доступа", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,7 +120,11 @@ describe("отзыв кода доступа", () => {
   });
 
   it("успех подтверждается тостом", async () => {
-    (api.POST as Mock).mockResolvedValue({ data: {}, error: undefined });
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.endsWith("/revoke")
+        ? { data: undefined, error: undefined }
+        : { data: ISSUED, error: undefined },
+    );
     const user = userEvent.setup();
     render(<AccessCodePanel patientId={PATIENT_ID} audience="specialist" />, {
       wrapper,

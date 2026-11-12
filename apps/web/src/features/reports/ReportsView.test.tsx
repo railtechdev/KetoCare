@@ -206,3 +206,51 @@ describe("период отчёта — в адресе", () => {
     expect(currentAddress().job).toBeUndefined();
   });
 });
+
+describe("печать отчёта со страницы", () => {
+  it("печатает то, что на экране, без сборки файла", async () => {
+    // Аудит продукта 12.11.2026: за бумагой на приёме ждали сборки PDF.
+    const print = vi.spyOn(window, "print").mockImplementation(() => {});
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        generated_at: "2026-08-31T10:00:00Z",
+        period: { from_date: "2026-08-01", to_date: "2026-08-31" },
+        patient: { full_name: "Аня Иванова" },
+        prescriptions: [
+          {
+            ratio: 4,
+            kcal_per_day: 1200,
+            protein_g: 26,
+            carbs_limit_g: 10,
+            meals_per_day: 4,
+            effective_from: "2026-08-01",
+            created_at: "2026-08-01T09:00:00Z",
+          },
+        ],
+        seizures: { count: 3, entries: 2, by_type: [], by_day: {} },
+        ketones: { points: [], min: null, max: null, mean: null },
+        weight: { points: [], min: null, max: null, mean: null },
+        medications: [],
+        side_effects: [],
+        menu: { days_planned: 0, items_planned: 0, items_eaten: 0 },
+        summaries: [],
+      },
+    });
+    const user = userEvent.setup();
+    renderView();
+
+    const button = await screen.findByRole("button", {
+      name: reportsRu.print.button,
+    });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByRole("heading", { name: "Отчёт: Аня Иванова" }),
+    ).toBeInTheDocument();
+    // Числа — помощниками кита, как на экране (правило П45).
+    expect(screen.getByText(/1 200 ккал в сутки/)).toBeInTheDocument();
+    print.mockRestore();
+  });
+});

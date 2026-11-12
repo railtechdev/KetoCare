@@ -9,7 +9,7 @@ import {
   Section,
 } from "@ketocare/ui";
 import { KeyRound, Copy, Share2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 
@@ -40,6 +40,11 @@ import { queryState } from "../../lib/queryState";
  * «семье», родитель — о «другом взрослом» (`audience`). Назначение кода
  * передаётся явно в обоих случаях: этот экран выдаёт доступ, а не подключает
  * свой чат, и полагаться на выбор сервера по роли здесь незачем.
+ *
+ * **Код выпускается при открытии панели** (аудит продукта 12.11.2026,
+ * ADR-0072): панель открывают ради кода, и вторая кнопка с тем же названием,
+ * что и открывшая её, была лишним шагом. Правила кода прежние — одноразовый,
+ * неделя, отзывается из журнала ниже; «Ещё один код» выпускает следующий.
  */
 export function AccessCodePanel({
   patientId,
@@ -102,12 +107,21 @@ export function AccessCodePanel({
     }
   }
 
+  // Один выпуск на открытие. Флаг в ref, а не в состоянии: в StrictMode эффект
+  // запускается дважды на том же экземпляре, и второй запуск выпустил бы
+  // второй код.
+  const autoIssued = useRef(false);
+  useEffect(() => {
+    if (autoIssued.current) return;
+    autoIssued.current = true;
+    void handleIssue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
+  }, []);
+
   return (
     <div className="flex flex-col gap-section">
       <Section
         title={voice("title")}
-        description={voice("intro")}
-
         action={
           <Button
             type="button"
@@ -115,6 +129,8 @@ export function AccessCodePanel({
             disabled={issue.isPending}
           >
             <KeyRound aria-hidden="true" />
+            {/* До первого кода кнопка видна только при отказе выпуска — как
+                повтор; после него выпускает следующий. */}
             {issue.isPending
               ? t("panel.issuing")
               : issued === null

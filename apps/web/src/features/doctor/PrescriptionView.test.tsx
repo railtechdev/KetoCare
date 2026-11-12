@@ -15,6 +15,7 @@ import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
+import { currentAddress } from "../../test/address";
 import { PrescriptionView } from "./PrescriptionView";
 import { nativeSelect } from "../../test/nativeSelect";
 
@@ -244,9 +245,15 @@ describe("форма назначения", () => {
   });
 
   it("история пишет числа по-русски: «1 200», а не «1200»", async () => {
+    const user = userEvent.setup();
     renderView();
 
-    const table = await screen.findByRole("table");
+    await user.click(
+      await screen.findByRole("button", { name: "История назначений" }),
+    );
+    const table = await screen.findByRole("table", {
+      name: "История назначений",
+    });
     expect(
       within(table).getAllByText(formatKcal(1200), { normalizer: (t) => t })
         .length,
@@ -254,6 +261,74 @@ describe("форма назначения", () => {
     expect(within(table).queryByText("1200")).toBeNull();
     expect(within(table).getAllByText(formatGrams(26)).length).toBeGreaterThan(
       0,
+    );
+  });
+
+  it("история — панелью по кнопке и в адресе, а форма во всю ширину", async () => {
+    // Аудит продукта 12.11.2026: колонка истории рядом с формой выталкивала
+    // «Сохранить» за нижний край экрана.
+    const user = userEvent.setup();
+    renderView();
+
+    await screen.findByRole("button", { name: "Сохранить назначение" });
+    expect(screen.queryByRole("table")).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: "История назначений" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(currentAddress()).toMatchObject({ item: "history" });
+  });
+
+  it("печать называет, что будет на листе", async () => {
+    renderView();
+
+    expect(
+      await screen.findByRole("button", { name: "Печать: назначение" }),
+    ).toBeInTheDocument();
+  });
+
+  it("после записи назначения предлагает выдать код семье, пока она не подключена", async () => {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/patients/{patient_id}/prescriptions") {
+        return Promise.resolve({
+          data: { items: history.items, total: history.items.length },
+        });
+      }
+      if (path === "/api/v1/patients/{patient_id}/overview") {
+        return Promise.resolve({
+          data: { family_activated: false, last_weight: null },
+        });
+      }
+      if (path === "/api/v1/patients/{patient_id}/custom-dish-review") {
+        return Promise.resolve({ data: { off_target: [] } });
+      }
+      return Promise.resolve({
+        data:
+          path.includes("aed-drugs") || path.includes("intake")
+            ? []
+            : { items: [], total: 0 },
+      });
+    });
+    const user = userEvent.setup();
+    renderView();
+
+    const field = () => nativeSelect(screen.getByLabelText("Кетосоотношение"));
+    await waitFor(() => expect(field().value).toBe("4"));
+    // До записи следующего шага нет: он о только что записанном назначении.
+    expect(screen.queryByRole("link", { name: /Выдать код семье/ })).toBeNull();
+
+    fireEvent.change(field(), { target: { value: "3.5" } });
+    await user.click(
+      screen.getByRole("button", { name: "Сохранить назначение" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Подтвердить назначение" }),
+    );
+
+    const next = await screen.findByRole("link", { name: /Выдать код семье/ });
+    expect(next.getAttribute("href")).toBe(
+      `/app/patients/${PATIENT_ID}/profile?item=access-code`,
     );
   });
 

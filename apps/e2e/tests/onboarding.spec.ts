@@ -48,16 +48,14 @@ test("врач заводит карту и выдаёт код, семья вх
   await expect(doctor).toHaveURL(/\/app\/patients\/[0-9a-f-]+\/prescription/);
   await doctor
     .getByRole("navigation", { name: /Разделы карты пациента/ })
-    .getByRole("link", { name: "Карта" })
+    .getByRole("link", { name: "Профиль и семья" })
     .click();
   await expect(doctor).toHaveURL(/\/app\/patients\/[0-9a-f-]+\/profile/);
 
   // --- 2. врач выдаёт семье код -------------------------------------------
+  // Одно нажатие: панель выпускает код сама при открытии (аудит продукта
+  // 12.11.2026), второй кнопки внутри неё нет.
   await doctor.getByRole("button", { name: "Дать доступ семье" }).click();
-  await doctor
-    .getByRole("button", { name: /Дать доступ семье|Ещё один код/ })
-    .last()
-    .click();
 
   const code = (await doctor.locator("output").first().innerText()).trim();
   expect(code).toHaveLength(8);

@@ -158,11 +158,10 @@ describe("кто ведёт ребёнка дома", () => {
 
     render(<FamilyPanel patientId={PATIENT_ID} />, { wrapper });
 
+    // Одно нажатие: панель выпускает код сама при открытии (аудит продукта
+    // 12.11.2026) — второй кнопки с тем же названием в ней нет.
     await user.click(
       await screen.findByRole("button", { name: "Дать доступ семье" }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /Дать доступ семье/ }),
     );
 
     // Назначение передаётся явно: этот экран выдаёт доступ другому взрослому,
@@ -176,6 +175,49 @@ describe("кто ведёт ребёнка дома", () => {
     );
     // Код показывается крупно и целиком: врач поворачивает экран к родителю.
     expect(await screen.findByText("TRWX4K92")).toBeInTheDocument();
+    // Ровно один выпуск на открытие — и в StrictMode тоже.
+    const issued = (api.POST as Mock).mock.calls.filter(
+      ([path]) => path === "/api/v1/patients/{patient_id}/access-codes",
+    );
+    expect(issued).toHaveLength(1);
+    // В открытой панели второй кнопки «Дать доступ семье» нет — только
+    // следующий код.
+    expect(
+      screen.queryByRole("button", { name: "Дать доступ семье" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Ещё один код" }),
+    ).toBeInTheDocument();
+  });
+
+  it("панель кода, открытая снаружи, выпускает код без нажатий", async () => {
+    // Так её открывают «Выдать код семье» после первого назначения и строка
+    // «Семья ещё не подключена» в «Обзоре» (`?item=access-code`).
+    (api.GET as Mock).mockResolvedValue({ data: [], error: undefined });
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/auth/refresh"
+        ? { data: { access_token: token }, error: undefined }
+        : {
+            data: {
+              code: "OPEN4K92",
+              expires_at: "2026-09-22T10:00:00Z",
+              deep_link: null,
+              join_url: "https://app.example.org/join?code=OPEN4K92",
+            },
+            error: undefined,
+          },
+    );
+
+    render(
+      <FamilyPanel
+        patientId={PATIENT_ID}
+        accessOpen
+        onAccessOpenChange={() => undefined}
+      />,
+      { wrapper },
+    );
+
+    expect(await screen.findByText("OPEN4K92")).toBeInTheDocument();
   });
 
   /**
@@ -406,9 +448,6 @@ describe("кто ведёт ребёнка дома", () => {
         name: "Пригласить близкого",
       }),
     );
-    await user.click(
-      await screen.findByRole("button", { name: "Создать приглашение" }),
-    );
 
     expect(api.POST).toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/access-codes",
@@ -538,9 +577,6 @@ describe("кто ведёт ребёнка дома", () => {
 
     await user.click(
       await screen.findByRole("button", { name: "Пригласить близкого" }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: "Создать приглашение" }),
     );
     await user.click(
       await screen.findByRole("button", { name: "Поделиться приглашением" }),

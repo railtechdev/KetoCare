@@ -11,10 +11,13 @@ import { createPortal } from "react-dom";
 export function PrintButton({
   label,
   disabled = false,
+  describedBy,
   children,
 }: {
   label: string;
   disabled?: boolean;
+  /** Строка с причиной недоступности (`ActionReason`, правило П44). */
+  describedBy?: string;
   children: ReactNode;
 }) {
   const [run, setRun] = useState(0);
@@ -42,6 +45,7 @@ export function PrintButton({
         type="button"
         variant="outline"
         disabled={disabled}
+        aria-describedby={describedBy}
         onClick={() => {
           setPrinting(true);
           setRun((current) => current + 1);

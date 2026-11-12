@@ -114,6 +114,16 @@ export type PatientView = (typeof PATIENT_VIEWS)[number];
 
 export const DEFAULT_PATIENT_VIEW: PatientView = "summary";
 
+/**
+ * `?item=` панели кода семье в разделе «Профиль и семья». Одно значение на три
+ * входа: кнопка блока семьи, следующий шаг после первого назначения и строка
+ * «Семья ещё не подключена» в «Обзоре».
+ */
+export const ACCESS_CODE_ITEM = "access-code";
+
+/** `?item=` панели истории назначений в разделе «Диета и препараты». */
+export const PRESCRIPTION_HISTORY_ITEM = "history";
+
 export function isPatientView(value: string): value is PatientView {
   return (PATIENT_VIEWS as readonly string[]).includes(value);
 }

@@ -82,11 +82,13 @@ describe("навигация карты пациента", () => {
     expect(current[0]).toHaveTextContent("Диета");
   });
 
-  it("ведёт группу «Карта» диетолога в профиль, а не в заметки врача", async () => {
+  it("ведёт группу «Профиль и семья» диетолога в профиль, а не в заметки врача", async () => {
     // Заметки сервер отдаёт одной роли: пункт, ведущий в заведомый 403, — тупик.
     renderNav({ role: "dietitian" });
 
-    const card = await screen.findByRole("link", { name: /Карта/ });
+    const card = await screen.findByRole("link", {
+      name: /Профиль и семья/,
+    });
     expect(card.getAttribute("href")).toBe(
       `/app/patients/${PATIENT_ID}/profile`,
     );
