@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from .. import keyboards, texts
 from ..api import BotApi
 from ..config import BotSettings
-from ..deps import menu
+from ..deps import menu, retire_keyboard
 from ..storage import BindingStore
 from .start import handle_bare_code, looks_like_code
 
@@ -62,3 +62,16 @@ async def unknown(
         texts.UNKNOWN_INPUT if settings.has_miniapp else texts.UNKNOWN_INPUT_NO_APP,
         reply_markup=await menu(store, message.chat.id, settings),
     )
+
+
+@router.callback_query()
+async def stale_button(callback: CallbackQuery) -> None:
+    """A button no scenario handles any more: its step is over.
+
+    Without an answer Telegram kept a spinner on the button and the parent
+    pressed it again. The buttons are removed so the old message stops inviting
+    presses.
+    """
+
+    await retire_keyboard(callback)
+    await callback.answer(texts.BUTTON_STALE, show_alert=True)

@@ -2,7 +2,6 @@
 import { t, useTranslations } from "../i18n";
 import { pagePath, type Locale } from "../i18n/config";
 import {
-  ADMIN_URL,
   BUILD_YEAR,
   CONTACT_EMAIL,
   JOIN_URL,
@@ -41,7 +40,6 @@ const d = useTranslations(locale);
         <h2>{d.common.brand} App</h2>
         <a href={JOIN_URL}>{d.common.clinicCode}</a>
         <a href={LOGIN_URL}>{d.nav.login}</a>
-        <a href={ADMIN_URL}>{d.footer.adminLink}</a>
       </div>
       <div class="site-footer__col">
         <h2>{d.footer.contactsTitle}</h2>

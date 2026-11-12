@@ -1,7 +1,7 @@
 ---
 import { useTranslations } from "../i18n";
 import { pagePath, type Locale, type PageKey } from "../i18n/config";
-import { ADMIN_URL, JOIN_URL, LOGIN_URL } from "../site";
+import { JOIN_URL, LOGIN_URL } from "../site";
 import LangSwitcher from "./LangSwitcher.astro";
 
 interface Props {
@@ -71,14 +71,6 @@ const d = useTranslations(locale);
         {d.nav.clinicCode}
       </a>
       <a class="nav__login" href={LOGIN_URL}>{d.nav.login}</a>
-      <a
-        class="nav__login"
-        href={ADMIN_URL}
-        title={d.common.admin}
-        style="font-size:0.84rem;opacity:0.9"
-      >
-        {d.common.admin}
-      </a>
       <a class="nav__cta" href={ctaHref}>{ctaLabel}</a>
 
       <div class="nav__controls">

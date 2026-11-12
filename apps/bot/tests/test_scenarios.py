@@ -76,6 +76,11 @@ class FakeMessage:
     async def answer(self, text: str, reply_markup: Any = None, **_: Any) -> None:
         self.answers.append((text, reply_markup))
 
+    keyboard_removed: bool = False
+
+    async def edit_reply_markup(self, reply_markup: Any = None, **_: Any) -> None:
+        self.keyboard_removed = reply_markup is None
+
     @property
     def last(self) -> str:
         assert self.answers, "обработчик ничего не ответил"
@@ -92,9 +97,11 @@ class FakeCallback:
     data: str
     message: FakeMessage = field(default_factory=FakeMessage)
     answered: bool = False
+    alert: str | None = None
 
-    async def answer(self, *_: Any, **__: Any) -> None:
+    async def answer(self, text: str | None = None, *_: Any, **__: Any) -> None:
         self.answered = True
+        self.alert = text
 
 
 async def answer_when_now(message: FakeMessage, state: FSMContext, api: Any, store: Any) -> None:
@@ -422,6 +429,37 @@ class TestCancelAndFailures:
         assert await state.get_state() is None
         assert callback.message.last == texts.CANCELLED
         assert callback.answered, "инлайновую кнопку надо погасить, иначе она крутится"
+
+    @pytest.mark.asyncio
+    async def test_cancel_after_the_record_is_saved_does_not_claim_a_cancel(self, state):
+        """«Отмена» под сохранённой записью отвечала «Отменено», а запись
+        оставалась в дневнике (аудит 12.11.2026)."""
+
+        callback = FakeCallback(data=keyboards.CANCEL_DATA)
+
+        await scenarios.cancel(callback, state, SETTINGS, FakeStore())
+
+        assert callback.alert == texts.BUTTON_STALE
+        assert callback.message.answers == [], "«Отменено» в чат не уходит"
+        assert callback.message.keyboard_removed
+
+    @pytest.mark.asyncio
+    async def test_cancel_removes_the_buttons_it_was_pressed_under(self, state):
+        await state.set_state(scenarios.Ketones.value)
+        callback = FakeCallback(data=keyboards.CANCEL_DATA)
+
+        await scenarios.cancel(callback, state, SETTINGS, FakeStore())
+
+        assert callback.message.keyboard_removed
+
+    @pytest.mark.asyncio
+    async def test_a_button_of_a_finished_step_is_answered(self):
+        callback = FakeCallback(data=keyboards.WHEN_NOW_DATA)
+
+        await fallback.stale_button(callback)
+
+        assert callback.alert == texts.BUTTON_STALE
+        assert callback.message.keyboard_removed
 
     @pytest.mark.asyncio
     async def test_revoked_binding_is_forgotten_locally(self, api, linked_store, state):

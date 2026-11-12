@@ -180,7 +180,7 @@ describe("кетосоотношение в назначении", () => {
   });
 });
 
-describe("углеводы считаются сами, как в KDC", () => {
+describe("углеводы считаются сами", () => {
   it("в записанном назначении не трогаются, пока не поменяли калорийность", async () => {
     renderForm();
     await screen.findByText(/120,0 г/);
@@ -291,18 +291,18 @@ describe("жидкость по весу (Холлидей — Сегар)", () 
     const fluid = screen.getByLabelText(/Жидкость/);
     const protein = screen.getByLabelText(/Белок/);
     // Пояснение о формуле — только у числа, которое поставила формула.
-    expect(screen.queryByText(/формула Холлидея — Сегара/)).toBeNull();
+    expect(screen.queryByText(/Рассчитано по весу/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Подставить" }));
     expect(valueControl(fluid)).toHaveValue(1400);
     expect(valueControl(protein)).toHaveValue(18);
-    expect(screen.getByText(/формула Холлидея — Сегара/)).toBeInTheDocument();
+    expect(screen.getByText(/Рассчитано по весу/)).toBeInTheDocument();
     expect(screen.getByText(/1 г на кг/)).toBeInTheDocument();
 
     await user.clear(fluid);
     await user.type(fluid, "1000");
     await user.click(screen.getByRole("button", { name: "Подставить" }));
     expect(valueControl(fluid)).toHaveValue(1000);
-    expect(screen.queryByText(/формула Холлидея — Сегара/)).toBeNull();
+    expect(screen.queryByText(/Рассчитано по весу/)).toBeNull();
   });
 
   it("значения из прежней версии подсказка не перезаписывает", async () => {
@@ -316,7 +316,7 @@ describe("жидкость по весу (Холлидей — Сегар)", () 
     );
     expect(valueControl(fluid)).toHaveValue(1200);
     expect(valueControl(protein)).toHaveValue(24);
-    expect(screen.queryByText(/формула Холлидея — Сегара/)).toBeNull();
+    expect(screen.queryByText(/Рассчитано по весу/)).toBeNull();
     expect(screen.queryByText(/1 г на кг/)).toBeNull();
   });
 

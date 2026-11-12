@@ -15,6 +15,10 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
 });
 
+vi.mock("../auth/useSession", () => ({
+  useSession: () => ({ session: { userId: "doctor-1" } }),
+}));
+
 i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
 i18n.addResourceBundle("ru", "diary", diaryRu, true, true);
 
@@ -96,5 +100,57 @@ describe("запись на приёме", () => {
     expect(
       screen.queryByRole("button", { name: doctorRu.diary.recordAtVisit }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("запись, внесённая на приёме (аудит 12.11.2026)", () => {
+  function ketone(id: string, createdBy: string) {
+    return {
+      id,
+      patient_id: "p1",
+      occurred_at: "2026-11-12T08:00:00Z",
+      source: "web",
+      created_by: createdBy,
+      created_at: "2026-11-12T08:01:00Z",
+      value: 2.4,
+      method: "blood",
+      glucose_mmol: null,
+      gki: null,
+    };
+  }
+
+  it("свою запись специалист может исправить и удалить, чужую — нет", async () => {
+    // Раньше список получал вместо пользователя null, и ошибочно внесённую
+    // на приёме запись нельзя было ни исправить, ни удалить.
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        items: [ketone("own", "doctor-1"), ketone("family", "parent-1")],
+        total: 2,
+      },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(<PatientDiaryTab patientId="p1" />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <PatientRouter
+            patientId="p1"
+            view="diary"
+            search={{ kind: "ketones" }}
+          >
+            {children}
+          </PatientRouter>
+        </QueryClientProvider>
+      ),
+    });
+
+    const edits = await screen.findAllByRole("button", {
+      name: new RegExp(diaryRu.list.edit),
+    });
+    expect(edits).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: new RegExp(diaryRu.list.delete) }),
+    ).toHaveLength(1);
   });
 });

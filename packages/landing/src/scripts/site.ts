@@ -236,7 +236,7 @@ function initTheme(): void {
   });
 }
 
-/* ---------- Интерактивное превью (PR #303) ---------- */
+/* ---------- Интерактивное превью ---------- */
 
 function initHeroPreview(): void {
   const root = document.querySelector<HTMLElement>("[data-hero-preview]");

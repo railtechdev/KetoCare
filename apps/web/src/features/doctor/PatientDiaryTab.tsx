@@ -20,7 +20,12 @@ import { DiaryList } from "../diary/DiaryList";
 import { SeizureDiaryGrid } from "../diary/SeizureDiaryGrid";
 import { usePeriodSearch } from "../diary/usePeriodSearch";
 import { PeriodPicker } from "../diary/PeriodPicker";
-import { CHART_KINDS, DIARY_KINDS, type DiaryKind } from "../diary/diaryApi";
+import {
+  CHART_KINDS,
+  DIARY_KINDS,
+  type DiaryKind,
+  type DiaryLog,
+} from "../diary/diaryApi";
 import { formatChartDate } from "../diary/time";
 import {
   useDiaryLogs,
@@ -29,6 +34,7 @@ import {
   useDurationOptions,
   useSeizureTypes,
 } from "../diary/useDiary";
+import { useSession } from "../auth/useSession";
 import { useMedications } from "./doctorQueries";
 import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { CardsSkeleton } from "./skeletons";
@@ -42,9 +48,10 @@ import { queryState } from "../../lib/queryState";
  * запись выглядела бы у врача и у родителя по-разному.
  *
  * Замер и событие, увиденные на приёме, специалист записывает сам («Записать
- * на приёме»). Правка и мягкое удаление принадлежат автору записи,
- * то есть семье. `DiaryList` показывает действия лишь автору, поэтому
- * `currentUserId` здесь намеренно null.
+ * на приёме»). Правка и мягкое удаление принадлежат автору записи: семья
+ * правит свои записи, специалист — внесённые им на приёме (сервер проверяет
+ * автора, `services/logs.py`). Раньше сюда передавался null, и запись,
+ * ошибочно внесённую на приёме, специалист не мог ни исправить, ни удалить.
  */
 export function PatientDiaryTab({ patientId }: { patientId: string }) {
   const { t } = useTranslation("doctor");
@@ -82,8 +89,6 @@ export function PatientDiaryTab({ patientId }: { patientId: string }) {
     </div>
   );
 }
-
-const noop = () => undefined;
 
 /**
  * Что специалист записывает на приёме (этап 5 AUDIT_ROLES_PATHS_2026-11):
@@ -200,9 +205,26 @@ function DiaryKindView({
     [medications.data, t],
   );
 
-  const [adding, setAdding] = useState(false);
-  const { create } = useDiaryMutations(patientId, kind);
+  const { session } = useSession();
+  // `null` — форма закрыта, `"new"` — новая запись, иначе — правка своей записи.
+  const [form, setForm] = useState<"new" | DiaryLog | null>(null);
+  const editing = form === null || form === "new" ? null : form;
+  const { create, update, remove } = useDiaryMutations(patientId, kind);
+  const saving = editing === null ? create : update;
   const canRecord = VISIT_KINDS.includes(kind);
+
+  function submit(
+    body: Parameters<typeof create.mutate>[0],
+    onSaved: () => void,
+  ) {
+    const done = () => {
+      toast.success(t(editing === null ? "diary.recorded" : "diary.updated"));
+      onSaved();
+      setForm(null);
+    };
+    if (editing === null) create.mutate(body, { onSuccess: done });
+    else update.mutate({ logId: editing.id, body }, { onSuccess: done });
+  }
 
   return (
     <div className="flex flex-col gap-section">
@@ -211,35 +233,35 @@ function DiaryKindView({
           <Button
             type="button"
             className="min-h-touch"
-            onClick={() => setAdding(true)}
+            onClick={() => {
+              create.reset();
+              setForm("new");
+            }}
           >
             {t("diary.recordAtVisit")}
           </Button>
           <FormSheet
             closeLabel={t("common:actions.close")}
-            open={adding}
-            onOpenChange={setAdding}
-            title={t("diary.recordAtVisit")}
+            open={form !== null}
+            onOpenChange={(open) => {
+              if (!open) setForm(null);
+            }}
+            title={t(
+              editing === null ? "diary.recordAtVisit" : "diary.editRecord",
+            )}
             description={t(`diary.kinds.${kind}`)}
           >
             <DiaryForm
+              key={editing?.id ?? "new"}
               kind={kind}
-              editing={null}
+              editing={editing}
               seizureTypes={seizureTypes.data ?? []}
               durationOptions={durationOptions.data ?? []}
               medications={[]}
-              onSubmit={(body, onSaved) =>
-                create.mutate(body, {
-                  onSuccess: () => {
-                    toast.success(t("diary.recorded"));
-                    onSaved();
-                    setAdding(false);
-                  },
-                })
-              }
-              onCancel={() => setAdding(false)}
-              pending={create.isPending}
-              error={create.error}
+              onSubmit={submit}
+              onCancel={() => setForm(null)}
+              pending={saving.isPending}
+              error={saving.error}
             />
           </FormSheet>
         </div>
@@ -339,13 +361,28 @@ function DiaryKindView({
         >
           <DiaryList
             logs={items}
-            currentUserId={null}
+            currentUserId={session?.userId ?? null}
             seizureTypeNames={seizureTypeNames}
             durationOptionNames={durationOptionNames}
             medicationNames={medicationNames}
-            onEdit={noop}
-            onDelete={noop}
-            deletingId={null}
+            onEdit={(log) => {
+              update.reset();
+              setForm(log);
+            }}
+            onDelete={(logId) =>
+              remove.mutate(logId, {
+                onSuccess: () => {
+                  toast.success(t("diary.deleted"));
+                  if (editing?.id === logId) setForm(null);
+                },
+                onError: (error) => {
+                  toast.error(
+                    errorMessageOf(error) ?? t("common:errors.unexpected"),
+                  );
+                },
+              })
+            }
+            deletingId={remove.isPending ? (remove.variables ?? null) : null}
             emptyState={null}
           />
         </AsyncSection>

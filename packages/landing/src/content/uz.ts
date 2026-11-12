@@ -34,7 +34,6 @@ export const uz: Dict = {
     ratio: "Keto-nisbat",
     clinicCode: "Menda klinika kodi bor",
     login: "Kirish",
-    admin: "Administrator paneli",
   },
 
   nav: {
@@ -44,7 +43,6 @@ export const uz: Dict = {
     methodology: "Metodologiya va xavfsizlik",
     doctors: "Shifokorlarga",
     login: "Kirish",
-    admin: "Admin",
     clinicCode: "Klinika kodi",
     earlyAccess: "Erta kirish",
     pilot: "Pilot uchun ariza",
@@ -65,9 +63,9 @@ export const uz: Dict = {
     errorRateLimited:
       "Manzilingizdan juda ko‘p ariza yuborildi. Bizga {email} manziliga yozing.",
     doneFamily:
-      "Yozib oldik! {email} manziliga yozamiz va ulanishda yordam beramiz.",
+      "Yozib oldik! Ulanish imkoni paydo bo‘lganda {email} manziliga yozamiz.",
     doneDoctor:
-      "Ariza qabul qilindi. Yaqin kunlarda {email} manziliga javob beramiz.",
+      "Ariza qabul qilindi. Siz bilan {email} manzili orqali bog‘lanamiz.",
     consent:
       "Arizani yuborish orqali siz ko‘rsatilgan manzil bo‘yicha siz bilan bog‘lanishimizga rozilik bildirasiz. Formada tibbiy ma’lumotlarni yubormang.",
   },
@@ -142,7 +140,7 @@ export const uz: Dict = {
           quickWeight: "+ Vazn",
           quickSeizure: "Xuruj",
           caption:
-            "Ota-ona kabineti (PR #303) — aniq grammlar, kunlik maqsadlar va tezkor amallar",
+            "Ota-ona kabineti — aniq grammlar, kunlik maqsadlar va tezkor amallar",
         },
         doctor: {
           pinnedHeader: {
@@ -172,7 +170,7 @@ export const uz: Dict = {
           trendGlucose: "Qon glyukozasi: 4,8 → 4,3 mmol/l (me’yor)",
           trendGki: "GKI 3,8 dan 1,8 gacha tushdi (maqsadli ketozga erishildi)",
           caption:
-            "Shifokor kabineti (PR #303) — klinik svetofor, qadalgan panel va trendlar",
+            "Shifokor kabineti — klinik svetofor, qadalgan panel va trendlar",
         },
       },
     },
@@ -205,7 +203,7 @@ export const uz: Dict = {
       familyCard: {
         badge: "Ota-onalar uchun",
         title: "Oilalar va bemorlarga",
-        desc: "Oshxonada aniq grammlar, o‘rinbosarlarni tezkor hisoblash, Telegram Mini App va daftarlarsiz 6 ta kundalik.",
+        desc: "Oshxonada aniq grammlar, tayinlov bo‘yicha taom kalkulyatori, Telegram Mini App va daftarlarsiz 6 ta kundalik.",
         cta: "Oilalar uchun batafsil",
       },
       doctorCard: {
@@ -217,7 +215,7 @@ export const uz: Dict = {
       methodologyCard: {
         badge: "Ilmiy asos",
         title: "Metodologiya va isbotlilik",
-        desc: "Izolyatsiya qilingan keto_engine matematik yadrosi, Etvoter tekshiruvi, 4:1 va MAD protokollari hamda 2FA xavfsizligi.",
+        desc: "Izolyatsiya qilingan keto_engine matematik yadrosi, mahsulotlar kaloriyasini tekshirish, 1:1 dan 5:1 gacha nisbatlar hamda 2FA xavfsizligi.",
         cta: "Metodologiyani o‘rganish",
       },
     },
@@ -297,8 +295,8 @@ export const uz: Dict = {
         },
         {
           num: "2",
-          title: "Tayyor menyu va oshxonadagi almashtirish kalkulyatori",
-          text: "Har bir taom uchun grammgacha aniq o‘lchovlar. Agar mahsulot uyda bo‘lmasa — algoritm nisbatni saqlagan holda unga teng qiymatli muqobilini tanlaydi.",
+          title: "Oshxonada menyu va taom kalkulyatori",
+          text: "Har bir taom uchun grammgacha aniq o‘lchovlar. Kalkulyator taomni bola tayinloviga ko‘ra tekshiradi va tanlangan mahsulotlar grammlarini maqsadga moslab berishi mumkin.",
         },
         {
           num: "3",
@@ -348,10 +346,9 @@ export const uz: Dict = {
       netCarbs: "Shundan sof uglevodlar",
       netCarbsNote: "keto-nisbat shunga ko‘ra hisoblanadi",
       atwaterTitle: "Etvoter formulasi bo‘yicha tekshiruv",
-      atwaterBadge:
-        "✓ Etvoter formulasi bo‘yicha tekshiruv: xatolik < 2% (me’yor < 10%)",
+      atwaterBadge: "Kaloriya yog‘, oqsil va uglevodlar bo‘yicha tekshiriladi",
       atwaterNote:
-        "KetoCare har bir taom va mahsulotlar bazasini avtomatik tekshiradi: hisoblangan kaloriya (9×Y + 4×O + 4×Cnet) yorliq bilan solishtiriladi va noto‘g‘ri ma’lumotlarni cheklaydi.",
+        "Kabinetda ma’lumotnomadagi har bir mahsulot kaloriyasi uning yog‘, oqsil va uglevodlari bilan solishtiriladi: farq 100 g uchun 5 kkal dan oshsa, tizim ogohlantiradi.",
       targetRatioCorridor:
         "Shifokor tayinlovining maqsadli koridori: 3,50 : 1 (og‘ish ±0,15)",
       disclaimer:
@@ -495,8 +492,8 @@ export const uz: Dict = {
           a: "Ha. Kundalikning barcha imkoniyatlari to‘g‘ridan-to‘g‘ri smartfondan Telegram-bot va to‘liq funksional Telegram Mini App orqali ishlaydi. Siz xurujlarni 1 bosishda qayd etishingiz, ketonlar va glyukoza o‘lchovlarini yuborishingiz va menyuni ko‘rishingiz mumkin.",
         },
         {
-          q: "Tizim klassik keto-parhez (4:1, 3:1) va modifikatsiyalangan Atkins parhezini (MAD) qo‘llab-quvvatlaydimi?",
-          a: "Ha, KetoCare parhez terapiyasining barcha tayinlangan protokollarini qo‘llab-quvvatlaydi: 4:1, 3,5:1, 3:1 nisbatli klassik ketogenik parhez, o‘rta zanjirli triglitseridlar (MCT) parhezi, uglevodlar 10 dan 20 g/kunga cheklangan modifikatsiyalangan Atkins parhezi (MAD) va past glikemik indeksli parhez (LGIT).",
+          q: "Tizim qaysi ketogenik nisbatlarni qo‘llab-quvvatlaydi?",
+          a: "Nisbatni davolovchi shifokor belgilaydi. Tizim 1:1 dan 5:1 gacha, 0,5 qadam bilan nisbatlarni qo‘llab-quvvatlaydi va bolaning menyusi hamda taomlarini tayinlov bo‘yicha tekshiradi.",
         },
         {
           q: "Bolaning tibbiy ma’lumotlari qanday himoyalangan?",
@@ -785,7 +782,7 @@ export const uz: Dict = {
       title:
         "Oilalar va ota-onalarga — KetoCare: qiyinchiliklarsiz bolalar ketodiyetasi",
       description:
-        "KetoCare oilaga qanday yordam beradi: klinika kodini olish, aniq grammli retseptlar, oshxonada almashtirish kalkulyatori, Telegram Mini App orqali 5 soniyada xurujlarni qayd qilish.",
+        "KetoCare oilaga qanday yordam beradi: klinika kodini olish, aniq grammli retseptlar, tayinlov bo‘yicha taom kalkulyatori, Telegram Mini App orqali 5 soniyada xurujlarni qayd qilish.",
     },
     hero: {
       eyebrow: "Oilalar va bemorlarga",
@@ -803,8 +800,8 @@ export const uz: Dict = {
       },
       {
         num: "02",
-        title: "Tayyor menyu va almashtirishlar kalkulyatori",
-        text: "Sof uglevodlarni hisobga olgan holda har bir taom uchun aniq grammlar. Agar mahsulot bo‘lmasa, tizim bir necha soniyada teng o‘rinbosarni hisoblab beradi.",
+        title: "Menyu va taom kalkulyatori",
+        text: "Sof uglevodlarni hisobga olgan holda har bir taom uchun aniq grammlar. Kalkulyator taomni bola tayinloviga ko‘ra tekshiradi va tanlangan mahsulotlar grammlarini maqsadga moslab berishi mumkin.",
       },
       {
         num: "03",
@@ -821,7 +818,7 @@ export const uz: Dict = {
     features: [
       {
         title: "Telegram-bot va Mini App",
-        text: "Kundalikning to‘liq imkoniyatlari telefoningizda. Oshxonada noutbukni ochish shart emas — o‘lchovlarni bir necha harakatda yuboring.",
+        text: "Kundalikning to‘liq imkoniyatlari telefoningizda. Oshxonada noutbukni ochish shart emas — o‘lchovlar va xurujlarni bir necha bosishda yozing.",
       },
       {
         title: "Bitta tizimda oltita kundalik",
@@ -838,12 +835,19 @@ export const uz: Dict = {
     seo: {
       title: "Metodologiya va isbotlangan baza — KetoCare",
       description:
-        "KetoCare ilmiy standartlari: izolyatsiya qilingan keto_engine matematik yadrosi, Etvoter formulasi bo‘yicha tekshiruv, 4:1/MAD/LGIT protokollari va 2FA xavfsizligi.",
+        "KetoCare ilmiy standartlari: izolyatsiya qilingan keto_engine matematik yadrosi, mahsulotlar kaloriyasini tekshirish, 1:1 dan 5:1 gacha nisbatlar va 2FA xavfsizligi.",
     },
     hero: {
       eyebrow: "Metodologiya va standartlar",
       h1: "Klinik qat’iylik, matematika va ma’lumotlar xavfsizligi",
       lead: "Dori-darmonlarga chidamli epilepsiya terapiyasi taxminiy hisob-kitoblarni kechirmaydi. Platforma asosiga isbotlangan diyetoterapiyaning qat’iy formulalari va tibbiy sir standartlari kiritilgan.",
+    },
+    check: {
+      eyebrow: "Kaloriyani tekshirish",
+      formula: "kkal = 9×Y + 4×O + 4×U",
+      caption:
+        "Mahsulot kaloriyasi uning yog‘, oqsil va uglevodlari bilan solishtiriladi",
+      points: ["Farq 100 g uchun 5 kkal dan oshsa, ogohlantirish"],
     },
     pillarsTitle: "Platformaning me’moriy tamoyillari",
     pillars: [
@@ -855,12 +859,12 @@ export const uz: Dict = {
       {
         num: "02",
         title: "Formula siljishidan himoya va sof uglevodlar",
-        text: "Sof uglevodlarni qat’iy hisobga olish (har bir mahsulot bo‘yicha uglevodlardan kletchatkani manfiy bo‘lmagan qiymatda ayirish, ADR-0030) nisbatning klinik buzilishlarini istisno qiladi.",
+        text: "Sof uglevodlarni qat’iy hisobga olish (har bir mahsulot bo‘yicha uglevodlardan kletchatkani manfiy bo‘lmagan qiymatda ayirish) nisbatning klinik buzilishlarini istisno qiladi.",
       },
       {
         num: "03",
-        title: "Atwater Checksum va mahsulotlar bazasini tekshirish",
-        text: "Har bir mahsulot kaloriyasini Etvoter formulasi (9×Yog‘ + 4×Oqsil + 4×Cnet) bo‘yicha avtomatik tekshirish yorliqdagi xatolarni ular ketozni buzishidan oldin bartaraf etadi.",
+        title: "Mahsulotlar kaloriyasini tekshirish",
+        text: "Ma’lumotnomadagi har bir mahsulot kaloriyasi uning yog‘, oqsil va uglevodlari bilan solishtiriladi (9×Y + 4×O + 4×U). Farq 100 g uchun 5 kkal dan oshsa, tizim ma’lumotnomani yurituvchini ogohlantiradi.",
       },
       {
         num: "04",
@@ -868,23 +872,12 @@ export const uz: Dict = {
         text: "Shifokorlarning majburiy ikki bosqichli autentifikatsiyasi (2FA), ma’lumotlarni qat’iy rollarga ajratish (ota-onalar faqat o‘z bolasini ko‘radi), to‘liq audit va zaxira nusxalarini shifrlash.",
       },
     ],
-    protocolsTitle: "Qo‘llab-quvvatlanadigan diyetoterapiya protokollari",
+    protocolsEyebrow: "Parhez terapiyasi",
+    protocolsTitle: "KetoCare qaysi parhez terapiyasini qo‘llab-quvvatlaydi",
     protocols: [
       {
-        name: "Klassik ketogenik parhez (4:1 va 3:1)",
-        desc: "Rezistent epilepsiyada diyetoterapiyaning oltin standarti. Yuqori yog‘ miqdori, uglevodlar va oqsillarni qat’iy cheklash.",
-      },
-      {
-        name: "Modifikatsiyalangan Atkins parhezi (MAD)",
-        desc: "Oqsillar va kaloriyalarni qat’iy o‘lchamasdan uglevodlarni kuniga 10–20 g gacha cheklash, o‘smirlar uchun juda mos keladi.",
-      },
-      {
-        name: "O‘rtacha zanjirli triglitseridlar parhezi (MCT)",
-        desc: "MCT moylaridan foydalanish ketogenezni saqlab qolgan holda ko‘proq uglevodlar va oqsillarni kiritish imkonini beradi.",
-      },
-      {
-        name: "Past glikemik indeksli terapiya (LGIT)",
-        desc: "Qon glyukozasi darajasini barqaror saqlash uchun glikemik indeksi 50 dan past bo‘lgan uglevodlarga asosiy e’tibor.",
+        name: "Klassik ketogenik parhez",
+        desc: "Shifokor ketogenik nisbatni — 1:1 dan 5:1 gacha, 0,5 qadam bilan — hamda kaloriya, oqsil, uglevodlar chegarasi va ovqatlanishlar sonini belgilaydi. Tizim bolaning menyusi va taomlarini shu tayinlov bo‘yicha tekshiradi.",
       },
     ],
   },
@@ -894,8 +887,6 @@ export const uz: Dict = {
       "KetoCare — bu shifokor-epileptolog yoki diyetologning qat'iy nazorati ostida parhez terapiyasini klinik kuzatib borish tizimidir. O‘z-o‘zini davolash vositasi emas va shifokor maslahati o‘rnini bosmaydi: tayinlov, ketogenik ratsion va dori vositalarini tuzatish faqat tibbiy guruh tomonidan amalga oshiriladi.",
     sectionsTitle: "Bo‘limlar",
     contactsTitle: "Aloqa",
-    adminTitle: "Xodimlar uchun",
-    adminLink: "Administrator paneli (/admin)",
     telegram: "Telegram",
     copyright: "© {year} «RailTech» MChJ",
   },
