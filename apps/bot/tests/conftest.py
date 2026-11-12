@@ -72,6 +72,17 @@ class FakeApi:
     language_error: Exception | None = None
     #: Язык, присланный ботом при привязке.
     activation_language: str | None = None
+    #: Правки и удаления своих записей (ADR-0076): (вид, запись, тело) и (вид, запись).
+    updates: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
+    deleted: list[tuple[str, str]] = field(default_factory=list)
+    update_error: Exception | None = None
+    #: Снятые отметки «съедено».
+    unmarked: list[str] = field(default_factory=list)
+    #: Типы недавних приступов ребёнка.
+    recent_types: list[str] = field(default_factory=list)
+    recent_error: Exception | None = None
+    #: Сколько записей дойдёт до обрыва связи; None — обрыва нет.
+    fail_after: int | None = None
 
     async def activate_access_code(
         self,
@@ -105,8 +116,12 @@ class FakeApi:
         self.attempt_bodies.append(payload)
         if self.log_error is not None:
             raise self.log_error
+        if self.fail_after is not None and len(self.logs) >= self.fail_after:
+            raise BotApiError("transport", "ConnectError", 0)
+        log_id = str(uuid.uuid4())
         self.logs.append(
             {
+                "id": log_id,
                 "link_id": link_id,
                 "secret": secret,
                 "patient_id": patient_id,
@@ -114,7 +129,36 @@ class FakeApi:
                 "payload": payload,
             }
         )
-        return {"id": str(uuid.uuid4())}
+        return {"id": log_id}
+
+    async def update_log(
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        kind: str,
+        log_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self.update_error is not None:
+            raise self.update_error
+        self.updates.append((kind, log_id, payload))
+        return {"id": log_id, **payload}
+
+    async def delete_log(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, kind: str, log_id: str
+    ) -> None:
+        if self.update_error is not None:
+            raise self.update_error
+        self.deleted.append((kind, log_id))
+
+    async def recent_seizure_types(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, limit: int
+    ) -> list[str]:
+        if self.recent_error is not None:
+            raise self.recent_error
+        return self.recent_types[:limit]
 
     async def get_menu(
         self,
@@ -160,10 +204,19 @@ class FakeApi:
         return self.parsed
 
     async def mark_eaten(
-        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        item_id: str,
+        eaten: bool = True,
     ) -> dict[str, Any]:
         if self.eaten_error is not None:
             raise self.eaten_error
+        if not eaten:
+            self.unmarked.append(item_id)
+            return {"id": item_id, "eaten": False}
         self.eaten.append(item_id)
         # Позиция помечается и в меню: сценарий после отметки перечитывает план
         # с сервера, и настоящая ручка вернула бы позицию уже съеденной.
@@ -233,7 +286,7 @@ class FakeRedis:
     async def get(self, key: str) -> str | None:
         return self.values.get(key)
 
-    async def set(self, key: str, value: str, nx: bool = False) -> bool:
+    async def set(self, key: str, value: str, nx: bool = False, ex: int | None = None) -> bool:
         if nx and key in self.values:
             return False
         self.values[key] = value

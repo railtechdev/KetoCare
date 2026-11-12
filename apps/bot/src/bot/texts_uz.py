@@ -137,7 +137,7 @@ SEIZURE_EXACT_INVALID = (
     "0 dan {limit} gacha butun soniyalar soni kerak. Yana bir bor urinib ko‘ring."
 )
 BTN_SEIZURE_EXACT = "Aniq kiritish"
-SEIZURE_SAVED = "{type}, xurujlar soni: {count}, {duration}"
+SEIZURE_SAVED = "{type}, {duration}"
 SEIZURE_SAVED_LONGEST = "eng uzog‘i — {duration}"
 SEIZURE_SAVED_EXACT_SEC = "{value} s"
 SEIZURE_SAVED_EXACT_MIN = "{value} daq"
@@ -163,7 +163,7 @@ KETONE_METHOD_NAMES = {"blood": "qon", "urine": "siydik"}
 
 # --- Ovqat ---
 
-MEAL_ASK = "Bugungi menyudan nimalar allaqachon yeyildi?"
+MEAL_ASK = "Bugungi menyudan nimalar allaqachon yeyildi? Taomni bosing — belgi darhol saqlanadi."
 MEAL_NO_MENU = (
     "Bugun uchun menyu tuzilmagan. Yeyilganini so‘z bilan yozishingiz mumkin — "
     "men tahlil qilib, nimani yozishni ko‘rsataman."
@@ -186,7 +186,6 @@ MEAL_TEXT_LINE = "• {name} — {grams} g"
 MEAL_TEXT_LINE_GUESS = "• {name} — taxminan {grams} g"
 MEAL_TEXT_UNMATCHED = "\n\nMa’lumotnomadan topilmadi: {list}. Bu mahsulotlar hisobga kirmaydi."
 MEAL_TEXT_CONFIRM_HINT = "\n\nYozaymi?"
-MEAL_TEXT_SAVED = "Yozildi ✓"
 MEAL_TEXT_SUMMARY_ITEM = "{name} {grams} g"
 MEAL_TEXT_CLARIFY = "{question}\n\nYana bir bor yozing — yoki menyuga qayting."
 MEAL_TEXT_EMPTY = "Nimani yozishni tushunmadim. Bola nimani va qancha yeganini yozing."
@@ -199,12 +198,8 @@ MEAL_TEXT_UNAVAILABLE = (
 )
 BTN_CONFIRM = "Tasdiqlash"
 MEAL_ALL_EATEN = "Bugungi menyudagi hammasi allaqachon belgilangan ✓"
-MEAL_MARKED = "Belgilandi ✓ {title}"
-MEAL_MARKED_MORE = "Belgilandi ✓ {title}\n\nBugungi menyuda yana:"
-MEAL_MARKED_LAST = "Belgilandi ✓ {title}. Bu bugungi menyudagi oxirgisi edi."
 MEAL_UNKNOWN_DISH = "Taom"
 MEAL_PLAN_CHANGED = "Bugungi menyu hozirgina o‘zgartirildi. Unda hozir quyidagilar bor:"
-MEAL_PLAN_CHANGED_EMPTY = "Bugungi menyu hozirgina o‘zgartirildi — unda belgilanmagan taom yo‘q."
 BTN_DONE = "Tayyor"
 
 
@@ -227,19 +222,12 @@ CMD_LANGUAGE_DESCRIPTION = "Til / Язык — tilni almashtirish"
 
 # --- Dorilar ---
 
-MEDICATION_ASK = "Qaysi dori berildi?"
+MEDICATION_ASK = "Qaysi dorilar berildi? Hammasi bo‘lsa — darhol «Hammasi berildi» tugmasini bosing; hammasi bo‘lmasa — ularni belgilang."
 MEDICATION_NONE = "Shifokor hali dorilarni qo‘shmagan."
 MEDICATION_DOSE = "{name} — {dose}"
 
 # --- Qachon bo‘lgan ---
 
-WHEN_ASK = "Bu qachon bo‘ldi?"
-BTN_WHEN_NOW = "Hozir"
-BTN_WHEN_MANUAL = "Vaqtni ko‘rsatish"
-WHEN_ASK_MANUAL = (
-    "Bugungi voqea vaqtini kiriting, masalan 07:30.\n"
-    "Agar oldinroq bo‘lgan bo‘lsa — sana va vaqtni: 29.08 21:00."
-)
 WHEN_BAD_FORMAT = (
     "Vaqtni tushunib bo‘lmadi. Bugun bo‘lgan bo‘lsa 07:30, oldinroq bo‘lgan "
     "bo‘lsa 29.08 21:00 deb kiriting."
@@ -294,7 +282,7 @@ BOT_SHORT_DESCRIPTION = "Bolaning KetoCare kundaliklari — chatdan"
 
 API_UNAVAILABLE = "Saqlab bo‘lmadi — bir daqiqadan keyin yana urinib ko‘ring."
 
-NO_CONNECTION = "Aloqa yo‘q. Yana bir bor bosing — yozuv ikki marta saqlanmaydi."
+NO_CONNECTION = "Aloqa yo‘q. «Qayta urinish» tugmasini bosing — yozuv ikki marta saqlanmaydi."
 
 # --- Ketonlar (раздел 7.3) ---
 
@@ -313,7 +301,82 @@ WEIGHT_NOT_A_NUMBER = "Raqam kerak, masalan 18,4. Yana bir bor urinib ko‘ring.
 
 # --- O‘zini his qilish (раздел 7.3) ---
 
-WELLBEING_ASK_SYMPTOM = "Nimani sezdingiz? Qisqacha yozing, masalan «holsizlik»."
-WELLBEING_ASK_NOTE = "Tavsif qo‘shasizmi? Yozing yoki «O‘tkazib yuborish» tugmasini bosing."
-WELLBEING_SKIP = "O‘tkazib yuborish"
+WELLBEING_ASK_SYMPTOM = (
+    "Nimani sezdingiz? Bitta xabar bilan so‘z bilan yozing, masalan «holsizlik, yomon uxladi»."
+)
 WELLBEING_TOO_LONG = "Juda uzun. {limit} belgidan oshirmang."
+
+
+# --- Bitta yozuv — bitta xabar (ADR-0076) ---
+
+BTN_HELP = "❓ Помощь · Yordam"
+BTN_BACK = "← Orqaga"
+BTN_RETRY = "Qayta urinish"
+BTN_OPEN_APP = "📱 Ilovani ochish"
+BUTTON_STEP_HINT = "Yuqoridagi tugma bilan tanlang yoki «Bekor qilish» tugmasini bosing."
+GROUP_ONLY_PRIVATE = (
+    "Men faqat shaxsiy yozishmada ishlayman. Men bilan chatni oching va «Start» tugmasini bosing."
+)
+
+HELP_SHORT = (
+    "Yozuvlar — pastdagi tugmalarda. Yozuv darhol saqlanadi; vaqtini tuzatish yoki "
+    "o‘chirish — «Yozildi ✓» javobi ostidagi tugmalar bilan.\n"
+    "{app_line}\n"
+    "Tibbiy savollar bilan shifokoringizga murojaat qiling."
+)
+HELP_SHORT_APP_LINE = "Menyu, kundalik va grafiklar — ilovada.\n"
+BTN_HELP_FIX = "Yozuvni qanday tuzatish mumkin"
+BTN_HELP_MORE = "Boshqa savollar"
+HELP_FIX = (
+    "Yozuvni qanday tuzatish mumkin:\n\n"
+    "• Yozuvdan so‘ng darhol — «Yozildi ✓» javobi ostidagi tugmalar: «Boshqa vaqt» "
+    "va «Yozuvni o‘chirish». Ular ikki sutka ishlaydi.\n"
+    "• Keyinroq — ilovada, «Kundalik» bo‘limi: o‘z yozuvingizda «Tuzatish» va «O‘chirish».\n\n"
+    "Boshqa odamning yozuvini uni qilgan odam tuzatadi."
+)
+
+BTN_OTHER_TIME = "🕒 Boshqa vaqt"
+BTN_DELETE_RECORD = "🗑 Yozuvni o‘chirish"
+BTN_TIME_15_MIN = "15 daqiqa oldin"
+BTN_TIME_HOUR = "Bir soat oldin"
+BTN_TIME_MORNING = "Bugun soat 08:00 da"
+BTN_TIME_YESTERDAY_EVENING = "Kecha soat 20:00 da"
+BTN_TIME_TYPE = "Kiritish"
+RECORD_TIME_ASK = (
+    "{summary}\n\nBu qachon bo‘ldi? Tanlang yoki vaqtni yozing: bugun bo‘lsa 07:30, "
+    "oldinroq bo‘lsa 29.08 21:00."
+)
+RECORD_TIME_TYPE = "{summary}\n\nVaqtni yozing: bugun bo‘lsa 07:30, oldinroq bo‘lsa 29.08 21:00."
+RECORD_DELETE_ASK = "«{summary}» yozuvini o‘chiraymi?"
+BTN_DELETE_YES = "Ha, o‘chirish"
+RECORD_DELETED = "Yozuv o‘chirildi: {summary}."
+RECORD_GONE = "Bu yozuv endi yo‘q — u allaqachon o‘chirilgan."
+RECORD_EXPIRED = (
+    "Bu yozuvning tugmalari eskirgan. Uni ilovada, «Kundalik» bo‘limida tuzatish mumkin."
+)
+RECORD_CHILD_GONE = "Bu chatda ushbu bolaning kundaligiga kirish endi yo‘q."
+
+BTN_KETONES_WAS_URINE = "Bu siydik edi"
+BTN_KETONES_WAS_BLOOD = "Bu qon edi"
+
+BTN_SEIZURE_OTHER = "Boshqa"
+BTN_SEIZURE_UNKNOWN = "Bilmayman"
+SEIZURE_ASK_GROUP = "Qanday xuruj bo‘ldi? Guruhni tanlang."
+SEIZURE_ASK_SUBTYPE = "{group}: aynan qaysi?"
+SEIZURE_GROUP_ITSELF = "{name}, aniqrog‘ini bilmayman"
+SEIZURE_SAVED_SERIES = "{type}, xurujlar soni: {count}, {duration}"
+SEIZURE_SAVED_EXACT_MIN_SEC = "{minutes} daq {seconds} s"
+
+MEAL_TOAST_MARKED = "Belgilandi"
+MEAL_TOAST_UNMARKED = "Belgi olib tashlandi"
+BTN_MEAL_WHOLE = "{meal} to‘liq"
+MEAL_DONE = "Belgilandi ✓ {list}"
+
+BTN_MEDICATION_GIVEN_ALL = "Hammasi berildi"
+BTN_MEDICATION_GIVEN = "Belgilanganlar berildi ({count})"
+BTN_MEDICATION_SKIPPED_ALL = "Hammasi o‘tkazib yuborildi"
+BTN_MEDICATION_SKIPPED = "Belgilanganlar o‘tkazib yuborildi ({count})"
+SUMMARY_MEDICATIONS_GIVEN = "Berildi: {list}"
+SUMMARY_MEDICATIONS_SKIPPED = "O‘tkazib yuborildi: {list}"
+
+SAVED_PARTIAL = "{total} tadan {done} tasi saqlandi; «Qayta urinish» faqat qolganlarini yuboradi."

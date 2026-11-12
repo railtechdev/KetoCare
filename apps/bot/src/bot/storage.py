@@ -47,6 +47,14 @@ _LEGACY_PREFIX = "bot:binding:"
 _BINDINGS_PREFIX = "bot:bindings:"
 _ACTIVE_PREFIX = "bot:active:"
 _LANGUAGE_PREFIX = "bot:language:"
+_KETONE_METHOD_PREFIX = "bot:ketone-method:"
+_RECEIPT_PREFIX = "bot:receipt:"
+_GROUP_TOLD_PREFIX = "bot:group-told:"
+
+#: Сколько живёт квитанция записи — ключ кнопок «Другое время» и «Удалить
+#: запись» (ADR-0076). Двое суток — столько Telegram даёт править сообщение
+#: бота; дольше кнопки под ним всё равно не поменять.
+RECEIPT_TTL_S = 48 * 3600
 
 #: Сколько бот верит своей копии языка привязанного чата (ADR-0052). Пять
 #: минут: выбор, сделанный в Mini App, доходит до бота к следующему делу, а
@@ -252,6 +260,70 @@ class BindingStore:
     # раз в `LANGUAGE_TTL_S`, чтобы выбор, сделанный в Mini App, дошёл до бота
     # за минуты. У непривязанного чата сервера, которому принадлежал бы выбор,
     # ещё нет, и копия — единственное место, где он живёт.
+
+    # --- Метод кетонов (ADR-0076) ---
+    #
+    # Семья меряет кетоны одним и тем же прибором, и вопрос «кровь или моча»
+    # при каждой записи был лишним нажатием. Метод помнится по ребёнку, а не
+    # по чату: у двоих детей приборы могут быть разные. Бессрочно — это
+    # предпочтение, а не секрет; эхо записи его называет и меняет кнопкой.
+
+    async def ketone_method(self, chat_id: int, patient_id: uuid.UUID) -> str | None:
+        raw = await cast(
+            "Awaitable[Any]",
+            self._redis.get(f"{_KETONE_METHOD_PREFIX}{chat_id}:{patient_id}"),
+        )
+        value = _text(raw) if raw is not None else None
+        return value if value in ("blood", "urine") else None
+
+    async def set_ketone_method(self, chat_id: int, patient_id: uuid.UUID, method: str) -> None:
+        await cast(
+            "Awaitable[Any]",
+            self._redis.set(f"{_KETONE_METHOD_PREFIX}{chat_id}:{patient_id}", method),
+        )
+
+    # --- Квитанции записей (ADR-0076) ---
+    #
+    # Запись сохраняется сразу, и под ответом стоят «Другое время» и «Удалить
+    # запись». В callback_data (64 байта) не поместить ни ребёнка, ни список
+    # записей, ни эхо — они лежат здесь, по ключу, с коротким сроком.
+
+    async def put_receipt(self, chat_id: int, key: str, receipt: dict[str, Any]) -> None:
+        await cast(
+            "Awaitable[Any]",
+            self._redis.set(
+                f"{_RECEIPT_PREFIX}{chat_id}:{key}",
+                json.dumps(receipt, ensure_ascii=False),
+                ex=RECEIPT_TTL_S,
+            ),
+        )
+
+    async def receipt(self, chat_id: int, key: str) -> dict[str, Any] | None:
+        raw = await cast("Awaitable[Any]", self._redis.get(f"{_RECEIPT_PREFIX}{chat_id}:{key}"))
+        if raw is None:
+            return None
+        try:
+            parsed = json.loads(_text(raw))
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    async def drop_receipt(self, chat_id: int, key: str) -> None:
+        await cast("Awaitable[int]", self._redis.delete(f"{_RECEIPT_PREFIX}{chat_id}:{key}"))
+
+    async def first_time_in_group(self, chat_id: int) -> bool:
+        """Отвечал ли бот уже в этой группе — `/start` в группе объясняется один раз.
+
+        Бот работает только в личной переписке; в группе каждый `/start`
+        получал бы то же объяснение, и группа превращалась бы в спам.
+        """
+
+        return bool(
+            await cast(
+                "Awaitable[Any]",
+                self._redis.set(f"{_GROUP_TOLD_PREFIX}{chat_id}", "1", nx=True),
+            )
+        )
 
     async def language(self, chat_id: int) -> StoredLanguage | None:
         raw = await cast("Awaitable[Any]", self._redis.get(_LANGUAGE_PREFIX + str(chat_id)))

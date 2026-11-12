@@ -225,6 +225,57 @@ class BotApi:
                 raise
         return await self._request("POST", path, headers=headers, json=payload)
 
+    async def update_log(
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        kind: str,
+        log_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Поправить свою запись: время или метод кетонов (ADR-0076).
+
+        Правит только автор записи — взрослый за привязкой; чужую сервер не даст.
+        """
+
+        token = await self._token(link_id=link_id, secret=secret)
+        return await self._request(
+            "PATCH",
+            f"/api/v1/patients/{patient_id}/logs/{kind}/{log_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json=payload,
+        )
+
+    async def delete_log(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, kind: str, log_id: str
+    ) -> None:
+        """Удалить свою запись (мягко: сервер ставит `deleted_at`)."""
+
+        token = await self._token(link_id=link_id, secret=secret)
+        await self._request(
+            "DELETE",
+            f"/api/v1/patients/{patient_id}/logs/{kind}/{log_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    async def recent_seizure_types(
+        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, limit: int
+    ) -> list[str]:
+        """Типы недавних приступов ребёнка, свежие первыми (ADR-0076).
+
+        Только идентификаторы: дневник боту не открыт, и эта ручка — не он.
+        """
+
+        token = await self._token(link_id=link_id, secret=secret)
+        body = await self._request(
+            "GET",
+            f"/api/v1/patients/{patient_id}/logs/seizures/recent-types?limit={limit}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        return [str(item) for item in body.get("items", [])]
+
     async def get_menu(
         self,
         *,
@@ -329,9 +380,15 @@ class BotApi:
         return items
 
     async def mark_eaten(
-        self, *, link_id: uuid.UUID, secret: str, patient_id: uuid.UUID, item_id: str
+        self,
+        *,
+        link_id: uuid.UUID,
+        secret: str,
+        patient_id: uuid.UUID,
+        item_id: str,
+        eaten: bool = True,
     ) -> dict[str, Any]:
-        """Отметка «съедено» по позиции плана.
+        """Отметка «съедено» по позиции плана; `eaten=False` её снимает.
 
         Второй путь — «Написать словами»: он идёт через `parse_text` и
         `create_log`, потому что съеденное могло не совпасть с планом.
@@ -342,7 +399,7 @@ class BotApi:
             "POST",
             f"/api/v1/patients/{patient_id}/menus/items/{item_id}/eaten",
             headers={"Authorization": f"Bearer {token}"},
-            json={"eaten": True},
+            json={"eaten": eaten},
         )
 
     # --- низкий уровень ---
@@ -374,6 +431,8 @@ class BotApi:
             # (аудит блокеров, 05.10.2026).
             raise BotApiError(TRANSPORT_ERROR, str(exc) or type(exc).__name__, 0) from exc
         if response.is_success:
+            if response.status_code == 204 or not response.content:
+                return {}
             body: dict[str, Any] = response.json()
             return body
 
