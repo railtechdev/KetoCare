@@ -35,7 +35,7 @@ export const en: Dict = {
 
   shots: {
     overview: {
-      alt: "Doctor's cabinet, patient overview: today's totals — ketogenic ratio 3.5 : 1, 1,303 of 1,300 kcal, carbs 11.4 of 14 g; the current prescription on the right.",
+      alt: "Doctor's cabinet, patient overview: today's totals — ketogenic ratio 3.5 : 1, 1,303 of 1,300 kcal, carbs 11.4 of 14 g; the prescription on the right.",
       caption:
         "Doctor's cabinet (in Russian): the child's day next to the prescription",
     },
@@ -44,9 +44,9 @@ export const en: Dict = {
       caption: "Patient list (in Russian): those who need attention come first",
     },
     prescription: {
-      alt: "Doctor's cabinet, prescription form: ketogenic ratio from a list, calories with a hint by age and weight, protein, carbs, meals, fluid; version history on the right.",
+      alt: "Doctor's cabinet, prescription form: ketogenic ratio from a list, calories with a hint by age and weight, protein, carbs, meals, fluid; prescription history on the right.",
       caption:
-        "Prescription (in Russian): hints by age and weight, version history",
+        "Prescription (in Russian): hints by age and weight, prescription history",
     },
     menu: {
       alt: "Doctor's cabinet, weekly menu: four meals a day, the ketogenic ratio and calories under each day.",
@@ -104,7 +104,7 @@ export const en: Dict = {
       title:
         "KetoCare — ketogenic diet for a child with epilepsy: doctor and family",
       description:
-        "The doctor sets the prescription, the family cooks by the gram and keeps diaries in Telegram, the doctor sees how the therapy goes. A web cabinet and a Telegram app.",
+        "The doctor sets the prescription, the family cooks by the gram and keeps diaries in Telegram, the doctor sees how the therapy goes. A cabinet and a Telegram app.",
     },
     hero: {
       h1: "Ketogenic diet for a child with epilepsy: doctor and family in one system",
@@ -188,7 +188,7 @@ export const en: Dict = {
         },
         {
           q: "What does a family need to start?",
-          a: "Telegram on the phone and an access code from the doctor. Nothing to install. A web cabinet can be turned on later if needed.",
+          a: "Telegram on the phone and an access code from the doctor. Nothing to install. The cabinet can be turned on later if needed.",
         },
         {
           q: "Which languages?",
@@ -237,7 +237,7 @@ export const en: Dict = {
         "A calorie hint by the child's age and weight.",
         "The carb limit is calculated automatically and can be changed.",
         "Protein, meals per day and, if needed, fluid.",
-        "Every change is a new version. The history is kept.",
+        "Earlier prescriptions stay in the prescription history.",
         "The prescription and the menu print for the family with one button.",
       ],
     },
@@ -267,7 +267,7 @@ export const en: Dict = {
         "Height and weight against WHO standards, with a flag for a notable drop.",
         "Follow-up visits at 1, 3, 6, 9, 12 and 24 months; the family gets a reminder three days before.",
         "A PDF report for any period.",
-        "AI prepares a draft summary for the period. Only text the doctor has checked and approved goes into the report.",
+        "The summary for the period starts as an automatic draft. Only text the doctor has checked and approved goes into the report.",
       ],
     },
     connect: {
@@ -283,7 +283,7 @@ export const en: Dict = {
         },
         {
           title: "The family opens it in Telegram",
-          text: "Or in a browser. No password. The family invites a second adult itself.",
+          text: "Or in the cabinet. No password. The family invites a second adult itself.",
         },
       ],
     },
@@ -309,7 +309,7 @@ export const en: Dict = {
       points: [
         "The doctor creates the child's card and gives you an access code — eight characters or a QR code.",
         "Send the code to the KetoCare Telegram bot — and the app opens.",
-        "No sign-up and no password. A web cabinet can be turned on later.",
+        "No sign-up and no password. The cabinet can be turned on later.",
       ],
     },
     menu: {
@@ -328,7 +328,7 @@ export const en: Dict = {
     },
     diary: {
       title: "A diary in a couple of taps",
-      text: "Six diaries: seizures, ketones, weight, wellbeing, medications, meals.",
+      text: "Six diaries: seizures, ketones, weight, wellbeing, medicines, meals.",
       points: [
         "The bot records in a few seconds and repeats what was recorded, so mistakes are easy to spot.",
         "You can describe what the child ate in words — the bot shows the products and grams and records only after you confirm.",
@@ -390,7 +390,7 @@ export const en: Dict = {
         title: "The family gets access",
         points: [
           "The doctor issues an access code — eight characters and a QR code. It is valid for a week.",
-          "The family sends the code to the KetoCare Telegram bot or enters it in the web cabinet.",
+          "The family sends the code to the KetoCare Telegram bot or enters it in the cabinet.",
           "No password. The family invites a second adult itself.",
         ],
       },
@@ -400,7 +400,7 @@ export const en: Dict = {
         points: [
           "Plans the menu from dishes and recipes — the app checks every dish against the prescription.",
           "Weighs products by the grams in the menu and marks what was eaten.",
-          "Records seizures, ketones, weight, wellbeing and medications taken.",
+          "Records seizures, ketones, weight, wellbeing and medicines given.",
           "Gets reminders at the chosen time.",
         ],
       },
@@ -418,7 +418,7 @@ export const en: Dict = {
       h2: "Where it works",
       items: [
         {
-          title: "Web cabinet",
+          title: "Cabinet",
           text: "For doctors and dietitians — all work with patients. For families — optional, if a computer is more convenient.",
         },
         {
@@ -489,10 +489,10 @@ export const en: Dict = {
       {
         title: "Who makes decisions",
         points: [
-          "Only the doctor sets and changes the prescription. Every change is a new version; earlier ones stay in the history.",
+          "Only the doctor sets and changes the prescription. Earlier prescriptions stay in the prescription history.",
           "The app does not diagnose, does not change the diet and does not advise on treatment.",
           "If a parent describes in words what the child ate, the app shows the recognised products and grams. The record appears only after confirmation.",
-          "AI prepares a draft summary for the doctor. Only text the doctor has checked and approved goes into the report.",
+          "The summary for the doctor starts as an automatic draft. Only text the doctor has checked and approved goes into the report.",
         ],
       },
       {
@@ -508,7 +508,7 @@ export const en: Dict = {
         points: [
           "A family sees only its own child, a doctor only their own patients. The administrator does not see medical data.",
           "Doctors log in with a password and a code from an app on their phone.",
-          "Names and contacts are not sent to the AI.",
+          "Names and contacts are not passed to the assistant or to automatic drafts.",
           "Medical records are never silently erased; backups are stored encrypted.",
         ],
       },

@@ -9,6 +9,10 @@
  */
 import { describe, expect, it } from "vitest";
 
+// Общий список запрещённых слов кабинета, приложения в Telegram, бота и
+// сообщений (docs/PLAN_UI_TEXT_2026-11.md, раздел 3): сайт — пятый канал, и
+// называть одно и то же иначе, чем продукт, он не должен.
+import shared from "../../../ui/src/testing/forbiddenTerms.json";
 import { en } from "./en";
 import { ru } from "./ru";
 import { uz } from "./uz";
@@ -39,8 +43,11 @@ const FORBIDDEN = [
   /в развитии|coming soon/i,
   /ISO|HIPAA/,
   /PR #|ADR-/,
+  /кабинет[а-я]* в браузере|веб-кабинет|web cabinet|brauzerdagi kabinet/i,
+  /верси[яиюей]|version|versiya/i,
   // Срок ответа на заявку: уведомления о ней нет, обещать некому.
   /в ближайш|в течение \d|within \d|next few days|yaqin kunlarda/i,
+  ...shared.terms.map((term) => new RegExp(term.pattern, term.flags)),
 ];
 
 function strings(value: unknown, path = ""): [string, string][] {

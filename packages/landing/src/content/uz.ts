@@ -38,7 +38,7 @@ export const uz: Dict = {
 
   shots: {
     overview: {
-      alt: "Shifokor kabineti, bemor sharhi: bugungi kun yakunlari — keto nisbati 3,5 : 1, 1 300 kkal dan 1 303 kkal, uglevodlar 14 g dan 11,4 g; o‘ngda amaldagi tayinlov.",
+      alt: "Shifokor kabineti, bemor sharhi: bugungi kun yakunlari — keto nisbati 3,5 : 1, 1 300 kkal dan 1 303 kkal, uglevodlar 14 g dan 11,4 g; o‘ngda tayinlov.",
       caption: "Shifokor kabineti (rus tilida): bolaning kuni tayinlov yonida",
     },
     patients: {
@@ -46,9 +46,9 @@ export const uz: Dict = {
       caption: "Bemorlar ro‘yxati (rus tilida): avval e’tibor kerak bo‘lganlar",
     },
     prescription: {
-      alt: "Shifokor kabineti, tayinlov shakli: ro‘yxatdan keto nisbati, yosh va vaznga ko‘ra maslahatli kaloriya, oqsil, uglevodlar, ovqatlanishlar soni, suyuqlik; o‘ngda versiyalar tarixi.",
+      alt: "Shifokor kabineti, tayinlov shakli: ro‘yxatdan keto nisbati, yosh va vaznga ko‘ra maslahatli kaloriya, oqsil, uglevodlar, ovqatlanishlar soni, suyuqlik; o‘ngda tayinlovlar tarixi.",
       caption:
-        "Tayinlov (rus tilida): yosh va vaznga ko‘ra maslahat, versiyalar tarixi",
+        "Tayinlov (rus tilida): yosh va vaznga ko‘ra maslahat, tayinlovlar tarixi",
     },
     menu: {
       alt: "Shifokor kabineti, haftalik menyu: kuniga to‘rt ovqatlanish, har kun ostida keto nisbati va kaloriya.",
@@ -105,7 +105,7 @@ export const uz: Dict = {
       title:
         "KetoCare — epilepsiyali bolaning ketogen parhezi: shifokor va oila",
       description:
-        "Shifokor tayinlovni belgilaydi, oila grammlab ovqat tayyorlaydi va Telegramda kundalik yuritadi, shifokor davolash qanday borayotganini ko‘radi. Brauzerdagi kabinet va Telegramdagi ilova.",
+        "Shifokor tayinlovni belgilaydi, oila grammlab ovqat tayyorlaydi va Telegramda kundalik yuritadi, shifokor davolash qanday borayotganini ko‘radi. Kabinet va Telegramdagi ilova.",
     },
     hero: {
       h1: "Epilepsiyali bolaning ketogen parhezi: shifokor va oila bitta tizimda",
@@ -189,7 +189,7 @@ export const uz: Dict = {
         },
         {
           q: "Boshlash uchun oilaga nima kerak?",
-          a: "Telefonda Telegram va shifokordan kirish kodi. Hech narsa o‘rnatish shart emas. Brauzerdagi kabinetni keyinroq, kerak bo‘lsa, yoqish mumkin.",
+          a: "Telefonda Telegram va shifokordan kirish kodi. Hech narsa o‘rnatish shart emas. Kabinetni keyinroq, kerak bo‘lsa, yoqish mumkin.",
         },
         {
           q: "Qaysi tillarda?",
@@ -238,7 +238,7 @@ export const uz: Dict = {
         "Bolaning yoshi va vazniga ko‘ra kaloriya bo‘yicha maslahat.",
         "Uglevodlar chegarasi o‘zi hisoblanadi, uni o‘zgartirish mumkin.",
         "Oqsil, ovqatlanishlar soni, kerak bo‘lsa — suyuqlik.",
-        "Har bir o‘zgarish — yangi versiya. Tarix saqlanadi.",
+        "Oldingi tayinlovlar tayinlovlar tarixida qoladi.",
         "Tayinlov va menyu oila uchun bitta tugma bilan chop etiladi.",
       ],
     },
@@ -268,7 +268,7 @@ export const uz: Dict = {
         "JSST me’yorlariga nisbatan bo‘y va vazn, sezilarli pasayish belgisi bilan.",
         "1, 3, 6, 9, 12 va 24 oyda nazorat tashriflari; oila uch kun oldin eslatma oladi.",
         "Davr uchun PDF hisobot.",
-        "Davr bo‘yicha xulosa qoralamasini sun’iy intellekt tayyorlaydi. Hisobotga faqat shifokor tekshirgan va tasdiqlagan matn tushadi.",
+        "Davr bo‘yicha xulosa avtomatik qoralama sifatida tayyorlanadi. Hisobotga faqat shifokor tekshirgan va tasdiqlagan matn tushadi.",
       ],
     },
     connect: {
@@ -284,7 +284,7 @@ export const uz: Dict = {
         },
         {
           title: "Oila kodni Telegramda ochadi",
-          text: "Yoki brauzerda. Parol kerak emas. Ikkinchi kattani oila o‘zi taklif qiladi.",
+          text: "Yoki kabinetda. Parol kerak emas. Ikkinchi kattani oila o‘zi taklif qiladi.",
         },
       ],
     },
@@ -310,7 +310,7 @@ export const uz: Dict = {
       points: [
         "Shifokor bolaning kartasini ochadi va kirish kodini beradi — sakkiz belgi yoki QR-kod.",
         "Kodni KetoCare Telegram-botiga yuboring — ilova ochiladi.",
-        "Ro‘yxatdan o‘tish va parol kerak emas. Brauzerdagi kabinetni keyinroq yoqish mumkin.",
+        "Ro‘yxatdan o‘tish va parol kerak emas. Kabinetni keyinroq yoqish mumkin.",
       ],
     },
     menu: {
@@ -391,7 +391,7 @@ export const uz: Dict = {
         title: "Oila kirish huquqini oladi",
         points: [
           "Shifokor kirish kodini beradi — sakkiz belgi va QR-kod. Kod bir hafta amal qiladi.",
-          "Oila kodni KetoCare Telegram-botiga yuboradi yoki brauzerdagi kabinetda kiritadi.",
+          "Oila kodni KetoCare Telegram-botiga yuboradi yoki kabinetda kiritadi.",
           "Parol kerak emas. Ikkinchi kattani oila o‘zi taklif qiladi.",
         ],
       },
@@ -419,7 +419,7 @@ export const uz: Dict = {
       h2: "Qayerda ishlaydi",
       items: [
         {
-          title: "Brauzerdagi kabinet",
+          title: "Kabinet",
           text: "Shifokor va dietolog uchun — bemorlar bilan butun ish. Oila uchun — xohishga ko‘ra, kompyuterdan qulayroq bo‘lsa.",
         },
         {
@@ -491,10 +491,10 @@ export const uz: Dict = {
       {
         title: "Qarorlarni kim qabul qiladi",
         points: [
-          "Tayinlovni faqat shifokor belgilaydi va o‘zgartiradi. Har bir o‘zgarish — yangi versiya, oldingilari tarixda qoladi.",
+          "Tayinlovni faqat shifokor belgilaydi va o‘zgartiradi. Oldingi tayinlovlar tayinlovlar tarixida qoladi.",
           "Ilova tashxis qo‘ymaydi, parhezni o‘zgartirmaydi va qanday davolash haqida maslahat bermaydi.",
           "Ota-ona bola nima yeganini so‘z bilan yozsa, ilova tanilgan mahsulotlar va grammlarni ko‘rsatadi. Yozuv faqat tasdiqlangandan keyin paydo bo‘ladi.",
-          "Shifokor uchun xulosa qoralamasini sun’iy intellekt tayyorlaydi. Hisobotga faqat shifokor tekshirgan va tasdiqlagan matn tushadi.",
+          "Shifokor uchun xulosa avtomatik qoralama sifatida tayyorlanadi. Hisobotga faqat shifokor tekshirgan va tasdiqlagan matn tushadi.",
         ],
       },
       {
@@ -510,7 +510,7 @@ export const uz: Dict = {
         points: [
           "Oila faqat o‘z bolasini, shifokor faqat o‘z bemorlarini ko‘radi. Administrator tibbiy ma’lumotlarni ko‘rmaydi.",
           "Shifokor parol va telefondagi ilovadan olingan kod bilan kiradi.",
-          "Sun’iy intellektga ismlar va kontaktlar yuborilmaydi.",
+          "Ismlar va kontaktlar yordamchiga ham, avtomatik qoralamalarga ham uzatilmaydi.",
           "Tibbiy yozuvlar bilinmasdan o‘chirilmaydi, zaxira nusxalar shifrlangan holda saqlanadi.",
         ],
       },
