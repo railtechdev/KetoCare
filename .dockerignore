@@ -16,6 +16,8 @@ packages/api-client
 docs
 # …кроме статей помощника: индекс поиска собирается из них в образе.
 !docs/knowledge-base
+# …и источники рабочего справочника: их загружает выкат.
+!docs/import/sources
 graphify-out
 var
 .env

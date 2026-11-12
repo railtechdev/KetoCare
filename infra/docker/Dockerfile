@@ -37,6 +37,8 @@ COPY infra/seed/dmtt-2025 infra/seed/dmtt-2025
 # выкате (`deploy.sh`). Остальной `docs/` в образ не идёт — он большой и
 # приложению не нужен, а эти пять файлов и есть то, чем помощник отвечает.
 COPY docs/knowledge-base docs/knowledge-base
+# Источники рабочего справочника: загружаются при выкате (ADR-0071).
+COPY docs/import/sources docs/import/sources
 RUN uv sync --frozen --no-dev --all-packages
 
 # Каталоги томов создаются в образе и отдаются `app` заранее.
