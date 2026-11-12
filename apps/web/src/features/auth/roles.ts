@@ -40,8 +40,9 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
     "child",
     "profile",
   ],
-  // «Главная» первой: вход вёл сразу в таблицу пациентов — полный реестр
-  // вместо ответа на вопрос, с которого начинается рабочий день.
+  // Главной у специалиста нет (аудит продукта 12.11.2026): она стояла вне
+  // меню, вход вёл в реестр пациентов, и до неё нельзя было дойти. Старая
+  // ссылка `/app/home` уводит на первый раздел роли — реестр.
   //
   // Калькулятор и справочник продуктов ТЗ §8.1 врачу не даёт, но врач
   // назначает кетосоотношение и обязан понимать, выполнимо ли оно на доступных
@@ -52,15 +53,8 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
   // которым ничего нет (правило П3 канона). AI-сводка это пункт 21 ТЗ, этап 4;
   // раздел вернётся вместе со своей работой, как вернутся «Ассистент» и
   // «Отчёты» у родителя.
-  doctor: ["patients", "recipes", "products", "calculator", "home", "profile"],
-  dietitian: [
-    "patients",
-    "recipes",
-    "products",
-    "calculator",
-    "home",
-    "profile",
-  ],
+  doctor: ["patients", "recipes", "products", "calculator", "profile"],
+  dietitian: ["patients", "recipes", "products", "calculator", "profile"],
   admin: [
     "home",
     "users",
@@ -78,11 +72,11 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
  *
  * Специалист работает от пациента: вход ведёт в список, а меню из трёх пунктов
  * (пациенты, база блюд, продукты) не заставляет выбирать между двумя
- * калькуляторами и главной без действий (`docs/AUDIT_ROLES_PATHS_2026-11.md`).
+ * калькуляторами (`docs/AUDIT_ROLES_PATHS_2026-11.md`).
  */
 export const HIDDEN_FROM_NAV: Partial<Record<Role, ReadonlySet<string>>> = {
-  doctor: new Set(["home", "calculator", "profile"]),
-  dietitian: new Set(["home", "calculator", "profile"]),
+  doctor: new Set(["calculator", "profile"]),
+  dietitian: new Set(["calculator", "profile"]),
   // Пять пунктов семьи: Главная, Меню, Дневник, Отчёт, Помощник. Калькулятор и
   // рецепты открываются из меню дня, продукты — из калькулятора, «Ребёнок» и
   // профиль — из меню учётной записи.

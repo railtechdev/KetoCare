@@ -31,6 +31,8 @@ import { usePatientOverview } from "../patients/overview";
 import { useUpdateChildMutation } from "../patients/useChildren";
 import { CareTeamPanel } from "./CareTeamPanel";
 import { FamilyPanel } from "./FamilyPanel";
+import { ACCESS_CODE_ITEM } from "./patientViews";
+import { useSectionItem } from "../../routes/useSectionTab";
 import { MedicalProfileForm } from "./MedicalProfileForm";
 import { ageInMonths, formatIsoDate, formatTimestamp } from "./dates";
 import { useMedicalProfile } from "./doctorQueries";
@@ -101,6 +103,9 @@ export function PatientProfileView({
   const [editOpen, setEditOpen] = useState(false);
   const update = useUpdateChildMutation(patient.id);
   const navigate = useNavigate();
+  // Панель кода семье — в адресе: на неё ведут «Выдать код семье» из
+  // назначения и из «Обзора», и F5 не должен её закрывать.
+  const [item, setItem] = useSectionItem();
 
   const months = ageInMonths(patient.birth_date, new Date());
   const birthDate = formatIsoDate(patient.birth_date);
@@ -287,7 +292,13 @@ export function PatientProfileView({
           {/* Два ответа на один вопрос «с кем говорить»: кто ведёт ребёнка дома
               и кто ведёт его в клинике. Семья первой — к ней обращаются, когда
               дневники пусты, а это самый частый повод. */}
-          <FamilyPanel patientId={patient.id} />
+          <FamilyPanel
+            patientId={patient.id}
+            accessOpen={item === ACCESS_CODE_ITEM}
+            onAccessOpenChange={(open) =>
+              setItem(open ? ACCESS_CODE_ITEM : undefined)
+            }
+          />
 
           <CareTeamPanel
             patientId={patient.id}

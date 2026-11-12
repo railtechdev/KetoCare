@@ -9,7 +9,7 @@ import {
   Section,
 } from "@ketocare/ui";
 import { KeyRound, Copy, Share2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 
@@ -23,6 +23,14 @@ import {
   type AccessCodeCreated,
 } from "./useAccessCodes";
 import { queryState } from "../../lib/queryState";
+import {
+  clearCachedCode,
+  readCachedCode,
+  writeCachedCode,
+} from "./accessCodeCache";
+
+/** Эта панель выдаёт доступ к карте, а не подключает свой чат (ADR-0042). */
+const PURPOSE = "family_member" as const;
 
 /**
  * Выдача доступа семье из карты ребёнка (ADR-0040).
@@ -40,6 +48,14 @@ import { queryState } from "../../lib/queryState";
  * «семье», родитель — о «другом взрослом» (`audience`). Назначение кода
  * передаётся явно в обоих случаях: этот экран выдаёт доступ, а не подключает
  * свой чат, и полагаться на выбор сервера по роли здесь незачем.
+ *
+ * **Код выпускается при открытии панели** (аудит продукта 12.11.2026,
+ * ADR-0072): панель открывают ради кода, и вторая кнопка с тем же названием,
+ * что и открывшая её, была лишним шагом. Повторное открытие показывает код,
+ * выпущенный в этой вкладке, пока журнал подтверждает, что он действует, —
+ * иначе каждое открытие оставляло бы ещё один код на неделю. Правила кода
+ * прежние — одноразовый, неделя, отзывается из журнала ниже; «Ещё один код»
+ * выпускает следующий явно.
  */
 export function AccessCodePanel({
   patientId,
@@ -54,7 +70,7 @@ export function AccessCodePanel({
   // Ключи с голосом выдающего; общие — без префикса.
   const voice = (key: string) => t(`panel.${audience}.${key}`);
 
-  const issue = useIssueAccessCode(patientId, "family_member");
+  const issue = useIssueAccessCode(patientId, PURPOSE);
   const revoke = useRevokeAccessCode(patientId);
   const journal = useAccessCodes(patientId, true);
 
@@ -99,15 +115,59 @@ export function AccessCodePanel({
     if (created) {
       setIssued(created);
       setCopied(false);
+      writeCachedCode(patientId, PURPOSE, created);
     }
   }
+
+  // Открытие панели: показать код, выпущенный в этой вкладке раньше, если
+  // журнал подтверждает, что он ещё действует; иначе выпустить новый. Без
+  // этого каждое открытие оставляло ещё один код, живущий неделю.
+  //
+  // Решение принимается один раз. Флаг в ref, а не в состоянии: в StrictMode
+  // эффект запускается дважды на том же экземпляре, и второй запуск выпустил
+  // бы второй код.
+  const decided = useRef(false);
+  useEffect(() => {
+    if (decided.current) return;
+    const cached = readCachedCode(patientId, PURPOSE);
+    if (cached === null) {
+      decided.current = true;
+      void handleIssue();
+      return;
+    }
+    // Есть что переиспользовать — сначала сверка с журналом.
+    if (journal.isPending) return;
+    decided.current = true;
+    const row = (journal.data ?? []).find(
+      (entry) => entry.code === cached.code && entry.status === "pending",
+    );
+    if (row === undefined) {
+      // Погашен, отозван, истёк или журнал не ответил: показывать нельзя.
+      clearCachedCode(patientId, PURPOSE);
+      void handleIssue();
+      return;
+    }
+    setIssued({
+      ...cached,
+      // Ссылки — из журнала, если он их отдал: они те же, что при выдаче.
+      deep_link: row.deep_link ?? cached.deep_link,
+      join_url: row.join_url ?? cached.join_url,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- decided once per open
+  }, [journal.isPending, journal.data]);
+
+  // Другие действующие коды ребёнка: видно, сколько дверей ещё открыто, и
+  // отозвать их можно в журнале ниже.
+  const otherActive = (journal.data ?? []).filter(
+    (entry) =>
+      entry.status === "pending" &&
+      (issued === null || entry.code !== issued.code),
+  ).length;
 
   return (
     <div className="flex flex-col gap-section">
       <Section
         title={voice("title")}
-        description={voice("intro")}
-
         action={
           <Button
             type="button"
@@ -115,6 +175,8 @@ export function AccessCodePanel({
             disabled={issue.isPending}
           >
             <KeyRound aria-hidden="true" />
+            {/* До первого кода кнопка видна только при отказе выпуска — как
+                повтор; после него выпускает следующий. */}
             {issue.isPending
               ? t("panel.issuing")
               : issued === null
@@ -123,6 +185,12 @@ export function AccessCodePanel({
           </Button>
         }
       >
+        {otherActive > 0 && (
+          <p className="m-0 text-sm text-muted-foreground">
+            {t("panel.otherActive", { count: otherActive })}
+          </p>
+        )}
+
         {issue.isError && (
           <p className="m-0 text-sm break-words text-destructive" role="alert">
             {errorMessageOf(issue.error) ?? t("panel.issueFailed")}
@@ -318,8 +386,15 @@ export function AccessCodePanel({
                       const code = row.code;
                       if (code === null) return;
                       revoke.mutate(code, {
-                        onSuccess: () =>
-                          toast.success(t("panel.revokedToast", { code })),
+                        onSuccess: () => {
+                          toast.success(t("panel.revokedToast", { code }));
+                          // Отозванный код больше не показывается и не
+                          // предлагается при следующем открытии.
+                          if (issued?.code === code) {
+                            setIssued(null);
+                            clearCachedCode(patientId, PURPOSE);
+                          }
+                        },
                         onError: (error) =>
                           toast.error(
                             errorMessageOf(error) ?? t("panel.revokeFailed"),

@@ -58,11 +58,6 @@ const AdminHomePage = lazy(() =>
     default: m.AdminHomePage,
   })),
 );
-const DoctorHomePage = lazy(() =>
-  import("../features/doctor/DoctorHomePage").then((m) => ({
-    default: m.DoctorHomePage,
-  })),
-);
 const PatientsListView = lazy(() =>
   import("../features/doctor/PatientsListView").then((m) => ({
     default: m.PatientsListView,
@@ -122,14 +117,12 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
       render={(patientId) => <AssistantPage patientId={patientId} />}
     />
   ),
-  // Главная у семьи и у специалиста отвечает на разные вопросы: родителю —
-  // «что сейчас», врачу — «кем заняться» (`docs/DESIGN_PROPOSAL.md`). Экран
-  // выбирается по роли, как у `products`; право читать проверяет сервер.
+  // Главная у семьи и у администратора отвечает на разные вопросы. У
+  // специалиста главной нет: он работает от реестра пациентов (аудит продукта
+  // 12.11.2026). Экран выбирается по роли; право читать проверяет сервер.
   home: (role) =>
     role === "admin" ? (
       <AdminHomePage />
-    ) : role === "doctor" || role === "dietitian" ? (
-      <DoctorHomePage />
     ) : (
       <PatientGate render={(patientId) => <HomePage patientId={patientId} />} />
     ),

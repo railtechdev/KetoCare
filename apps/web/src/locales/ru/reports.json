@@ -96,5 +96,14 @@
         "other": "Требует внимания"
       }
     }
+  },
+  "print": {
+    "button": "Печать отчёта",
+    "title": "Отчёт: {{name}}",
+    "period": "Период: {{from}} — {{to}}",
+    "prescriptions": "Назначения",
+    "prescriptionLine": "с {{from}}: {{ratio}}, {{kcal}} ккал в сутки, белок {{protein}} г, углеводы не более {{carbs}} г, приёмов пищи: {{meals}}",
+    "medications": "Препараты",
+    "generated": "Сформирован {{at}}"
   }
 }

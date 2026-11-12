@@ -13,7 +13,7 @@ import {
   SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarX, SearchX, UserPlus, Users } from "lucide-react";
+import { CalendarX, Filter, SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -42,8 +42,10 @@ import {
   useSectionQuery,
 } from "../../routes/useSectionTab";
 
-/** `?item=` формы новой карты пациента: на неё ссылается главная врача. */
-export const NEW_PATIENT_ITEM = "new";
+/** `?item=` формы новой карты пациента. */
+const NEW_PATIENT_ITEM = "new";
+
+type QuickFilter = "all" | "attention" | "family";
 
 interface PatientRow {
   patient: Patient;
@@ -90,15 +92,19 @@ export function PatientsListView() {
   const navigate = useNavigate();
   const createChild = useCreateChildMutation();
 
-  const [filterMode, setFilterMode] = useState<"all" | "attention" | "active">(
-    "all",
-  );
+  // Быстрый отбор — в адресе (`?show=`), как поиск и «на терапии»: после F5
+  // и возврата из карты список остаётся тем же.
+  const filterMode: QuickFilter = address.show ?? "all";
+  const setFilterMode = (value: QuickFilter) =>
+    patchAddress({ show: value === "all" ? undefined : value });
 
   const quickFilterItems = useMemo(
     () => [
       { value: "all" as const, label: t("list.quickFilters.all") },
       { value: "attention" as const, label: t("list.quickFilters.attention") },
-      { value: "active" as const, label: t("list.quickFilters.active") },
+      // «Семья подключена», а не «Активные»: отбор — по тому, вошла ли
+      // семья по коду, и «активный» читался как «на терапии».
+      { value: "family" as const, label: t("list.quickFilters.family") },
     ],
     [t],
   );
@@ -157,7 +163,7 @@ export function PatientsListView() {
     if (filterMode === "attention") {
       return rows.filter((row) => row.attention > 0);
     }
-    if (filterMode === "active") {
+    if (filterMode === "family") {
       return rows.filter((row) => row.patient.family_activated);
     }
     return rows;
@@ -350,9 +356,27 @@ export function PatientsListView() {
         }
         retryLabel={t("common:actions.retry")}
         onRetry={() => void patients.refetch()}
-        isEmpty={rows.length === 0}
+        // Пусто бывает трижды, и у каждого случая свой выход: отбор вернул
+        // ноль — «Показать всех»; поиск ничего не нашёл — очистить поиск;
+        // пациентов нет вовсе — завести первого. Прежде отбор, оставивший
+        // пустую таблицу, не говорил ничего.
+        isEmpty={displayedRows.length === 0}
         empty={
-          debouncedQuery.trim() === "" ? (
+          rows.length > 0 ? (
+            <EmptyState
+              icon={Filter}
+              title={t("list.emptyFilter")}
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setFilterMode("all")}
+                >
+                  {t("list.showAll")}
+                </Button>
+              }
+            />
+          ) : debouncedQuery.trim() === "" ? (
             therapy === "ended" ? (
               <EmptyState
                 icon={Users}
@@ -364,6 +388,12 @@ export function PatientsListView() {
                 icon={Users}
                 title={t("list.empty")}
                 description={t("list.emptyDescription")}
+                action={
+                  <Button type="button" onClick={() => setInviteOpen(true)}>
+                    <UserPlus aria-hidden="true" />
+                    {t("list.createAction")}
+                  </Button>
+                }
               />
             )
           ) : (

@@ -25,6 +25,7 @@ import {
 } from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
+import { PatientViewLink } from "./PatientViewLink";
 import { useMedicalProfile } from "./doctorQueries";
 import { LinesSkeleton } from "./skeletons";
 import {
@@ -128,10 +129,34 @@ export function TherapyCourseView({
                   прежде это был абзац, и программа чтения экрана о нём у кнопки не
                   сообщала. Живая область стоит в разметке постоянно. */}
               {editable && (
-                <ActionReason id={buildReasonId} className="mb-2">
-                  {startedOn === null ? t("course.visits.noStart") : null}
-                </ActionReason>
+                <div className="mb-2 flex flex-wrap items-center gap-field">
+                  <ActionReason id={buildReasonId}>
+                    {startedOn === null ? t("course.visits.noStart") : null}
+                  </ActionReason>
+                  {/* Подсказка ведёт туда, где дату начала задают, ссылкой, а
+                      не названием раздела (аудит продукта 12.11.2026). */}
+                  {startedOn === null && (
+                    <PatientViewLink
+                      patientId={patientId}
+                      view="profile"
+                      className="text-sm font-medium underline"
+                    >
+                      {t("course.visits.noStartLink")}
+                    </PatientViewLink>
+                  )}
+                </div>
               )}
+              {/* Диетолог видит просрочку, но отмечать визиты не может (ADR-0031):
+                  без этой строки пометка выглядела поручением, которое
+                  нечем выполнить. */}
+              {!editable &&
+                visits.some(
+                  (visit) => visit.overdue && !visit.completed_on,
+                ) && (
+                  <p className="m-0 mb-2 text-sm text-muted-foreground">
+                    {t("course.visits.doctorMarks")}
+                  </p>
+                )}
               <AsyncSection
                 {...queryState(schedule)}
                 skeleton={
@@ -301,8 +326,9 @@ function VisitItem({
   patientId: string;
 }) {
   const { t } = useTranslation("doctor");
-  const { updateVisit, deleteVisit } = useTherapyCourseMutations(patientId);
+  const { deleteVisit } = useTherapyCourseMutations(patientId);
   const planned = formatIsoDate(visit.planned_on) ?? visit.planned_on;
+  const [dateSheet, setDateSheet] = useState<"done" | "move" | null>(null);
 
   return (
     <article className="rounded-xl border border-border p-3">
@@ -343,27 +369,28 @@ function VisitItem({
       )}
       {editable && (
         <div className="mt-2 flex flex-wrap gap-2">
+          {/* «Состоялся» спрашивает дату: визит отмечают и задним числом,
+              после выходных (аудит продукта 12.11.2026). «Перенести» — новая
+              дата вместо удаления и заведения визита заново. */}
           {!visit.completed_on && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={updateVisit.isPending}
-              onClick={() =>
-                updateVisit.mutate(
-                  { visitId: visit.id, body: { completed_on: todayInput() } },
-                  {
-                    onSuccess: () => toast.success(t("course.visits.marked")),
-                    onError: (error) =>
-                      toast.error(
-                        errorMessageOf(error) ?? t("common:errors.unexpected"),
-                      ),
-                  },
-                )
-              }
-            >
-              {t("course.visits.markDone")}
-            </Button>
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setDateSheet("done")}
+              >
+                {t("course.visits.markDone")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setDateSheet("move")}
+              >
+                {t("course.visits.move")}
+              </Button>
+            </>
           )}
           <ConfirmDialog
             trigger={
@@ -386,7 +413,142 @@ function VisitItem({
           />
         </div>
       )}
+      {editable && !visit.completed_on && (
+        <VisitDateSheet
+          mode={dateSheet}
+          onClose={() => setDateSheet(null)}
+          visit={visit}
+          patientId={patientId}
+        />
+      )}
     </article>
+  );
+}
+
+/**
+ * Дата для «Состоялся» и «Перенести» — одна панель на оба действия: поле одно,
+ * различаются заголовок, умолчание и предел.
+ *
+ * «Состоялся» — по умолчанию сегодня, будущая дата не принимается (так же
+ * проверяет сервер). «Перенести» — по умолчанию пусто: новая дата — решение
+ * врача, и подставленная была бы неотличима от выбранной.
+ */
+function VisitDateSheet({
+  mode,
+  onClose,
+  visit,
+  patientId,
+}: {
+  mode: "done" | "move" | null;
+  onClose: () => void;
+  visit: ControlVisit;
+  patientId: string;
+}) {
+  const { t } = useTranslation("doctor");
+  const ids = useId();
+  const { updateVisit } = useTherapyCourseMutations(patientId);
+  const planned = formatIsoDate(visit.planned_on) ?? visit.planned_on;
+  const [value, setValue] = useState("");
+  const [attempts, setAttempts] = useState(0);
+  const [openedFor, setOpenedFor] = useState<typeof mode>(null);
+  const today = todayInput();
+
+  // Умолчание ставится при каждом открытии, а не один раз на монтирование:
+  // строка визита живёт долго, и вчерашнее «сегодня» было бы уже не сегодня.
+  if (mode !== openedFor) {
+    setOpenedFor(mode);
+    setValue(mode === "done" ? today : "");
+    setAttempts(0);
+  }
+
+  const missing = value === "";
+  const inFuture = mode === "done" && value > today;
+  const error =
+    attempts === 0
+      ? undefined
+      : missing
+        ? t("course.errors.date")
+        : inFuture
+          ? t("course.errors.future")
+          : undefined;
+
+  function close() {
+    updateVisit.reset();
+    onClose();
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    setAttempts((count) => count + 1);
+    if (missing || inFuture) return;
+    updateVisit.mutate(
+      {
+        visitId: visit.id,
+        body: mode === "done" ? { completed_on: value } : { planned_on: value },
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            mode === "done"
+              ? t("course.visits.marked")
+              : t("course.visits.moved"),
+          );
+          close();
+        },
+      },
+    );
+  }
+
+  return (
+    <FormSheet
+      closeLabel={t("common:actions.close")}
+      open={mode !== null}
+      onOpenChange={(next) => {
+        if (!next) close();
+      }}
+      title={
+        mode === "move"
+          ? t("course.visits.moveTitle", { date: planned })
+          : t("course.visits.doneTitle", { date: planned })
+      }
+    >
+      <form noValidate className="flex flex-col gap-section" onSubmit={submit}>
+        <FormErrorSummary
+          items={errorSummaryItems(attempts, [[`${ids}-date`, error]])}
+          focusKey={attempts}
+        />
+        <Field
+          id={`${ids}-date`}
+          type="date"
+          width="narrow"
+          label={
+            mode === "move"
+              ? t("course.fields.newDate")
+              : t("course.fields.completedOn")
+          }
+          max={mode === "done" ? today : undefined}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          error={error}
+        />
+        {updateVisit.isError && (
+          <FormError>
+            {errorMessageOf(updateVisit.error) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
+        <FormFooter
+          submitLabel={
+            mode === "move"
+              ? t("course.visits.moveSubmit")
+              : t("course.visits.doneSubmit")
+          }
+          pendingLabel={t("course.visits.addPending")}
+          pending={updateVisit.isPending}
+          onCancel={close}
+          cancelLabel={t("common:actions.cancel")}
+        />
+      </form>
+    </FormSheet>
   );
 }
 

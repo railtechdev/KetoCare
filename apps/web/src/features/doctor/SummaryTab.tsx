@@ -18,12 +18,18 @@ import {
   formatMeasured,
   formatNumber,
   formatWeight,
+  formatDayMonth,
 } from "@ketocare/ui";
-import { CalendarOff, ClipboardList } from "lucide-react";
+import { CalendarOff, ClipboardList, KeyRound } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "./dates";
+import { toDateInput } from "../diary/time";
+import { useReport } from "../reports/useReports";
+import { firstAndLast, periodStart, seizuresByWeek } from "./lastDays";
+import { ACCESS_CODE_ITEM } from "./patientViews";
 import { usePatientOverview } from "../patients/overview";
 import { DayTargetBars } from "../menu/DayTargetBars";
 import { PatientViewLink } from "./PatientViewLink";
@@ -42,6 +48,9 @@ import { queryState } from "../../lib/queryState";
  * ведущие специалисты уехали в раздел «Профиль»: сводку открывают, чтобы
  * увидеть состояние на сегодня, и шесть блоков анамнеза под ней превращали
  * ответ на этот вопрос в пролистывание.
+ *
+ * Под сегодняшним днём — «За 30 дней» (аудит продукта 12.11.2026): приступы,
+ * кетоны, вес и съеденное за месяц. Раньше за этим шли в «Отчёт» и ждали файл.
  */
 export function SummaryTab({ patient }: { patient: Patient }) {
   const { t } = useTranslation("doctor");
@@ -102,6 +111,32 @@ function OverviewPanels({
       asideSticky
       main={
         <>
+          {/* Семья не подключена — одной строкой с действием, а не пометкой
+              без продолжения: код выдаётся в «Профиле и семье», панель
+              открывается сразу (`?item=access-code`). */}
+          {data.family_activated === false && (
+            <div className="flex flex-wrap items-center gap-field rounded-lg border border-border px-3 py-2">
+              <span className="font-medium">
+                {t("summary.family.notConnected")}
+              </span>
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="min-h-touch"
+              >
+                <PatientViewLink
+                  patientId={patientId}
+                  view="profile"
+                  item={ACCESS_CODE_ITEM}
+                >
+                  <KeyRound aria-hidden="true" />
+                  {t("summary.family.issueCode")}
+                </PatientViewLink>
+              </Button>
+            </div>
+          )}
+
           <Section title={t("summary.day.title")}>
             {day === null ? (
               <EmptyState
@@ -230,6 +265,10 @@ function OverviewPanels({
               />
             </MetricRow>
           </Section>
+
+          {/* Месяц — под сегодняшним днём и своим запросом: сегодняшняя
+              сводка не ждёт сборки отчёта за тридцать дней. */}
+          <LastDaysSection patientId={patientId} />
         </>
       }
       aside={
@@ -238,7 +277,6 @@ function OverviewPanels({
             <EmptyState
               icon={ClipboardList}
               title={t("summary.prescription.empty")}
-              description={t("summary.prescription.emptyDescription")}
               action={
                 // Ссылкой, а не кнопкой: раздел живёт по адресу, и переход к
                 // назначению открывается в новой вкладке и пересылается коллеге
@@ -330,4 +368,145 @@ function OverviewPanels({
       }
     />
   );
+}
+
+/**
+ * «За 30 дней»: приступы по неделям, кетоны и вес — крайние и последние
+ * значения, съеденное из меню.
+ *
+ * Числа — из отчёта за тот же период (`/patients/{id}/report`): «Обзор» и
+ * «Отчёт» за одни даты обязаны совпадать, поэтому второй сборки агрегатов
+ * здесь нет. В браузере только раскладка приступов по неделям и выбор первого
+ * и последнего замера — счёт, а не медицинский расчёт.
+ */
+function LastDaysSection({ patientId }: { patientId: string }) {
+  const { t } = useTranslation("doctor");
+  const [to] = useState(() => toDateInput(new Date()));
+  const from = periodStart(to);
+  const report = useReport(patientId, { from, to });
+  const data = report.data;
+
+  return (
+    <Section
+      title={t("summary.month.title")}
+      action={
+        <Button asChild variant="outline" size="sm" className="min-h-touch">
+          <PatientViewLink patientId={patientId} view="reports">
+            {t("summary.month.toReport")}
+          </PatientViewLink>
+        </Button>
+      }
+    >
+      <AsyncSection
+        {...queryState(report)}
+        skeleton={
+          <LinesSkeleton label={t("summary.month.loading")} lines={3} />
+        }
+        error={
+          report.isError
+            ? {
+                title: t("summary.month.loadError"),
+                description:
+                  errorMessageOf(report.error) ?? t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void report.refetch()}
+        isEmpty={data === undefined}
+        empty={null}
+      >
+        {data !== undefined && (
+          <MetricRow label={t("summary.month.title")}>
+            <Metric
+              label={t("summary.month.seizures")}
+              value={t("summary.month.seizuresTotal", {
+                count: data.seizures.count,
+              })}
+              hint={
+                data.seizures.count > 0 && (
+                  <ul className="m-0 flex list-none flex-col p-0">
+                    {seizuresByWeek(data.seizures.by_day, to).map((week) => (
+                      <li key={week.from}>
+                        {t("summary.month.week", {
+                          from: formatDayMonth(isoToLocal(week.from)),
+                          to: formatDayMonth(isoToLocal(week.to)),
+                          count: week.count,
+                        })}
+                      </li>
+                    ))}
+                  </ul>
+                )
+              }
+            />
+            <Metric
+              label={t("summary.month.ketones")}
+              value={
+                data.ketones.min === null || data.ketones.max === null
+                  ? t("summary.month.noReadings")
+                  : t("summary.month.ketoneRange", {
+                      min: formatMeasured(data.ketones.min),
+                      max: formatMeasured(data.ketones.max),
+                    })
+              }
+              hint={(() => {
+                const ends = firstAndLast(data.ketones.points);
+                return ends === null
+                  ? undefined
+                  : t("summary.month.ketoneLast", {
+                      value: formatMeasured(ends.last.value),
+                      at: formatOccurredAt(new Date(ends.last.at)),
+                    });
+              })()}
+            />
+            <Metric
+              label={t("summary.month.weight")}
+              value={(() => {
+                const ends = firstAndLast(data.weight.points);
+                if (ends === null) return t("summary.month.noReadings");
+                return ends.first === ends.last
+                  ? t("summary.month.weightOne", {
+                      value: formatWeight(ends.last.value),
+                    })
+                  : t("summary.month.weightChange", {
+                      first: formatWeight(ends.first.value),
+                      last: formatWeight(ends.last.value),
+                    });
+              })()}
+              hint={(() => {
+                const ends = firstAndLast(data.weight.points);
+                return ends === null
+                  ? undefined
+                  : t("summary.month.weightDates", {
+                      first: formatDayMonth(new Date(ends.first.at)),
+                      last: formatDayMonth(new Date(ends.last.at)),
+                    });
+              })()}
+            />
+            <Metric
+              label={t("summary.month.menu")}
+              value={
+                data.menu.items_planned === 0
+                  ? t("summary.month.noMenu")
+                  : t("summary.month.eaten", {
+                      eaten: data.menu.items_eaten,
+                      count: data.menu.items_planned,
+                    })
+              }
+            />
+          </MetricRow>
+        )}
+      </AsyncSection>
+    </Section>
+  );
+}
+
+/** `YYYY-MM-DD` → местная полночь того же дня, для подписи без сдвига суток. */
+function isoToLocal(iso: string): Date {
+  const [year, month, day] = iso.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return new Date(year, month - 1, day);
 }

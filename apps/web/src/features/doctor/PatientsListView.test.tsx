@@ -335,4 +335,67 @@ describe("поиск и отбор реестра — в адресе", () => {
     );
     await waitFor(() => expect(currentAddress().therapy).toBeUndefined());
   });
+
+  it("быстрый отбор живёт в адресе: «Семья подключена» и обратно ко всем", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(
+      await screen.findByRole("radio", {
+        name: doctorRu.list.quickFilters.family,
+      }),
+    );
+    await waitFor(() => expect(currentAddress().show).toBe("family"));
+
+    await user.click(
+      screen.getByRole("radio", { name: doctorRu.list.quickFilters.all }),
+    );
+    await waitFor(() => expect(currentAddress().show).toBeUndefined());
+  });
+
+  it("пустой отбор говорит об этом и возвращает всех одним нажатием", async () => {
+    const user = userEvent.setup();
+    // У обоих пациентов замечаний нет только если сводки спокойные; здесь
+    // молчащий есть, поэтому пустым делает отбор «Семья подключена» без семей.
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/patients") {
+        const items = PATIENTS.map((patient) => ({
+          ...patient,
+          family_activated: false,
+        }));
+        return Promise.resolve({ data: { items, total: items.length } });
+      }
+      if (path === "/api/v1/patients/{patient_id}/overview") {
+        return Promise.resolve({ data: FRESH_OVERVIEW });
+      }
+      return Promise.resolve({ data: { items: [], total: 0 } });
+    });
+    renderList({ show: "family" });
+
+    expect(
+      await screen.findByText(doctorRu.list.emptyFilter),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: doctorRu.list.showAll }),
+    );
+    await waitFor(() => expect(currentAddress().show).toBeUndefined());
+    expect(await screen.findByText("Иван Петров")).toBeInTheDocument();
+  });
+
+  it("без пациентов действие «Новый пациент» стоит и в пустом состоянии", async () => {
+    const user = userEvent.setup();
+    (api.GET as Mock).mockImplementation(() =>
+      Promise.resolve({ data: { items: [], total: 0 } }),
+    );
+    renderList();
+
+    expect(await screen.findByText(doctorRu.list.empty)).toBeInTheDocument();
+    const actions = screen.getAllByRole("button", {
+      name: doctorRu.list.createAction,
+    });
+    // Одна — в шапке, вторая — в пустом состоянии.
+    expect(actions).toHaveLength(2);
+    await user.click(actions[1] as HTMLElement);
+    await waitFor(() => expect(currentAddress().item).toBe("new"));
+  });
 });

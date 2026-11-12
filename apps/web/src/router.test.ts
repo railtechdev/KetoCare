@@ -76,6 +76,13 @@ describe("адреса кабинета", () => {
     it("чужой роли раздел уводит на её первый, а не в 404", async () => {
       expect(await resolve("/app/users", "parent")).toBe("/app/home");
     });
+
+    it("у специалиста главной нет: старая ссылка ведёт в реестр пациентов", async () => {
+      // Главная врача стояла вне меню и была недостижима (аудит продукта
+      // 12.11.2026); закладка на неё открывает рабочий раздел, а не 404.
+      expect(await resolve("/app/home", "doctor")).toBe("/app/patients");
+      expect(await resolve("/app/home", "dietitian")).toBe("/app/patients");
+    });
   });
 
   describe("карта пациента", () => {

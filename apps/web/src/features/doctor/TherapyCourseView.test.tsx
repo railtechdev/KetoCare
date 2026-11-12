@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -9,7 +9,8 @@ import { api } from "../../lib/api";
 import doctorRu from "../../locales/ru/doctor.json";
 import { GrowthView } from "./GrowthView";
 import { TherapyCourseView } from "./TherapyCourseView";
-import { nativeSelect } from "../../test/nativeSelect";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
+import { PatientRouter } from "../../test/PatientRouter";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -38,7 +39,12 @@ function wrapper() {
   });
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        {/* Роутер нужен ссылкам на разделы карты («Указать в профиле»). */}
+        <PatientRouter patientId={PATIENT_ID} view="course">
+          {children}
+        </PatientRouter>
+      </QueryClientProvider>
     );
   };
 }
@@ -184,6 +190,126 @@ describe("ход терапии (вопросы 17, 18, 34)", () => {
     expect(
       screen.queryByRole("button", { name: doctorRu.course.visits.markDone }),
     ).toBeNull();
+    // Просрочку диетолог видит, а отметить не может — экран говорит, кто может.
+    expect(
+      screen.getByText(doctorRu.course.visits.doctorMarks),
+    ).toBeInTheDocument();
+  });
+
+  const OPEN_VISIT = {
+    id: "v1",
+    patient_id: PATIENT_ID,
+    planned_on: "2026-07-31",
+    month_offset: 6,
+    completed_on: null,
+    note: null,
+    purpose: null,
+    labs: [],
+    overdue: true,
+  };
+
+  function todayIso(): string {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${now.getFullYear()}-${month}-${day}`;
+  }
+
+  it("«Состоялся» спрашивает дату: по умолчанию сегодня, будущая не принимается", async () => {
+    visits = [OPEN_VISIT];
+    (api.PATCH as Mock).mockResolvedValue({ data: OPEN_VISIT });
+    const user = userEvent.setup();
+    render(<TherapyCourseView patientId={PATIENT_ID} editable />, {
+      wrapper: wrapper(),
+    });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: doctorRu.course.visits.markDone,
+      }),
+    );
+    const field = (await screen.findByLabelText(
+      doctorRu.course.fields.completedOn,
+    )) as HTMLInputElement;
+    expect(valueControl(field)).toHaveValue(todayIso());
+
+    // Будущая дата — отказ формы, запрос не уходит.
+    const next = new Date();
+    next.setDate(next.getDate() + 2);
+    const future = `${String(next.getDate()).padStart(2, "0")}.${String(next.getMonth() + 1).padStart(2, "0")}.${next.getFullYear()}`;
+    fireEvent.change(field, { target: { value: future } });
+    await user.click(
+      screen.getByRole("button", { name: doctorRu.course.visits.doneSubmit }),
+    );
+    expect(
+      await screen.findAllByText(doctorRu.course.errors.future),
+    ).toHaveLength(2);
+    expect(api.PATCH).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: "03.08.2026" } });
+    await user.click(
+      screen.getByRole("button", { name: doctorRu.course.visits.doneSubmit }),
+    );
+    await waitFor(() => expect(api.PATCH).toHaveBeenCalledTimes(1));
+    const [, options] = (api.PATCH as Mock).mock.calls[0] as [
+      string,
+      { body: Record<string, unknown> },
+    ];
+    expect(options.body).toEqual({ completed_on: "2026-08-03" });
+  });
+
+  it("«Перенести» отправляет новую дату визита", async () => {
+    visits = [OPEN_VISIT];
+    (api.PATCH as Mock).mockResolvedValue({ data: OPEN_VISIT });
+    const user = userEvent.setup();
+    render(<TherapyCourseView patientId={PATIENT_ID} editable />, {
+      wrapper: wrapper(),
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: doctorRu.course.visits.move }),
+    );
+    const field = (await screen.findByLabelText(
+      doctorRu.course.fields.newDate,
+    )) as HTMLInputElement;
+    // Новая дата — решение врача: поле пустое, а не подставленное.
+    expect(valueControl(field)).toHaveValue("");
+    fireEvent.change(field, { target: { value: "15.12.2026" } });
+    await user.click(
+      screen.getByRole("button", { name: doctorRu.course.visits.moveSubmit }),
+    );
+    await waitFor(() => expect(api.PATCH).toHaveBeenCalledTimes(1));
+    const [, options] = (api.PATCH as Mock).mock.calls[0] as [
+      string,
+      { body: Record<string, unknown> },
+    ];
+    expect(options.body).toEqual({ planned_on: "2026-12-15" });
+  });
+
+  it("без даты начала подсказка ведёт в профиль ссылкой", async () => {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/control-schedule")) {
+        return Promise.resolve({
+          data: {
+            visits: [],
+            therapy_started_on: null,
+            weekly_labs: [],
+            periodic_labs: [],
+          },
+        });
+      }
+      return Promise.resolve({ data: profile });
+    });
+    render(<TherapyCourseView patientId={PATIENT_ID} editable />, {
+      wrapper: wrapper(),
+    });
+
+    const link = await screen.findByRole("link", {
+      name: doctorRu.course.visits.noStartLink,
+    });
+    expect(link.getAttribute("href")).toBe(
+      `/app/patients/${PATIENT_ID}/profile`,
+    );
   });
 
   it("график строится кнопкой, когда дата начала известна", async () => {

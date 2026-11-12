@@ -170,10 +170,12 @@ export function PrescriptionForm({
         focusKey={submitCount}
       />
 
-      {/* Две колонки — исключение для парных числовых показателей назначения:
-          врач сверяет их между собой на одном экране. На узком экране колонка
-          одна (правило П6 канона). */}
-      <div className="grid gap-section @sm:grid-cols-2 @md:grid-cols-3">
+      {/* Несколько колонок — исключение для парных числовых показателей
+          назначения: врач сверяет их между собой на одном экране. Форма во всю
+          ширину раздела, поэтому на широком экране в ряд четыре поля и вся
+          форма с кнопкой «Сохранить» помещается в окно 1440 × 900. На узком
+          экране колонка одна (правило П6 канона). */}
+      <div className="grid gap-section @sm:grid-cols-2 @3xl:grid-cols-4">
         {/* Список, а не свободное число: врач мыслит «4 : 1», а поле
             показывало «4». Значения те же, что уже разрешены схемой (шаг 0,5
             от 1 до 5), новых состояний не появляется — меняется только способ
@@ -209,29 +211,6 @@ export function PrescriptionForm({
           error={errors.kcalPerDay && t("prescription.errors.kcal")}
           {...register("kcalPerDay", { valueAsNumber: true })}
         />
-        {kcalHint?.((kcal, proteinG, fluidMl) => {
-          setValue("kcalPerDay", kcal, {
-            shouldDirty: true,
-            shouldValidate: true,
-          });
-          // Белок идёт за калорийностью, как в KDC: 1 г на кг веса.
-          if (hintMayFill(getValues("proteinG"), proteinFromHint)) {
-            setValue("proteinG", proteinG, {
-              shouldDirty: true,
-              shouldValidate: true,
-            });
-            setProteinFromHint(proteinG);
-          }
-          // Жидкость — тоже по весу (Холлидей — Сегар, ADR-0069).
-          if (hintMayFill(getValues("fluidMlPerDay"), fluidFromHint)) {
-            setValue("fluidMlPerDay", fluidMl, {
-              shouldDirty: true,
-              shouldValidate: true,
-            });
-            setFluidFromHint(fluidMl);
-          }
-        })}
-
         <Field
           id={`${ids}-protein`}
           width="narrow"
@@ -264,6 +243,35 @@ export function PrescriptionForm({
             onChange: () => setCarbsByHand(true),
           })}
         />
+
+        {/* Подсказка калорийности — своей строкой во всю ширину под первым
+            рядом, а не ячейкой сетки: ячейкой она сдвигала соседние поля и
+            разрывала ряд показателей (аудит продукта 12.11.2026). Пустая —
+            не занимает места. */}
+        <div className="col-span-full empty:hidden">
+          {kcalHint?.((kcal, proteinG, fluidMl) => {
+            setValue("kcalPerDay", kcal, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+            // Белок идёт за калорийностью, как в KDC: 1 г на кг веса.
+            if (hintMayFill(getValues("proteinG"), proteinFromHint)) {
+              setValue("proteinG", proteinG, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+              setProteinFromHint(proteinG);
+            }
+            // Жидкость — тоже по весу (Холлидей — Сегар, ADR-0069).
+            if (hintMayFill(getValues("fluidMlPerDay"), fluidFromHint)) {
+              setValue("fluidMlPerDay", fluidMl, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+              setFluidFromHint(fluidMl);
+            }
+          })}
+        </div>
 
         <Field
           id={`${ids}-meals`}
@@ -308,23 +316,27 @@ export function PrescriptionForm({
         />
       </div>
 
-      <PrescriptionGoalPreview
-        input={{
-          ratio: watch("ratio"),
-          kcalPerDay: watch("kcalPerDay"),
-          proteinG: watch("proteinG"),
-          mealsPerDay: watch("mealsPerDay"),
-        }}
-      />
+      {/* Граммы цели и ограничения — рядом: оба блока узкие, и столбиком
+          они добавляли форме полэкрана. */}
+      <div className="grid items-start gap-section @3xl:grid-cols-2">
+        <PrescriptionGoalPreview
+          input={{
+            ratio: watch("ratio"),
+            kcalPerDay: watch("kcalPerDay"),
+            proteinG: watch("proteinG"),
+            mealsPerDay: watch("mealsPerDay"),
+          }}
+        />
 
-      <TextAreaField
-        id={`${ids}-restrictions`}
-        rows={2}
-        optional
-        label={t("fields.restrictions")}
-        placeholder={t("prescription.restrictionsPlaceholder")}
-        {...register("restrictions")}
-      />
+        <TextAreaField
+          id={`${ids}-restrictions`}
+          rows={2}
+          optional
+          label={t("fields.restrictions")}
+          placeholder={t("prescription.restrictionsPlaceholder")}
+          {...register("restrictions")}
+        />
+      </div>
 
       {error !== null && error !== undefined && (
         <FormError>

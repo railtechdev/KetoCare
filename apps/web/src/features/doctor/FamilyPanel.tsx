@@ -60,14 +60,31 @@ import { queryState } from "../../lib/queryState";
  * устройство писало в дневник ребёнка. Снимает доступ врач: он ведёт ребёнка и
  * отвечает за то, кто видит его данные. Право в API у него было и до экрана.
  */
-export function FamilyPanel({ patientId }: { patientId: string }) {
+export function FamilyPanel({
+  patientId,
+  accessOpen,
+  onAccessOpenChange,
+}: {
+  patientId: string;
+  /**
+   * Панель кода, управляемая снаружи. Карта пациента держит её в адресе
+   * (`?item=access-code`): на неё ведут «Выдать код семье» после первого
+   * назначения и строка «Семья ещё не подключена» в «Обзоре». Без пропа
+   * панель живёт в состоянии блока — так у родителя в разделе «Ребёнок», где
+   * `?item=` уже занят выбранным ребёнком.
+   */
+  accessOpen?: boolean;
+  onAccessOpenChange?: (open: boolean) => void;
+}) {
   const { t } = useTranslation("doctor");
   const { session } = useSession();
   const family = useFamily(patientId);
   const links = useTelegramLinks(patientId);
   const revoke = useRevokeLinkMutation(patientId);
   const remove = useRemoveFamilyMember(patientId);
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const inviteOpen = accessOpen ?? localOpen;
+  const setInviteOpen = onAccessOpenChange ?? setLocalOpen;
 
   const isSpecialist = isCareRole(session?.role);
   const isParent = session?.role === "parent";
@@ -263,6 +280,8 @@ export function FamilyPanel({ patientId }: { patientId: string }) {
           title={t(`family.${voice}.grantAccessTitle`)}
           description={t(`family.${voice}.grantAccessIntro`)}
         >
+          {/* Содержимое панели монтируется при открытии (Radix) и выпускает
+              код сразу — второй кнопки «Дать доступ семье» в панели нет. */}
           <AccessCodePanel patientId={patientId} audience={voice} />
         </FormSheet>
       )}

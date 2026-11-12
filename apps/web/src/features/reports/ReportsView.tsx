@@ -16,6 +16,8 @@ import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { DoctorSummaryPanel } from "./DoctorSummaryPanel";
+import { ReportSheet } from "./ReportSheet";
+import { PrintButton } from "../../components/PrintButton";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { toDateInput } from "../diary/time";
@@ -154,26 +156,39 @@ export function ReportsView({ patientId }: { patientId: string }) {
            открывается вкладкой карты пациента, и шапка там принадлежит карте
            (правило П31 канона). */
         action={
-          <Button
-            type="button"
-            disabled={invalidRange || requestPdf.isPending}
-            onClick={() =>
-              requestPdf.mutate(range, {
-                onSuccess: (created) => {
-                  setJobId(created.id);
-                  setRequestedAt(Date.now());
-                  toast.success(t("pdf.queued"));
-                },
-                onError: (error) =>
-                  toast.error(
-                    errorMessageOf(error) ?? t("common:errors.unexpected"),
-                  ),
-              })
-            }
-          >
-            <FileText aria-hidden="true" />
-            {t("pdf.request")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-field">
+            {/* Печать со страницы — то, что уже на экране, без ожидания
+                сборки файла (аудит продукта 12.11.2026). PDF — для файла,
+                который уносят или пересылают. */}
+            <PrintButton
+              label={t("print.button")}
+              disabled={invalidRange || report.data === undefined}
+            >
+              {report.data !== undefined && (
+                <ReportSheet report={report.data} />
+              )}
+            </PrintButton>
+            <Button
+              type="button"
+              disabled={invalidRange || requestPdf.isPending}
+              onClick={() =>
+                requestPdf.mutate(range, {
+                  onSuccess: (created) => {
+                    setJobId(created.id);
+                    setRequestedAt(Date.now());
+                    toast.success(t("pdf.queued"));
+                  },
+                  onError: (error) =>
+                    toast.error(
+                      errorMessageOf(error) ?? t("common:errors.unexpected"),
+                    ),
+                })
+              }
+            >
+              <FileText aria-hidden="true" />
+              {t("pdf.request")}
+            </Button>
+          </div>
         }
       >
         <FilterBar label={t("period.legend")}>

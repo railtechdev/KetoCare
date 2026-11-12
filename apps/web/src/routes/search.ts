@@ -95,6 +95,12 @@ const PERIODS: readonly PeriodSearch[] = ["week", "month", "custom"];
 export interface FilterSearch {
   /** Реестр пациентов: `active` (умолчание, в адресе не пишется) или `ended` */
   therapy?: "ended";
+  /**
+   * Реестр пациентов: быстрый отбор — «требуют внимания» или «семья
+   * подключена»; без параметра — все. В адресе, чтобы врач, вернувшийся из
+   * карты, застал список тем же (правило П1).
+   */
+  show?: "attention" | "family";
   /** Категория продукта (идентификатор) или рецепта (код) */
   category?: string;
   /** Справочник продуктов: стандарт питания; без параметра — основной */
@@ -171,6 +177,9 @@ function validateFilters(search: Record<string, unknown>): FilterSearch {
   // Ключи с `undefined` — по той же причине, что в `validateViewState`.
   return {
     therapy: search.therapy === "ended" ? ("ended" as const) : undefined,
+    show: (["attention", "family"] as const).find(
+      (value) => value === search.show,
+    ),
     category: matching(search.category, /^[\w-]{1,64}$/),
     standard: matching(search.standard, UUID),
     sources: matching(search.sources, UUID_LIST),
