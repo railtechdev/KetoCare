@@ -1,5 +1,5 @@
 import type { components } from "@ketocare/api-client";
-import { formatMass } from "@ketocare/ui";
+import { formatMass, formatPerGram } from "@ketocare/ui";
 import type { TFunction } from "i18next";
 
 export type ProductAnomaly = components["schemas"]["ProductAnomalyRead"];
@@ -15,14 +15,26 @@ export type ProductAnomaly = components["schemas"]["ProductAnomalyRead"];
 export function anomalyDetail(
   t: TFunction<"admin">,
   item: Pick<ProductAnomaly, "kind" | "values"> & { field?: string },
+  options: {
+    /**
+     * Числа на 1 г — в карточке продукта, где и поля на 1 г (ADR-0065,
+     * ADR-0072). Сервер считает и отдаёт на 100 г; список подозрительных и
+     * отчёт загрузки читают так же, как источник.
+     */
+    perGram?: boolean;
+  } = {},
 ): string {
   // Числа — русской записью и с той точностью, что пришла (П45). Округлять
   // до целых нельзя даже калорийность: находка «расхождение больше 5 ккал»
   // при «заявлено 520, выходит 525» читалась бы как спор с самой собой.
   const values = Object.fromEntries(
-    Object.entries(item.values).map(([key, value]) => [key, formatMass(value)]),
+    Object.entries(item.values).map(([key, value]) => [
+      key,
+      options.perGram ? formatPerGram(value) : formatMass(value),
+    ]),
   );
-  return t(`products.anomalies.detail.${item.kind}`, {
+  const branch = options.perGram ? "detailPerGram" : "detail";
+  return t(`products.anomalies.${branch}.${item.kind}`, {
     ...values,
     field: item.field
       ? t(`products.anomalies.field.${item.field}`, {

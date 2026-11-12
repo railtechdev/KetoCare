@@ -10,6 +10,10 @@ import {
   Section,
   Switch,
   toast,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
   useDebouncedValue,
   WarningBanner,
 } from "@ketocare/ui";
@@ -29,6 +33,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { formatIsoDate } from "../doctor/dates";
+import { shortSourceName } from "../products/sourceName";
 import { useProductDetail } from "../products/useProductDetail";
 import {
   DEFAULT_FOOD_STANDARD_ID,
@@ -264,21 +269,34 @@ export function ProductsPanel({
       {
         accessorKey: "verified_at",
         header: t("products.columns.source"),
+        // Короткое имя источника, а полное — с изданием и датой сверки — во
+        // всплывающей подсказке. Обрезанное посреди слова «USDA FoodData C…»
+        // не называло ни источник, ни издание.
         cell: ({ row }) => {
           const verified =
             formatIsoDate(row.original.verified_at) ?? row.original.verified_at;
+          const full = [
+            row.original.source,
+            row.original.source_version,
+            t("products.columns.verifiedOn", { date: verified }),
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return (
-            <span
-              className="flex flex-col leading-tight"
-              title={`${t("products.columns.source")}: ${row.original.source} · ${t("products.columns.sourceVersion")}: ${row.original.source_version} · ${t("products.columns.verifiedAt")}: ${verified}`}
-            >
-              <span className="max-w-32 truncate">{row.original.source}</span>
-              <span className="max-w-32 truncate text-xs text-muted-foreground tabular-nums">
-                {[row.original.source_version, verified]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  // Подсказка открывается и с клавиатуры: в ячейке нет
+                  // другого способа прочитать полное имя.
+                  tabIndex={0}
+                  className="block max-w-40 whitespace-normal leading-snug"
+                >
+                  {shortSourceName(row.original.source) || "—"}
+                  <span className="sr-only">{` (${full})`}</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">{full}</TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -332,11 +350,16 @@ export function ProductsPanel({
   // Проверка и по адресу тоже: `?item=import` вводится руками, и без неё
   // диетолог попал бы на экран, чья ручка ответит ему 403.
   if (item === IMPORT_ITEM && canImport) {
+    // Цель загрузки выбирается из перечня источников: без него поле
+    // показало бы один основной и тем самым подсказало бы не ту цель.
+    if (standards.isPending) {
+      return <TableSkeleton label={t("products.loading")} rows={4} />;
+    }
     return (
       <ProductImportPanel
         onDone={() => setItem(undefined)}
-        standardId={filters.standardId || undefined}
-        standardName={currentStandard?.name}
+        standards={standardList}
+        initialStandardId={filters.standardId || undefined}
       />
     );
   }
@@ -690,28 +713,30 @@ export function ProductsPanel({
           />
         }
       >
-        <DataTable
-          columns={columns}
-          data={rows}
-          caption={t("products.table.caption")}
-          emptyState={null}
-          footerMeta={
-            products.data !== undefined
-              ? t("table.found", { total: products.data.total })
-              : undefined
-          }
-          labels={{
-            previousPage: t("table.previousPage"),
-            nextPage: t("table.nextPage"),
-            pageStatus: (shown, total) =>
-              t("table.pageStatus", { page: shown, total }),
-          }}
-          serverPagination={{
-            pageIndex: page,
-            pageCount,
-            onPageChange: setPage,
-          }}
-        />
+        <TooltipProvider>
+          <DataTable
+            columns={columns}
+            data={rows}
+            caption={t("products.table.caption")}
+            emptyState={null}
+            footerMeta={
+              products.data !== undefined
+                ? t("table.found", { total: products.data.total })
+                : undefined
+            }
+            labels={{
+              previousPage: t("table.previousPage"),
+              nextPage: t("table.nextPage"),
+              pageStatus: (shown, total) =>
+                t("table.pageStatus", { page: shown, total }),
+            }}
+            serverPagination={{
+              pageIndex: page,
+              pageCount,
+              onPageChange: setPage,
+            }}
+          />
+        </TooltipProvider>
       </AsyncSection>
     </div>
   );

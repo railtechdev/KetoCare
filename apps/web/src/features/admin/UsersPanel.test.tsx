@@ -8,7 +8,10 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import adminRu from "../../locales/ru/admin.json";
 import { UsersPanel } from "./UsersPanel";
+import { currentAddress } from "../../test/address";
 import { nativeSelect } from "../../test/nativeSelect";
+import { SectionRouter } from "../../test/SectionRouter";
+import type { SectionSearch } from "../../routes/search";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -38,13 +41,19 @@ const USERS = {
   total: 1,
 };
 
-function renderPanel() {
+function renderPanel(search: SectionSearch = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  // Вид и отбор живут в адресе (ADR-0072), поэтому экрану нужен роутер — как
+  // и в работающем приложении.
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <SectionRouter section="users" search={search}>
+          {children}
+        </SectionRouter>
+      </QueryClientProvider>
     );
   }
   return render(<UsersPanel />, { wrapper: Wrapper });
@@ -112,6 +121,71 @@ describe("учётные записи", () => {
     expect(
       screen.getAllByRole("button", { name: "Сбросить фильтры" }).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("адрес и приглашения (ADR-0072)", () => {
+  it("отбор по роли живёт в адресе и переживает F5", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await screen.findByText("Ольга Диетолог");
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText("Роль")),
+      "doctor",
+    );
+
+    await waitFor(() =>
+      expect(currentAddress()).toMatchObject({ role: "doctor" }),
+    );
+  });
+
+  it("открытый по ссылке отбор применяется сразу", async () => {
+    renderPanel({ q: "ольга", role: "dietitian" });
+
+    await waitFor(() => {
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/admin/users",
+        expect.objectContaining({
+          params: expect.objectContaining({
+            query: expect.objectContaining({ q: "ольга", role: "dietitian" }),
+          }),
+        }),
+      );
+    });
+    expect(screen.getByLabelText(/Поиск по имени/)).toHaveValue("ольга");
+  });
+
+  it("«Все приглашения» с главной открывают список приглашений", async () => {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      Promise.resolve({
+        data:
+          path === "/api/v1/auth/invitations"
+            ? {
+                items: [
+                  {
+                    id: "inv-1",
+                    email: "new.doctor@example.com",
+                    role: "doctor",
+                    status: "pending",
+                    expires_at: "2026-11-20T10:00:00Z",
+                    created_at: "2026-11-13T10:00:00Z",
+                    invited_by_name: "Алексей Смирнов",
+                    patient_id: null,
+                  },
+                ],
+                total: 1,
+              }
+            : USERS,
+      }),
+    );
+    renderPanel({ tab: "invitations" });
+
+    expect(
+      await screen.findByText("new.doctor@example.com"),
+    ).toBeInTheDocument();
+    // Таблица учётных записей на этой вкладке не стоит.
+    expect(screen.queryByText("Ольга Диетолог")).toBeNull();
   });
 });
 

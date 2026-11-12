@@ -79,7 +79,13 @@ describe("карточка продукта: проверка значений �
     expect(
       await screen.findByText(adminRu.products.form.checkTitle),
     ).toBeInTheDocument();
-    expect(screen.getByText(/заявлено 717 ккал/)).toBeInTheDocument();
+    // В единице полей — на 1 г (ADR-0072): «717» под полями «в 1 г» не
+    // совпадало ни с одним набранным числом.
+    expect(
+      screen.getByText(
+        /указано 7,17 ккал в 1 г, а по жирам, белкам и углеводам — 7,34/,
+      ),
+    ).toBeInTheDocument();
     expect(api.POST).toHaveBeenCalledWith("/api/v1/products/check", {
       body: {
         kcal_100g: 717,
@@ -152,8 +158,14 @@ describe("карточка продукта: контроль калорийно
       screen.getByText(adminRu.products.form.atwaterTitle),
     ).toBeInTheDocument();
 
+    // Те же числа, что в полях, — на 1 г.
+    expect(
+      screen.getByText(
+        "По жирам, белкам и углеводам выходит 3,4 ккал в 1 г, указано 1.",
+      ),
+    ).toBeInTheDocument();
     const substituteButton = screen.getByRole("button", {
-      name: /340/,
+      name: /3,4 ккал в 1 г/,
     });
     expect(substituteButton).toBeInTheDocument();
 
@@ -233,5 +245,49 @@ describe("карточка продукта: прочерк источника (
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0]?.[0].confirmed.carbs).toBe(true);
+  });
+});
+
+describe("карточка продукта: единица полей — 1 г (ADR-0072)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.POST as Mock).mockResolvedValue({ data: [] });
+  });
+
+  it("под полем стоит то же число на 100 г", () => {
+    renderForm({
+      kcal: 7.17,
+      fat: 0.811,
+      protein: 0.009,
+      carbs: 0.001,
+      fiber: 0,
+    });
+
+    expect(
+      screen.getByLabelText(adminRu.products.form.fat),
+    ).toHaveAccessibleDescription("= 81,1 г на 100 г");
+    expect(
+      screen.getByLabelText(adminRu.products.form.kcal),
+    ).toHaveAccessibleDescription("= 717 ккал на 100 г");
+  });
+
+  it("«82» в поле «Жиры в 1 г» ловится и подсказывает число на 1 г", async () => {
+    renderForm({
+      kcal: 7.17,
+      fat: 0.811,
+      protein: 0.009,
+      carbs: 0.001,
+      fiber: 0,
+    });
+
+    const fat = screen.getByLabelText(adminRu.products.form.fat);
+    fireEvent.change(fat, { target: { value: "82" } });
+    fireEvent.blur(fat);
+
+    expect(
+      await screen.findByText(
+        "В 1 г — не больше 1 г. Если число взято на 100 г, в 1 г это 0,82.",
+      ),
+    ).toBeInTheDocument();
   });
 });

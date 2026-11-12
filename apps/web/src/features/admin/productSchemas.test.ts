@@ -14,10 +14,11 @@ const VALID: ProductFormValues = {
   nameUz: "",
   nameEn: " Butter ",
   categoryId: "6f1e5c34-9b7a-4c2d-8f10-2a3b4c5d6e7f",
-  kcal: 717,
-  fat: 81.1,
-  protein: 0.85,
-  carbs: 0.06,
+  // На 1 г, как вводит диетолог (ADR-0065): 717 ккал и 81,1 г на 100 г.
+  kcal: 7.17,
+  fat: 0.811,
+  protein: 0.0085,
+  carbs: 0.0006,
   fiber: 0,
   source: " USDA ",
   sourceVersion: " SR Legacy 2018 ",
@@ -79,6 +80,31 @@ describe("productFormSchema", () => {
   it("не пропускает отрицательную пищевую ценность", () => {
     expect(productFormSchema.safeParse({ ...VALID, fat: -1 }).success).toBe(
       false,
+    );
+  });
+
+  it.each(["fat", "protein", "carbs", "fiber"] as const)(
+    "не пропускает %s больше 1 г в 1 г — это число на 100 г (ADR-0072)",
+    (field) => {
+      const result = productFormSchema.safeParse({ ...VALID, [field]: 82 });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.code).toBe("too_big");
+    },
+  );
+
+  it("пропускает ровно 1 г в 1 г — масло без примесей", () => {
+    expect(
+      productFormSchema.safeParse({ ...VALID, fat: 1, protein: 0, carbs: 0 })
+        .success,
+    ).toBe(true);
+  });
+
+  it("не пропускает калорийность 1 г больше 10 ккал", () => {
+    expect(productFormSchema.safeParse({ ...VALID, kcal: 717 }).success).toBe(
+      false,
+    );
+    expect(productFormSchema.safeParse({ ...VALID, kcal: 9 }).success).toBe(
+      true,
     );
   });
 

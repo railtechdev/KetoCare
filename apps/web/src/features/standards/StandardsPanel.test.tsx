@@ -1,3 +1,4 @@
+import { Toaster } from "@ketocare/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -58,7 +59,10 @@ function renderPanel(onOpen = vi.fn()) {
   });
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        {children}
+        <Toaster />
+      </QueryClientProvider>
     );
   }
   render(<StandardsPanel onOpen={onOpen} />, { wrapper: Wrapper });
@@ -133,6 +137,75 @@ describe("стандарты питания", () => {
         name: `${labels.actions.retire}: ${MAIN.name}`,
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("в архив — только после подтверждения, и об успехе сказано", async () => {
+    // Источник пропадает из выбора у всех: одно случайное нажатие в строке
+    // таблицы прежде делало это молча (ADR-0072).
+    const user = userEvent.setup();
+    (api.PUT as Mock).mockResolvedValue({
+      data: { ...DOCUMENT, is_active: false },
+    });
+    renderPanel();
+    await screen.findByText(DOCUMENT.name);
+
+    await user.click(
+      within(rowOf(DOCUMENT.name)).getByRole("button", {
+        name: `${labels.actions.retire}: ${DOCUMENT.name}`,
+      }),
+    );
+    expect(api.PUT).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).getByText(
+        labels.confirmRetire.title.replace("{{name}}", DOCUMENT.name),
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: labels.confirmRetire.confirm,
+      }),
+    );
+    await waitFor(() =>
+      expect(api.PUT).toHaveBeenCalledWith(
+        "/api/v1/food-standards/{standard_id}",
+        expect.objectContaining({
+          body: expect.objectContaining({ is_active: false }),
+        }),
+      ),
+    );
+    expect(
+      await screen.findByText(
+        labels.retired.replace("{{name}}", DOCUMENT.name),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("вернуть из архива можно без вопроса", async () => {
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({
+      data: [MAIN, { ...DOCUMENT, is_active: false }],
+    });
+    (api.PUT as Mock).mockResolvedValue({ data: DOCUMENT });
+    renderPanel();
+    await screen.findByText(DOCUMENT.name);
+
+    await user.click(
+      within(rowOf(DOCUMENT.name)).getByRole("button", {
+        name: `${labels.actions.restore}: ${DOCUMENT.name}`,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(api.PUT).toHaveBeenCalledWith(
+        "/api/v1/food-standards/{standard_id}",
+        expect.objectContaining({
+          body: expect.objectContaining({ is_active: true }),
+        }),
+      ),
+    );
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
   it("у закрытого стандарта нет правки описания", async () => {

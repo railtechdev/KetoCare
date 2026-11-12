@@ -333,3 +333,35 @@ class TestProductAnomalies:
         response = await client.get("/api/v1/products/anomalies", headers=auth_headers(parent))
 
         assert response.status_code == 403
+
+    @pytest.mark.parametrize("role", [UserRole.DIETITIAN, UserRole.DOCTOR])
+    async def test_catalogue_editors_read_the_anomalies(
+        self, client, session, make_user, auth_headers, role
+    ):
+        """Проверку видят те, кто ведёт справочник (ADR-0072).
+
+        Потребитель — вкладка «Подозрительные значения» раздела продуктов
+        кабинета (`apps/web/src/features/products/CatalogPage.tsx`). Раньше она
+        стояла только у администратора, у которого раздела продуктов нет в
+        меню, — то есть проверку не видел никто, кто правит значения.
+        """
+
+        editor = await make_user(role)
+        await _product(
+            session,
+            name_ru="Невозможный продукт для редактора",
+            kcal_100g=500,
+            fat_100g=60,
+            protein_100g=30,
+            carbs_100g=30,
+        )
+
+        response = await client.get(
+            "/api/v1/products/anomalies?limit=200", headers=auth_headers(editor)
+        )
+
+        assert response.status_code == 200, response.text
+        found = {item["name_ru"]: item for item in response.json()["items"]}
+        row = found["Невозможный продукт для редактора"]
+        assert set(row) == {"product_id", "name_ru", "is_active", "anomalies"}
+        assert {"kind", "values", "field"} <= set(row["anomalies"][0])

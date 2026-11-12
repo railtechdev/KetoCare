@@ -10,8 +10,24 @@ const requiredText = z.string().trim().min(1);
  * Пищевая ценность НА 1 Г — так её вводит диетолог (ADR-0065). В тело запроса
  * уходит на 100 г: хранение и расчёт не меняются. Отрицательной не бывает,
  * ноль допустим (вода, соль).
+ *
+ * Верхняя граница — не копия политики сервера, а физика: в одном грамме
+ * продукта не бывает больше грамма жира, белка, углеводов или клетчатки.
+ * Число больше единицы почти всегда перенесено из колонки «на 100 г»: «82» в
+ * поле «Жиры в 1 г» без этой границы ушло бы на сервер как 8 200 г на 100 г и
+ * вернулось бы непонятным отказом (ADR-0072).
  */
-const per100g = z.number().nonnegative();
+export const MAX_GRAMS_PER_GRAM = 1;
+
+/**
+ * Калорийность 1 г: у чистого жира около 9 ккал. Граница — та же, что у
+ * импорта (1 000 ккал на 100 г): её превышение — это килоджоули или число
+ * на 100 г.
+ */
+export const MAX_KCAL_PER_GRAM = 10;
+
+const gramsPerGram = z.number().nonnegative().max(MAX_GRAMS_PER_GRAM);
+const kcalPerGram = z.number().nonnegative().max(MAX_KCAL_PER_GRAM);
 
 /**
  * Схема формы продукта (раздел 8.3 ТЗ, «Админ / Продукты»).
@@ -28,11 +44,11 @@ export const productFormSchema = z.object({
   nameUz: z.string().trim(),
   nameEn: z.string().trim(),
   categoryId: z.string().trim().guid(),
-  kcal: per100g,
-  fat: per100g,
-  protein: per100g,
-  carbs: per100g,
-  fiber: per100g,
+  kcal: kcalPerGram,
+  fat: gramsPerGram,
+  protein: gramsPerGram,
+  carbs: gramsPerGram,
+  fiber: gramsPerGram,
   source: requiredText,
   sourceVersion: requiredText,
   /** `<input type="date">` отдаёт ISO-дату; пустое поле не проходит проверку */

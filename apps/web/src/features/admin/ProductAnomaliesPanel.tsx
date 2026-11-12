@@ -97,16 +97,19 @@ export function ProductAnomaliesPanel() {
             {rows.map((row) => (
               <li key={row.product_id} className="flex flex-col gap-field">
                 <p className="m-0 flex flex-wrap items-baseline gap-field">
+                  {/* Вкладка — в ссылке: «К списку» из карточки
+                      возвращает к проверке, а не к перечню продуктов. */}
                   <SectionLink
                     section="products"
+                    tab="anomalies"
                     item={row.product_id}
                     className="font-medium"
                   >
                     {row.name_ru}
                   </SectionLink>
-                  {/* Выведенные позиции проверяются тоже: в меню их не
+                  {/* Продукты в архиве проверяются тоже: в меню их не
                       предлагают, но в сохранённых блюдах они остаются. Без
-                      пометки администратор не отличит их в списке. */}
+                      пометки их не отличить в списке. */}
                   {!row.is_active && (
                     <span className="text-sm text-muted-foreground">
                       {t("products.anomalies.inactive")}

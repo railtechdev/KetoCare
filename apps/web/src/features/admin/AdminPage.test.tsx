@@ -392,7 +392,7 @@ describe("AdminPage — навигация", () => {
     renderPage("audit");
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Журнал аудита" }),
+      await screen.findByRole("heading", { level: 1, name: "Журнал действий" }),
     ).toBeInTheDocument();
   });
 });
