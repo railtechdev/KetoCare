@@ -143,7 +143,7 @@ class TestFamilyNudge:
         monkeypatch.setattr(notify.telegram_repo, "children_per_chat", one_child_each)
         sent: list[tuple[int, str]] = []
 
-        async def send(client, *, token, chat_id, text):
+        async def send(client, *, token, chat_id, text, **_):
             sent.append((chat_id, text))
 
         monkeypatch.setattr(notify, "send_message", send)
@@ -192,7 +192,7 @@ class TestFamilyNudge:
         monkeypatch.setattr(children.patients_repo, "get", patient)
         sent: dict[int, str] = {}
 
-        async def send(client, *, token, chat_id, text):
+        async def send(client, *, token, chat_id, text, **_):
             sent[chat_id] = text
 
         monkeypatch.setattr(notify, "send_message", send)

@@ -43,7 +43,7 @@ def delivery(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str]]:
     monkeypatch.setattr(notify, "parent_language", language)
     sent: list[tuple[int, str]] = []
 
-    async def send(client: Any, *, token: str, chat_id: int, text: str) -> None:
+    async def send(client: Any, *, token: str, chat_id: int, text: str, **_: Any) -> None:
         sent.append((chat_id, text))
 
     monkeypatch.setattr(notify, "send_message", send)

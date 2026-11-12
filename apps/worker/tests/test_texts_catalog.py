@@ -113,7 +113,7 @@ class TestRecipientLanguage:
 
         sent: list[str] = []
 
-        async def send(client, *, token, chat_id, text):
+        async def send(client, *, token, chat_id, text, **_):
             sent.append(text)
 
         monkeypatch.setattr(notify, "get_sessionmaker", lambda: fake_session)
