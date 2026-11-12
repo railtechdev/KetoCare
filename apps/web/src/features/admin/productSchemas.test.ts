@@ -84,7 +84,7 @@ describe("productFormSchema", () => {
   });
 
   it.each(["fat", "protein", "carbs", "fiber"] as const)(
-    "не пропускает %s больше 1 г в 1 г — это число на 100 г (ADR-0072)",
+    "не пропускает %s больше 1 г в 1 г — это число на 100 г (ADR-0073)",
     (field) => {
       const result = productFormSchema.safeParse({ ...VALID, [field]: 82 });
       expect(result.success).toBe(false);

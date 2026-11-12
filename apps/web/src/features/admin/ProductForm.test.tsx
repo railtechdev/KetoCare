@@ -79,7 +79,7 @@ describe("карточка продукта: проверка значений �
     expect(
       await screen.findByText(adminRu.products.form.checkTitle),
     ).toBeInTheDocument();
-    // В единице полей — на 1 г (ADR-0072): «717» под полями «в 1 г» не
+    // В единице полей — на 1 г (ADR-0073): «717» под полями «в 1 г» не
     // совпадало ни с одним набранным числом.
     expect(
       screen.getByText(
@@ -248,7 +248,7 @@ describe("карточка продукта: прочерк источника (
   });
 });
 
-describe("карточка продукта: единица полей — 1 г (ADR-0072)", () => {
+describe("карточка продукта: единица полей — 1 г (ADR-0073)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (api.POST as Mock).mockResolvedValue({ data: [] });

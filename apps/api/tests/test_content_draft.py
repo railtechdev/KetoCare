@@ -338,7 +338,7 @@ class TestProductAnomalies:
     async def test_catalogue_editors_read_the_anomalies(
         self, client, session, make_user, auth_headers, role
     ):
-        """Проверку видят те, кто ведёт справочник (ADR-0072).
+        """Проверку видят те, кто ведёт справочник (ADR-0073).
 
         Потребитель — вкладка «Подозрительные значения» раздела продуктов
         кабинета (`apps/web/src/features/products/CatalogPage.tsx`). Раньше она

@@ -45,7 +45,7 @@ function renderPanel(search: SectionSearch = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  // Вид и отбор живут в адресе (ADR-0072), поэтому экрану нужен роутер — как
+  // Вид и отбор живут в адресе (ADR-0073), поэтому экрану нужен роутер — как
   // и в работающем приложении.
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -124,7 +124,7 @@ describe("учётные записи", () => {
   });
 });
 
-describe("адрес и приглашения (ADR-0072)", () => {
+describe("адрес и приглашения (ADR-0073)", () => {
   it("отбор по роли живёт в адресе и переживает F5", async () => {
     const user = userEvent.setup();
     renderPanel();

@@ -234,7 +234,7 @@ class TestAudit:
 
 
 class TestProcessLead:
-    """Отметка «обработана» (ADR-0072).
+    """Отметка «обработана» (ADR-0073).
 
     Потребитель — раздел «Заявки» кабинета администратора
     (`apps/web/src/features/admin/LeadsPanel.tsx`): он читает `processed_at` в

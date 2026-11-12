@@ -43,7 +43,7 @@ class LeadRead(BaseModel):
     audience: LeadAudience
     locale: str
     created_at: datetime
-    #: Когда заявку отметили обработанной; `null` — новая (ADR-0072).
+    #: Когда заявку отметили обработанной; `null` — новая (ADR-0073).
     processed_at: datetime | None = None
 
 

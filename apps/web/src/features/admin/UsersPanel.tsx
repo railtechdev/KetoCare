@@ -67,7 +67,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   const { session } = useSession();
 
   // Вид и отбор живут в адресе (П1, П30): «Все приглашения» с главной ведёт
-  // сюда же ссылкой, а F5 и «Назад» прежде сбрасывали поиск и роль (ADR-0072).
+  // сюда же ссылкой, а F5 и «Назад» прежде сбрасывали поиск и роль (ADR-0073).
   const [view, setView] = useSectionTab<UsersView>(
     "tab",
     USERS_VIEWS,

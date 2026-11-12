@@ -26,7 +26,7 @@ const LEADS_KEY = ["admin", "leads"] as const;
 
 /**
  * Отбор заявок (`?tab=`). По умолчанию — новые: список открывают, чтобы
- * ответить тем, кому ещё не ответили (ADR-0072).
+ * ответить тем, кому ещё не ответили (ADR-0073).
  */
 const LEAD_VIEWS = ["new", "processed", "all"] as const;
 type LeadView = (typeof LEAD_VIEWS)[number];

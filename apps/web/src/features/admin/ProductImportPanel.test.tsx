@@ -132,7 +132,7 @@ describe("импорт продуктов", () => {
 
   it("куда загрузить — поле формы, по умолчанию открытый в списке источник", async () => {
     // Прежде цель решал отбор над таблицей, и файл уезжал туда, где случайно
-    // стоял фильтр (ADR-0072).
+    // стоял фильтр (ADR-0073).
     (api.POST as Mock).mockResolvedValue({ data: REPORT });
     const user = userEvent.setup();
     renderPanel(OPEN_SOURCE.id);
