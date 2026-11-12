@@ -27,8 +27,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
@@ -40,7 +42,7 @@ from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import LEADS_RATE_LIMIT, limiter
 from ..schemas import Page
-from ..schemas_leads import LeadCreate, LeadRead
+from ..schemas_leads import LeadCreate, LeadRead, LeadUpdate
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -85,11 +87,20 @@ async def list_leads(
     session: SessionDep,
     user: CurrentUserDep,
     page: PaginationDep,
+    status_filter: Annotated[
+        leads_repo.LeadStatus | None,
+        Query(
+            alias="status",
+            description="`new` — без отметки «обработана», `processed` — с ней; не указан — все",
+        ),
+    ] = None,
 ) -> Page[LeadRead]:
     """Читает администратор: заявки — работа с контактами, а не с клиническими
     данными, к которым админу доступ закрыт."""
 
-    items, total = await leads_repo.list_leads(session, limit=page.limit, offset=page.offset)
+    items, total = await leads_repo.list_leads(
+        session, status=status_filter, limit=page.limit, offset=page.offset
+    )
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,
@@ -103,6 +114,48 @@ async def list_leads(
         ip=client_address(request),
     )
     return Page(items=[LeadRead.model_validate(lead) for lead in items], total=total)
+
+
+@router.patch(
+    "/{lead_id}",
+    response_model=LeadRead,
+    summary="Отметить заявку обработанной или снять отметку",
+    dependencies=[Depends(require_roles(UserRole.ADMIN))],
+)
+async def update_lead(
+    request: Request,
+    lead_id: uuid.UUID,
+    payload: LeadUpdate,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> LeadRead:
+    """Уведомлений о заявке нет (ADR-0012), и список — единственное место, где
+    её видно. Без отметки отвеченные и новые лежали вперемешку, и каждый раз
+    приходилось вспоминать, кому уже написали (ADR-0073).
+
+    Пишется в журнал: это работа с чужим контактом, как чтение и удаление.
+    """
+
+    lead = await leads_repo.get(session, lead_id)
+    if lead is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Заявка не найдена.")
+
+    before = lead.processed_at is not None
+    await leads_repo.set_processed(
+        session, lead=lead, processed=payload.processed, by=user.id, at=datetime.now(UTC)
+    )
+    if before != payload.processed:
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="update",
+            entity="leads",
+            entity_id=lead.id,
+            before={"processed": before},
+            after={"processed": payload.processed},
+            ip=client_address(request),
+        )
+    return LeadRead.model_validate(lead)
 
 
 @router.delete(

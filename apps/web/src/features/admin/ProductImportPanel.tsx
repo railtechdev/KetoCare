@@ -13,10 +13,14 @@ import { useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CsvTemplateLink } from "../../components/CsvTemplateLink";
-import { Field } from "../../components/Field";
+import { Field, SelectField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { SubPageHeader } from "../../components/SubPageHeader";
+import {
+  DEFAULT_FOOD_STANDARD_ID,
+  type FoodStandard,
+} from "../standards/useFoodStandards";
 import { anomalyDetail } from "./productAnomalyText";
 import { useImportProductsMutation } from "./useAdminProducts";
 import type { ImportRowError } from "./types";
@@ -52,16 +56,35 @@ const PRODUCT_TEMPLATE_COLUMNS = [
  */
 export function ProductImportPanel({
   onDone,
-  standardId,
-  standardName,
+  standards,
+  initialStandardId,
 }: {
   onDone: () => void;
-  /** Куда загружается файл; не задан — основной стандарт */
-  standardId?: string;
-  standardName?: string;
+  /** Все источники: в выбор попадают открытые и не в архиве */
+  standards: readonly FoodStandard[];
+  /** Источник, открытый в списке; не задан — основной справочник */
+  initialStandardId?: string;
 }) {
   const { t } = useTranslation("admin");
   const ids = useId();
+
+  // Куда загружается файл, решает поле формы, а не отбор списка (ADR-0073):
+  // прежде цель молча бралась из фильтра, и файл уезжал в тот источник,
+  // который случайно был выбран над таблицей. Поле обязательное и стоит до
+  // файла; начальное значение — открытый в списке источник.
+  const targets = standards.filter(
+    (standard) => standard.is_active && standard.locked_at == null,
+  );
+  // Заблокированный или убранный в архив источник файл не примет (сервер
+  // откажет), и предлагать его нельзя даже по ссылке: тогда — основной.
+  const [target, setTarget] = useState(() =>
+    initialStandardId !== undefined &&
+    targets.some((standard) => standard.id === initialStandardId)
+      ? initialStandardId
+      : DEFAULT_FOOD_STANDARD_ID,
+  );
+  const targetStandardId =
+    target === DEFAULT_FOOD_STANDARD_ID ? undefined : target;
 
   const [file, setFile] = useState<File | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -138,11 +161,34 @@ export function ProductImportPanel({
         intro={t("products.import.intro")}
       />
 
-      {standardName !== undefined && (
-        <p className="m-0 text-sm font-medium">
-          {t("products.import.target", { name: standardName })}
-        </p>
-      )}
+      <div className="max-w-md">
+        <SelectField
+          id={`${ids}-target`}
+          width="wide"
+          label={t("products.import.target")}
+          value={target}
+          onChange={(event) => {
+            setTarget(event.target.value);
+            // Отчёт проверки относится к прежней цели: дубли и обновления
+            // считаются внутри источника.
+            preview.reset();
+            commit.reset();
+          }}
+        >
+          {/* Перечень источников не загрузился — остаётся основной: пустой
+              обязательный выбор без вариантов был бы тупиком. */}
+          {targets.length === 0 && (
+            <option value={DEFAULT_FOOD_STANDARD_ID}>
+              {t("products.import.targetMain")}
+            </option>
+          )}
+          {targets.map((standard) => (
+            <option key={standard.id} value={standard.id}>
+              {standard.name}
+            </option>
+          ))}
+        </SelectField>
+      </div>
 
       <div className="max-w-md">
         <Field
@@ -204,7 +250,7 @@ export function ProductImportPanel({
                 file,
                 dryRun: true,
                 updateExisting,
-                standardId,
+                standardId: targetStandardId,
               });
             }
           }}
@@ -330,7 +376,12 @@ export function ProductImportPanel({
                   onClick={() => {
                     if (file === null) return;
                     commit.mutate(
-                      { file, dryRun: false, updateExisting, standardId },
+                      {
+                        file,
+                        dryRun: false,
+                        updateExisting,
+                        standardId: targetStandardId,
+                      },
                       {
                         onSuccess: (result) => {
                           if (result.imported > 0) {

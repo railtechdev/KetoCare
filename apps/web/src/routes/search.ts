@@ -123,6 +123,8 @@ export interface FilterSearch {
   /** Журнал аудита: таблица и действие */
   entity?: string;
   action?: string;
+  /** Учётные записи: отбор по роли */
+  role?: "admin" | "doctor" | "dietitian" | "parent";
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -196,6 +198,9 @@ function validateFilters(search: Record<string, unknown>): FilterSearch {
     user: matching(search.user, UUID),
     entity: matching(search.entity, /^[a-z_]{1,64}$/),
     action: matching(search.action, /^[a-z_.]{1,64}$/),
+    role: (["admin", "doctor", "dietitian", "parent"] as const).find(
+      (value) => value === search.role,
+    ),
   };
 }
 

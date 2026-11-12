@@ -3,6 +3,8 @@ import {
   Button,
   Checkbox,
   formatKcal,
+  formatMass,
+  formatPerGram,
   FormFooter,
   toPer100,
   toPerGram,
@@ -22,6 +24,8 @@ import {
 import { SubPageHeader } from "../../components/SubPageHeader";
 import { anomalyDetail } from "./productAnomalyText";
 import {
+  MAX_GRAMS_PER_GRAM,
+  MAX_KCAL_PER_GRAM,
   productFormSchema,
   type Nutrient,
   type ProductFormValues,
@@ -126,6 +130,13 @@ export function ProductForm({
   const [kcal, fat, protein, carbs, fiber] = watch(NUTRIENTS).map((value) =>
     value === undefined || Number.isNaN(value) ? value : toPer100(value),
   ) as [number, number, number, number, number];
+  const per100: Record<Nutrient, number | undefined> = {
+    kcal,
+    fat,
+    protein,
+    carbs,
+    fiber,
+  };
   const check = useProductValuesCheck({ kcal, fat, protein, carbs, fiber });
   const findings = check.data ?? [];
 
@@ -165,10 +176,42 @@ export function ProductForm({
     return `${ids}-${spec?.anchor ?? name}`;
   }
 
+  /**
+   * Текст ошибки поля. Число больше допустимого на 1 г почти всегда взято из
+   * колонки «на 100 г», и сообщение предлагает то же число, делённое на сто:
+   * «82» в «Жиры в 1 г» — это 0,82, а не опечатка (ADR-0073).
+   */
+  function errorText(name: keyof ProductFormValues, messageKey: string) {
+    if (
+      errors[name]?.type === "too_big" &&
+      (NUTRIENTS as readonly string[]).includes(name)
+    ) {
+      const typed = per100[name as Nutrient];
+      return t(
+        name === "kcal"
+          ? "products.form.errors.kcalPerGram"
+          : "products.form.errors.gramsPerGram",
+        {
+          // Граница на 1 г, записанная тем же помощником, что поле: из
+          // значения на 100 г, умноженного на сто.
+          max: formatPerGram(
+            (name === "kcal" ? MAX_KCAL_PER_GRAM : MAX_GRAMS_PER_GRAM) * 100,
+          ),
+          // Набранное число — это «на 100 г»; на 1 г оно в сто раз меньше.
+          suggested:
+            typed === undefined || Number.isNaN(typed)
+              ? ""
+              : formatPerGram(typed / 100),
+        },
+      );
+    }
+    return t(`products.form.${messageKey}`);
+  }
+
   function fieldError(name: keyof ProductFormValues) {
     const spec = VALIDATED.find((field) => field.name === name);
     if (spec === undefined || errors[name] === undefined) return undefined;
-    return t(`products.form.${spec.messageKey}`);
+    return errorText(name, spec.messageKey);
   }
 
   // Сводка появляется только после неудачной отправки (правило П8).
@@ -178,7 +221,7 @@ export function ProductForm({
       : VALIDATED.filter((field) => errors[field.name] !== undefined).map(
           (field) => ({
             fieldId: `${ids}-${field.anchor}`,
-            message: t(`products.form.${field.messageKey}`),
+            message: errorText(field.name, field.messageKey),
           }),
         );
 
@@ -267,9 +310,21 @@ export function ProductForm({
                   step="0.0001"
                   inputMode="decimal"
                   label={t(`products.form.${nutrient}`)}
-                  // Прочерк источника лежит нулём: без подсказки его
-                  // нельзя отличить от настоящего нуля (ADR-0067).
-                  hint={unknown ? t("products.form.noData") : undefined}
+                  // Под полем — то же число на 100 г, как в источнике: поле
+                  // «в 1 г», а источники и этикетки пишут на 100 г, и ошибку
+                  // переноса видно сразу (ADR-0073). Прочерк источника
+                  // лежит нулём: без подсказки его нельзя отличить от
+                  // настоящего нуля (ADR-0067).
+                  hint={
+                    unknown ? (
+                      t("products.form.noData")
+                    ) : (
+                      <Per100Hint
+                        nutrient={nutrient}
+                        value={per100[nutrient]}
+                      />
+                    )
+                  }
                   error={fieldError(nutrient)}
                   {...register(nutrient, { valueAsNumber: true })}
                 />
@@ -314,10 +369,13 @@ export function ProductForm({
               level="warning"
               title={t("products.form.atwaterTitle")}
             >
+              {/* В той же единице, что поля, — на 1 г (ADR-0073): прежде
+                  предупреждение писало «на 100 г» под полями «в 1 г», и
+                  числа в нём не совпадали ни с одним набранным. */}
               <p className="m-0">
                 {t("products.form.atwaterMismatch", {
-                  expected: formatKcal(roundedExpectedKcal),
-                  declared: formatKcal(kcal),
+                  expected: formatPerGram(roundedExpectedKcal),
+                  declared: formatPerGram(kcal),
                 })}
               </p>
               <div className="mt-field">
@@ -333,7 +391,7 @@ export function ProductForm({
                   }}
                 >
                   {t("products.form.atwaterSubstitute", {
-                    expected: formatKcal(roundedExpectedKcal),
+                    expected: formatPerGram(roundedExpectedKcal),
                   })}
                 </Button>
               </div>
@@ -347,7 +405,7 @@ export function ProductForm({
               <ul className="m-0 list-disc pl-5">
                 {findings.map((item, index) => (
                   <li key={`${item.kind}-${index}`}>
-                    {anomalyDetail(t, item)}
+                    {anomalyDetail(t, item, { perGram: true })}
                   </li>
                 ))}
               </ul>
@@ -407,5 +465,27 @@ export function ProductForm({
         onCancel={onCancel}
       />
     </form>
+  );
+}
+
+/**
+ * «= 82,5 г на 100 г» под полем «в 1 г». Пустое или нечисловое поле — пусто:
+ * подсказка не должна утверждать «= 0» о том, чего не ввели.
+ */
+function Per100Hint({
+  nutrient,
+  value,
+}: {
+  nutrient: Nutrient;
+  value: number | undefined;
+}) {
+  const { t } = useTranslation("admin");
+  if (value === undefined || Number.isNaN(value)) return null;
+  return (
+    <span aria-live="polite">
+      {nutrient === "kcal"
+        ? t("products.form.per100Kcal", { value: formatKcal(value) })
+        : t("products.form.per100Grams", { value: formatMass(value) })}
+    </span>
   );
 }

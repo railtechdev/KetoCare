@@ -13,7 +13,11 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Index, String, UniqueConstraint
+import uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAtMixin, UUIDPkMixin
@@ -28,6 +32,7 @@ class Lead(Base, UUIDPkMixin, CreatedAtMixin):
         # просто нажали кнопку дважды, не дождавшись ответа.
         UniqueConstraint("email", "audience", name="uq_lead_email_audience"),
         Index("ix_leads_created_at", "created_at"),
+        Index("ix_leads_processed_by", "processed_by"),
     )
 
     email: Mapped[str] = mapped_column(String(320), nullable=False)
@@ -40,3 +45,13 @@ class Lead(Base, UUIDPkMixin, CreatedAtMixin):
     )
     #: Язык страницы, с которой пришла заявка: на нём человеку и отвечать.
     locale: Mapped[str] = mapped_column(String(16), nullable=False, default="ru")
+
+    #: Когда администратор отметил заявку обработанной (ответил человеку).
+    #: Пусто — заявка новая. Отметка снимается, если её поставили по ошибке.
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Кто отметил. Учётные записи не удаляются физически, но связь не должна
+    #: мешать удалению, если оно однажды понадобится: тогда пропадёт имя, а не
+    #: заявка.
+    processed_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )

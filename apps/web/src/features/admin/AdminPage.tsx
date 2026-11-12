@@ -1,22 +1,12 @@
-import { SegmentedControl } from "@ketocare/ui";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
-import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
+import { CatalogPage } from "../products/CatalogPage";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { LeadsPanel } from "./LeadsPanel";
-import { ProductAnomaliesPanel } from "./ProductAnomaliesPanel";
-import { ProductsPanel } from "./ProductsPanel";
-import { ProductCategoriesPanel } from "../products/ProductCategoriesPanel";
-import { DEFAULT_FOOD_STANDARD_ID } from "../standards/useFoodStandards";
-import { StandardsSection } from "../standards/StandardsSection";
 import { UsersPanel } from "./UsersPanel";
 import { isAdminSection, type AdminSection } from "./types";
-
-type ProductsWorkspaceView =
-  "catalog" | "categories" | "standards" | "anomalies";
 
 /**
  * Администрирование (раздел 8.1 ТЗ: users, products, dictionaries, audit).
@@ -32,32 +22,30 @@ type ProductsWorkspaceView =
  * каким из двух способов ходить. Раздел называет себя заголовком, а переходы
  * между разделами — дело меню (правило П3 канона).
  *
- * Заголовок берётся у подраздела: «Учётные записи», «Журнал аудита» — а не
+ * Заголовок берётся у подраздела: «Учётные записи», «Журнал действий» — а не
  * общее «Администрирование» с уточнением ниже. Экран отвечает на вопрос «где
  * я» первой строкой.
+ *
+ * **Продукты — тот же экран, что у диетолога и врача** (ADR-0073). Раздела нет
+ * в меню администратора (ADR-0064), но на него ведут ссылки главной:
+ * несверенные продукты, весь справочник. Прежде у администратора был свой
+ * экран с видом в состоянии вкладки — F5 возвращал к перечню, — и только на
+ * нём стояла проверка подозрительных значений.
  *
  * Клинических данных здесь нет: администратор к ним доступа не имеет
  * (раздел 5.1 ТЗ), и сервер вырезает нагрузку клинических записей даже из
  * журнала аудита.
  */
 export function AdminPage({ section }: { section?: string }) {
-  const { t } = useTranslation(["admin", "products"]);
-  const address = useAddressState();
-  const patchAddress = useAddressPatch();
-  // Сборка рабочего справочника живёт в адресе (`?kind=merge`, ADR-0068):
-  // F5 на ней возвращает к стандартам, а не к перечню продуктов.
-  const [productsView, setProductsView] = useState<ProductsWorkspaceView>(() =>
-    address.kind === "merge" ? "standards" : "catalog",
-  );
+  const { t } = useTranslation("admin");
 
   const current = sectionFromRoute(section);
-  const isEditingProductItem =
-    current === "products" && address.item !== undefined && address.item !== "";
+  if (current === "products") return <CatalogPage />;
 
   return (
-    // Разделы админки — таблицы: учётки, продукты, справочники, журнал. Это
-    // страницы, на которых работают, а не читают (правило П34 канона), и
-    // плотность у них объявляется один раз на экран, а не в каждом блоке.
+    // Разделы админки — таблицы: учётки, справочники, журнал. Это страницы,
+    // на которых работают, а не читают (правило П34 канона), и плотность у
+    // них объявляется один раз на экран, а не в каждом блоке.
     <PageLayout
       title={t(`${current}.title`)}
       intro={t(`${current}.intro`, { defaultValue: "" }) || undefined}
@@ -67,60 +55,6 @@ export function AdminPage({ section }: { section?: string }) {
       <div className="flex flex-col gap-section">
         {current === "users" && <UsersPanel chrome="screen" />}
         {current === "leads" && <LeadsPanel chrome="screen" />}
-        {current === "products" && (
-          <>
-            {!isEditingProductItem && (
-              <div>
-                <SegmentedControl<ProductsWorkspaceView>
-                  label={t("products.title")}
-                  value={productsView}
-                  onChange={setProductsView}
-                  items={[
-                    { value: "catalog", label: t("products.title") },
-                    {
-                      value: "categories",
-                      label: t("products:categories.title"),
-                    },
-                    {
-                      value: "standards",
-                      label: t("products:standards.title"),
-                    },
-                    {
-                      value: "anomalies",
-                      label: t("products.anomalies.title"),
-                    },
-                  ]}
-                />
-              </div>
-            )}
-
-            {(isEditingProductItem || productsView === "catalog") && (
-              <ProductsPanel chrome="screen" />
-            )}
-
-            {!isEditingProductItem && productsView === "categories" && (
-              <ProductCategoriesPanel />
-            )}
-
-            {!isEditingProductItem && productsView === "standards" && (
-              <StandardsSection
-                onOpen={(standardId) => {
-                  patchAddress({
-                    standard:
-                      standardId === DEFAULT_FOOD_STANDARD_ID
-                        ? undefined
-                        : standardId,
-                  });
-                  setProductsView("catalog");
-                }}
-              />
-            )}
-
-            {!isEditingProductItem && productsView === "anomalies" && (
-              <ProductAnomaliesPanel />
-            )}
-          </>
-        )}
         {current === "dictionaries" && <DictionariesPanel chrome="screen" />}
         {current === "audit" && <AuditPanel chrome="screen" />}
       </div>

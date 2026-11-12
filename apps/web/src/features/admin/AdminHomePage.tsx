@@ -215,7 +215,9 @@ export function AdminHomePage() {
           description={t("home.invitations.intro")}
           action={
             <Button asChild variant="outline">
-              <SectionLink section="users">
+              {/* Сразу на вкладку приглашений: прежде ссылка открывала
+                  учётные записи, где приглашений нет. */}
+              <SectionLink section="users" tab="invitations">
                 {t("home.invitations.toList")}
               </SectionLink>
             </Button>

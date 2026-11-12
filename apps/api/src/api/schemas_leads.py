@@ -43,3 +43,18 @@ class LeadRead(BaseModel):
     audience: LeadAudience
     locale: str
     created_at: datetime
+    #: Когда заявку отметили обработанной; `null` — новая (ADR-0073).
+    processed_at: datetime | None = None
+
+
+class LeadUpdate(BaseModel):
+    """Отметка «обработана». Других правок у заявки нет: адрес и язык прислал
+    человек, и переписывать их за него незачем.
+
+    Потребитель — раздел «Заявки» кабинета администратора
+    (`apps/web/src/features/admin/LeadsPanel.tsx`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    processed: bool

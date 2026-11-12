@@ -201,6 +201,17 @@ function StandardActions({
   const forRow = (action: string) =>
     t("standards.actions.forRow", { action, name: standard.name });
 
+  const setActive = (active: boolean) =>
+    update.mutate(toStandardUpdateBody(toStandardValues(standard), active), {
+      onSuccess: () =>
+        toast.success(
+          t(active ? "standards.restored" : "standards.retired", {
+            name: standard.name,
+          }),
+        ),
+      onError: failed,
+    });
+
   const locked = standard.locked_at != null;
   const isMain = standard.id === DEFAULT_FOOD_STANDARD_ID;
   const openLabel = t("standards.actions.open");
@@ -262,27 +273,43 @@ function StandardActions({
         </Button>
       )}
 
-      {/* Основной стандарт сервер снять не даст: по нему работают семья и бот. */}
-      {!isMain && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={update.isPending}
-          aria-label={forRow(retireLabel)}
-          onClick={() =>
-            update.mutate(
-              toStandardUpdateBody(
-                toStandardValues(standard),
-                !standard.is_active,
-              ),
-              { onError: failed },
-            )
-          }
-        >
-          {retireLabel}
-        </Button>
-      )}
+      {/* Основной стандарт сервер снять не даст: по нему работают семья и бот.
+          В архив — только с подтверждением (ADR-0073): источник пропадает из
+          выбора у всех, и прежде одно случайное нажатие в строке таблицы
+          делало это молча. Вернуть из архива — без вопроса: это ничего не
+          прячет. */}
+      {!isMain &&
+        (standard.is_active ? (
+          <ConfirmDialog
+            trigger={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={update.isPending}
+                aria-label={forRow(retireLabel)}
+              >
+                {retireLabel}
+              </Button>
+            }
+            title={t("standards.confirmRetire.title", { name: standard.name })}
+            description={t("standards.confirmRetire.body")}
+            confirmLabel={t("standards.confirmRetire.confirm")}
+            cancelLabel={t("common:actions.cancel")}
+            onConfirm={() => setActive(false)}
+          />
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={update.isPending}
+            aria-label={forRow(retireLabel)}
+            onClick={() => setActive(true)}
+          >
+            {retireLabel}
+          </Button>
+        ))}
 
       {canLock && standard.kind === "reference" && !locked && (
         <ConfirmDialog

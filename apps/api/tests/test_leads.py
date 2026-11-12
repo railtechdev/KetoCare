@@ -231,3 +231,150 @@ class TestAudit:
         await client.post("/api/v1/leads", json={"email": "c@example.com", "audience": "family"})
 
         assert await _leads_audit_count(session) == before
+
+
+class TestProcessLead:
+    """Отметка «обработана» (ADR-0073).
+
+    Потребитель — раздел «Заявки» кабинета администратора
+    (`apps/web/src/features/admin/LeadsPanel.tsx`): он читает `processed_at` в
+    строке списка, отбирает `?status=new` и шлёт `PATCH {processed}`.
+    """
+
+    async def _lead_id(self, client, session, email: str) -> uuid.UUID:
+        await client.post("/api/v1/leads", json={"email": email, "audience": "family"})
+        lead = await _lead(session, email)
+        assert lead is not None
+        return lead.id
+
+    async def test_admin_marks_and_unmarks(self, client, session, make_user, auth_headers):
+        lead_id = await self._lead_id(client, session, "done@example.com")
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.patch(
+            f"/api/v1/leads/{lead_id}", json={"processed": True}, headers=auth_headers(admin)
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert set(body) == {"id", "email", "audience", "locale", "created_at", "processed_at"}
+        assert body["processed_at"] is not None
+        lead = await _lead(session, "done@example.com")
+        assert lead is not None and lead.processed_by == admin.id
+
+        response = await client.patch(
+            f"/api/v1/leads/{lead_id}", json={"processed": False}, headers=auth_headers(admin)
+        )
+        assert response.status_code == 200
+        assert response.json()["processed_at"] is None
+        lead = await _lead(session, "done@example.com")
+        assert lead is not None and lead.processed_by is None
+
+    async def test_repeated_mark_keeps_the_first(self, client, session, make_user, auth_headers):
+        lead_id = await self._lead_id(client, session, "twice@example.com")
+        first = await make_user(UserRole.ADMIN)
+        second = await make_user(UserRole.ADMIN)
+
+        marked = await client.patch(
+            f"/api/v1/leads/{lead_id}", json={"processed": True}, headers=auth_headers(first)
+        )
+        again = await client.patch(
+            f"/api/v1/leads/{lead_id}", json={"processed": True}, headers=auth_headers(second)
+        )
+
+        assert again.json()["processed_at"] == marked.json()["processed_at"]
+        lead = await _lead(session, "twice@example.com")
+        assert lead is not None and lead.processed_by == first.id
+
+    async def test_marking_is_audited(self, client, session, make_user, auth_headers):
+        lead_id = await self._lead_id(client, session, "audit@example.com")
+        admin = await make_user(UserRole.ADMIN)
+
+        await client.patch(
+            f"/api/v1/leads/{lead_id}", json={"processed": True}, headers=auth_headers(admin)
+        )
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "update",
+                AuditLog.entity == "leads",
+                AuditLog.entity_id == lead_id,
+            )
+        )
+        assert entry is not None
+        assert entry.user_id == admin.id
+        assert entry.before == {"processed": False}
+        assert entry.after == {"processed": True}
+
+    async def test_list_filters_by_status(self, client, session, make_user, auth_headers):
+        fresh = await self._lead_id(client, session, "fresh@example.com")
+        answered = await self._lead_id(client, session, "answered@example.com")
+        admin = await make_user(UserRole.ADMIN)
+        await client.patch(
+            f"/api/v1/leads/{answered}", json={"processed": True}, headers=auth_headers(admin)
+        )
+
+        new = await client.get(
+            "/api/v1/leads", params={"status": "new", "limit": 200}, headers=auth_headers(admin)
+        )
+        processed = await client.get(
+            "/api/v1/leads",
+            params={"status": "processed", "limit": 200},
+            headers=auth_headers(admin),
+        )
+
+        new_ids = {item["id"] for item in new.json()["items"]}
+        processed_ids = {item["id"] for item in processed.json()["items"]}
+        assert str(fresh) in new_ids and str(answered) not in new_ids
+        assert str(answered) in processed_ids and str(fresh) not in processed_ids
+        assert all(item["processed_at"] is None for item in new.json()["items"])
+
+    async def test_unknown_status_is_rejected(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        response = await client.get(
+            "/api/v1/leads", params={"status": "old"}, headers=auth_headers(admin)
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [{}, {"processed": "может быть"}, {"processed": True, "email": "x@example.com"}],
+        ids=["empty", "not-bool", "extra-field"],
+    )
+    async def test_validation(self, client, session, make_user, auth_headers, payload):
+        lead_id = await self._lead_id(client, session, "valid@example.com")
+        admin = await make_user(UserRole.ADMIN)
+
+        response = await client.patch(
+            f"/api/v1/leads/{lead_id}", json=payload, headers=auth_headers(admin)
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+        lead = await _lead(session, "valid@example.com")
+        assert lead is not None and lead.processed_at is None
+
+    async def test_missing_lead_is_404(self, client, make_user, auth_headers):
+        admin = await make_user(UserRole.ADMIN)
+        response = await client.patch(
+            f"/api/v1/leads/{uuid.uuid4()}", json={"processed": True}, headers=auth_headers(admin)
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.PARENT, UserRole.DIETITIAN])
+    async def test_other_roles_forbidden(self, client, session, make_user, auth_headers, role):
+        lead_id = await self._lead_id(client, session, "nope@example.com")
+        user = await make_user(role)
+
+        response = await client.patch(
+            f"/api/v1/leads/{lead_id}", json={"processed": True}, headers=auth_headers(user)
+        )
+
+        assert response.status_code == 403
+        lead = await _lead(session, "nope@example.com")
+        assert lead is not None and lead.processed_at is None
+
+    async def test_anonymous_cannot_mark(self, client, session):
+        lead_id = await self._lead_id(client, session, "anon@example.com")
+        response = await client.patch(f"/api/v1/leads/{lead_id}", json={"processed": True})
+        assert response.status_code == 401

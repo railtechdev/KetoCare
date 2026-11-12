@@ -7,6 +7,7 @@ import {
   DataTable,
   EmptyState,
   Section,
+  SegmentedControl,
   formatOccurredAt,
   toast,
   useDebouncedValue,
@@ -16,6 +17,12 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, RotateCcwKey, SearchX, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PageActions } from "../../components/PageLayout";
+import {
+  useAddressPatch,
+  useAddressState,
+  useSectionQuery,
+  useSectionTab,
+} from "../../routes/useSectionTab";
 import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 
@@ -30,12 +37,10 @@ import { TableSkeleton } from "./TableSkeleton";
 import { CareTransferPanel } from "./CareTransferPanel";
 import { UserAccountForm } from "./UserAccountForm";
 import {
-  EMPTY_USERS_FILTER,
   useAdminUsers,
   useResetPasswordMutation,
   useResetTotpMutation,
   useUpdateUserMutation,
-  type UsersFilter,
 } from "./useAdminUsers";
 import type { AdminUser } from "./types";
 import { queryState } from "../../lib/queryState";
@@ -53,11 +58,26 @@ const ROLE_OPTIONS = ["admin", "doctor", "dietitian", "parent"] as const;
  */
 const STAFF_ROLES: readonly Role[] = ["doctor", "dietitian", "admin"];
 
+/** Виды раздела: учётные записи и выданные приглашения (`?tab=`). */
+const USERS_VIEWS = ["accounts", "invitations"] as const;
+type UsersView = (typeof USERS_VIEWS)[number];
+
 export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   const { t } = useTranslation("admin");
   const { session } = useSession();
 
-  const [filter, setFilter] = useState<UsersFilter>(EMPTY_USERS_FILTER);
+  // Вид и отбор живут в адресе (П1, П30): «Все приглашения» с главной ведёт
+  // сюда же ссылкой, а F5 и «Назад» прежде сбрасывали поиск и роль (ADR-0073).
+  const [view, setView] = useSectionTab<UsersView>(
+    "tab",
+    USERS_VIEWS,
+    "accounts",
+  );
+  const [q, setQ] = useSectionQuery();
+  const address = useAddressState();
+  const patchAddress = useAddressPatch();
+  const filter = { q, role: address.role ?? "" };
+  const resetFilter = () => patchAddress({ q: undefined, role: undefined });
   // Задержка — чтобы запрос уходил не на каждую букву; отбор всё равно делает
   // сервер (см. `useAdminUsers`).
   const debouncedQuery = useDebouncedValue(filter.q, SEARCH_DELAY_MS);
@@ -318,10 +338,6 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         title={t("invitations:title")}
       >
         <InviteForm roles={STAFF_ROLES} />
-
-        {/* Список выданных под формой: администратор видит все приглашения,
-            включая выданные врачами семьям. */}
-        <InvitationsList />
       </FormSheet>
 
       {/* Правка учётной записи — тоже панелью: раньше форма раскрывалась над
@@ -367,115 +383,140 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         )}
       </FormSheet>
 
-      {/* Панель отбора — блок экрана, поэтому Section со скрытым заголовком
-          (правило П23 канона). */}
-      <Section
-        title={t("users.filters.legend")}
-        titleHidden
-        density="compact"
-        contentClassName="flex-row flex-wrap items-end gap-section"
-      >
-        <div className="min-w-56 flex-1 sm:max-w-md">
-          <Field
-            id="users-search"
-            width="wide"
-            type="search"
-            label={t("users.filters.search")}
-            value={filter.q}
-            onChange={(event) =>
-              setFilter((current) => ({ ...current, q: event.target.value }))
-            }
-          />
-        </div>
-        <SelectField
-          id="users-role"
-          label={t("users.filters.role")}
-          width="narrow"
-          value={filter.role}
-          onChange={(event) =>
-            setFilter((current) => ({ ...current, role: event.target.value }))
-          }
-        >
-          <option value="">{t("users.filters.anyRole")}</option>
-          {ROLE_OPTIONS.map((role) => (
-            <option key={role} value={role}>
-              {t(`common:roles.${role}`)}
-            </option>
-          ))}
-        </SelectField>
-        {(filter.q !== "" || filter.role !== "") && (
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-touch"
-            onClick={() => setFilter(EMPTY_USERS_FILTER)}
-          >
-            {t("users.filters.reset")}
-          </Button>
-        )}
-      </Section>
-
-      {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
-      <AsyncSection
-        {...queryState(users)}
-        skeleton={<TableSkeleton label={t("users.loading")} columns={6} />}
-        error={
-          users.isError
-            ? {
-                title: t("users.error"),
-                description:
-                  errorMessageOf(users.error) ?? t("common:errors.unexpected"),
-              }
-            : null
-        }
-        retryLabel={t("common:actions.retry")}
-        onRetry={() => void users.refetch()}
-        isEmpty={rows.length === 0}
-        empty={
-          filter.q === "" && filter.role === "" ? (
-            <EmptyState
-              icon={Users}
-              title={t("users.empty.title")}
-              description={t("users.empty.description")}
-            />
-          ) : (
-            <EmptyState
-              icon={SearchX}
-              title={t("users.empty.searchTitle")}
-              description={t("users.empty.searchDescription")}
-              action={
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setFilter(EMPTY_USERS_FILTER)}
-                >
-                  {t("users.filters.reset")}
-                </Button>
-              }
-            />
-          )
-        }
-      >
-        <DataTable
-          columns={columns}
-          data={rows}
-          caption={t("users.table.caption")}
-          emptyState={null}
-          labels={{
-            previousPage: t("table.previousPage"),
-            nextPage: t("table.nextPage"),
-            pageStatus: (page, total) => t("table.pageStatus", { page, total }),
-          }}
+      <div>
+        <SegmentedControl<UsersView>
+          label={t("users.views.label")}
+          value={view}
+          onChange={setView}
+          items={[
+            { value: "accounts", label: t("users.views.accounts") },
+            { value: "invitations", label: t("users.views.invitations") },
+          ]}
         />
-      </AsyncSection>
+      </div>
 
-      {users.data !== undefined && users.data.total > rows.length && (
-        <p className="m-0 text-sm text-muted-foreground">
-          {t("table.truncated", {
-            shown: rows.length,
-            total: users.data.total,
-          })}
-        </p>
+      {/* Все выданные приглашения, включая выданные врачами семьям: на них
+          ведёт «Все приглашения» с главной администратора. Прежде ссылка
+          открывала учётные записи, а список прятался в панели «Пригласить». */}
+      {view === "invitations" && <InvitationsList />}
+
+      {view === "accounts" && (
+        <>
+          {/* Панель отбора — блок экрана, поэтому Section со скрытым заголовком
+          (правило П23 канона). */}
+          <Section
+            title={t("users.filters.legend")}
+            titleHidden
+            density="compact"
+            contentClassName="flex-row flex-wrap items-end gap-section"
+          >
+            <div className="min-w-56 flex-1 sm:max-w-md">
+              <Field
+                id="users-search"
+                width="wide"
+                type="search"
+                label={t("users.filters.search")}
+                value={filter.q}
+                onChange={(event) => setQ(event.target.value)}
+              />
+            </div>
+            <SelectField
+              id="users-role"
+              label={t("users.filters.role")}
+              width="narrow"
+              value={filter.role}
+              onChange={(event) =>
+                patchAddress({
+                  role: ROLE_OPTIONS.find(
+                    (role) => role === event.target.value,
+                  ),
+                })
+              }
+            >
+              <option value="">{t("users.filters.anyRole")}</option>
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {t(`common:roles.${role}`)}
+                </option>
+              ))}
+            </SelectField>
+            {(filter.q !== "" || filter.role !== "") && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                onClick={resetFilter}
+              >
+                {t("users.filters.reset")}
+              </Button>
+            )}
+          </Section>
+
+          {/* Ошибка не прячет уже загруженные строки — правило в AsyncSection. */}
+          <AsyncSection
+            {...queryState(users)}
+            skeleton={<TableSkeleton label={t("users.loading")} columns={6} />}
+            error={
+              users.isError
+                ? {
+                    title: t("users.error"),
+                    description:
+                      errorMessageOf(users.error) ??
+                      t("common:errors.unexpected"),
+                  }
+                : null
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void users.refetch()}
+            isEmpty={rows.length === 0}
+            empty={
+              filter.q === "" && filter.role === "" ? (
+                <EmptyState
+                  icon={Users}
+                  title={t("users.empty.title")}
+                  description={t("users.empty.description")}
+                />
+              ) : (
+                <EmptyState
+                  icon={SearchX}
+                  title={t("users.empty.searchTitle")}
+                  description={t("users.empty.searchDescription")}
+                  action={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetFilter}
+                    >
+                      {t("users.filters.reset")}
+                    </Button>
+                  }
+                />
+              )
+            }
+          >
+            <DataTable
+              columns={columns}
+              data={rows}
+              caption={t("users.table.caption")}
+              emptyState={null}
+              labels={{
+                previousPage: t("table.previousPage"),
+                nextPage: t("table.nextPage"),
+                pageStatus: (page, total) =>
+                  t("table.pageStatus", { page, total }),
+              }}
+            />
+          </AsyncSection>
+
+          {users.data !== undefined && users.data.total > rows.length && (
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("table.truncated", {
+                shown: rows.length,
+                total: users.data.total,
+              })}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
