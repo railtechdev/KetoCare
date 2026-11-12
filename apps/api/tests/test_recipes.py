@@ -1011,7 +1011,7 @@ class TestRatioFitsPrescription:
             headers=auth_headers(stranger),
         )
 
-        assert response.status_code in (403, 404)
+        assert response.status_code == 403
         assert recipe["id"] not in response.text
 
     async def test_malformed_patient_id_is_a_validation_error(

@@ -136,7 +136,7 @@ test("семья из Telegram собирает вчерашний день и �
   await expect(page.getByRole("button", { name: "Убрать" })).toHaveCount(0);
 
   // На завтра флажка «съедено» нет: съесть будущий день нельзя.
-  await page.getByRole("radio", { name: "Завтра" }).check();
+  await pickDay(page, "Завтра");
   await expect(page.getByRole("checkbox")).toHaveCount(0);
 });
 
@@ -147,6 +147,19 @@ test("семья из Telegram собирает вчерашний день и �
  * сегодня что-то стоит (его пишет `journey.spec.ts`), и «Составить меню», если
  * нет. Для этого сценария разницы нет — обе ведут в одно меню.
  */
+/**
+ * Day switch is the kit `SegmentedControl`: the radio is visually hidden and its
+ * label takes the click, so the test presses the label, as a person does, and
+ * then checks the radio state.
+ */
+async function pickDay(page: Page, name: string): Promise<void> {
+  await page
+    .locator("label")
+    .filter({ hasText: new RegExp(`^${name}$`) })
+    .click();
+  await expect(page.getByRole("radio", { name })).toBeChecked();
+}
+
 async function openYesterdayMenu(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: /^(Открыть меню|Составить меню)$/ })
@@ -154,7 +167,7 @@ async function openYesterdayMenu(page: Page): Promise<void> {
   await expect(
     page.getByRole("heading", { level: 1, name: "Меню" }),
   ).toBeVisible();
-  await page.getByRole("radio", { name: "Вчера" }).check();
+  await pickDay(page, "Вчера");
 }
 
 test("семья добавляет замер кетонов прямо в дневнике", async ({ page }) => {
