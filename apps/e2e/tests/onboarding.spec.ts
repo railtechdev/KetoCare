@@ -35,7 +35,7 @@ test("врач заводит карту и выдаёт код, семья вх
   await doctor.goto("/app/patients");
   await doctor.getByRole("button", { name: "Новый пациент" }).click();
   await doctor.getByLabel("Имя и фамилия").fill(CHILD);
-  await doctor.getByLabel("Дата рождения").fill("2019-04-12");
+  await doctor.getByLabel("Дата рождения").fill("12.04.2019");
   // Рост и вес обязательны с 12.11.2026 (ADR-0070): по ним считаются подсказки.
   await doctor.getByLabel("Рост, см").fill("118");
   await doctor.getByLabel("Вес, кг").fill("21");
