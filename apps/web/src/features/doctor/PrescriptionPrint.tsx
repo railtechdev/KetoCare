@@ -107,9 +107,11 @@ export function PrescriptionSheet({
               <th scope="col" className="text-right font-normal">
                 {t("prescription.goal.day")}
               </th>
-              <th scope="col" className="text-right font-normal">
-                {t("prescription.goal.meal")}
-              </th>
+              {goal.data.meal !== null && (
+                <th scope="col" className="text-right font-normal">
+                  {t("prescription.goal.meal")}
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -118,9 +120,9 @@ export function PrescriptionSheet({
                 {t("prescription.goal.fat")}
               </th>
               <td className="text-right">{grams(goal.data.day.fat_g)}</td>
-              <td className="text-right">
-                {grams(goal.data.meal?.fat_g ?? null)}
-              </td>
+              {goal.data.meal !== null && (
+                <td className="text-right">{grams(goal.data.meal.fat_g)}</td>
+              )}
             </tr>
             {goal.data.day.protein_g !== null && (
               <>
@@ -131,9 +133,11 @@ export function PrescriptionSheet({
                   <td className="text-right">
                     {grams(goal.data.day.protein_g)}
                   </td>
-                  <td className="text-right">
-                    {grams(goal.data.meal?.protein_g ?? null)}
-                  </td>
+                  {goal.data.meal !== null && (
+                    <td className="text-right">
+                      {grams(goal.data.meal.protein_g)}
+                    </td>
+                  )}
                 </tr>
                 <tr>
                   <th scope="row" className="text-left font-normal">
@@ -142,9 +146,11 @@ export function PrescriptionSheet({
                   <td className="text-right">
                     {grams(goal.data.day.net_carbs_g)}
                   </td>
-                  <td className="text-right">
-                    {grams(goal.data.meal?.net_carbs_g ?? null)}
-                  </td>
+                  {goal.data.meal !== null && (
+                    <td className="text-right">
+                      {grams(goal.data.meal.net_carbs_g)}
+                    </td>
+                  )}
                 </tr>
               </>
             )}

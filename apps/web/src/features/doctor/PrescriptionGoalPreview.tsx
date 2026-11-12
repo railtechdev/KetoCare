@@ -138,17 +138,24 @@ export function PrescriptionGoalPreview({
       </table>
       {/* Арифметика диетической единицы — так, как её объясняет слайд Yonsei,
           присланный клиникой: врач видит, откуда взялись граммы. Числа — от
-          сервера, браузер только подставляет их в фразу. */}
-      <p className="m-0 max-w-form text-sm text-muted-foreground">
-        {t("prescription.goal.unit", {
-          ratio: formatRatio(ratio),
-          times: formatNumber(ratio, Number.isInteger(ratio) ? 0 : 1),
-          // 2,5 : 1 даёт 26,5 ккал: целые ккал здесь соврали бы.
-          unitKcal: formatNumber(unitKcal, Number.isInteger(unitKcal) ? 0 : 1),
-          kcal: formatKcal(kcalPerDay),
-          units: formatNumber(day.non_fat_g, 1),
-        })}
-      </p>
+          сервера, браузер только подставляет их в фразу. Пока ответ на новый
+          ввод не пришёл, фразы нет: старые числа с новым соотношением дали бы
+          неверное деление. */}
+      {!query.isPlaceholderData && (
+        <p className="m-0 max-w-form text-sm text-muted-foreground">
+          {t("prescription.goal.unit", {
+            ratio: formatRatio(ratio),
+            times: formatNumber(ratio, Number.isInteger(ratio) ? 0 : 1),
+            // 2,5 : 1 даёт 26,5 ккал: целые ккал здесь соврали бы.
+            unitKcal: formatNumber(
+              unitKcal,
+              Number.isInteger(unitKcal) ? 0 : 1,
+            ),
+            kcal: formatKcal(kcalPerDay),
+            units: formatNumber(day.non_fat_g, 1),
+          })}
+        </p>
+      )}
       {!proteinFits && (
         <p className="m-0 text-sm text-warning-strong">
           {t("prescription.goal.proteinTooHigh")}
