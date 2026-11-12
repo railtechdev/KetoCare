@@ -1014,6 +1014,24 @@ class TestRatioFitsPrescription:
         assert response.status_code == 403
         assert recipe["id"] not in response.text
 
+    async def test_recipe_card_refuses_another_familys_child(
+        self, client, session, make_user, make_patient, auth_headers, make_recipe
+    ):
+        """Карточка сверяет соотношение тем же правилом, что и поиск."""
+
+        recipe = await self._published(client, session, make_user, auth_headers, make_recipe)
+        _, patient = await self._world(session, make_user, make_patient, ratio=4.0)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            f"/api/v1/recipes/{recipe['id']}",
+            params={"patient_id": str(patient.id)},
+            headers=auth_headers(stranger),
+        )
+
+        assert response.status_code == 403
+        assert "ratio_fits_prescription" not in response.text
+
     async def test_malformed_patient_id_is_a_validation_error(
         self, client, make_user, auth_headers
     ):
