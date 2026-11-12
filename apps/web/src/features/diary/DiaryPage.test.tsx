@@ -309,9 +309,11 @@ describe("состояния, которые не врут", () => {
     );
     renderPage({ kind: "meals" });
 
-    expect(await screen.findByText(/отмечается в меню/)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Открыть план дня" }),
+      await screen.findByText(/Отметки «съедено» ставятся в меню/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Открыть меню дня" }),
     ).toHaveAttribute("href", expect.stringContaining("/app/menu"));
   });
 

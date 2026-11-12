@@ -13,6 +13,7 @@ import { FileUp } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CsvTemplateLink } from "../../components/CsvTemplateLink";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { PageLayout } from "../../components/PageLayout";
@@ -22,6 +23,20 @@ import {
   type RecipeImportError,
   type RecipeImportRow,
 } from "./useRecipeImport";
+
+/**
+ * Колонки шаблона — REQUIRED_COLUMNS из
+ * apps/api/src/api/services/recipe_import.py: строка на продукт рецепта.
+ */
+const RECIPE_TEMPLATE_COLUMNS = [
+  "title",
+  "category",
+  "yield_g",
+  "servings",
+  "instructions",
+  "product_name",
+  "grams",
+] as const;
 
 /**
  * CSV-импорт рецептов (раздел 15 п. 24 ТЗ).
@@ -137,7 +152,17 @@ export function RecipeImportPanel({ onDone }: { onDone: () => void }) {
             type="file"
             accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             label={t("import.file")}
-            hint={t("import.formatHint")}
+            hint={
+              <>
+                {t("import.formatHint")}{" "}
+                <CsvTemplateLink
+                  columns={RECIPE_TEMPLATE_COLUMNS}
+                  fileName="recipes.csv"
+                >
+                  {t("import.template")}
+                </CsvTemplateLink>
+              </>
+            }
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null);
               // Отчёт относится к прежнему файлу: оставить его на экране значит

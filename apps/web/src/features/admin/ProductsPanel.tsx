@@ -444,11 +444,7 @@ export function ProductsPanel({
   return (
     <div className="flex flex-col gap-section">
       {chrome === "tab" ? (
-        <SubPageHeader
-          title={t("products.title")}
-          intro={t("products.intro")}
-          actions={actions}
-        />
+        <SubPageHeader title={t("products.title")} actions={actions} />
       ) : (
         <PageActions>{actions}</PageActions>
       )}

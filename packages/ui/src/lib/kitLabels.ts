@@ -91,7 +91,7 @@ export const DEFAULT_KIT_LABELS: KitLabels = {
     within: (value) => `Соотношение ${value}, соответствует назначению`,
     off: (value) => `Соотношение ${value}, отклоняется от назначения`,
     target: (value) => `Цель: ${value}`,
-    delta: (value) => `Δ ${value}`,
+    delta: (value) => `отклонение ${value}`,
     inRange: "В норме",
     deviation: "Отклонение",
     critical: "Критическое",
@@ -100,7 +100,7 @@ export const DEFAULT_KIT_LABELS: KitLabels = {
     web: "Веб",
     bot: "Бот",
     miniapp: "Приложение",
-    ai_parsed: "Распознано ИИ",
+    ai_parsed: "Распознано из текста",
   },
 };
 

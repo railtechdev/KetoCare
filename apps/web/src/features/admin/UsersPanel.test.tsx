@@ -107,10 +107,10 @@ describe("учётные записи", () => {
     await user.type(await screen.findByLabelText(/Поиск по имени/), "кого нет");
 
     expect(
-      await screen.findByText("По этому отбору никого нет"),
+      await screen.findByText("По этим фильтрам никого нет"),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("button", { name: "Сбросить отбор" }).length,
+      screen.getAllByRole("button", { name: "Сбросить фильтры" }).length,
     ).toBeGreaterThan(0);
   });
 });

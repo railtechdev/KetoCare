@@ -279,12 +279,12 @@ describe("записи дневника в Mini App", () => {
     (api.GET as Mock).mockImplementation(fakeGet(logs));
     renderEntries();
 
-    expect(await screen.findByText("Отмечено в плане дня")).toBeInTheDocument();
+    expect(await screen.findByText("Отмечено в меню")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Исправить запись «Еда»" }),
     ).toBeNull();
     expect(
-      screen.getByText(/поправить её можно на вкладке/),
+      screen.getByText(/исправить её можно во вкладке/),
     ).toBeInTheDocument();
   });
 

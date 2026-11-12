@@ -206,7 +206,7 @@ class TestWhenParsingFails:
         await scenarios.meal_text_parse(message, state, api, linked_store, SETTINGS)
 
         assert message.last == texts.MEAL_TEXT_UNAVAILABLE
-        assert "по плану" in message.last
+        assert "в меню" in message.last
 
     @pytest.mark.asyncio
     async def test_revoked_link_ends_the_scenario(self, api, linked_store, state):

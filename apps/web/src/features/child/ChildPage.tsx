@@ -411,7 +411,6 @@ function ChildIntake({
   return (
     <PageLayout
       title={t("titleFor", { name: child.full_name })}
-      intro={t("intro")}
       width="form"
       onBack={onDone}
     >
@@ -442,7 +441,6 @@ function ChildDocuments({
   return (
     <PageLayout
       title={t("documents.title", { name: child.full_name })}
-      intro={t("documents.intro")}
       onBack={onDone}
     >
       <AttachmentsPanel patientId={child.id} />

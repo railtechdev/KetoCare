@@ -96,7 +96,7 @@ describe("привязка Telegram", () => {
 
     expect(await screen.findByText("ABCD2345")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(screen.getByText(/отправьте этот код боту/)).toBeInTheDocument();
+    expect(screen.getByText(/отправьте ему этот код/)).toBeInTheDocument();
   });
 
   it("отозванные привязки в списке действующих не показываются", async () => {

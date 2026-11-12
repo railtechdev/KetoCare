@@ -313,7 +313,7 @@ describe("сохранённое блюдо — в план дня", () => {
       "Приём 2",
     );
     await user.click(
-      await screen.findByRole("button", { name: "Добавить в план" }),
+      await screen.findByRole("button", { name: "Добавить в меню" }),
     );
 
     await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
@@ -342,11 +342,11 @@ describe("сохранённое блюдо — в план дня", () => {
       },
     );
     expect(
-      await screen.findByText("Добавлено в план: Сегодня, приём 2."),
+      await screen.findByText("Добавлено в меню: Сегодня, приём 2."),
     ).toBeInTheDocument();
     // Повторное нажатие поставило бы блюдо в тот же приём второй раз.
     expect(
-      screen.queryByRole("button", { name: "Добавить в план" }),
+      screen.queryByRole("button", { name: "Добавить в меню" }),
     ).not.toBeInTheDocument();
   });
 
@@ -358,7 +358,7 @@ describe("сохранённое блюдо — в план дня", () => {
     const days = await screen.findByRole("group", { name: "День" });
     await user.click(within(days).getByRole("button", { name: "Завтра" }));
     await user.click(
-      await screen.findByRole("button", { name: "Добавить в план" }),
+      await screen.findByRole("button", { name: "Добавить в меню" }),
     );
 
     await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
@@ -382,11 +382,9 @@ describe("сохранённое блюдо — в план дня", () => {
     renderScreen();
     await saveDish(user);
 
+    expect(await screen.findByText(/Загружаем меню/)).toBeInTheDocument();
     expect(
-      await screen.findByText(/Загружаем план этого дня/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Добавить в план" }),
+      screen.queryByRole("button", { name: "Добавить в меню" }),
     ).not.toBeInTheDocument();
     expect(api.PUT).not.toHaveBeenCalled();
   });
@@ -403,10 +401,10 @@ describe("сохранённое блюдо — в план дня", () => {
     await saveDish(user);
 
     expect(
-      await screen.findByText(/Не удалось загрузить план этого дня/),
+      await screen.findByText(/Не удалось загрузить меню этого дня/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Добавить в план" }),
+      screen.queryByRole("button", { name: "Добавить в меню" }),
     ).not.toBeInTheDocument();
     expect(api.PUT).not.toHaveBeenCalled();
   });

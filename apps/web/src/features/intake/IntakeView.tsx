@@ -71,7 +71,6 @@ export function IntakeView({
   return (
     <Section
       title={t("title")}
-      description={t("intro")}
       density="compact"
       action={
         editable &&

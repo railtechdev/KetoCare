@@ -199,7 +199,7 @@ describe("форма назначения", () => {
 
     // Номер версии берётся из обновлённой истории, а не из «было плюс один»,
     // и сообщается тостом, а не зелёной строкой в потоке страницы.
-    expect(await screen.findByText("Создана версия 3")).toBeInTheDocument();
+    expect(await screen.findByText("Назначение сохранено")).toBeInTheDocument();
   });
 
   it("перед записью показывает значения и прежние рядом с изменёнными, а отмена ничего не пишет", async () => {
@@ -217,11 +217,9 @@ describe("форма назначения", () => {
     );
 
     const dialog = await screen.findByRole("alertdialog", {
-      name: "Подтвердить новую версию назначения?",
+      name: "Подтвердить изменение назначения?",
     });
-    const summary = within(dialog).getByLabelText(
-      "Значения новой версии назначения",
-    );
+    const summary = within(dialog).getByLabelText("Значения назначения");
     // Изменённое — с прежним значением рядом, неизменённое — одно.
     expect(within(summary).getByText("3.5 : 1")).toBeInTheDocument();
     expect(within(summary).getByText("(было 4.0 : 1)")).toBeInTheDocument();

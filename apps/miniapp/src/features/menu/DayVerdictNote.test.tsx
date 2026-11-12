@@ -34,7 +34,7 @@ describe("словарь Mini App объясняет каждую причину
     );
 
     expect(
-      screen.getByText(/Кетосоотношение дня не определено/),
+      screen.getByText(/Кетосоотношение не посчитать/),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Кетосоотношение дня соответствует назначению."),

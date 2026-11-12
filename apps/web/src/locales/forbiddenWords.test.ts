@@ -1,55 +1,80 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import {
+  FORBIDDEN_TERMS,
+  forbiddenTermsIn,
+  type ForbiddenTerm,
+} from "@ketocare/ui/testing";
 import { describe, expect, it } from "vitest";
 
 /**
- * Словарь терминов кабинета (`docs/PLAN_UI_TEXT_2026-11.md`, раздел 3, и
- * `docs/UI_GUIDE.md`). Внутренняя кухня и прежние названия не возвращаются в
- * тексты: один предмет — одно слово. Печатные формы показывают «Версия
- * расчёта», и это слово не запрещено.
+ * Словарь терминов (`docs/PLAN_UI_TEXT_2026-11.md`, раздел 3).
+ *
+ * Общий список запрещённых слов — `@ketocare/ui/testing` (`forbiddenTerms.json`):
+ * по нему проверяются все четыре канала, кабинет, Mini App, бот и рассылки.
+ * Здесь к нему добавлены слова, которые встречались только в кабинете: прежние
+ * названия его собственных предметов.
  */
-const FORBIDDEN: ReadonlyArray<[RegExp, string]> = [
-  [/ядр[оау]/i, "расчётное ядро — внутренняя кухня"],
-  [/сервер/i, "сервер — внутренняя кухня"],
-  [/вердикт/i, "вердикт — внутренняя кухня"],
-  [/сним(ок|к)/i, "снимок — внутренняя кухня"],
-  [/план питания/i, "пишем «меню»"],
-  [/план на день/i, "пишем «меню на день»"],
-  [/раскладк/i, "пишем «блюдо»"],
-  [/мои блюда|своих блюд|свои блюда/i, "пишем «блюда ребёнка»"],
-  [/библиотек/i, "пишем «рецепты»"],
-  [/коэффициент порции|множитель порции/i, "пишем «порция»"],
-  [/выведен из оборота/i, "пишем «в архиве»"],
-  [/назначить препарат/i, "пишем «добавить препарат»"],
-  // Аудит 12.11.2026: названия чужих программ и авторов формул врачу ничего
-  // не объясняют, а чужая программа в интерфейсе читается как заимствование.
-  [/KDC|KetoDiet/i, "название чужой программы"],
-  [/Холлиде|Сегар/i, "имя автора формулы — пишем, от чего считается"],
+const CABINET_TERMS: readonly ForbiddenTerm[] = [
+  { pattern: /сним(ок|к)/i, why: "снимок — внутренняя кухня" },
+  { pattern: /раскладк/i, why: "пишем «блюдо»" },
+  {
+    pattern: /мо[её] блюд|мои блюд|сво[её] блюд|свои[хм]? блюд|ваш[а-я]* блюд/i,
+    why: "пишем «блюда ребёнка»",
+  },
+  { pattern: /библиотек/i, why: "пишем «рецепты»" },
+  {
+    pattern: /коэффициент порции|множитель порции/i,
+    why: "пишем «порция»",
+  },
+  { pattern: /назначить препарат/i, why: "пишем «добавить препарат»" },
+  { pattern: /позици[яиюей]/i, why: "пишем «продукт» или «блюдо»" },
+  {
+    pattern: /стандарт(?!н)|внешний документ|редакци/i,
+    why: "пишем «источник», «справочник клиники», «издание»",
+  },
+  { pattern: /мимо цели/i, why: "пишем «не по назначению»" },
+  { pattern: /подогна|подгон/i, why: "пишем «пересчитать под ребёнка»" },
+  { pattern: /снять ведение/i, why: "пишем «убрать из ведущих»" },
+  { pattern: /TOTP|мини-приложени/i, why: "пишем «код входа», «приложение»" },
 ];
+
+/**
+ * Где запрещённое слово оправдано. Ключ — `файл:ключ`.
+ *
+ * Версия расчёта остаётся в печатных формах (раздел 3 словаря): карточка блюда
+ * на бумаге — документ, по которому через год восстанавливают, чем считали.
+ */
+const ALLOWED = new Set(["calculator.json:engineVersion"]);
 
 const DIR = join(__dirname, "ru");
 
-function strings(value: unknown, path: string, out: [string, string][]) {
-  if (typeof value === "string") out.push([path, value]);
-  else if (value !== null && typeof value === "object")
-    for (const [key, child] of Object.entries(value))
-      strings(child, path === "" ? key : `${path}.${key}`, out);
-  return out;
-}
-
 describe("словарь терминов кабинета", () => {
   it("ни одна строка не использует запрещённых слов", () => {
-    const found: string[] = [];
-    for (const file of readdirSync(DIR).filter((f) => f.endsWith(".json"))) {
-      const entries = strings(
-        JSON.parse(readFileSync(join(DIR, file), "utf8")),
-        "",
-        [],
-      );
-      for (const [key, text] of entries)
-        for (const [pattern, why] of FORBIDDEN)
-          if (pattern.test(text)) found.push(`${file}:${key} — ${why}`);
-    }
+    const terms = [...FORBIDDEN_TERMS, ...CABINET_TERMS];
+    const found = readdirSync(DIR)
+      .filter((file) => file.endsWith(".json"))
+      .flatMap((file) =>
+        forbiddenTermsIn(
+          file,
+          JSON.parse(readFileSync(join(DIR, file), "utf8")),
+          terms,
+        ),
+      )
+      .filter((entry) => !ALLOWED.has(entry.split(" — ")[0] ?? ""));
     expect(found).toEqual([]);
+  });
+
+  it("исключения не пережили своих строк", () => {
+    // Исключение без строки — дыра на будущее: под тем же ключом однажды
+    // появится другой текст, и проверка его пропустит.
+    for (const entry of ALLOWED) {
+      const [file, key] = entry.split(":");
+      const dict = JSON.parse(
+        readFileSync(join(DIR, file ?? ""), "utf8"),
+      ) as Record<string, unknown>;
+      expect(typeof dict[key ?? ""], entry).toBe("string");
+    }
   });
 });

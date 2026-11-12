@@ -67,7 +67,7 @@ describe("вход со вторым фактором", () => {
     await submitCredentials();
 
     expect(
-      await screen.findByLabelText(/Код из приложения-аутентификатора/),
+      await screen.findByLabelText(authRu.login.totpCode),
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(signIn).not.toHaveBeenCalled();
@@ -86,10 +86,7 @@ describe("вход со вторым фактором", () => {
         name: authRu.login.rememberDevice,
       }),
     );
-    await user.type(
-      screen.getByLabelText(/Код из приложения-аутентификатора/),
-      "123456",
-    );
+    await user.type(screen.getByLabelText(authRu.login.totpCode), "123456");
     await user.click(screen.getByRole("button", { name: authRu.login.submit }));
 
     await waitFor(() =>
@@ -112,9 +109,7 @@ describe("вход со вторым фактором", () => {
     renderPage();
     const user = await submitCredentials();
 
-    const code = await screen.findByLabelText(
-      /Код из приложения-аутентификатора/,
-    );
+    const code = await screen.findByLabelText(authRu.login.totpCode);
     await waitFor(() => expect(code).toHaveFocus());
 
     // Переключение на резервный код переносит фокус и в его поле.
@@ -179,7 +174,7 @@ describe("вход со вторым фактором", () => {
 
     expect(await screen.findByLabelText(/Резервный код/)).toBeInTheDocument();
     expect(
-      screen.queryByLabelText(/Код из приложения-аутентификатора/),
+      screen.queryByLabelText(authRu.login.totpCode),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Ввести код из приложения/ }),
@@ -189,9 +184,7 @@ describe("вход со вторым фактором", () => {
     expect(
       screen.getByText(/Вход по коду из приложения сломан/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/сбросит администратор клиники/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/обратитесь к администратору/)).toBeInTheDocument();
     expect(signIn).not.toHaveBeenCalled();
   });
 
@@ -216,7 +209,7 @@ describe("вход со вторым фактором", () => {
     await user.click(screen.getByRole("button", { name: "Войти" }));
 
     expect(
-      await screen.findByLabelText(/Код из приложения-аутентификатора/),
+      await screen.findByLabelText(authRu.login.totpCode),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/Вход по коду из приложения сломан/),

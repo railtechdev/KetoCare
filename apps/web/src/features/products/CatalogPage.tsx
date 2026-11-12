@@ -27,12 +27,7 @@ export function CatalogPage() {
   const isEditingItem = address.item !== undefined && address.item !== "";
 
   return (
-    <PageLayout
-      title={t("catalog.title")}
-      intro={t("catalog.intro")}
-      width="wide"
-      density="compact"
-    >
+    <PageLayout title={t("catalog.title")} width="wide" density="compact">
       {!isEditingItem && (
         <div>
           <SegmentedControl<CatalogView>

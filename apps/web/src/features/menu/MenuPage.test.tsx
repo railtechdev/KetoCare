@@ -432,7 +432,7 @@ describe("MenuPage", () => {
       await screen.findByText(/Назначено приёмов в день: 5/),
     ).toBeInTheDocument();
     // Приёмы, а не блюда: в завтраке две позиции, и это один приём.
-    expect(screen.getByText(/В плане на этот день: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/В меню на этот день: 2/)).toBeInTheDocument();
   });
 
   it("говорит, что блюдо изменили после составления дня", async () => {
@@ -540,9 +540,9 @@ describe("убрать план на день", () => {
     renderPage();
 
     await screen.findByText("Омлет на сливках");
-    await user.click(screen.getByRole("button", { name: /Убрать план/ }));
+    await user.click(screen.getByRole("button", { name: /Убрать меню/ }));
     await user.click(
-      await screen.findByRole("button", { name: "Убрать план" }),
+      await screen.findByRole("button", { name: "Убрать меню" }),
     );
 
     await waitFor(() => {

@@ -185,7 +185,7 @@ describe("карточка продукта вне текущей выборки
 
     renderPanel(OUTSIDE_ID);
 
-    expect(await screen.findByText("Позиция не найдена")).toBeInTheDocument();
+    expect(await screen.findByText("Продукт не найден")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "К списку продуктов" }),
     ).toBeInTheDocument();
@@ -265,7 +265,7 @@ describe("карточка продукта вне текущей выборки
     expect(
       screen.getByText("Нет связи. Проверьте интернет."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Позиция не найдена")).toBeNull();
+    expect(screen.queryByText("Продукт не найден")).toBeNull();
 
     // Кнопка обязана не просто быть, а повторять запрос: вся находка была в
     // том, что повторить было нечем.

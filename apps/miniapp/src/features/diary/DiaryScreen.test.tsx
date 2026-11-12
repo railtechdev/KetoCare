@@ -161,7 +161,7 @@ describe("динамика в Mini App", () => {
     renderScreen();
 
     expect(
-      await screen.findByText(/Без неё скачок показателя/),
+      await screen.findByText("История назначений не загрузилась."),
     ).toBeInTheDocument();
   });
 

@@ -251,9 +251,11 @@ export function LoginPage({
                 {totpRequired ? t("login.totpStepTitle") : t("login.title")}
               </h1>
             </CardTitle>
-            <CardDescription>
-              {totpRequired ? t("login.totpStepIntro") : t("login.intro")}
-            </CardDescription>
+            {/* Вступления у входа нет: экран называет заголовок. Строка нужна
+                только на шаге кода — он появляется внезапно. */}
+            {totpRequired && (
+              <CardDescription>{t("login.totpStepIntro")}</CardDescription>
+            )}
           </CardHeader>
 
           <CardContent>

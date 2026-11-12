@@ -257,11 +257,7 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
   return (
     <div className="flex flex-col gap-section">
       {chrome === "tab" ? (
-        <SubPageHeader
-          title={t("users.title")}
-          intro={t("users.intro")}
-          actions={inviteButton}
-        />
+        <SubPageHeader title={t("users.title")} actions={inviteButton} />
       ) : (
         // Заголовок даёт экран, а действие уходит в его шапку (П31).
         <PageActions>{inviteButton}</PageActions>
@@ -320,7 +316,6 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         title={t("invitations:title")}
-        description={t("invitations:intro")}
       >
         <InviteForm roles={STAFF_ROLES} />
 

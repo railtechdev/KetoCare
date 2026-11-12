@@ -290,7 +290,6 @@ export function PatientsListView() {
     // `compact` на весь экран: правило П26 канона, блоки её наследуют.
     <PageLayout
       title={t("list.title")}
-      intro={t("list.intro")}
       width="wide"
       density="compact"
       actions={

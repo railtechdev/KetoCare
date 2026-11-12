@@ -151,7 +151,7 @@ describe("карточка продукта", () => {
     expect(
       await screen.findByText("правка: Анна Диетолог, 10.11.2026"),
     ).toBeInTheDocument();
-    expect(screen.getByText("из стандарта «СанПиН 2025»")).toBeInTheDocument();
+    expect(screen.getByText("из источника «СанПиН 2025»")).toBeInTheDocument();
   });
 
   it("прочерк источника — «нет данных», а не ноль; отходы — процентом", async () => {
@@ -217,7 +217,7 @@ describe("карточка продукта", () => {
     // Автор назван у каждой записи: идентификатор без имени отвечает «кто-то».
     expect(screen.getAllByText("Анна Диетолог")).toHaveLength(2);
     // У самой старой записи разницы нет — это заведение позиции.
-    expect(entries[1]?.textContent).toContain("позиция заведена");
+    expect(entries[1]?.textContent).toContain("продукт заведён");
   });
 
   it("семье историю не показывает и не запрашивает", async () => {

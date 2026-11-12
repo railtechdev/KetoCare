@@ -120,12 +120,12 @@ describe("отборы выдачи в адресе", () => {
     expect(valueControl(await screen.findByLabelText("Категория"))).toHaveValue(
       "breakfast",
     );
-    expect(valueControl(screen.getByLabelText("Соотношение от"))).toHaveValue(
-      3,
-    );
-    expect(valueControl(screen.getByLabelText("Соотношение до"))).toHaveValue(
-      4.5,
-    );
+    expect(
+      valueControl(screen.getByLabelText("Кетосоотношение от")),
+    ).toHaveValue(3);
+    expect(
+      valueControl(screen.getByLabelText("Кетосоотношение до")),
+    ).toHaveValue(4.5);
     await waitFor(() =>
       expect(api.GET).toHaveBeenCalledWith(
         "/api/v1/recipes",

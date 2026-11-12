@@ -142,12 +142,7 @@ export function DoctorHomePage() {
   return (
     // Главная врача — рабочая страница: очередь внимания и цифры по когорте
     // стояли друг под другом в колонке 1152 px, при том что справа было пусто.
-    <PageLayout
-      title={t("home.title")}
-      intro={t("home.intro")}
-      width="wide"
-      density="compact"
-    >
+    <PageLayout title={t("home.title")} width="wide" density="compact">
       <Columns
         asideLabel={t("home.cohort.title")}
         asideSticky

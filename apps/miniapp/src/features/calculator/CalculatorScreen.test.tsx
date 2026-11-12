@@ -1800,7 +1800,7 @@ describe("калькулятор в Mini App", () => {
     await addProduct(user);
 
     expect(
-      await screen.findByText("Приправа — не учитывается в расчёте"),
+      await screen.findByText("Приправа — не учитывается"),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("group", { name: /Вклад продукта/ }),

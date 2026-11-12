@@ -106,7 +106,6 @@ export function DiaryPage({ patientId }: { patientId: string }) {
     // уезжала в горизонтальную прокрутку, при том что справа было пусто.
     <PageLayout
       title={t("title")}
-      intro={t("intro")}
       width="wide"
       actions={
         // Кнопка обещает ввод на каждой вкладке, а на «Лекарствах» с пустой
