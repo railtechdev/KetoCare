@@ -18,7 +18,7 @@ import {
   RATIO_CHOICES,
   formatRatio,
 } from "@ketocare/ui";
-import { onlineManager } from "@tanstack/react-query";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -46,7 +46,8 @@ import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
 import type { DishRow } from "./types";
-import { useProduct } from "./useProducts";
+import { productQuery, useProduct } from "./useProducts";
+import { clearDraft, draftKey, readDraft, writeDraft } from "./draft";
 import {
   useScaleMutation,
   useSolveMutation,
@@ -109,12 +110,20 @@ export function CalculatorView({
 }) {
   const { t } = useTranslation("calculator");
 
-  const [rows, setRows] = useState<DishRow[]>([]);
-
   // Продукт, пришедший из справочника (`?item=<id>`). Справочник знает только
   // идентификатор, состав на 100 г нужно дочитать.
   const [incomingId, setIncomingId] = useSectionItem();
   const incoming = parseIncoming(incomingId);
+
+  // Черновик состава переживает обновление страницы и уход в справочник
+  // (`draft.ts`). Читается один раз, при открытии экрана.
+  const currentDraftKey = draftKey(patientId, incoming);
+  const [restored] = useState(() => readDraft(currentDraftKey));
+  const [rows, setRows] = useState<DishRow[]>(() => restored ?? []);
+  // Состав, совпадающий с сохранённым (или только что открытым блюдом), —
+  // не черновик: хранить его незачем, а восстановленный поверх блюда, правленого
+  // с тех пор, он вернул бы прежние граммы.
+  const cleanRows = useRef<DishRow[] | null>(restored === null ? rows : null);
   const incomingProduct = useProduct(
     incoming?.kind === "product" ? incoming.id : undefined,
   );
@@ -170,7 +179,11 @@ export function CalculatorView({
   // Какое блюдо уже разложено на экране. Ссылка из адреса НЕ снимается: она
   // описывает, что открыто, и после F5 состав должен вернуться. А вот применять
   // её повторно нельзя — правки граммовки затирались бы исходным составом.
-  const appliedDish = useRef<string | null>(null);
+  // Восстановленный черновик и есть правка этого блюда: состав из адреса
+  // поверх него не раскладывается.
+  const appliedDish = useRef<string | null>(
+    restored === null ? null : (incomingId ?? null),
+  );
 
   useEffect(() => {
     const composition = incomingDish.rows;
@@ -180,8 +193,47 @@ export function CalculatorView({
     appliedDish.current = incomingId ?? null;
     // Состав блюда ЗАМЕЩАЕТ набранный: человек пришёл пересчитать конкретное
     // блюдо, а не дополнить им то, что было на экране.
+    cleanRows.current = composition;
     setRows(composition);
   }, [incomingDish.rows, incoming, incomingId]);
+
+  useEffect(() => {
+    if (rows.length === 0 || rows === cleanRows.current) {
+      clearDraft(currentDraftKey);
+    } else {
+      writeDraft(currentDraftKey, rows);
+    }
+  }, [rows, currentDraftKey]);
+
+  // Числа на 100 г восстановленного черновика дочитываются из справочника:
+  // расчёт идёт по ним, а продукт могли поправить, пока вкладка была закрыта.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (restored === null) return;
+    let cancelled = false;
+    void Promise.all(
+      restored.map((row) =>
+        queryClient.fetchQuery(productQuery(row.product.id)).catch(() => null),
+      ),
+    ).then((fresh) => {
+      if (cancelled) return;
+      const byId = new Map(
+        fresh
+          .filter((product) => product !== null)
+          .map((product) => [product.id, product]),
+      );
+      if (byId.size === 0) return;
+      setRows((current) =>
+        current.map((row) => {
+          const product = byId.get(row.product.id);
+          return product === undefined ? row : { ...row, product };
+        }),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [restored, queryClient]);
 
   useEffect(() => {
     const product = incomingProduct.data;
@@ -517,6 +569,7 @@ export function CalculatorView({
                 // Состав калькулятора живёт в адресе блюда или набирается заново за
                 // секунды; формы рецепта и профиля ребёнка этого не умеют.
                 canLeave
+                canCreate
                 excludeIds={rows.map((r) => r.product.id)}
                 onPick={(product) => {
                   setRows((current) => [...current, { product, grams: 50 }]);
@@ -622,6 +675,10 @@ export function CalculatorView({
                     rows={rows}
                     blockedBy={tooHeavyReason}
                     waitingFor={actionsBusyReason}
+                    onSaved={() => {
+                      cleanRows.current = rows;
+                      clearDraft(currentDraftKey);
+                    }}
                   />
                 ) : (
                   <SaveDishForm
@@ -636,6 +693,11 @@ export function CalculatorView({
                         ? { id: incoming.id, title: incomingDish.dishTitle }
                         : null
                     }
+                    onSaved={() => {
+                      // Сохранённый состав — уже не черновик.
+                      cleanRows.current = rows;
+                      clearDraft(currentDraftKey);
+                    }}
                     onSavedAsNew={(dishId) => {
                       // The copy has the rows already on screen; applying it
                       // again would only repeat them.

@@ -8,6 +8,7 @@ import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
 import recipesRu from "../../locales/ru/recipes.json";
 import { SectionRouter } from "../../test/SectionRouter";
+import { nativeSelect } from "../../test/nativeSelect";
 import { MyDishesPanel } from "./MyDishesPanel";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -179,5 +180,80 @@ describe("блюда ребёнка в карте после смены назн
       "/api/v1/patients/{patient_id}/custom-dish-review",
       expect.anything(),
     );
+  });
+});
+
+describe("блюдо из списка — в меню", () => {
+  function renderAt(openIn: "section" | "card") {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? {
+              data: undefined,
+              error: { error: { code: "not_found", message: "Меню нет." } },
+            }
+          : path.endsWith("/overview")
+            ? { data: { prescription: { meals_per_day: 3 } } }
+            : path.endsWith("/custom-dish-review")
+              ? { data: { off_target: [] } }
+              : { data: { items: [DISH], total: 1 } },
+      ),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <SectionRouter section="recipes">
+          <MyDishesPanel patientId={PATIENT_ID} openIn={openIn} />
+        </SectionRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("в карте ребёнка ставит блюдо в выбранный приём", async () => {
+    // Раньше в карте «В меню» не было вовсе: специалист искал блюдо заново в
+    // меню, поиском.
+    (api.PUT as Mock).mockResolvedValue({
+      data: { date: "2026-11-12", items: [] },
+    });
+    const user = userEvent.setup();
+    renderAt("card");
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "В меню: «Завтрак с авокадо»",
+      }),
+    );
+    await user.selectOptions(
+      nativeSelect(await screen.findByLabelText("Приём")),
+      "3",
+    );
+    await user.click(screen.getByRole("button", { name: "Добавить в меню" }));
+
+    await waitFor(() =>
+      expect(api.PUT).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/menus",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            items: [
+              {
+                meal_index: 3,
+                recipe_id: null,
+                custom_dish_id: "d1",
+                portion_factor: 1,
+              },
+            ],
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("«Съели» с пустой формой дневника больше не предлагается", async () => {
+    renderAt("section");
+
+    await screen.findByText("Завтрак с авокадо");
+    expect(screen.queryByText("Съели")).not.toBeInTheDocument();
   });
 });

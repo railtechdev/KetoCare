@@ -301,7 +301,7 @@ class TestCreate:
             {"category": "supper"},
             {"servings": 0},
             {"yield_g": 0},
-            {"instructions": ""},
+            {"instructions": "x" * 20001},
             {"ingredients": [{"product_id": str(uuid.uuid4()), "grams": 0}]},
             {"ingredients": [{"product_id": "не-uuid", "grams": 10}]},
         ],
@@ -318,6 +318,26 @@ class TestCreate:
             headers=auth_headers(dietitian),
         )
         assert response.status_code == 422
+
+    @pytest.mark.parametrize("instructions", ["", None])
+    async def test_instructions_are_optional(
+        self, client, session, make_user, auth_headers, instructions
+    ):
+        """A recipe is saved as a composition alone; the cabinet hides the empty block."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        payload = _payload((butter, 100))
+        if instructions is None:
+            del payload["instructions"]
+        else:
+            payload["instructions"] = instructions
+
+        response = await client.post(
+            "/api/v1/recipes", json=payload, headers=auth_headers(dietitian)
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["instructions"] == ""
 
 
 async def _legacy_zero_servings(session, recipe_id) -> None:

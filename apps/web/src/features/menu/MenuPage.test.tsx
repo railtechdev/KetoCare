@@ -697,3 +697,65 @@ describe("добавление блюда", () => {
     );
   });
 });
+
+describe("убрать блюдо из дня: тупики", () => {
+  function withItems(items: (typeof MENU.items)[number][]) {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? { data: { ...MENU, items } }
+          : respond(path),
+      ),
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.PUT as unknown as Mock).mockResolvedValue({ data: MENU });
+    (api.DELETE as unknown as Mock).mockResolvedValue({ error: undefined });
+  });
+
+  it("последнее блюдо дня убирается вместе с меню — после подтверждения", async () => {
+    // Раньше кнопка была серой с ложной причиной: день из одного ошибочного
+    // блюда так и оставался в итогах.
+    withItems([MENU.items[0]!]);
+    const user = userEvent.setup();
+    renderPage();
+
+    const remove = await screen.findByLabelText(
+      "Убрать «Каша на кокосовом масле» из меню",
+    );
+    expect(remove).toBeEnabled();
+    await user.click(remove);
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Убрать «Каша на кокосовом масле» и меню на день?",
+    });
+    expect(dialog).toHaveTextContent(/удалится меню на/);
+    expect(api.DELETE).not.toHaveBeenCalled();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Убрать меню на день" }),
+    );
+
+    await waitFor(() => expect(api.DELETE).toHaveBeenCalled());
+    expect(api.PUT).not.toHaveBeenCalled();
+  });
+
+  it("съеденное блюдо не убирается, и кнопка говорит почему", async () => {
+    withItems([{ ...MENU.items[0]!, eaten: true }, MENU.items[1]!]);
+    const user = userEvent.setup();
+    renderPage();
+
+    const remove = await screen.findByLabelText(
+      "Убрать «Каша на кокосовом масле» из меню",
+    );
+    expect(remove).toHaveAttribute("aria-disabled", "true");
+    expect(remove).toHaveAccessibleDescription(
+      "Блюдо отмечено съеденным. Чтобы убрать его, сначала снимите отметку.",
+    );
+    await user.click(remove);
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(api.PUT).not.toHaveBeenCalled();
+  });
+});

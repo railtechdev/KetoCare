@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import recipesRu from "../../locales/ru/recipes.json";
+import { SectionRouter } from "../../test/SectionRouter";
 import { RecipeFitSheet } from "./RecipeFitSheet";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -147,5 +148,26 @@ describe("блюда из библиотеки", () => {
 
     const card = (await screen.findByText("С арахисом")).closest("li");
     expect(within(card as HTMLElement).queryByRole("checkbox")).toBeNull();
+  });
+});
+
+describe("рецептов для подгонки нет", () => {
+  it("ведёт в рецепты ссылкой, а не текстом", async () => {
+    (api.GET as Mock).mockResolvedValue({ data: { items: [DRAFT], total: 1 } });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SectionRouter section="patients">
+          <RecipeFitSheet patientId={PATIENT_ID} />
+        </SectionRouter>
+      </QueryClientProvider>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Добавить из рецептов/ }),
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "Открыть рецепты" }),
+    ).toHaveAttribute("href", expect.stringContaining("/app/recipes"));
   });
 });

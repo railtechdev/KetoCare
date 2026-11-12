@@ -8,7 +8,9 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import "../../lib/i18n";
 import { api } from "../../lib/api";
 import { SectionRouter } from "../../test/SectionRouter";
+import { nativeSelect, valueControl } from "../../test/nativeSelect";
 import { RecipeForm } from "./RecipeForm";
+import { EMPTY_RECIPE_FORM_VALUES } from "./schemas";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -283,7 +285,126 @@ describe("показатели в форме рецепта", () => {
       await screen.findByText(/Показатели сейчас не посчитать/),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Создать рецепт" }),
+      screen.getByRole("button", { name: "Сохранить черновик" }),
     ).toBeEnabled();
+  });
+});
+
+describe("умолчания формы рецепта", () => {
+  function renderEmpty(props: { canPublish?: boolean } = {}) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onSubmit = vi.fn();
+    render(
+      <RecipeForm
+        mode="create"
+        defaultValues={EMPTY_RECIPE_FORM_VALUES}
+        pending={false}
+        error={null}
+        canPublish={props.canPublish}
+        onSubmit={onSubmit}
+        onCancel={() => {}}
+      />,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>
+            <SectionRouter section="recipes">{children}</SectionRouter>
+          </QueryClientProvider>
+        ),
+      },
+    );
+    return onSubmit;
+  }
+
+  async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(await screen.findByLabelText(/^Название/), "Омлет");
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText(/Категория/)),
+      "breakfast",
+    );
+    await user.type(screen.getByLabelText(/Порций/), "1");
+    await addButter(user);
+  }
+
+  it("категория не выбрана заранее, и без выбора рецепт не сохраняется", async () => {
+    // «Завтрак» стоял по умолчанию и незаметно доставался каждому рецепту.
+    const user = userEvent.setup();
+    const onSubmit = renderEmpty();
+
+    expect(valueControl(await screen.findByLabelText(/Категория/))).toHaveValue(
+      "",
+    );
+    await user.type(screen.getByLabelText(/^Название/), "Омлет");
+    await user.type(screen.getByLabelText(/Порций/), "1");
+    await addButter(user);
+    await user.click(
+      screen.getByRole("button", { name: "Сохранить черновик" }),
+    );
+
+    expect(
+      (await screen.findAllByText("Выберите категорию.")).length,
+    ).toBeGreaterThan(0);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("выход по умолчанию — сумма граммов состава, своё значение не перезаписывается", async () => {
+    const user = userEvent.setup();
+    renderEmpty();
+    await addButter(user);
+
+    const yieldField = screen.getByLabelText(/Выход, г/);
+    await waitFor(() => expect(yieldField).toHaveValue(50));
+    expect(screen.getByText(/Сумма граммов состава/)).toBeInTheDocument();
+
+    const grams = screen.getByLabelText(/Масса продукта «Масло сливочное»/);
+    await user.clear(grams);
+    await user.type(grams, "80");
+    await waitFor(() => expect(yieldField).toHaveValue(80));
+
+    // Вписанное человеком — блюдо уварилось — остаётся его.
+    await user.clear(yieldField);
+    await user.type(yieldField, "60");
+    await user.clear(grams);
+    await user.type(grams, "90");
+    expect(yieldField).toHaveValue(60);
+    expect(screen.queryByText(/Сумма граммов состава/)).not.toBeInTheDocument();
+  });
+
+  it("сохраняет рецепт без текста приготовления", async () => {
+    const user = userEvent.setup();
+    const onSubmit = renderEmpty();
+    await fillRequired(user);
+
+    await user.click(
+      screen.getByRole("button", { name: "Сохранить черновик" }),
+    );
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const [values, options] = onSubmit.mock.calls[0]!;
+    expect(values.instructions).toBe("");
+    expect(values.yieldG).toBe(50);
+    expect(options).toEqual({ publish: false });
+  });
+
+  it("«Сохранить и опубликовать» просит публикацию одним шагом", async () => {
+    const user = userEvent.setup();
+    const onSubmit = renderEmpty({ canPublish: true });
+    await fillRequired(user);
+
+    await user.click(
+      screen.getByRole("button", { name: "Сохранить и опубликовать" }),
+    );
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]![1]).toEqual({ publish: true });
+  });
+
+  it("у опубликованного рецепта второй кнопки нет", async () => {
+    renderEmpty({ canPublish: false });
+    await screen.findByLabelText(/^Название/);
+    expect(
+      screen.queryByRole("button", { name: "Сохранить и опубликовать" }),
+    ).not.toBeInTheDocument();
   });
 });

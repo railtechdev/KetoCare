@@ -287,9 +287,14 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
         <Ingredients recipe={recipe} />
       </Section>
 
-      <Section title={t("recipes.instructions")} density="compact">
-        <p className="break-words whitespace-pre-line">{recipe.instructions}</p>
-      </Section>
+      {/* Текст приготовления у рецепта необязателен: без него блока нет. */}
+      {recipe.instructions.trim() !== "" && (
+        <Section title={t("recipes.instructions")} density="compact">
+          <p className="break-words whitespace-pre-line">
+            {recipe.instructions}
+          </p>
+        </Section>
+      )}
     </div>
   );
 }

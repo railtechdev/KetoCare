@@ -11,15 +11,7 @@ import {
   formatRatio,
   toast,
 } from "@ketocare/ui";
-import {
-  CalendarPlus,
-  Calculator,
-  CookingPot,
-  Pencil,
-  Trash2,
-  Utensils,
-  Plus,
-} from "lucide-react";
+import { Calculator, CookingPot, Pencil, Trash2, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -27,6 +19,7 @@ import { Field } from "../../components/Field";
 import { SectionLink } from "../../components/SectionLink";
 import { PatientViewLink } from "../doctor/PatientViewLink";
 import { incomingDish } from "../calculator/incomingItem";
+import { AddToMenuPopover } from "../menu/AddToMenu";
 import { errorMessageOf } from "../../lib/api";
 import {
   useCustomDishes,
@@ -183,42 +176,18 @@ export function MyDishesPanel({
                 )}
               </Button>
 
-              {openIn !== "card" && (
-                <>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-touch"
-                  >
-                    <SectionLink
-                      section="menu"
-                      aria-label={t("myDishes.toMenu", { title: dish.title })}
-                      title={t("myDishes.toMenu", { title: dish.title })}
-                    >
-                      <CalendarPlus aria-hidden="true" className="size-4" />
-                      <span>{t("myDishes.short.menu")}</span>
-                    </SectionLink>
-                  </Button>
-
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-touch"
-                  >
-                    <SectionLink
-                      section="diary"
-                      diaryKind="meals"
-                      item="new"
-                      aria-label={t("myDishes.eaten", { title: dish.title })}
-                      title={t("myDishes.eaten", { title: dish.title })}
-                    >
-                      <Utensils aria-hidden="true" className="size-4" />
-                      <span>{t("myDishes.short.eaten")}</span>
-                    </SectionLink>
-                  </Button>
-                </>
+              {/* В меню — сразу в выбранный день и приём, и в карте ребёнка
+                  тоже: специалист собирает меню тем же путём, что и семья
+                  (ADR-0047). «Съели» здесь больше нет: запись дневника еды —
+                  свободный текст и сослаться на блюдо не умеет, форма
+                  открывалась пустой. Съеденное отмечают в меню. */}
+              {patientId !== null && (
+                <AddToMenuPopover
+                  patientId={patientId}
+                  dish={{ kind: "custom", id: dish.id, title: dish.title }}
+                  label={t("myDishes.short.menu")}
+                  ariaLabel={t("myDishes.toMenu", { title: dish.title })}
+                />
               )}
 
               <Button

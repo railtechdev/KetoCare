@@ -13,7 +13,7 @@ import {
   toast,
 } from "@ketocare/ui";
 import { CookingPot, Sparkles, X } from "lucide-react";
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   useFieldArray,
   useForm,
@@ -33,7 +33,11 @@ import { errorMessageOf } from "../../lib/api";
 import { ProductPicker } from "../calculator/ProductPicker";
 import { productLabel } from "./productLabel";
 import { useRecipeComputed } from "./useRecipeComputed";
-import { recipeFormSchema, type RecipeFormValues } from "./schemas";
+import {
+  compositionGrams,
+  recipeFormSchema,
+  type RecipeFormValues,
+} from "./schemas";
 import { useRecipeDraftMutation, type DraftCheck } from "./useRecipeDraft";
 import { RECIPE_CATEGORIES } from "./types";
 
@@ -43,7 +47,13 @@ interface Props {
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
-  onSubmit: (values: RecipeFormValues) => void;
+  /**
+   * Можно ли сохранить и сразу опубликовать — у нового рецепта и у черновика.
+   * Публикация была отдельным шагом в карточке после сохранения, и рецепт,
+   * сохранённый «готовым», оставался невидимым семьям.
+   */
+  canPublish?: boolean;
+  onSubmit: (values: RecipeFormValues, options: { publish: boolean }) => void;
   onCancel: () => void;
 }
 
@@ -60,6 +70,7 @@ export function RecipeForm({
   defaultValues,
   pending,
   error,
+  canPublish = false,
   onSubmit,
   onCancel,
 }: Props) {
@@ -97,7 +108,9 @@ export function RecipeForm({
     draft.mutate(
       {
         title: (watched.title ?? "").trim(),
-        category: watched.category ?? "breakfast",
+        // Категория в черновике — подсказка тону текста, не значение рецепта:
+        // пока её не выбрали, текст пишется как для любого блюда.
+        category: watched.category || "breakfast",
         servings:
           watched.servings && watched.servings > 0 ? watched.servings : 1,
         ingredients: (watched.ingredients ?? []).map((item) => ({
@@ -129,6 +142,20 @@ export function RecipeForm({
   }
 
   /**
+   * Выход по умолчанию — сумма граммов состава, и он идёт за составом, пока
+   * человек не впишет своё (блюдо уварилось, ужарилось). Вписанное больше не
+   * перезаписывается. У сохранённого рецепта выход уже задан — его не трогаем.
+   */
+  const [yieldOwn, setYieldOwn] = useState(
+    () => defaultValues.yieldG !== undefined,
+  );
+  const gramsTotal = compositionGrams(watched.ingredients ?? []);
+  useEffect(() => {
+    if (yieldOwn || gramsTotal <= 0) return;
+    setValue("yieldG", gramsTotal, { shouldValidate: submitCount > 0 });
+  }, [yieldOwn, gramsTotal, setValue, submitCount]);
+
+  /**
    * Показатели блюда по мере правки состава.
    *
    * Считает сервер (`/calc/verify`): своя арифметика в браузере — второй
@@ -158,8 +185,6 @@ export function RecipeForm({
     compositionEmpty && errors.ingredients
       ? t("form.errors.ingredients")
       : undefined;
-  const instructionsError =
-    errors.instructions && t("form.errors.instructions");
 
   // Сводка повторяет порядок формы: основное, порция, состав (по строке на
   // продукт с неверной массой), приготовление. Пустой состав ведёт в поиск
@@ -177,7 +202,6 @@ export function RecipeForm({
         ] as const,
     ),
     [productSearchId, compositionError],
-    [instructionsId, instructionsError],
   ]);
 
   return (
@@ -188,7 +212,9 @@ export function RecipeForm({
     >
       <form
         noValidate
-        onSubmit={handleSubmit(onSubmit)}
+        onSubmit={handleSubmit((values) =>
+          onSubmit(values, { publish: false }),
+        )}
         className="@container flex flex-col gap-screen"
       >
         <FormErrorSummary items={summary} focusKey={submitCount} />
@@ -210,6 +236,9 @@ export function RecipeForm({
               error={categoryError}
               {...register("category")}
             >
+              {/* Без предвыбора: «Завтрак» по умолчанию незаметно доставался
+                  каждому рецепту, у которого категорию не меняли. */}
+              <option value="">{t("form.categoryPlaceholder")}</option>
               {RECIPE_CATEGORIES.map((category) => (
                 <option key={category} value={category}>
                   {t(`categories.${category}`)}
@@ -235,8 +264,12 @@ export function RecipeForm({
               min={0}
               step={0.1}
               label={t("form.yieldG")}
+              hint={yieldOwn ? undefined : t("form.yieldHint")}
               error={yieldError}
-              {...register("yieldG", { valueAsNumber: true })}
+              {...register("yieldG", {
+                valueAsNumber: true,
+                onChange: () => setYieldOwn(true),
+              })}
             />
             <Field
               id={`${ids}-servings`}
@@ -465,9 +498,9 @@ export function RecipeForm({
           <TextAreaField
             id={instructionsId}
             label={t("form.instructions")}
+            optional
             rows={8}
             placeholder={t("form.instructionsPlaceholder")}
-            error={instructionsError}
             {...register("instructions")}
           />
 
@@ -527,6 +560,23 @@ export function RecipeForm({
           pending={pending}
           cancelLabel={t("actions.cancel")}
           onCancel={onCancel}
+          extra={
+            canPublish ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                disabled={pending}
+                onClick={() =>
+                  void handleSubmit((values) =>
+                    onSubmit(values, { publish: true }),
+                  )()
+                }
+              >
+                {t("form.submitPublish")}
+              </Button>
+            ) : undefined
+          }
         />
       </form>
     </PageLayout>

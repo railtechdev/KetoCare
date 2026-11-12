@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -328,5 +328,63 @@ describe("недавние продукты", () => {
       "/api/v1/patients/{patient_id}/menus/recent-products",
       expect.anything(),
     );
+  });
+});
+
+describe("продукта нет — не уходить со страницы", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("справочник открывается в новой вкладке: набранное остаётся", async () => {
+    const user = userEvent.setup();
+    (api.GET as Mock).mockResolvedValue({
+      data: { items: [], total: 0 },
+      error: undefined,
+    });
+    render(
+      <ProductPicker onPick={() => {}} excludeIds={[]} canLeave canCreate />,
+      { wrapper: withRole("parent") },
+    );
+
+    await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
+
+    const catalog = await screen.findByRole("link", {
+      name: /Искать в справочнике/,
+    });
+    expect(catalog).toHaveAttribute("target", "_blank");
+    // Семья справочник не правит — заводить продукт ей не предлагается.
+    expect(
+      screen.queryByRole("button", { name: "Добавить продукт в справочник" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("специалист заводит продукт панелью на том же экране", async () => {
+    const user = userEvent.setup();
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/products/categories"
+        ? { data: [{ id: "fats", name_ru: "Жиры" }], error: undefined }
+        : { data: { items: [], total: 0 }, error: undefined },
+    );
+    const onPick = vi.fn();
+    render(
+      <ProductPicker onPick={onPick} excludeIds={[]} canLeave canCreate />,
+      { wrapper: withRole("doctor") },
+    );
+
+    await user.type(await screen.findByLabelText(/Добавить продукт/), "фуагра");
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Добавить продукт в справочник",
+      }),
+    );
+
+    // Форма та же, что в справочнике, и начинается с того, что искали.
+    const dialog = await screen.findByRole("dialog", {
+      name: "Продукта нет в справочнике",
+    });
+    expect(dialog).toBeVisible();
+    expect(within(dialog).getByDisplayValue("фуагра")).toBeInTheDocument();
+    expect(onPick).not.toHaveBeenCalled();
   });
 });

@@ -34,7 +34,9 @@ class RecipeWrite(BaseModel):
     # ошибкой записи вместо понятного 422.
     yield_g: Annotated[float, Field(gt=0, le=99999.9)]
     servings: Annotated[int, Field(ge=1, le=100)]
-    instructions: str = Field(min_length=1, max_length=20000)
+    # Optional: a clinic recipe often arrives as a composition alone, and a
+    # required text made editors type a placeholder just to save it.
+    instructions: str = Field(default="", max_length=20000)
     # Пустой состав допустим только у черновика: publish его отклонит.
     ingredients: list[RecipeIngredientIn] = Field(default_factory=list, max_length=MAX_INGREDIENTS)
 
