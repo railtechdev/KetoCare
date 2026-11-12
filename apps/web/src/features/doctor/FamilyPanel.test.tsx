@@ -53,6 +53,7 @@ function wrapper({ children }: { children: ReactNode }) {
  */
 describe("кто ведёт ребёнка дома", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     vi.clearAllMocks();
     token = tokenFor("doctor");
     (api.POST as Mock).mockImplementation(async (path: string) => {
@@ -615,6 +616,7 @@ describe("напомнить семье", () => {
   }
 
   beforeEach(() => {
+    window.sessionStorage.clear();
     vi.clearAllMocks();
     token = tokenFor("doctor");
     (api.GET as Mock).mockResolvedValue({

@@ -34,15 +34,19 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+/** Через шесть дней от «сейчас»: код в хранилище вкладки ещё не истёк. */
+const IN_SIX_DAYS = new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString();
+
 const ISSUED = {
   code: "NEWC0D3S",
-  expires_at: "2026-10-08T10:00:00Z",
+  expires_at: IN_SIX_DAYS,
   deep_link: null,
   join_url: "https://app.example.org/join?code=NEWC0D3S",
 };
 
 describe("выпуск кода при открытии", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     vi.clearAllMocks();
     (api.GET as Mock).mockResolvedValue({ data: [] });
   });
@@ -80,8 +84,142 @@ describe("выпуск кода при открытии", () => {
   });
 });
 
+/** Строка журнала для кода `code` в состоянии `status`. */
+function journalRow(code: string | null, status: string) {
+  return {
+    code,
+    status,
+    purpose: "family_member",
+    created_at: "2026-11-10T10:00:00Z",
+    expires_at: IN_SIX_DAYS,
+    deep_link: null,
+    join_url:
+      status === "pending" && code !== null
+        ? `https://app.example.org/join?code=${code}`
+        : null,
+  };
+}
+
+/** Код, показанный крупно: тот же текст стоит и в журнале ниже. */
+function shownCode(): string | undefined {
+  return document.querySelector("output")?.textContent ?? undefined;
+}
+
+function renderPanel() {
+  return render(
+    <AccessCodePanel patientId={PATIENT_ID} audience="specialist" />,
+    { wrapper },
+  );
+}
+
+describe("повторное открытие панели не плодит коды", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  it("показывает код, выпущенный в этой вкладке, пока журнал считает его живым", async () => {
+    // Каждый код живёт неделю: пять открытий панели оставляли бы пять дверей.
+    (api.GET as Mock).mockResolvedValue({ data: [] });
+    (api.POST as Mock).mockResolvedValue({ data: ISSUED, error: undefined });
+    const first = renderPanel();
+    expect(await screen.findByText("NEWC0D3S")).toBeInTheDocument();
+    first.unmount();
+
+    (api.GET as Mock).mockResolvedValue({
+      data: [journalRow("NEWC0D3S", "pending")],
+    });
+    renderPanel();
+
+    await waitFor(() => expect(shownCode()).toBe("NEWC0D3S"));
+    expect(api.POST).toHaveBeenCalledTimes(1);
+  });
+
+  it("отозванный или погашенный код не показывается — выпускается новый", async () => {
+    window.sessionStorage.setItem(
+      `ketocare:access-code:${PATIENT_ID}:family_member`,
+      JSON.stringify(ISSUED),
+    );
+    (api.GET as Mock).mockResolvedValue({
+      data: [journalRow("NEWC0D3S", "revoked")],
+    });
+    (api.POST as Mock).mockResolvedValue({
+      data: { ...ISSUED, code: "FRESHC0D", join_url: "https://x/join" },
+      error: undefined,
+    });
+    renderPanel();
+
+    expect(await screen.findByText("FRESHC0D")).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledTimes(1);
+    expect(shownCode()).toBe("FRESHC0D");
+  });
+
+  it("истёкший код из хранилища не показывается — выпускается новый", async () => {
+    window.sessionStorage.setItem(
+      `ketocare:access-code:${PATIENT_ID}:family_member`,
+      JSON.stringify({ ...ISSUED, expires_at: "2020-01-01T00:00:00Z" }),
+    );
+    // Журнал даже не спрашивается о нём: срок вышел по часам вкладки.
+    (api.GET as Mock).mockResolvedValue({
+      data: [journalRow("NEWC0D3S", "pending")],
+    });
+    (api.POST as Mock).mockResolvedValue({
+      data: { ...ISSUED, code: "FRESHC0D", join_url: "https://x/join" },
+      error: undefined,
+    });
+    renderPanel();
+
+    expect(await screen.findByText("FRESHC0D")).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledTimes(1);
+  });
+
+  it("недоступное хранилище не ломает панель: код просто выпускается", async () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("SecurityError");
+      });
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("QuotaExceededError");
+      });
+    (api.GET as Mock).mockResolvedValue({ data: [] });
+    (api.POST as Mock).mockResolvedValue({ data: ISSUED, error: undefined });
+    renderPanel();
+
+    expect(await screen.findByText("NEWC0D3S")).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledTimes(1);
+    getItem.mockRestore();
+    setItem.mockRestore();
+  });
+
+  it("называет число других действующих кодов", async () => {
+    window.sessionStorage.setItem(
+      `ketocare:access-code:${PATIENT_ID}:family_member`,
+      JSON.stringify(ISSUED),
+    );
+    (api.GET as Mock).mockResolvedValue({
+      data: [
+        journalRow("NEWC0D3S", "pending"),
+        journalRow("OLDC0DE1", "pending"),
+        journalRow("OLDC0DE2", "pending"),
+        journalRow("USEDC0DE", "used"),
+      ],
+    });
+    renderPanel();
+
+    await waitFor(() => expect(shownCode()).toBe("NEWC0D3S"));
+    expect(
+      screen.getByText("Ещё действуют 2 кода — отозвать можно в журнале ниже."),
+    ).toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+});
+
 describe("отзыв кода доступа", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     vi.clearAllMocks();
     (api.GET as Mock).mockResolvedValue({
       data: [
