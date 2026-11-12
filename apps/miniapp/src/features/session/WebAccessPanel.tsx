@@ -118,11 +118,12 @@ export function WebAccessPanel({ session }: { session: Session }) {
           </p>
         )}
 
-        {/* Второстепенное на главной: громкая кнопка одна на экран (П31). */}
+        {/* Второстепенное на экране настроек: громкая кнопка одна на экран
+            (П31), а ширина — как у остальных действий формы. */}
         <Button
           type="submit"
           variant="outline"
-          className="min-h-touch self-start"
+          className="min-h-touch w-full"
           disabled={enable.isPending}
         >
           {enable.isPending ? t("webAccess.saving") : t("webAccess.submit")}
@@ -243,7 +244,7 @@ function WebPasswordReset({ session }: { session: Session }) {
           <Button
             type="submit"
             variant="outline"
-            className="min-h-touch self-start"
+            className="min-h-touch w-full"
             disabled={reset.isPending}
           >
             {reset.isPending
