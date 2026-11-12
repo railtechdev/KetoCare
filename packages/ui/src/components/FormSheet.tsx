@@ -87,10 +87,19 @@ export function FormSheet({
           // (валидация `onBlur`, закрытый список). Ход Radix отменяется только
           // при успехе. Выделение и `preventScroll` — тоже как у Radix: панель
           // ещё выезжает, а набор в поле правки заменяет значение.
+          //
+          // Поле с `data-autofocus` идёт первым: у срочной записи (кетоны,
+          // вес) первым в форме стоит время, уже заполненное «сейчас», а
+          // набирать человек будет значение — клавиатура должна открыться
+          // для него, а не для даты.
           const previous = document.activeElement;
-          const candidates = Array.from(
+          const all = Array.from(
             bodyRef.current?.querySelectorAll<HTMLElement>("*") ?? [],
           ).filter((element) => element.matches(FOCUSABLE));
+          const candidates = [
+            ...all.filter((element) => element.matches("[data-autofocus]")),
+            ...all.filter((element) => !element.matches("[data-autofocus]")),
+          ];
           for (const candidate of candidates) {
             candidate.focus({ preventScroll: true });
             if (document.activeElement === previous) continue;

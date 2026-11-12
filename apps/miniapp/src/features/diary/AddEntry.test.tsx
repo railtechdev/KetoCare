@@ -16,7 +16,8 @@ import {
 import "../../lib/i18n";
 import { api } from "../../lib/api";
 import { createQueryClient } from "../../lib/queryClient";
-import { OpenTabContext, type TabId } from "../../lib/tabs";
+import type { LaunchTarget } from "../../lib/launchTarget";
+import { NavigateContext } from "../../lib/tabs";
 import { AddEntry } from "./AddEntry";
 import { DiaryScreen } from "./DiaryScreen";
 import { PATIENT_ID, SESSION, fakeGet } from "./testFixtures";
@@ -55,7 +56,7 @@ function pressBack() {
   });
 }
 
-function wrapper(openTab: (tab: TabId) => void = () => undefined) {
+function wrapper(openTab: (target: LaunchTarget) => void = () => undefined) {
   // Клиент приложения: записи без сети отказывают сразу (ADR-0034), как в бою.
   const client = createQueryClient();
   client.setDefaultOptions({
@@ -65,7 +66,7 @@ function wrapper(openTab: (tab: TabId) => void = () => undefined) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <OpenTabContext value={openTab}>{children}</OpenTabContext>
+        <NavigateContext value={openTab}>{children}</NavigateContext>
         <Toaster />
       </QueryClientProvider>
     );
@@ -73,7 +74,10 @@ function wrapper(openTab: (tab: TabId) => void = () => undefined) {
 }
 
 function renderAdd(
-  options: { onClose?: () => void; openTab?: (tab: TabId) => void } = {},
+  options: {
+    onClose?: () => void;
+    openTab?: (target: LaunchTarget) => void;
+  } = {},
 ) {
   const onClose = options.onClose ?? vi.fn();
   render(<AddEntry session={SESSION} onClose={onClose} />, {
@@ -284,7 +288,7 @@ describe("«Добавить запись» в Mini App", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Открыть меню" }));
 
-    expect(openTab).toHaveBeenCalledWith("menu");
+    expect(openTab).toHaveBeenCalledWith({ tab: "today", view: "menu" });
     expect(onClose).toHaveBeenCalled();
     expect(api.POST).not.toHaveBeenCalled();
   });

@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import Recipe, RecipeIngredient
+from keto_engine import DishResult, Targets, within_tolerance
 
 from ..schemas_recipes import (
     RecipeComputed,
@@ -22,6 +23,7 @@ from ..schemas_recipes import (
     RecipeRead,
 )
 from . import composition as composition_service
+from .engine_version import comparable_to_current
 
 
 def to_composition(ingredients: Sequence[RecipeIngredientIn]) -> list[tuple[uuid.UUID, float]]:
@@ -52,7 +54,44 @@ def duplicate_product_ids(ingredients: Sequence[RecipeIngredientIn]) -> list[uui
     return composition_service.duplicate_product_ids(item.product_id for item in ingredients)
 
 
-def to_read(recipe: Recipe, ingredients: Sequence[RecipeIngredient]) -> RecipeRead:
+def ratio_fits(
+    computed: RecipeComputed | None, engine_version: str | None, target_ratio: float | None
+) -> bool | None:
+    """Совпадает ли соотношение рецепта с назначенным — допуском самого ядра.
+
+    Своего сравнения здесь нет: допуск — медицинская константа ядра, и копия
+    сравнения разошлась бы с ним. Ядро судит о блюде целиком, поэтому рецепт
+    подаётся ему итогами; калорийность в цель ставится та же, что у рецепта, —
+    о ней здесь не спрашивают.
+
+    Рецепт, посчитанный прежним основным правилом, вердикта не получает: его
+    соотношение получено иначе (ADR-0030).
+    """
+
+    if target_ratio is None or computed is None or computed.ratio is None:
+        return None
+    if not comparable_to_current(engine_version):
+        return None
+    dish = DishResult(
+        items=(),
+        kcal=computed.kcal,
+        fat_g=computed.fat,
+        protein_g=computed.protein,
+        carbs_g=computed.carbs,
+        fiber_g=computed.fiber,
+        net_carbs_g=max(computed.carbs - computed.fiber, 0.0),
+        ratio=computed.ratio,
+    )
+    ratio_within, _ = within_tolerance(dish, Targets(ratio=target_ratio, kcal=computed.kcal))
+    return ratio_within
+
+
+def to_read(
+    recipe: Recipe,
+    ingredients: Sequence[RecipeIngredient],
+    *,
+    target_ratio: float | None = None,
+) -> RecipeRead:
     """Состав хранится отдельной таблицей, поэтому ответ собирается явно, а не
     `model_validate(recipe)`."""
 
@@ -77,4 +116,5 @@ def to_read(recipe: Recipe, ingredients: Sequence[RecipeIngredient]) -> RecipeRe
         author_id=recipe.author_id,
         ingredients=[RecipeIngredientRead.model_validate(row) for row in ingredients],
         created_at=recipe.created_at,
+        ratio_fits_prescription=ratio_fits(computed, recipe.engine_version, target_ratio),
     )

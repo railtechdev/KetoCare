@@ -1,17 +1,16 @@
 import {
-  MacroBar,
   RatioBadge,
   Section,
   TargetBar,
-  formatKcal,
   formatGrams,
+  formatKcal,
   type DayTolerance,
   type ToleranceGap,
 } from "@ketocare/ui";
+import type { components } from "@ketocare/api-client";
 import { useTranslation } from "react-i18next";
 
 import { DayVerdictNote } from "./DayVerdictNote";
-import type { Menu } from "./useMenu";
 
 export interface DayTargets {
   kcalPerDay: number;
@@ -26,76 +25,60 @@ export interface DayVerdictInput {
   otherDay: boolean;
 }
 
+export type DayTotalsValues = components["schemas"]["DishComputed"];
+
 /**
- * Итоги дня рядом с целями назначения.
+ * Итоги дня рядом с целями назначения — ОДНИМ компактным блоком.
  *
- * Показывать одни макронутриенты стало нельзя с того дня, как день начали
- * собирать здесь: до этого семья смотрела на план, составленный в кабинете, где
- * цели видно. Собирать день, не видя, попадает ли он в назначение, — это
- * собирать вслепую, а речь о суточном рационе ребёнка на терапии.
+ * Калорийность здесь названа один раз — полосой «850 из 1 200 ккал» с
+ * подсказкой «добавьте ещё N». Прежде она стояла в одной карточке трижды:
+ * полосой макронутриентов, полосой цели и строкой вердикта (аудит 12.11.2026,
+ * ADR-0075). Жиры, белки и углеводы — одной строкой граммов, без своей
+ * калорийности.
  *
- * Числа и цели те же, что в кабинете (`features/menu/DayTotalsPanel.tsx`), и
- * примитивы те же — `TargetBar` и `RatioBadge` кита. Калорийность — цель,
- * которую НАБИРАЮТ, углеводы — предел, который нельзя превышать: у них разный
- * смысл заполнения, и `kind` это различает.
- *
- * **Вердикт о соответствии назначению — с 05.10.2026 и здесь**, тем же
- * правилом, что в кабинете: `dayVerdict` переехал в кит (`DayVerdictNote`).
- * Готовый вердикт сервер отдаёт только за сегодня и только в `/overview`, поэтому
- * его приносит экран (`verdict`), а не план дня: у `GET /menus` вердикта нет.
+ * Калорийность — цель, которую НАБИРАЮТ, углеводы — предел, который нельзя
+ * превышать: у них разный смысл заполнения, и `kind` это различает. Цвет
+ * кетосоотношения — только из вердикта сервера за этот же день (`dayVerdict`
+ * кита, тот же, что в кабинете).
  */
 export function DayTotals({
-  menu,
+  totals,
   targets,
   verdict,
 }: {
-  menu: Menu;
+  totals: DayTotalsValues | null | undefined;
   targets: DayTargets | null;
   verdict: DayVerdictInput;
 }) {
   const { t } = useTranslation();
-  const totals = menu.totals;
   if (totals === null || totals === undefined) return null;
 
   return (
     <Section title={t("menu.totals")} density="compact">
-      {totals.ratio !== null && totals.ratio !== undefined && (
-        // `self-start`: содержимое `Section` — колонка flex, и значок без него
-        // растягивается во всю ширину, переставая читаться как значок.
-        //
-        // Цвет допуска — только из вердикта сервера за этот же день; для
-        // других дней значок показывает одно число.
-        <div className="self-start">
-          <RatioBadge
-            ratio={totals.ratio}
-            withinTolerance={
-              verdict.otherDay
-                ? undefined
-                : (verdict.tolerance?.ratio_within_tolerance ?? undefined)
-            }
-          />
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-field">
+        <RatioBadge
+          ratio={totals.ratio ?? null}
+          withinTolerance={
+            verdict.otherDay
+              ? undefined
+              : (verdict.tolerance?.ratio_within_tolerance ?? undefined)
+          }
+        />
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {t("menu.macroLine", {
+            fat: formatGrams(totals.fat),
+            protein: formatGrams(totals.protein),
+            carbs: formatGrams(totals.carbs),
+          })}
+        </span>
+      </div>
 
-      <MacroBar
-        fatG={totals.fat}
-        proteinG={totals.protein}
-        carbsG={totals.carbs}
-        targetGrams={
-          targets?.kcalPerDay !== undefined
-            ? { kcal: targets.kcalPerDay }
-            : undefined
-        }
-        remainingGrams={
-          targets?.kcalPerDay !== undefined
-            ? { kcal: targets.kcalPerDay - totals.kcal }
-            : undefined
-        }
-        showGrams
-      />
-
-      {targets !== null && (
-        <div className="flex flex-col gap-section">
+      {targets === null ? (
+        <p className="m-0 tabular-nums">
+          {t("menu.compose.kcal", { value: formatKcal(totals.kcal) })}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-field">
           <TargetBar
             kind="goal"
             label={t("menu.targets.kcalLabel")}
@@ -137,6 +120,8 @@ export function DayTotals({
         </div>
       )}
 
+      {/* Калорийность уже названа полосой: вердикт говорит только о
+          кетосоотношении (`kcalHint` выключен, пока цель известна). */}
       <DayVerdictNote
         tolerance={verdict.tolerance}
         gap={verdict.gap}

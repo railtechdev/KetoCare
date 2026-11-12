@@ -275,17 +275,29 @@ describe("записи дневника в Mini App", () => {
         free_text: null,
         parsed: null,
       },
+      {
+        id: "e2",
+        patient_id: PATIENT_ID,
+        occurred_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        source: "miniapp",
+        created_by: "22222222-2222-4222-8222-222222222222",
+        created_at: new Date().toISOString(),
+        menu_item_id: "mi2",
+        free_text: null,
+        parsed: null,
+      },
     ];
     (api.GET as Mock).mockImplementation(fakeGet(logs));
     renderEntries();
 
-    expect(await screen.findByText("Отмечено в меню")).toBeInTheDocument();
+    expect(await screen.findAllByText("Отмечено в меню")).toHaveLength(2);
     expect(
       screen.queryByRole("button", { name: "Исправить запись «Еда»" }),
     ).toBeNull();
+    // Подсказка — один раз над лентой, а не под каждой отметкой.
     expect(
-      screen.getByText(/исправить её можно во вкладке/),
-    ).toBeInTheDocument();
+      screen.getAllByText("Отметки «съедено» исправляют в меню."),
+    ).toHaveLength(1);
   });
 
   it("без записей ведёт к добавлению, а не в бот", async () => {

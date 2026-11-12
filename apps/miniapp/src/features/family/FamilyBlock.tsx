@@ -8,6 +8,7 @@ import {
 import { Send, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { RemoveButton } from "../../components/RemoveButton";
 import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
 
 import { errorMessageOf } from "../../lib/api";
@@ -96,15 +97,10 @@ export function FamilyBlock({ session }: { session: Session }) {
               {member.can_remove && !member.is_me && (
                 <TelegramConfirmDialog
                   trigger={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="min-h-touch"
+                    <RemoveButton
+                      label={t("family.remove")}
                       disabled={remove.isPending}
-                    >
-                      {t("family.remove")}
-                    </Button>
+                    />
                   }
                   title={t("family.removeTitle", { name: member.full_name })}
                   description={t("family.removeBody")}
@@ -135,7 +131,7 @@ export function FamilyBlock({ session }: { session: Session }) {
         <Button
           type="button"
           variant="outline"
-          className="min-h-touch self-start"
+          className="min-h-touch w-full"
           disabled={invite.isPending}
           onClick={() => invite.mutate()}
         >
@@ -174,7 +170,7 @@ function InvitationReady({ invitation }: { invitation: Invitation }) {
       <p className="m-0">{t("family.readyIntro")}</p>
       <Button
         type="button"
-        className="min-h-touch self-start"
+        className="min-h-touch w-full"
         onClick={() => shareToTelegram(link, text)}
       >
         <Send aria-hidden="true" />

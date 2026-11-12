@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -17,10 +18,16 @@ const diagnosis = vi.hoisted(() =>
   vi.fn(() => ({ telegram: false, launchParams: false })),
 );
 
+const canCloseApp = vi.hoisted(() => vi.fn(() => false));
+const closeApp = vi.hoisted(() => vi.fn());
+
 vi.mock("../../lib/telegram", () => ({
   launchData,
   webApp: () => null,
   launchDiagnosis: diagnosis,
+  canCloseApp,
+  closeApp,
+  haptic: () => undefined,
 }));
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -120,7 +127,25 @@ describe("вход в Mini App", () => {
     renderGate();
 
     expect(await screen.findByText(/ещё не привязан/)).toBeInTheDocument();
-    expect(screen.getByText(/Отправьте код в чат с ботом/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Отправьте код сообщением в чат с ботом/),
+    ).toBeInTheDocument();
+  });
+
+  it("«не привязан» и «откройте снова» закрываются кнопкой — назад в чат", async () => {
+    // Поля для кода в приложении нет: прежде экран просил прислать код
+    // «сюда» и выхода, кроме крестика Telegram, не давал (аудит 12.11.2026).
+    canCloseApp.mockReturnValue(true);
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockResolvedValue({ error: {}, response: { status: 404 } });
+
+    renderGate();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Закрыть и вернуться в чат" }),
+    );
+
+    expect(closeApp).toHaveBeenCalled();
+    canCloseApp.mockReturnValue(false);
   });
 
   it("вне Telegram объясняет, откуда приложение открывается", async () => {

@@ -4,13 +4,16 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import "../../lib/i18n";
 import { api } from "../../lib/api";
 import { seizuresPerDay, trendRange } from "../charts/useTrend";
+import type { ScreenRequest } from "../../lib/tabs";
 import { DiaryScreen } from "./DiaryScreen";
+import type { CreatableKind } from "./useDiary";
 import { SESSION, defaultLogs, fakeGet } from "./testFixtures";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -18,7 +21,9 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return { ...actual, api: { GET: vi.fn() } };
 });
 
-function renderScreen() {
+function renderScreen(
+  request: ScreenRequest<{ addKind?: CreatableKind }> | null = null,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -28,7 +33,7 @@ function renderScreen() {
     );
   }
   // `client` — тестам, которым нужно тронуть сам кэш (фоновое обновление).
-  const result = render(<DiaryScreen session={SESSION} />, {
+  const result = render(<DiaryScreen session={SESSION} request={request} />, {
     wrapper: Wrapper,
   });
   return Object.assign(result, { client });
@@ -77,56 +82,73 @@ describe("динамика в Mini App", () => {
     }
   });
 
-  it("показывает три графика и записи под ними", async () => {
+  it("записи — первыми, под ними один график с переключателем", async () => {
+    // Прежде над записями стояли три графика по 260 px (аудит 12.11.2026).
     renderScreen();
 
+    const entries = await screen.findByRole("heading", {
+      name: "Записи за 14 дней",
+    });
+    const chart = screen.getByRole("heading", { name: "График за 30 дней" });
     expect(
-      await screen.findByRole("heading", { name: "Кетоны" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Вес" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Приступы" }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("heading", { name: "Записи за две недели" }),
-    ).toBeInTheDocument();
+      entries.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(await screen.findByText("Кетоны: 3,2 ммоль/л")).toBeInTheDocument();
+    expect(await screen.findAllByRole("figure")).toHaveLength(1);
+    expect(screen.getByRole("radio", { name: "Кетоны" })).toBeChecked();
+  });
+
+  it("переключатель показывает другой вид — тем же графиком", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findAllByRole("figure");
+
+    await user.click(screen.getByRole("radio", { name: "Вес" }));
+
+    await waitFor(() => {
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/logs/weight",
+        expect.anything(),
+      );
+    });
+    expect(screen.getAllByRole("figure")).toHaveLength(1);
   });
 
   it("пустой ответ — это «записей нет», а не молчание блока", async () => {
     // Блок молчит, только пока ответа нет. Если сервер ответил и записей за
-    // месяц действительно нет, это надо сказать: иначе экран одинаково молчит
-    // и когда связи нет, и когда ребёнок месяц не измерялся.
+    // месяц действительно нет, это надо сказать.
     (api.GET as Mock).mockImplementation(fakeGet({}));
+    const user = userEvent.setup();
 
     renderScreen();
 
     expect(
-      await screen.findAllByText("Записей за этот период нет."),
-    ).toHaveLength(2);
+      await screen.findByText("Записей за этот период нет."),
+    ).toBeInTheDocument();
     // У приступов пустота — хорошая новость, и сказана она своими словами.
+    await user.click(screen.getByRole("radio", { name: "Приступы" }));
     expect(
-      screen.getByText("За 30 дней приступов не записано."),
+      await screen.findByText("За 30 дней приступов не записано."),
     ).toBeInTheDocument();
   });
 
-  it("с записями рисует графики и молчит про пустоту", async () => {
+  it("с записями рисует график и молчит про пустоту", async () => {
     renderScreen();
 
-    expect(await screen.findAllByRole("figure")).toHaveLength(3);
+    expect(await screen.findAllByRole("figure")).toHaveLength(1);
     expect(screen.queryByText("Записей за этот период нет.")).toBeNull();
     expect(
       screen.queryByText("Нет связи — покажем, как только она появится."),
     ).toBeNull();
   });
 
-  it("над нарисованными графиками про связь не говорит", async () => {
+  it("над нарисованным графиком про связь не говорит", async () => {
     // Фоновое обновление без сети тоже встаёт на паузу. Сообщать о связи там,
-    // где данные уже на экране, значит говорить о том, что и так видно, — и
-    // отнимать место у самих графиков на телефоне.
+    // где данные уже на экране, значит говорить о том, что и так видно.
     const { client } = renderScreen();
     screenClient = client;
-    expect(await screen.findAllByRole("figure")).toHaveLength(3);
+    expect(await screen.findAllByRole("figure")).toHaveLength(1);
+    await screen.findByText("Кетоны: 3,2 ммоль/л");
 
     onlineManager.setOnline(false);
     try {
@@ -146,6 +168,13 @@ describe("динамика в Mini App", () => {
       screenClient?.clear();
       onlineManager.setOnline(true);
     }
+  });
+
+  it("запрос из «Сегодня» открывает форму вида сразу", async () => {
+    renderScreen({ id: 1, target: { addKind: "weight" } });
+
+    expect(await screen.findByLabelText("Вес, кг")).toBeInTheDocument();
+    expect(screen.queryByText("Что записать?")).toBeNull();
   });
 
   it("без истории назначений говорит, что черт нет", async () => {
@@ -169,7 +198,7 @@ describe("динамика в Mini App", () => {
     renderScreen();
 
     const range = trendRange();
-    await screen.findByRole("heading", { name: "Кетоны" });
+    await screen.findAllByRole("figure");
     expect(api.GET).toHaveBeenCalledWith(
       "/api/v1/patients/{patient_id}/logs/ketones",
       expect.objectContaining({

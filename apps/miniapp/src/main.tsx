@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "@ketocare/ui/styles.css";
+import "./telegram.css";
 
 import { App } from "./App";
 import { watchConnectivity } from "./lib/connectivity";

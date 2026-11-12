@@ -90,13 +90,13 @@ beforeEach(() => {
   });
 });
 
-function renderScreens() {
+function renderScreens(props: Partial<Parameters<typeof Screens>[0]> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <Screens session={SESSION} onSwitchChild={() => undefined} />
+      <Screens session={SESSION} onSwitchChild={() => undefined} {...props} />
     </QueryClientProvider>,
   );
 }
@@ -105,15 +105,30 @@ function tab(name: string) {
   return within(screen.getByRole("navigation")).getByRole("button", { name });
 }
 
-describe("вкладки Mini App", () => {
-  it("состав калькулятора переживает переход на другую вкладку и обратно", async () => {
+beforeEach(() => {
+  globalThis.localStorage.clear();
+});
+
+describe("вкладки Mini App (ADR-0075)", () => {
+  it("вкладок четыре: «Сегодня», «Дневник», «Блюда», «Помощник»", () => {
+    renderScreens();
+
+    const names = within(screen.getByRole("navigation"))
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+    expect(names).toEqual(["Сегодня", "Дневник", "Блюда", "Помощник"]);
+    expect(tab("Сегодня")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("состав расчёта переживает переход на другую вкладку и обратно", async () => {
     // Вкладки размонтировались при переключении: семья, собиравшая блюдо и
-    // заглянувшая в план дня, возвращалась к пустому калькулятору.
+    // заглянувшая в меню, возвращалась к пустому расчёту.
     const user = userEvent.setup();
     renderScreens();
 
-    await user.click(tab("Расчёт"));
-    // Вкладка грузится по требованию, а поиск ждёт паузы в наборе: на
+    await user.click(tab("Блюда"));
+    await user.click(await screen.findByRole("radio", { name: "Расчёт" }));
+    // Раздел грузится по требованию, а поиск ждёт паузы в наборе: на
     // загруженном раннере CI это дольше секунды по умолчанию у findBy*.
     await user.type(
       await screen.findByLabelText("Найдите продукт", {}, { timeout: 5000 }),
@@ -131,34 +146,110 @@ describe("вкладки Mini App", () => {
       "30",
     );
 
-    await user.click(tab("Сводка"));
-    // Вкладка скрыта, а не размонтирована.
+    // Соседний раздел той же вкладки — и обратно.
+    await user.click(screen.getByRole("radio", { name: "Рецепты" }));
     expect(screen.getByLabelText(/Масло сливочное, граммы/)).not.toBeVisible();
+    await user.click(screen.getByRole("radio", { name: "Расчёт" }));
+    expect(screen.getByLabelText(/Масло сливочное, граммы/)).toBeVisible();
 
-    await user.click(tab("Расчёт"));
+    // Другая вкладка — и обратно.
+    await user.click(tab("Сегодня"));
+    expect(screen.getByLabelText(/Масло сливочное, граммы/)).not.toBeVisible();
+    await user.click(tab("Блюда"));
     const grams = screen.getByLabelText(/Масло сливочное, граммы/);
     expect(grams).toBeVisible();
     expect(grams).toHaveValue("30");
   });
 
   it("вкладка и заголовок экрана называют одно и то же", async () => {
-    // Вкладка «Расчёт» открывала экран «Калькулятор»: два имени одного места.
     const user = userEvent.setup();
     renderScreens();
 
-    await user.click(tab("Расчёт"));
+    await user.click(tab("Блюда"));
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Расчёт" }),
+      await screen.findByRole("heading", { level: 1, name: "Блюда" }),
     ).toBeVisible();
   });
 
   it("не посещённая вкладка не монтируется вовсе", () => {
     // Чанки и запросы вкладок ждут первого перехода — приложение из чата
-    // открывают ради плана на сегодня.
+    // открывают ради меню на сегодня.
     renderScreens();
 
-    expect(document.querySelector('[data-tab="calculator"]')).toBeNull();
-    expect(document.querySelector('[data-tab="home"]')).not.toBeNull();
+    expect(document.querySelector('[data-tab="dishes"]')).toBeNull();
+    expect(document.querySelector('[data-tab="today"]')).not.toBeNull();
+  });
+
+  it("открывается вкладка, открытая в прошлый раз", async () => {
+    const user = userEvent.setup();
+    const first = renderScreens();
+    await user.click(tab("Дневник"));
+    first.unmount();
+
+    renderScreens();
+
+    expect(tab("Дневник")).toHaveAttribute("aria-current", "page");
+    expect(document.querySelector('[data-tab="today"]')).toBeNull();
+  });
+
+  it("имя ребёнка — в шапке над любой вкладкой", async () => {
+    const user = userEvent.setup();
+    renderScreens();
+
+    expect(screen.getByText(SESSION.patientName)).toBeVisible();
+    await user.click(tab("Помощник"));
+    expect(screen.getByText(SESSION.patientName)).toBeVisible();
+  });
+});
+
+describe("настройки — отдельным экраном (ADR-0075)", () => {
+  it("шестерёнка открывает настройки, «Назад» возвращает на вкладку", async () => {
+    const user = userEvent.setup();
+    renderScreens();
+
+    await user.click(screen.getByRole("button", { name: "Настройки" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Настройки" }),
+    ).toBeVisible();
+    expect(screen.getByText("Напоминания")).toBeVisible();
+    expect(screen.getByText("Близкие")).toBeVisible();
+    // Полоса вкладок под настройками не видна: это свой экран.
+    expect(screen.queryByRole("navigation")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Назад" }));
+    expect(screen.queryByRole("heading", { name: "Настройки" })).toBeNull();
+    expect(tab("Сегодня")).toHaveAttribute("aria-current", "page");
+  });
+});
+
+describe("запуск с параметром (ADR-0075)", () => {
+  it("«diary-ketones» открывает дневник сразу на форме кетонов", async () => {
+    renderScreens({ launch: { tab: "diary", addKind: "ketones" } });
+
+    expect(
+      await screen.findByLabelText("Кетоны, ммоль/л", {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    // Панель формы модальна и прячет остальное от программы чтения с экрана —
+    // открытую вкладку проверяем по разметке.
+    expect(
+      document.querySelector('nav [aria-current="page"]')?.textContent,
+    ).toBe("Дневник");
+  });
+
+  it("«reminders» открывает настройки", async () => {
+    renderScreens({ launch: { settings: true, section: "reminders" } });
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Настройки" }),
+    ).toBeVisible();
+  });
+
+  it("параметр запуска важнее запомненной вкладки", () => {
+    globalThis.localStorage.setItem("ketocare.miniapp.tab", "assistant");
+    renderScreens({ launch: { tab: "today", view: "menu" } });
+
+    expect(tab("Сегодня")).toHaveAttribute("aria-current", "page");
   });
 });

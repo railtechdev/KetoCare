@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
+import { RemoveButton } from "../../components/RemoveButton";
 import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
 
 import { errorMessageOf } from "../../lib/api";
@@ -24,6 +25,7 @@ import type { Session } from "../session/useSession";
 import { EntryEditSheet } from "./EntryEditSheet";
 import { KIND_ICON } from "./kinds";
 import {
+  DIARY_DAYS,
   type DiaryLog,
   useDiaryEntries,
   useDurationOptions,
@@ -96,10 +98,26 @@ export function DiaryEntries({
     members.map((member) => [member.id, member.full_name]),
   );
   const groups = groupByDay(diary.entries ?? []);
+  const hasOwnMenuMarks = (diary.entries ?? []).some(
+    (entry) =>
+      entry.kind === "meals" &&
+      entry.menu_item_id !== null &&
+      entry.created_by !== null &&
+      entry.created_by === me,
+  );
 
   return (
-    <Section title={t("diary.entriesTitle")} density="compact">
-      <p className="m-0 text-muted-foreground">{t("diary.entriesHint")}</p>
+    <Section
+      title={t("diary.entriesTitle", { days: DIARY_DAYS })}
+      density="compact"
+    >
+      {/* Один раз над лентой, а не под каждой отметкой: подсказка под каждой
+          строкой «съедено» повторялась десятки раз (аудит 12.11.2026). */}
+      {hasOwnMenuMarks && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("diary.fromMenuHint")}
+        </p>
+      )}
 
       <AsyncSection
         loading={diary.isPending}
@@ -113,9 +131,9 @@ export function DiaryEntries({
               }
             : null
         }
-        // Без сети об этом один раз говорит экран (над графиками): та же
-        // фраза второй раз ниже — шум, а не объяснение (правило П27).
-        waiting={null}
+        // Без сети об этом говорит лента — один раз на экран: график ниже
+        // молчит (правило П27).
+        waiting={diary.isWaiting ? t("errors.waitingForNetwork") : null}
         retryLabel={t("actions.retry")}
         onRetry={diary.refetch}
         isEmpty={diary.entries !== undefined && diary.entries.length === 0}
@@ -245,16 +263,11 @@ function Entry({
             </Button>
             <TelegramConfirmDialog
               trigger={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
+                <RemoveButton
+                  label={deleting ? t("diary.deleting") : t("diary.delete")}
                   disabled={deleting}
                   aria-label={t("diary.deleteAria", { title })}
-                  className="text-destructive hover:text-destructive"
-                >
-                  {deleting ? t("diary.deleting") : t("diary.delete")}
-                </Button>
+                />
               }
               title={t("diary.confirmTitle", { title })}
               description={t("diary.confirmBody", {
@@ -280,9 +293,6 @@ function Entry({
             </li>
           ))}
           {who !== null && <li className="text-muted-foreground">{who}</li>}
-          {own && fromMenu && (
-            <li className="text-muted-foreground">{t("diary.fromMenuHint")}</li>
-          )}
         </ul>
       </div>
     </DiaryEntryCard>

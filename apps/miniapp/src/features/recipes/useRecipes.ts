@@ -1,4 +1,9 @@
-import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+} from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
 import { productNameState, type ProductName } from "@ketocare/ui";
@@ -7,7 +12,10 @@ import { api } from "../../lib/api";
 
 export type Recipe = components["schemas"]["RecipeRead"];
 
-/** Сколько рецептов приходит за раз. Больше на телефоне всё равно не пролистают. */
+/**
+ * Сколько рецептов приходит за раз. Следующие — по «Показать ещё»: прежде
+ * выдача молча обрывалась на двадцатом (аудит 12.11.2026).
+ */
 export const PAGE_SIZE = 20;
 
 export type RecipeCategory = Recipe["category"];
@@ -31,29 +39,51 @@ export const RECIPE_CATEGORIES = [
   "bread",
 ] as const satisfies readonly RecipeCategory[];
 
-export function useRecipeSearch(query: string, category: RecipeCategory | "") {
+/**
+ * Поиск рецептов страницами.
+ *
+ * `patientId` — сверить соотношение каждого рецепта с назначением ребёнка:
+ * пометку «не как в назначении» решает сервер допуском ядра
+ * (`ratio_fits_prescription`), приложение чисел не сравнивает.
+ */
+export function useRecipeSearch(
+  query: string,
+  category: RecipeCategory | "",
+  patientId?: string,
+) {
   const trimmed = query.trim();
 
-  return useQuery({
-    queryKey: ["recipes", "search", trimmed, category],
+  const result = useInfiniteQuery({
+    queryKey: ["recipes", "search", patientId ?? null, trimmed, category],
     // Прошлая выдача держится, пока грузится новая: иначе список мигает
     // пустотой на каждой набранной букве.
     placeholderData: keepPreviousData,
-    queryFn: async (): Promise<Recipe[]> => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
       const { data, error } = await api.GET("/api/v1/recipes", {
         params: {
           query: {
             q: trimmed === "" ? undefined : trimmed,
             category: category === "" ? undefined : category,
+            patient_id: patientId,
             limit: PAGE_SIZE,
-            offset: 0,
+            offset: pageParam,
           },
         },
       });
       if (error || !data) throw error ?? new Error("Empty recipes response");
-      return data.items;
+      return { items: data.items, total: data.total, offset: pageParam };
+    },
+    getNextPageParam: (last) => {
+      const next = last.offset + last.items.length;
+      return last.items.length > 0 && next < last.total ? next : undefined;
     },
   });
+
+  return {
+    ...result,
+    recipes: result.data?.pages.flatMap((page) => page.items),
+  };
 }
 
 /**
@@ -62,13 +92,16 @@ export function useRecipeSearch(query: string, category: RecipeCategory | "") {
  * Список отдаёт те же поля, но карточка берётся отдельным запросом: рецепт
  * могли поправить с тех пор, как список загрузился, а по нему готовят.
  */
-export function useRecipe(recipeId: string | null) {
+export function useRecipe(recipeId: string | null, patientId?: string) {
   return useQuery({
-    queryKey: ["recipes", recipeId],
+    queryKey: ["recipes", recipeId, patientId ?? null],
     enabled: recipeId !== null,
     queryFn: async (): Promise<Recipe> => {
       const { data, error } = await api.GET("/api/v1/recipes/{recipe_id}", {
-        params: { path: { recipe_id: recipeId as string } },
+        params: {
+          path: { recipe_id: recipeId as string },
+          query: { patient_id: patientId },
+        },
       });
       if (error || !data) throw error ?? new Error("Empty recipe response");
       return data;

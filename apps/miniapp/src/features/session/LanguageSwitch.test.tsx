@@ -18,6 +18,9 @@ vi.mock("../../lib/telegram", () => ({
   launchData,
   webApp: () => null,
   launchDiagnosis: () => ({ telegram: true, launchParams: true, keys: "" }),
+  haptic: () => undefined,
+  canCloseApp: () => false,
+  closeApp: () => undefined,
 }));
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -44,21 +47,17 @@ describe("выбор языка (ADR-0052)", () => {
     expect(
       screen.getByRole("group", { name: "Til / Язык" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Русский" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "O‘zbekcha" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    expect(screen.getByRole("radio", { name: "Русский" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "O‘zbekcha" })).not.toBeChecked();
+    // Подпись узбекского — на самом узбекском, и программа чтения читает её так.
+    expect(screen.getByText("O‘zbekcha")).toHaveAttribute("lang", "uz-Latn");
   });
 
   it("переключает экран, даты и атрибут lang — и сохраняет выбор на сервере", async () => {
     put.mockResolvedValue({ data: { language: "uz" } });
     render(<LanguageSwitch persist />);
 
-    await userEvent.click(screen.getByRole("button", { name: "O‘zbekcha" }));
+    await userEvent.click(screen.getByRole("radio", { name: "O‘zbekcha" }));
 
     expect(i18n.language).toBe("uz");
     expect(formatLocale()).toBe("uz-Latn-UZ");
@@ -68,10 +67,30 @@ describe("выбор языка (ADR-0052)", () => {
     });
   });
 
+  it("отказ сохранения можно повторить — кнопкой и тем же выбором", async () => {
+    // Прежде экран уже стоял на новом языке, и повторное нажатие ничего не
+    // делало: «выберите ещё раз» было невыполнимо (аудит 12.11.2026).
+    put.mockRejectedValueOnce(new Error("offline"));
+    put.mockResolvedValue({ data: { language: "uz" } });
+    render(<LanguageSwitch persist />);
+
+    await userEvent.click(screen.getByRole("radio", { name: "O‘zbekcha" }));
+    const retry = await screen.findByRole("button", { name: "Qaytarish" });
+
+    await userEvent.click(retry);
+
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(put).toHaveBeenLastCalledWith("/api/v1/users/me/language", {
+      body: { language: "uz" },
+    });
+    await screen.findByRole("radio", { name: "O‘zbekcha" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("до входа ничего не сохраняет — сохранять некуда", async () => {
     render(<LanguageSwitch persist={false} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "O‘zbekcha" }));
+    await userEvent.click(screen.getByRole("radio", { name: "O‘zbekcha" }));
 
     expect(i18n.language).toBe("uz");
     expect(put).not.toHaveBeenCalled();
@@ -84,7 +103,7 @@ describe("выбор языка (ADR-0052)", () => {
     render(<SessionGate>{() => null}</SessionGate>, { wrapper });
     expect(await screen.findByText(/ещё не привязан/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "O‘zbekcha" }));
+    await userEvent.click(screen.getByRole("radio", { name: "O‘zbekcha" }));
 
     expect(
       await screen.findByText("Bu Telegram hali ulanmagan"),

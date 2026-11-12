@@ -4,6 +4,8 @@ import {
   copiedDay,
   itemsOf,
   mealNumbers,
+  mealsOfDay,
+  nextMeal,
   withDish,
   withoutItem,
 } from "./dayPlan";
@@ -201,5 +203,62 @@ describe("перенос предыдущего дня", () => {
   it("переносить нечего — переноса нет", () => {
     expect(copiedDay(null, null)).toBeNull();
     expect(copiedDay(menu([]), null)).toBeNull();
+  });
+});
+
+describe("приёмы меню дня (ADR-0075)", () => {
+  it("все назначенные приёмы — в том числе пустые", () => {
+    expect(mealsOfDay([1, 2, 3, 4], [{ meal_index: 2 }])).toEqual([1, 2, 3, 4]);
+  });
+
+  it("приём, которого в назначении уже нет, но с едой — остаётся", () => {
+    // Врач сократил число приёмов после того, как день собрали: прятать еду,
+    // которую ребёнку дадут, нельзя.
+    expect(mealsOfDay([1, 2], [{ meal_index: 5 }, { meal_index: 1 }])).toEqual([
+      1, 2, 5,
+    ]);
+  });
+
+  it("без назначения — только приёмы с едой", () => {
+    expect(mealsOfDay([], [])).toEqual([]);
+    expect(mealsOfDay([], [{ meal_index: 3 }])).toEqual([3]);
+  });
+});
+
+describe("ближайший приём на «Сегодня»", () => {
+  const at = (meal_index: number, eaten: boolean, id: string) => ({
+    meal_index,
+    eaten,
+    id,
+  });
+
+  it("первый по порядку приём, где есть несъеденное", () => {
+    const next = nextMeal([
+      at(3, false, "c"),
+      at(1, true, "a"),
+      at(2, false, "b"),
+    ]);
+    expect(next).toEqual({
+      kind: "meal",
+      mealIndex: 2,
+      items: [at(2, false, "b")],
+    });
+  });
+
+  it("всё съедено — так и сказано", () => {
+    expect(nextMeal([at(1, true, "a")])).toEqual({ kind: "allEaten" });
+  });
+
+  it("пустое меню — `null`", () => {
+    expect(nextMeal([])).toBeNull();
+  });
+
+  it("в приёме показываются и уже отмеченные блюда — их можно снять", () => {
+    const next = nextMeal([at(2, true, "a"), at(2, false, "b")]);
+    expect(next).toEqual({
+      kind: "meal",
+      mealIndex: 2,
+      items: [at(2, true, "a"), at(2, false, "b")],
+    });
   });
 });

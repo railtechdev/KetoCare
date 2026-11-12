@@ -1,18 +1,12 @@
-import {
-  BookOpen,
-  Bot,
-  Calculator,
-  House,
-  NotebookPen,
-  UtensilsCrossed,
-} from "lucide-react";
+import { Bot, House, NotebookPen, UtensilsCrossed } from "lucide-react";
 import {
   Suspense,
   lazy,
+  useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
-  type ComponentType,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,13 +18,26 @@ import {
   kitLabelsFrom,
 } from "@ketocare/ui";
 import { TabBar, type TabBarItem } from "./components/TabBar";
-import { HomeScreen } from "./features/home/HomeScreen";
-import { MenuScreen } from "./features/menu/MenuScreen";
+import type { CreatableKind } from "./features/diary/useDiary";
 import { ChildSwitcher } from "./features/session/ChildSwitcher";
 import { SessionGate } from "./features/session/SessionGate";
 import type { Session } from "./features/session/useSession";
-import { OpenTabContext, type TabId } from "./lib/tabs";
-import { TabVisibleContext } from "./lib/useTelegram";
+import { SettingsScreen } from "./features/settings/SettingsScreen";
+import { TodayScreen, type TodayRequest } from "./features/today/TodayScreen";
+import {
+  type LaunchTarget,
+  type SettingsSection,
+  readLaunchTarget,
+} from "./lib/launchTarget";
+import {
+  NavigateContext,
+  type ScreenRequest,
+  type TabId,
+  rememberTab,
+  rememberedCloudTab,
+  rememberedTab,
+} from "./lib/tabs";
+import { TabVisibleContext, useSettingsButton } from "./lib/useTelegram";
 
 /**
  * Mini App: кабинет родителя внутри Telegram (раздел 9 ТЗ).
@@ -40,29 +47,21 @@ import { TabVisibleContext } from "./lib/useTelegram";
  * нескольких детей, другой открывается новой сессией (ADR-0048).
  */
 /**
- * Вкладки сверх первых двух грузятся по требованию.
+ * Вкладки, кроме «Сегодня», грузятся по требованию.
  *
  * Замер до разделения: Mini App собирался в один файл 877 кБ (257 кБ gzip), и
  * внутри — recharts с lodash на 705 кБ из 2 408 кБ исходников, то есть 29 %.
- * Родитель открывает приложение из чата, чтобы посмотреть план на сегодня, а
- * скачивает вместе с ним библиотеку графиков, калькулятор и помощника.
- *
- * «Сводка» и «План дня» остаются в стартовом чанке: с них начинают, и лишний
- * запрос на самой частой вкладке — это задержка там, где её видно каждый раз.
+ * Родитель открывает приложение из чата, чтобы посмотреть меню на сегодня, а
+ * скачивал вместе с ним библиотеку графиков, расчёт и помощника.
  */
-const CalculatorScreen = lazy(() =>
-  import("./features/calculator/CalculatorScreen").then((m) => ({
-    default: m.CalculatorScreen,
-  })),
-);
 const DiaryScreen = lazy(() =>
   import("./features/diary/DiaryScreen").then((m) => ({
     default: m.DiaryScreen,
   })),
 );
-const RecipesScreen = lazy(() =>
-  import("./features/recipes/RecipesScreen").then((m) => ({
-    default: m.RecipesScreen,
+const DishesScreen = lazy(() =>
+  import("./features/dishes/DishesScreen").then((m) => ({
+    default: m.DishesScreen,
   })),
 );
 const AssistantScreen = lazy(() =>
@@ -77,6 +76,11 @@ const AssistantScreen = lazy(() =>
  * кадр светлой темы в тёмном Telegram.
  */
 export function App() {
+  // Параметр запуска читается один раз за жизнь страницы и применяется один
+  // раз: смена ребёнка пересобирает экраны, и форма из кнопки бота не должна
+  // открываться второй раз у другого ребёнка.
+  const [launch, setLaunch] = useState(readLaunchTarget);
+
   return (
     <AppKitLabels>
       {/* Безопасная зона со всех сторон: в альбомной ориентации вырез экрана
@@ -84,7 +88,12 @@ export function App() {
       <div className="flex min-h-dvh flex-col bg-background pt-[var(--safe-top,0px)] pr-[var(--safe-right,0px)] pl-[var(--safe-left,0px)]">
         <SessionGate>
           {(session, { switchChild }) => (
-            <Screens session={session} onSwitchChild={switchChild} />
+            <Screens
+              session={session}
+              onSwitchChild={switchChild}
+              launch={launch}
+              onLaunchUsed={() => setLaunch(null)}
+            />
           )}
         </SessionGate>
         {/* Подтверждения действий («Запись исправлена») — тостами кита. */}
@@ -106,92 +115,186 @@ function AppKitLabels({ children }: { children: ReactNode }) {
   return <KitLabelsProvider labels={labels}>{children}</KitLabelsProvider>;
 }
 
-const SCREENS: Record<TabId, ComponentType<{ session: Session }>> = {
-  home: HomeScreen,
-  menu: MenuScreen,
-  calculator: CalculatorScreen,
-  recipes: RecipesScreen,
-  diary: DiaryScreen,
-  assistant: AssistantScreen,
-};
+const TAB_ORDER: readonly TabId[] = ["today", "diary", "dishes", "assistant"];
+
+/** Первая вкладка: из параметра запуска, иначе запомненная, иначе «Сегодня». */
+function initialTab(launch: LaunchTarget | null): TabId {
+  if (launch !== null && "tab" in launch) return launch.tab;
+  return rememberedTab() ?? "today";
+}
+
+let requestCounter = 0;
+
+function requestOf(target: LaunchTarget): ScreenRequest<LaunchTarget> | null {
+  return "tab" in target ? { id: ++requestCounter, target } : null;
+}
 
 export function Screens({
   session,
   onSwitchChild,
+  launch = null,
+  onLaunchUsed,
 }: {
   session: Session;
   onSwitchChild: (patientId: string) => void;
+  launch?: LaunchTarget | null;
+  onLaunchUsed?: () => void;
 }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<TabId>("home");
-  // Посещённые вкладки остаются смонтированными, скрытыми: переход на план
-  // дня посреди сборки блюда в калькуляторе стирал состав, недописанный
-  // вопрос помощнику, открытый рецепт и панель сборки дня. Не посещённые не
-  // монтируются вовсе — их чанки и запросы ждут первого перехода.
+  const [tab, setTab] = useState<TabId>(() => initialTab(launch));
+  // Посещённые вкладки остаются смонтированными, скрытыми: переход на меню
+  // посреди сборки блюда в расчёте стирал состав, недописанный вопрос
+  // помощнику, открытый рецепт. Не посещённые не монтируются вовсе — их чанки
+  // и запросы ждут первого перехода.
   const [visited, setVisited] = useState<ReadonlySet<TabId>>(
-    () => new Set<TabId>(["home"]),
+    () => new Set<TabId>([initialTab(launch)]),
+  );
+  const [request, setRequest] = useState<ScreenRequest<LaunchTarget> | null>(
+    () => (launch === null ? null : requestOf(launch)),
+  );
+  const [settings, setSettings] = useState<{
+    section?: SettingsSection;
+  } | null>(() =>
+    launch !== null && "settings" in launch
+      ? { section: launch.section }
+      : null,
   );
   // Прокрутка у окна одна на все вкладки: без памяти вкладка открывалась бы
   // на высоте предыдущей.
-  const scrollByTab = useRef(new Map<TabId, number>());
+  const scrollByTab = useRef(new Map<TabId | "settings", number>());
+  // Человек уже выбрал сам — облако Telegram, ответившее позже, не перебивает.
+  const chosen = useRef(launch !== null);
 
-  function select(next: TabId) {
-    if (next === tab) return;
-    scrollByTab.current.set(tab, window.scrollY);
+  useEffect(() => {
+    if (launch !== null) onLaunchUsed?.();
+    // Только при первой отрисовке: параметр запуска одноразовый.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const select = useCallback((next: TabId) => {
+    chosen.current = true;
+    rememberTab(next);
     setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
-    setTab(next);
-    // После отрисовки новой вкладки, когда у страницы её высота.
-    requestAnimationFrame(() => {
-      window.scrollTo(0, scrollByTab.current.get(next) ?? 0);
+    setTab((current) => {
+      if (current === next) return current;
+      scrollByTab.current.set(current, window.scrollY);
+      // После отрисовки новой вкладки, когда у страницы её высота.
+      requestAnimationFrame(() => {
+        window.scrollTo(0, scrollByTab.current.get(next) ?? 0);
+      });
+      return next;
     });
-  }
+  }, []);
+
+  // Вкладка с другого устройства — если здесь её ещё не запоминали.
+  useEffect(() => {
+    if (chosen.current || rememberedTab() !== null) return;
+    rememberedCloudTab((cloudTab) => {
+      if (chosen.current) return;
+      setVisited((prev) =>
+        prev.has(cloudTab) ? prev : new Set(prev).add(cloudTab),
+      );
+      setTab(cloudTab);
+    });
+  }, []);
+
+  const openSettings = useCallback((section?: SettingsSection) => {
+    scrollByTab.current.set("settings", window.scrollY);
+    setSettings({ section });
+    window.scrollTo(0, 0);
+  }, []);
+  const closeSettings = useCallback(() => {
+    setSettings(null);
+    requestAnimationFrame(() => {
+      window.scrollTo(0, scrollByTab.current.get("settings") ?? 0);
+    });
+  }, []);
+  useSettingsButton(() => openSettings());
+
+  const navigate = useCallback(
+    (target: LaunchTarget) => {
+      if ("settings" in target) {
+        openSettings(target.section);
+        return;
+      }
+      setSettings(null);
+      select(target.tab);
+      setRequest(requestOf(target));
+    },
+    [openSettings, select],
+  );
 
   const tabs: readonly TabBarItem<TabId>[] = [
-    { id: "home", label: t("tabs.home"), icon: House },
-    { id: "menu", label: t("tabs.menu"), icon: UtensilsCrossed },
-    { id: "calculator", label: t("tabs.calculator"), icon: Calculator },
-    { id: "recipes", label: t("tabs.recipes"), icon: BookOpen },
-    // Не новая вкладка, а прежняя «Динамика», ставшая дневником: седьмой
-    // в полосе места нет (ADR-0044).
+    { id: "today", label: t("tabs.today"), icon: House },
     { id: "diary", label: t("tabs.diary"), icon: NotebookPen },
-    // Шестая и последняя: больше в нижнюю полосу не помещается — на 360 px
-    // это по 60 px на вкладку, и подпись перестаёт читаться.
+    { id: "dishes", label: t("tabs.dishes"), icon: UtensilsCrossed },
     { id: "assistant", label: t("tabs.assistant"), icon: Bot },
   ];
 
+  const todayRequest = narrow<TodayRequest>(request, "today", (target) =>
+    "view" in target ? { view: target.view, dayOffset: target.dayOffset } : {},
+  );
+  const diaryRequest = narrow<{ addKind?: CreatableKind }>(
+    request,
+    "diary",
+    (target) => ("addKind" in target ? { addKind: target.addKind } : {}),
+  );
+
   return (
-    <>
-      {/* Над экранами, а не на одной вкладке: какой ребёнок открыт, важно на
-          каждой — запись в дневник уходит именно ему (ADR-0048). */}
-      <ChildSwitcher session={session} onSwitch={onSwitchChild} />
-      <OpenTabContext value={select}>
+    <NavigateContext value={navigate}>
+      {settings !== null && (
+        <SettingsScreen
+          session={session}
+          section={settings.section}
+          onClose={closeSettings}
+        />
+      )}
+      <div hidden={settings !== null} className="flex flex-1 flex-col">
+        <ChildSwitcher
+          session={session}
+          onSwitch={onSwitchChild}
+          onOpenSettings={() => openSettings()}
+        />
         <div className="flex-1">
           {/* Пока чанк вкладки едет — скелетон, а не пустота: в Telegram
-            приложение открывается поверх чата, и мигание пустым экраном
-            читается как «не загрузилось». */}
-          {tabs
-            .filter(({ id }) => visited.has(id))
-            .map(({ id }) => {
-              const Screen = SCREENS[id];
-              return (
-                // `hidden` убирает скрытую вкладку и из дерева доступности: её
-                // заголовок и поля не мешают программе чтения с экрана.
-                <div key={id} hidden={id !== tab} data-tab={id}>
-                  <TabVisibleContext value={id === tab}>
-                    {/* Своя граница ожидания у каждой вкладки: чанк новой
-                      вкладки не должен прятать уже открытые за скелетоном. */}
-                    <Suspense fallback={<TabSkeleton />}>
-                      <Screen session={session} />
-                    </Suspense>
-                  </TabVisibleContext>
-                </div>
-              );
-            })}
+              приложение открывается поверх чата, и мигание пустым экраном
+              читается как «не загрузилось». */}
+          {TAB_ORDER.filter((id) => visited.has(id)).map((id) => (
+            // `hidden` убирает скрытую вкладку и из дерева доступности: её
+            // заголовок и поля не мешают программе чтения с экрана.
+            <div key={id} hidden={id !== tab} data-tab={id}>
+              <TabVisibleContext value={id === tab && settings === null}>
+                {/* Своя граница ожидания у каждой вкладки: чанк новой
+                    вкладки не должен прятать уже открытые за скелетоном. */}
+                <Suspense fallback={<TabSkeleton />}>
+                  {id === "today" && (
+                    <TodayScreen session={session} request={todayRequest} />
+                  )}
+                  {id === "diary" && (
+                    <DiaryScreen session={session} request={diaryRequest} />
+                  )}
+                  {id === "dishes" && <DishesScreen session={session} />}
+                  {id === "assistant" && <AssistantScreen session={session} />}
+                </Suspense>
+              </TabVisibleContext>
+            </div>
+          ))}
         </div>
-      </OpenTabContext>
-      <TabBar items={tabs} active={tab} onSelect={select} />
-    </>
+        <TabBar items={tabs} active={tab} onSelect={select} />
+      </div>
+    </NavigateContext>
   );
+}
+
+/** Запрос, адресованный этой вкладке, в форме, которую она понимает. */
+function narrow<T>(
+  request: ScreenRequest<LaunchTarget> | null,
+  tab: TabId,
+  pick: (target: LaunchTarget & { tab: TabId }) => T,
+): ScreenRequest<T> | null {
+  if (request === null || !("tab" in request.target)) return null;
+  if (request.target.tab !== tab) return null;
+  return { id: request.id, target: pick(request.target) };
 }
 
 /** Заглушка вкладки в форме будущего содержимого. */

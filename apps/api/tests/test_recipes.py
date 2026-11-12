@@ -22,6 +22,8 @@ from api.main import create_app
 from api.routers.recipes import router as recipes_router
 from core.models import AuditLog, Product, ProductCategory, Recipe, RecipeIngredient
 from core.models.enums import RecipeStatus, UserRole
+from core.repositories import patients as patients_repo
+from core.repositories import prescriptions as prescriptions_repo
 from keto_engine import ENGINE_VERSION
 
 pytestmark = pytest.mark.asyncio
@@ -903,3 +905,122 @@ class TestDeleteRecipe:
 
         still_there = await client.get(f"/api/v1/recipes/{recipe_id}", headers=auth_headers(admin))
         assert still_there.status_code == 200
+
+
+class TestRatioFitsPrescription:
+    """`?patient_id=` — пометка «соотношение рецепта не как у ребёнка».
+
+    Потребитель — Mini App (`features/recipes`, ADR-0075): у рецепта в списке
+    и в карточке стоит пометка, если его соотношение расходится с назначением.
+    Сравнивает ядро своим допуском; клиент чисел не сравнивает.
+    """
+
+    async def _world(self, session, make_user, make_patient, *, ratio: float | None):
+        doctor = await make_user(UserRole.DOCTOR)
+        parent = await make_user(UserRole.PARENT)
+        patient = await make_patient()
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        if ratio is not None:
+            await prescriptions_repo.create(
+                session,
+                patient_id=patient.id,
+                ratio=ratio,
+                kcal_per_day=1200,
+                protein_g=24.0,
+                carbs_limit_g=20.0,
+                meals_per_day=4,
+                author_id=doctor.id,
+                effective_from=date.today(),
+            )
+        return parent, patient
+
+    async def _published(self, client, session, make_user, auth_headers, make_recipe) -> dict:
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        chicken = await _product(session, "Курица", **CHICKEN)
+        recipe = await make_recipe((butter, 40), (chicken, 30), author=dietitian)
+        response = await client.post(
+            f"/api/v1/recipes/{recipe['id']}/publish", headers=auth_headers(dietitian)
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    async def test_matching_ratio_is_marked_as_fitting(
+        self, client, session, make_user, make_patient, auth_headers, make_recipe
+    ):
+        recipe = await self._published(client, session, make_user, auth_headers, make_recipe)
+        ratio = recipe["computed"]["ratio"]
+        parent, patient = await self._world(session, make_user, make_patient, ratio=round(ratio, 1))
+
+        response = await client.get(
+            f"/api/v1/recipes/{recipe['id']}",
+            params={"patient_id": str(patient.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["ratio_fits_prescription"] is True
+
+    async def test_other_ratio_is_marked_in_search(
+        self, client, session, make_user, make_patient, auth_headers, make_recipe
+    ):
+        recipe = await self._published(client, session, make_user, auth_headers, make_recipe)
+        ratio = recipe["computed"]["ratio"]
+        parent, patient = await self._world(
+            session, make_user, make_patient, ratio=round(ratio + 1.0, 1)
+        )
+
+        response = await client.get(
+            "/api/v1/recipes",
+            params={"patient_id": str(patient.id), "q": recipe["title"], "limit": 200},
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        found = [item for item in response.json()["items"] if item["id"] == recipe["id"]]
+        assert found and found[0]["ratio_fits_prescription"] is False
+
+    async def test_without_patient_or_prescription_says_nothing(
+        self, client, session, make_user, make_patient, auth_headers, make_recipe
+    ):
+        recipe = await self._published(client, session, make_user, auth_headers, make_recipe)
+        parent, patient = await self._world(session, make_user, make_patient, ratio=None)
+
+        plain = await client.get(f"/api/v1/recipes/{recipe['id']}", headers=auth_headers(parent))
+        unprescribed = await client.get(
+            f"/api/v1/recipes/{recipe['id']}",
+            params={"patient_id": str(patient.id)},
+            headers=auth_headers(parent),
+        )
+
+        assert plain.json()["ratio_fits_prescription"] is None
+        assert unprescribed.json()["ratio_fits_prescription"] is None
+
+    async def test_another_familys_child_is_refused(
+        self, client, session, make_user, make_patient, auth_headers, make_recipe
+    ):
+        """Назначение — клинические данные: чужой ребёнок не сверяется молча."""
+
+        recipe = await self._published(client, session, make_user, auth_headers, make_recipe)
+        _, patient = await self._world(session, make_user, make_patient, ratio=4.0)
+        stranger = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            "/api/v1/recipes",
+            params={"patient_id": str(patient.id)},
+            headers=auth_headers(stranger),
+        )
+
+        assert response.status_code in (403, 404)
+        assert recipe["id"] not in response.text
+
+    async def test_malformed_patient_id_is_a_validation_error(
+        self, client, make_user, auth_headers
+    ):
+        parent = await make_user(UserRole.PARENT)
+
+        response = await client.get(
+            "/api/v1/recipes", params={"patient_id": "nope"}, headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 422

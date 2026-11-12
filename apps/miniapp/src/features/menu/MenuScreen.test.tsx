@@ -337,16 +337,16 @@ describe("план дня в Mini App", () => {
 
   it("отсутствие плана — это состояние, а не ошибка", async () => {
     // Семья могла не планировать день; экран ошибки тут читался бы как поломка.
-    (api.GET as Mock).mockResolvedValue({ response: { status: 404 } });
+    respond({ menus: {} });
     renderScreen();
 
     expect(
       await screen.findByText(/Меню на этот день не составлено/),
     ).toBeInTheDocument();
-    // Выход отсюда — составить меню здесь же; у кого кабинет включён, тому
-    // ещё и ссылка на него.
+    // Выход отсюда — собрать меню здесь же, приём за приёмом; у кого кабинет
+    // включён, тому ещё и ссылка на него.
     expect(
-      screen.getByRole("button", { name: "Составить меню" }),
+      await screen.findByRole("button", { name: "Добавить блюдо в приём 1" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Открыть кабинет/ }),
@@ -356,7 +356,7 @@ describe("план дня в Mini App", () => {
   it("без кабинета пустой план не ведёт в кабинет", async () => {
     // У взрослого из Telegram кабинета нет: ссылка вела бы на форму входа,
     // войти в которую ему нечем.
-    (api.GET as Mock).mockResolvedValue({ response: { status: 404 } });
+    respond({ menus: {} });
     renderScreen({ ...SESSION, hasWebCredentials: false });
 
     expect(
@@ -449,16 +449,13 @@ describe("сборка дня в Mini App", () => {
     respond({ recipes: [RECIPE] });
     renderScreen();
 
+    // «Добавить блюдо» стоит у каждого приёма — и приём приходит уже выбранным.
     await user.click(
-      await screen.findByRole("button", { name: "Составить меню" }),
+      await screen.findByRole("button", { name: "Добавить блюдо в приём 2" }),
     );
     await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
 
-    // Приём выбирается из назначенных врачом, а не набирается числом.
-    await user.selectOptions(
-      screen.getByLabelText("Приём пищи"),
-      screen.getByRole("option", { name: "Приём 2" }),
-    );
+    expect(screen.getByLabelText("Приём пищи")).toHaveValue("2");
     await user.clear(screen.getByLabelText("Порций"));
     await user.type(screen.getByLabelText("Порций"), "0,5");
     await user.click(screen.getByRole("button", { name: "Добавить в меню" }));
@@ -494,7 +491,7 @@ describe("сборка дня в Mini App", () => {
     renderScreen();
 
     await user.click(
-      await screen.findByRole("button", { name: "Составить меню" }),
+      await screen.findByRole("button", { name: "Добавить блюдо в приём 1" }),
     );
     await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
     await user.click(screen.getByRole("button", { name: "Добавить в меню" }));
@@ -514,14 +511,11 @@ describe("сборка дня в Mini App", () => {
     respond({ mealsPerDay: null });
     renderScreen();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Составить меню" }),
-    );
-
+    // Панели, из которой нечего выбрать, нет вовсе: кнопок сборки нет, вместо
+    // них одна строка (аудит 12.11.2026 — прежде панель была тупиком).
     expect(await screen.findByText(/Назначения пока нет/)).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Найти блюдо или рецепт"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Добавить блюдо/ })).toBeNull();
+    expect(user).toBeDefined();
   });
 
   it("убирает позицию из дня", async () => {
@@ -657,7 +651,7 @@ describe("сборка дня в Mini App", () => {
       await screen.findByRole("checkbox", { name: /Омлет/ }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Завтра" }));
+    await user.click(screen.getByRole("radio", { name: "Завтра" }));
 
     expect(await screen.findByText("Омлет на сливках")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).toBeNull();
@@ -679,7 +673,7 @@ describe("сборка дня в Mini App", () => {
     renderScreen();
     await screen.findByText("Омлет на сливках");
 
-    await user.click(screen.getByRole("button", { name: "Завтра" }));
+    await user.click(screen.getByRole("radio", { name: "Завтра" }));
 
     await waitFor(() => {
       const dates = (api.GET as Mock).mock.calls
@@ -711,7 +705,7 @@ describe("день не собирается вслепую", () => {
 
     await waitFor(() => expect(api.GET).toHaveBeenCalled());
     expect(
-      screen.queryByRole("button", { name: "Составить меню" }),
+      screen.queryByRole("button", { name: /Добавить блюдо/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -734,7 +728,7 @@ describe("день не собирается вслепую", () => {
       await screen.findByText(/Не удалось загрузить меню/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Составить меню" }),
+      screen.queryByRole("button", { name: /Добавить блюдо/ }),
     ).not.toBeInTheDocument();
     expect(api.PUT).not.toHaveBeenCalled();
   });
@@ -750,9 +744,8 @@ describe("день не собирается вслепую", () => {
     });
 
     renderScreen();
-    await user.click(
-      await screen.findByRole("button", { name: "Составить меню" }),
-    );
+    await screen.findByText("Омлет на сливках");
+    expect(user).toBeDefined();
 
     // «Назначения нет» — утверждение о клиническом факте; из незнания его
     // делать нельзя.
@@ -910,7 +903,7 @@ describe("итоги дня рядом с целями назначения", ()
     renderScreen();
     await screen.findByText("1 200 из 1 200 ккал");
 
-    await user.click(screen.getByRole("button", { name: "Завтра" }));
+    await user.click(screen.getByRole("radio", { name: "Завтра" }));
 
     // Сводка посчитана для сегодня, но цели берутся из активного назначения:
     // брать их из сводки значило бы оставить завтрашний день без ориентира.
@@ -921,7 +914,7 @@ describe("итоги дня рядом с целями назначения", ()
     respond({ mealsPerDay: null });
     renderScreen();
 
-    expect(await screen.findByText(/Жиры/)).toBeInTheDocument();
+    expect(await screen.findByText(/жиры 100/)).toBeInTheDocument();
     expect(screen.queryByText(/из .* ккал/)).not.toBeInTheDocument();
   });
 });
@@ -950,7 +943,7 @@ describe("вчерашний день", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: "Вчера" }));
+    await user.click(await screen.findByRole("radio", { name: "Вчера" }));
     await user.click(
       await screen.findByRole("checkbox", { name: /Вчерашний омлет/ }),
     );
@@ -965,10 +958,7 @@ describe("вчерашний день", () => {
       );
     });
     expect(menuDates()).toContain(dayAt(-1));
-    expect(screen.getByRole("button", { name: "Вчера" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("radio", { name: "Вчера" })).toBeChecked();
   });
 });
 
@@ -1033,7 +1023,7 @@ describe("«Как вчера»", () => {
     renderScreen();
 
     await screen.findByText("Суфле");
-    await user.click(screen.getByRole("button", { name: "Завтра" }));
+    await user.click(screen.getByRole("radio", { name: "Завтра" }));
     await user.click(
       await screen.findByRole("button", { name: "Как сегодня" }),
     );
@@ -1189,7 +1179,7 @@ describe("соответствие дня назначению", () => {
     renderScreen();
     await screen.findByText("Кетосоотношение дня соответствует назначению.");
 
-    await user.click(screen.getByRole("button", { name: "Завтра" }));
+    await user.click(screen.getByRole("radio", { name: "Завтра" }));
 
     expect(
       await screen.findByText(/показывается только для сегодняшнего дня/),
@@ -1197,5 +1187,136 @@ describe("соответствие дня назначению", () => {
     expect(
       screen.queryByText("Кетосоотношение дня соответствует назначению."),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("сборка по приёмам (ADR-0075)", () => {
+  const RECIPE = {
+    id: "33333333-3333-4333-8333-333333333333",
+    title: "Запеканка со сливками",
+    servings: 2,
+    status: "published",
+    computed: {
+      kcal: 420,
+      fat: 40,
+      protein: 8,
+      carbs: 3,
+      fiber: 1,
+      ratio: 3.6,
+    },
+  };
+
+  it("показывает все назначенные приёмы, в том числе пустые", async () => {
+    // Прежде пустые приёмы не показывались вовсе, и добавить блюдо в третий
+    // приём можно было лишь через общую панель с приёмом «по умолчанию».
+    respond();
+    renderScreen();
+
+    for (const index of [1, 2, 3, 4]) {
+      expect(
+        await screen.findByRole("heading", { name: `Приём ${index}` }),
+      ).toBeInTheDocument();
+    }
+    expect(screen.getAllByText("Блюд пока нет.")).toHaveLength(3);
+  });
+
+  it("панель не закрывается после блюда и помнит приём", async () => {
+    // Прежде панель закрывалась после каждого блюда, а приём сбрасывался на
+    // первый: пять приёмов собирались за двадцать пять нажатий.
+    const user = userEvent.setup();
+    respond({ recipes: [RECIPE] });
+    (api.PUT as Mock).mockImplementation(
+      async (_path: string, init: { body: { items: unknown[] } }) => ({
+        data: menu({
+          items: [
+            menu().items[0],
+            ...init.body.items.slice(1).map((item, index) => ({
+              ...(item as object),
+              id: `new-${index}`,
+              eaten: false,
+              title: RECIPE.title,
+            })),
+          ],
+        }),
+      }),
+    );
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Добавить блюдо в приём 3" }),
+    );
+    await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
+    await user.click(screen.getByRole("button", { name: "Добавить в меню" }));
+
+    expect(
+      await screen.findByText(/«Запеканка со сливками» — в приёме 3/),
+    ).toBeInTheDocument();
+    // Панель на месте: поиск, тот же приём, и можно добавлять дальше.
+    expect(screen.getByLabelText("Найти блюдо или рецепт")).toBeVisible();
+    expect(screen.getByLabelText("Приём пищи")).toHaveValue("3");
+
+    await user.click(screen.getByRole("button", { name: "Готово" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Меню" }),
+    ).toBeInTheDocument();
+  });
+
+  it("порция не числом — кнопка называет причину", async () => {
+    const user = userEvent.setup();
+    respond({ recipes: [RECIPE] });
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Добавить блюдо в приём 1" }),
+    );
+    await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
+    await user.clear(screen.getByLabelText("Порций"));
+
+    expect(
+      screen.getByRole("button", { name: "Добавить в меню" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Укажите порцию числом больше 0, например 1 или 0,5."),
+    ).toBeInTheDocument();
+  });
+
+  it("у блюда из рецепта — «Как готовить», и карточка открывается здесь же", async () => {
+    respond({
+      menu: menu({
+        items: [
+          { ...menu().items[0], recipe_id: RECIPE.id, title: "Запеканка" },
+        ],
+      }),
+      recipes: [RECIPE],
+    });
+    const listed = (api.GET as Mock).getMockImplementation();
+    (api.GET as Mock).mockImplementation(async (path: string, init: unknown) =>
+      path === "/api/v1/recipes/{recipe_id}"
+        ? {
+            data: {
+              ...RECIPE,
+              yield_g: 200,
+              instructions: "Запечь.",
+              ingredients: [],
+              per_portion: null,
+              ratio_fits_prescription: null,
+            },
+            response: { status: 200 },
+          }
+        : listed?.(path, init),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как готовить" }),
+    );
+    expect(
+      await screen.findByRole("heading", { level: 1, name: RECIPE.title }),
+    ).toBeInTheDocument();
+
+    expect(
+      await screen.findByRole("button", { name: "К списку" }),
+    ).toBeInTheDocument();
   });
 });

@@ -52,7 +52,12 @@ function renderScreen() {
     );
   }
   // `client` — тестам, которым нужно очистить кэш до возврата сети (#174).
-  const result = render(<RecipesScreen />, { wrapper: Wrapper });
+  const result = render(
+    <RecipesScreen patientId="11111111-1111-4111-8111-111111111111" />,
+    {
+      wrapper: Wrapper,
+    },
+  );
   return Object.assign(result, { client });
 }
 
@@ -417,7 +422,7 @@ describe("рецепты в Mini App", () => {
     (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
     const { client } = renderScreen();
 
-    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    const field = await screen.findByLabelText("Найдите рецепт");
     await user.type(field, "суфле");
     expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
 
@@ -443,7 +448,7 @@ describe("рецепты в Mini App", () => {
     const user = userEvent.setup();
     const { client } = renderScreen();
 
-    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    const field = await screen.findByLabelText("Найдите рецепт");
     await user.type(field, "омлет");
     expect(await screen.findByText(/Омлет на сливках/)).toBeInTheDocument();
 
@@ -474,7 +479,7 @@ describe("рецепты в Mini App", () => {
     const user = userEvent.setup();
     const { client } = renderScreen();
 
-    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    const field = await screen.findByLabelText("Найдите рецепт");
     await user.type(field, "омлет");
     expect(await screen.findByText(/Омлет на сливках/)).toBeInTheDocument();
 
@@ -502,7 +507,7 @@ describe("рецепты в Mini App", () => {
     (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
     renderScreen();
 
-    const field = await screen.findByLabelText(/Поиск|Найти|рецепт/i);
+    const field = await screen.findByLabelText("Найдите рецепт");
     await user.type(field, "суфле");
     expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
 
@@ -626,5 +631,108 @@ describe("рецепты в Mini App", () => {
     renderScreen();
 
     expect(await screen.findByText("Ничего не нашлось")).toBeInTheDocument();
+  });
+});
+
+describe("рецепты ↔ меню и назначение (ADR-0075)", () => {
+  it("список не обрывается молча: «Показать ещё» берёт следующую страницу", async () => {
+    // Прежде выдача обрывалась на двадцатом рецепте без единого слова.
+    const page = (offset: number) =>
+      Array.from({ length: offset === 0 ? 20 : 1 }, (_, index) => ({
+        ...RECIPE,
+        id: `r-${offset + index}`,
+        title: `Рецепт ${offset + index + 1}`,
+      }));
+    (api.GET as Mock).mockImplementation(
+      (path: string, options?: { params?: { query?: { offset?: number } } }) =>
+        Promise.resolve({
+          data: {
+            items: page(options?.params?.query?.offset ?? 0),
+            total: 21,
+          },
+          response: { status: 200 },
+        }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    expect(await screen.findByText("Рецепт 20")).toBeInTheDocument();
+    expect(screen.queryByText("Рецепт 21")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Показать ещё" }));
+
+    expect(await screen.findByText("Рецепт 21")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Показать ещё" })).toBeNull();
+  });
+
+  it("сверку с назначением спрашивает у сервера и помечает расхождение", async () => {
+    (api.GET as Mock).mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          items: [{ ...RECIPE, ratio_fits_prescription: false }],
+          total: 1,
+        },
+        response: { status: 200 },
+      }),
+    );
+    renderScreen();
+
+    expect(
+      await screen.findByText("Кетосоотношение не как в назначении"),
+    ).toBeInTheDocument();
+    expect(api.GET).toHaveBeenCalledWith(
+      "/api/v1/recipes",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          query: expect.objectContaining({
+            patient_id: "11111111-1111-4111-8111-111111111111",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("из карточки рецепт ставится в меню — день и приём выбираются", async () => {
+    const get = (api.GET as Mock).getMockImplementation();
+    (api.GET as Mock).mockImplementation((path: string, options?: unknown) => {
+      if (path.endsWith("/overview")) {
+        return Promise.resolve({
+          data: {
+            patient_id: "11111111-1111-4111-8111-111111111111",
+            date: "2026-10-05",
+            prescription: {
+              ratio: 4,
+              kcal_per_day: 1200,
+              protein_g: 20,
+              carbs_limit_g: 10,
+              meals_per_day: 3,
+            },
+            day: null,
+          },
+          response: { status: 200 },
+        });
+      }
+      if (path.endsWith("/menus")) {
+        return Promise.resolve({ response: { status: 404 } });
+      }
+      return get?.(path, options);
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Омлет на сливках/ }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Добавить в меню" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("radio", { name: "Завтра" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Приём пищи")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Добавить в меню" }),
+    ).toBeEnabled();
   });
 });

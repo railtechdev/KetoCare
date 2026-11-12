@@ -1,8 +1,17 @@
-import { AsyncSection, Button, Input, Section, toast } from "@ketocare/ui";
+import {
+  AsyncSection,
+  Button,
+  Input,
+  Section,
+  Switch,
+  toast,
+} from "@ketocare/ui";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { haptic } from "../../lib/telegram";
+import { useBottomButtons } from "../../lib/useTelegram";
 import type { Session } from "../session/useSession";
 import {
   type ReminderValues,
@@ -44,6 +53,39 @@ export function RemindersBlock({ session }: { session: Session }) {
   const save = useSaveReminders(session.patientId);
   const [form, setForm] = useState<ReminderValues | null>(null);
 
+  const submit = () => {
+    if (form === null || save.isPending) return;
+    save.mutate(form, {
+      onSuccess: () => {
+        haptic("success");
+        toast.success(t("reminders.saved"));
+      },
+      onError: () => haptic("error"),
+    });
+  };
+  // Изменено ли что-то против сохранённого: «Сохранить» нужен только тогда.
+  const dirty =
+    form !== null &&
+    settings.data !== undefined &&
+    (Object.keys(form) as (keyof ReminderValues)[]).some(
+      (key) => form[key] !== settings.data[key],
+    );
+  // «Сохранить напоминания» — родной кнопкой Telegram внизу экрана настроек
+  // (Bot API 7.10), пока есть что сохранять.
+  const native = useBottomButtons(
+    dirty
+      ? {
+          main: {
+            text: save.isPending
+              ? t("reminders.saving")
+              : t("reminders.submit"),
+            onClick: submit,
+            progress: save.isPending,
+          },
+        }
+      : null,
+  );
+
   // Пустое поле здесь значит «выключено», поэтому до ответа сервера форма не
   // показывается вовсе: пустая — она утверждала бы неправду.
   useEffect(() => {
@@ -77,122 +119,108 @@ export function RemindersBlock({ session }: { session: Session }) {
         empty={null}
       >
         {form !== null && (
-          // Свёрнуто по умолчанию: пять полей времени на главной стояли
-          // вровень со сводкой дня, хотя меняют их раз в месяц. Состояние —
-          // словами в заголовке, его видно и в свёрнутом виде.
-          <details className="group">
-            <summary className="flex min-h-touch cursor-pointer items-center gap-field">
-              <span className="min-w-0 flex-1">
-                {settings.data?.enabled
-                  ? t("reminders.statusOn")
-                  : t("reminders.statusOff")}
-              </span>
-              <span className="text-primary underline underline-offset-4">
-                {t("reminders.edit")}
-              </span>
-            </summary>
-            <form
-              noValidate
-              className="mt-field flex flex-col gap-field"
-              onSubmit={(event) => {
-                event.preventDefault();
-                save.mutate(form, {
-                  onSuccess: () => toast.success(t("reminders.saved")),
-                });
-              }}
-            >
-              <div className="flex flex-col gap-1">
-                {/* Цель касания — вся строка во всю ширину, а не флажок 24 px. */}
-                <label className="flex min-h-touch w-full cursor-pointer items-center gap-field">
-                  <input
-                    type="checkbox"
-                    className="size-6 shrink-0 accent-primary"
-                    checked={form.enabled}
-                    aria-describedby={`${ids}-enabled-hint`}
-                    onChange={(event) =>
-                      setForm({ ...form, enabled: event.target.checked })
-                    }
-                  />
-                  <span>{t("reminders.enabled")}</span>
-                </label>
-                {/* Визит к врачу своего поля не имеет, но выключатель действует
+          // На своём экране настроек форма открыта сразу: сворачивать её было
+          // нужно, пока она стояла на главной под сводкой дня.
+          <form
+            noValidate
+            className="flex flex-col gap-field"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submit();
+            }}
+          >
+            <div className="flex flex-col gap-1">
+              {/* Цель касания — вся строка во всю ширину. Переключатель, а не
+                    флажок: напоминания включаются целиком, как в настройках
+                    самого Telegram. */}
+              <label className="flex min-h-touch w-full cursor-pointer items-center gap-field">
+                <Switch
+                  checked={form.enabled}
+                  aria-describedby={`${ids}-enabled-hint`}
+                  onChange={(event) =>
+                    setForm({ ...form, enabled: event.target.checked })
+                  }
+                />
+                <span className="min-w-0 flex-1">{t("reminders.enabled")}</span>
+              </label>
+              {/* Визит к врачу своего поля не имеет, но выключатель действует
                     и на него — так и сказано, а не подразумевается. */}
-                <span
-                  id={`${ids}-enabled-hint`}
-                  className="text-sm text-muted-foreground"
-                >
-                  {t("reminders.enabledHint")}
-                </span>
-              </div>
+              <span
+                id={`${ids}-enabled-hint`}
+                className="text-sm text-muted-foreground"
+              >
+                {t("reminders.enabledHint")}
+              </span>
+            </div>
 
-              {KINDS.map((kind) => {
-                const id = `${ids}-${kind}`;
-                const value = toTimeInput(form[FIELD[kind]]);
-                const label = t(`reminders.kinds.${kind}`);
-                return (
-                  <div key={kind} className="flex flex-col gap-1">
-                    <label htmlFor={id}>{label}</label>
-                    <div className="flex flex-wrap items-center gap-field">
-                      <Input
-                        id={id}
-                        type="time"
-                        className="min-h-touch w-36 tabular-nums"
-                        disabled={!form.enabled}
-                        aria-describedby={`${id}-hint`}
-                        value={value}
-                        onChange={(event) =>
-                          setForm({
-                            ...form,
-                            [FIELD[kind]]:
-                              event.target.value === ""
-                                ? null
-                                : event.target.value,
-                          })
-                        }
-                      />
-                      {/* На телефоне у поля времени не всегда есть «очистить»,
+            {KINDS.map((kind) => {
+              const id = `${ids}-${kind}`;
+              const value = toTimeInput(form[FIELD[kind]]);
+              const label = t(`reminders.kinds.${kind}`);
+              return (
+                <div key={kind} className="flex flex-col gap-1">
+                  <label htmlFor={id}>{label}</label>
+                  <div className="flex flex-wrap items-center gap-field">
+                    <Input
+                      id={id}
+                      type="time"
+                      className="min-h-touch w-36 tabular-nums"
+                      disabled={!form.enabled}
+                      aria-describedby={`${id}-hint`}
+                      value={value}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          [FIELD[kind]]:
+                            event.target.value === ""
+                              ? null
+                              : event.target.value,
+                        })
+                      }
+                    />
+                    {/* На телефоне у поля времени не всегда есть «очистить»,
                         а пустое время — единственный способ выключить вид. */}
-                      {value !== "" && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="min-h-touch"
-                          disabled={!form.enabled}
-                          aria-label={t("reminders.clearAria", { kind: label })}
-                          onClick={() =>
-                            setForm({ ...form, [FIELD[kind]]: null })
-                          }
-                        >
-                          {t("reminders.clear")}
-                        </Button>
-                      )}
-                    </div>
-                    <span
-                      id={`${id}-hint`}
-                      className="text-sm text-muted-foreground"
-                    >
-                      {t(`reminders.hints.${kind}`)}
-                    </span>
+                    {value !== "" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="min-h-touch"
+                        disabled={!form.enabled}
+                        aria-label={t("reminders.clearAria", { kind: label })}
+                        onClick={() =>
+                          setForm({ ...form, [FIELD[kind]]: null })
+                        }
+                      >
+                        {t("reminders.clear")}
+                      </Button>
+                    )}
                   </div>
-                );
-              })}
+                  <span
+                    id={`${id}-hint`}
+                    className="text-sm text-muted-foreground"
+                  >
+                    {t(`reminders.hints.${kind}`)}
+                  </span>
+                </div>
+              );
+            })}
 
-              {save.isError && (
-                <p role="alert" className="m-0 text-destructive">
-                  {errorMessageOf(save.error) ?? t("reminders.saveFailed")}
-                </p>
-              )}
+            {save.isError && (
+              <p role="alert" className="m-0 text-destructive">
+                {errorMessageOf(save.error) ?? t("reminders.saveFailed")}
+              </p>
+            )}
 
+            {!native && (
               <Button
                 type="submit"
-                variant="outline"
-                className="min-h-touch self-start"
+                className="min-h-touch w-full"
                 disabled={save.isPending}
               >
                 {save.isPending ? t("reminders.saving") : t("reminders.submit")}
               </Button>
-            </form>
-          </details>
+            )}
+          </form>
         )}
       </AsyncSection>
     </Section>

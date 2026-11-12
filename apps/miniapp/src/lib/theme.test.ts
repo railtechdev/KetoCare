@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { applyTelegramTheme, contrastRatio, watchTelegramTheme } from "./theme";
 import type { TelegramWebApp } from "./telegram";
@@ -59,6 +59,8 @@ afterEach(() => {
   delete window.Telegram;
   root.removeAttribute("style");
   delete root.dataset.theme;
+  delete root.dataset.tgSeparator;
+  delete root.dataset.tgSectionHeader;
 });
 
 describe("тема из Telegram", () => {
@@ -230,5 +232,70 @@ describe("тема из Telegram", () => {
     applyTelegramTheme();
 
     expect(root.dataset.theme).toBeUndefined();
+  });
+});
+
+describe("цвета родных экранов Telegram (Bot API 7.0, ADR-0075)", () => {
+  /** Светлая iOS с цветами разделов — как её присылает клиент 7.0+. */
+  const SECTIONS_LIGHT = {
+    ...IOS_LIGHT,
+    secondary_bg_color: "#efeff4",
+    section_bg_color: "#ffffff",
+    subtitle_text_color: "#5f5f64",
+    accent_text_color: "#1c6fb8",
+    section_header_text_color: "#5e5e63",
+    section_separator_color: "#c8c7cc",
+  };
+
+  it("разделы — на фоне разделов: фон из secondary_bg, карточка из section_bg", () => {
+    fakeTelegram({ themeParams: SECTIONS_LIGHT });
+
+    applyTelegramTheme();
+
+    expect(tokenOf("--color-background")).toBe("#efeff4");
+    expect(tokenOf("--color-card")).toBe("#ffffff");
+  });
+
+  it("подзаголовок, акцент и заголовок раздела — только читаемые", () => {
+    fakeTelegram({ themeParams: SECTIONS_LIGHT });
+
+    applyTelegramTheme();
+
+    expect(tokenOf("--color-muted-foreground")).toBe("#5f5f64");
+    expect(tokenOf("--tg-accent")).toBe("#1c6fb8");
+    expect(tokenOf("--tg-section-header")).toBe("#5e5e63");
+    expect(root.dataset.tgSectionHeader).toBe("");
+    // Разделитель — не текст: контраст от него не требуется.
+    expect(tokenOf("--tg-separator")).toBe("#c8c7cc");
+    expect(root.dataset.tgSeparator).toBe("");
+  });
+
+  it("нечитаемый акцент не берётся — остаётся наш цвет", () => {
+    fakeTelegram({
+      themeParams: { ...SECTIONS_LIGHT, accent_text_color: "#9fd3ff" },
+    });
+
+    applyTelegramTheme();
+
+    expect(tokenOf("--tg-accent")).toBe("");
+  });
+
+  it("шапка и фон Telegram — в цвет страницы, нижняя полоса — с 7.10", () => {
+    const setHeaderColor = vi.fn();
+    const setBackgroundColor = vi.fn();
+    const setBottomBarColor = vi.fn();
+    fakeTelegram({
+      themeParams: SECTIONS_LIGHT,
+      isVersionAtLeast: () => true,
+      setHeaderColor,
+      setBackgroundColor,
+      setBottomBarColor,
+    });
+
+    applyTelegramTheme();
+
+    expect(setHeaderColor).toHaveBeenCalledWith("#efeff4");
+    expect(setBackgroundColor).toHaveBeenCalledWith("#efeff4");
+    expect(setBottomBarColor).toHaveBeenCalledWith("#ffffff");
   });
 });

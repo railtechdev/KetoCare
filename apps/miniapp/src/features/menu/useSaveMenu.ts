@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api, errorCodeOf } from "../../lib/api";
+import { haptic } from "../../lib/telegram";
 import type { DayItem } from "./dayPlan";
 import { menuKey } from "./useMenu";
 
@@ -42,6 +43,7 @@ export function useSaveMenu(patientId: string, day: string) {
       return data;
     },
     onSuccess: (saved) => {
+      haptic("success");
       // Ответ кладётся в кэш сразу, а не ждёт рефетча: до его прихода
       // `menu.data` не содержит только что добавленной позиции, и следующее
       // действие отправило бы состав без неё — сервер молча снял бы свежее.
@@ -59,6 +61,7 @@ export function useSaveMenu(patientId: string, day: string) {
     // перечитывает день, чтобы следующее действие строилось от настоящего
     // состава, а не от устаревшего; объяснение отказа приходит от сервера.
     onError: (error) => {
+      haptic("error");
       if (errorCodeOf(error) === "conflict") {
         void queryClient.invalidateQueries({
           queryKey: menuKey(patientId, day),

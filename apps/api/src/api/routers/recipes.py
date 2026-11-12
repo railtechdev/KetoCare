@@ -21,11 +21,18 @@ from core.models.enums import AttachmentOwnerKind, RecipeCategory, RecipeStatus,
 from core.repositories import attachments as attachments_repo
 from core.repositories import audit as audit_repo
 from core.repositories import food_standards as food_standards_repo
+from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from core.repositories import recipes as recipes_repo
 
 from ..client_address import client_address
-from ..deps.auth import CurrentUser, CurrentUserDep, SessionDep, require_roles
+from ..deps.auth import (
+    CurrentUser,
+    CurrentUserDep,
+    SessionDep,
+    assert_patient_access,
+    require_roles,
+)
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import IMPORT_RATE_LIMIT, limiter
@@ -87,9 +94,27 @@ def _reject_duplicates(payload: RecipeWrite) -> None:
         )
 
 
-async def _read(session: SessionDep, recipe: Recipe) -> RecipeRead:
+async def _read(
+    session: SessionDep, recipe: Recipe, *, target_ratio: float | None = None
+) -> RecipeRead:
     ingredients = await recipes_repo.list_ingredients(session, recipe_id=recipe.id)
-    return recipes_service.to_read(recipe, ingredients)
+    return recipes_service.to_read(recipe, ingredients, target_ratio=target_ratio)
+
+
+async def _target_ratio(
+    session: SessionDep, user: CurrentUser, patient_id: uuid.UUID | None
+) -> float | None:
+    """Назначенное соотношение ребёнка, с которым сверяются рецепты.
+
+    Доступ к ребёнку проверяется тем же правилом, что у его ручек: назначение —
+    клинические данные, и чужой `patient_id` отвечает 403/404, а не молчанием.
+    """
+
+    if patient_id is None:
+        return None
+    await assert_patient_access(session, user, patient_id)
+    prescription = await prescriptions_repo.get_active(session, patient_id=patient_id)
+    return None if prescription is None else float(prescription.ratio)
 
 
 @router.get("", response_model=Page[RecipeRead], summary="Поиск рецептов")
@@ -102,7 +127,12 @@ async def search_recipes(
     ratio_max: Annotated[float | None, Query(ge=0)] = None,
     q: str | None = None,
     standard_id: uuid.UUID | None = None,
+    patient_id: Annotated[
+        uuid.UUID | None,
+        Query(description="Сверить соотношение рецептов с назначением этого ребёнка"),
+    ] = None,
 ) -> Page[RecipeRead]:
+    target_ratio = await _target_ratio(session, user, patient_id)
     items, total = await recipes_repo.search(
         session,
         statuses=_visible_statuses(user),
@@ -124,16 +154,27 @@ async def search_recipes(
         session, recipe_ids=[recipe.id for recipe in items]
     )
     return Page(
-        items=[recipes_service.to_read(r, ingredients.get(r.id, [])) for r in items], total=total
+        items=[
+            recipes_service.to_read(r, ingredients.get(r.id, []), target_ratio=target_ratio)
+            for r in items
+        ],
+        total=total,
     )
 
 
 @router.get("/{recipe_id}", response_model=RecipeRead, summary="Карточка рецепта")
 async def get_recipe(
-    recipe_id: Annotated[uuid.UUID, Path()], session: SessionDep, user: CurrentUserDep
+    recipe_id: Annotated[uuid.UUID, Path()],
+    session: SessionDep,
+    user: CurrentUserDep,
+    patient_id: Annotated[
+        uuid.UUID | None,
+        Query(description="Сверить соотношение рецепта с назначением этого ребёнка"),
+    ] = None,
 ) -> RecipeRead:
+    target_ratio = await _target_ratio(session, user, patient_id)
     recipe = await _visible_recipe(session, recipe_id, user)
-    return await _read(session, recipe)
+    return await _read(session, recipe, target_ratio=target_ratio)
 
 
 @router.put(

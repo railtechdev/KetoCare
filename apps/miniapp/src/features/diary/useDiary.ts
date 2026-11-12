@@ -8,6 +8,7 @@ import type { components } from "@ketocare/api-client";
 import type { DiaryEntryBody, DiaryEntryKind } from "@ketocare/ui";
 
 import { api } from "../../lib/api";
+import { haptic } from "../../lib/telegram";
 
 type Schemas = components["schemas"];
 
@@ -411,6 +412,9 @@ async function deleteEntry(
 export function useEntryMutations(patientId: string) {
   const queryClient = useQueryClient();
   const invalidate = async () => {
+    // Сохранение и удаление ощущаются рукой (Bot API 6.1) — запись делают на
+    // ходу, часто не глядя в экран.
+    haptic("success");
     await Promise.all(
       (["logs", "trend", "overview"] as const).map((part) =>
         queryClient.invalidateQueries({
@@ -424,18 +428,21 @@ export function useEntryMutations(patientId: string) {
     mutationFn: (input: { body: CreatableEntryBody; idempotencyKey: string }) =>
       createEntry(patientId, input.body, input.idempotencyKey),
     onSuccess: invalidate,
+    onError: () => haptic("error"),
   });
 
   const update = useMutation({
     mutationFn: (input: { logId: string; body: DiaryEntryBody }) =>
       patchEntry(patientId, input.logId, input.body),
     onSuccess: invalidate,
+    onError: () => haptic("error"),
   });
 
   const remove = useMutation({
     mutationFn: (entry: { kind: DiaryEntryKind; id: string }) =>
       deleteEntry(patientId, entry.kind, entry.id),
     onSuccess: invalidate,
+    onError: () => haptic("error"),
   });
 
   return { create, update, remove };
