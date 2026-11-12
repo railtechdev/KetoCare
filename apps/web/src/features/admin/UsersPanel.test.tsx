@@ -302,9 +302,18 @@ describe("отключение специалиста", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Сбросить пароль: Ольга Диетолог",
+        name: "Ещё действия: Ольга Диетолог",
       }),
     );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Сбросить пароль" }),
+    );
+    // Подтверждение называет человека, чей пароль сбрасывается.
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Сбросить пароль: Ольга Диетолог?",
+      }),
+    ).toBeInTheDocument();
     await user.click(
       await screen.findByRole("button", { name: "Сбросить пароль" }),
     );

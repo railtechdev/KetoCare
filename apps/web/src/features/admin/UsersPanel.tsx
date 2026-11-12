@@ -5,6 +5,10 @@ import {
   FormSheet,
   Button,
   DataTable,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   EmptyState,
   Section,
   SegmentedControl,
@@ -14,7 +18,14 @@ import {
   SEARCH_DELAY_MS,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { KeyRound, RotateCcwKey, SearchX, UserPlus, Users } from "lucide-react";
+import {
+  Ellipsis,
+  KeyRound,
+  RotateCcwKey,
+  SearchX,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { PageActions } from "../../components/PageLayout";
 import {
@@ -98,6 +109,13 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
     password: string;
   } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Какой сброс подтверждается и для кого. Диалоги стоят один раз под
+  // таблицей, а не в каждой строке: пункт меню закрывает меню, и диалог,
+  // живущий внутри него, закрылся бы вместе с ним.
+  const [confirm, setConfirm] = useState<{
+    kind: "password" | "totp";
+    user: AdminUser;
+  } | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
 
   const currentUserId = session?.userId ?? null;
@@ -174,6 +192,9 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
               {t("users.self")}
             </span>
           ) : (
+            // Сбросы — в меню «Ещё», в строке остаётся «Изменить» (правило
+            // П31). Три кнопки в ряд делали колонку действий шире половины
+            // таблицы, и на ноутбуке она накрывала дату создания.
             <div className="flex items-center gap-1.5 whitespace-nowrap">
               <Button
                 type="button"
@@ -187,84 +208,51 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
                 {t("users.edit")}
               </Button>
 
-              {row.original.email !== null && (
-                <ConfirmDialog
-                  trigger={
+              {(row.original.email !== null ||
+                row.original.totp_resettable) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
-                      className="min-h-touch"
-                      aria-label={t("users.resetPasswordAria", {
+                      size="icon"
+                      className="min-h-touch min-w-touch"
+                      aria-label={t("users.moreAria", {
                         name: row.original.full_name,
                       })}
                     >
-                      <RotateCcwKey aria-hidden="true" />
-                      {t("users.resetPassword")}
+                      <Ellipsis aria-hidden="true" />
                     </Button>
-                  }
-                  title={t("users.confirmResetPasswordTitle", {
-                    name: row.original.full_name,
-                  })}
-                  description={t("users.confirmResetPasswordBody")}
-                  confirmLabel={t("users.confirmResetPasswordAction")}
-                  cancelLabel={t("common:actions.cancel")}
-                  onConfirm={() =>
-                    resetPassword.mutate(row.original.id, {
-                      onSuccess: (data) =>
-                        setIssued({
-                          name: row.original.full_name,
-                          password: data.temporary_password,
-                        }),
-                      onError: (error) =>
-                        toast.error(
-                          errorMessageOf(error) ??
-                            t("common:errors.unexpected"),
-                        ),
-                    })
-                  }
-                />
-              )}
-
-              {row.original.totp_resettable && (
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-touch"
-                      aria-label={t("users.resetTotpAria", {
-                        name: row.original.full_name,
-                      })}
-                    >
-                      <KeyRound aria-hidden="true" />
-                      {t("users.resetTotp")}
-                    </Button>
-                  }
-                  title={t("users.confirmResetTotpTitle", {
-                    name: row.original.full_name,
-                  })}
-                  description={t("users.confirmResetTotpBody")}
-                  confirmLabel={t("users.confirmResetTotpAction")}
-                  cancelLabel={t("common:actions.cancel")}
-                  onConfirm={() =>
-                    resetTotp.mutate(row.original.id, {
-                      onSuccess: () => toast.success(t("users.totpReset")),
-                      onError: (error) =>
-                        toast.error(
-                          errorMessageOf(error) ??
-                            t("common:errors.unexpected"),
-                        ),
-                    })
-                  }
-                />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {row.original.email !== null && (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          setConfirm({ kind: "password", user: row.original })
+                        }
+                      >
+                        <RotateCcwKey aria-hidden="true" />
+                        {t("users.resetPassword")}
+                      </DropdownMenuItem>
+                    )}
+                    {row.original.totp_resettable && (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          setConfirm({ kind: "totp", user: row.original })
+                        }
+                      >
+                        <KeyRound aria-hidden="true" />
+                        {t("users.resetTotp")}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           ),
       },
     ],
-    [t, currentUserId, resetUpdate, resetTotp, resetPassword],
+    [t, currentUserId, resetUpdate],
   );
 
   const inviteButton = (
@@ -289,6 +277,58 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
           Панелью, а не блоком над списком: администратор приходит сюда
           управлять учётными записями, а приглашает сотрудника изредка
           (правило П32 канона). */}
+      {/* Заголовок называет человека: подтверждается сброс конкретной учётной
+          записи, а не абстрактное «вы уверены?». */}
+      <ConfirmDialog
+        open={confirm?.kind === "password"}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        title={t("users.confirmResetPasswordTitle", {
+          name: confirm?.user.full_name,
+        })}
+        description={t("users.confirmResetPasswordBody")}
+        confirmLabel={t("users.confirmResetPasswordAction")}
+        cancelLabel={t("common:actions.cancel")}
+        onConfirm={() => {
+          if (confirm === null) return;
+          const target = confirm.user;
+          resetPassword.mutate(target.id, {
+            onSuccess: (data) =>
+              setIssued({
+                name: target.full_name,
+                password: data.temporary_password,
+              }),
+            onError: (error) =>
+              toast.error(
+                errorMessageOf(error) ?? t("common:errors.unexpected"),
+              ),
+          });
+        }}
+      />
+      <ConfirmDialog
+        open={confirm?.kind === "totp"}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        title={t("users.confirmResetTotpTitle", {
+          name: confirm?.user.full_name,
+        })}
+        description={t("users.confirmResetTotpBody")}
+        confirmLabel={t("users.confirmResetTotpAction")}
+        cancelLabel={t("common:actions.cancel")}
+        onConfirm={() => {
+          if (confirm === null) return;
+          resetTotp.mutate(confirm.user.id, {
+            onSuccess: () => toast.success(t("users.totpReset")),
+            onError: (error) =>
+              toast.error(
+                errorMessageOf(error) ?? t("common:errors.unexpected"),
+              ),
+          });
+        }}
+      />
+
       {/* Временный пароль — панелью, которая не закрывается сама: показать его
           второй раз нельзя (в базе только argon2-хэш), а передать владельцу
           администратор должен успеть. */}
@@ -423,7 +463,9 @@ export function UsersPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
             <SelectField
               id="users-role"
               label={t("users.filters.role")}
-              width="narrow"
+              // Ширина по самому длинному варианту — «Администратор»: при
+              // узкой «Любая роль» обрезалась до «Любая ро.».
+              width="medium"
               value={filter.role}
               onChange={(event) =>
                 patchAddress({

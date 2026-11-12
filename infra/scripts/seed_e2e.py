@@ -60,6 +60,11 @@ DOCTOR_EMAIL = "e2e-doctor@example.com"
 # одноразовое событие, и на основном враче её можно было бы проверить лишь
 # однажды. Здесь она проверяется каждым прогоном, отдельным тестом.
 DOCTOR_SETUP_EMAIL = "e2e-doctor-setup@example.com"
+#: Диетолог и администратор — для проверки их экранов на ширине ноутбука
+#: (`apps/e2e/tests/laptop.spec.ts`, ADR-0077). Второй фактор тот же, что у
+#: врача: повтор кода сервер помнит у каждой учётной записи свой.
+DIETITIAN_EMAIL = "e2e-dietitian@example.com"
+ADMIN_EMAIL = "e2e-admin@example.com"
 # Второй фактор врача прогона задан, а не настраивается на ходу: тот же секрет
 # читает прогон (`E2E_TOTP_SECRET`), поэтому состояние живёт только в базе.
 # Значение фиктивное и годится лишь для локальной базы — как и пароль выше.
@@ -278,9 +283,21 @@ async def main() -> int:
             delete(UserBackupCode).where(UserBackupCode.user_id == doctor_setup.id)
         )
 
+        dietitian = await _user(
+            session, UserRole.DIETITIAN, "Диетолог Прогонов", DIETITIAN_EMAIL, hash_password
+        )
+        admin = await _user(
+            session, UserRole.ADMIN, "Администратор Прогонов", ADMIN_EMAIL, hash_password
+        )
+        for staff in (dietitian, admin):
+            staff.totp_secret = _totp_secret()
+            staff.totp_pending_secret = None
+
         category = await _category(session)
         added = await _products(session, category_id=category.id, changed_by=doctor.id)
         patient = await _patient(session, parent=parent, doctor=doctor)
+        # Диетолог ведёт того же ребёнка: его карта — предмет проверки.
+        await patients_repo.link_doctor(session, doctor_id=dietitian.id, patient_id=patient.id)
 
         await session.commit()
         patient_id = patient.id
@@ -291,6 +308,7 @@ async def main() -> int:
     print(f"Продуктов добавлено: {added}")
     print(f"Врач:     {DOCTOR_EMAIL} (второй фактор задан)")
     print(f"Врач:     {DOCTOR_SETUP_EMAIL} (второй фактор не настроен)")
+    print(f"Диетолог: {DIETITIAN_EMAIL}, администратор: {ADMIN_EMAIL}")
     print(f"Родитель: {PARENT_EMAIL}")
     return 0
 

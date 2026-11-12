@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { loginAsDoctor, loginAsParent, patientId } from "../src/auth";
+import {
+  loginAsAdmin,
+  loginAsDietitian,
+  loginAsDoctor,
+  loginAsParent,
+  patientId,
+} from "../src/auth";
 import { ensurePrescription } from "../src/miniapp";
 import { flushRateLimits } from "../src/redis";
 
@@ -25,9 +31,23 @@ test.use({ viewport: { width: 1280, height: 720 } });
 
 test.beforeEach(flushRateLimits);
 
-// Разделы специалиста (`SECTIONS_BY_ROLE.doctor`) и разделы карты пациента
-// (`features/doctor/patientViews.tsx`), кроме печатных форм.
+// Разделы специалиста (`SECTIONS_BY_ROLE.doctor`, у диетолога те же) и
+// разделы карты пациента (`features/doctor/patientViews.tsx`), кроме печатных
+// форм.
 const SECTIONS = ["patients", "recipes", "products", "calculator", "profile"];
+// Вкладки справочника продуктов: «Подозрительные значения» видит только
+// редактор справочника, то есть диетолог и администратор.
+const PRODUCT_TABS = ["categories", "standards", "anomalies"];
+const ADMIN_SECTIONS = [
+  "home",
+  "users",
+  "leads",
+  "products",
+  "recipes",
+  "dictionaries",
+  "audit",
+  "profile",
+];
 const PATIENT_VIEWS = [
   "summary",
   "prescription",
@@ -52,6 +72,9 @@ async function overflowOf(page: Page) {
     ) as HTMLElement[]) {
       // Скрытые подписи (`sr-only`) всегда «переполнены» своим текстом.
       if (element.clientWidth < 8 || element.offsetParent === null) continue;
+      // Текст записи журнала — окно кода с собственной прокруткой: JSON не
+      // переносится по словам, и прокрутка там — способ его прочитать.
+      if (element.tagName === "PRE" || element.closest("pre")) continue;
       if (element.scrollWidth > element.clientWidth + 1) {
         const scrolls = /auto|scroll/.test(getComputedStyle(element).overflowX);
         offenders.push(
@@ -96,4 +119,28 @@ test("экраны специалиста помещаются в 1280 px", asyn
   for (const view of PATIENT_VIEWS) {
     await check(page, `/app/patients/${patient}/${view}`);
   }
+});
+
+async function childOfParent(page: Page): Promise<string> {
+  const parentPage = await page.context().newPage();
+  await loginAsParent(parentPage);
+  const patient = await patientId(parentPage.request);
+  await parentPage.close();
+  return patient;
+}
+
+test("экраны диетолога помещаются в 1280 px", async ({ page }) => {
+  test.setTimeout(180_000);
+  const patient = await childOfParent(page);
+  await loginAsDietitian(page);
+  for (const tab of PRODUCT_TABS) await check(page, `/app/products?tab=${tab}`);
+  for (const view of ["summary", "prescription", "dishes", "menu"]) {
+    await check(page, `/app/patients/${patient}/${view}`);
+  }
+});
+
+test("экраны администратора помещаются в 1280 px", async ({ page }) => {
+  test.setTimeout(180_000);
+  await loginAsAdmin(page);
+  for (const section of ADMIN_SECTIONS) await check(page, `/app/${section}`);
 });
