@@ -21,10 +21,8 @@ from __future__ import annotations
 # --- Ulash (раздел 7.1) ---
 
 START_NEED_CODE = (
-    "Assalomu alaykum! Bu bot bolaning ma’lumotlarini KetoCare’ga yozib boradi.\n\n"
-    "Boshlash uchun bu yerga sakkiz belgili kirish kodini yuboring. Uni qabulda "
-    "shifokor yoki bolaga kirish huquqi allaqachon bor ota-ona beradi; agar "
-    "kabinetingiz ochiq bo‘lsa, kod «Bola» → «Telegram» bo‘limida turadi."
+    "Assalomu alaykum! Shifokordan olgan kodni shu yerga yuboring — 8 ta harf va raqam. "
+    "Agar sizni bolaning ota-onasi taklif qilgan bo‘lsa, kod unda."
 )
 
 START_ALREADY_LINKED = "Bu chat allaqachon ulangan: {patient_name}. Nimani yozamiz — tanlang."
@@ -32,16 +30,11 @@ START_ALREADY_LINKED_SEVERAL = (
     "Bu chat bolalarni yuritadi: {children}. Hozir tanlangan: {active}. Nimani yozamiz — tanlang."
 )
 
-LINK_SUCCESS = "Tayyor, chat ulandi: {patient_name}.\n\n📝 Kundaliklar — pastdagi tugmalarda.\n"
+LINK_SUCCESS = "Tayyor, chat ulandi: {patient_name}.\n\n📝 Yozuvlar — pastdagi tugmalarda.\n"
 LINK_SUCCESS_APP_LINE = (
-    "📱 Umumiy holat, kun rejasi va grafiklar — yozish maydonining chap tomonidagi "
+    "📱 Menyu, kundalik va grafiklar — ilovada: yozish maydonining chap tomonidagi "
     "«Ilova» tugmasi.\n"
 )
-LINK_SUCCESS_CABINET_OFF = (
-    "💻 Brauzerdagi kabinet — qabul uchun hisobotlar va hujjatlar. U majburiy emas; "
-    "ilovaning «Kabinetga kirish» bo‘limida yoqiladi va {web_url} manzilida ochiladi"
-)
-LINK_SUCCESS_CABINET_ON = "💻 Brauzerdagi kabinet — qabul uchun hisobotlar va hujjatlar: {web_url}"
 
 LINK_ONLY_PRIVATE = (
     "Bolani faqat men bilan shaxsiy yozishmada ulash mumkin: men bilan chatni "
@@ -170,7 +163,7 @@ KETONE_METHOD_NAMES = {"blood": "qon", "urine": "siydik"}
 
 # --- Ovqat ---
 
-MEAL_ASK = "Bugungi rejadan nimalar allaqachon yeyildi?"
+MEAL_ASK = "Bugungi menyudan nimalar allaqachon yeyildi?"
 MEAL_NO_MENU = (
     "Bugun uchun menyu tuzilmagan. Yeyilganini so‘z bilan yozishingiz mumkin — "
     "men tahlil qilib, nimani yozishni ko‘rsataman."
@@ -198,21 +191,20 @@ MEAL_TEXT_SUMMARY_ITEM = "{name} {grams} g"
 MEAL_TEXT_CLARIFY = "{question}\n\nYana bir bor yozing — yoki menyuga qayting."
 MEAL_TEXT_EMPTY = "Nimani yozishni tushunmadim. Bola nimani va qancha yeganini yozing."
 MEAL_TEXT_LIMIT = (
-    "Bugun so‘z bilan tahlil qilish boshqa mavjud emas. Yeyilganini kun rejasi "
-    "bo‘yicha belgilang — pastdagi menyuda «🍽 Ovqat» tugmasi."
+    "Bugun so‘z bilan tahlil qilish boshqa mavjud emas. Yeyilganini menyuda "
+    "belgilang — pastdagi «🍽 Ovqat» tugmasi."
 )
 MEAL_TEXT_UNAVAILABLE = (
-    "Tahlil hozir mavjud emas. Yeyilganini kun rejasi bo‘yicha belgilang yoki "
-    "keyinroq urinib ko‘ring."
+    "Tahlil hozir mavjud emas. Yeyilganini menyuda belgilang yoki keyinroq urinib ko‘ring."
 )
 BTN_CONFIRM = "Tasdiqlash"
-MEAL_ALL_EATEN = "Bugungi rejadagi hammasi allaqachon belgilangan ✓"
+MEAL_ALL_EATEN = "Bugungi menyudagi hammasi allaqachon belgilangan ✓"
 MEAL_MARKED = "Belgilandi ✓ {title}"
-MEAL_MARKED_MORE = "Belgilandi ✓ {title}\n\nBugungi rejada yana:"
-MEAL_MARKED_LAST = "Belgilandi ✓ {title}. Bu bugungi rejadagi oxirgisi edi."
+MEAL_MARKED_MORE = "Belgilandi ✓ {title}\n\nBugungi menyuda yana:"
+MEAL_MARKED_LAST = "Belgilandi ✓ {title}. Bu bugungi menyudagi oxirgisi edi."
 MEAL_UNKNOWN_DISH = "Taom"
-MEAL_PLAN_CHANGED = "Bugungi reja hozirgina o‘zgartirildi. Unda hozir quyidagilar bor:"
-MEAL_PLAN_CHANGED_EMPTY = "Bugungi reja hozirgina o‘zgartirildi — unda belgilanmagan taom yo‘q."
+MEAL_PLAN_CHANGED = "Bugungi menyu hozirgina o‘zgartirildi. Unda hozir quyidagilar bor:"
+MEAL_PLAN_CHANGED_EMPTY = "Bugungi menyu hozirgina o‘zgartirildi — unda belgilanmagan taom yo‘q."
 BTN_DONE = "Tayyor"
 
 
@@ -236,10 +228,7 @@ CMD_LANGUAGE_DESCRIPTION = "Til / Язык — tilni almashtirish"
 # --- Dorilar ---
 
 MEDICATION_ASK = "Qaysi dori berildi?"
-MEDICATION_NONE = (
-    "Davolash sxemasi hali kiritilmagan. Uni shifokor yuritadi — u dorilarni "
-    "kiritishi bilan ular shu yerda paydo bo‘ladi."
-)
+MEDICATION_NONE = "Shifokor hali dorilarni qo‘shmagan."
 MEDICATION_DOSE = "{name} — {dose}"
 
 # --- Qachon bo‘lgan ---
@@ -258,54 +247,46 @@ WHEN_BAD_FORMAT = (
 WHEN_IN_FUTURE = "Bu vaqt hali kelmagan. Tekshirib ko‘ring — balki allaqachon yozgandirsiz?"
 WHEN_TOO_OLD = (
     "Bir haftadan oldingi voqeani yozib bo‘lmaydi: ko‘pincha bu sanadagi xato. "
-    "Agar yozuv haqiqatan eski bo‘lsa, uni brauzerdagi kabinetda qo‘shish mumkin — "
+    "Agar yozuv haqiqatan eski bo‘lsa, uni kabinetda qo‘shish mumkin — "
     "u ilovaning «Kabinetga kirish» bo‘limida yoqiladi."
 )
 
 UNKNOWN_INPUT = (
-    "Men ma’lumotlarni yozib boraman. Boshqa savollar uchun ilovani 📱 oching "
-    "yoki shifokorga murojaat qiling."
+    "Nimani yozishni pastdagi tugma bilan tanlang. Qolgani — ilovada 📱, "
+    "tibbiy savollar — shifokorga."
 )
 UNKNOWN_INPUT_NO_APP = (
-    "Men ma’lumotlarni yozib boraman — pastdagi menyudan tugmani tanlang. "
-    "Tibbiy savollar bilan shifokorga murojaat qiling."
+    "Nimani yozishni pastdagi tugma bilan tanlang. Tibbiy savollar bilan — shifokorga."
 )
 
 # --- Yordam (/help) ---
 
 HELP = (
-    "Bu bot nimalar qila oladi:\n\n"
-    "🩸 Ketonlar, ⚖️ Vazn, 🙂 O‘zini his qilish — kundaliklarga tezkor yozuvlar\n"
-    "🍽 Ovqat — bugungi rejadan yeyilganini belgilash yoki so‘z bilan yozish\n"
-    "💊 Dorilar — shifokor sxemasidagi dori berilganini belgilash\n"
+    "Bot nimalar qila oladi:\n\n"
+    "⚡ Xuruj, 🩸 Ketonlar, ⚖️ Vazn, 🙂 O‘zini his qilish — kundalikka yozuvlar\n"
+    "🍽 Ovqat — menyudan yeyilganini belgilash yoki so‘z bilan yozish\n"
+    "💊 Dorilar — dori berilganini belgilash\n"
     "{app_line}"
-    "💻 Brauzerdagi kabinet — qabul uchun hisobotlar va hujjatlar. Agar u hali "
-    "yo‘q bo‘lsa va kerak bo‘lsa, ilovada yoqing: «Kabinetga kirish» bo‘limi\n"
-    "🌐 Til / Язык — o‘zbek yoki rus tili\n"
+    "💻 Kabinet — qabul uchun hisobotlar va hujjatlar. Ilovada, «Kabinetga kirish» "
+    "bo‘limida yoqiladi\n"
     "\n"
-    "Bolani hali ulamadingizmi? Kirish kodini yuboring: uni qabulda shifokor "
-    "yoki bolaning ota-onasi beradi.\n"
-    "👶 Ikki bola parhezdami? Ikkinchi bolaning kodini ham shu yerga yuboring — "
-    "kimning kundaligini yuritishni «Bola» tugmasi bilan almashtirasiz.\n"
-    "👨‍👩‍👧 Buvini, ikkinchi ota-onani yoki enagani taklif qilish — ilovada, "
-    "«Yaqinlar» bo‘limi.\n"
-    "⏰ Eslatmalar — ilovada, bosh sahifadagi «Eslatmalar» bloki.\n"
     "Yozuvda xato qildingizmi? Uni ilovaning «Kundalik» bo‘limida tuzatish yoki "
     "o‘chirish mumkin.\n"
-    "Telefonni yo‘qotdingizmi? Sizni taklif qilgan odamdan yoki shifokordan "
-    "«Yaqinlar» bo‘limida kirishni yopishni so‘rang — keyin yangi kod bilan qayta "
-    "kirasiz.\n\n"
-    "Bot tibbiy savollarga javob bermaydi — ular bilan shifokoringizga murojaat qiling."
+    "⏰ Eslatmalar — ilovada, bosh sahifadagi «Eslatmalar» bloki.\n"
+    "👨‍👩‍👧 Yaqinlarni taklif qilish — ilovada, «Yaqinlar» bo‘limi.\n"
+    "👶 Ikkinchi bola? Uning kodini shu yerga yuboring.\n"
+    "Telefonni yo‘qotdingizmi? Shifokordan yoki sizni taklif qilgan odamdan "
+    "kirishni yopishni so‘rang.\n\n"
+    "Tibbiy savollar bilan shifokoringizga murojaat qiling."
 )
 HELP_APP_LINE = (
-    "📱 Ilova — umumiy holat, kun rejasi va grafiklar: yozish maydonining chap "
-    "tomonidagi «Ilova» tugmasi\n"
+    "📱 Ilova — menyu, kundalik va grafiklar: yozish maydonining chap tomonidagi «Ilova» tugmasi\n"
 )
 
 CMD_START_DESCRIPTION = "Bolani ulash yoki qaytadan boshlash"
 CMD_HELP_DESCRIPTION = "Bot nimalar qila oladi"
 BOT_DESCRIPTION = (
-    "Bolaning kundaliklarini KetoCare’ga yozadi: ketonlar, vazn, ovqat (reja "
+    "Bolaning kundaliklarini KetoCare’ga yozadi: ketonlar, vazn, ovqat (menyu "
     "bo‘yicha yoki o‘z so‘zlaringiz bilan), dorilar va o‘zini his qilish. Ulash "
     "uchun shifokor yoki bolaning ota-onasidan kod kerak."
 )
@@ -313,11 +294,7 @@ BOT_SHORT_DESCRIPTION = "Bolaning KetoCare kundaliklari — chatdan"
 
 API_UNAVAILABLE = "Saqlab bo‘lmadi — bir daqiqadan keyin yana urinib ko‘ring."
 
-NO_CONNECTION = (
-    "Server bilan aloqa yo‘q — yozuv hali saqlanmadi. Hech narsa yo‘qolmadi: "
-    "aloqa tiklanganda o‘sha tugmani bosing yoki oxirgi javobni qayta yuboring — "
-    "ikkinchi yozuv paydo bo‘lmaydi."
-)
+NO_CONNECTION = "Aloqa yo‘q. Yana bir bor bosing — yozuv ikki marta saqlanmaydi."
 
 # --- Ketonlar (раздел 7.3) ---
 
@@ -325,13 +302,13 @@ KETONES_ASK_VALUE = "Ketonlar qiymatini mmol/l da kiriting, masalan 3,2"
 KETONES_ASK_METHOD = "Nima bilan o‘lchandi?"
 KETONES_METHOD_BLOOD = "Qon"
 KETONES_METHOD_URINE = "Siydik"
-KETONES_OUT_OF_RANGE = "Qiymat 0-12 mmol/l oralig‘idan tashqarida. Tekshirib, qaytadan kiriting."
+KETONES_OUT_OF_RANGE = "Ketonlar — 0 dan 12 mmol/l gacha raqam."
 KETONES_NOT_A_NUMBER = "Raqam kerak, masalan 3,2. Yana bir bor urinib ko‘ring."
 
 # --- Vazn (раздел 7.3) ---
 
 WEIGHT_ASK_VALUE = "Vaznni kilogrammda kiriting, masalan 18,4"
-WEIGHT_OUT_OF_RANGE = "Qiymat 2-150 kg oralig‘idan tashqarida. Tekshirib, qaytadan kiriting."
+WEIGHT_OUT_OF_RANGE = "Vazn — 2 dan 150 kg gacha raqam."
 WEIGHT_NOT_A_NUMBER = "Raqam kerak, masalan 18,4. Yana bir bor urinib ko‘ring."
 
 # --- O‘zini his qilish (раздел 7.3) ---

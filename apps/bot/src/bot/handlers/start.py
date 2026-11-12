@@ -189,8 +189,8 @@ def welcome(
     """Приветствие после привязки: что у семьи теперь есть и где.
 
     Строка про приложение — только когда кнопка приложения есть, как в /help.
-    Строка про кабинет — всегда, но разная: семье от врача кабинет ещё надо
-    включить, семья с кабинетом получает просто адрес.
+    Кабинета здесь нет (аудит продукта 12.11.2026): первое сообщение говорит,
+    где записывать и что остальное в приложении, а кабинет описан в /help.
 
     Второй ребёнок в том же чате (ADR-0048) — другое приветствие: о приложении
     и кабинете семья уже знает, а знать ей нужно одно — как переключаться.
@@ -206,12 +206,6 @@ def welcome(
     lines = [texts.LINK_SUCCESS.format(patient_name=_first_name(verified))]
     if settings.has_miniapp:
         lines.append(texts.LINK_SUCCESS_APP_LINE)
-    cabinet = (
-        texts.LINK_SUCCESS_CABINET_ON
-        if verified.has_web_credentials
-        else texts.LINK_SUCCESS_CABINET_OFF
-    )
-    lines.append(cabinet.format(web_url=verified.web_url))
     return "".join(lines)
 
 

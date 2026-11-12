@@ -207,7 +207,6 @@ export function RecipesPage() {
     // Выдача — плитки с фотографиями: страница, на которой ищут, а не читают.
     <PageLayout
       title={t("title")}
-      intro={t("intro")}
       width="wide"
       actions={
         <>

@@ -24,7 +24,7 @@ describe("DiaryEntryCard", () => {
     render(
       <DiaryEntryCard title="Обед" occurredAt={OCCURRED} source="ai_parsed" />,
     );
-    const badge = screen.getByText("Распознано ИИ");
+    const badge = screen.getByText("Распознано из текста");
     expect(badge).toHaveAttribute("data-source", "ai_parsed");
     // Выделяется цветом предупреждения, а не как обычный источник
     expect(badge.className).toContain("text-warning-strong");

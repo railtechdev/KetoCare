@@ -163,9 +163,11 @@ describe("блюда ребёнка в карте после смены назн
     expect(
       await screen.findByText(/1 блюдо расходится с целью приёма/),
     ).toBeInTheDocument();
-    expect(screen.getByText("мимо цели")).toBeInTheDocument();
+    expect(screen.getByText("не по назначению")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Подогнать «Завтрак с авокадо»" }),
+      screen.getByRole("link", {
+        name: "Пересчитать под ребёнка «Завтрак с авокадо»",
+      }),
     ).toBeInTheDocument();
   });
 

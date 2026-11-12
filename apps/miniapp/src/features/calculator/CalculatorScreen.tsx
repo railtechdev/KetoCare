@@ -560,7 +560,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
               kcal === String(suggested.kcal)
                 ? t("calculator.kcalFromPrescription", {
                     kcal: formatKcal(prescription.kcal_per_day),
-                    meals: prescription.meals_per_day,
+                    count: prescription.meals_per_day,
                   })
                 : t("calculator.mealKcalHint")
             }

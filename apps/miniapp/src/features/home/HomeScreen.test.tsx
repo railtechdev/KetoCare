@@ -316,10 +316,10 @@ describe("сводка в Mini App", () => {
     renderScreen();
 
     expect(
-      await screen.findByText(/по прежнему правилу расчёта/),
+      await screen.findByText(/Этот день составлен давно/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/активного назначения нет/),
+      screen.queryByText(/не с чем: назначения нет/),
     ).not.toBeInTheDocument();
   });
 

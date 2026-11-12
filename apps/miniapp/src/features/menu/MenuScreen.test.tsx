@@ -321,10 +321,10 @@ describe("план дня в Mini App", () => {
     await user.click(await screen.findByText("Что взвесить"));
 
     expect(await screen.findByText("Перец чёрный")).toHaveTextContent(
-      "приправа, не в расчёте",
+      "приправа, не учитывается",
     );
     expect(screen.getByText("Яйцо куриное")).not.toHaveTextContent(
-      "не в расчёте",
+      "не учитывается",
     );
   });
 
@@ -341,13 +341,12 @@ describe("план дня в Mini App", () => {
     renderScreen();
 
     expect(
-      await screen.findByText(/Плана на этот день нет/),
+      await screen.findByText(/Меню на этот день не составлено/),
     ).toBeInTheDocument();
-    // Выход отсюда — собрать день здесь же; у кого кабинет включён, тому
+    // Выход отсюда — составить меню здесь же; у кого кабинет включён, тому
     // ещё и ссылка на него.
-    expect(screen.getByText(/«Собрать день»/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Собрать день" }),
+      screen.getByRole("button", { name: "Составить меню" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Открыть кабинет/ }),
@@ -361,7 +360,7 @@ describe("план дня в Mini App", () => {
     renderScreen({ ...SESSION, hasWebCredentials: false });
 
     expect(
-      await screen.findByText(/Плана на этот день нет/),
+      await screen.findByText(/Меню на этот день не составлено/),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /кабинет/i }),
@@ -451,7 +450,7 @@ describe("сборка дня в Mini App", () => {
     renderScreen();
 
     await user.click(
-      await screen.findByRole("button", { name: "Собрать день" }),
+      await screen.findByRole("button", { name: "Составить меню" }),
     );
     await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
 
@@ -462,7 +461,7 @@ describe("сборка дня в Mini App", () => {
     );
     await user.clear(screen.getByLabelText("Порций"));
     await user.type(screen.getByLabelText("Порций"), "0,5");
-    await user.click(screen.getByRole("button", { name: "Добавить в день" }));
+    await user.click(screen.getByRole("button", { name: "Добавить в меню" }));
 
     await waitFor(() => {
       expect(api.PUT).toHaveBeenCalledWith(
@@ -495,10 +494,10 @@ describe("сборка дня в Mini App", () => {
     renderScreen();
 
     await user.click(
-      await screen.findByRole("button", { name: "Собрать день" }),
+      await screen.findByRole("button", { name: "Составить меню" }),
     );
     await user.click(await screen.findByRole("button", { name: /Запеканка/ }));
-    await user.click(screen.getByRole("button", { name: "Добавить в день" }));
+    await user.click(screen.getByRole("button", { name: "Добавить в меню" }));
 
     await waitFor(() => expect(api.PUT).toHaveBeenCalled());
     const call = (api.PUT as Mock).mock.calls[0] as [string, { body: unknown }];
@@ -516,7 +515,7 @@ describe("сборка дня в Mini App", () => {
     renderScreen();
 
     await user.click(
-      await screen.findByRole("button", { name: "Собрать день" }),
+      await screen.findByRole("button", { name: "Составить меню" }),
     );
 
     expect(await screen.findByText(/Назначения пока нет/)).toBeInTheDocument();
@@ -712,7 +711,7 @@ describe("день не собирается вслепую", () => {
 
     await waitFor(() => expect(api.GET).toHaveBeenCalled());
     expect(
-      screen.queryByRole("button", { name: "Собрать день" }),
+      screen.queryByRole("button", { name: "Составить меню" }),
     ).not.toBeInTheDocument();
   });
 
@@ -732,10 +731,10 @@ describe("день не собирается вслепую", () => {
     // Экран объясняет, что происходит, но собрать день не предлагает: иначе
     // добавление ужина стёрло бы завтрак и обед вместе с их отметками.
     expect(
-      await screen.findByText(/Не удалось загрузить план дня/),
+      await screen.findByText(/Не удалось загрузить меню/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Собрать день" }),
+      screen.queryByRole("button", { name: "Составить меню" }),
     ).not.toBeInTheDocument();
     expect(api.PUT).not.toHaveBeenCalled();
   });
@@ -752,7 +751,7 @@ describe("день не собирается вслепую", () => {
 
     renderScreen();
     await user.click(
-      await screen.findByRole("button", { name: "Собрать день" }),
+      await screen.findByRole("button", { name: "Составить меню" }),
     );
 
     // «Назначения нет» — утверждение о клиническом факте; из незнания его
@@ -1082,7 +1081,7 @@ describe("«Как вчера»", () => {
 
     expect(
       await screen.findByText(
-        "В предыдущий день плана не было — переносить нечего.",
+        "В предыдущий день меню не было — переносить нечего.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -1102,7 +1101,7 @@ describe("«Как вчера»", () => {
     await user.click(await screen.findByRole("button", { name: "Как вчера" }));
 
     expect(
-      await screen.findByText("Не удалось перенести день"),
+      await screen.findByText("Не удалось перенести меню"),
     ).toBeInTheDocument();
     expect(screen.getByText("Сервер недоступен.")).toBeInTheDocument();
   });
@@ -1155,10 +1154,10 @@ describe("соответствие дня назначению", () => {
   });
 
   it.each([
-    ["no_prescription", "Сравнивать итоги не с чем: активного назначения нет."],
-    ["engine_changed", /по прежнему правилу расчёта/],
-    ["engine_unknown", /не записана версия расчёта/],
-  ])("причина «%s» называется своими словами", async (gap, text) => {
+    ["no_prescription", "Сравнивать итоги не с чем: назначения нет."],
+    ["engine_changed", /Этот день составлен давно/],
+    ["engine_unknown", /Этот день составлен давно/],
+  ])("причина «%s» называется словами семьи", async (gap, text) => {
     withVerdict({ tolerance: null, tolerance_gap: gap });
     renderScreen();
 
@@ -1178,7 +1177,7 @@ describe("соответствие дня назначению", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/активного назначения нет/),
+      screen.queryByText(/не с чем: назначения нет/),
     ).not.toBeInTheDocument();
   });
 

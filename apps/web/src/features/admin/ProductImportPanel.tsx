@@ -12,6 +12,7 @@ import { ArrowLeft, FileUp, RotateCcw } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CsvTemplateLink } from "../../components/CsvTemplateLink";
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
@@ -19,6 +20,26 @@ import { SubPageHeader } from "../../components/SubPageHeader";
 import { anomalyDetail } from "./productAnomalyText";
 import { useImportProductsMutation } from "./useAdminProducts";
 import type { ImportRowError } from "./types";
+
+/**
+ * Колонки шаблона — REQUIRED_COLUMNS и OPTIONAL_COLUMNS из
+ * apps/api/src/api/services/product_import.py. Сами колонки проверяет сервер,
+ * шаблон только избавляет от их перепечатывания.
+ */
+const PRODUCT_TEMPLATE_COLUMNS = [
+  "name_ru",
+  "category",
+  "kcal_100g",
+  "fat_100g",
+  "protein_100g",
+  "carbs_100g",
+  "fiber_100g",
+  "source",
+  "source_version",
+  "verified_at",
+  "name_uz",
+  "name_en",
+] as const;
 
 /**
  * CSV-импорт продуктов (раздел 8.3 ТЗ: «CSV-импорт с превью и отчётом об
@@ -123,9 +144,6 @@ export function ProductImportPanel({
         </p>
       )}
 
-      {/* Список колонок повторяет REQUIRED_COLUMNS из
-          apps/api/src/api/services/product_import.py — это подсказка к формату
-          файла, сами колонки проверяет сервер. */}
       <div className="max-w-md">
         <Field
           ref={fileInput}
@@ -133,7 +151,17 @@ export function ProductImportPanel({
           type="file"
           accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           label={t("products.import.file")}
-          hint={t("products.import.formatHint")}
+          hint={
+            <>
+              {t("products.import.formatHint")}{" "}
+              <CsvTemplateLink
+                columns={PRODUCT_TEMPLATE_COLUMNS}
+                fileName="products.csv"
+              >
+                {t("products.import.template")}
+              </CsvTemplateLink>
+            </>
+          }
           onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
         />
       </div>

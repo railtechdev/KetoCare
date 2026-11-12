@@ -85,15 +85,9 @@ export function AdminHomePage() {
   const recentRows = (recent.data?.items ?? []).slice(0, RECENT_LIMIT);
 
   return (
-    <PageLayout
-      title={t("home.title")}
-      intro={t("home.intro")}
-      width="wide"
-      density="compact"
-    >
+    <PageLayout title={t("home.title")} width="wide" density="compact">
       <Section
         title={t("home.accounts.title")}
-        description={t("home.accounts.intro")}
         action={
           <Button asChild variant="outline">
             <SectionLink section="users">
@@ -272,7 +266,6 @@ export function AdminHomePage() {
 
       <Section
         title={t("home.audit.title")}
-        description={t("home.audit.intro")}
         action={
           <Button asChild variant="outline">
             <SectionLink section="audit">{t("home.audit.toList")}</SectionLink>

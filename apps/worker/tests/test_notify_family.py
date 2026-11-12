@@ -32,7 +32,7 @@ class TestNoticeText:
 
         assert "приложени" in NOTICE.lower()
         assert "кабинет" not in NOTICE.lower()
-        assert "план питания" in NOTICE.lower()
+        assert "меню" in NOTICE.lower()
 
     def test_carries_no_names(self) -> None:
         """Чат привязан к одному ребёнку — называть его по имени незачем."""
@@ -217,7 +217,7 @@ class TestMenuComposed:
             composer_name="Анна Петровна", composer_role="dietitian", menu_date=date(2026, 10, 6)
         )
         assert text == (
-            "Анна Петровна, диетолог, составил(а) план питания на 06.10. "
+            "Анна Петровна, диетолог, составил(а) меню на 06.10. "
             "Откройте приложение, вкладка «Меню»."
         )
 

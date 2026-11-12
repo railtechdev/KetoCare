@@ -26,7 +26,7 @@ RU: Final[dict[str, str]] = {
     # --- напоминания (раздел 7.4 ТЗ) — мягкие и без упрёка
     "reminder_ketones": "Напоминание: пора измерить кетоны 🩸",
     "reminder_weight": "Напоминание: пора взвесить ребёнка ⚖️",
-    "reminder_medications": "Напоминание: приём препаратов по схеме 💊",
+    "reminder_medications": "Напоминание: пора дать лекарства 💊",
     # «Так и отметьте» обещало кнопку «спокойный день», которой нет: отметить
     # спокойный день можно тем, что есть, — самочувствием.
     "reminder_no_records": (
@@ -37,7 +37,7 @@ RU: Final[dict[str, str]] = {
     # --- новое назначение (раздел 5.4 ТЗ) — без чисел (раздел 7.5)
     "prescription_changed": (
         "Врач обновил назначение. Откройте приложение — кнопка «Приложение» слева "
-        "от поля ввода — и заново соберите план питания на сегодня и завтра под новые цели."
+        "от поля ввода — и заново составьте меню на сегодня и завтра под новые цели."
     ),
     # --- новый близкий (ADR-0043)
     "joined": (
@@ -54,16 +54,18 @@ RU: Final[dict[str, str]] = {
     "role_doctor": "Врач",
     "role_dietitian": "Диетолог",
     "role_other": "Специалист",
-    # --- план дня от специалиста (ADR-0047)
+    # --- меню от специалиста (ADR-0047). Дата числом, а не «на сегодня /
+    # на завтра»: задача может уйти позже, чем поставлена, а слово «сегодня»,
+    # посчитанное в момент постановки, к утру стало бы неправдой.
     "menu_composed": (
-        "{name}, {role}, составил(а) план питания на {date}. Откройте приложение, вкладка «Меню»."
+        "{name}, {role}, составил(а) меню на {date}. Откройте приложение, вкладка «Меню»."
     ),
     "role_doctor_lower": "врач",
     "role_dietitian_lower": "диетолог",
     "role_other_lower": "специалист",
     # --- смена пароля кабинета из Telegram (ADR-0051)
     "password_changed": (
-        "Пароль от кабинета KetoCare изменён из приложения в Telegram.\n\n"
+        "Пароль от кабинета изменён из приложения в Telegram.\n\n"
         "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство, "
         "а администратор клиники выдаст вам временный пароль."
     ),
@@ -75,7 +77,7 @@ RU: Final[dict[str, str]] = {
         "Первые сутки с нового устройства нельзя задать вход в кабинет."
     ),
     "web_credentials_set": (
-        "Для вашей учётной записи KetoCare включён вход в веб-кабинет по почте и паролю.\n\n"
+        "Для вашей учётной записи KetoCare включён вход в кабинет по почте и паролю.\n\n"
         "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство, "
         "а администратор клиники выдаст вам временный пароль."
     ),
@@ -89,7 +91,7 @@ RU: Final[dict[str, str]] = {
 UZ: Final[dict[str, str]] = {
     "reminder_ketones": "Eslatma: ketonlarni o‘lchash vaqti keldi 🩸",
     "reminder_weight": "Eslatma: bolani tortish vaqti keldi ⚖️",
-    "reminder_medications": "Eslatma: dorilarni sxema bo‘yicha berish vaqti 💊",
+    "reminder_medications": "Eslatma: dorilarni berish vaqti keldi 💊",
     "reminder_no_records": (
         "Bugun kundalikda hali yozuv yo‘q. Agar kun tinch o‘tgan bo‘lsa, "
         "«🙂 O‘zini his qilish» tugmasi bilan belgilab qo‘ying: shifokor uchun "
@@ -97,7 +99,7 @@ UZ: Final[dict[str, str]] = {
     ),
     "prescription_changed": (
         "Shifokor tayinlovni yangiladi. Ilovani oching — yozish maydonining chap "
-        "tomonidagi «Ilova» tugmasi — va bugungi hamda ertangi ovqatlanish rejasini "
+        "tomonidagi «Ilova» tugmasi — va bugungi hamda ertangi menyuni "
         "yangi maqsadlarga moslab qaytadan tuzing."
     ),
     "joined": (
@@ -114,14 +116,12 @@ UZ: Final[dict[str, str]] = {
     "role_doctor": "Shifokor",
     "role_dietitian": "Dietolog",
     "role_other": "Mutaxassis",
-    "menu_composed": (
-        "{name} ({role}) {date} uchun ovqatlanish rejasini tuzdi. Ilovani oching, «Menyu» bo‘limi."
-    ),
+    "menu_composed": "{name} ({role}) {date} uchun menyu tuzdi. Ilovani oching, «Menyu» bo‘limi.",
     "role_doctor_lower": "shifokor",
     "role_dietitian_lower": "dietolog",
     "role_other_lower": "mutaxassis",
     "password_changed": (
-        "KetoCare kabineti paroli Telegramdagi ilova orqali o‘zgartirildi.\n\n"
+        "Kabinet paroli Telegramdagi ilova orqali o‘zgartirildi.\n\n"
         "Agar buni siz qilmagan bo‘lsangiz, darhol shifokorga xabar bering: u "
         "begona qurilmani o‘chiradi, klinika administratori esa sizga vaqtinchalik "
         "parol beradi."
@@ -134,7 +134,7 @@ UZ: Final[dict[str, str]] = {
         "kabinetga kirishni sozlab bo‘lmaydi."
     ),
     "web_credentials_set": (
-        "KetoCare hisobingiz uchun veb-kabinetga pochta va parol bilan kirish yoqildi.\n\n"
+        "KetoCare hisobingiz uchun kabinetga pochta va parol bilan kirish yoqildi.\n\n"
         "Agar buni siz qilmagan bo‘lsangiz, darhol shifokorga xabar bering: u "
         "begona qurilmani o‘chiradi, klinika administratori esa sizga vaqtinchalik "
         "parol beradi."

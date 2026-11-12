@@ -594,7 +594,7 @@ describe("рецепты в Mini App", () => {
     );
 
     expect(
-      await screen.findByText(/Состав — на весь выход \(2 порции\)/),
+      await screen.findByText(/Состав — на всё блюдо \(2 порции\)/),
     ).toBeInTheDocument();
     expect(await screen.findByText("Яйцо куриное")).toBeInTheDocument();
     expect(screen.getByText("120 г")).toBeInTheDocument();

@@ -195,9 +195,7 @@ describe("калькулятор", () => {
     await waitFor(() =>
       expect(valueControl(ratio)).toHaveValue(String(PRESCRIBED_RATIO)),
     );
-    expect(
-      screen.getByText(/Из активного назначения ребёнка/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Из назначения ребёнка/)).toBeInTheDocument();
   });
 
   it("считает сам, без нажатия кнопки", async () => {
@@ -947,7 +945,7 @@ describe("калькулятор", () => {
       expect(screen.queryByText(/374 ккал/)).not.toBeInTheDocument(),
     );
     expect(
-      screen.queryByText("Сохранить как моё блюдо"),
+      screen.queryByText("Сохранить как блюдо ребёнка"),
     ).not.toBeInTheDocument();
   });
 

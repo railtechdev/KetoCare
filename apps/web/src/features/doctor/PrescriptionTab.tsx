@@ -225,7 +225,12 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
 
             {canWrite && (
               <Section
-                title={t("prescription.formTitle")}
+                title={
+                  // Первое назначение не «изменяется»: менять ещё нечего.
+                  active === null || active === undefined
+                    ? t("prescription.formTitleFirst")
+                    : t("prescription.formTitle")
+                }
                 description={t("prescription.formHint")}
               >
                 {/* Форма — только после истории: новая версия строится от

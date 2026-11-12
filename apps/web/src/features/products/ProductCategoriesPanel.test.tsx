@@ -89,7 +89,7 @@ describe("справочник категорий", () => {
     const submit = await screen.findByRole("button", { name: "Слить" });
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription(
-      "Выберите категорию, куда перенести позиции",
+      "Выберите категорию, куда перенести продукты",
     );
 
     await user.selectOptions(

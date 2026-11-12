@@ -132,11 +132,11 @@ class TestLinking:
         assert api.verified_telegram_user_id == CHAT_ID
 
     @pytest.mark.asyncio
-    async def test_welcome_tells_where_the_app_and_the_cabinet_are(self, api, store):
+    async def test_welcome_tells_where_the_app_is(self, api, store):
         """«Готово, выберите, что записать» оставляло семью в боте навсегда.
 
-        Родитель от врача не знает ни о приложении, ни о кабинете, и узнать ему
-        неоткуда: это единственное сообщение, которое он точно прочтёт.
+        Родитель от врача не знает о приложении, и узнать ему неоткуда: это
+        единственное сообщение, которое он точно прочтёт.
         """
 
         message = FakeMessage(text="/start ABCD2345")
@@ -147,21 +147,20 @@ class TestLinking:
         await start._link(message, api=api, store=store, settings=with_app, code="ABCD2345")
 
         assert "кнопка «Приложение»" in message.last
-        assert "Вход в кабинет" in message.last, "кабинета ещё нет — сказать, как включить"
-        assert "https://app.example" in message.last, "адрес называется, а не подразумевается"
 
     @pytest.mark.asyncio
-    async def test_welcome_does_not_tell_to_enable_an_existing_cabinet(self, api, store):
-        """Семья с кабинетом (пришла из веба, подключает чат) получает адрес, а не
-        поручение включить то, что у неё уже есть."""
+    @pytest.mark.parametrize("has_web_credentials", [False, True])
+    async def test_welcome_leaves_the_cabinet_to_help(self, api, store, has_web_credentials):
+        """Приветствие — только главное: где записывать и что остальное в
+        приложении. Кабинет описан в /help (аудит продукта 12.11.2026)."""
 
-        api.verified = replace(api.verified, has_web_credentials=True)
+        api.verified = replace(api.verified, has_web_credentials=has_web_credentials)
         message = FakeMessage(text="/start ABCD2345")
 
         await start._link(message, api=api, store=store, settings=SETTINGS, code="ABCD2345")
 
-        assert "https://app.example" in message.last
-        assert "Вход в кабинет" not in message.last
+        assert "кабинет" not in message.last.lower()
+        assert "https://app.example" not in message.last
 
     @pytest.mark.asyncio
     async def test_group_chat_cannot_be_linked(self, api, store):
@@ -1048,9 +1047,8 @@ class TestHelp:
         """План дня живёт в приложении: «кабинет — меню, настройки» уводил
         взрослого без кабинета от того, что у него уже есть."""
 
-        for text in (texts.HELP, texts.LINK_SUCCESS_CABINET_ON, texts.LINK_SUCCESS_CABINET_OFF):
-            assert "меню, отчёты" not in text.lower()
-            assert "отчёты к приёму" in text.lower()
+        assert "меню, отчёты" not in texts.HELP.lower()
+        assert "отчёты к приёму" in texts.HELP.lower()
 
     def test_texts_do_not_send_to_the_cabinet_for_everyday_things(self):
         """Отзыв доступа, исчерпанный разбор и пустой справочник — ни один

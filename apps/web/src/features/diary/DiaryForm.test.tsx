@@ -86,11 +86,11 @@ describe("сводка ошибок записи дневника", () => {
     await user.type(glucoseInput, "4.0");
 
     // GKI = 4.0 / 2.0 = 2.0 (high / глубокий кетоз)
-    expect(await screen.findByText(/GKI: 2[.,]0/)).toHaveTextContent(
-      /GKI: 2[.,]0/,
-    );
-    expect(await screen.findByText(/GKI: 2[.,]0/)).toHaveTextContent(
-      diaryRu.ketones.gkiLevels.high,
-    );
+    expect(
+      await screen.findByText(/Глюкозо-кетоновый индекс: 2[.,]0/),
+    ).toHaveTextContent(/Глюкозо-кетоновый индекс: 2[.,]0/);
+    expect(
+      await screen.findByText(/Глюкозо-кетоновый индекс: 2[.,]0/),
+    ).toHaveTextContent(diaryRu.ketones.gkiLevels.high);
   });
 });

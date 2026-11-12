@@ -20,12 +20,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
     <DayComposer patientId={patientId} canMarkEaten>
       {({ actions, content }) => (
         // План дня и итоги стоят рядом — это просит ширины (правило П34 канона).
-        <PageLayout
-          title={t("title")}
-          intro={t("intro")}
-          width="wide"
-          actions={actions}
-        >
+        <PageLayout title={t("title")} width="wide" actions={actions}>
           {/* Калькулятор и рецепты у семьи — части сборки меню, а не пункты
               бокового меню (этап 6 AUDIT_ROLES_PATHS_2026-11). */}
           <nav

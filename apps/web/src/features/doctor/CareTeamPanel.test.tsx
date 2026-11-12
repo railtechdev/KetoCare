@@ -151,7 +151,7 @@ describe("кто ведёт пациента", () => {
       screen.queryByRole("button", { name: /Подключить коллегу/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Снять ведение/ }),
+      screen.queryByRole("button", { name: /Убрать из ведущих/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -161,7 +161,7 @@ describe("кто ведёт пациента", () => {
     render(<CareTeamPanel patientId={PATIENT_ID} />, { wrapper });
 
     const button = await screen.findByRole("button", {
-      name: "Снять ведение: Иван Врач",
+      name: "Убрать из ведущих: Иван Врач",
     });
     expect(button).toBeDisabled();
     expect(button).toHaveAccessibleDescription(/сначала подключите коллегу/);
@@ -188,10 +188,12 @@ describe("кто ведёт пациента", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "Снять ведение: Иван Врач" }),
+      await screen.findByRole("button", {
+        name: "Убрать из ведущих: Иван Врач",
+      }),
     );
     await user.click(
-      await screen.findByRole("button", { name: "Снять ведение" }),
+      await screen.findByRole("button", { name: "Убрать из ведущих" }),
     );
     expect(await screen.findByText("Недостаточно прав.")).toBeInTheDocument();
     expect(onSelfRemoved).not.toHaveBeenCalled();
@@ -203,10 +205,12 @@ describe("кто ведёт пациента", () => {
       error: undefined,
     });
     await user.click(
-      await screen.findByRole("button", { name: "Снять ведение: Иван Врач" }),
+      await screen.findByRole("button", {
+        name: "Убрать из ведущих: Иван Врач",
+      }),
     );
     await user.click(
-      await screen.findByRole("button", { name: "Снять ведение" }),
+      await screen.findByRole("button", { name: "Убрать из ведущих" }),
     );
     await vi.waitFor(() => expect(onSelfRemoved).toHaveBeenCalled());
   });

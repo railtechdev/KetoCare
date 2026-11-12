@@ -15,7 +15,7 @@ export function ReportsPage({ patientId }: { patientId: string }) {
 
   return (
     // Отчёт — числа и таблицы, страница для работы (правило П34 канона).
-    <PageLayout title={t("title")} intro={t("intro")} width="wide">
+    <PageLayout title={t("title")} width="wide">
       <ReportsView patientId={patientId} />
     </PageLayout>
   );

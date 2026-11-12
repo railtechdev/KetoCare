@@ -203,7 +203,7 @@ describe("специалист составляет день (ADR-0047)", () => 
     renderFood();
 
     expect(
-      await screen.findByRole("button", { name: "Убрать план" }),
+      await screen.findByRole("button", { name: "Убрать меню" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Скопировать день" }),

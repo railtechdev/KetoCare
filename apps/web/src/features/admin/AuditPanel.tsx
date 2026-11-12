@@ -206,9 +206,7 @@ export function AuditPanel({ chrome = "tab" }: { chrome?: "tab" | "screen" }) {
 
   return (
     <div className="flex flex-col gap-section">
-      {chrome === "tab" && (
-        <SubPageHeader title={t("audit.title")} intro={t("audit.intro")} />
-      )}
+      {chrome === "tab" && <SubPageHeader title={t("audit.title")} />}
 
       {/* Панель фильтров — `Section` со скрытым заголовком, а не голый
           `fieldset`: блок экрана выделяется одним способом (правило П23), а

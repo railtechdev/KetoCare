@@ -254,7 +254,7 @@ describe("«Добавить запись» в Mini App", () => {
       expect(screen.getByRole("button", { name: "Лекарство" })).toBeDisabled(),
     );
     expect(
-      screen.getByText("Врач ещё не внёс препараты — отмечать пока нечего."),
+      screen.getByText("Врач ещё не добавил лекарства — отмечать пока нечего."),
     ).toBeInTheDocument();
   });
 
@@ -280,9 +280,9 @@ describe("«Добавить запись» в Mini App", () => {
     const { onClose } = renderAdd({ openTab });
 
     await choose(user, "Еда");
-    expect(await screen.findByText("Еда — в плане дня")).toBeInTheDocument();
+    expect(await screen.findByText("Еда — в меню")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Открыть план дня" }));
+    await user.click(screen.getByRole("button", { name: "Открыть меню" }));
 
     expect(openTab).toHaveBeenCalledWith("menu");
     expect(onClose).toHaveBeenCalled();
@@ -394,7 +394,7 @@ describe("«Добавить запись» в Mini App", () => {
     const { onClose } = renderAdd();
 
     await choose(user, "Еда");
-    await screen.findByText("Еда — в плане дня");
+    await screen.findByText("Еда — в меню");
     pressBack();
 
     expect(await screen.findByText("Что записать?")).toBeInTheDocument();

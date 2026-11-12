@@ -139,7 +139,6 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
   return (
     <Section
       title={t("title")}
-      description={t("intro")}
       // Список идёт раньше формы (правило П32): сюда приходят смотреть
       // документы, а добавляют изредка. Форма была раскрыта под списком
       // всегда и отправляла файл сразу при выборе — без «Загрузить», то есть
@@ -262,7 +261,6 @@ export function AttachmentsPanel({ patientId }: { patientId: string }) {
           setFormOpen(open);
         }}
         title={t("form.title")}
-        description={t("intro")}
       >
         <form
           noValidate

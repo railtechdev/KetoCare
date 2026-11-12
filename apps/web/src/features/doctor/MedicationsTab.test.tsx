@@ -543,7 +543,7 @@ describe("доза числом и единицей", () => {
     );
 
     expect(
-      await screen.findByText(/Раньше доза записывалась строкой/),
+      await screen.findByText(/Доза записана по-старому/),
     ).toBeInTheDocument();
     expect(valueControl(screen.getByLabelText(/Единица дозы/))).toHaveValue("");
     expect(valueControl(screen.getByLabelText(/Разовая доза/))).toHaveValue("");

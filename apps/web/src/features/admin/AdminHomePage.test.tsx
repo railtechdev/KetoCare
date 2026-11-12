@@ -96,8 +96,8 @@ describe("главная администратора", () => {
 
     // Считает база: пересчёт первых двухсот строк на клиенте переставал быть
     // правдой ровно на большой установке.
-    expect(await screen.findByText(/128 позиций/)).toBeInTheDocument();
-    expect(screen.getByText(/в обороте: 120/)).toBeInTheDocument();
+    expect(await screen.findByText(/Продуктов: 128/)).toBeInTheDocument();
+    expect(screen.getByText(/действующих: 120/)).toBeInTheDocument();
   });
 
   it("зовёт перепроверить позиции, которые давно не сверялись", async () => {

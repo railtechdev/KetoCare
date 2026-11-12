@@ -84,7 +84,7 @@ export function CalculatorPage({ patientId }: { patientId?: string }) {
   const { t } = useTranslation("calculator");
 
   return (
-    <PageLayout title={t("title")} intro={t("intro")} width="wide">
+    <PageLayout title={t("title")} width="wide">
       <CalculatorView patientId={patientId} />
     </PageLayout>
   );

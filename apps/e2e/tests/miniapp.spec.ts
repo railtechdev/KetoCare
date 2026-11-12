@@ -59,7 +59,7 @@ test("семья из Telegram собирает вчерашний день и �
   // Блюдо заводит семья, а не врач: своих блюд у врача нет (ADR-0027), и сид
   // их не сеет — их создаёт тот, кто готовит.
   await ensureDish(parentPage.request, patient, DISH);
-  // Хвост прошлого прогона: план на вчера остался бы, и «Собрать день» легло
+  // Хвост прошлого прогона: план на вчера остался бы, и «Составить меню» легло
   // бы поверх — тест проверял бы историю запусков, а не результат. Чистит
   // семья: отметку «съедено» снимает только она, а день с отметкой сервер не
   // удаляет.
@@ -86,7 +86,7 @@ test("семья из Telegram собирает вчерашний день и �
   await page.getByRole("button", { name: "Вчера" }).click();
 
   // --- сборка дня -----------------------------------------------------------
-  await page.getByRole("button", { name: "Собрать день" }).click();
+  await page.getByRole("button", { name: "Составить меню" }).click();
   const search = page.getByLabel("Найти блюдо или рецепт");
   await expect(search).toBeVisible();
 
@@ -95,7 +95,7 @@ test("семья из Telegram собирает вчерашний день и �
   await dish.click();
 
   await page.getByLabel("Приём пищи").selectOption({ label: "Приём 2" });
-  await page.getByRole("button", { name: "Добавить в день" }).click();
+  await page.getByRole("button", { name: "Добавить в меню" }).click();
 
   // --- что семья видит после сборки ----------------------------------------
   await expect(page.getByRole("heading", { name: "Приём 2" })).toBeVisible();
