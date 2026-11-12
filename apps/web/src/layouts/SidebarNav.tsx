@@ -14,15 +14,17 @@ import {
  * иначе они расходятся, и на телефоне не хватает пункта, который есть на
  * широком экране.
  *
- * Между 768 и 1024 px панель — узкая рельса (Rail, CSS-токен
- * `--container-nav-collapsed: 4.5rem`): каждый пункт отображает
- * вертикальную пару из иконки и короткой подписи, убирая «слепую зону» из одних
- * значков. На широких экранах (с 1024 px) разделы группируются по смысловым
- * блокам с заголовками групп.
+ * Между 768 и 1536 px панель — узкая полоса (6rem): каждый пункт — значок и
+ * подпись под ним в две строки, без «слепой зоны» из одних значков. Полное
+ * меню с заголовками групп — только с 1536 px. Граница стояла на 1024 px, и
+ * ноутбук (1280–1440) отдавал меню из трёх пунктов 16rem: таблица продуктов
+ * уходила за край, карта пациента сжималась до колонки.
  *
  * В шторке подписи видны всегда с группировкой: она открывается на телефоне,
  * где места по ширине столько же, сколько у широкой панели.
  */
+export type NavLabels = "responsive" | "always" | "stacked" | "never";
+
 export function SidebarNav({
   sections,
   onNavigate,
@@ -31,12 +33,14 @@ export function SidebarNav({
   sections: readonly string[];
   onNavigate?: () => void;
   /**
-   * `responsive` — подписи под иконками на 768–1024 px, полное меню с 1024 px;
+   * `responsive` — подписи под иконками на 768–1536 px, полное меню с 1536 px;
    * `always` — подписи и заголовки групп видны всегда (мобильная шторка);
-   * `never` — только значки на любой ширине (панель внутри карты пациента:
-   * место отдано навигации самого пациента).
+   * `stacked` — значок с короткой подписью под ним на любой ширине (панель
+   * внутри карты пациента: место отдано навигации самого пациента, но пункт
+   * по-прежнему назван словом);
+   * `never` — только значки на любой ширине.
    */
-  labels?: "responsive" | "always" | "never";
+  labels?: NavLabels;
 }) {
   const { t } = useTranslation();
   const iconsOnly = labels !== "always";
@@ -70,7 +74,7 @@ export function SidebarNav({
               <div
                 className={cn(
                   "my-1.5 h-px bg-sidebar-border/60",
-                  labels === "responsive" && "lg:hidden",
+                  labels === "responsive" && "2xl:hidden",
                   labels === "always" && "hidden",
                 )}
                 aria-hidden="true"
@@ -84,7 +88,7 @@ export function SidebarNav({
                   className={cn(
                     "px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground select-none",
                     groupIndex === 0 ? "pt-1" : "pt-4",
-                    labels === "responsive" && "hidden lg:block",
+                    labels === "responsive" && "hidden 2xl:block",
                   )}
                 >
                   {t(`nav.groups.${group}`)}
@@ -105,8 +109,10 @@ export function SidebarNav({
                       labels === "never" && "justify-center px-0 text-sm",
                       labels === "always" &&
                         "justify-start gap-section px-3 text-sm",
+                      labels === "stacked" &&
+                        "flex-col justify-center gap-0.5 px-1 py-1.5 text-center text-sm",
                       labels === "responsive" &&
-                        "flex-col justify-center px-1 py-1.5 text-center gap-0.5 lg:flex-row lg:justify-start lg:gap-section lg:px-3 lg:py-2 lg:text-left text-sm",
+                        "flex-col justify-center px-1 py-1.5 text-center gap-0.5 2xl:flex-row 2xl:justify-start 2xl:gap-section 2xl:px-3 2xl:py-2 2xl:text-left text-sm",
                     )}
                     // Карта пациента лежит внутри своего раздела
                     // (`/app/patients/<id>/…`), и роутер считает пункт «Пациенты»
@@ -130,8 +136,12 @@ export function SidebarNav({
                       className={cn(
                         labels === "never" && "sr-only",
                         labels === "always" && "truncate",
+                        // Две строки, а не обрезка: «База бл…» не называло
+                        // раздел, ради чего подпись под значком и оставлена.
+                        labels === "stacked" &&
+                          "line-clamp-2 w-full text-center text-[11px] leading-tight hyphens-auto",
                         labels === "responsive" &&
-                          "w-full truncate text-center text-[11px] leading-tight lg:w-auto lg:truncate-none lg:text-left lg:text-sm",
+                          "line-clamp-2 w-full text-center text-[11px] leading-tight hyphens-auto 2xl:line-clamp-none 2xl:w-auto 2xl:text-left 2xl:text-sm",
                       )}
                     >
                       {label}
@@ -146,7 +156,9 @@ export function SidebarNav({
                         <TooltipTrigger asChild>{link}</TooltipTrigger>
                         <TooltipContent
                           side="right"
-                          className={cn(labels === "responsive" && "lg:hidden")}
+                          className={cn(
+                            labels === "responsive" && "2xl:hidden",
+                          )}
                         >
                           {label}
                         </TooltipContent>

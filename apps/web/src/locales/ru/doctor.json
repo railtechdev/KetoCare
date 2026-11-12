@@ -170,7 +170,6 @@
     "readings": {
       "title": "Последние замеры и приступы",
       "ketone": "Кетоны",
-      "ketoneValue": "{{value}} ммоль/л, {{method}}, {{at}}",
       "noKetone": "Замеров кетонов пока нет.",
       "method": {
         "blood": "по крови",
@@ -180,10 +179,14 @@
       "weightValue": "{{value}} кг, {{at}}",
       "noWeight": "Замеров веса пока нет.",
       "seizures": "Приступы за сегодня",
-      "seizuresValue_one": "{{count}} приступ, записей в дневнике: {{entries}}",
-      "seizuresValue_few": "{{count}} приступа, записей в дневнике: {{entries}}",
-      "seizuresValue_many": "{{count}} приступов, записей в дневнике: {{entries}}",
-      "seizuresValue_other": "{{count}} приступа, записей в дневнике: {{entries}}"
+      "seizuresValue_one": "{{count}} приступ",
+      "seizuresValue_few": "{{count}} приступа",
+      "seizuresValue_many": "{{count}} приступов",
+      "seizuresValue_other": "{{count}} приступа",
+      "ketoneAmount": "{{value}} ммоль/л",
+      "ketoneWhen": "{{method}}, {{at}}",
+      "weightAmount": "{{value}} кг",
+      "seizuresEntries": "Записей в дневнике: {{entries}}"
     },
     "family": {
       "notConnected": "Семья ещё не подключена",

@@ -148,11 +148,13 @@ describe("раскладка экранов", () => {
   it("панель внутри карты пациента уже, чем панель разделов", () => {
     // Смысл сжатия: место отдаётся навигации самого пациента. Панель,
     // оставшаяся широкой, забирала бы 30rem под два меню разом.
-    const inPatient = Number(/w-(\d+)/.exec(NAV.patient.aside)?.[1]);
-    const inSections = Math.max(
-      ...[...NAV.sections.aside.matchAll(/w-(\d+)/g)].map((m) => Number(m[1])),
-    );
+    //
+    // Сравнивается НАИБОЛЬШАЯ ширина каждой панели, а не первая в строке:
+    // прежняя проверка брала `w-20` из «w-20 lg:w-64» и не заметила, что с
+    // 1024 px панель в карте стала такой же широкой, как в разделах.
+    const widest = (classes: string) =>
+      Math.max(...[...classes.matchAll(/w-(\d+)/g)].map((m) => Number(m[1])));
 
-    expect(inPatient).toBeLessThan(inSections);
+    expect(widest(NAV.patient.aside)).toBeLessThan(widest(NAV.sections.aside));
   });
 });
