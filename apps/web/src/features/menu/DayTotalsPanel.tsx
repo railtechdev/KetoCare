@@ -32,6 +32,8 @@ interface Props {
   targets: DayTargets | null;
   /** Ребёнок — для «Подобрать блюдо на остаток»; без него подбора нет */
   patientId?: string | null;
+  /** День этих итогов: подобранное на остаток блюдо ставится в него */
+  date: string;
 }
 
 /** Числа в русской записи: «12,5 г», а не «12.5 г» (правило П22 канона). */
@@ -46,6 +48,7 @@ export function DayTotalsPanel({
   toleranceGap,
   targets,
   patientId = null,
+  date,
 }: Props) {
   const { t } = useTranslation("menu");
 
@@ -101,6 +104,7 @@ export function DayTotalsPanel({
         targets.kcalPerDay - totals.kcal >= MIN_REMAINING_KCAL && (
           <RemainingPicks
             patientId={patientId}
+            date={date}
             remainingKcal={targets.kcalPerDay - totals.kcal}
           />
         )}

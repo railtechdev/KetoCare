@@ -468,10 +468,15 @@ export function RecipeDetail({
         )}
       </Section>
 
-      <Section title={t("detail.instructions")}>
-        {/* Переносы строк заданы автором рецепта — они и есть шаги готовки. */}
-        <p className="m-0 max-w-2xl whitespace-pre-line">{data.instructions}</p>
-      </Section>
+      {/* Текст приготовления необязателен: у рецепта без него блока нет. */}
+      {data.instructions.trim() !== "" && (
+        <Section title={t("detail.instructions")}>
+          {/* Переносы строк заданы автором рецепта — они и есть шаги готовки. */}
+          <p className="m-0 max-w-2xl whitespace-pre-line">
+            {data.instructions}
+          </p>
+        </Section>
+      )}
     </PageLayout>
   );
 }

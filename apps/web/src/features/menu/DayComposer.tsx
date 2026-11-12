@@ -37,6 +37,7 @@ import {
   useDeleteMenuMutation,
   useEatenMutation,
   useMenuQuery,
+  useRemoveMenuItemMutation,
   useUpsertMenuMutation,
   type DishKind,
 } from "./useMenu";
@@ -100,6 +101,7 @@ export function DayComposer({
   const menu = useMenuQuery(patientId, date);
   const removeDay = useDeleteMenuMutation(patientId);
   const upsert = useUpsertMenuMutation(patientId);
+  const removal = useRemoveMenuItemMutation(patientId);
   const eaten = useEatenMutation(patientId, date);
   const dayTolerance = useDayTolerance(patientId, date);
   const targets = useDayTargets(patientId, date);
@@ -141,14 +143,19 @@ export function DayComposer({
     );
   }
 
+  // Состав дня для удаления читается с сервера: кэш мог не знать о блюде,
+  // добавленном семьёй, и `PUT` без него или удаление «последнего» блюда
+  // унесли бы чужое (`useRemoveMenuItemMutation`).
   function removeItem(itemId: string) {
-    const rest = toWriteItems(items.filter((item) => item.id !== itemId));
-    // Пустой день сервер не принимает (в меню минимум одна позиция), поэтому
-    // кнопка удаления последней позиции заблокирована — сюда это не доходит.
-    if (rest.length === 0) return;
-    upsert.mutate(
-      { date, items: rest },
-      { onSuccess: () => toast.success(t("item.removed")) },
+    upsert.reset();
+    removal.mutate(
+      { date, itemId },
+      {
+        onSuccess: (result) =>
+          toast.success(
+            result.removedDay ? t("remove.done") : t("item.removed"),
+          ),
+      },
     );
   }
 
@@ -244,6 +251,12 @@ export function DayComposer({
           </FormError>
         )}
 
+        {removal.isError && (
+          <FormError>
+            {errorMessageOf(removal.error) ?? t("errors.save")}
+          </FormError>
+        )}
+
         {eaten.isError && (
           <FormError>
             {errorMessageOf(eaten.error) ?? t("common:errors.unexpected")}
@@ -282,6 +295,7 @@ export function DayComposer({
                 // Подбор — у семьи: ссылки ведут в её разделы рецептов и
                 // калькулятора, у специалиста они открыли бы общие, без ребёнка.
                 patientId={canMarkEaten ? patientId : null}
+                date={date}
               />
             ) : null
           }
@@ -307,8 +321,9 @@ export function DayComposer({
                   items={items.filter((item) => item.meal_index === mealIndex)}
                   titles={titles}
                   withdrawnByItem={withdrawn}
-                  canRemove={items.length > 1}
-                  pending={upsert.isPending}
+                  lastInDay={items.length === 1}
+                  dayLabel={humanDate}
+                  pending={upsert.isPending || removal.isPending}
                   onAdd={() => {
                     // Прежний отказ (скажем, удаления позиции) к новой
                     // попытке не относится и в панели не показывается.
@@ -331,7 +346,7 @@ export function DayComposer({
           }
         />
 
-        {upsert.isPending && (
+        {(upsert.isPending || removal.isPending) && (
           <p role="status" className="m-0 text-sm text-muted-foreground">
             {t("day.saving")}
           </p>

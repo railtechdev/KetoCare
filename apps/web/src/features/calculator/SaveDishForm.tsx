@@ -6,15 +6,16 @@ import {
   useAttemptKey,
 } from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-
-import { AddSavedDishToPlan } from "./AddSavedDishToPlan";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { SectionLink } from "../../components/SectionLink";
 import { PatientViewLink } from "../doctor/PatientViewLink";
+import { MenuSlotFields } from "../menu/AddToMenu";
+import { useAddToMenu, type MenuSlot } from "../menu/useAddToMenu";
+import { formatDayLabel, todayIso } from "../menu/dates";
 import {
   customDishesKey,
   useUpdateCustomDish,
@@ -50,6 +51,8 @@ interface Props {
   editing?: { id: string; title: string } | null;
   /** A copy was saved while editing: the calculator now shows the copy. */
   onSavedAsNew?: (dishId: string) => void;
+  /** The dish was written: the composition on screen is no longer a draft. */
+  onSaved?: () => void;
 }
 
 /** «Сохранить как моё блюдо» (раздел 8.3 ТЗ). */
@@ -61,6 +64,7 @@ export function SaveDishForm({
   inCard = false,
   editing = null,
   onSavedAsNew,
+  onSaved,
 }: Props) {
   const { t } = useTranslation("calculator");
   const queryClient = useQueryClient();
@@ -68,7 +72,6 @@ export function SaveDishForm({
   const [title, setTitle] = useState("");
   const update = useUpdateCustomDish(patientId);
   const [saved, setSaved] = useState(false);
-  const [savedId, setSavedId] = useState<string | null>(null);
   // The title follows the opened dish, and only when another dish is opened.
   const [editedId, setEditedId] = useState<string | null>(null);
   if ((editing?.id ?? null) !== editedId) {
@@ -79,58 +82,105 @@ export function SaveDishForm({
   // ответа не создаст второго блюда (ADR-0035).
   const attemptKey = useAttemptKey(dishSignature(patientId, title, rows));
 
+  // Куда в меню ставит «Сохранить и добавить в меню». Поля стоят в форме
+  // всегда: спрашивать день и приём отдельным шагом после сохранения — это
+  // те же два поля, но ещё одно нажатие и ещё один блок под формой.
+  const [slot, setSlot] = useState<MenuSlot>(() => ({
+    date: todayIso(),
+    mealIndex: 1,
+  }));
+  const menu = useAddToMenu(patientId);
+  // Сохранение и постановка в меню — одна попытка: второе нажатие, пока она
+  // идёт, не сохраняет и не ставит блюдо второй раз.
+  const busy = useRef(false);
+
   const cannotSave =
     title.trim() === "" ||
     rows.length === 0 ||
     blockedBy !== null ||
     waitingFor !== null;
-  const pending = save.isPending || update.isPending;
+  const pending = save.isPending || update.isPending || menu.pending;
   const failure = save.error ?? update.error;
 
-  function saveAsNew(): void {
-    save.mutate(
-      { title: title.trim(), rows, idempotencyKey: attemptKey },
-      {
-        onSuccess: (created) => {
-          // Успех — тост, а не зелёная строка навсегда в потоке страницы (П16
-          // канона): форма остаётся на месте и готова принять следующее блюдо.
-          toast.success(t("save.saved"));
-          // In the cache before the address changes: the calculator finds the
-          // opened dish in this list and would report it as missing. The saved
-          // dish stays open, so a second save edits it instead of duplicating.
-          queryClient.setQueryData<CustomDish[]>(
-            customDishesKey(patientId),
-            (current) => [...(current ?? []), created],
-          );
-          onSavedAsNew?.(created.id);
-          setSavedId(created.id);
-          setSaved(true);
-          void queryClient.invalidateQueries({
-            queryKey: ["patient", patientId, "custom-dishes"],
-          });
-        },
-      },
-    );
+  /** Записать блюдо; `null` — запись не удалась, причину покажет форма. */
+  async function persist(quiet: boolean): Promise<string | null> {
+    try {
+      if (editing !== null) {
+        await update.mutateAsync({
+          dishId: editing.id,
+          title: title.trim(),
+          ingredients: rows.map((row) => ({
+            product_id: row.product.id,
+            grams: row.grams,
+          })),
+        });
+        if (!quiet) toast.success(t("save.savedChanges"));
+        setSaved(true);
+        onSaved?.();
+        return editing.id;
+      }
+      return await saveAsNew(quiet);
+    } catch {
+      return null;
+    }
   }
 
-  function saveChanges(dishId: string): void {
-    update.mutate(
-      {
-        dishId,
+  async function saveAsNew(quiet: boolean): Promise<string | null> {
+    try {
+      const created = await save.mutateAsync({
         title: title.trim(),
-        ingredients: rows.map((row) => ({
-          product_id: row.product.id,
-          grams: row.grams,
-        })),
-      },
-      {
-        onSuccess: () => {
-          toast.success(t("save.savedChanges"));
-          setSavedId(dishId);
-          setSaved(true);
-        },
-      },
-    );
+        rows,
+        idempotencyKey: attemptKey,
+      });
+      // Успех — тост, а не зелёная строка навсегда в потоке страницы (П16
+      // канона): форма остаётся на месте и готова принять следующее блюдо.
+      if (!quiet) toast.success(t("save.saved"));
+      // In the cache before the address changes: the calculator finds the
+      // opened dish in this list and would report it as missing. The saved
+      // dish stays open, so a second save edits it instead of duplicating.
+      queryClient.setQueryData<CustomDish[]>(
+        customDishesKey(patientId),
+        (current) => [...(current ?? []), created],
+      );
+      onSavedAsNew?.(created.id);
+      setSaved(true);
+      onSaved?.();
+      void queryClient.invalidateQueries({
+        queryKey: ["patient", patientId, "custom-dishes"],
+      });
+      return created.id;
+    } catch {
+      return null;
+    }
+  }
+
+  async function run(action: "save" | "saveAsNew" | "saveToMenu") {
+    if (busy.current || cannotSave) return;
+    busy.current = true;
+    try {
+      if (action === "saveAsNew") {
+        await saveAsNew(false);
+        return;
+      }
+      const toMenu = action === "saveToMenu";
+      const dishId = await persist(toMenu);
+      if (dishId === null || !toMenu) return;
+      const dishTitle = title.trim();
+      const done = await menu.add(
+        { kind: "custom", id: dishId, title: dishTitle },
+        slot,
+      );
+      if (done) {
+        toast.success(
+          t("save.savedToMenu", {
+            day: formatDayLabel(slot.date),
+            meal: t("menu:meal.name", { index: slot.mealIndex }),
+          }),
+        );
+      }
+    } finally {
+      busy.current = false;
+    }
   }
 
   const heading =
@@ -155,9 +205,7 @@ export function SaveDishForm({
           // Выключенная кнопка — не единственная защита: форма — последняя
           // проверка перед сохранением (сервер исключённое ребёнку не сверяет),
           // и отправка в обход кнопки не должна её миновать.
-          if (cannotSave) return;
-          if (editing !== null) saveChanges(editing.id);
-          else saveAsNew();
+          void run("save");
         }}
       >
         <Field
@@ -173,9 +221,28 @@ export function SaveDishForm({
           }}
         />
 
+        <fieldset className="m-0 flex min-w-0 flex-col gap-field border-0 p-0">
+          <legend className="mb-field p-0 text-sm font-medium">
+            {t("save.menuSlot")}
+          </legend>
+          <MenuSlotFields
+            patientId={patientId}
+            slot={slot}
+            onChange={(next) => {
+              setSlot(next);
+              menu.reset();
+            }}
+          />
+        </fieldset>
+
         {failure !== null && (
           <FormError>
             {errorMessageOf(failure) ?? t("common:errors.unexpected")}
+          </FormError>
+        )}
+        {menu.error !== null && (
+          <FormError>
+            {errorMessageOf(menu.error) ?? t("common:errors.unexpected")}
           </FormError>
         )}
 
@@ -187,17 +254,28 @@ export function SaveDishForm({
           pending={pending}
           disabled={cannotSave}
           extra={
-            editing !== null ? (
+            <>
               <Button
                 type="button"
                 variant="outline"
                 className="min-h-touch"
-                disabled={pending || cannotSave}
-                onClick={saveAsNew}
+                disabled={pending || cannotSave || slot.date === ""}
+                onClick={() => void run("saveToMenu")}
               >
-                {t("save.saveAsNew")}
+                {t("save.submitToMenu")}
               </Button>
-            ) : undefined
+              {editing !== null && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch"
+                  disabled={pending || cannotSave}
+                  onClick={() => void run("saveAsNew")}
+                >
+                  {t("save.saveAsNew")}
+                </Button>
+              )}
+            </>
           }
           // Сначала то, что устраняет человек, — в порядке, в каком устраняют;
           // ожидание проверки последним: оно проходит само.
@@ -211,45 +289,21 @@ export function SaveDishForm({
           }
         />
 
-        {saved && savedId !== null && (
-          <AddSavedDishToPlan patientId={patientId} dishId={savedId} />
-        )}
-
+        {/* «Записать как приём пищи» здесь больше нет: запись дневника еды —
+            свободный текст, сослаться на блюдо она не умеет, и форма
+            открывалась пустой. Что ребёнок съел это блюдо, записывает отметка
+            «съедено» в меню — с граммами, которые входят в итоги дня. */}
         {saved && (
           <div className="flex flex-wrap items-center gap-field pt-1">
-            {inCard ? (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="min-h-touch"
-              >
+            <Button asChild variant="outline" size="sm" className="min-h-touch">
+              {inCard ? (
                 <PatientViewLink patientId={patientId} view="menu">
                   {t("save.toMenu")}
                 </PatientViewLink>
-              </Button>
-            ) : (
-              <>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="min-h-touch"
-                >
-                  <SectionLink section="menu">{t("save.toMenu")}</SectionLink>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="min-h-touch"
-                >
-                  <SectionLink section="diary" diaryKind="meals" item="new">
-                    {t("save.toDiary")}
-                  </SectionLink>
-                </Button>
-              </>
-            )}
+              ) : (
+                <SectionLink section="menu">{t("save.toMenu")}</SectionLink>
+              )}
+            </Button>
           </div>
         )}
       </form>

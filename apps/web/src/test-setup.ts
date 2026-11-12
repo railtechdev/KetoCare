@@ -10,9 +10,12 @@ if (typeof window !== "undefined") {
   //
   // Заглушка ставится, только если хранилища нет: там, где оно настоящее,
   // подменять его нечем и незачем.
-  if (typeof globalThis.localStorage === "undefined") {
+  //
+  // То же с `sessionStorage`: в нём калькулятор держит черновик состава.
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    if (typeof globalThis[name] !== "undefined") continue;
     const store = new Map<string, string>();
-    Object.defineProperty(globalThis, "localStorage", {
+    Object.defineProperty(globalThis, name, {
       configurable: true,
       value: {
         get length() {
@@ -27,6 +30,12 @@ if (typeof window !== "undefined") {
       } satisfies Storage,
     });
   }
+
+  // Хранилище вкладки живёт весь файл тестов: черновик, оставленный одним
+  // тестом, восстанавливался бы в следующем.
+  beforeEach(() => {
+    globalThis.sessionStorage.clear();
+  });
 
   // jsdom не умеет прокрутку, а роутер восстанавливает её при каждом переходе.
   // Без заглушки каждый тест экрана с адресуемой вкладкой сыпал бы «Not

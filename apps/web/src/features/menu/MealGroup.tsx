@@ -5,6 +5,7 @@ import {
   cn,
   ConfirmDialog,
   formatMass,
+  toast,
 } from "@ketocare/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { useId } from "react";
@@ -23,8 +24,15 @@ interface Props {
   titles: Record<string, string>;
   /** Выведенные из оборота продукты в составе позиции: id позиции → названия */
   withdrawnByItem: Record<string, string[]>;
-  /** Меню дня не может остаться пустым — последнюю позицию убрать нельзя */
-  canRemove: boolean;
+  /**
+   * В дне осталось одно блюдо. Пустого дня не бывает, поэтому убрать его —
+   * значит убрать меню на день целиком, и подтверждение говорит об этом прямо.
+   * Раньше кнопка была просто серой с подсказкой «добавьте другое блюдо»:
+   * ошибочно составленный день из одного блюда так и оставался в итогах.
+   */
+  lastInDay: boolean;
+  /** День словами — для подтверждения «меню на … удалится». */
+  dayLabel: string;
   pending: boolean;
   onAdd: () => void;
   onRemove: (itemId: string) => void;
@@ -53,7 +61,8 @@ export function MealGroup({
   items,
   titles,
   withdrawnByItem,
-  canRemove,
+  lastInDay,
+  dayLabel,
   pending,
   onAdd,
   onRemove,
@@ -63,6 +72,9 @@ export function MealGroup({
   const headingId = useId();
 
   const mealName = t("meal.name", { index: mealIndex });
+  const eatenReason = onToggleEaten
+    ? t("item.eatenUnmarkFirst")
+    : t("item.eatenByFamily");
 
   return (
     <section
@@ -143,26 +155,59 @@ export function MealGroup({
                   })}
                 </span>
 
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="min-h-touch min-w-touch text-muted-foreground"
-                      disabled={!canRemove || pending}
-                      title={canRemove ? undefined : t("item.lastOne")}
-                      aria-label={t("item.remove", { name: title })}
-                    >
-                      <Trash2 aria-hidden="true" />
-                    </Button>
-                  }
-                  title={t("item.removeTitle", { name: title })}
-                  description={t("item.removeDescription", { meal: mealName })}
-                  confirmLabel={t("item.removeConfirm")}
-                  cancelLabel={t("common:actions.cancel")}
-                  onConfirm={() => onRemove(item.id)}
-                />
+                {/* Съеденное не убирается: это уже не план, а запись о том,
+                    что ребёнок ел (ADR-0041), — сервер такой состав и не
+                    примет. Кнопка остаётся на месте и на нажатие говорит, что
+                    сделать: семья снимает отметку сама, специалисту её
+                    снимает семья. */}
+                {item.eaten ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="min-h-touch min-w-touch text-muted-foreground aria-disabled:opacity-50"
+                    aria-disabled="true"
+                    title={eatenReason}
+                    aria-label={t("item.remove", { name: title })}
+                    aria-description={eatenReason}
+                    onClick={() => toast.info(eatenReason)}
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </Button>
+                ) : (
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="min-h-touch min-w-touch text-muted-foreground"
+                        disabled={pending}
+                        aria-label={t("item.remove", { name: title })}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    }
+                    title={
+                      lastInDay
+                        ? t("item.removeLastTitle", { name: title })
+                        : t("item.removeTitle", { name: title })
+                    }
+                    description={
+                      lastInDay
+                        ? t("item.removeLastDescription", { date: dayLabel })
+                        : t("item.removeDescription", { meal: mealName })
+                    }
+                    confirmLabel={
+                      lastInDay
+                        ? t("item.removeLastConfirm")
+                        : t("item.removeConfirm")
+                    }
+                    cancelLabel={t("common:actions.cancel")}
+                    destructive={lastInDay}
+                    onConfirm={() => onRemove(item.id)}
+                  />
+                )}
 
                 {/* Что и сколько взвесить. Раскрывается по требованию: у
                     плиты нужен состав, а при беглом взгляде на день — только

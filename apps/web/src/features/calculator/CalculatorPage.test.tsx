@@ -26,7 +26,7 @@ import { nativeSelect, valueControl } from "../../test/nativeSelect";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
-  return { ...actual, api: { GET: vi.fn(), POST: vi.fn() } };
+  return { ...actual, api: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() } };
 });
 
 i18n.addResourceBundle("ru", "calculator", calculatorRu, true, true);
@@ -2025,5 +2025,147 @@ describe("приправы в калькуляторе (ADR-0054)", () => {
       screen.queryByRole("button", { name: /Пересчитать порции/ }),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Порция/)).not.toBeInTheDocument();
+  });
+});
+
+describe("черновик состава", () => {
+  const BUTTER_CARD = {
+    id: BUTTER,
+    name_ru: "Масло сливочное",
+    kcal_100g: 748,
+    fat_100g: 82.5,
+    protein_100g: 0.5,
+    carbs_100g: 0.8,
+    fiber_100g: 0,
+    is_active: true,
+  };
+  const SAVED_DISH = {
+    id: "dish-1",
+    patient_id: PATIENT_ID,
+    title: "Масляный завтрак",
+    ingredients: [{ product_id: BUTTER, grams: 50 }],
+    computed: null,
+  };
+
+  beforeEach(() => {
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.includes("overview"))
+        return { data: OVERVIEW, error: undefined };
+      if (path === "/api/v1/products/{product_id}") {
+        return { data: BUTTER_CARD, error: undefined };
+      }
+      if (path === "/api/v1/patients/{patient_id}/menus") {
+        return {
+          data: undefined,
+          error: { error: { code: "not_found", message: "Меню нет." } },
+        };
+      }
+      if (path.includes("custom-dishes")) {
+        return { data: { items: [SAVED_DISH], total: 1 }, error: undefined };
+      }
+      return { data: PRODUCTS, error: undefined };
+    });
+    (api.POST as Mock).mockImplementation(async (path: string) => ({
+      data: path.includes("custom-dishes") ? SAVED_DISH : VERIFIED,
+      error: undefined,
+    }));
+    (api.PUT as Mock).mockResolvedValue({
+      data: { date: new Date().toISOString().slice(0, 10), items: [] },
+      error: undefined,
+    });
+  });
+
+  async function composeAndWait(user: ReturnType<typeof userEvent.setup>) {
+    await addButter(user);
+    await screen.findByText(/374 ккал/, undefined, {
+      timeout: AUTO_CALC_TIMEOUT_MS,
+    });
+  }
+
+  it("набранный состав переживает обновление страницы", async () => {
+    // Состав жил в памяти вкладки: F5 или уход в справочник стирали его.
+    const user = userEvent.setup();
+    const first = renderCalculator(PATIENT_ID);
+    await composeAndWait(user);
+    first.unmount();
+
+    renderCalculator(PATIENT_ID);
+
+    expect(
+      await screen.findByLabelText(/Масса продукта «Масло сливочное»/),
+    ).toHaveValue(50);
+    // Числа на 100 г дочитываются из справочника, а не берутся из хранилища.
+    await waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/products/{product_id}",
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("черновик одного ребёнка не всплывает у другого", async () => {
+    const user = userEvent.setup();
+    const first = renderCalculator(PATIENT_ID);
+    await composeAndWait(user);
+    first.unmount();
+
+    renderCalculator(OTHER_PATIENT_ID);
+
+    await screen.findByLabelText(/Добавить продукт/);
+    expect(
+      screen.queryByLabelText(/Масса продукта «Масло сливочное»/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("испорченный черновик не ломает экран", async () => {
+    sessionStorage.setItem(
+      `ketocare.calculator.draft:${PATIENT_ID}:new`,
+      "{не json",
+    );
+    renderCalculator(PATIENT_ID);
+
+    expect(await screen.findByLabelText(/Добавить продукт/)).toBeVisible();
+    expect(screen.queryByLabelText(/Масса продукта/)).not.toBeInTheDocument();
+  });
+
+  it("«Сохранить и добавить в меню» сохраняет блюдо и ставит его в приём одним нажатием", async () => {
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await composeAndWait(user);
+    expect(
+      sessionStorage.getItem(`ketocare.calculator.draft:${PATIENT_ID}:new`),
+    ).not.toBeNull();
+
+    await user.type(
+      screen.getByLabelText(/Название блюда/),
+      "Масляный завтрак",
+    );
+    const both = await screen.findByRole("button", {
+      name: "Сохранить и добавить в меню",
+    });
+    await waitFor(() => expect(both).toBeEnabled());
+    // Двойной щелчок — одна попытка: второе блюдо в день не встаёт.
+    fireEvent.click(both);
+    fireEvent.click(both);
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
+    const saves = (api.POST as Mock).mock.calls.filter(([path]) =>
+      String(path).includes("custom-dishes"),
+    );
+    expect(saves).toHaveLength(1);
+    expect((api.PUT as Mock).mock.calls[0]![1].body.items).toEqual([
+      {
+        meal_index: 1,
+        recipe_id: null,
+        custom_dish_id: "dish-1",
+        portion_factor: 1,
+      },
+    ]);
+    // Сохранённое — уже не черновик.
+    expect(
+      sessionStorage.getItem(`ketocare.calculator.draft:${PATIENT_ID}:new`),
+    ).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.PUT).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -151,5 +151,79 @@ describe("форма рецепта: подпись строки состава"
       (call) => call[0] === "/api/v1/products/{product_id}",
     ).length;
     expect(requests).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("форма рецепта: сохранить и опубликовать", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/products/{product_id}"
+        ? {
+            data: { id: BUTTER, name_ru: "Масло сливочное", is_active: true },
+            response: { status: 200 },
+          }
+        : { data: RECIPE, response: { status: 200 } },
+    );
+    (api.POST as Mock).mockImplementation(async (path: string) =>
+      path.endsWith("/publish")
+        ? { data: { ...RECIPE, status: "published" } }
+        : { data: { dish: null }, error: undefined },
+    );
+    (api.PUT as Mock).mockResolvedValue({ data: RECIPE });
+  });
+
+  it("черновик сохраняется и публикуется одним нажатием", async () => {
+    const onSaved = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <RecipeFormPanel
+        recipeId={RECIPE_ID}
+        onSaved={onSaved}
+        onCancel={() => {}}
+      />,
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>
+            <SectionRouter section="recipes">{children}</SectionRouter>
+          </QueryClientProvider>
+        ),
+      },
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Сохранить и опубликовать" }),
+    );
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(RECIPE_ID));
+    expect(api.PUT).toHaveBeenCalledTimes(1);
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/recipes/{recipe_id}/publish",
+      expect.objectContaining({
+        params: { path: { recipe_id: RECIPE_ID } },
+      }),
+    );
+  });
+
+  it("у опубликованного рецепта публиковать нечего", async () => {
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path === "/api/v1/products/{product_id}"
+        ? {
+            data: { id: BUTTER, name_ru: "Масло сливочное", is_active: true },
+            response: { status: 200 },
+          }
+        : {
+            data: { ...RECIPE, status: "published" },
+            response: { status: 200 },
+          },
+    );
+    renderPanel();
+
+    await screen.findByRole("button", { name: "Сохранить изменения" });
+    expect(
+      screen.queryByRole("button", { name: "Сохранить и опубликовать" }),
+    ).not.toBeInTheDocument();
   });
 });

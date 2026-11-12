@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
 import { api } from "../../lib/api";
-import { customDishesKey } from "./useCustomDishes";
+import { customDishesKey, type CustomDish } from "./useCustomDishes";
 
 export type RecipeFitsResponse = components["schemas"]["RecipeFitsResponse"];
 export type RecipeFit = components["schemas"]["RecipeFit"];
@@ -33,7 +33,8 @@ export interface FitToSave {
 }
 
 /**
- * Сохраняет выбранные блюда по одному обычной ручкой записи.
+ * Сохраняет выбранные блюда по одному обычной ручкой записи и возвращает
+ * записанные — ячейка недели ставит такое блюдо в меню сразу.
  *
  * При отказе посередине уже записанные остаются: повтор с теми же ключами
  * получает прежние ответы и дописывает остальные.
@@ -44,7 +45,8 @@ export function useSaveFits(patientId: string) {
   return useMutation({
     networkMode: "always",
     retry: false,
-    mutationFn: async (fits: FitToSave[]) => {
+    mutationFn: async (fits: FitToSave[]): Promise<CustomDish[]> => {
+      const created: CustomDish[] = [];
       for (const fit of fits) {
         const { data, error } = await api.POST(
           "/api/v1/patients/{patient_id}/custom-dishes",
@@ -61,7 +63,9 @@ export function useSaveFits(patientId: string) {
           },
         );
         if (error || !data) throw error ?? new Error("Empty save response");
+        created.push(data);
       }
+      return created;
     },
     onSettled: () =>
       queryClient.invalidateQueries({

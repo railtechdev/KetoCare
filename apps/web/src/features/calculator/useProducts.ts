@@ -68,12 +68,23 @@ export function useProductSearch(query: string) {
  */
 export function useProduct(productId: string | undefined) {
   return useQuery({
-    queryKey: ["products", "one", productId],
+    ...productQuery(productId ?? ""),
     enabled: productId !== undefined,
+  });
+}
+
+/**
+ * Запрос одного продукта — и для `useProduct`, и для дочитывания продуктов
+ * черновика состава: числа на 100 г берутся из справочника заново, а не из
+ * хранилища вкладки (`draft.ts`).
+ */
+export function productQuery(productId: string) {
+  return {
+    queryKey: ["products", "one", productId] as const,
     retry: false,
     queryFn: async (): Promise<ProductOption> => {
       const { data, error } = await api.GET("/api/v1/products/{product_id}", {
-        params: { path: { product_id: productId as string } },
+        params: { path: { product_id: productId } },
       });
       if (error || !data) throw error ?? new Error("Empty product response");
 
@@ -88,7 +99,7 @@ export function useProduct(productId: string | undefined) {
         isActive: data.is_active,
       };
     },
-  });
+  };
 }
 
 /**

@@ -48,6 +48,12 @@ interface Props {
    * (раздел действительно открыт), для ссылки «наверх» — нет.
    */
   exact?: boolean;
+  /**
+   * Открыть в новой вкладке. Для перехода, который не должен уводить с
+   * экрана с незаписанным вводом: калькулятор отправляет в справочник за
+   * недостающим продуктом, а набранный состав остаётся на месте.
+   */
+  newTab?: boolean;
   onClick?: () => void;
 }
 
@@ -76,6 +82,7 @@ export function SectionLink({
   title,
   current,
   exact,
+  newTab,
   onClick,
 }: Props) {
   return (
@@ -106,6 +113,8 @@ export function SectionLink({
       aria-current={current ? "true" : undefined}
       activeOptions={exact ? { exact: true } : undefined}
       activeProps={activeProps}
+      target={newTab ? "_blank" : undefined}
+      rel={newTab ? "noopener noreferrer" : undefined}
       onClick={onClick}
     >
       {children}

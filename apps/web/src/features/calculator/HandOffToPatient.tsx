@@ -36,8 +36,11 @@ export function HandOffToPatient({
   rows,
   blockedBy = null,
   waitingFor = null,
+  onSaved,
 }: {
   rows: DishRow[];
+  /** The composition went to the child: it is no longer a draft here. */
+  onSaved?: () => void;
   /** Почему набранный состав передать нельзя — например, масса тяжелее предела. */
   blockedBy?: string | null;
   /**
@@ -87,6 +90,7 @@ export function HandOffToPatient({
                 void queryClient.invalidateQueries({
                   queryKey: ["patient", patient.id, "custom-dishes"],
                 });
+                onSaved?.();
                 void navigate({
                   to: "/app/patients/$patientId/$view",
                   params: { patientId: patient.id, view: "calculator" },

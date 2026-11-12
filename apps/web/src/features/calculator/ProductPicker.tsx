@@ -13,6 +13,8 @@ import { useTranslation } from "react-i18next";
 import { Field } from "../../components/Field";
 import { SECTIONS_BY_ROLE } from "../auth/roles";
 import { useOptionalSession } from "../auth/sessionContext";
+import { canEditCatalog } from "../products/types";
+import { NewProductSheet } from "./NewProductSheet";
 import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import {
@@ -55,6 +57,14 @@ interface Props {
    */
   canLeave?: boolean;
   /**
+   * Можно ли завести недостающий продукт панелью прямо здесь. Заведённый
+   * продукт сразу встаёт в состав. Кнопка видна только тем, кто вправе
+   * править справочник. Только вне чужой формы: панель — портал, а события
+   * React всплывают и через портал, и отправка формы продукта отправила бы
+   * заодно объемлющую (так было бы в форме рецепта).
+   */
+  canCreate?: boolean;
+  /**
    * id поля поиска, когда на него ссылается форма: строка сводки ошибок
    * «Добавьте продукты» ведёт сюда (правило П8).
    */
@@ -92,6 +102,7 @@ export function ProductPicker({
   patientId,
   suggestRecipes = false,
   canLeave = false,
+  canCreate = false,
   inputId: inputIdProp,
 }: Props) {
   const { t } = useTranslation("calculator");
@@ -103,6 +114,8 @@ export function ProductPicker({
     suggestRecipes &&
     role !== undefined &&
     SECTIONS_BY_ROLE[role].includes("recipes");
+  const mayCreate = canCreate && canEditCatalog(role);
+  const [creating, setCreating] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   // Список закрыли щелчком мимо или Escape. Само по себе `isOpen` производное
@@ -232,18 +245,33 @@ export function ProductPicker({
                 : t("noMatches", { query: query.trim() })}
             </span>
           </span>
-          {canLeave && (
+          {(canLeave || mayCreate) && (
             <span className="flex flex-wrap items-center gap-field">
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="min-h-touch"
-              >
-                <SectionLink section="products" query={query.trim()}>
-                  {t("openCatalog")}
-                </SectionLink>
-              </Button>
+              {mayCreate && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-touch"
+                  onClick={() => setCreating(query.trim())}
+                >
+                  {t("newProduct.open")}
+                </Button>
+              )}
+              {/* Справочник — в новой вкладке: набранное здесь остаётся на
+                  месте, а найденный там продукт добавляется сюда поиском. */}
+              {canLeave && (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="min-h-touch"
+                >
+                  <SectionLink section="products" query={query.trim()} newTab>
+                    {t("openCatalog")}
+                  </SectionLink>
+                </Button>
+              )}
               {canOpenRecipes && (
                 <Button
                   asChild
@@ -251,7 +279,7 @@ export function ProductPicker({
                   size="sm"
                   className="min-h-touch"
                 >
-                  <SectionLink section="recipes" query={query.trim()}>
+                  <SectionLink section="recipes" query={query.trim()} newTab>
                     {t("openRecipes")}
                   </SectionLink>
                 </Button>
@@ -283,6 +311,17 @@ export function ProductPicker({
             ))}
           </ul>
         </div>
+      )}
+
+      {mayCreate && (
+        <NewProductSheet
+          open={creating !== null}
+          name={creating ?? ""}
+          onOpenChange={(open) => {
+            if (!open) setCreating(null);
+          }}
+          onCreated={pick}
+        />
       )}
 
       {searchFailed && (

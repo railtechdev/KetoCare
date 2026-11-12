@@ -11,6 +11,7 @@ import {
 } from "./schemas";
 import {
   useCreateRecipeMutation,
+  usePublishRecipeMutation,
   useUpdateRecipeMutation,
 } from "./useRecipeMutations";
 import { useRecipe } from "./useRecipes";
@@ -36,6 +37,7 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
 
   const create = useCreateRecipeMutation();
   const update = useUpdateRecipeMutation(recipeId);
+  const publish = usePublishRecipeMutation();
 
   if (recipeId !== null) {
     // Ожидание — только по самому рецепту. Ждать здесь ИМЁН нельзя, и это не
@@ -82,6 +84,31 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
 
   const editing = recipeId !== null && recipe.data ? recipe.data : null;
 
+  /**
+   * После записи — публикация, если просили. Отказ публикации не отменяет
+   * записи: рецепт сохранён черновиком, и карточка, куда ведёт `onSaved`,
+   * показывает и статус, и кнопку «Опубликовать».
+   */
+  function finish(savedId: string, published: boolean, message: string) {
+    if (!published) {
+      toast.success(message);
+      onSaved(savedId);
+      return;
+    }
+    publish.mutate(savedId, {
+      onSuccess: () => {
+        toast.success(t("actions.savePublishSuccess"));
+        onSaved(savedId);
+      },
+      onError: (failure) => {
+        toast.error(errorMessageOf(failure) ?? t("common:errors.unexpected"), {
+          description: t("actions.savedAsDraft"),
+        });
+        onSaved(savedId);
+      },
+    });
+  }
+
   return (
     <RecipeForm
       mode={editing === null ? "create" : "edit"}
@@ -90,25 +117,22 @@ export function RecipeFormPanel({ recipeId, onSaved, onCancel }: Props) {
           ? EMPTY_RECIPE_FORM_VALUES
           : toRecipeFormValues(editing)
       }
-      pending={create.isPending || update.isPending}
+      pending={create.isPending || update.isPending || publish.isPending}
       error={create.error ?? update.error}
+      canPublish={editing === null || editing.status !== "published"}
       onCancel={onCancel}
-      onSubmit={(values) => {
+      onSubmit={(values, { publish: andPublish }) => {
         const body = toRecipeBody(values);
 
         if (editing === null) {
           create.mutate(body, {
-            onSuccess: (created) => {
-              toast.success(t("actions.createSuccess"));
-              onSaved(created.id);
-            },
+            onSuccess: (created) =>
+              finish(created.id, andPublish, t("actions.createSuccess")),
           });
         } else {
           update.mutate(body, {
-            onSuccess: () => {
-              toast.success(t("actions.saveSuccess"));
-              onSaved(editing.id);
-            },
+            onSuccess: () =>
+              finish(editing.id, andPublish, t("actions.saveSuccess")),
           });
         }
       }}

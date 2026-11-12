@@ -119,6 +119,137 @@ export function useUpsertMenuMutation(patientId: string | null) {
   });
 }
 
+/**
+ * Поставить одно блюдо в день и приём, не открывая день на экране.
+ *
+ * День читается с сервера в момент записи, а не берётся из кэша: `PUT` задаёт
+ * день целиком, и состав, прочитанный раньше, стёр бы блюда, добавленные с тех
+ * пор в другой вкладке или семьёй в приложении. Прежние позиции уходят в
+ * запрос без изменений, поэтому сервер узнаёт их по ключу
+ * `(meal_index, recipe_id, custom_dish_id)` и сохраняет их отметки «съедено»
+ * (ADR-0041).
+ */
+export function useAddToMenuMutation(patientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      date: string;
+      mealIndex: number;
+      kind: DishKind;
+      id: string;
+      portionFactor: number;
+    }) => {
+      if (patientId === null)
+        throw new Error("patientId is required to add to a menu");
+
+      const day = await readDay(patientId, input.date);
+      const { data, error } = await api.PUT(
+        "/api/v1/patients/{patient_id}/menus",
+        {
+          params: { path: { patient_id: patientId } },
+          body: {
+            date: input.date,
+            items: [...toWriteItems(day?.items), toWriteItem(input)],
+          },
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty menu response");
+      return data;
+    },
+    onSuccess: (menu) => onMenuSaved(queryClient, patientId, menu),
+    onError: (error, input) =>
+      onMenuConflict(queryClient, patientId, input.date, error),
+  });
+}
+
+/**
+ * Убрать одно блюдо из дня, не доверяя составу на экране.
+ *
+ * Состав дня читается с сервера в момент записи: кэш недели живёт десятки
+ * секунд, и блюдо, добавленное за это время семьёй в приложении, ушло бы из
+ * `PUT` — сервер удалил бы его молча. Если на сервере в дне осталось только это
+ * блюдо, день удаляется целиком (пустого дня не бывает, ADR-0018); решает это
+ * сервер, а не кэш, — иначе `DELETE` унёс бы чужие позиции.
+ *
+ * Съеденное сервер не отдаст ни `PUT`, ни `DELETE` (409), и тогда перечитывается
+ * всё меню, включая сетку недели: экран показал бы прежний состав рядом с
+ * ошибкой.
+ */
+export function useRemoveMenuItemMutation(patientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      date: string;
+      itemId: string;
+    }): Promise<{ removedDay: boolean; menu: MenuRead | null }> => {
+      if (patientId === null)
+        throw new Error("patientId is required to edit a menu");
+
+      const day = await readDay(patientId, input.date);
+      const items = day?.items ?? [];
+      if (!items.some((item) => item.id === input.itemId)) {
+        // Блюда уже нет — убирать нечего; экран просто догонит сервер.
+        return { removedDay: false, menu: day };
+      }
+      const rest = items.filter((item) => item.id !== input.itemId);
+      if (rest.length === 0) {
+        const { error } = await api.DELETE(
+          "/api/v1/patients/{patient_id}/menus",
+          {
+            params: {
+              path: { patient_id: patientId },
+              query: { date: input.date },
+            },
+          },
+        );
+        if (error) throw error;
+        return { removedDay: true, menu: null };
+      }
+      const { data, error } = await api.PUT(
+        "/api/v1/patients/{patient_id}/menus",
+        {
+          params: { path: { patient_id: patientId } },
+          body: { date: input.date, items: toWriteItems(rest) },
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty menu response");
+      return { removedDay: false, menu: data };
+    },
+    onSuccess: (result, input) => {
+      if (result.menu !== null && !result.removedDay) {
+        onMenuSaved(queryClient, patientId, result.menu);
+        return;
+      }
+      queryClient.removeQueries({ queryKey: menuKey(patientId, input.date) });
+      void queryClient.invalidateQueries({ queryKey: menusKey(patientId) });
+      void queryClient.invalidateQueries({
+        queryKey: patientOverviewKey(patientId),
+      });
+    },
+    onError: (error) => {
+      if (errorCodeOf(error) !== "conflict") return;
+      void queryClient.invalidateQueries({ queryKey: menusKey(patientId) });
+    },
+  });
+}
+
+/** День с сервера; `null` — дня ещё нет. */
+async function readDay(
+  patientId: string,
+  date: string,
+): Promise<MenuRead | null> {
+  const { data, error } = await api.GET("/api/v1/patients/{patient_id}/menus", {
+    params: { path: { patient_id: patientId }, query: { date } },
+  });
+  if (error) {
+    if (errorCodeOf(error) === "not_found") return null;
+    throw error;
+  }
+  return data ?? null;
+}
+
 /** Копирование отказано: день-получатель уже составлен. */
 export class TargetDayNotEmptyError extends Error {
   constructor() {
@@ -169,23 +300,9 @@ export function useCopyDayMutation(patientId: string | null) {
       if (patientId === null)
         throw new Error("patientId is required to copy a menu");
 
-      const read = async (date: string): Promise<MenuRead | null> => {
-        const { data, error } = await api.GET(
-          "/api/v1/patients/{patient_id}/menus",
-          {
-            params: { path: { patient_id: patientId }, query: { date } },
-          },
-        );
-        if (error) {
-          if (errorCodeOf(error) === "not_found") return null;
-          throw error;
-        }
-        return data ?? null;
-      };
-
       const [source, target] = await Promise.all([
-        read(input.from),
-        read(input.to),
+        readDay(patientId, input.from),
+        readDay(patientId, input.to),
       ]);
       if ((target?.items.length ?? 0) > 0) throw new TargetDayNotEmptyError();
       const items = copiedDay(source, target);
@@ -471,4 +588,9 @@ function onMenuConflict(
 ): void {
   if (errorCodeOf(error) !== "conflict") return;
   void queryClient.invalidateQueries({ queryKey: menuKey(patientId, date) });
+  // Сетка недели лежит под тем же меню отдельным ключом и показала бы прежний
+  // состав рядом с ошибкой.
+  void queryClient.invalidateQueries({
+    queryKey: [...menusKey(patientId), "week"],
+  });
 }

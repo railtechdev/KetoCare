@@ -1,16 +1,17 @@
 import {
+  ActionReason,
   AsyncSection,
   Button,
   ConfirmDialog,
   RatioBadge,
   Section,
   cn,
-  formatFactor,
   formatKcal,
   formatMass,
   toast,
 } from "@ketocare/ui";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PrintButton } from "../../components/PrintButton";
@@ -27,6 +28,7 @@ import {
 } from "./dates";
 import { DEFAULT_MEAL_COUNT, useMealsPerDay } from "./useMenu";
 import { WeekCellAdd } from "./WeekCellAdd";
+import { WeekCellItem } from "./WeekCellItem";
 import { useCopyWeek, useWeekQuery, type MenuWeek } from "./useWeek";
 
 /**
@@ -74,6 +76,14 @@ export function WeekGrid({
   const mealCount = Math.max(mealsPerDay, 0, ...plannedMeals);
   const meals = Array.from({ length: mealCount }, (_, index) => index + 1);
   const hasPlan = plannedMeals.length > 0;
+  // Печать недели серела без слова (аудит, «Тупики»): причина — рядом.
+  const printBlockedBy =
+    week.data === undefined
+      ? t("week.printWaiting")
+      : hasPlan
+        ? null
+        : t("week.printEmpty");
+  const printReasonId = useId();
 
   return (
     <Section title={t("week.title")} description={t("week.intro")}>
@@ -139,7 +149,8 @@ export function WeekGrid({
           />
           <PrintButton
             label={t("week.print")}
-            disabled={!hasPlan || week.data === undefined}
+            disabled={printBlockedBy !== null}
+            describedBy={printBlockedBy === null ? undefined : printReasonId}
           >
             {week.data !== undefined && (
               <WeekPrint
@@ -149,6 +160,9 @@ export function WeekGrid({
             )}
           </PrintButton>
         </div>
+        <ActionReason id={printReasonId} className="w-full sm:text-right">
+          {printBlockedBy}
+        </ActionReason>
       </div>
 
       <AsyncSection
@@ -214,21 +228,19 @@ export function WeekGrid({
                       {(day.menu?.items ?? [])
                         .filter((item) => item.meal_index === meal)
                         .map((item) => (
-                          <p key={item.id} className="m-0">
-                            {item.title ?? t("week.untitled")}
-                            {item.portion_factor !== 1 && (
-                              <span className="text-muted-foreground">
-                                {" "}
-                                {formatFactor(item.portion_factor)}
-                              </span>
-                            )}
-                          </p>
+                          <WeekCellItem
+                            key={item.id}
+                            patientId={patientId}
+                            date={day.date}
+                            dayLabel={formatDayLabel(day.date)}
+                            item={item}
+                            dayItems={day.menu?.items ?? []}
+                          />
                         ))}
                       <WeekCellAdd
                         patientId={patientId}
                         date={day.date}
                         mealIndex={meal}
-                        dayItems={day.menu?.items}
                         dayLabel={formatDayLabel(day.date)}
                       />
                     </td>

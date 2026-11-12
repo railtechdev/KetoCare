@@ -15,6 +15,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
+import { SectionLink } from "../../components/SectionLink";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { useRecipeSearch } from "../recipes/useRecipes";
@@ -146,6 +147,15 @@ function RecipeChoice({
           size="inline"
           title={t("fromLibrary.empty")}
           description={t("fromLibrary.emptyDescription")}
+          // Совет опубликовать рецепт был текстом без ссылки: куда идти,
+          // человек искал сам.
+          action={
+            <Button asChild variant="outline" className="min-h-touch">
+              <SectionLink section="recipes">
+                {t("fromLibrary.toRecipes")}
+              </SectionLink>
+            </Button>
+          }
         />
       ) : (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
