@@ -19,27 +19,26 @@ const d = useTranslations(locale);
 
 <footer class="site-footer">
   <div class="wrap site-footer__top">
-    <div style="max-width: 480px;">
-      <div class="brand" style="margin-bottom:14px">
+    <div class="site-footer__about">
+      <a class="brand" href={pagePath("home", locale)}>
         <span class="brand__mark" aria-hidden="true">{d.common.brandMark}</span>
         <span>{d.common.brand}</span>
-      </div>
+      </a>
       <p class="site-footer__disclaimer">{d.footer.disclaimer}</p>
     </div>
 
     <div class="site-footer__cols">
       <div class="site-footer__col">
         <h2>{d.footer.sectionsTitle}</h2>
-        <a href={pagePath("home", locale)}>{d.nav.home}</a>
-        <a href={pagePath("forFamilies", locale)}>{d.nav.forFamilies}</a>
-        <a href={pagePath("doctors", locale)}>{d.nav.forDoctors}</a>
-        <a href={pagePath("methodology", locale)}>{d.nav.methodology}</a>
+        <a href={pagePath("doctors", locale)}>{d.nav.doctors}</a>
+        <a href={pagePath("forFamilies", locale)}>{d.nav.families}</a>
         <a href={pagePath("howItWorks", locale)}>{d.nav.howItWorks}</a>
+        <a href={pagePath("methodology", locale)}>{d.nav.methodology}</a>
       </div>
       <div class="site-footer__col">
-        <h2>{d.common.brand} App</h2>
-        <a href={JOIN_URL}>{d.common.clinicCode}</a>
+        <h2>{d.footer.cabinetTitle}</h2>
         <a href={LOGIN_URL}>{d.nav.login}</a>
+        <a href={JOIN_URL}>{d.nav.enterCode}</a>
       </div>
       <div class="site-footer__col">
         <h2>{d.footer.contactsTitle}</h2>

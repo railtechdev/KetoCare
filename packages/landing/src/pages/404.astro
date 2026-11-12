@@ -1,0 +1,53 @@
+---
+/**
+ * Страница 404. Файл один на все языки (nginx отдаёт его на любой
+ * несуществующий адрес), поэтому основной текст — на языке по умолчанию, а
+ * ниже — те же две строки по-узбекски и по-английски со ссылкой на главную
+ * своего языка.
+ */
+import { useTranslations } from "../i18n";
+import { DEFAULT_LOCALE, HTML_LANG, LOCALES, pagePath } from "../i18n/config";
+import Layout from "../layouts/Layout.astro";
+
+const locale = DEFAULT_LOCALE;
+const d = useTranslations(locale);
+const others = LOCALES.filter((l) => l !== locale).map((l) => ({
+  locale: l,
+  dict: useTranslations(l),
+}));
+---
+
+<Layout
+  locale={locale}
+  page="home"
+  title={d.notFound.seo.title}
+  description={d.notFound.seo.description}
+  notFound
+>
+  <section class="page-hero">
+    <div class="wrap wrap--text">
+      <h1 class="h1">{d.notFound.h1}</h1>
+      <p class="lead">{d.notFound.text}</p>
+      <ul class="link-list">
+        <li><a href={pagePath("home", locale)}>{d.nav.home}</a></li>
+        <li><a href={pagePath("doctors", locale)}>{d.nav.doctors}</a></li>
+        <li>
+          <a href={pagePath("forFamilies", locale)}>{d.nav.families}</a>
+        </li>
+        <li>
+          <a href={pagePath("howItWorks", locale)}>{d.nav.howItWorks}</a>
+        </li>
+      </ul>
+      {
+        others.map(({ locale: l, dict }) => (
+          <p class="not-found__other" lang={HTML_LANG[l]}>
+            {dict.notFound.h1}.{" "}
+            <a class="text-link" href={pagePath("home", l)}>
+              {dict.nav.home}
+            </a>
+          </p>
+        ))
+      }
+    </div>
+  </section>
+</Layout>

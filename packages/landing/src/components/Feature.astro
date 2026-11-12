@@ -1,0 +1,65 @@
+---
+/**
+ * Блок «что умеет продукт»: заголовок, пара строк, список и снимок экрана
+ * рядом. Снимок — доказательство, что сказанное есть в продукте: блок без
+ * снимка допустим, снимок без текста — нет.
+ */
+import type { Locale } from "../i18n/config";
+import { SCREENS, type ScreenId } from "../lib/screens";
+import Screen from "./Screen.astro";
+
+interface Props {
+  locale: Locale;
+  id: string;
+  title: string;
+  text?: string;
+  points: string[];
+  shot?: ScreenId;
+  reverse?: boolean;
+  alt?: boolean;
+}
+
+const {
+  locale,
+  id,
+  title,
+  text,
+  points,
+  shot,
+  reverse = false,
+  alt = false,
+} = Astro.props;
+const phone = shot ? SCREENS[shot].kind === "app" : false;
+const splitClass = [
+  "wrap",
+  "split",
+  reverse ? "split--reverse" : "",
+  phone ? "split--phone" : "",
+  shot ? "" : "split--text-only",
+]
+  .filter(Boolean)
+  .join(" ");
+---
+
+<section
+  class={alt ? "section section--alt" : "section"}
+  aria-labelledby={`h-${id}`}
+>
+  <div class={splitClass}>
+    <div class="split__text">
+      <h2 class="h2" id={`h-${id}`}>{title}</h2>
+      {text && <p class="lead">{text}</p>}
+      <ul class="tick-list">
+        {points.map((point) => <li>{point}</li>)}
+      </ul>
+      <slot />
+    </div>
+    {
+      shot && (
+        <div class="split__media">
+          <Screen id={shot} locale={locale} />
+        </div>
+      )
+    }
+  </div>
+</section>

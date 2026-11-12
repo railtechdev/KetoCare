@@ -17,9 +17,11 @@ interface Props {
   page: PageKey;
   title: string;
   description: string;
+  /** Страница 404: без canonical и языковых версий, закрыта от индексации. */
+  notFound?: boolean;
 }
 
-const { locale, page, title, description } = Astro.props;
+const { locale, page, title, description, notFound = false } = Astro.props;
 
 const canonical = new URL(pagePath(page, locale), Astro.site);
 
@@ -40,7 +42,7 @@ const ogImage = new URL(`/og/${locale}.png`, Astro.site).href;
  * которые после переезда на домен клиента придётся убирать вручную.
  * На настоящем домене сборка запускается с LANDING_INDEXABLE=1.
  */
-const indexable = process.env.LANDING_INDEXABLE === "1";
+const indexable = process.env.LANDING_INDEXABLE === "1" && !notFound;
 const ogLocale = { ru: "ru_RU", uz: "uz_UZ", en: "en_US" }[locale];
 ---
 
@@ -49,18 +51,21 @@ const ogLocale = { ru: "ru_RU", uz: "uz_UZ", en: "en_US" }[locale];
 
 <title>{title}</title>
 <meta name="description" content={description} />
-<link rel="canonical" href={canonical.href} />
-
 {
-  alternates.map((a) => (
-    <link rel="alternate" hreflang={a.hreflang} href={a.href} />
-  ))
+  !notFound && (
+    <>
+      <link rel="canonical" href={canonical.href} />
+      {alternates.map((a) => (
+        <link rel="alternate" hreflang={a.hreflang} href={a.href} />
+      ))}
+      <link
+        rel="alternate"
+        hreflang="x-default"
+        href={new URL(pagePath(page, "ru"), Astro.site).href}
+      />
+    </>
+  )
 }
-<link
-  rel="alternate"
-  hreflang="x-default"
-  href={new URL(pagePath(page, "ru"), Astro.site).href}
-/>
 
 <meta
   name="robots"

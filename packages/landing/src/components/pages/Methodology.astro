@@ -1,8 +1,14 @@
 ---
+/**
+ * Как приложение считает и кто принимает решения — простыми словами.
+ *
+ * Страница в шапку не вынесена (на неё ведут «Как это работает», блок
+ * безопасности на главной и подвал): это ответ на вопрос «а можно ли этому
+ * доверять», и задают его после того, как поняли, что продукт делает.
+ */
 import { useTranslations } from "../../i18n";
 import { pagePath, type Locale } from "../../i18n/config";
 import Layout from "../../layouts/Layout.astro";
-import KetoCalculator from "../KetoCalculator.astro";
 
 interface Props {
   locale: Locale;
@@ -10,151 +16,45 @@ interface Props {
 
 const { locale } = Astro.props;
 const d = useTranslations(locale);
-const mp = d.methodologyPage;
+const p = d.methodology;
 ---
 
 <Layout
   locale={locale}
   page="methodology"
-  title={mp.seo.title}
-  description={mp.seo.description}
-  ctaHref={pagePath("doctors", locale)}
-  ctaLabel={d.nav.pilot}
+  title={p.seo.title}
+  description={p.seo.description}
 >
-  {/* ---------- Hero: Методология и стандарты ---------- */}
-  <section class="hero dark-section">
-    <div
-      class="hero__glow"
-      aria-hidden="true"
-      style="top:-160px;left:-140px;width:520px;height:520px;background:radial-gradient(closest-side,rgb(127 166 255 / 16%),transparent 70%)"
-    >
-    </div>
-    <div class="wrap hero__inner split">
-      <div class="split__text">
-        <p class="eyebrow">{mp.hero.eyebrow}</p>
-        <h1 class="h1" style="margin-bottom:20px">{mp.hero.h1}</h1>
-        <p class="lead measure--tight" style="margin-bottom:30px">
-          {mp.hero.lead}
-        </p>
-        <div class="btn-row">
-          <a class="btn btn--on-dark" href={pagePath("doctors", locale)}>
-            {d.nav.pilot}
-          </a>
-          <a class="btn btn--ghost-dark" href="#calculator">
-            {d.home.calc.eyebrow}
-          </a>
-        </div>
-      </div>
-
-      <div class="split__media reveal">
-        <div class="card card--dark" style="padding:32px;border-radius:20px">
-          <p
-            class="eyebrow"
-            style="color:var(--dark-accent);margin-bottom:12px"
-          >
-            {mp.check.eyebrow}
-          </p>
-          <div class="atwater-formula-box" style="margin:16px 0 20px">
-            <div class="atwater-formula">{mp.check.formula}</div>
-            <p style="font-size:0.84rem;color:var(--dark-muted);margin:0">
-              {mp.check.caption}
-            </p>
-          </div>
-          <ul class="tick-list" style="color:var(--dark-ink)">
-            {mp.check.points.map((point) => <li>{point}</li>)}
-          </ul>
-        </div>
-      </div>
+  <section class="page-hero">
+    <div class="wrap wrap--text">
+      <h1 class="h1">{p.hero.h1}</h1>
+      <p class="lead">{p.hero.lead}</p>
     </div>
   </section>
 
-  {/* ---------- Архитектурные принципы платформы ---------- */}
-  <section class="section section--white section--bordered">
-    <div class="wrap reveal">
-      <div style="text-align:center;max-width:760px;margin:0 auto 52px">
-        <p class="eyebrow">{mp.hero.eyebrow}</p>
-        <h2 class="h2">{mp.pillarsTitle}</h2>
-      </div>
-
-      <div class="pillars-grid">
-        {
-          mp.pillars.map((pillar) => (
-            <div class="pillar-card">
-              <div class="pillar-card__top">
-                <span class="pillar-card__num num tabular-nums">
-                  {pillar.num}
-                </span>
-              </div>
-              <h3 class="card__title" style="margin-bottom:12px">
-                {pillar.title}
-              </h3>
-              <p
-                class="card__text"
-                style="color:var(--ink-muted);line-height:1.6"
-              >
-                {pillar.text}
-              </p>
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- Поддерживаемая диетотерапия ---------- */}
-  <section class="section section--sand">
-    <div class="wrap reveal">
-      <div style="text-align:center;max-width:760px;margin:0 auto 48px">
-        <p class="eyebrow">{mp.protocolsEyebrow}</p>
-        <h2 class="h2">{mp.protocolsTitle}</h2>
-      </div>
-
-      <div class="grid grid--auto">
-        {
-          mp.protocols.map((protocol) => (
-            <div
-              class="card card--sunken"
-              style="padding:32px;border-radius:18px"
-            >
-              <h3
-                class="card__title"
-                style="margin-bottom:12px;font-size:1.15rem"
-              >
-                {protocol.name}
-              </h3>
-              <p
-                class="card__text"
-                style="color:var(--ink-muted);line-height:1.6"
-              >
-                {protocol.desc}
-              </p>
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- Живой калькулятор ядра ---------- */}
-  <section class="section section--white section--bordered" id="calculator">
-    <div class="wrap reveal">
-      <div class="split" style="align-items:flex-start">
-        <div class="split__text">
-          <p class="eyebrow">{d.home.calc.eyebrow}</p>
-          <h2 class="h2" style="max-width:20ch;margin-bottom:18px">
-            {d.home.calc.h2}
-          </h2>
-          <p class="lead measure--tight" style="margin-bottom:14px">
-            {d.home.calc.lead1}
-          </p>
-          <p class="lead measure--tight" style="margin-bottom:24px">
-            {d.home.calc.lead2}
-          </p>
-          <p class="note">{d.home.calc.note}</p>
-        </div>
-        <div class="split__media">
-          <KetoCalculator locale={locale} />
-        </div>
+  <section class="section section--alt section--tight-top">
+    <div class="wrap wrap--text stack">
+      {
+        p.sections.map((section, i) => (
+          <article class="card card--wide" aria-labelledby={`h-m${i}`}>
+            <h2 class="h3" id={`h-m${i}`}>
+              {section.title}
+            </h2>
+            <ul class="tick-list">
+              {section.points.map((point) => (
+                <li>{point}</li>
+              ))}
+            </ul>
+          </article>
+        ))
+      }
+      <div class="btn-row">
+        <a class="btn btn--primary" href={`${pagePath("home", locale)}#lead`}
+          >{d.nav.lead}</a
+        >
+        <a class="btn btn--secondary" href={pagePath("howItWorks", locale)}
+          >{d.nav.howItWorks}</a
+        >
       </div>
     </div>
   </section>

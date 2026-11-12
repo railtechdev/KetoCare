@@ -2,6 +2,7 @@
 import { useTranslations } from "../../i18n";
 import { pagePath, type Locale } from "../../i18n/config";
 import Layout from "../../layouts/Layout.astro";
+import Screen from "../Screen.astro";
 
 interface Props {
   locale: Locale;
@@ -9,7 +10,7 @@ interface Props {
 
 const { locale } = Astro.props;
 const d = useTranslations(locale);
-const p = d.howItWorks;
+const p = d.how;
 ---
 
 <Layout
@@ -17,137 +18,83 @@ const p = d.howItWorks;
   page="howItWorks"
   title={p.seo.title}
   description={p.seo.description}
-  ctaHref={`${pagePath("home", locale)}#cta`}
-  ctaLabel={d.nav.earlyAccess}
 >
-  <section
-    class="section section--white"
-    style="border-bottom:1px solid var(--border)"
-  >
-    <div class="wrap wrap--text" style="text-align:center">
-      <p class="eyebrow">{p.hero.eyebrow}</p>
-      <h1 class="h1" style="margin-bottom:18px">{p.hero.h1}</h1>
-      <p class="lead" style="max-width:56ch;margin-inline:auto">
-        {p.hero.lead}
-      </p>
+  <section class="page-hero">
+    <div class="wrap wrap--text">
+      <h1 class="h1">{p.hero.h1}</h1>
+      <p class="lead">{p.hero.lead}</p>
     </div>
   </section>
 
-  <section class="section">
-    <div class="wrap wrap--narrow">
+  <section class="section section--alt section--tight-top">
+    <div class="wrap split split--steps">
       <ol class="timeline">
         {
-          p.steps.map((step, i) => (
-            <li class="timeline__step reveal">
-              <div class="timeline__rail" aria-hidden="true">
-                <span class="timeline__num">{i + 1}</span>
-                {i < p.steps.length - 1 && <span class="timeline__line" />}
-              </div>
-              <div class="timeline__body">
-                <p class="timeline__role">{step.role}</p>
-                <h2 class="h3" style="margin-bottom:10px">
-                  {step.title}
-                </h2>
-                {step.paragraphs.map((text) => (
-                  <p>{text}</p>
+          p.steps.map((step) => (
+            <li class="timeline__item">
+              <p class="timeline__who">{step.who}</p>
+              <h2 class="h3">{step.title}</h2>
+              <ul class="tick-list">
+                {step.points.map((point) => (
+                  <li>{point}</li>
                 ))}
-                {step.verdictBadge && (
-                  <p class="verdict-inline">
-                    <span class="ratio-badge">{step.verdictBadge}</span>
-                    <span>{step.verdictText}</span>
-                  </p>
-                )}
-                {step.chips.length > 0 && (
-                  <ul class="chip-row">
-                    {step.chips.map((chip, ci) => (
-                      /* Последняя плашка шага «Ведёт дневники» — про приступ,
-                         и она красная. Позиция, а не текст: текст переводится. */
-                      <li
-                        class={
-                          i === 2 && ci === step.chips.length - 1
-                            ? "chip chip--danger"
-                            : "chip chip--outline"
-                        }
-                      >
-                        {chip}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              </ul>
             </li>
           ))
         }
       </ol>
+      <div class="split__media split__media--sticky">
+        <Screen id="ketones" locale={locale} />
+        <Screen id="appDiary" locale={locale} crop class="shot--small" />
+      </div>
     </div>
   </section>
 
-  <section class="section section--white section--bordered">
-    <div class="wrap reveal">
-      <h2 class="h2" style="margin-bottom:12px">{p.channels.h2}</h2>
-      <p class="lead measure" style="margin-bottom:40px">{p.channels.lead}</p>
-      <div class="grid grid--auto-sm">
+  <section class="section" aria-labelledby="h-channels">
+    <div class="wrap">
+      <h2 class="h2" id="h-channels">{p.channels.h2}</h2>
+      <ul class="cards cards--3">
         {
           p.channels.items.map((item) => (
-            <div class="card card--sunken">
-              <h3 class="card__title">{item.title}</h3>
-              <p class="card__text">{item.text}</p>
-            </div>
+            <li class="card">
+              <h3 class="h3">{item.title}</h3>
+              <p>{item.text}</p>
+            </li>
           ))
         }
-      </div>
+      </ul>
     </div>
   </section>
 
-  <section class="section section--sand">
-    <div class="wrap wrap--narrow reveal">
-      <p class="eyebrow">{p.status.eyebrow}</p>
-      <h2 class="h2" style="margin-bottom:28px">{p.status.h2}</h2>
-      <div class="grid grid--auto">
-        <div class="card card--sand">
-          <h3 class="card__title" style="color:var(--success)">
-            {p.status.nowTitle}
-          </h3>
-          <ul class="tick-list" style="font-size:.92rem">
-            {p.status.now.map((i) => <li>{i}</li>)}
-          </ul>
-        </div>
-        <div class="card card--sand">
-          <h3 class="card__title" style="color:var(--sand-accent)">
-            {p.status.nextTitle}
-          </h3>
-          <ul class="tick-list tick-list--next" style="font-size:.92rem">
-            {p.status.next.map((i) => <li>{i}</li>)}
-          </ul>
-        </div>
-      </div>
-      <p
-        style="margin-top:24px;font-size:.84rem;color:var(--sand-muted);line-height:1.6"
-      >
-        {p.status.note}
+  <section class="section section--alt" aria-labelledby="h-roles">
+    <div class="wrap">
+      <h2 class="h2" id="h-roles">{p.roles.h2}</h2>
+      <ul class="cards">
+        {
+          p.roles.items.map((item) => (
+            <li class="card">
+              <h3 class="h3">{item.title}</h3>
+              <p>{item.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="more-line">
+        {p.more.text}{" "}
+        <a class="text-link" href={pagePath("methodology", locale)}
+          >{p.more.link}</a
+        >
       </p>
-    </div>
-  </section>
-
-  <section
-    class="section section--white"
-    style="border-top:1px solid var(--border)"
-  >
-    <div class="wrap wrap--text" style="text-align:center">
-      <h2 class="h2" style="margin-bottom:14px">{p.cta.h2}</h2>
-      <p
-        class="lead"
-        style="max-width:52ch;margin-inline:auto;margin-bottom:30px"
-      >
-        {p.cta.lead}
-      </p>
-      <div class="btn-row btn-row--center">
-        <a class="btn btn--primary" href={`${pagePath("home", locale)}#cta`}>
-          {d.home.hero.ctaFamily}
-        </a>
-        <a class="btn btn--secondary" href={pagePath("doctors", locale)}>
-          {d.home.hero.ctaDoctors}
-        </a>
+      <div class="btn-row">
+        <a class="btn btn--primary" href={`${pagePath("home", locale)}#lead`}
+          >{d.nav.lead}</a
+        >
+        <a class="btn btn--secondary" href={pagePath("doctors", locale)}
+          >{d.nav.doctors}</a
+        >
+        <a class="btn btn--secondary" href={pagePath("forFamilies", locale)}
+          >{d.nav.families}</a
+        >
       </div>
     </div>
   </section>

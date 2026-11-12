@@ -1,25 +1,19 @@
 /**
- * Вся интерактивность лендинга. Ванильный TypeScript, без фреймворка:
- * страница статическая, и тащить в браузер React ради четырёх виджетов
- * незачем.
+ * Вся интерактивность сайта. Ванильный TypeScript, без фреймворка: страница
+ * статическая, и тащить в браузер React ради трёх виджетов незачем.
  *
- * Общий принцип — прогрессивное улучшение: разметка полна и осмысленна без
- * скриптов, а этот файл только добавляет поведение. Поэтому здесь есть
- * места, которые СНАЧАЛА прячут содержимое (свёрнутые ответы, сообщения
- * бота) — до их выполнения посетитель видит всё.
+ * Принцип — прогрессивное улучшение: разметка полна и осмысленна без
+ * скриптов, этот файл только добавляет поведение. Без него меню раскрыто,
+ * вместо формы видна почта, а калькулятор показывает расчёт по умолчанию.
  */
 
-import { calculate, formatNumber, type Ingredient } from "../lib/keto";
+import { calculate, formatNumber } from "../lib/keto";
 
-// Отмечаемся сразу: страховочный таймер в <head> ждёт именно этого признака
-// и без него через 3 секунды сам покажет всё скрытое содержимое.
+// Отмечаемся сразу: страховочный таймер в `boot.js` ждёт именно этого признака
+// и без него через 3 секунды вернёт страницу в вид «без скриптов».
 document.documentElement.dataset.siteReady = "1";
 
-const prefersReducedMotion = window.matchMedia(
-  "(prefers-reduced-motion: reduce)",
-).matches;
-
-/* ---------- Мобильное меню ---------- */
+/* ---------- Меню-значок ---------- */
 
 function initNav(): void {
   const toggle = document.querySelector<HTMLButtonElement>("[data-nav-toggle]");
@@ -27,6 +21,7 @@ function initNav(): void {
   const label = document.querySelector<HTMLElement>("[data-nav-toggle-label]");
   if (!toggle || !nav || !label) return;
 
+  const isOpen = (): boolean => toggle.getAttribute("aria-expanded") === "true";
   const setOpen = (open: boolean): void => {
     nav.dataset.open = String(open);
     toggle.setAttribute("aria-expanded", String(open));
@@ -36,87 +31,64 @@ function initNav(): void {
   };
 
   setOpen(false);
-  toggle.addEventListener("click", () =>
-    setOpen(toggle.getAttribute("aria-expanded") !== "true"),
-  );
+  toggle.addEventListener("click", () => setOpen(!isOpen()));
 
   // Esc закрывает меню и возвращает фокус на кнопку — иначе фокус остаётся
   // на невидимой ссылке.
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isOpen()) {
       setOpen(false);
       toggle.focus();
     }
   });
 
-  // Переход по якорю внутри страницы должен закрывать меню.
-  nav.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest("a")) setOpen(false);
+  // Переход по якорю внутри страницы («Оставить заявку») закрывает меню.
+  nav.addEventListener("click", (event) => {
+    if ((event.target as HTMLElement).closest("a")) setOpen(false);
+  });
+
+  // Окно расширили до полной строки — открытое меню не должно остаться
+  // висеть в состоянии, которого на этой ширине нет.
+  window.matchMedia("(min-width: 1200px)").addEventListener("change", (e) => {
+    if (e.matches) setOpen(false);
   });
 }
 
-/* ---------- Появление блоков при прокрутке ---------- */
+/* ---------- Тема оформления ---------- */
 
-function initReveal(): void {
-  const items = document.querySelectorAll<HTMLElement>(".reveal");
-  if (prefersReducedMotion || !("IntersectionObserver" in window)) {
-    items.forEach((el) => el.classList.add("is-visible"));
-    return;
-  }
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      });
-    },
-    { rootMargin: "0px 0px -10% 0px", threshold: 0.05 },
+function initTheme(): void {
+  const toggle = document.querySelector<HTMLButtonElement>(
+    "[data-theme-toggle]",
   );
+  if (!toggle) return;
 
-  items.forEach((el) => observer.observe(el));
-}
+  const root = document.documentElement;
+  const sync = (): void =>
+    toggle.setAttribute(
+      "aria-pressed",
+      String(root.getAttribute("data-theme") === "dark"),
+    );
 
-/* ---------- Частые вопросы ---------- */
-
-function initFaq(): void {
-  const root = document.querySelector<HTMLElement>("[data-faq]");
-  if (!root) return;
-
-  const buttons = Array.from(
-    root.querySelectorAll<HTMLButtonElement>("[data-faq-q]"),
-  );
-
-  const setExpanded = (button: HTMLButtonElement, expanded: boolean): void => {
-    button.setAttribute("aria-expanded", String(expanded));
-    const id = button.getAttribute("aria-controls");
-    const panel = id ? document.getElementById(id) : null;
-    if (panel) panel.hidden = !expanded;
-  };
-
-  // Свёрнуты все, кроме первого: в разметке они раскрыты ради посетителей
-  // без скриптов и ради индексации ответов поисковиком.
-  buttons.forEach((button, i) => setExpanded(button, i === 0));
-
-  buttons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const willOpen = button.getAttribute("aria-expanded") !== "true";
-      buttons.forEach((other) =>
-        setExpanded(other, other === button && willOpen),
-      );
-    });
+  sync();
+  toggle.addEventListener("click", () => {
+    const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try {
+      localStorage.setItem("kc-theme", next);
+    } catch {
+      // Хранилище недоступно — тема действует до перезагрузки.
+    }
+    sync();
   });
 }
 
 /* ---------- Демонстрационный калькулятор ---------- */
 
 interface CalcConfig {
-  ingredients: Ingredient[];
-  target: number;
-  tolerance: number;
   locale: string;
   grams: string;
+  kcal: string;
+  netCarbs: string;
   verdict: { ok: string; low: string; high: string };
 }
 
@@ -129,30 +101,31 @@ function initCalculator(): void {
   const inputs = Array.from(
     root.querySelectorAll<HTMLInputElement>("[data-calc-input]"),
   );
-  const grams = config.ingredients.map((ing) => ing.initial);
+  const grams = inputs.map((input) => Number(input.value));
+  const g = (value: number): string =>
+    `${formatNumber(value, config.locale)}\u00a0${config.grams}`;
 
-  const kcalEl = root.querySelector<HTMLElement>("[data-calc-kcal]");
-  const verdictEl = root.querySelector<HTMLElement>("[data-calc-verdict]");
-  const verdictTextEl = root.querySelector<HTMLElement>(
-    "[data-calc-verdict-text]",
-  );
-  const ratioEl = root.querySelector<HTMLElement>("[data-calc-ratio]");
-  const netCarbsEl = root.querySelector<HTMLElement>("[data-calc-net-carbs]");
+  const set = (selector: string, text: string): void => {
+    const el = root.querySelector<HTMLElement>(selector);
+    if (el) el.textContent = text;
+  };
 
   const render = (): void => {
     const r = calculate(grams);
 
-    inputs.forEach((_input, i) => {
-      const out = root.querySelector<HTMLElement>(`[data-calc-grams="${i}"]`);
-      if (out) out.textContent = `${grams[i]} ${config.grams}`;
-    });
+    grams.forEach((value, i) =>
+      set(`[data-calc-grams="${i}"]`, `${value}\u00a0${config.grams}`),
+    );
+    set("[data-calc-kcal]", `${Math.round(r.kcal)}\u00a0${config.kcal}`);
+    set("[data-calc-ratio]", `${formatNumber(r.ratio, config.locale, 2)} : 1`);
+    set("[data-calc-verdict-text]", config.verdict[r.state]);
+    set(
+      "[data-calc-net-carbs]",
+      config.netCarbs.replace("{value}", g(r.netCarbs)),
+    );
 
-    if (kcalEl) {
-      // Единица измерения уже стоит в разметке рядом; здесь только число.
-      const unit =
-        kcalEl.textContent?.replace(/[\d\s\u00a0]+/, "").trim() ?? "";
-      kcalEl.textContent = `${Math.round(r.kcal)} ${unit}`;
-    }
+    const verdict = root.querySelector<HTMLElement>("[data-calc-verdict]");
+    if (verdict) verdict.dataset.state = r.state;
 
     (
       [
@@ -163,33 +136,8 @@ function initCalculator(): void {
     ).forEach(([key, value, pct]) => {
       const bar = root.querySelector<HTMLElement>(`[data-calc-bar="${key}"]`);
       if (bar) bar.style.width = `${pct.toFixed(1)}%`;
-      const macro = root.querySelector<HTMLElement>(
-        `[data-calc-macro="${key}"]`,
-      );
-      if (macro)
-        macro.textContent = `${formatNumber(value, config.locale)}\u00a0${config.grams}`;
+      set(`[data-calc-macro="${key}"]`, g(value));
     });
-
-    // Число, по которому считается соотношение: без него полоса макронутриентов
-    // объясняет вердикт наполовину.
-    if (netCarbsEl)
-      netCarbsEl.textContent = `${formatNumber(r.netCarbs, config.locale)}\u00a0${config.grams}`;
-
-    if (ratioEl) {
-      ratioEl.textContent = `${formatNumber(r.ratio, config.locale, 2)} : 1`;
-      ratioEl.classList.toggle("ratio-badge--off", r.state !== "ok");
-      ratioEl.classList.toggle("ratio-badge--low", r.state === "low");
-      ratioEl.classList.toggle("ratio-badge--high", r.state === "high");
-    }
-    if (verdictEl) verdictEl.dataset.state = r.state;
-    if (verdictTextEl) verdictTextEl.textContent = config.verdict[r.state];
-
-    const atwaterBadgeEl = root.querySelector<HTMLElement>(
-      "[data-calc-atwater-badge]",
-    );
-    if (atwaterBadgeEl) {
-      atwaterBadgeEl.classList.toggle("atwater-badge--off", !r.atwaterOk);
-    }
   };
 
   inputs.forEach((input, i) => {
@@ -200,244 +148,104 @@ function initCalculator(): void {
   });
 }
 
-/* ---------- Переключение темы оформления ---------- */
-
-function initTheme(): void {
-  const toggle = document.querySelector<HTMLButtonElement>(
-    "[data-theme-toggle]",
-  );
-  if (!toggle) return;
-
-  const getSystemTheme = (): "dark" | "light" =>
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-
-  const getCurrentTheme = (): "dark" | "light" => {
-    const attr = document.documentElement.getAttribute("data-theme");
-    if (attr === "dark" || attr === "light") return attr;
-    const stored = localStorage.getItem("kc-theme");
-    if (stored === "dark" || stored === "light") return stored;
-    return getSystemTheme();
-  };
-
-  const setTheme = (theme: "dark" | "light"): void => {
-    document.documentElement.setAttribute("data-theme", theme);
-    try {
-      localStorage.setItem("kc-theme", theme);
-    } catch {
-      // Игнорируем ошибки при недоступном localStorage
-    }
-  };
-
-  toggle.addEventListener("click", () => {
-    const current = getCurrentTheme();
-    setTheme(current === "dark" ? "light" : "dark");
-  });
-}
-
-/* ---------- Интерактивное превью ---------- */
-
-function initHeroPreview(): void {
-  const root = document.querySelector<HTMLElement>("[data-hero-preview]");
-  if (!root) return;
-
-  const tabs = Array.from(
-    root.querySelectorAll<HTMLButtonElement>("[data-preview-tab]"),
-  );
-  const panels = Array.from(
-    root.querySelectorAll<HTMLElement>("[data-preview-panel]"),
-  );
-
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const mode = tab.dataset.previewTab;
-      if (!mode) return;
-
-      tabs.forEach((t) => {
-        const isActive = t === tab;
-        t.classList.toggle("is-active", isActive);
-        t.setAttribute("aria-selected", String(isActive));
-      });
-
-      panels.forEach((p) => {
-        const isActive = p.dataset.previewPanel === mode;
-        p.classList.toggle("is-active", isActive);
-        p.hidden = !isActive;
-      });
-    });
-  });
-}
-
-/* ---------- Демонстрация диалога с ботом ---------- */
-
-function initChat(): void {
-  const root = document.querySelector<HTMLElement>("[data-chat]");
-  if (!root) return;
-
-  const messages = Array.from(
-    root.querySelectorAll<HTMLElement>("[data-chat-msg]"),
-  );
-  const typing = root.querySelector<HTMLElement>("[data-chat-typing]");
-  const replay = root.querySelector<HTMLButtonElement>("[data-chat-replay]");
-  if (messages.length === 0) return;
-
-  // Без анимации показывать нечего: переписка уже в разметке целиком.
-  if (prefersReducedMotion) {
-    replay?.remove();
-    return;
-  }
-
-  let timers: number[] = [];
-  let played = false;
-
-  const clear = (): void => {
-    timers.forEach((id) => window.clearTimeout(id));
-    timers = [];
-  };
-
-  const play = (): void => {
-    clear();
-    messages.forEach((m) => (m.hidden = true));
-    if (typing) typing.hidden = true;
-
-    let delay = 400;
-    messages.forEach((message, i) => {
-      const isBot = !message.classList.contains("chat__msg--user");
-      if (isBot && typing) {
-        // Пауза «бот печатает» перед ответом — иначе диалог выглядит так,
-        // будто оба собеседника пишут одновременно.
-        const showTypingAt = delay;
-        timers.push(
-          window.setTimeout(() => (typing.hidden = false), showTypingAt),
-        );
-        delay += 800;
-        timers.push(
-          window.setTimeout(() => {
-            typing.hidden = true;
-            message.hidden = false;
-          }, delay),
-        );
-      } else {
-        timers.push(window.setTimeout(() => (message.hidden = false), delay));
-      }
-      delay += i === messages.length - 1 ? 0 : 900;
-    });
-  };
-
-  replay?.addEventListener("click", play);
-
-  if (!("IntersectionObserver" in window)) {
-    play();
-    return;
-  }
-
-  // Диалог начинается, когда блок появился на экране: проигранная в фоне
-  // анимация — это анимация, которую никто не увидел.
-  const observer = new IntersectionObserver(
-    (entries) => {
-      if (!entries.some((e) => e.isIntersecting) || played) return;
-      played = true;
-      play();
-      observer.disconnect();
-    },
-    { threshold: 0.35 },
-  );
-  observer.observe(root);
-}
-
-/* ---------- Формы заявок ---------- */
+/* ---------- Форма заявки ---------- */
 
 function initLeadForms(): void {
-  document
-    .querySelectorAll<HTMLFormElement>("[data-lead-form]")
-    .forEach((form) => {
-      const fields = form.querySelector<HTMLElement>("[data-lead-fields]");
-      const done = form.querySelector<HTMLElement>("[data-lead-done]");
-      const error = form.querySelector<HTMLElement>("[data-lead-error]");
-      const messages = form.querySelector<HTMLElement>("[data-lead-messages]");
-      const input = form.querySelector<HTMLInputElement>('input[type="email"]');
-      const submit = form.querySelector<HTMLButtonElement>(
-        'button[type="submit"]',
+  document.querySelectorAll<HTMLElement>("[data-lead]").forEach((box) => {
+    const form = box.querySelector<HTMLFormElement>("[data-lead-form]");
+    const done = box.querySelector<HTMLElement>("[data-lead-done]");
+    const doneText = box.querySelector<HTMLElement>("[data-lead-done-text]");
+    const again = box.querySelector<HTMLButtonElement>("[data-lead-again]");
+    const error = box.querySelector<HTMLElement>("[data-lead-error]");
+    const input = box.querySelector<HTMLInputElement>('input[type="email"]');
+    const submit = box.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    );
+    const honeypot = box.querySelector<HTMLInputElement>(
+      'input[name="website"]',
+    );
+    if (!form || !done || !doneText || !again || !error || !input || !submit)
+      return;
+
+    const messages = form.dataset;
+    const submitLabel = submit.textContent ?? "";
+    const contact = messages.contactEmail ?? "";
+
+    const showError = (template: string | undefined): void => {
+      error.textContent = (template ?? "").replace("{email}", contact);
+      error.hidden = false;
+    };
+
+    // Успех: форма уступает место короткому «что дальше», и фокус переходит
+    // на него — иначе читалка экрана молчит, а фокус остаётся на исчезнувшей
+    // кнопке.
+    const showDone = (email: string): void => {
+      doneText.textContent = (doneText.dataset.template ?? "").replace(
+        "{email}",
+        email,
       );
-      const honeypot = form.querySelector<HTMLInputElement>(
-        'input[name="website"]',
-      );
-      if (!fields || !done || !error || !messages || !input || !submit) return;
+      form.hidden = true;
+      done.hidden = false;
+      done.focus();
+    };
 
-      const submitLabel = submit.textContent ?? "";
-
-      const showError = (text: string): void => {
-        error.textContent = text;
-        error.hidden = false;
-      };
-
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        error.hidden = true;
-
-        // Заполненная приманка — это бот. Показываем обычный успех: сообщать
-        // спамеру, что он распознан, значит помогать ему подобрать обход.
-        if (honeypot?.value) {
-          fields.hidden = true;
-          done.hidden = false;
-          return;
-        }
-
-        const email = input.value.trim();
-        submit.disabled = true;
-        submit.textContent = messages.dataset.sending ?? submitLabel;
-
-        void fetch(form.action, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            audience: form.dataset.variant,
-            locale: document.documentElement.lang,
-          }),
-        })
-          .then((response) => {
-            if (response.ok) {
-              done.textContent = (done.dataset.template ?? "").replace(
-                "{email}",
-                email,
-              );
-              fields.hidden = true;
-              done.hidden = false;
-              return;
-            }
-            if (response.status === 429) {
-              // Окно лимита — час (LEADS_RATE_LIMIT), а не минуты. Обещать
-              // срок нельзя: посетитель ждёт, повторяет, получает тот же
-              // отказ — и уходит. Вместо срока называем работающий обход:
-              // почту, которая на форме скрыта, когда JavaScript включён.
-              showError(
-                (messages.dataset.errorRate ?? "").replace(
-                  "{email}",
-                  messages.dataset.contactEmail ?? "",
-                ),
-              );
-            } else if (response.status === 422 || response.status === 400) {
-              showError(messages.dataset.errorEmail ?? "");
-            } else {
-              showError(messages.dataset.errorNetwork ?? "");
-            }
-          })
-          .catch(() => showError(messages.dataset.errorNetwork ?? ""))
-          .finally(() => {
-            submit.disabled = false;
-            submit.textContent = submitLabel;
-          });
-      });
+    again.addEventListener("click", () => {
+      done.hidden = true;
+      form.hidden = false;
+      input.value = "";
+      input.focus();
     });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      error.hidden = true;
+      const email = input.value.trim();
+
+      // Заполненная приманка — это бот. Показываем обычный успех: сообщать
+      // спамеру, что он распознан, значит помогать ему подобрать обход.
+      if (honeypot?.value) {
+        showDone(email);
+        return;
+      }
+
+      const audience =
+        form.querySelector<HTMLInputElement>('input[name="audience"]:checked')
+          ?.value ?? "doctor";
+      submit.disabled = true;
+      submit.textContent = messages.sending ?? submitLabel;
+
+      void fetch(form.action, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          audience,
+          locale: document.documentElement.lang,
+        }),
+      })
+        .then((response) => {
+          if (response.ok) {
+            showDone(email);
+          } else if (response.status === 429) {
+            // Окно лимита — час (LEADS_RATE_LIMIT). Срок не обещаем: вместо
+            // него — работающий обход, почта.
+            showError(messages.errorRate);
+          } else if (response.status === 422 || response.status === 400) {
+            showError(messages.errorEmail);
+          } else {
+            showError(messages.errorNetwork);
+          }
+        })
+        .catch(() => showError(messages.errorNetwork))
+        .finally(() => {
+          submit.disabled = false;
+          submit.textContent = submitLabel;
+        });
+    });
+  });
 }
 
 initNav();
 initTheme();
-initHeroPreview();
-initReveal();
-initFaq();
 initCalculator();
-initChat();
 initLeadForms();

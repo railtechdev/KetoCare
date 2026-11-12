@@ -34,7 +34,9 @@
  * JavaScript показывает корректный расчёт, а не пустые прочерки.
  */
 
-import demo from "./demo-dish.json";
+// Именованный импорт, а не весь объект: служебные поля файла (`_comment`,
+// `_source`) не должны попадать в код страницы.
+import { ingredients, target_ratio } from "./demo-dish.json";
 
 export interface Ingredient {
   /** Граммы жиров, белков, углеводов и ккал на 100 г. Источник — USDA
@@ -61,9 +63,9 @@ export interface Ingredient {
  * брокколи вышла из знаменателя, соотношение на прежних граммовках поднялось до
  * 3,78 — за допуск.
  */
-export const INGREDIENTS: Ingredient[] = demo.ingredients;
+export const INGREDIENTS: Ingredient[] = ingredients;
 
-export const TARGET_RATIO = demo.target_ratio;
+export const TARGET_RATIO = target_ratio;
 export const TOLERANCE = 0.15;
 
 export interface CalcResult {
@@ -79,12 +81,6 @@ export interface CalcResult {
   proteinPct: number;
   carbsPct: number;
   state: "ok" | "low" | "high";
-  /** Энергия по формуле Этватера: 9*жиры + 4*белки + 4*чистые углеводы */
-  atwaterKcal: number;
-  /** Отклонение калорийности продуктов от расчёта по Этватеру, % */
-  atwaterDiffPct: number;
-  /** В пределах клинической нормы (отклонение <= 10%) */
-  atwaterOk: boolean;
 }
 
 /**
@@ -128,12 +124,6 @@ export function calculateFrom(
         ? "high"
         : "ok";
 
-  // Валидация по формуле Этватера (4*P + 9*F + 4*NetCarbs)
-  const atwaterKcal = fat * 9 + protein * 4 + netCarbs * 4;
-  const atwaterDiffPct =
-    kcal > 0 ? (Math.abs(atwaterKcal - kcal) / kcal) * 100 : 0;
-  const atwaterOk = atwaterDiffPct <= 10;
-
   return {
     fat,
     protein,
@@ -145,9 +135,6 @@ export function calculateFrom(
     proteinPct: (protein / total) * 100,
     carbsPct: (carbs / total) * 100,
     state,
-    atwaterKcal,
-    atwaterDiffPct,
-    atwaterOk,
   };
 }
 
