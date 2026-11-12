@@ -50,6 +50,19 @@ BOT_ALLOWED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/patients/{patient_id}/logs/medications"),
         ("POST", "/patients/{patient_id}/logs/meals"),
         ("POST", "/patients/{patient_id}/logs/side-effects"),
+        # «Другое время», «Это была моча» и «Удалить запись» под ответом бота
+        # (ADR-0076): запись сохраняется сразу, и поправить её можно здесь же.
+        # Правит и удаляет только автор записи (`services.logs._require_author`),
+        # а автор записи из бота — сам взрослый за привязкой: чужую запись
+        # бот не тронет, как и любой другой канал.
+        *(
+            (method, f"/patients/{{patient_id}}/logs/{kind}/{{log_id}}")
+            for method in ("PATCH", "DELETE")
+            for kind in ("seizures", "ketones", "weight", "medications", "meals", "side-effects")
+        ),
+        # Сценарий «Приступ» (ADR-0076): кнопки «как в прошлый раз». Только
+        # идентификаторы типов — не дневник: читать записи бот по-прежнему не может.
+        ("GET", "/patients/{patient_id}/logs/seizures/recent-types"),
         # Сценарий «Еда → из меню на сегодня»: показать позиции и отметить съеденное.
         ("GET", "/patients/{patient_id}/menus"),
         ("POST", "/patients/{patient_id}/menus/items/{item_id}/eaten"),

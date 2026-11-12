@@ -13,9 +13,10 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Response
+from fastapi import APIRouter, Path, Query, Response
 
 from core.models import KetoneLog, MealLog, MedicationLog, SeizureLog, SideEffectLog, WeightLog
+from core.repositories import diary as diary_repo
 
 from ..deps.auth import PatientAccessDep, SessionDep
 from ..deps.idempotency import WriteAttemptDep
@@ -31,6 +32,7 @@ from ..schemas_logs import (
     MedicationLogCreate,
     MedicationLogRead,
     MedicationLogUpdate,
+    RecentSeizureTypesRead,
     SeizureLogCreate,
     SeizureLogRead,
     SeizureLogUpdate,
@@ -62,6 +64,34 @@ async def list_seizure_logs(
 ) -> Page[SeizureLogRead]:
     return await logs_service.list_logs(
         session, SeizureLog, SeizureLogRead, patient_id=patient_id, period=period, page=page
+    )
+
+
+#: How many recent types the bot shows as «like last time» buttons; the
+#: ceiling keeps the first seizure screen short (ADR-0076).
+RECENT_SEIZURE_TYPES_MAX = 10
+
+
+@router.get(
+    "/seizures/recent-types",
+    response_model=RecentSeizureTypesRead,
+    summary="Недавние типы приступов ребёнка",
+)
+async def recent_seizure_types(
+    patient_id: PatientIdPath,
+    session: SessionDep,
+    _: PatientAccessDep,
+    limit: Annotated[int, Query(ge=1, le=RECENT_SEIZURE_TYPES_MAX)] = 4,
+) -> RecentSeizureTypesRead:
+    """Consumer: the bot's «Приступ» scenario (`BotApi.recent_seizure_types`).
+
+    A separate narrow read instead of the diary list: the list carries
+    durations, notes and triggers, and the bot channel has no business reading
+    them (`BOT_ALLOWED_ROUTES` opens no diary read).
+    """
+
+    return RecentSeizureTypesRead(
+        items=await diary_repo.recent_seizure_types(session, patient_id=patient_id, limit=limit)
     )
 
 

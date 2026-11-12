@@ -196,6 +196,32 @@ async def seizure_type_exists(session: AsyncSession, seizure_type_id: uuid.UUID)
     return found is not None
 
 
+async def recent_seizure_types(
+    session: AsyncSession, *, patient_id: uuid.UUID, limit: int
+) -> list[uuid.UUID]:
+    """Seizure types of the child's recent records, most recently used first.
+
+    Only types a new record may still use: a retired type (ADR-0050) offered as
+    «like last time» would be refused by the very write it starts. Deleted
+    records do not count — they were mistakes, not the child's seizures.
+    """
+
+    last_used = func.max(SeizureLog.occurred_at)
+    stmt = (
+        select(SeizureLog.seizure_type_id)
+        .join(SeizureType, SeizureType.id == SeizureLog.seizure_type_id)
+        .where(
+            SeizureLog.patient_id == patient_id,
+            SeizureLog.deleted_at.is_(None),
+            SeizureType.retired.is_(False),
+        )
+        .group_by(SeizureLog.seizure_type_id)
+        .order_by(last_used.desc())
+        .limit(limit)
+    )
+    return list((await session.scalars(stmt)).all())
+
+
 async def seizure_type_is_retired(session: AsyncSession, seizure_type_id: uuid.UUID) -> bool:
     """Тип выведен из употребления при переходе на ILAE 2025 (ADR-0050).
 

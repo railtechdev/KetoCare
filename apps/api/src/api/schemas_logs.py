@@ -185,6 +185,16 @@ class SeizureLogRead(LogRead):
     triggers: str | None
 
 
+class RecentSeizureTypesRead(BaseModel):
+    """Types of the child's recent seizures, most recently used first (ADR-0076).
+
+    Identifiers only — no dates, durations or notes: the bot needs them to
+    offer «like last time» buttons, and its token must not read the diary.
+    """
+
+    items: list[uuid.UUID]
+
+
 # --- кетоны ---------------------------------------------------------------
 
 
