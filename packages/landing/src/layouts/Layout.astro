@@ -10,7 +10,7 @@ import BaseHead from "../components/BaseHead.astro";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import { useTranslations } from "../i18n";
-import { HTML_LANG, type Locale, type PageKey } from "../i18n/config";
+import { HTML_LANG, pagePath, type Locale, type PageKey } from "../i18n/config";
 import { CONTACT_EMAIL, TELEGRAM_URL } from "../site";
 
 interface Props {
@@ -18,15 +18,25 @@ interface Props {
   page: PageKey;
   title: string;
   description: string;
-  ctaHref: string;
-  ctaLabel: string;
+  /** Стоит ли на странице форма заявки (`#lead`). Иначе кнопка «Оставить
+   *  заявку» ведёт к форме на главной. */
+  hasLead?: boolean;
   /** Микроразметка страницы (FAQPage и т. п.) сверх общей Organization. */
   schema?: unknown;
+  notFound?: boolean;
 }
 
-const { locale, page, title, description, ctaHref, ctaLabel, schema } =
-  Astro.props;
+const {
+  locale,
+  page,
+  title,
+  description,
+  hasLead = false,
+  schema,
+  notFound = false,
+} = Astro.props;
 const d = useTranslations(locale);
+const leadHref = hasLead ? "#lead" : `${pagePath("home", locale)}#lead`;
 
 const organization = {
   "@context": "https://schema.org",
@@ -47,6 +57,7 @@ const organization = {
       page={page}
       title={title}
       description={description}
+      notFound={notFound}
     />
     <script
       is:inline
@@ -65,15 +76,15 @@ const organization = {
     {
       /* Файлом, а не инлайном: с политикой содержимого (`script-src 'self'`)
         инлайновый скрипт не выполнится, а хеш в политике пришлось бы править
-        вместе с каждой правкой скрипта. Синхронный, без `defer`: классы должны
-        стоять до первой отрисовки, иначе скрытые блоки мигают. Содержимое и
+        вместе с каждой правкой скрипта. Синхронный, без `defer`: тема должна
+        стоять до первой отрисовки, иначе страница мигает. Содержимое и
         причины — в `public/boot.js`. */
     }
     <script is:inline src="/boot.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">{d.common.skipToContent}</a>
-    <Header locale={locale} page={page} ctaHref={ctaHref} ctaLabel={ctaLabel} />
+    <Header locale={locale} page={page} leadHref={leadHref} />
     <main id="main">
       <slot />
     </main>

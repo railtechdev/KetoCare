@@ -1,0 +1,78 @@
+---
+/**
+ * Снимок экрана продукта: окно кабинета или экран телефона.
+ *
+ * `eager` — только для первого экрана страницы: снимки ниже грузятся, когда
+ * до них долистали. `crop` у телефона показывает верхнюю часть экрана — там,
+ * где снимок нужен как пример, а не как инструкция, он не должен занимать
+ * пол-экрана телефона посетителя.
+ */
+import { useTranslations } from "../i18n";
+import type { Locale } from "../i18n/config";
+import { SCREENS, screenSrc, type ScreenId } from "../lib/screens";
+
+interface Props {
+  id: ScreenId;
+  locale: Locale;
+  eager?: boolean;
+  caption?: boolean;
+  crop?: boolean;
+  class?: string;
+}
+
+const {
+  id,
+  locale,
+  eager = false,
+  caption = true,
+  crop = false,
+  class: extra,
+} = Astro.props;
+const d = useTranslations(locale);
+const screen = SCREENS[id];
+const zoom = screen.kind === "cabinet";
+const src = screenSrc(id, locale);
+const text = d.shots[id];
+const classes = [
+  "shot",
+  `shot--${screen.kind}`,
+  crop ? "shot--crop" : "",
+  extra ?? "",
+]
+  .filter(Boolean)
+  .join(" ");
+---
+
+<figure class={classes}>
+  <div class="shot__frame">
+    {
+      /* Снимок кабинета на странице уменьшен, и мелкие подписи на нём не
+        прочесть, — он открывается в натуральную величину. Название ссылки —
+        описание снимка. */
+      zoom ? (
+        <a class="shot__zoom" href={src}>
+          <img
+            src={src}
+            width={screen.width}
+            height={screen.height}
+            alt={text.alt}
+            loading={eager ? "eager" : "lazy"}
+            decoding="async"
+            fetchpriority={eager ? "high" : undefined}
+          />
+        </a>
+      ) : (
+        <img
+          src={src}
+          width={screen.width}
+          height={screen.height}
+          alt={text.alt}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
+          fetchpriority={eager ? "high" : undefined}
+        />
+      )
+    }
+  </div>
+  {caption && <figcaption class="shot__caption">{text.caption}</figcaption>}
+</figure>

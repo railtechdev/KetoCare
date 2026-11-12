@@ -1,13 +1,20 @@
 ---
+/**
+ * Главная. Порядок блоков — вопросы посетителя по очереди: что это (первый
+ * экран со снимком продукта), что получает врач, что получает семья, как это
+ * устроено, насколько это безопасно, частые вопросы, заявка.
+ *
+ * Мерило длины — телефон: не больше семи экранов на 360 px (прежняя главная
+ * занимала шестнадцать с половиной), на ноутбуке 1440 × 900 — не больше
+ * четырёх. Подробности живут на страницах разделов, сюда — по пять строк.
+ */
 import { useTranslations } from "../../i18n";
 import { pagePath, type Locale } from "../../i18n/config";
-import { JOIN_URL } from "../../site";
 import Layout from "../../layouts/Layout.astro";
-import BotChat from "../BotChat.astro";
+import { JOIN_URL } from "../../site";
 import Faq from "../Faq.astro";
-import HeroPreview from "../HeroPreview.astro";
-import KetoCalculator from "../KetoCalculator.astro";
 import LeadForm from "../LeadForm.astro";
+import Screen from "../Screen.astro";
 
 interface Props {
   locale: Locale;
@@ -34,287 +41,121 @@ const faqSchema = {
   page="home"
   title={h.seo.title}
   description={h.seo.description}
-  ctaHref="#cta"
-  ctaLabel={d.nav.earlyAccess}
+  hasLead
   schema={faqSchema}
 >
-  {/* ---------- Первый экран (Hero + превью кабинета) ---------- */}
   <section class="hero">
-    <div class="hero__glow hero__glow--amber" aria-hidden="true"></div>
-    <div class="hero__glow hero__glow--blue" aria-hidden="true"></div>
-    <div class="wrap hero__inner split">
-      <div class="split__text">
-        <p class="badge">
-          <span class="badge__dot" aria-hidden="true"></span>{h.hero.badge}
-        </p>
-        <h1 class="h1" style="margin:22px 0 20px">{h.hero.h1}</h1>
-        <p class="lead measure--tight" style="margin-bottom:32px">
-          {h.hero.lead}
-        </p>
-        <div class="btn-row" style="margin-bottom:28px">
-          <a class="btn btn--primary" href="#cta">{h.hero.ctaFamily}</a>
-          <a class="btn btn--secondary" href={pagePath("doctors", locale)}
-            >{h.hero.ctaDoctors}</a
+    <div class="wrap hero__grid">
+      <div class="hero__text">
+        <h1 class="h1">{h.hero.h1}</h1>
+        <p class="lead">{h.hero.lead}</p>
+        <div class="btn-row">
+          <a class="btn btn--primary" href="#lead">{h.hero.ctaPrimary}</a>
+          <a class="btn btn--secondary" href={pagePath("howItWorks", locale)}
+            >{h.hero.ctaSecondary}</a
           >
-          <a class="btn btn--outline" href={JOIN_URL}>{d.nav.clinicCode}</a>
         </div>
-        <ul class="chip-row">
-          {h.hero.chips.map((c) => <li class="chip">{c}</li>)}
-        </ul>
-      </div>
-
-      <div class="split__media reveal">
-        <HeroPreview locale={locale} />
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- Клинические индикаторы платформы (Stats Bar) ---------- */}
-  <section class="wrap">
-    <div class="portal-stats">
-      {
-        h.stats.map((st) => (
-          <div class="portal-stat-card">
-            <div class="portal-stat-card__val num tabular-nums">{st.value}</div>
-            <div class="portal-stat-card__label">{st.label}</div>
-            <p class="portal-stat-card__desc">{st.note}</p>
-          </div>
-        ))
-      }
-    </div>
-  </section>
-
-  {/* ---------- Направления портала (Portal Navigation Cards) ---------- */}
-  <section
-    class="section section--white section--bordered"
-    id="portal-directions"
-  >
-    <div class="wrap reveal">
-      <div style="text-align:center;max-width:760px;margin:0 auto 48px">
-        <p class="eyebrow">{h.portalNav.eyebrow}</p>
-        <h2 class="h2" style="margin-bottom:14px">{h.portalNav.h2}</h2>
-        <p class="lead" style="color:var(--ink-muted)">{h.portalNav.lead}</p>
-      </div>
-
-      <div class="portal-directions">
-        {/* Карточка 1: Для Семей и Пациентов */}
-        <div class="portal-card">
-          <div>
-            <div class="portal-card__icon" aria-hidden="true">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-            </div>
-            <p class="eyebrow" style="margin-bottom:8px">
-              {h.portalNav.familyCard.badge}
-            </p>
-            <h3 class="portal-card__title">{h.portalNav.familyCard.title}</h3>
-            <p class="portal-card__lead">{h.portalNav.familyCard.desc}</p>
-          </div>
-          <a class="portal-card__cta" href={pagePath("forFamilies", locale)}>
-            {h.portalNav.familyCard.cta}
-            <span aria-hidden="true">→</span>
-          </a>
-        </div>
-
-        {/* Карточка 2: Для Врачей и Клиник */}
-        <div class="portal-card portal-card--dark">
-          <div>
-            <div class="portal-card__icon" aria-hidden="true">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-              </svg>
-            </div>
-            <p
-              class="eyebrow"
-              style="color:var(--dark-accent);margin-bottom:8px"
-            >
-              {h.portalNav.doctorCard.badge}
-            </p>
-            <h3 class="portal-card__title" style="color:var(--dark-ink)">
-              {h.portalNav.doctorCard.title}
-            </h3>
-            <p class="portal-card__lead">{h.portalNav.doctorCard.desc}</p>
-          </div>
-          <a class="portal-card__cta" href={pagePath("doctors", locale)}>
-            {h.portalNav.doctorCard.cta}
-            <span aria-hidden="true">→</span>
-          </a>
-        </div>
-
-        {/* Карточка 3: Методология и строгость */}
-        <div class="portal-card">
-          <div>
-            <div class="portal-card__icon" aria-hidden="true">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              </svg>
-            </div>
-            <p class="eyebrow" style="margin-bottom:8px">
-              {h.portalNav.methodologyCard.badge}
-            </p>
-            <h3 class="portal-card__title">
-              {h.portalNav.methodologyCard.title}
-            </h3>
-            <p class="portal-card__lead">{h.portalNav.methodologyCard.desc}</p>
-          </div>
-          <a class="portal-card__cta" href={pagePath("methodology", locale)}>
-            {h.portalNav.methodologyCard.cta}
-            <span aria-hidden="true">→</span>
-          </a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- Интерактивный калькулятор ---------- */}
-  <section class="section section--sand" id="calculator">
-    <div class="wrap reveal">
-      <div class="split" style="align-items:flex-start">
-        <div class="split__text">
-          <p class="eyebrow">{h.calc.eyebrow}</p>
-          <h2 class="h2" style="max-width:20ch;margin-bottom:18px">
-            {h.calc.h2}
-          </h2>
-          <p class="lead measure--tight" style="margin-bottom:14px">
-            {h.calc.lead1}
-          </p>
-          <p class="lead measure--tight" style="margin-bottom:24px">
-            {h.calc.lead2}
-          </p>
-          <p class="note">{h.calc.note}</p>
-        </div>
-        <div class="split__media">
-          <KetoCalculator locale={locale} />
-        </div>
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- Telegram & Mobile экосистема ---------- */}
-  <section class="section">
-    <div class="wrap split reveal">
-      <div class="split__text">
-        <p class="eyebrow">{h.telegram.eyebrow}</p>
-        <h2 class="h2" style="max-width:20ch;margin-bottom:16px">
-          {h.telegram.h2}
-        </h2>
-        <p class="lead measure--tight" style="margin-bottom:18px">
-          {h.telegram.lead}
+        <p class="hero__code">
+          {h.hero.codeHint}
+          <a class="text-link" href={JOIN_URL}>{d.nav.enterCode}</a>
         </p>
+      </div>
+      <div class="hero__media duo">
+        <Screen id="overview" locale={locale} eager caption={false} />
+        <Screen
+          id="appHome"
+          locale={locale}
+          eager
+          caption={false}
+          crop
+          class="duo__phone"
+        />
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" aria-labelledby="h-doctor">
+    <div class="wrap split">
+      <div class="split__text">
+        <h2 class="h2" id="h-doctor">{h.doctor.h2}</h2>
         <ul class="tick-list">
-          {h.telegram.items.map((i) => <li>{i}</li>)}
+          {h.doctor.items.map((item) => <li>{item}</li>)}
         </ul>
+        <a class="more-link" href={pagePath("doctors", locale)}
+          >{h.doctor.more}<span aria-hidden="true"> →</span></a
+        >
       </div>
       <div class="split__media">
-        <BotChat locale={locale} />
+        <Screen id="patients" locale={locale} />
       </div>
     </div>
   </section>
 
-  {/* ---------- Доверие и стандарты ---------- */}
-  <section
-    class="section section--white"
-    style="border-bottom:1px solid var(--border)"
-  >
-    <div class="wrap reveal">
-      <p class="eyebrow">{h.trust.eyebrow}</p>
-      <h2 class="h2" style="max-width:24ch;margin-bottom:44px">{h.trust.h2}</h2>
-      <div class="grid grid--auto-sm">
+  <section class="section" aria-labelledby="h-family">
+    <div class="wrap split split--reverse split--phone">
+      <div class="split__text">
+        <h2 class="h2" id="h-family">{h.family.h2}</h2>
+        <ul class="tick-list">
+          {h.family.items.map((item) => <li>{item}</li>)}
+        </ul>
+        <a class="more-link" href={pagePath("forFamilies", locale)}
+          >{h.family.more}<span aria-hidden="true"> →</span></a
+        >
+      </div>
+      <div class="split__media hide-narrow">
+        <Screen id="appMenu" locale={locale} crop />
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" aria-labelledby="h-steps">
+    <div class="wrap">
+      <h2 class="h2" id="h-steps">{h.steps.h2}</h2>
+      <ol class="steps">
         {
-          h.trust.items.map((item) => (
-            <div class="card">
-              <h3 class="card__title">{item.title}</h3>
-              <p class="card__text">{item.text}</p>
-            </div>
+          h.steps.items.map((step) => (
+            <li class="steps__item">
+              <h3 class="h3">{step.title}</h3>
+              <p>{step.text}</p>
+            </li>
           ))
         }
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- Частые вопросы ---------- */}
-  <section class="section">
-    <div class="wrap wrap--text reveal">
-      <h2 class="h2" style="margin-bottom:32px">{h.faq.h2}</h2>
-      <Faq locale={locale} />
-    </div>
-  </section>
-
-  {/* ---------- Заявки и активация ---------- */}
-  <section
-    class="section section--white"
-    id="cta"
-    style="border-top:1px solid var(--border)"
-  >
-    <div class="wrap">
-      <div style="text-align:center;margin-bottom:44px">
-        <h2 class="h2" style="margin-bottom:14px">{h.cta.h2}</h2>
-        <p class="lead" style="max-width:56ch;margin-inline:auto">
-          {h.cta.lead}
-        </p>
-      </div>
-      <div
-        class="grid"
-        style="grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));max-width:920px;margin-inline:auto"
+      </ol>
+      <a class="more-link" href={pagePath("howItWorks", locale)}
+        >{h.steps.more}<span aria-hidden="true"> →</span></a
       >
-        <div class="card card--sunken" style="padding:32px;border-radius:20px">
-          <p class="eyebrow" style="margin-bottom:10px">
-            {h.cta.family.eyebrow}
-          </p>
-          <h3 class="card__title" style="font-size:1.19rem">
-            {h.cta.family.title}
-          </h3>
-          <p class="card__text" style="margin-bottom:20px">
-            {h.cta.family.text}
-          </p>
-          <LeadForm locale={locale} variant="family" />
-        </div>
-        <div class="card card--dark" style="padding:32px;border-radius:20px">
-          <p class="eyebrow" style="margin-bottom:10px">
-            {h.cta.doctors.eyebrow}
-          </p>
-          <h3 class="card__title" style="font-size:1.19rem">
-            {h.cta.doctors.title}
-          </h3>
-          <p
-            class="card__text"
-            style="color:var(--dark-muted);margin-bottom:20px"
-          >
-            {h.cta.doctors.text}
-          </p>
-          <a class="btn btn--on-dark" href={pagePath("doctors", locale)}
-            >{h.cta.doctors.cta}</a
-          >
-        </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="h-safety">
+    <div class="wrap">
+      <h2 class="h2" id="h-safety">{h.safety.h2}</h2>
+      <ul class="cards">
+        {
+          h.safety.items.map((item) => (
+            <li class="card">
+              <h3 class="h3">{item.title}</h3>
+              <p>{item.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+      <a class="more-link" href={pagePath("methodology", locale)}
+        >{h.safety.more}<span aria-hidden="true"> →</span></a
+      >
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap faq-lead">
+      <div aria-labelledby="h-faq" role="region">
+        <h2 class="h2" id="h-faq">{h.faq.h2}</h2>
+        <Faq locale={locale} />
+      </div>
+      <div id="lead" aria-labelledby="h-lead" role="region">
+        <h2 class="h2" id="h-lead">{h.lead.h2}</h2>
+        <p class="lead lead--tight">{h.lead.text}</p>
+        <LeadForm locale={locale} />
       </div>
     </div>
   </section>

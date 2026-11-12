@@ -3,6 +3,10 @@
  * Демонстрационный калькулятор. Значения по умолчанию считаются на сборке,
  * поэтому без JavaScript посетитель видит корректный расчёт — просто без
  * возможности двигать ползунки.
+ *
+ * Вердикт стоит НАД ползунками: на телефоне четыре ползунка занимают экран, и
+ * вердикт под ними двигали вслепую — ответ на вопрос «подходит ли блюдо»
+ * оказывался ниже сгиба.
  */
 import { t, useTranslations } from "../i18n";
 import type { Locale } from "../i18n/config";
@@ -20,146 +24,123 @@ interface Props {
 
 const { locale } = Astro.props;
 const d = useTranslations(locale);
+const c = d.calc;
 
 const initial = INGREDIENTS.map((i) => i.initial);
 const r = calculate(initial);
 
-const verdictText = {
-  ok: d.home.calc.verdictOk,
-  low: d.home.calc.verdictLow,
-  high: d.home.calc.verdictHigh,
-};
+const verdictText = { ok: c.verdictOk, low: c.verdictLow, high: c.verdictHigh };
 
-/**
- * Строки, которые скрипту нужны в браузере: он не имеет доступа к словарю.
- */
+/** Строки, которые скрипту нужны в браузере: словаря у него нет. */
 const configJson = JSON.stringify({
-  ingredients: INGREDIENTS,
   target: TARGET_RATIO,
   tolerance: TOLERANCE,
   locale,
   grams: d.common.grams,
+  kcal: d.common.kcal,
+  netCarbs: c.netCarbs,
   verdict: verdictText,
-  atwaterOkText: d.home.calc.atwaterBadge,
 }).replaceAll("<", "\\u003c");
+
+const grams = (value: number) =>
+  `${formatNumber(value, locale)}\u00a0${d.common.grams}`;
 ---
 
 <div class="calc" data-calc>
   <div class="calc__head">
     <div>
-      <strong style="display:block;font-size:1.06rem">{d.home.calc.dish}</strong
-      >
-      <span style="font-size:0.79rem;color:var(--ink-muted)"
-        >{d.home.calc.targetRatioCorridor}</span
-      >
+      <p class="calc__dish">{c.dish}</p>
+      <p class="calc__target">{c.target}</p>
     </div>
-    <span class="num tabular-nums" data-calc-kcal
-      >{Math.round(r.kcal)} {d.common.kcal}</span
-    >
+    <p class="calc__kcal num" data-calc-kcal>
+      {Math.round(r.kcal)}&nbsp;{d.common.kcal}
+    </p>
   </div>
 
-  {
-    INGREDIENTS.map((ing, i) => (
-      <div class="calc__ing">
-        <div class="calc__ing-row">
-          <label for={`calc-ing-${i}`}>{d.home.calc.ingredients[i]}</label>
-          <span class="num tabular-nums" data-calc-grams={i}>
-            {ing.initial} {d.common.grams}
-          </span>
-        </div>
-        <input
-          type="range"
-          id={`calc-ing-${i}`}
-          min="0"
-          max={ing.max}
-          step="5"
-          value={ing.initial}
-          data-calc-input={i}
-          aria-label={t(d.home.calc.sliderLabel, {
-            name: d.home.calc.ingredients[i] ?? "",
-          })}
-        />
-      </div>
-    ))
-  }
-
-  <div class="calc__total">
-    <div class="macro-bar" aria-hidden="true">
-      <span
-        style={`width:${r.fatPct.toFixed(1)}%;background:var(--macro-fat)`}
-        data-calc-bar="fat"></span>
-      <span
-        style={`width:${r.proteinPct.toFixed(1)}%;background:var(--macro-protein)`}
-        data-calc-bar="protein"></span>
-      <span
-        style={`width:${r.carbsPct.toFixed(1)}%;background:var(--macro-carbs)`}
-        data-calc-bar="carbs"></span>
-    </div>
-    <div class="macro-legend">
-      <span>
-        <i style="background:var(--macro-fat)" aria-hidden="true"></i>
-        {d.common.fat}
-        <strong class="num tabular-nums" data-calc-macro="fat">
-          {formatNumber(r.fat, locale)}&nbsp;{d.common.grams}
-        </strong>
-      </span>
-      <span>
-        <i style="background:var(--macro-protein)" aria-hidden="true"></i>
-        {d.common.protein}
-        <strong class="num tabular-nums" data-calc-macro="protein">
-          {formatNumber(r.protein, locale)}&nbsp;{d.common.grams}
-        </strong>
-      </span>
-      <span>
-        <i style="background:var(--macro-carbs)" aria-hidden="true"></i>
-        {d.common.carbs}
-        <strong class="num tabular-nums" data-calc-macro="carbs">
-          {formatNumber(r.carbs, locale)}&nbsp;{d.common.grams}
-        </strong>
-      </span>
-    </div>
-
-    <p class="calc__net-carbs">
-      {d.home.calc.netCarbs}{" "}
-      <strong class="num tabular-nums" data-calc-net-carbs>
-        {formatNumber(r.netCarbs, locale)}&nbsp;{d.common.grams}
-      </strong>
-      {" — "}{d.home.calc.netCarbsNote}
+  <div class="calc__verdict" data-calc-verdict data-state={r.state}>
+    <p class="calc__ratio num" data-calc-ratio>
+      {formatNumber(r.ratio, locale, 2)} : 1
     </p>
-
-    <div
-      class="calc__verdict"
-      data-calc-verdict
-      data-state={r.state === "ok" ? "ok" : "off"}
+    <p
+      class="calc__verdict-text"
+      data-calc-verdict-text
       role="status"
       aria-live="polite"
     >
-      <span
-        class={r.state === "ok"
-          ? "ratio-badge"
-          : "ratio-badge ratio-badge--off"}
-        data-calc-ratio
-      >
-        {formatNumber(r.ratio, locale, 2)} : 1
-      </span>
-      <span class="calc__verdict-text" data-calc-verdict-text
-        >{verdictText[r.state]}</span
-      >
-    </div>
-
-    <div class="atwater-box" data-calc-atwater>
-      <div class="atwater-box__header">
-        <span class="atwater-badge" data-calc-atwater-badge>
-          {d.home.calc.atwaterBadge}
-        </span>
-      </div>
-      <p class="atwater-box__note">
-        {d.home.calc.atwaterNote}
-      </p>
-    </div>
-
-    <p class="calc__disclaimer">{d.home.calc.disclaimer}</p>
+      {verdictText[r.state]}
+    </p>
   </div>
+
+  <div class="macro-bar" aria-hidden="true">
+    <span
+      class="macro-bar__fat"
+      style={`width:${r.fatPct.toFixed(1)}%`}
+      data-calc-bar="fat"></span>
+    <span
+      class="macro-bar__protein"
+      style={`width:${r.proteinPct.toFixed(1)}%`}
+      data-calc-bar="protein"></span>
+    <span
+      class="macro-bar__carbs"
+      style={`width:${r.carbsPct.toFixed(1)}%`}
+      data-calc-bar="carbs"></span>
+  </div>
+  <dl class="macro-legend">
+    <div>
+      <dt>
+        <i class="macro-dot macro-dot--fat" aria-hidden="true"></i>{
+          d.common.fat
+        }
+      </dt>
+      <dd class="num" data-calc-macro="fat">{grams(r.fat)}</dd>
+    </div>
+    <div>
+      <dt>
+        <i class="macro-dot macro-dot--protein" aria-hidden="true"></i>{
+          d.common.protein
+        }
+      </dt>
+      <dd class="num" data-calc-macro="protein">{grams(r.protein)}</dd>
+    </div>
+    <div>
+      <dt>
+        <i class="macro-dot macro-dot--carbs" aria-hidden="true"></i>{
+          d.common.carbs
+        }
+      </dt>
+      <dd class="num" data-calc-macro="carbs">{grams(r.carbs)}</dd>
+    </div>
+  </dl>
+
+  <div class="calc__sliders">
+    {
+      INGREDIENTS.map((ing, i) => (
+        <div class="calc__ing">
+          <div class="calc__ing-row">
+            <label for={`calc-ing-${i}`}>{c.ingredients[i]}</label>
+            <output class="num" for={`calc-ing-${i}`} data-calc-grams={i}>
+              {ing.initial}&nbsp;{d.common.grams}
+            </output>
+          </div>
+          <input
+            type="range"
+            id={`calc-ing-${i}`}
+            min="0"
+            max={ing.max}
+            step="5"
+            value={ing.initial}
+            data-calc-input={i}
+            aria-label={t(c.sliderLabel, { name: c.ingredients[i] ?? "" })}
+          />
+        </div>
+      ))
+    }
+  </div>
+
+  <p class="calc__note" data-calc-net-carbs>
+    {t(c.netCarbs, { value: grams(r.netCarbs) })}
+  </p>
+  <p class="calc__note">{c.disclaimer}</p>
 
   <script
     is:inline

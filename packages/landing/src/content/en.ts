@@ -1,885 +1,535 @@
+import type { Dict } from "./ru";
+
 /**
- * Английская версия словаря лендинга.
- *
- * Структура обязана в точности повторять `ru.ts` (тип `Dict`): недостающий или
- * лишний ключ — ошибка `astro check`. Формулировки правятся здесь, не в разметке.
+ * English. The structure mirrors `ru.ts` key for key; a missing key is a type
+ * error. The product's doctor cabinet is in Russian, so captions of its
+ * screenshots say so.
  */
-
-import type { ChatMsg, Dict, HowStep, Level, QueueItem } from "./ru";
-
 export const en: Dict = {
-  /** Подписи интерфейса, общие для всех страниц. */
   common: {
     brand: "KetoCare",
-    /** Буква в квадрате логотипа: у латиницы и кириллицы она разная. */
     brandMark: "K",
     skipToContent: "Skip to content",
-    openMenu: "Open menu",
-    closeMenu: "Close menu",
+    openMenu: "Menu",
+    closeMenu: "Close",
+    mainNav: "Main sections",
     languageLabel: "Site language",
-    toggleTheme: "Toggle theme (light / dark)",
+    toggleTheme: "Dark theme",
     grams: "g",
     kcal: "kcal",
     fat: "Fat",
     protein: "Protein",
     carbs: "Carbs",
-    netCarbs: "Net carbs",
-    gki: "GKI index",
-    glucose: "Glucose",
-    ketones: "Ketones",
-    seizure: "Seizure",
-    weight: "Weight",
-    ratio: "Keto ratio",
-    clinicCode: "I have a clinic code",
-    login: "Log in",
   },
 
   nav: {
-    howItWorks: "How it works",
-    forFamilies: "For families",
-    forDoctors: "For clinicians",
-    methodology: "Methodology & safety",
-    doctors: "For clinicians",
-    login: "Log in",
-    clinicCode: "Clinic code",
-    earlyAccess: "Early access",
-    pilot: "Request a pilot",
     home: "Home",
+    doctors: "For doctors",
+    families: "For families",
+    howItWorks: "How it works",
+    methodology: "Calculation and safety",
+    login: "Log in",
+    enterCode: "Enter access code",
+    lead: "Send a request",
   },
 
-  /** Форма заявки — одна на два места (семьям и врачам). */
+  shots: {
+    overview: {
+      alt: "Doctor's cabinet, patient overview: today's totals — ketogenic ratio 3.5 : 1, 1,303 of 1,300 kcal, carbs 11.4 of 14 g; the current prescription on the right.",
+      caption:
+        "Doctor's cabinet (in Russian): the child's day next to the prescription",
+    },
+    patients: {
+      alt: "Doctor's cabinet, patient list: at the top, children flagged «Prolonged seizure», «No prescription yet», «No readings for 5 days» with a «Remind the family in Telegram» button; below, «No issues».",
+      caption: "Patient list (in Russian): those who need attention come first",
+    },
+    prescription: {
+      alt: "Doctor's cabinet, prescription form: ketogenic ratio from a list, calories with a hint by age and weight, protein, carbs, meals, fluid; version history on the right.",
+      caption:
+        "Prescription (in Russian): hints by age and weight, version history",
+    },
+    menu: {
+      alt: "Doctor's cabinet, weekly menu: four meals a day, the ketogenic ratio and calories under each day.",
+      caption: "Weekly menu (in Russian) with totals for each day",
+    },
+    ketones: {
+      alt: "Doctor's cabinet, ketone diary: a one-month chart, ketones rising from 0.8 to 3.1 mmol/L.",
+      caption: "Ketone diary for a month (in Russian)",
+    },
+    seizures: {
+      alt: "Doctor's cabinet, seizure diary: a table by day and time of day — morning, afternoon, evening, night — with the number of seizures.",
+      caption: "Seizures by day and time of day (in Russian)",
+    },
+    growth: {
+      alt: "Doctor's cabinet, height and weight: position against WHO standards and a table of measurements.",
+      caption: "Height and weight against WHO standards (in Russian)",
+    },
+    appHome: {
+      alt: "Telegram app, the family's home screen: prescription 3.5 : 1 and 1,300 kcal, today's totals, latest readings.",
+      caption: "Telegram app: home screen",
+    },
+    appMenu: {
+      alt: "Telegram app, today's menu: meal 1 — spinach omelette, the «What to weigh» list is open: egg 53 g, cream 20 g, butter 24 g, spinach 10 g; the first two meals are marked as eaten.",
+      caption: "Today's menu: what to weigh and what has been eaten",
+    },
+    appDiary: {
+      alt: "Telegram app, diary: an «Add entry» button, ketone and weight charts for 30 days.",
+      caption: "Diary: 30-day charts",
+    },
+  },
+
   leadForm: {
-    emailLabel: "Email address",
-    emailPlaceholderFamily: "Email",
-    emailPlaceholderDoctor: "Work email",
-    submitFamily: "Request access",
-    submitDoctor: "Send",
+    emailLabel: "Email",
+    emailPlaceholder: "name@example.com",
+    audienceLegend: "Who are you",
+    audienceDoctor: "Doctor or clinic",
+    audienceFamily: "Family",
+    submit: "Send request",
     sending: "Sending…",
-    errorEmail: "Please check the address — it looks like there is a typo.",
+    errorEmail: "Please check the email address — it looks like a typo.",
     errorNetwork:
-      "We could not send your request. Please try again or write to us by email.",
+      "We could not send your request. Please try again or write to {email}.",
     errorRateLimited:
-      "Too many requests from your address. Write to us at {email}.",
-    doneFamily:
-      "Got it. We will write to {email} when access becomes available.",
-    doneDoctor: "Your request is in. We will contact you at {email}.",
+      "There have been many requests from your address. Please write to {email}.",
+    doneTitle: "Request sent",
+    doneText:
+      "The KetoCare administrator will receive it. Reply address: {email}.",
+    again: "Use a different address",
     consent:
-      "By sending this form you agree that we may contact you at the address you provide. Please do not include medical data in the form.",
+      "We use the address only to reply to your request. Please do not write anything about the child's health in the form.",
   },
 
   home: {
     seo: {
       title:
-        "KetoCare — pediatric ketogenic diet therapy under clinical supervision",
+        "KetoCare — ketogenic diet for a child with epilepsy: doctor and family",
       description:
-        "Ketogenic diet therapy platform for children with drug-resistant epilepsy: meals calculated to prescription, six diaries, clinical triage for doctors. Web and Telegram.",
+        "The doctor sets the prescription, the family cooks by the gram and keeps diaries in Telegram, the doctor sees how the therapy goes. A web cabinet and a Telegram app.",
     },
     hero: {
-      badge: "Platform active and evolving",
-      h1: "Pediatric ketogenic diet therapy — strictly per clinical prescription",
-      lead: "KetoCare brings families and clinicians into a single clinical loop: automated meal calculations with error protection, real-time GKI monitoring, seizure logging (Web + Telegram Mini App), and patient triage for clinicians.",
-      ctaFamily: "Early access for families",
-      ctaDoctors: "Clinicians & centers",
-      ctaClinicCode: "I have a clinic code",
-      chips: [
-        "Strictly per physician prescription",
-        "Mathematical gram calculation",
-        "GKI & Atwater checksum verification",
-        "Web + Telegram Mini App",
+      h1: "Ketogenic diet for a child with epilepsy: doctor and family in one system",
+      lead: "The doctor sets the prescription. The family cooks by the gram and keeps the diary on the phone. The doctor sees how the therapy is going — no notebooks and no manual recalculation.",
+      ctaPrimary: "Send a request",
+      ctaSecondary: "How it works",
+      codeHint: "Has your doctor already given you an access code?",
+    },
+    doctor: {
+      h2: "What the doctor gets",
+      items: [
+        "A prescription in a minute — with a calorie hint by age and weight.",
+        "A patient list that puts first those who need attention.",
+        "The family's diaries with charts: seizures, ketones, weight, wellbeing, medications, meals.",
+        "Growth against WHO standards, follow-up visits, PDF reports.",
+        "Printing of the prescription and the menu for the family.",
       ],
-      card: {
-        today: "Today",
-        childName: "Anya · 7 yo",
-        childInitials: "AI",
-        nextMeal: "Next meal · 12:30",
-        ratio: "3.50 : 1",
-        dish: "Omelet with heavy cream and broccoli",
-        dishMacros: "310 kcal · fat 29.4 g · protein 6.8 g · carbs 1.6 g",
-        dayVsPrescription: "Day vs Prescription",
-        caloriesLabel: "Calories",
-        caloriesValue: "742 / 1200 kcal",
-        fatValue: "68.2 g",
-        proteinValue: "17.1 g",
-        carbsValue: "7.7 g",
-        carbsLeft: "Carbs remaining today: <strong>4.3 g</strong> of 12",
-        quickKetones: "+ Ketones",
-        quickWeight: "+ Weight",
-        quickSeizure: "Seizure",
-        caption: "Parent dashboard — main home screen preview",
-      },
-      preview: {
-        tabParent: "Parent Mode (Diary & Nutrition)",
-        tabDoctor: "Doctor Mode (Clinical Triage & GKI)",
-        parent: {
-          childName: "Anya I. · 7 yo",
-          childInitials: "AI",
-          today: "Today",
-          targetRatioBadge: "3.50 : 1 — Target met",
-          nextMeal: "Lunch · 12:30",
-          dish: "Omelet with heavy cream and broccoli",
-          dishGrams:
-            "Egg 40 g · Heavy cream 35 g · Butter 22 g · Broccoli 25 g",
-          dishMacros: "310 kcal · fat 29.4 g · protein 6.8 g · carbs 1.6 g",
-          dayVsPrescription: "Day vs Prescription",
-          caloriesLabel: "Calories",
-          caloriesValue: "742 / 1200 kcal",
-          fatValue: "68.2 g",
-          proteinValue: "17.1 g",
-          carbsValue: "7.7 g",
-          carbsLeft: "Carbs remaining today: <strong>4.3 g</strong> of 12",
-          gkiBadge: "GKI 1.8 — Deep therapeutic ketosis",
-          gkiDetails: "Glucose: 4.5 mmol/L · Ketones: 2.5 mmol/L",
-          quickKetones: "+ Ketones",
-          quickGlucose: "+ Glucose",
-          quickWeight: "+ Weight",
-          quickSeizure: "Seizure",
-          caption:
-            "Parent dashboard — exact gram weights, daily targets, and 1-click logs",
-        },
-        doctor: {
-          pinnedHeader: {
-            patientName: "Anya I. · 7 yo (21.4 kg, 118 cm)",
-            prescription:
-              "Prescription: 3.50 : 1 · 1200 kcal/day · protein 25 g",
-            gki: "Current GKI: 1.80 (in range)",
-          },
-          triageTitle: "Clinical Patient Triage (Traffic Light)",
-          triageRed: {
-            name: "Misha K. · 5 yo",
-            badge: "Red zone",
-            reason:
-              "No data for 4 days · Risk of hypoglycemia and seizure cluster",
-          },
-          triageYellow: {
-            name: "Anya I. · 7 yo",
-            badge: "Yellow zone",
-            reason: "Ratio 2.90 : 1 (below target corridor 3 days in a row)",
-          },
-          triageGreen: {
-            name: "Damir T. · 9 yo",
-            badge: "Green zone",
-            reason: "GKI 1.45 · Ketones 3.2 mmol/L · 0 seizures in 14 days",
-          },
-          trendTitle: "Ketones and glucose trend (therapeutic corridor)",
-          trendKetones: "Blood ketones: 1.2 → 2.8 mmol/L (rising)",
-          trendGlucose: "Blood glucose: 4.8 → 4.3 mmol/L (stable)",
-          trendGki: "GKI decreased from 3.8 to 1.8 (therapeutic target met)",
-          caption:
-            "Doctor cabinet — clinical patient traffic light, pinned header, and trends",
-        },
-      },
+      more: "More for doctors",
     },
-    stats: [
-      {
-        value: "3.50 : 1",
-        label: "Target prescription corridor",
-        note: "Mathematical LP engine control",
-      },
-      {
-        value: "< 10%",
-        label: "Atwater checksum verification",
-        note: "Protects food database from labeling errors",
-      },
-      {
-        value: "5 sec",
-        label: "Logging seizure or ketones",
-        note: "Web + Telegram Mini App",
-      },
-      {
-        value: "2FA",
-        label: "Clinical secure perimeter",
-        note: "Strict RBAC & audit logging",
-      },
-    ],
-    portalNav: {
-      eyebrow: "Platform sections",
-      h2: "Unified medical platform for families and clinical teams",
-      lead: "Engineered with specialized operational environments, strict role segregation, and seamless real-time data sync.",
-      familyCard: {
-        badge: "For parents",
-        title: "For families & patients",
-        desc: "Kitchen-ready gram weights, a dish calculator checked against the prescription, Telegram Mini App, and 6 diaries without paper notebooks.",
-        cta: "Explore family portal",
-      },
-      doctorCard: {
-        badge: "For clinicians",
-        title: "For clinicians & centers",
-        desc: "Real-time patient traffic light triage, LP gram optimization, and pre-consultation reports.",
-        cta: "Clinical features in detail",
-      },
-      methodologyCard: {
-        badge: "Evidence base",
-        title: "Methodology & security",
-        desc: "Isolated keto_engine math core, product calorie checks, ratios from 1:1 to 5:1, and 2FA protection.",
-        cta: "Review methodology",
-      },
-    },
-    mission: {
-      eyebrow: "Mission",
-      h2: "Delivering clinical precision at home every single day",
-      lead: "Ketogenic diet therapy can provide life-changing relief for children with drug-resistant epilepsy — but only when followed with strict adherence. Between consultations, families are left alone with calculations. KetoCare unites family and physician in one secure loop.",
-      families: {
-        title: "What families can expect",
-        items: [
-          "Every meal calculated to prescription — no kitchen arithmetic or notebooks",
-          "Daily menus and six diaries — in a couple of taps from your phone",
-          "Your physician sees real-time trends — you never navigate therapy alone",
-        ],
-      },
-      doctors: {
-        title: "What clinicians can expect",
-        items: [
-          "Versioned prescriptions with tolerances — full immutable audit trail",
-          "Risk-sorted patient triage list and detailed interactive chart",
-          "Consultation summary generated from family logs — discussions backed by data",
-        ],
-      },
+    family: {
+      h2: "What the family gets",
+      items: [
+        "A daily menu: how many grams of each product to weigh.",
+        "A dish check against the child's prescription and fitting grams to the target.",
+        "A diary in a couple of taps in Telegram, and reminders.",
+        "An assistant that answers questions about how the app works.",
+        "Access for the second parent or a grandmother. Russian and Uzbek.",
+      ],
+      more: "More for families",
     },
     steps: {
-      eyebrow: "How it works",
-      h2: "Three roles, one diary, zero guesswork in the kitchen",
+      h2: "How it works",
       items: [
         {
-          title: "Clinician issues prescription",
-          text: "Ketogenic ratio, daily energy target, protein minimum, and carb ceiling — all in one place with an effective start date.",
+          title: "The doctor creates the card",
+          text: "And sets the prescription: ketogenic ratio, calories, protein, carbs, meals per day.",
         },
         {
-          title: "Family executes therapy",
-          text: "The platform calculates meals and daily plans, immediately confirming compliance. Diaries take seconds via Web or Telegram.",
+          title: "The family gets a code",
+          text: "Eight characters or a QR code. It opens in the KetoCare Telegram bot, no password needed.",
         },
         {
-          title: "Clinician monitors progress",
-          text: "Ketones, weight, seizures, and food logs on a single timeline. At each checkup, a comprehensive clinical report replaces hand-written notebooks.",
+          title: "The family runs the therapy at home",
+          text: "Plans the menu, weighs by the gram, marks what was eaten, keeps the diaries.",
+        },
+        {
+          title: "The doctor sees the dynamics",
+          text: "Every day, not only at the visit. The family sees a new prescription at once.",
         },
       ],
-      link: "Detailed breakdown of each step",
+      more: "More about each step",
     },
-    forDoctors: {
-      eyebrow: "For clinicians & centers",
-      h2: "Clinical control of ketotherapy without blind spots",
-      lead: "Engineered for pediatric epileptologists and keto-dietitians: from initial titration to data-driven routine consultations.",
+    safety: {
+      h2: "Safety",
       items: [
         {
-          title: "Instant clinical triage upon login",
-          text: "Clinicians immediately spot patients in red and yellow triage zones: ketone drop, missing logs, or seizure clusters.",
+          title: "The doctor decides",
+          text: "Only the doctor sets the prescription. The app does not change it or advise instead of the doctor.",
         },
         {
-          title: "Mathematical gram optimization (LP engine)",
-          text: "Linear programming in keto_engine computes gram weights with mathematical precision, strictly preserving the prescribed ratio and calories.",
+          title: "Every dish is checked",
+          text: "The dish and the whole day are compared with the prescription.",
         },
         {
-          title: "GKI monitoring & Atwater database integrity",
-          text: "Automated Glucose-Ketone Index calculation and Atwater macro checksums eliminate manufacturer labeling errors from the product catalog.",
+          title: "The assistant does not treat",
+          text: "It answers only about how the app works. Health questions go to the doctor.",
         },
         {
-          title: "Secure perimeter: 2FA & one-time clinic codes",
-          text: "Mandatory 2FA for clinicians, strict role segregation, and family onboarding via single-use clinic codes without public self-registration.",
+          title: "Access by role",
+          text: "A family sees its own child, a doctor their own patients. The administrator does not see medical data.",
         },
       ],
-      cta: "Learn more for clinics",
-    },
-    forFamilies: {
-      eyebrow: "For families & patients",
-      h2: "Family journey: kitchen confidence and daily peace of mind",
-      lead: "Pediatric ketogenic therapy demands extreme precision. KetoCare handles calculations and tracking so you can focus on care.",
-      steps: [
-        {
-          num: "1",
-          title: "Receive single-use clinic code",
-          text: "During in-person consultation, your doctor sets therapy targets and gives you an instant single-use activation code.",
-        },
-        {
-          num: "2",
-          title: "Meal plan & dish calculator in the kitchen",
-          text: "Exact gram weights for each meal. The calculator checks a dish against the child's prescription and can fit the grams of the chosen products to the target.",
-        },
-        {
-          num: "3",
-          title: "Log ketones, glucose, and seizures in 5 seconds",
-          text: "Input readings via Web or Telegram Mini App. Record seizures with 1 tap ('now'), adding triggers and details later when calm.",
-        },
-        {
-          num: "4",
-          title: "Continuous link with your physician",
-          text: "Your doctor monitors patient metrics in real time, and the system prepares an objective consultation report for your next visit.",
-        },
-      ],
-    },
-    methodology: {
-      eyebrow: "Methodology & safety",
-      h2: "Clinical rigor, mathematical verification, and data privacy",
-      lead: "Treating drug-resistant epilepsy allows zero margin for calculation errors. Evidence-based clinical guidelines guide our system.",
-      items: [
-        {
-          title: "Isolated mathematical calculation engine",
-          text: "Calculations run inside the keto_engine core (linear programming simplex solver). Formulas are deterministic without intermediate rounding.",
-        },
-        {
-          title: "Formula drift protection",
-          text: "Strict net carbohydrate accounting (total carbs minus fiber per ingredient clamped at zero) prevents clinical discrepancies.",
-        },
-        {
-          title: "Medical privacy & 2FA protection",
-          text: "Clinician two-factor authentication, encrypted backups, and role-based access: parents only view their child, unauthorized access is excluded.",
-        },
-        {
-          title: "Responsible AI with zero hallucination",
-          text: "The AI assistant helps parse unstructured text logs and drafts consultation summaries, but never makes clinical decisions or unvetted advice.",
-        },
-      ],
-    },
-    calc: {
-      eyebrow: "Try it yourself",
-      h2: "Assemble breakfast for a 3.5 : 1 prescription",
-      lead1:
-        "The ketogenic ratio is fat divided by protein plus net carbs (fiber is excluded from the denominator). Every meal must hit the prescribed ratio within tolerance.",
-      lead2:
-        "Move the sliders for instant feedback. In real life, KetoCare does this automatically: no kitchen scale calculations or notebook math required.",
-      note: "Nutrient data from USDA FoodData Central. In production, calculations run through an isolated engine validated against medical benchmark suites.",
-      dish: "Omelet with heavy cream and broccoli",
-      ingredients: ["Chicken egg", "Heavy cream 33%", "Butter", "Broccoli"],
-      netCarbs: "Of which net carbs",
-      netCarbsNote: "ratio is computed using this figure",
-      atwaterTitle: "Calorie check",
-      atwaterBadge: "Calories checked against fat, protein and carbs",
-      atwaterNote:
-        "In the cabinet, the calories of each product in the catalogue are checked against its fat, protein and carbs: if they differ by more than 5 kcal per 100 g, the system shows a warning.",
-      targetRatioCorridor:
-        "Target prescription corridor: 3.50 : 1 (tolerance ±0.15)",
-      disclaimer:
-        "This is an educational formula demo, not a dietary planning tool. Your child's diet must be planned in the app based on an active clinical prescription.",
-      sliderLabel: "{name}, grams",
-      verdictOk: "Matches 3.5 : 1 prescription (preliminary tolerance ±0.15)",
-      verdictLow: "Below prescription — add fat or decrease carbohydrates",
-      verdictHigh: "Above prescription — fat exceeds prescribed ratio",
-    },
-    diaries: {
-      eyebrow: "Diaries",
-      h2: "Six clinical diaries — in a couple of taps",
-      lead: "Seizures, ketones, weight, nutrition, medication, and overall wellbeing. Everything logged by the family — via Web, bot, or Mini App — syncs to one diary.",
-      ketones: {
-        title: "Ketones over 14 days",
-        badge: "3.5 mmol/L",
-        caption:
-          "Reaching therapeutic ketosis is visible on charts, not guessed by feeling",
-        chartAlt:
-          "Chart of ketone readings over 14 days: steady rise from 1.2 to 3.5 mmol/L.",
-      },
-      seizure: {
-        title: "Log seizures instantly, add details later",
-        text: "Nobody fills out forms during a seizure. Log it in one or two taps: type and 'now'. Add triggers and notes later once the child is safe. For clinicians, logs automatically format into monthly grids.",
-        chipType: "Tonic-clonic",
-        chipNow: "Now",
-      },
-      progress: {
-        title: "Progress means 'remaining', not just 'eaten'",
-        text: "'4.3 g carbs remaining today' is a clear answer, not a math puzzle. Warnings trigger only upon genuine divergence from clinical goals.",
-      },
-    },
-    telegram: {
-      eyebrow: "Telegram",
-      h2: "Log directly from your messenger",
-      lead: "Ketone check — one quick message to the bot. The bot and Telegram Mini App are core parts of the platform: everything feeds into the patient record.",
-      items: [
-        "Ketones, weight, wellbeing, and seizures — logged in 2–4 button taps",
-        "Freeform text meals — AI parses macros, you verify",
-        "Reminders for tests and medication — sent to all caregivers",
-        "Telegram Mini App: daily meal plan, calculator, recipes, diary, and 'Family'",
-      ],
-      botLabel: "bot",
-      replay: "Replay",
-      caption:
-        "Scenario demo. The bot does not provide medical advice — only rapid logging and reminders",
-      chat: [
-        { from: "user", text: "ketones 2.6", time: "08:11" },
-        {
-          from: "bot",
-          text: "Ketones 2.6 mmol/L. Which measurement method did you use?",
-          time: "08:11",
-          chips: ["Blood", "Urine"],
-        },
-        { from: "user", text: "Blood", time: "08:12" },
-        {
-          from: "bot",
-          text: "Recorded ✓ Ketones 2.6 mmol/L (blood), today at 08:12. Saved to diary for your physician.",
-          time: "08:12",
-        },
-        { from: "user", text: "weight 21.4", time: "14:05" },
-        {
-          from: "bot",
-          text: "Weight 21.4 kg. Save for today?",
-          time: "14:05",
-          chips: ["Yes, for today", "Other date"],
-        },
-        { from: "user", text: "Yes, for today", time: "14:05" },
-        {
-          from: "bot",
-          text: "Recorded ✓ Weight 21.4 kg, today. Trend updated in patient chart.",
-          time: "14:06",
-        },
-      ] as ChatMsg[],
-    },
-    doctorsTeaser: {
-      eyebrow: "For clinicians & dietitians",
-      h2: "Not 'how many patients', but who needs attention today",
-      lead: "Patient lists sorted by clinical risk: caregiver silence, diet out of bounds, or week-over-week seizure clusters.",
-      cta: "Explore clinician portal",
-      queueTitle: "Attention queue",
-      queue: [
-        {
-          name: "Misha K.",
-          status: "no data",
-          reason: "No diary entries logged for 4 days",
-          age: "4 days ago",
-          level: "danger",
-        },
-        {
-          name: "Anya I.",
-          status: "nutrition",
-          reason: "Ratio out of target for 3 consecutive days",
-          age: "logged today",
-          level: "warning",
-        },
-        {
-          name: "Vera S.",
-          status: "seizures",
-          reason: "Seizure frequency higher than previous week",
-          age: "logged yesterday",
-          level: "warning",
-        },
-      ] as QueueItem[],
-      queueNote:
-        "Status is always indicated with words — color is never the only signal",
-    },
-    trust: {
-      eyebrow: "Why you can trust KetoCare",
-      h2: "Calculation error is a clinical risk. We design around that.",
-      items: [
-        {
-          title: "Verified against reference benchmarks",
-          text: "The calculation core is isolated and regression-tested against reference scenarios on every release.",
-        },
-        {
-          title: "Role-based access",
-          text: "Parents only see their child; clinicians only see their patients. Two-factor authentication and full audit logging.",
-        },
-        {
-          title: "AI does not make medical decisions",
-          text: "AI parses natural language and drafts summaries, but every entry requires human confirmation and no PII leaves the platform.",
-        },
-        {
-          title: "Choice of access channels",
-          text: "Web portal, Telegram bot, and Telegram Mini App write to the same single diary. Families use whatever is easiest today.",
-        },
-      ],
+      more: "How dishes are calculated and data is protected",
     },
     faq: {
-      h2: "Frequently Asked Questions",
+      h2: "Frequently asked questions",
       items: [
         {
-          q: "How can our family get access to KetoCare?",
-          a: "Access is granted by your attending pediatric epileptologist or keto-dietitian during a consultation: the specialist sets your clinical targets and gives you a single-use clinic code. If your doctor is not yet on KetoCare, submit an early access request and we will connect with your clinic.",
+          q: "Can we use it without a doctor?",
+          a: "No. The doctor sets the prescription, and without it the app has nothing to calculate against. If your doctor does not use KetoCare yet, send a request or tell them about it.",
         },
         {
-          q: "Can we use KetoCare on mobile via Telegram?",
-          a: "Yes. All diary and menu features are accessible from your smartphone via the Telegram bot and our full-featured Telegram Mini App. You can log seizures in 1 tap, record ketone and glucose levels, and check meal gram weights on the go.",
+          q: "What does a family need to start?",
+          a: "Telegram on the phone and an access code from the doctor. Nothing to install. A web cabinet can be turned on later if needed.",
         },
         {
-          q: "Which ketogenic ratios does the system support?",
-          a: "The ratio is set by the attending doctor. The system supports ratios from 1:1 to 5:1 in steps of 0.5 and checks the child's menu and dishes against the prescription.",
+          q: "Which languages?",
+          a: "The bot and the Telegram app are in Russian and Uzbek. The doctor's cabinet is in Russian.",
         },
         {
-          q: "How is my child's medical data protected?",
-          a: "Data is segregated and protected according to clinical security standards: strict role-based access (caregivers only view their child, doctors only view their patients), 2FA authentication, complete audit logging, and encrypted backups.",
+          q: "Does the app give medical advice?",
+          a: "No. It calculates dishes against the doctor's prescription and keeps the family's records. The assistant only answers questions about how the app works.",
         },
         {
-          q: "Does this platform replace our doctor or dietitian?",
-          a: "Absolutely not. Ketogenic diet therapy is a serious clinical medical treatment and must be conducted strictly under the care of an epileptologist and dietitian. KetoCare ensures exact execution and eliminates kitchen math errors.",
-        },
-        {
-          q: "Can multiple caregivers log entries for the same child?",
-          a: "Yes. Multiple adult accounts (both parents, grandparents, babysitters) can be linked to the same child profile. All entries synchronize immediately, providing the clinician with a unified, accurate record.",
+          q: "How can a clinic join?",
+          a: "Send a request at the bottom of the page — the KetoCare administrator will receive it.",
         },
       ],
     },
-    cta: {
-      h2: "Let's connect",
-      lead: "The platform is fully functional and continuously advancing. Family access is issued by attending doctors; we onboard clinics and practices directly.",
-      family: {
-        eyebrow: "For families",
-        title: "Access for your family",
-        text: "Access is provided by your attending physician via invitation. If your doctor is not yet using KetoCare, leave your email and we will help introduce them.",
-      },
-      doctors: {
-        eyebrow: "For clinicians & centers",
-        title: "Request a pilot",
-        text: "We will demonstrate the clinician portal, review your center's protocols, and onboard your first patients alongside you.",
-        cta: "Details and application",
-      },
-    },
-  },
-
-  howItWorks: {
-    seo: {
-      title:
-        "How KetoCare works — from clinical prescription to consult report",
-      description:
-        "Five steps of ketogenic diet therapy in KetoCare: physician sets targets, family builds meals and logs diaries, clinician tracks trends. Web, Telegram bot, and Mini App.",
-    },
-    hero: {
-      eyebrow: "How it works",
-      h1: "From prescription to report — one continuous loop",
-      lead: "Clinicians, families, and data operate within one unified system. Nothing is re-copied from paper notebooks, recalculated on kitchen scales, or lost between visits.",
-    },
-    steps: [
-      {
-        role: "Clinician",
-        title: "Invites family and sets prescription targets",
-        paragraphs: [
-          "Access is opened by the attending physician during the consultation via an invitation code. The parent sets up the child's profile and answers a short questionnaire. The diagnosis and exact medication list are entered by the doctor.",
-          "Next is the prescription: ketogenic ratio, daily calories, protein goal, and carbohydrate limit, with an effective start date. Every modification creates a new version with full historical tracking.",
-        ],
-        chips: ["3.5 : 1", "1200 kcal/day", "protein 25 g", "carbs ≤ 12 g"],
-      },
-      {
-        role: "Family",
-        title: "Assembles meals without kitchen arithmetic",
-        paragraphs: [
-          "The parent selects ingredients and gram amounts — the platform calculates macros and ratio instantly, confirming if the meal meets the prescription. Ingredient entry starts with 'Recent' and 'Frequent' items rather than empty searches.",
-        ],
-        verdictBadge: "3.52 : 1",
-        verdictText: "Prescription met · preliminary tolerance ±0.15",
-        chips: [],
-      },
-      {
-        role: "Family",
-        title: "Logs diaries in a few taps",
-        paragraphs: [
-          "Seizures, ketones, weight, meals, medications, and overall status — via Web or Telegram bot messages. Meals can be entered as natural text: AI parses ingredients, you verify. Seizures are recorded in 1–2 taps ('now'), with details added later.",
-        ],
-        chips: ["+ Ketones", "+ Weight", "+ Medication", "Seizure — now"],
-      },
-      {
-        role: "Clinician",
-        title: "Tracks trends between consultations",
-        paragraphs: [
-          "Ketones, weight, seizures, and nutrition on a single timeline with prescription change markers. Patients requiring attention rise to the top automatically: caregiver silence, diet drift, or seizure increases.",
-        ],
-        chips: [],
-      },
-      {
-        role: "Together",
-        title: "Consultations driven by data, not memory",
-        paragraphs: [
-          "By the next visit, an objective summary is ready: biomarker trends, seizure frequency, and dietary adherence. The conversation begins with facts, and dosage or ratio adjustments are made with confidence.",
-        ],
-        chips: [],
-      },
-    ] as HowStep[],
-    channels: {
-      h2: "One clinical diary, four channels",
-      lead: "Wherever the family enters data — everything syncs into one place and is visible to the clinician.",
-      items: [
-        {
-          title: "Web portal",
-          text: "Parent, physician, dietitian, and admin dashboards. Meal planning, diaries, patient charts, and reports.",
-        },
-        {
-          title: "Telegram bot",
-          text: "Rapid entry of diary records via short messages and automated reminders for tests.",
-        },
-        {
-          title: "Mini App",
-          text: "Full parent mobile dashboard inside Telegram — no app store installation required.",
-        },
-        {
-          title: "AI assistant",
-          text: "Parses natural language meal notes and drafts consult summaries. Every entry requires human verification.",
-        },
-      ],
-    },
-    status: {
-      eyebrow: "Platform status",
-      h2: "Core capabilities are fully active",
-      nowTitle: "Active today",
-      now: [
-        "Parent, clinician, and administrator portals",
-        "Deterministic calculation core with benchmark test suites",
-        "Prescriptions, product database, meal planner, and six diaries",
-        "2FA login, role-based access, full audit logging",
-      ],
-      nextTitle: "In active development",
-      next: [
-        "Telegram bot automated reminders",
-        "Telegram Mini App expanded modules",
-        "Family AI logging assistant & summary drafts",
-      ],
-      note: "Public self-registration is intentionally absent: families are invited by clinicians, clinics are onboarded directly.",
-    },
-    cta: {
-      h2: "Explore for your practice",
-      lead: "Families — early access waiting list. Clinicians and centers — pilot program with live portal demo.",
+    lead: {
+      h2: "Send a request",
+      text: "For clinics and doctors who want to follow children in KetoCare, and for families with questions.",
     },
   },
 
   doctors: {
     seo: {
-      title:
-        "KetoCare for clinicians & dietitians — ketogenic diet therapy oversight",
+      title: "KetoCare for doctors and dietitians",
       description:
-        "KetoCare clinician portal: risk-sorted patient triage, patient charts with ketones, weight, and seizure trends, consult reports, and versioned prescriptions.",
+        "Prescriptions with hints by age and weight, a patient list by urgency, the family's diaries, growth against WHO standards, follow-up visits and reports.",
     },
     hero: {
-      eyebrow: "For clinicians & dietitians",
-      h1: "Prescriptions executed. You see exactly how.",
-      lead: "Between appointments, families are left alone: weighing, calculating, and logging in notebooks. KetoCare brings therapy execution into a supervised clinical loop — you review real trends and deviations instead of recollections months later.",
-      ctaPilot: "Request a pilot",
-      ctaHow: "How the clinical loop works",
-      card: {
-        title: "Prescription · Anya I.",
-        badge: "active since 16.08",
-        ratioLabel: "Ratio",
-        ratioValue: "3.5 : 1",
-        caloriesLabel: "Energy",
-        caloriesValue: "1200 kcal",
-        proteinLabel: "Protein",
-        proteinValue: "25 g/day",
-        carbsLabel: "Carbs",
-        carbsValue: "≤ 12 g/day",
-        mealsLabel: "Meals per day",
-        mealsValue: "4",
-        note: "Caregivers view these exact targets in their dashboard; every meal and day is verified automatically against preliminary ±0.15 ratio tolerance.",
-      },
+      h1: "What doctors and dietitians get",
+      lead: "Prescription, menu, the family's diaries and the child's dynamics — in one cabinet. The family gets your prescription at once, and you see its records every day.",
     },
-    benefits: {
-      h2: "A productive clinical workday, not a vanity dashboard",
-      queue: {
-        title: "Attention queue",
-        text: "Patients sorted by clinical risk rather than alphabetical order: caregiver silence, diet drift, week-over-week seizure clusters.",
-        rows: [
-          {
-            name: "Misha K.",
-            reason: "no diary entries logged for 4 days",
-            level: "danger",
-          },
-          {
-            name: "Anya I.",
-            reason: "day exceeds tolerance 3 days in a row",
-            level: "warning",
-          },
-        ] as { name: string; reason: string; level: Level }[],
-      },
-      chart: {
-        title: "Patient chart",
-        text: "Ketones, weight, seizures, nutrition, and medications on a single timeline with prescription modification markers: evaluate therapy changes clearly.",
-        legend: "prescription adjusted 3.0 → 3.5",
-        chartAlt:
-          "Metric chart over time: steady rise, steepening noticeably after the prescription adjustment marker.",
-      },
-      report: {
-        title: "Consultation report",
-        text: "Summary for the inter-visit period compiled directly from family logs: trends, seizures, target adherence. Export to PDF and CSV.",
-        sampleTitle: "Summary · 16.08 — 30.08",
-        sampleLines: [
-          "Ketones: median 2.8 mmol/L · Weight: −0.3 kg",
-          "Seizures: 4 (down from 7 in previous period)",
-          "Days within ratio tolerance: 11 of 14",
-        ],
-      },
-      grid: {
-        title: "Seizures in familiar clinical grid",
-        text: "Families record individual events with time and duration. For the doctor, entries aggregate into a monthly type-by-time-of-day grid, matching paper logs.",
-        colType: "Type",
-        colMorning: "Morning",
-        colDay: "Day",
-        colEvening: "Evening",
-        colNight: "Night",
-        rows: [
-          { type: "TC", values: ["1", "·", "·", "1"] },
-          { type: "M", values: ["·", "2", "·", "·"] },
-          { type: "A", values: ["·", "·", "1", "·"] },
-        ],
-        caption: "Seizure grid: seizure type by rows, time of day by columns.",
-      },
+    patients: {
+      title: "Children who need attention come first",
+      text: "The patient list moves to the top those for whom something is wrong.",
+      points: [
+        "A prolonged seizure in the past week.",
+        "No prescription yet, or the family has not connected.",
+        "The family has recorded nothing for several days — with a «Remind the family in Telegram» button.",
+        "The day's ketogenic ratio differs from the prescription.",
+      ],
     },
-    rigor: {
-      eyebrow: "Clinical rigor",
-      h2: "Calculation is no place for improvisation",
+    prescription: {
+      title: "A prescription in a minute",
+      text: "The ketogenic ratio is chosen from a list — from 1 : 1 to 5 : 1 in steps of 0.5.",
+      points: [
+        "A calorie hint by the child's age and weight.",
+        "The carb limit is calculated automatically and can be changed.",
+        "Protein, meals per day and, if needed, fluid.",
+        "Every change is a new version. The history is kept.",
+        "The prescription and the menu print for the family with one button.",
+      ],
+    },
+    menu: {
+      title: "Menus and dishes that match the prescription",
+      text: "The menu can be planned by the family, the doctor or the dietitian — everyone sees the same thing.",
+      points: [
+        "Every dish and the whole day are checked against the prescription.",
+        "The whole week at once, with each day's ketogenic ratio and calories.",
+        "The calculator fits product grams to the meal target.",
+        "If the doctor planned the menu, the family gets a Telegram message.",
+      ],
+    },
+    diaries: {
+      title: "The family's diaries — every day",
+      text: "Six diaries: seizures, ketones, weight, wellbeing, medications, meals. The family records them in Telegram or in the cabinet.",
+      points: [
+        "Charts for a week, a month or any period.",
+        "Seizures as a table by day and time of day.",
+        "The doctor can add records made at the visit.",
+      ],
+    },
+    growth: {
+      title: "Growth, visits, reports",
+      text: "Everything needed for the visit is ready in advance.",
+      points: [
+        "Height and weight against WHO standards, with a flag for a notable drop.",
+        "Follow-up visits at 1, 3, 6, 9, 12 and 24 months; the family gets a reminder three days before.",
+        "A PDF report for any period.",
+        "AI prepares a draft summary for the period. Only text the doctor has checked and approved goes into the report.",
+      ],
+    },
+    connect: {
+      h2: "How to connect a family",
       items: [
         {
-          title: "Isolated calculation engine",
-          text: "Nutrition and ratio calculations run in a dedicated module, isolated from frontend and presentation logic.",
+          title: "You create the card",
+          text: "At the visit: questionnaire, prescription, medications. You can work with the card right away.",
         },
         {
-          title: "Reference benchmark suites",
-          text: "The core is validated against gold-standard clinical scenarios with full test coverage; discrepancies block release.",
+          title: "The family gets a code",
+          text: "Eight characters and a QR code. The code is valid for a week and can be revoked.",
         },
         {
-          title: "Roles, 2FA, audit logs",
-          text: "Strict role-based access: clinicians see their patients, parents see their child. Two-factor authentication, full audit log of data events.",
-        },
-        {
-          title: "Traceable product database",
-          text: "Every food product includes data source and version (e.g. USDA FoodData Central) and verification timestamp. Zero unverified crowd-sourced numbers.",
-        },
-        {
-          title: "Immutable prescriptions",
-          text: "Every adjustment creates a new version with author and effective date; full historical audit trail preserved.",
+          title: "The family opens it in Telegram",
+          text: "Or in a browser. No password. The family invites a second adult itself.",
         },
       ],
     },
-    onboarding: {
-      h2: "You provide access to the family",
-      lead: "No public self-registration: families join KetoCare via physician invitation — each patient has an assigned specialist from day one.",
-      items: [
-        {
-          title: "In-consultation invitation",
-          text: "Provide the family with an invitation link directly during their visit — no email spam or complex signups.",
-        },
-        {
-          title: "Family creates child profile",
-          text: "Short step-by-step onboarding wizard. Diagnosis and exact medication regimens are entered by the clinician.",
-        },
-        {
-          title: "Patient appears in your panel",
-          text: "Diaries and meal plans appear immediately. Secondary opinions and dietitians can be linked by the primary specialist.",
-        },
-      ],
-    },
-    pilot: {
-      h2: "How the pilot runs",
-      items: [
-        {
-          title: "Portal demonstration",
-          text: "We demonstrate doctor and caregiver dashboards on clinical demo datasets, answering calculation and tolerance questions.",
-        },
-        {
-          title: "Protocol alignment",
-          text: "We analyze your center's titration and monitoring protocols; if needed, they become custom test benchmarks.",
-        },
-        {
-          title: "First cohort onboarding",
-          text: "Onboard your initial patient cohort together under your supervision, collecting feedback and tuning workflow ergonomics.",
-        },
-      ],
-    },
-    ctaForm: {
-      h2: "Request a pilot",
-      lead: "Leave your institutional email — we will connect, demonstrate the portal, and arrange a pilot for your clinic.",
-      direct: "Or email us directly:",
+    lead: {
+      h2: "Connect a clinic",
+      text: "Leave your work email — the KetoCare administrator will receive the request.",
     },
   },
 
-  forFamiliesPage: {
+  families: {
     seo: {
-      title:
-        "For Families & Caregivers — KetoCare: pediatric keto without guesswork",
+      title: "KetoCare for families: menu, grams and a diary in Telegram",
       description:
-        "How KetoCare empowers families: clinic code activation, exact gram-calculated recipes, a dish calculator checked against the prescription, 5-second seizure logging via Telegram Mini App.",
+        "A menu from the doctor's prescription with grams for each product, dish checks, a diary in Telegram, reminders and an assistant. In Russian and Uzbek.",
     },
     hero: {
-      eyebrow: "For families & patients",
-      h1: "Confidence in the kitchen and peace of mind every day",
-      lead: "Pediatric ketogenic diet therapy requires extreme precision. KetoCare handles calculations, tracking, and clinical tolerances so you can focus on caring for your child.",
-      ctaCode: "I have a clinic code",
-      ctaApp: "Open Web Cabinet",
+      h1: "What the family gets",
+      lead: "The doctor's prescription turns into clear grams in the kitchen, and the diary into a couple of taps in Telegram. The doctor sees the records without waiting for the next visit.",
+      codeCta: "I have a code",
     },
-    stepsTitle: "The family journey in 4 clear steps",
+    start: {
+      title: "How to start",
+      points: [
+        "The doctor creates the child's card and gives you an access code — eight characters or a QR code.",
+        "Send the code to the KetoCare Telegram bot — and the app opens.",
+        "No sign-up and no password. A web cabinet can be turned on later.",
+      ],
+    },
+    menu: {
+      title: "Menu and grams",
+      text: "The menu for yesterday, today and tomorrow. You or the doctor plan it.",
+      points: [
+        "Every dish has «What to weigh»: the grams of each product.",
+        "Mark a dish as eaten with one tap.",
+        "Day totals next to the prescription: calories, carbs, ketogenic ratio.",
+        "«Same as yesterday» copies yesterday's menu into an empty day.",
+      ],
+    },
+    calc: {
+      title: "Check your own dish",
+      text: "Build a dish from products — the app tells you at once whether it fits the prescription. It can also fit the grams to the meal target. Try it on an example:",
+    },
+    diary: {
+      title: "A diary in a couple of taps",
+      text: "Six diaries: seizures, ketones, weight, wellbeing, medications, meals.",
+      points: [
+        "The bot records in a few seconds and repeats what was recorded, so mistakes are easy to spot.",
+        "You can describe what the child ate in words — the bot shows the products and grams and records only after you confirm.",
+        "Reminders come at the time you choose — only if there is no record for the day yet.",
+        "Charts of ketones, weight and seizures for 30 days.",
+      ],
+    },
+    help: {
+      title: "The assistant and the whole family",
+      points: [
+        "The assistant answers questions about using the app, from reviewed articles. It gives no medical advice.",
+        "You can invite the second parent, a grandmother or a nanny — they see the same child.",
+        "One Telegram account can follow several children.",
+        "The bot and the app are in Russian and Uzbek.",
+      ],
+    },
+    end: {
+      h2: "Your doctor does not use KetoCare yet?",
+      text: "Tell them about it or send a request.",
+    },
+  },
+
+  calc: {
+    dish: "Omelette with cream and broccoli",
+    target: "Example prescription: 3.5 : 1",
+    ingredients: ["Chicken egg", "Cream 33%", "Butter", "Broccoli"],
+    sliderLabel: "{name}, grams",
+    netCarbs:
+      "Carbs minus fibre: {value} — the ketogenic ratio is calculated from these.",
+    verdictOk: "Fits the prescription",
+    verdictLow: "Too little fat for the prescription",
+    verdictHigh: "More fat than the prescription",
+    disclaimer:
+      "This is an example with four products. The real prescription is set by the doctor.",
+  },
+
+  how: {
+    seo: {
+      title: "How KetoCare works",
+      description:
+        "Four steps: the doctor creates the card and prescription, the family gets a code, keeps the menu and diaries in Telegram, the doctor sees the dynamics.",
+    },
+    hero: {
+      h1: "How it works",
+      lead: "From the first visit to daily work at home — what the doctor does, what the family does and where it happens.",
+    },
     steps: [
       {
-        num: "01",
-        title: "Receive your activation code from your doctor",
-        text: "During consultation, your doctor sets your target ratio and caloric limits, providing a single-use clinic activation code. Zero complicated registration.",
+        who: "Doctor",
+        title: "Creates the card and sets the prescription",
+        points: [
+          "The child's questionnaire, medical data, medication schedule.",
+          "Prescription: ketogenic ratio, calories, protein, carb limit, meals per day.",
+          "A calorie hint by age and weight.",
+        ],
       },
       {
-        num: "02",
-        title: "Prescription-tailored menu and dish calculator",
-        text: "Exact gram weights for each meal calculated using net carbs. The calculator checks a dish against the child's prescription and can fit the grams of the chosen products to the target.",
+        who: "Doctor and family",
+        title: "The family gets access",
+        points: [
+          "The doctor issues an access code — eight characters and a QR code. It is valid for a week.",
+          "The family sends the code to the KetoCare Telegram bot or enters it in the web cabinet.",
+          "No password. The family invites a second adult itself.",
+        ],
       },
       {
-        num: "03",
-        title: "Log ketones, glucose, and seizures in 5 seconds",
-        text: "Record measurements via Web or Telegram Mini App. A seizure is marked with a single tap ('Now'), and clinical details can be added later.",
+        who: "Family",
+        title: "Runs the therapy at home",
+        points: [
+          "Plans the menu from dishes and recipes — the app checks every dish against the prescription.",
+          "Weighs products by the grams in the menu and marks what was eaten.",
+          "Records seizures, ketones, weight, wellbeing and medications taken.",
+          "Gets reminders at the chosen time.",
+        ],
       },
       {
-        num: "04",
-        title: "Continuous sync with your clinical team",
-        text: "All entries sync directly to your child's patient file. At your next consultation, your doctor reviews objective trends instead of memory recall.",
+        who: "Doctor",
+        title: "Sees the dynamics and changes the prescription",
+        points: [
+          "The patient list shows first those who need attention.",
+          "Charts, growth against WHO standards, follow-up visits, PDF reports.",
+          "The family sees a new prescription at once and gets a Telegram message.",
+        ],
       },
     ],
-    featuresTitle: "Tools designed for everyday family life",
-    features: [
+    channels: {
+      h2: "Where it works",
+      items: [
+        {
+          title: "Web cabinet",
+          text: "For doctors and dietitians — all work with patients. For families — optional, if a computer is more convenient.",
+        },
+        {
+          title: "Telegram bot",
+          text: "Quick diary records, reminders, messages about a new prescription or menu.",
+        },
+        {
+          title: "Telegram app",
+          text: "Opens with a button in the chat with the bot: menu, dish calculation, recipes, diary, assistant.",
+        },
+      ],
+    },
+    roles: {
+      h2: "Who sees what",
+      items: [
+        {
+          title: "Doctor",
+          text: "Their own patients: prescription, medications, diaries, reports.",
+        },
+        {
+          title: "Dietitian",
+          text: "Their own patients: prescription, menu, recipes and products. Medical data is read-only.",
+        },
+        {
+          title: "Family",
+          text: "Only its own child: prescription, menu, diaries, assistant.",
+        },
+        {
+          title: "Clinic administrator",
+          text: "Staff accounts and requests. No access to medical data.",
+        },
+      ],
+    },
+    more: {
+      text: "How the app calculates dishes and protects data —",
+      link: "on a separate page",
+    },
+  },
+
+  methodology: {
+    seo: {
+      title: "How KetoCare calculates dishes and protects data",
+      description:
+        "The ketogenic ratio and calories in plain words, product checks, the doctor's role, the assistant and data protection.",
+    },
+    hero: {
+      h1: "Calculation and safety",
+      lead: "In plain words: how the app checks dishes, who makes decisions and how the child's data is protected.",
+    },
+    sections: [
       {
-        title: "Telegram Bot & Mini App",
-        text: "Full diary capability right on your phone. No need to bring a laptop to the kitchen — record measurements and seizures in a couple of taps.",
+        title: "How a dish is checked",
+        points: [
+          "The ketogenic ratio is how many grams of fat there are per gram of protein and carbs together. With a 4 : 1 prescription, there are 4 g of fat for every 1 g of protein and carbs.",
+          "Fibre does not count towards the ratio: it is subtracted from each product's carbs. The daily carb limit counts all carbs.",
+          "Salt and pepper are listed in the recipe but not counted.",
+          "The dish and the whole day are compared with the prescription. If they differ by more than allowed, the app warns.",
+        ],
       },
       {
-        title: "Six synchronized diaries",
-        text: "Blood ketones, glucose, seizures, weight, medications, and nutrition history organized in a single unified timeline.",
+        title: "Where product data comes from",
+        points: [
+          "Each product in the catalogue has fat, protein, carbs, fibre and calories per 100 g, and the source of these figures.",
+          "A product's calories are checked against its fat, protein and carbs. If the figures do not add up, the catalogue warns.",
+          "The catalogue is maintained by the clinic's dietitians.",
+        ],
       },
       {
-        title: "Shared family access",
-        text: "Connect parents, grandparents, and caregivers to one child profile: logs stay updated and synchronized across all devices.",
+        title: "Who makes decisions",
+        points: [
+          "Only the doctor sets and changes the prescription. Every change is a new version; earlier ones stay in the history.",
+          "The app does not diagnose, does not change the diet and does not advise on treatment.",
+          "If a parent describes in words what the child ate, the app shows the recognised products and grams. The record appears only after confirmation.",
+          "AI prepares a draft summary for the doctor. Only text the doctor has checked and approved goes into the report.",
+        ],
+      },
+      {
+        title: "The assistant",
+        points: [
+          "Answers only questions about how the app works, and only from reviewed articles. If there is no suitable article, it says so.",
+          "It does not answer about medicines, doses, symptoms or diet changes — it refers you to the doctor.",
+          "Under every answer it reminds you that this is not medical advice. The doctor sees the family's questions.",
+        ],
+      },
+      {
+        title: "How data is protected",
+        points: [
+          "A family sees only its own child, a doctor only their own patients. The administrator does not see medical data.",
+          "Doctors log in with a password and a code from an app on their phone.",
+          "Names and contacts are not sent to the AI.",
+          "Medical records are never silently erased; backups are stored encrypted.",
+        ],
       },
     ],
   },
 
-  methodologyPage: {
+  notFound: {
     seo: {
-      title: "Methodology & Evidence-Based Architecture — KetoCare",
-      description:
-        "Scientific standards behind KetoCare: isolated keto_engine math core, product calorie checks, ratios from 1:1 to 5:1, and clinical 2FA security.",
+      title: "Page not found — KetoCare",
+      description: "There is no such page on the KetoCare site.",
     },
-    hero: {
-      eyebrow: "Methodology & Standards",
-      h1: "Clinical rigor, mathematical precision, and data security",
-      lead: "Dietary therapy for drug-resistant epilepsy cannot tolerate mathematical rounding errors. KetoCare is built on evidence-based protocols and strict healthcare privacy standards.",
-    },
-    check: {
-      eyebrow: "Calorie check",
-      formula: "kcal = 9×F + 4×P + 4×C",
-      caption:
-        "A product's calories are checked against its fat, protein and carbs",
-      points: ["A warning if they differ by more than 5 kcal per 100 g"],
-    },
-    pillarsTitle: "Core architectural pillars",
-    pillars: [
-      {
-        num: "01",
-        title: "Isolated mathematical engine (keto_engine)",
-        text: "All meal calculations and recipe optimization are handled by an isolated linear programming solver (simplex algorithm). Formulas are locked and free of intermediate rounding errors.",
-      },
-      {
-        num: "02",
-        title: "Formula drift protection & net carbohydrates",
-        text: "Strict net carbohydrate accounting (carbohydrates minus dietary fiber per ingredient, non-negative) prevents dangerous ratio drift.",
-      },
-      {
-        num: "03",
-        title: "Product calorie check",
-        text: "The calories of each product in the catalogue are checked against its fat, protein and carbs (9×F + 4×P + 4×C). If they differ by more than 5 kcal per 100 g, the system warns whoever maintains the catalogue.",
-      },
-      {
-        num: "04",
-        title: "Healthcare confidentiality & 2FA security perimeter",
-        text: "Mandatory 2FA for clinicians, strict role-based access control (parents only access their child), immutable audit logging, and encrypted backups.",
-      },
-    ],
-    protocolsEyebrow: "Diet therapy",
-    protocolsTitle: "What diet therapy KetoCare supports",
-    protocols: [
-      {
-        name: "Classic ketogenic diet",
-        desc: "The doctor sets the ketogenic ratio — from 1:1 to 5:1 in steps of 0.5 — along with calories, protein, the carbohydrate limit and the number of meals. The system checks the child's menu and dishes against this prescription.",
-      },
-    ],
+    h1: "This page does not exist",
+    text: "The address may be mistyped or the page may have moved. Start from one of the sections:",
   },
 
   footer: {
     disclaimer:
-      "KetoCare is a clinical companion system for dietotherapy conducted strictly under the supervision of an attending epileptologist or dietitian. It is not a tool for self-treatment and does not replace medical advice: adjustments to the ketogenic regimen and medications are performed exclusively by the medical team.",
+      "KetoCare helps run ketogenic diet therapy under a doctor's supervision. The app does not diagnose and does not replace a consultation: the prescription and its changes are the doctor's decision.",
     sectionsTitle: "Sections",
-    contactsTitle: "Contact",
+    cabinetTitle: "Cabinet",
+    contactsTitle: "Contacts",
     telegram: "Telegram",
     copyright: "© {year} LLC 'RailTech'",
   },

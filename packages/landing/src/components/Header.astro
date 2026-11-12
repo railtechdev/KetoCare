@@ -1,136 +1,110 @@
 ---
+/**
+ * Шапка: логотип, три раздела, «Войти», одна главная кнопка, язык.
+ *
+ * Полная строка помещается от 1200 px. Уже — разделы, «Войти» и тема уходят
+ * в меню-значок, а язык остаётся на виду всегда: человек, открывший сайт не
+ * на своём языке, не должен искать переключатель в меню. Главная кнопка видна
+ * с 640 px, на телефоне — первой строкой меню.
+ *
+ * Прежняя шапка ставила девять элементов в строку без переноса, и с 941 до
+ * 1215 px страница становилась шире окна. Ширины разбора — в
+ * docs/AUDIT_PRODUCT_2026-11.md, раздел 1.
+ */
 import { useTranslations } from "../i18n";
 import { pagePath, type Locale, type PageKey } from "../i18n/config";
-import { JOIN_URL, LOGIN_URL } from "../site";
+import { LOGIN_URL } from "../site";
 import LangSwitcher from "./LangSwitcher.astro";
 
 interface Props {
   locale: Locale;
   page: PageKey;
-  /** Куда ведёт главная кнопка: на форму семьи или на форму пилота. */
-  ctaHref: string;
-  ctaLabel: string;
+  leadHref: string;
 }
 
-const { locale, page, ctaHref, ctaLabel } = Astro.props;
+const { locale, page, leadHref } = Astro.props;
 const d = useTranslations(locale);
+
+const links: { key: PageKey; label: string }[] = [
+  { key: "doctors", label: d.nav.doctors },
+  { key: "forFamilies", label: d.nav.families },
+  { key: "howItWorks", label: d.nav.howItWorks },
+];
 ---
 
 <header class="site-header">
   <div class="wrap site-header__inner">
     <a class="brand" href={pagePath("home", locale)}>
       <span class="brand__mark" aria-hidden="true">{d.common.brandMark}</span>
-      <span>{d.common.brand}</span>
+      <span class="brand__name">{d.common.brand}</span>
     </a>
 
-    <button
-      class="nav-toggle"
-      type="button"
-      aria-expanded="false"
-      aria-controls="site-nav"
-      data-nav-toggle
-      data-label-open={d.common.openMenu}
-      data-label-close={d.common.closeMenu}
-    >
-      <span class="nav-toggle__bars" aria-hidden="true"
-        ><i></i><i></i><i></i></span
+    <nav class="nav" id="site-nav" aria-label={d.common.mainNav}>
+      <a class="btn btn--primary nav__cta" href={leadHref}>{d.nav.lead}</a>
+      <ul class="nav__links">
+        {
+          links.map((link) => (
+            <li>
+              <a
+                class="nav__link"
+                href={pagePath(link.key, locale)}
+                aria-current={page === link.key ? "page" : undefined}
+              >
+                {link.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      <a class="nav__link nav__login" href={LOGIN_URL}>{d.nav.login}</a>
+      <button
+        type="button"
+        class="theme-toggle"
+        data-theme-toggle
+        aria-pressed="false"
+        title={d.common.toggleTheme}
       >
-      <span data-nav-toggle-label>{d.common.openMenu}</span>
-    </button>
-
-    <nav class="nav" id="site-nav" aria-label={d.common.brand}>
-      <a
-        class="nav__link"
-        href={pagePath("forFamilies", locale)}
-        aria-current={page === "forFamilies" ? "page" : undefined}
-      >
-        {d.nav.forFamilies}
-      </a>
-      <a
-        class="nav__link"
-        href={pagePath("doctors", locale)}
-        aria-current={page === "doctors" ? "page" : undefined}
-      >
-        {d.nav.forDoctors}
-      </a>
-      <a
-        class="nav__link"
-        href={pagePath("methodology", locale)}
-        aria-current={page === "methodology" ? "page" : undefined}
-      >
-        {d.nav.methodology}
-      </a>
-      <a
-        class="nav__link"
-        href={pagePath("howItWorks", locale)}
-        aria-current={page === "howItWorks" ? "page" : undefined}
-      >
-        {d.nav.howItWorks}
-      </a>
-      <a class="nav__code" href={JOIN_URL} title={d.common.clinicCode}>
-        {d.nav.clinicCode}
-      </a>
-      <a class="nav__login" href={LOGIN_URL}>{d.nav.login}</a>
-      <a class="nav__cta" href={ctaHref}>{ctaLabel}</a>
-
-      <div class="nav__controls">
-        <button
-          type="button"
-          class="theme-toggle"
-          data-theme-toggle
-          aria-label={d.common.toggleTheme}
-          title={d.common.toggleTheme}
+        <svg
+          class="theme-toggle__icon"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
         >
-          <span
-            class="theme-toggle__icon theme-toggle__icon--sun"
-            aria-hidden="true"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="4"></circle>
-              <path d="M12 2v2"></path>
-              <path d="M12 20v2"></path>
-              <path d="m4.93 4.93 1.41 1.41"></path>
-              <path d="m17.66 17.66 1.41 1.41"></path>
-              <path d="M2 12h2"></path>
-              <path d="M20 12h2"></path>
-              <path d="m6.34 17.66-1.41 1.41"></path>
-              <path d="m19.07 4.93-1.41 1.41"></path>
-            </svg>
-          </span>
-          <span
-            class="theme-toggle__icon theme-toggle__icon--moon"
-            aria-hidden="true"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
-            </svg>
-          </span>
-        </button>
-
-        <LangSwitcher
-          locale={locale}
-          page={page}
-          label={d.common.languageLabel}
-        />
-      </div>
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+        </svg>
+        <span class="theme-toggle__label">{d.common.toggleTheme}</span>
+      </button>
     </nav>
+
+    <div class="site-header__end">
+      <a class="btn btn--primary header-cta" href={leadHref}>{d.nav.lead}</a>
+      <LangSwitcher
+        locale={locale}
+        page={page}
+        label={d.common.languageLabel}
+      />
+      <button
+        class="nav-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="site-nav"
+        data-nav-toggle
+        data-label-open={d.common.openMenu}
+        data-label-close={d.common.closeMenu}
+      >
+        <span class="nav-toggle__bars" aria-hidden="true"
+          ><i></i><i></i><i></i></span
+        >
+        <span class="nav-toggle__label" data-nav-toggle-label
+          >{d.common.openMenu}</span
+        >
+      </button>
+    </div>
   </div>
 </header>
