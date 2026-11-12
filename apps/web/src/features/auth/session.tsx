@@ -10,6 +10,7 @@ import {
 import { api, onSessionExpired, setAccessToken } from "../../lib/api";
 import { readTokenClaims, type Session } from "./claims";
 import { SessionContext, type SessionState } from "./sessionContext";
+import { clearTabStorage } from "../../lib/tabStorage";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -51,6 +52,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setAccessToken(null);
       setSession(null);
       queryClient.clear();
+      clearTabStorage();
     }
   }, [queryClient]);
 
