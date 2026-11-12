@@ -36,6 +36,9 @@ test("врач заводит карту и выдаёт код, семья вх
   await doctor.getByRole("button", { name: "Новый пациент" }).click();
   await doctor.getByLabel("Имя и фамилия").fill(CHILD);
   await doctor.getByLabel("Дата рождения").fill("12.04.2019");
+  // Пол выбирается явно: умолчания «Мальчик» больше нет (аудит 12.11.2026).
+  await doctor.getByLabel("Пол").click();
+  await doctor.getByRole("option", { name: "Девочка" }).click();
   // Рост и вес обязательны с 12.11.2026 (ADR-0070): по ним считаются подсказки.
   await doctor.getByLabel("Рост, см").fill("118");
   await doctor.getByLabel("Вес, кг").fill("21");

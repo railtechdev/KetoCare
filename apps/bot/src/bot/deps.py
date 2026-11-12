@@ -13,8 +13,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import structlog
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardMarkup
+from aiogram.types import CallbackQuery, InaccessibleMessage, Message, ReplyKeyboardMarkup
 
 from . import keyboards, texts
 from .api import TRANSPORT_ERROR, BotApi, BotApiError, LinkRevokedError
@@ -273,3 +274,21 @@ async def submit_log(
             texts.SAVED.format(summary=summary, when=when) if summary else texts.SAVED_BARE
         )
     await message.answer(confirmation, reply_markup=await menu(store, message.chat.id, settings))
+
+
+async def retire_keyboard(callback: CallbackQuery) -> None:
+    """Remove the inline buttons from the message whose button was pressed.
+
+    Buttons of a finished step stayed live under the message: «Отмена» under a
+    saved record answered «Отменено» while the record stayed in the diary.
+    Telegram refuses the edit for messages older than 48 hours or already
+    without buttons; that is not an error for the family.
+    """
+
+    message = callback.message
+    if message is None or isinstance(message, InaccessibleMessage):
+        return
+    try:
+        await message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest:
+        return

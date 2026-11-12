@@ -27,6 +27,18 @@ describe("форма ребёнка", () => {
     expect(childSchema.safeParse(VALID).success).toBe(true);
   });
 
+  it("пол не выбран — карта не сохраняется (аудит 12.11.2026)", () => {
+    // Умолчание «Мальчик» сохраняло девочек мальчиками, а пол после создания
+    // карты не меняется: по нему считается оценка роста по ВОЗ.
+    const result = newChildSchema.safeParse({
+      ...VALID,
+      weightKg: "21",
+      sex: "",
+    } as unknown);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path[0])).toContain("sex");
+  });
+
   it("новая карта требует рост и вес (замечание диетолога 12.11.2026)", () => {
     const filled = { ...VALID, weightKg: "23" };
     expect(newChildSchema.safeParse(filled).success).toBe(true);

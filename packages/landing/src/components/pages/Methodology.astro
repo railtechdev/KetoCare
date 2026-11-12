@@ -52,18 +52,16 @@ const mp = d.methodologyPage;
             class="eyebrow"
             style="color:var(--dark-accent);margin-bottom:12px"
           >
-            Atwater Checksum
+            {mp.check.eyebrow}
           </p>
           <div class="atwater-formula-box" style="margin:16px 0 20px">
-            <div class="atwater-formula">E = 9×Ж + 4×Б + 4×(У - К)</div>
+            <div class="atwater-formula">{mp.check.formula}</div>
             <p style="font-size:0.84rem;color:var(--dark-muted);margin:0">
-              Валидация энергетической ценности каждого продукта в базе
+              {mp.check.caption}
             </p>
           </div>
           <ul class="tick-list" style="color:var(--dark-ink)">
-            <li>Аналитическая точность до 0.01 г</li>
-            <li>Отсечение расхождений калоража > 5%</li>
-            <li>Автоматический пересчёт при кулинарной обработке</li>
+            {mp.check.points.map((point) => <li>{point}</li>)}
           </ul>
         </div>
       </div>
@@ -86,7 +84,6 @@ const mp = d.methodologyPage;
                 <span class="pillar-card__num num tabular-nums">
                   {pillar.num}
                 </span>
-                <span class="pillar-card__badge">ISO / HIPAA</span>
               </div>
               <h3 class="card__title" style="margin-bottom:12px">
                 {pillar.title}
@@ -104,11 +101,11 @@ const mp = d.methodologyPage;
     </div>
   </section>
 
-  {/* ---------- Поддерживаемые протоколы ---------- */}
+  {/* ---------- Поддерживаемая диетотерапия ---------- */}
   <section class="section section--sand">
     <div class="wrap reveal">
       <div style="text-align:center;max-width:760px;margin:0 auto 48px">
-        <p class="eyebrow">Clinical Guidelines</p>
+        <p class="eyebrow">{mp.protocolsEyebrow}</p>
         <h2 class="h2">{mp.protocolsTitle}</h2>
       </div>
 

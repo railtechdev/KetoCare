@@ -56,7 +56,8 @@ export function ChildForm({
     defaultValues: {
       fullName: child?.full_name ?? "",
       birthDate: child?.birth_date ?? "",
-      sex: (child?.sex as "m" | "f") ?? "m",
+      // No default: the empty first option stays selected until chosen.
+      sex: child?.sex as "m" | "f" | undefined,
       heightCm: child?.height_cm === null ? "" : String(child?.height_cm ?? ""),
       weightKg: "",
       // Свободные метки — в поле, продукты каталога — списком ниже: строка
@@ -115,6 +116,7 @@ export function ChildForm({
             error={sexError}
             {...register("sex")}
           >
+            <option value="">{t("child.sex.placeholder")}</option>
             <option value="m">{t("child.sex.m")}</option>
             <option value="f">{t("child.sex.f")}</option>
           </SelectField>

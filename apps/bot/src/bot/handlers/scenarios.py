@@ -40,6 +40,7 @@ from ..deps import (
     link_revoked,
     menu,
     named,
+    retire_keyboard,
     scenario_binding,
     submit_log,
 )
@@ -375,6 +376,12 @@ async def wellbeing_start(message: Message, state: FSMContext, store: BindingSto
 async def cancel(
     callback: CallbackQuery, state: FSMContext, settings: BotSettings, store: BindingStore
 ) -> None:
+    await retire_keyboard(callback)
+    if await state.get_state() is None:
+        # The scenario is already over: the record was saved or cancelled. The
+        # button stayed under an old message, and «Отменено» would be a lie.
+        await callback.answer(texts.BUTTON_STALE, show_alert=True)
+        return
     await state.clear()
     message = _answerable(callback)
     if message is not None:

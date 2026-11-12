@@ -32,7 +32,6 @@ export const en: Dict = {
     ratio: "Keto ratio",
     clinicCode: "I have a clinic code",
     login: "Log in",
-    admin: "Admin portal",
   },
 
   nav: {
@@ -42,7 +41,6 @@ export const en: Dict = {
     methodology: "Methodology & safety",
     doctors: "For clinicians",
     login: "Log in",
-    admin: "Admin",
     clinicCode: "Clinic code",
     earlyAccess: "Early access",
     pilot: "Request a pilot",
@@ -62,9 +60,9 @@ export const en: Dict = {
       "We could not send your request. Please try again or write to us by email.",
     errorRateLimited:
       "Too many requests from your address. Write to us at {email}.",
-    doneFamily: "Got it. We will write to {email} and help you get set up.",
-    doneDoctor:
-      "Your request is in. We will reply to {email} within the next few days.",
+    doneFamily:
+      "Got it. We will write to {email} when access becomes available.",
+    doneDoctor: "Your request is in. We will contact you at {email}.",
     consent:
       "By sending this form you agree that we may contact you at the address you provide. Please do not include medical data in the form.",
   },
@@ -136,7 +134,7 @@ export const en: Dict = {
           quickWeight: "+ Weight",
           quickSeizure: "Seizure",
           caption:
-            "Parent dashboard (PR #303) — exact gram weights, daily targets, and 1-click logs",
+            "Parent dashboard — exact gram weights, daily targets, and 1-click logs",
         },
         doctor: {
           pinnedHeader: {
@@ -167,7 +165,7 @@ export const en: Dict = {
           trendGlucose: "Blood glucose: 4.8 → 4.3 mmol/L (stable)",
           trendGki: "GKI decreased from 3.8 to 1.8 (therapeutic target met)",
           caption:
-            "Doctor cabinet (PR #303) — clinical patient traffic light, pinned header, and trends",
+            "Doctor cabinet — clinical patient traffic light, pinned header, and trends",
         },
       },
     },
@@ -200,7 +198,7 @@ export const en: Dict = {
       familyCard: {
         badge: "For parents",
         title: "For families & patients",
-        desc: "Kitchen-ready gram weights, automated substitutions, Telegram Mini App, and 6 diaries without paper notebooks.",
+        desc: "Kitchen-ready gram weights, a dish calculator checked against the prescription, Telegram Mini App, and 6 diaries without paper notebooks.",
         cta: "Explore family portal",
       },
       doctorCard: {
@@ -212,7 +210,7 @@ export const en: Dict = {
       methodologyCard: {
         badge: "Evidence base",
         title: "Methodology & security",
-        desc: "Isolated keto_engine math core, Atwater validation, clinical protocols (4:1, MAD), and 2FA protection.",
+        desc: "Isolated keto_engine math core, product calorie checks, ratios from 1:1 to 5:1, and 2FA protection.",
         cta: "Review methodology",
       },
     },
@@ -292,8 +290,8 @@ export const en: Dict = {
         },
         {
           num: "2",
-          title: "Ready meal plan & kitchen swap calculator",
-          text: "Exact gram weights for each meal. If an ingredient is missing, the algorithm calculates an equivalent swap with preserved ratio.",
+          title: "Meal plan & dish calculator in the kitchen",
+          text: "Exact gram weights for each meal. The calculator checks a dish against the child's prescription and can fit the grams of the chosen products to the target.",
         },
         {
           num: "3",
@@ -342,10 +340,10 @@ export const en: Dict = {
       ingredients: ["Chicken egg", "Heavy cream 33%", "Butter", "Broccoli"],
       netCarbs: "Of which net carbs",
       netCarbsNote: "ratio is computed using this figure",
-      atwaterTitle: "Atwater Checksum Verification",
-      atwaterBadge: "✓ Atwater verification: error < 2% (clinical limit < 10%)",
+      atwaterTitle: "Calorie check",
+      atwaterBadge: "Calories checked against fat, protein and carbs",
       atwaterNote:
-        "KetoCare automatically validates each dish and product: calculated energy (9×F + 4×P + 4×Cnet) is cross-checked against labels to prevent nutrition errors.",
+        "In the cabinet, the calories of each product in the catalogue are checked against its fat, protein and carbs: if they differ by more than 5 kcal per 100 g, the system shows a warning.",
       targetRatioCorridor:
         "Target prescription corridor: 3.50 : 1 (tolerance ±0.15)",
       disclaimer:
@@ -487,8 +485,8 @@ export const en: Dict = {
           a: "Yes. All diary and menu features are accessible from your smartphone via the Telegram bot and our full-featured Telegram Mini App. You can log seizures in 1 tap, record ketone and glucose levels, and check meal gram weights on the go.",
         },
         {
-          q: "Does the system support classical keto (4:1, 3:1) and Modified Atkins Diet (MAD)?",
-          a: "Yes, KetoCare supports all evidence-based ketogenic therapy protocols: classical keto diets (4:1, 3.5:1, 3:1), Medium-Chain Triglyceride (MCT) diets, Modified Atkins Diet (MAD) with 10–20 g/day carbohydrate limits, and Low Glycemic Index Treatment (LGIT).",
+          q: "Which ketogenic ratios does the system support?",
+          a: "The ratio is set by the attending doctor. The system supports ratios from 1:1 to 5:1 in steps of 0.5 and checks the child's menu and dishes against the prescription.",
         },
         {
           q: "How is my child's medical data protected?",
@@ -777,7 +775,7 @@ export const en: Dict = {
       title:
         "For Families & Caregivers — KetoCare: pediatric keto without guesswork",
       description:
-        "How KetoCare empowers families: clinic code activation, exact gram-calculated recipes, kitchen substitutions, 5-second seizure logging via Telegram Mini App.",
+        "How KetoCare empowers families: clinic code activation, exact gram-calculated recipes, a dish calculator checked against the prescription, 5-second seizure logging via Telegram Mini App.",
     },
     hero: {
       eyebrow: "For families & patients",
@@ -795,8 +793,8 @@ export const en: Dict = {
       },
       {
         num: "02",
-        title: "Prescription-tailored menu and substitutions",
-        text: "Exact gram weights for each meal calculated using net carbs. If an ingredient is missing, the algorithm calculates an equivalent swap in seconds.",
+        title: "Prescription-tailored menu and dish calculator",
+        text: "Exact gram weights for each meal calculated using net carbs. The calculator checks a dish against the child's prescription and can fit the grams of the chosen products to the target.",
       },
       {
         num: "03",
@@ -813,7 +811,7 @@ export const en: Dict = {
     features: [
       {
         title: "Telegram Bot & Mini App",
-        text: "Full diary capability right on your phone. No need to bring a laptop to the kitchen — submit logs and check recipes in seconds.",
+        text: "Full diary capability right on your phone. No need to bring a laptop to the kitchen — record measurements and seizures in a couple of taps.",
       },
       {
         title: "Six synchronized diaries",
@@ -830,12 +828,19 @@ export const en: Dict = {
     seo: {
       title: "Methodology & Evidence-Based Architecture — KetoCare",
       description:
-        "Scientific standards behind KetoCare: isolated keto_engine math core, Atwater checksum verification, 4:1/MAD/LGIT protocols, and clinical 2FA security.",
+        "Scientific standards behind KetoCare: isolated keto_engine math core, product calorie checks, ratios from 1:1 to 5:1, and clinical 2FA security.",
     },
     hero: {
       eyebrow: "Methodology & Standards",
       h1: "Clinical rigor, mathematical precision, and data security",
       lead: "Dietary therapy for drug-resistant epilepsy cannot tolerate mathematical rounding errors. KetoCare is built on evidence-based protocols and strict healthcare privacy standards.",
+    },
+    check: {
+      eyebrow: "Calorie check",
+      formula: "kcal = 9×F + 4×P + 4×C",
+      caption:
+        "A product's calories are checked against its fat, protein and carbs",
+      points: ["A warning if they differ by more than 5 kcal per 100 g"],
     },
     pillarsTitle: "Core architectural pillars",
     pillars: [
@@ -847,12 +852,12 @@ export const en: Dict = {
       {
         num: "02",
         title: "Formula drift protection & net carbohydrates",
-        text: "Strict net carbohydrate accounting (carbohydrates minus dietary fiber per ingredient, non-negative, ADR-0030) prevents dangerous ratio drift.",
+        text: "Strict net carbohydrate accounting (carbohydrates minus dietary fiber per ingredient, non-negative) prevents dangerous ratio drift.",
       },
       {
         num: "03",
-        title: "Atwater Checksum & catalog integrity",
-        text: "Automated energy verification using the Atwater specific factor system (9×Fat + 4×Protein + 4×NetCarbs) catches supplier labeling discrepancies before they affect ketosis.",
+        title: "Product calorie check",
+        text: "The calories of each product in the catalogue are checked against its fat, protein and carbs (9×F + 4×P + 4×C). If they differ by more than 5 kcal per 100 g, the system warns whoever maintains the catalogue.",
       },
       {
         num: "04",
@@ -860,23 +865,12 @@ export const en: Dict = {
         text: "Mandatory 2FA for clinicians, strict role-based access control (parents only access their child), immutable audit logging, and encrypted backups.",
       },
     ],
-    protocolsTitle: "Supported clinical diet protocols",
+    protocolsEyebrow: "Diet therapy",
+    protocolsTitle: "What diet therapy KetoCare supports",
     protocols: [
       {
-        name: "Classic Ketogenic Diet (4:1 and 3:1)",
-        desc: "Gold standard for pediatric refractory epilepsy. Very high fat, strictly measured protein, and minimal carbohydrates.",
-      },
-      {
-        name: "Modified Atkins Diet (MAD)",
-        desc: "Carbohydrate restriction to 10–20 g/day without strict calorie or protein weighing, ideal for adolescents and outpatient titration.",
-      },
-      {
-        name: "Medium-Chain Triglyceride Diet (MCT)",
-        desc: "Incorporates MCT oils, allowing higher protein and carbohydrate allowances while sustaining robust ketogenesis.",
-      },
-      {
-        name: "Low Glycemic Index Treatment (LGIT)",
-        desc: "Focuses on carbohydrates with glycemic index under 50 for steady glycemic and anticonvulsant stability.",
+        name: "Classic ketogenic diet",
+        desc: "The doctor sets the ketogenic ratio — from 1:1 to 5:1 in steps of 0.5 — along with calories, protein, the carbohydrate limit and the number of meals. The system checks the child's menu and dishes against this prescription.",
       },
     ],
   },
@@ -886,8 +880,6 @@ export const en: Dict = {
       "KetoCare is a clinical companion system for dietotherapy conducted strictly under the supervision of an attending epileptologist or dietitian. It is not a tool for self-treatment and does not replace medical advice: adjustments to the ketogenic regimen and medications are performed exclusively by the medical team.",
     sectionsTitle: "Sections",
     contactsTitle: "Contact",
-    adminTitle: "Staff & Admin",
-    adminLink: "Admin Dashboard (/admin)",
     telegram: "Telegram",
     copyright: "© {year} LLC 'RailTech'",
   },

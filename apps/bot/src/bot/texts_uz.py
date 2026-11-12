@@ -113,6 +113,7 @@ BTN_APP_MENU = "Ilova"
 
 BTN_CANCEL = "Bekor qilish"
 CANCELLED = "Bekor qilindi."
+BUTTON_STALE = "Bu tugma eskirgan: yozuv allaqachon saqlangan yoki bekor qilingan."
 
 # --- Xuruj (раздел 7.3, вопрос 23) ---
 

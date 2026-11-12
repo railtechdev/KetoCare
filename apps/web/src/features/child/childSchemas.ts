@@ -27,6 +27,9 @@ const WEIGHT_MAX_KG = 150;
 export const childSchema = z.object({
   fullName: z.string().trim().min(1).max(255),
   birthDate: z.string().refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)),
+  // The form starts with the empty «Выберите» option, which this enum rejects:
+  // a preselected «Мальчик» was saved for girls, and sex is fixed after the
+  // card is created (the WHO growth assessment depends on it).
   sex: z.enum(["m", "f"]),
   heightCm: z
     .string()
