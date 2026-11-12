@@ -27,13 +27,22 @@ RU: Final[dict[str, str]] = {
     "reminder_ketones": "Напоминание: пора измерить кетоны 🩸",
     "reminder_weight": "Напоминание: пора взвесить ребёнка ⚖️",
     "reminder_medications": "Напоминание: пора дать лекарства 💊",
-    # «Так и отметьте» обещало кнопку «спокойный день», которой нет: отметить
-    # спокойный день можно тем, что есть, — самочувствием.
+    # Прежний текст звал отметить спокойный день «самочувствием» — и семья
+    # записывала «всё хорошо» как симптом. Записи «жалоб нет» в дневнике нет
+    # (ADR-0076), поэтому напоминание зовёт записать то, что было, и не
+    # обещает отметки, которой не существует.
     "reminder_no_records": (
-        "За сегодня в дневнике нет записей. Если день прошёл спокойно — "
-        "отметьте самочувствие кнопкой «🙂 Самочувствие»: врачу важно видеть "
-        "и спокойные дни."
+        "За сегодня в дневнике нет записей. Если что-то было — запишите: "
+        "кнопкой ниже, в меню этого чата или в приложении."
     ),
+    # --- кнопки под сообщениями (ADR-0076)
+    "btn_record_ketones": "🩸 Записать кетоны",
+    "btn_record_weight": "⚖️ Записать вес",
+    "btn_record_medications": "💊 Отметить лекарства",
+    "btn_record_wellbeing": "🙂 Записать самочувствие",
+    "btn_open_diary": "📱 Открыть дневник",
+    "btn_open_menu": "📱 Открыть меню",
+    "btn_open_family": "📱 Открыть «Близкие»",
     # --- новое назначение (раздел 5.4 ТЗ) — без чисел (раздел 7.5)
     "prescription_changed": (
         "Врач обновил назначение. Откройте приложение — кнопка «Приложение» слева "
@@ -93,10 +102,16 @@ UZ: Final[dict[str, str]] = {
     "reminder_weight": "Eslatma: bolani tortish vaqti keldi ⚖️",
     "reminder_medications": "Eslatma: dorilarni berish vaqti keldi 💊",
     "reminder_no_records": (
-        "Bugun kundalikda hali yozuv yo‘q. Agar kun tinch o‘tgan bo‘lsa, "
-        "«🙂 O‘zini his qilish» tugmasi bilan belgilab qo‘ying: shifokor uchun "
-        "tinch kunlarni ko‘rish ham muhim."
+        "Bugun kundalikda hali yozuv yo‘q. Agar biror narsa bo‘lgan bo‘lsa — yozib "
+        "qo‘ying: pastdagi tugma, shu chatdagi menyu yoki ilova orqali."
     ),
+    "btn_record_ketones": "🩸 Ketonlarni yozish",
+    "btn_record_weight": "⚖️ Vaznni yozish",
+    "btn_record_medications": "💊 Dorilarni belgilash",
+    "btn_record_wellbeing": "🙂 O‘zini his qilishni yozish",
+    "btn_open_diary": "📱 Kundalikni ochish",
+    "btn_open_menu": "📱 Menyuni ochish",
+    "btn_open_family": "📱 «Yaqinlar»ni ochish",
     "prescription_changed": (
         "Shifokor tayinlovni yangiladi. Ilovani oching — yozish maydonining chap "
         "tomonidagi «Ilova» tugmasi — va bugungi hamda ertangi menyuni "

@@ -38,7 +38,7 @@ from core.repositories import diary as diary_repo
 from core.repositories import menus as menus_repo
 from core.repositories import reminders as reminders_repo
 
-from . import texts
+from . import buttons, texts
 from .children import chat_languages, child_names, named
 from .telegram import TelegramSendError, send_message
 
@@ -151,6 +151,16 @@ async def reminders_cron(ctx: dict[str, Any]) -> dict[str, int]:
                         token=settings.bot_token,
                         chat_id=link.chat_id,
                         text=named(texts.text(language, TEXT_KEYS[kind]), names.get(link.chat_id)),
+                        # «Записать…» под напоминанием запускает сценарий бота
+                        # для этого ребёнка (ADR-0076): искать кнопку в меню
+                        # не нужно. Без звука напоминание не уходит — его
+                        # время семья выбрала сама.
+                        reply_markup=buttons.reminder(
+                            kind,
+                            patient_id=reminder.patient_id,
+                            language=language,
+                            base=settings.miniapp_url,
+                        ),
                     )
                 except TelegramSendError as exc:
                     # Чат мог быть заблокирован или удалён. Это не повод ронять

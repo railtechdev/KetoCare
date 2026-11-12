@@ -15,11 +15,11 @@ from aiogram.fsm.context import FSMContext
 
 from bot import keyboards, texts
 from bot.api import LinkVerified
-from bot.handlers import fallback, scenarios, start
+from bot.handlers import scenarios, start
 from bot.storage import Binding, BindingStore
 
 from .conftest import CHAT_ID, LINK_ID, PATIENT_ID, SECRET, FakeStore, put_binding
-from .test_scenarios import SETTINGS, FakeCallback, FakeMessage, answer_when_now
+from .test_scenarios import SETTINGS, FakeCallback, FakeMessage
 
 SECOND_PATIENT = uuid.UUID("33333333-3333-3333-3333-333333333333")
 SECOND_LINK = uuid.UUID("44444444-4444-4444-4444-444444444444")
@@ -233,7 +233,6 @@ class TestWritesGoToTheSelectedChild:
 
         message = FakeMessage(text="18.4")
         await scenarios.weight_value(message, state, api, two_children, SETTINGS)
-        await answer_when_now(message, state, api, two_children)
 
         sent = api.logs[-1]
         assert sent["patient_id"] == PATIENT_ID
@@ -248,7 +247,6 @@ class TestWritesGoToTheSelectedChild:
 
         message = FakeMessage(text="18.4")
         await scenarios.weight_value(message, state, api, two_children, SETTINGS)
-        await answer_when_now(message, state, api, two_children)
 
         assert api.logs[-1]["patient_id"] == SECOND_PATIENT
         assert api.logs[-1]["secret"] == SECOND_SECRET
@@ -261,7 +259,6 @@ class TestWritesGoToTheSelectedChild:
         message = FakeMessage(text="18.4")
 
         await scenarios.weight_value(message, state, api, linked_store, SETTINGS)
-        await answer_when_now(message, state, api, linked_store)
 
         assert message.last.startswith("Записано ✓ Вес")
 
@@ -276,7 +273,6 @@ class TestWritesGoToTheSelectedChild:
         message = FakeMessage(text="18.4")
 
         await scenarios.weight_value(message, state, api, two_children, SETTINGS)
-        await answer_when_now(message, state, api, two_children)
 
         assert message.last == texts.LINK_REVOKED_ONE.format(revoked="Тимур", active="Аня")
         assert await two_children.get(CHAT_ID) == ANYA
@@ -295,11 +291,8 @@ class TestScenarioKeepsItsChild:
         await store.put(CHAT_ID, ANYA)
         state = _state()
         await scenarios.weight_start(FakeMessage(text=texts.BTN_WEIGHT), state, store)
-        typed = FakeMessage(text="18.4")
-        await scenarios.weight_value(typed, state, api, store, SETTINGS)
-        assert typed.last == texts.WHEN_ASK
 
-        # Посреди шага «когда» семья присылает текстом код второго ребёнка.
+        # Посреди записи веса приходит код второго ребёнка (ссылкой /start).
         api.verified = LinkVerified(
             link_id=SECOND_LINK,
             patient_id=SECOND_PATIENT,
@@ -309,15 +302,16 @@ class TestScenarioKeepsItsChild:
             has_web_credentials=False,
             patient_first_name="Тимур",
         )
-        await fallback.unknown(
-            FakeMessage(text="ABCD 2345"), state=state, api=api, store=store, settings=SETTINGS
+        await start.handle_bare_code(
+            FakeMessage(text="ABCD 2345"), state, api=api, store=store, settings=SETTINGS
         )
         assert (await store.get(CHAT_ID)).patient_id == SECOND_PATIENT  # type: ignore[union-attr]
         assert await state.get_state() is None, "код закрыл начатый сценарий"
 
-        # Старая кнопка «Сейчас» всё равно нажата (обработчик вызывается напрямую,
+        # Набранный вес всё равно дошёл до шага (обработчик вызывается напрямую,
         # мимо фильтра состояния, — худший случай).
-        await answer_when_now(typed, state, api, store)
+        typed = FakeMessage(text="18.4")
+        await scenarios.weight_value(typed, state, api, store, SETTINGS)
 
         assert api.logs == [], "ничего не записано — ни Тимуру, ни Ане"
         assert typed.last == texts.SCENARIO_CHILD_UNKNOWN
@@ -332,7 +326,6 @@ class TestScenarioKeepsItsChild:
 
         # Переключение пришло параллельным обновлением и состояние не тронуло.
         await two_children.select(CHAT_ID, SECOND_PATIENT)
-        await answer_when_now(message, state, api, two_children)
 
         sent = api.logs[-1]
         assert sent["patient_id"] == PATIENT_ID
@@ -344,11 +337,10 @@ class TestScenarioKeepsItsChild:
         await two_children.select(CHAT_ID, SECOND_PATIENT)
         state = _state()
         await scenarios.weight_start(FakeMessage(text=texts.BTN_WEIGHT), state, two_children)
+        await two_children.forget(CHAT_ID, SECOND_PATIENT)
+
         message = FakeMessage(text="18.4")
         await scenarios.weight_value(message, state, api, two_children, SETTINGS)
-
-        await two_children.forget(CHAT_ID, SECOND_PATIENT)
-        await answer_when_now(message, state, api, two_children)
 
         assert api.logs == []
         assert message.last == texts.SCENARIO_CHILD_GONE

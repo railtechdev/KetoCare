@@ -15,8 +15,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import structlog
@@ -25,11 +26,17 @@ from core.config import Settings
 from core.db import get_sessionmaker
 from core.repositories import telegram as telegram_repo
 
-from . import texts
+from . import buttons, texts
 from .children import chat_languages, child_names, named, parent_language
 from .telegram import TelegramSendError, send_message
 
 logger = structlog.get_logger(__name__)
+
+
+def _quiet(settings: Settings) -> bool:
+    """Ночью уведомление уходит без звука (ADR-0076): событие ночное, семья спит."""
+
+    return buttons.quiet(datetime.now(ZoneInfo(settings.tz)))
 
 
 async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
@@ -42,6 +49,7 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
         return 0
 
     sessionmaker = get_sessionmaker()
+    quiet = _quiet(settings)
     delivered = 0
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
@@ -54,14 +62,23 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
             if link.revoked_at is not None:
                 continue
             try:
+                language = languages.get(link.chat_id)
                 await send_message(
                     client,
                     token=settings.bot_token,
                     chat_id=link.chat_id,
                     text=named(
-                        texts.text(languages.get(link.chat_id), "prescription_changed"),
+                        texts.text(language, "prescription_changed"),
                         names.get(link.chat_id),
                     ),
+                    # Новое назначение — значит, заново составить меню.
+                    reply_markup=buttons.open_app(
+                        language,
+                        base=settings.miniapp_url,
+                        target="menu",
+                        label_key="btn_open_menu",
+                    ),
+                    disable_notification=quiet,
                 )
             except TelegramSendError as exc:
                 # Один заблокированный чат не отменяет уведомление остальным:
@@ -109,6 +126,7 @@ async def notify_family_joined(
         return 0
 
     sessionmaker = get_sessionmaker()
+    quiet = _quiet(settings)
     delivered = 0
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
@@ -128,6 +146,14 @@ async def notify_family_joined(
                     token=settings.bot_token,
                     chat_id=chat_id,
                     text=named(text, names.get(chat_id)),
+                    # Закрыть доступ незнакомцу — в разделе «Близкие».
+                    reply_markup=buttons.open_app(
+                        languages.get(chat_id),
+                        base=settings.miniapp_url,
+                        target="family",
+                        label_key="btn_open_family",
+                    ),
+                    disable_notification=quiet,
                 )
             except TelegramSendError as exc:
                 logger.warning(
@@ -184,6 +210,7 @@ async def notify_family_nudge(
         return 0
 
     sessionmaker = get_sessionmaker()
+    quiet = _quiet(settings)
     delivered = 0
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
@@ -203,6 +230,13 @@ async def notify_family_nudge(
                     token=settings.bot_token,
                     chat_id=chat_id,
                     text=named(text, names.get(chat_id)),
+                    reply_markup=buttons.open_app(
+                        languages.get(chat_id),
+                        base=settings.miniapp_url,
+                        target="diary",
+                        label_key="btn_open_diary",
+                    ),
+                    disable_notification=quiet,
                 )
             except TelegramSendError as exc:
                 logger.warning("family_nudge_not_delivered", patient_id=patient_id, reason=str(exc))
@@ -260,6 +294,7 @@ async def notify_family_menu_composed(
         return 0
 
     sessionmaker = get_sessionmaker()
+    quiet = _quiet(settings)
     delivered = 0
 
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
@@ -280,6 +315,13 @@ async def notify_family_menu_composed(
                     token=settings.bot_token,
                     chat_id=chat_id,
                     text=named(text, names.get(chat_id)),
+                    reply_markup=buttons.open_app(
+                        languages.get(chat_id),
+                        base=settings.miniapp_url,
+                        target="menu",
+                        label_key="btn_open_menu",
+                    ),
+                    disable_notification=quiet,
                 )
             except TelegramSendError as exc:
                 logger.warning(
@@ -339,6 +381,7 @@ async def notify_password_changed(ctx: dict[str, Any], parent_id: str) -> int:
         return 0
 
     sessionmaker = get_sessionmaker()
+    quiet = _quiet(settings)
     delivered = 0
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
         links = await telegram_repo.list_live_links_for_parent(session, uuid.UUID(parent_id))
@@ -346,7 +389,13 @@ async def notify_password_changed(ctx: dict[str, Any], parent_id: str) -> int:
         text = texts.text(await parent_language(session, uuid.UUID(parent_id)), "password_changed")
         for chat_id in sorted({link.chat_id for link in links}):
             try:
-                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+                await send_message(
+                    client,
+                    token=settings.bot_token,
+                    chat_id=chat_id,
+                    text=text,
+                    disable_notification=quiet,
+                )
             except TelegramSendError as exc:
                 logger.warning("password_changed_notice_not_delivered", reason=str(exc))
                 continue
@@ -379,13 +428,20 @@ async def notify_account_security(
         return 0
 
     sessionmaker = get_sessionmaker()
+    quiet = _quiet(settings)
     delivered = 0
     async with sessionmaker() as session, httpx.AsyncClient(timeout=10.0) as client:
         links = await telegram_repo.list_live_links_for_parent(session, uuid.UUID(parent_id))
         text = texts.text(await parent_language(session, uuid.UUID(parent_id)), event)
         for chat_id in sorted({link.chat_id for link in links} - {skip_chat_id}):
             try:
-                await send_message(client, token=settings.bot_token, chat_id=chat_id, text=text)
+                await send_message(
+                    client,
+                    token=settings.bot_token,
+                    chat_id=chat_id,
+                    text=text,
+                    disable_notification=quiet,
+                )
             except TelegramSendError as exc:
                 logger.warning("account_security_notice_not_delivered", kind=event, reason=str(exc))
                 continue

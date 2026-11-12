@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 import structlog
 
@@ -23,8 +25,16 @@ class TelegramSendError(RuntimeError):
     """Сообщение не ушло. Разбирается вызывающей стороной, а не глотается."""
 
 
-async def send_message(client: httpx.AsyncClient, *, token: str, chat_id: int, text: str) -> None:
-    """Отправляет текст в чат.
+async def send_message(
+    client: httpx.AsyncClient,
+    *,
+    token: str,
+    chat_id: int,
+    text: str,
+    reply_markup: dict[str, Any] | None = None,
+    disable_notification: bool = False,
+) -> None:
+    """Отправляет текст в чат — с кнопками и без звука, если сказано (ADR-0076).
 
     Ошибка поднимается наверх: напоминание, которое не ушло, не должно
     выглядеть отправленным. Единственное исключение разбирает вызывающая
@@ -32,10 +42,12 @@ async def send_message(client: httpx.AsyncClient, *, token: str, chat_id: int, t
     человека, и повторять его нечего.
     """
 
-    response = await client.post(
-        f"{TELEGRAM_API}/bot{token}/sendMessage",
-        json={"chat_id": chat_id, "text": text},
-    )
+    payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    if disable_notification:
+        payload["disable_notification"] = True
+    response = await client.post(f"{TELEGRAM_API}/bot{token}/sendMessage", json=payload)
     if response.is_success:
         return
 

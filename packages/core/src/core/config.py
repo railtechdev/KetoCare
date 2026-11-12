@@ -118,6 +118,11 @@ class Settings(BaseSettings):
 
     web_origin: str = "http://localhost:5173"
     miniapp_origin: str = "http://localhost:5174"
+    #: Public Mini App address, the same `MINIAPP_URL` the bot reads. The
+    #: worker puts it under its Telegram messages as an «open the app» button
+    #: (ADR-0076); empty or non-https means no button — Telegram refuses a
+    #: `web_app` button with such an address and drops the whole message.
+    miniapp_url: str = ""
 
     sentry_dsn: str = ""
     #: Имя окружения в Sentry: отличает боевой стенд от машины разработчика.

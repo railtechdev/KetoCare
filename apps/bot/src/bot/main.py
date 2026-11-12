@@ -28,7 +28,7 @@ from redis.asyncio import Redis
 from . import i18n, texts
 from .api import BotApi
 from .config import BotSettings, load_settings
-from .handlers import fallback, scenarios, start
+from .handlers import fallback, records, scenarios, start
 from .language import LanguageMiddleware, commands
 from .observability import init_sentry
 from .storage import BindingStore
@@ -79,6 +79,7 @@ def build_dispatcher(
     # Порядок важен: fallback ловит всё подряд и обязан быть последним.
     dp.include_router(start.router)
     dp.include_router(scenarios.router)
+    dp.include_router(records.router)
     dp.include_router(fallback.router)
     return dp
 

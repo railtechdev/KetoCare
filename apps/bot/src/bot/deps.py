@@ -15,9 +15,15 @@ from zoneinfo import ZoneInfo
 import structlog
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InaccessibleMessage, Message, ReplyKeyboardMarkup
+from aiogram.types import (
+    CallbackQuery,
+    InaccessibleMessage,
+    Message,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 
-from . import keyboards, texts
+from . import card, keyboards, texts
 from .api import TRANSPORT_ERROR, BotApi, BotApiError, LinkRevokedError
 from .config import BotSettings
 from .storage import Binding, BindingStore
@@ -45,7 +51,7 @@ _SCENARIO_LINK = "scenario_link_id"
 
 
 async def begin_scenario(
-    message: Message, state: FSMContext, store: BindingStore
+    message: Message, state: FSMContext, store: BindingStore, binding: Binding | None = None
 ) -> Binding | None:
     """Привязка выбранного ребёнка — и отметка в сценарии, что он про НЕГО.
 
@@ -58,7 +64,10 @@ async def begin_scenario(
     (`scenario_binding`), а не выбранную.
     """
 
-    binding = await require_binding(message, store)
+    if binding is None:
+        # `binding` передаёт кнопка напоминания: оно про конкретного ребёнка,
+        # и запись уходит ему, а не выбранному сейчас (ADR-0076).
+        binding = await require_binding(message, store)
     if binding is not None:
         await state.update_data(
             {
@@ -153,30 +162,39 @@ async def menu(store: BindingStore, chat_id: int, settings: BotSettings) -> Repl
 
 
 async def link_revoked(
-    message: Message, state: FSMContext, store: BindingStore, binding: Binding
+    message: Message,
+    state: FSMContext,
+    store: BindingStore,
+    binding: Binding,
+    settings: BotSettings | None = None,
 ) -> None:
     """Привязку ребёнка отозвали: забыть её, закрыть сценарий, сказать, что дальше.
 
     Забывается привязка ОДНОГО ребёнка: остальные дети чата живут дальше
     (ADR-0048), и семье говорится, для кого теперь идут записи. Сценарий
     закрывается — начатая запись была про ребёнка, к которому доступа больше нет.
+
+    Детей в чате не осталось — клавиатура записей убирается
+    (`ReplyKeyboardRemove`): её кнопки отвечали бы «чат не привязан», и меню,
+    которое ничего не умеет, хуже отсутствующего (ADR-0076).
     """
 
     await state.clear()
     remaining = await store.forget(message.chat.id, binding.patient_id, binding.link_id)
     if remaining is None:
-        await message.answer(texts.LINK_REVOKED)
+        await message.answer(texts.LINK_REVOKED, reply_markup=ReplyKeyboardRemove())
         return
     await message.answer(
-        texts.LINK_REVOKED_ONE.format(revoked=binding.first_name, active=remaining.first_name)
+        texts.LINK_REVOKED_ONE.format(revoked=binding.first_name, active=remaining.first_name),
+        reply_markup=await menu(store, message.chat.id, settings) if settings else None,
     )
 
 
 def when_text(occurred_at: datetime | None, *, tz: str) -> str:
     """Человеческое время для эха подтверждения.
 
-    «Только что» — когда семья ответила «Сейчас»; иначе то время, которое она
-    сама ввела, в её же формате: «сегодня в 07:30» или «29.08 в 21:00».
+    «Только что» — запись сохранена сразу, без выбора времени; иначе то время,
+    которое семья выбрала или ввела: «сегодня в 07:30» или «29.08 в 21:00».
     """
 
     if occurred_at is None:
@@ -189,6 +207,30 @@ def when_text(occurred_at: datetime | None, *, tz: str) -> str:
     return texts.WHEN_DATE_AT.format(date=local.strftime("%d.%m"), time=local.strftime("%H:%M"))
 
 
+def echo_text(receipt: dict[str, Any], *, tz: str) -> str:
+    """«Записано ✓» с тем, что записано, и когда — из квитанции записи.
+
+    Эхо, а не голое «Записано ✓»: подтверждение без содержимого не даёт
+    заметить опечатку (3,2 против 32 — клиническая запись). Когда чат ведёт
+    двоих, эхо называет, кому ушла запись (ADR-0048).
+    """
+
+    raw = receipt.get("occurred_at")
+    moment = datetime.fromisoformat(raw) if isinstance(raw, str) else None
+    when = when_text(moment, tz=tz)
+    summary = str(receipt.get("summary") or "")
+    child = receipt.get("child")
+    if child:
+        if summary:
+            return texts.SAVED_FOR.format(child=child, summary=summary, when=when)
+        return texts.SAVED_BARE_FOR.format(child=child)
+    return texts.SAVED.format(summary=summary, when=when) if summary else texts.SAVED_BARE
+
+
+#: Незаконченная запись в данных сценария (ADR-0035): ключи попыток и тела.
+PENDING = "pending_write"
+
+
 async def submit_log(
     message: Message,
     state: FSMContext,
@@ -197,83 +239,144 @@ async def submit_log(
     store: BindingStore,
     binding: Binding,
     kind: str,
-    payload: dict[str, Any],
+    payloads: list[dict[str, Any]],
     summary: str,
     settings: BotSettings,
+    own: bool,
+    method: str | None = None,
+    extra: dict[str, Any] | None = None,
     occurred_at: datetime | None = None,
 ) -> None:
-    """Отправляет запись и закрывает сценарий эхом того, что записано.
+    """Сохраняет запись (или несколько — лекарства) и отвечает эхом в карточке.
 
-    Эхо, а не голое «Записано ✓»: подтверждение без содержимого не даёт
-    заметить опечатку (3,2 против 32 — клиническая запись), а два подряд
-    неотличимы друг от друга. `summary` собирает сценарий — только он знает,
-    что именно вводила семья.
+    Запись сохраняется сразу, с моментом «сейчас» (ADR-0076): шаг «Когда это
+    было?» стоял в каждой записи, а другое время нужно редко. Под эхом —
+    «Другое время» и «Удалить запись»: поправить можно здесь же, а не только в
+    приложении.
 
-    Отзыв привязки обрабатывается здесь: секрет перестал работать, значит запись
-    не уйдёт никогда, и держать сценарий открытым бессмысленно. Локальная
-    привязка удаляется — иначе бот бесконечно предъявлял бы мёртвый секрет.
+    Ключ попытки и тело живут в состоянии сценария до успешной записи:
+    повтор после «нет связи» отправляет ТУ ЖЕ запись — тот же ключ и то же
+    тело, байт в байт (ADR-0035). Записей несколько — помнится, какие уже
+    дошли, и повтор шлёт только остальные.
+
+    Отзыв привязки обрабатывается здесь: секрет перестал работать, значит
+    запись не уйдёт никогда, и держать сценарий открытым бессмысленно.
     """
 
-    # Момент события задаёт семья: бот ставит «сейчас» только тогда, когда она
-    # сама так ответила.
-    # Ключ попытки и тело живут в состоянии сценария до успешной записи:
-    # родитель, нажавший кнопку ещё раз после «нет связи», повторяет ТУ ЖЕ
-    # запись — тот же ключ и то же тело, байт в байт. Иначе ответ «Сейчас»
-    # давал бы новое `occurred_at`, сервер видел бы под старым ключом другой
-    # запрос и отказывал, а запись, уже дошедшую до базы, семья завела бы
-    # заново (находка ревью, 05.10.2026).
     data = await state.get_data()
-    pending = data.get("pending_write")
-    if isinstance(pending, dict) and pending.get("kind") == kind:
-        key = str(pending["key"])
-        body = dict(pending["body"])
-    else:
+    pending = data.get(PENDING)
+    # Повтор — только той же записи: родитель, после отказа набравший другое
+    # число, отправляет новую запись, а не прежнее тело под прежним ключом.
+    same = (
+        isinstance(pending, dict)
+        and pending.get("kind") == kind
+        and "bodies" in pending
+        and pending.get("payloads") == payloads
+    )
+    if not same:
         moment = occurred_at or datetime.now(UTC)
-        key = str(uuid.uuid4())
-        body = {"occurred_at": moment.isoformat(), **payload}
-        await state.update_data(pending_write={"kind": kind, "key": key, "body": body})
-    try:
-        await api.create_log(
-            link_id=binding.link_id,
-            secret=binding.secret,
-            patient_id=binding.patient_id,
-            kind=kind,
-            payload=body,
-            idempotency_key=key,
-        )
-    except LinkRevokedError:
-        await link_revoked(message, state, store, binding)
-        return
-    except BotApiError as exc:
-        # Подробности — в лог, семье только «попробуйте ещё раз»: код ошибки ей
-        # ничего не говорит, а тревоги добавляет.
-        logger.warning("log_submit_failed", kind=kind, status=exc.status, code=exc.code)
-        if exc.code == TRANSPORT_ERROR:
-            # Попытка остаётся в состоянии: повтор отправит её же.
-            await message.answer(texts.NO_CONNECTION)
-            return
-        # Сервер ответил отказом — эта попытка закончена. Следующая будет новой
-        # записью с новым ключом, а не вечным повтором отвергнутой.
-        await state.update_data(pending_write=None)
-        await message.answer(texts.API_UNAVAILABLE)
-        return
+        bodies = [{"occurred_at": moment.isoformat(), **payload} for payload in payloads]
+        pending = {
+            "kind": kind,
+            "keys": [str(uuid.uuid4()) for _ in bodies],
+            "bodies": bodies,
+            "payloads": payloads,
+            "done": [None for _ in bodies],
+            "summary": summary,
+            "method": method,
+            "extra": extra or {},
+            "occurred_at": occurred_at.isoformat() if occurred_at else None,
+        }
+        await state.update_data({PENDING: pending})
+    await send_pending(
+        message, state, api=api, store=store, binding=binding, settings=settings, own=own
+    )
 
+
+async def send_pending(
+    message: Message,
+    state: FSMContext,
+    *,
+    api: BotApi,
+    store: BindingStore,
+    binding: Binding,
+    settings: BotSettings,
+    own: bool,
+) -> None:
+    """Отправить незаконченную запись из данных сценария — первый раз или повтором."""
+
+    pending = dict((await state.get_data()).get(PENDING) or {})
+    kind = str(pending["kind"])
+    keys: list[str | None] = list(pending["keys"])
+    done: list[str | None] = list(pending["done"])
+    for index, body in enumerate(pending["bodies"]):
+        if done[index]:
+            continue
+        key = keys[index] or str(uuid.uuid4())
+        keys[index] = key
+        try:
+            created = await api.create_log(
+                link_id=binding.link_id,
+                secret=binding.secret,
+                patient_id=binding.patient_id,
+                kind=kind,
+                payload=dict(body),
+                idempotency_key=key,
+            )
+        except LinkRevokedError:
+            await link_revoked(message, state, store, binding, settings)
+            return
+        except BotApiError as exc:
+            # Подробности — в лог, семье только «попробуйте ещё раз».
+            logger.warning("log_submit_failed", kind=kind, status=exc.status, code=exc.code)
+            # Попытка остаётся вместе с ключом — и при обрыве, и при отказе:
+            # при отказе бронь ключа на сервере откатывается вместе с
+            # транзакцией, а ответ 502/504 прокси или «такой же запрос ещё
+            # выполняется» (409) не значит, что запись не сохранилась. Новый
+            # ключ при повторе тогда завёл бы её второй раз (ревью ADR-0076).
+            await state.update_data({PENDING: pending | {"keys": keys, "done": done}})
+            failure = texts.NO_CONNECTION if exc.code == TRANSPORT_ERROR else texts.API_UNAVAILABLE
+            saved = sum(1 for log_id in done if log_id)
+            if saved:
+                # Несколько лекарств: часть уже в дневнике. Без этой строки семья
+                # начала бы заново и записала сохранённое второй раз.
+                failure += "\n" + texts.SAVED_PARTIAL.format(done=saved, total=len(done))
+            await card.show(message, state, failure, keyboards.retry(), own=own)
+            return
+        done[index] = str(created.get("id") or "")
+        await state.update_data({PENDING: pending | {"keys": keys, "done": done}})
+
+    several = await several_children(store, message.chat.id)
+    log_ids = [log_id for log_id in done if log_id]
+    method = pending.get("method")
+    receipt: dict[str, Any] = {
+        "kind": kind,
+        "patient_id": str(binding.patient_id),
+        "log_ids": log_ids,
+        "summary": pending.get("summary") or "",
+        "occurred_at": pending.get("occurred_at"),
+        "child": binding.first_name if several else None,
+        "method": method,
+        "extra": pending.get("extra") or {},
+    }
+    key = receipt_key(log_ids)
+    markup = None
+    if log_ids:
+        await store.put_receipt(message.chat.id, key, receipt)
+        markup = keyboards.record_actions(key, method=method if isinstance(method, str) else None)
+    await card.show(message, state, echo_text(receipt, tz=settings.tz), markup, own=own)
     await state.clear()
-    when = when_text(occurred_at, tz=settings.tz)
-    # Когда чат ведёт двоих, эхо называет, кому ушла запись: иначе ошибку
-    # «записал не тому ребёнку» не заметить до приёма у врача (ADR-0048).
-    child = binding.first_name if await several_children(store, message.chat.id) else None
-    if child:
-        confirmation = (
-            texts.SAVED_FOR.format(child=child, summary=summary, when=when)
-            if summary
-            else texts.SAVED_BARE_FOR.format(child=child)
-        )
-    else:
-        confirmation = (
-            texts.SAVED.format(summary=summary, when=when) if summary else texts.SAVED_BARE
-        )
-    await message.answer(confirmation, reply_markup=await menu(store, message.chat.id, settings))
+
+
+def receipt_key(log_ids: list[str]) -> str:
+    """Ключ квитанции — номер первой записи без дефисов (32 знака в callback_data)."""
+
+    for log_id in log_ids:
+        try:
+            return uuid.UUID(log_id).hex
+        except ValueError:
+            continue
+    return uuid.uuid4().hex
 
 
 async def retire_keyboard(callback: CallbackQuery) -> None:

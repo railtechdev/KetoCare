@@ -16,7 +16,7 @@ from bot.api import BotApiError, LinkRevokedError
 from bot.config import BotSettings
 from bot.handlers import scenarios
 
-from .test_scenarios import FakeCallback, FakeMessage, answer_when_now
+from .test_scenarios import FakeCallback, FakeMessage
 
 SETTINGS = BotSettings(bot_token="t", bot_api_token="s", tz="Asia/Tashkent")
 
@@ -89,8 +89,7 @@ class TestScale:
         await _to_duration(ready, linked_store, state)
 
         callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
-        await scenarios.seizure_duration(callback, state)
-        await answer_when_now(callback.message, state, ready, linked_store)
+        await scenarios.seizure_duration(callback, state, ready, linked_store, SETTINGS)
 
         payload = ready.logs[0]["payload"]
         assert ready.logs[0]["kind"] == "seizures"
@@ -107,8 +106,7 @@ class TestScale:
         callback = FakeCallback(data=keyboards.SEIZURE_EXACT_DATA)
         await scenarios.seizure_duration_exact_ask(callback, state)
         message = FakeMessage(text="90")
-        await scenarios.seizure_duration_exact(message, state)
-        await answer_when_now(message, state, ready, linked_store)
+        await scenarios.seizure_duration_exact(message, state, ready, linked_store, SETTINGS)
 
         payload = ready.logs[0]["payload"]
         assert payload["duration_sec"] == 90
@@ -125,8 +123,7 @@ class TestScale:
         await scenarios.seizure_duration_exact_ask(callback, state)
 
         message = FakeMessage(text=raw)
-        await scenarios.seizure_duration_exact(message, state)
-        await answer_when_now(message, state, ready, linked_store)
+        await scenarios.seizure_duration_exact(message, state, ready, linked_store, SETTINGS)
 
         assert ready.logs[0]["payload"]["duration_sec"] == seconds
 
@@ -137,7 +134,7 @@ class TestScale:
         await scenarios.seizure_duration_exact_ask(callback, state)
 
         message = FakeMessage(text="полторы минуты")
-        await scenarios.seizure_duration_exact(message, state)
+        await scenarios.seizure_duration_exact(message, state, ready, linked_store, SETTINGS)
 
         assert "число" in message.last
         assert ready.logs == []
@@ -155,7 +152,7 @@ class TestScale:
         await scenarios.seizure_duration_exact_ask(callback, state)
 
         message = FakeMessage(text=raw)
-        await scenarios.seizure_duration_exact(message, state)
+        await scenarios.seizure_duration_exact(message, state, ready, linked_store, SETTINGS)
 
         assert "число" in message.last
         assert ready.logs == []
@@ -171,7 +168,7 @@ class TestScale:
         await scenarios.seizure_duration_exact_ask(callback, state)
 
         message = FakeMessage(text="100000")
-        await scenarios.seizure_duration_exact(message, state)
+        await scenarios.seizure_duration_exact(message, state, ready, linked_store, SETTINGS)
 
         assert ready.logs == []
 
@@ -184,12 +181,12 @@ class TestConfirmation:
 
         await _to_duration(ready, linked_store, state)
         callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
-        await scenarios.seizure_duration(callback, state)
-        await answer_when_now(callback.message, state, ready, linked_store)
+        await scenarios.seizure_duration(callback, state, ready, linked_store, SETTINGS)
 
         assert "Тонико-клонический" in callback.message.last
         assert "От 10 до 30 минут" in callback.message.last
-        assert "приступов: 1" in callback.message.last
+        # Один приступ числа в эхе не несёт: «приступов: 1» читалось как шум.
+        assert "приступов" not in callback.message.last
 
     @pytest.mark.asyncio
     async def test_echo_of_a_series_names_the_count_and_the_longest(
@@ -197,8 +194,7 @@ class TestConfirmation:
     ):
         await _to_duration(ready, linked_store, state, count=3)
         callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
-        await scenarios.seizure_duration(callback, state)
-        await answer_when_now(callback.message, state, ready, linked_store)
+        await scenarios.seizure_duration(callback, state, ready, linked_store, SETTINGS)
 
         assert "приступов: 3" in callback.message.last
         assert "самый долгий — От 10 до 30 минут" in callback.message.last
@@ -224,8 +220,7 @@ class TestSeriesCount:
     async def test_button_count_is_saved(self, ready, linked_store, state, count):
         await _to_duration(ready, linked_store, state, count=count)
         callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
-        await scenarios.seizure_duration(callback, state)
-        await answer_when_now(callback.message, state, ready, linked_store)
+        await scenarios.seizure_duration(callback, state, ready, linked_store, SETTINGS)
 
         payload = ready.logs[0]["payload"]
         assert payload["count"] == count
@@ -262,8 +257,7 @@ class TestSeriesCount:
         await scenarios.seizure_duration_exact_ask(exact, state)
         assert exact.message.last == texts.SEIZURE_ASK_EXACT_SERIES
         seconds = FakeMessage(text="40")
-        await scenarios.seizure_duration_exact(seconds, state)
-        await answer_when_now(seconds, state, ready, linked_store)
+        await scenarios.seizure_duration_exact(seconds, state, ready, linked_store, SETTINGS)
 
         payload = ready.logs[0]["payload"]
         assert payload["count"] == 12
@@ -314,8 +308,7 @@ class TestSeriesCount:
         await state.set_state(scenarios.Seizure.duration)
         await state.update_data(seizure_type_id=TYPE_ID, seizure_duration_names={})
         callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
-        await scenarios.seizure_duration(callback, state)
-        await answer_when_now(callback.message, state, ready, linked_store)
+        await scenarios.seizure_duration(callback, state, ready, linked_store, SETTINGS)
 
         assert ready.logs[0]["payload"]["count"] == 1
 
@@ -365,3 +358,152 @@ class TestWhenThingsGoWrong:
 
         assert "код" in message.last.lower()
         assert await state.get_state() is None
+
+
+#: Справочник ILAE 2025 в форме ответа API — номера узлов как в миграции
+#: `4fdbbc0c4e38`: узла «3.3» нет, «3.3.1» висит прямо под «3».
+ILAE = [
+    ("1", "Фокальный приступ"),
+    ("1.1", "Фокальный приступ с сохранением сознания"),
+    ("1.2", "Фокальный приступ с нарушением сознания"),
+    ("3", "Генерализованный приступ"),
+    ("3.1", "Абсанс"),
+    ("3.1.1", "Типичный абсанс"),
+    ("3.2", "Генерализованный тонико-клонический приступ"),
+    ("3.3.1", "Генерализованный миоклонический приступ"),
+    ("4", "Неклассифицированный приступ"),
+]
+ILAE_IDS = {ref: str(uuid.uuid4()) for ref, _ in ILAE}
+ILAE_TYPES = [
+    {"id": ILAE_IDS[ref], "name_ru": name, "sort": i, "code": None, "ilae_ref": ref}
+    for i, (ref, name) in enumerate(ILAE)
+]
+
+
+def _labels(message: FakeMessage) -> list[str]:
+    return [b.text for row in message.last_markup.inline_keyboard for b in row]
+
+
+class TestTwoStepTypes:
+    """25 типов одним столбцом уводили «Отмену» на 26-ю строку (аудит 12.11.2026)."""
+
+    @pytest.fixture
+    def ilae(self, api):
+        api.seizure_type_items = ILAE_TYPES
+        api.duration_items = DURATIONS
+        return api
+
+    @pytest.mark.asyncio
+    async def test_first_screen_is_the_childs_recent_types(self, ilae, linked_store, state):
+        ilae.recent_types = [ILAE_IDS["3.2"], ILAE_IDS["1.1"], str(uuid.uuid4())]
+        message = FakeMessage(text=texts.BTN_SEIZURE)
+
+        await scenarios.seizure_start(message, state, ilae, linked_store, SETTINGS)
+
+        assert message.last == texts.SEIZURE_ASK_TYPE
+        labels = _labels(message)
+        assert labels[:2] == [
+            "Генерализованный тонико-клонический приступ",
+            "Фокальный приступ с сохранением сознания",
+        ]
+        assert texts.BTN_SEIZURE_OTHER in labels
+        assert texts.BTN_SEIZURE_UNKNOWN in labels
+        assert texts.BTN_CANCEL in labels
+        assert len(labels) == 5, "незнакомый тип из истории не показывается"
+
+    @pytest.mark.asyncio
+    async def test_unknown_is_the_unclassified_node(self, ilae, linked_store, state):
+        """«Не знаю» — узел справочника, а не значение бота."""
+
+        ilae.recent_types = [ILAE_IDS["1.1"]]
+        message = FakeMessage(text=texts.BTN_SEIZURE)
+        await scenarios.seizure_start(message, state, ilae, linked_store, SETTINGS)
+        unknown = next(
+            b.callback_data
+            for row in message.last_markup.inline_keyboard
+            for b in row
+            if b.text == texts.BTN_SEIZURE_UNKNOWN
+        )
+
+        assert unknown == keyboards.SEIZURE_TYPE_PREFIX + ILAE_IDS["4"]
+
+    @pytest.mark.asyncio
+    async def test_without_history_the_groups_come_first(self, ilae, linked_store, state):
+        message = FakeMessage(text=texts.BTN_SEIZURE)
+
+        await scenarios.seizure_start(message, state, ilae, linked_store, SETTINGS)
+
+        assert message.last == texts.SEIZURE_ASK_GROUP
+        labels = _labels(message)
+        assert "Фокальный приступ ›" in labels and "Генерализованный приступ ›" in labels
+        assert "Неклассифицированный приступ" not in labels, "он и есть «Не знаю»"
+        assert "Абсанс ›" not in labels, "подтипы — на втором шаге"
+
+    @pytest.mark.asyncio
+    async def test_other_and_back(self, ilae, linked_store, state):
+        ilae.recent_types = [ILAE_IDS["1.1"]]
+        await scenarios.seizure_start(
+            FakeMessage(text=texts.BTN_SEIZURE), state, ilae, linked_store, SETTINGS
+        )
+        callback = FakeCallback(data=keyboards.SEIZURE_OTHER_DATA)
+        await scenarios.seizure_other(callback, state)
+        assert callback.message.last == texts.SEIZURE_ASK_GROUP
+
+        back = FakeCallback(data=keyboards.SEIZURE_FIRST_DATA, message=callback.message)
+        await scenarios.seizure_other(back, state)
+        assert callback.message.last == texts.SEIZURE_ASK_TYPE
+        assert _labels(callback.message)[0] == "Фокальный приступ с сохранением сознания"
+
+    @pytest.mark.asyncio
+    async def test_group_offers_itself_and_its_subtypes(self, ilae, linked_store, state):
+        start = FakeMessage(text=texts.BTN_SEIZURE)
+        await scenarios.seizure_start(start, state, ilae, linked_store, SETTINGS)
+
+        callback = FakeCallback(data=keyboards.SEIZURE_GROUP_PREFIX + ILAE_IDS["3"])
+        await scenarios.seizure_group(callback, state)
+
+        labels = _labels(callback.message)
+        assert labels[0] == texts.SEIZURE_GROUP_ITSELF.format(name="Генерализованный приступ")
+        # Ближайший существующий предок «3.3.1» — «3»: он здесь, а не потерян.
+        assert "Генерализованный миоклонический приступ" in labels
+        assert "Абсанс ›" in labels
+        assert "Типичный абсанс" not in labels
+        assert callback.message.sent == 0, "шаг в том же сообщении"
+
+    @pytest.mark.asyncio
+    async def test_choosing_a_subtype_saves_it(self, ilae, linked_store, state):
+        await scenarios.seizure_start(
+            FakeMessage(text=texts.BTN_SEIZURE), state, ilae, linked_store, SETTINGS
+        )
+        await scenarios.seizure_type(
+            FakeCallback(data=keyboards.SEIZURE_TYPE_PREFIX + ILAE_IDS["3.1.1"]), state
+        )
+        await scenarios.seizure_count(
+            FakeCallback(data=f"{keyboards.SEIZURE_COUNT_PREFIX}1"),
+            state,
+            ilae,
+            linked_store,
+            SETTINGS,
+        )
+        callback = FakeCallback(data=f"{keyboards.SEIZURE_DURATION_PREFIX}{OPTION_ID}")
+        await scenarios.seizure_duration(callback, state, ilae, linked_store, SETTINGS)
+
+        assert ilae.logs[0]["payload"]["seizure_type_id"] == ILAE_IDS["3.1.1"]
+        assert callback.message.last.startswith("Записано ✓ Типичный абсанс, От 10 до 30 минут")
+
+    def test_tree_follows_the_nearest_existing_parent(self):
+        nodes = [[t["id"], t["name_ru"], t["ilae_ref"]] for t in ILAE_TYPES]
+        top = {name for _, name, _ in scenarios.seizure_children(nodes, None)}
+        assert top == {
+            "Фокальный приступ",
+            "Генерализованный приступ",
+            "Неклассифицированный приступ",
+        }
+
+
+class TestExactDurationEcho:
+    @pytest.mark.parametrize(
+        ("seconds", "text"), [(600, "10 мин"), (90, "1 мин 30 с"), (45, "45 с"), (0, "0 с")]
+    )
+    def test_minutes_not_seconds(self, seconds, text):
+        assert scenarios.format_seconds(seconds) == text

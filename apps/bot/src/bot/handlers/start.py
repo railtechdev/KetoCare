@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message, ReplyKeyboardMarkup
@@ -33,9 +34,25 @@ def compact_code(value: str) -> str:
     return "".join(ch for ch in value if not ch.isspace() and ch != "-")
 
 
+#: Знаки, из которых может состоять набранный код: латиница и цифры — и
+#: кириллические двойники латинских букв, которые API приводит к латинице
+#: (`access_codes.normalize_code`): код переписывают на русской раскладке.
+_CODE_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789АВЕКМНРСТУХавекмнрстух"
+)
+
+
 def looks_like_code(value: str) -> bool:
+    """Похоже ли сообщение на код доступа.
+
+    Прежде годились любые восемь букв и цифр: «лекарств» и «спасибо!» без
+    знака считались кодом, отвечали «код не подошёл» и сбрасывали начатую
+    запись (аудит продукта 12.11.2026). Теперь — только знаки алфавита кода
+    и их кириллические двойники; слово с «л», «и» или «б» кодом не бывает.
+    """
+
     candidate = compact_code(value)
-    return len(candidate) == CODE_LENGTH and candidate.isalnum()
+    return len(candidate) == CODE_LENGTH and all(ch in _CODE_CHARS for ch in candidate)
 
 
 @router.message(CommandStart(deep_link=True))
@@ -47,6 +64,8 @@ async def start_with_code(
     store: BindingStore,
     settings: BotSettings,
 ) -> None:
+    if await _group(message, store):
+        return
     await state.clear()
     await _link(message, api=api, store=store, settings=settings, code=(command.args or ""))
 
@@ -55,6 +74,8 @@ async def start_with_code(
 async def start_without_code(
     message: Message, state: FSMContext, store: BindingStore, settings: BotSettings
 ) -> None:
+    if await _group(message, store):
+        return
     await state.clear()
     bindings = await store.all(message.chat.id)
     binding = await store.get(message.chat.id)
@@ -74,23 +95,67 @@ async def start_without_code(
     await message.answer(text, reply_markup=await menu(store, message.chat.id, settings))
 
 
-@router.message(Command("help"))
-async def help_command(message: Message, settings: BotSettings, store: BindingStore) -> None:
-    """Единственное место, где написано, что бот умеет.
+async def _group(message: Message, store: BindingStore) -> bool:
+    """`/start` в группе: объяснить один раз, что бот работает только в личке.
 
-    И ответы на вопросы, которые обязательно возникнут: «как исправить
-    ошибочную запись», «где напоминания», «как отключить потерянный телефон» —
-    в приложении или у тех, кто выдаёт коды, а не в кабинете, которого у
-    взрослого из Telegram обычно нет. Строка про приложение — только когда
-    кнопка приложения есть.
+    Привязка — к семье, а не к комнате (см. `_link`). Прежде `/start` в группе
+    просил там код, а каждый следующий — снова; теперь группа слышит это
+    один раз, дальше бот в ней молчит.
+    """
+
+    if message.chat.type == "private":
+        return False
+    if await store.first_time_in_group(message.chat.id):
+        await message.answer(texts.GROUP_ONLY_PRIVATE)
+    return True
+
+
+@router.message(Command("help"))
+@router.message(F.text.in_(i18n.variants("BTN_HELP")))
+async def help_command(
+    message: Message, state: FSMContext, settings: BotSettings, store: BindingStore
+) -> None:
+    """Короткая справка с кнопками (ADR-0076).
+
+    Прежде справка была стеной текста за командой /help, которую находят,
+    только набрав «/». Теперь — кнопка «❓ Помощь · Yordam» в меню, ответ в
+    три строки и кнопки: язык, приложение, как исправить запись, остальные
+    вопросы. Нажатие кнопки меню закрывает начатую запись, как любая кнопка
+    меню.
     """
 
     if message.chat.type != "private":
         return
-    await message.answer(
-        texts.HELP.format(app_line=texts.HELP_APP_LINE if settings.has_miniapp else ""),
-        reply_markup=await menu(store, message.chat.id, settings),
+    await state.clear()
+    await message.answer(_help_short(settings), reply_markup=keyboards.help_menu(settings))
+
+
+def _help_short(settings: BotSettings) -> str:
+    return texts.HELP_SHORT.format(
+        app_line=texts.HELP_SHORT_APP_LINE if settings.has_miniapp else ""
     )
+
+
+@router.callback_query(F.data.startswith("help:"))
+async def help_button(callback: CallbackQuery, settings: BotSettings) -> None:
+    await callback.answer()
+    message = callback.message
+    if message is None or isinstance(message, InaccessibleMessage):
+        return
+    data = callback.data
+    if data == keyboards.HELP_LANGUAGE_DATA:
+        text, markup = texts.LANGUAGE_ASK, keyboards.languages()
+    elif data == keyboards.HELP_FIX_DATA:
+        text, markup = texts.HELP_FIX, keyboards.help_back()
+    elif data == keyboards.HELP_MORE_DATA:
+        text = texts.HELP.format(app_line=texts.HELP_APP_LINE if settings.has_miniapp else "")
+        markup = keyboards.help_back()
+    else:
+        text, markup = _help_short(settings), keyboards.help_menu(settings)
+    try:
+        await message.edit_text(text, reply_markup=markup)
+    except TelegramBadRequest:
+        return
 
 
 async def handle_bare_code(
@@ -256,8 +321,10 @@ def _bot_of(message: Message) -> Bot | None:
 
 # --- Язык (ADR-0052) ----------------------------------------------------
 #
-# Кнопка «🌐 Til / Язык» есть в каждом меню, команда /language — в синем
-# меню, языки — под первым сообщением непривязанного чата. Выбор закрывает
+# Язык — первая кнопка справки «❓ Помощь · Yordam» (ADR-0076), команда
+# /language — в синем меню, языки — под первым сообщением непривязанного чата.
+# Прежняя кнопка меню «🌐 Til / Язык» остаётся понятной боту: клавиатура,
+# присланная до выката, стоит у семьи, пока бот не пришлёт новую. Выбор закрывает
 # начатый сценарий так же, как любая кнопка меню: клавиатуры сценария были на
 # прежнем языке.
 

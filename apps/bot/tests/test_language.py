@@ -33,7 +33,7 @@ from .test_scenarios import SETTINGS, FakeCallback, FakeMessage
 
 #: Кнопка языка, вопрос и описание команды — двуязычные намеренно и потому
 #: содержат кириллицу и в узбекском каталоге.
-BILINGUAL = {"BTN_LANGUAGE", "LANGUAGE_ASK", "CMD_LANGUAGE_DESCRIPTION"}
+BILINGUAL = {"BTN_LANGUAGE", "LANGUAGE_ASK", "CMD_LANGUAGE_DESCRIPTION", "BTN_HELP"}
 
 
 def public(module: ModuleType) -> dict[str, Any]:
@@ -94,6 +94,12 @@ class TestCatalogParity:
         assert len(i18n.variants("BTN_LANGUAGE")) == 1
         assert "Til" in texts_ru.BTN_LANGUAGE and "Язык" in texts_ru.BTN_LANGUAGE
 
+    def test_help_button_is_the_same_in_every_language(self) -> None:
+        """Справка заняла место кнопки языка в меню — и её двуязычность (ADR-0076)."""
+
+        assert len(i18n.variants("BTN_HELP")) == 1
+        assert "Помощь" in texts_ru.BTN_HELP and "Yordam" in texts_ru.BTN_HELP
+
 
 class TestTextsFollowTheLanguage:
     def test_default_is_russian(self) -> None:
@@ -109,7 +115,7 @@ class TestTextsFollowTheLanguage:
         with i18n.use("uz"):
             menu = keyboards.main_menu(SETTINGS)
         assert texts_uz.BTN_WEIGHT in labels(menu)
-        assert texts_ru.BTN_LANGUAGE in labels(menu)
+        assert texts_ru.BTN_HELP in labels(menu)
 
     def test_from_telegram(self) -> None:
         assert i18n.from_telegram("uz") == "uz"
@@ -151,7 +157,12 @@ class TestButtonsInAnyLanguage:
         assert await _matches(start.router, "child_menu", texts_ru.BTN_CHILD.format(name="Аня"))
 
     async def test_language_button(self) -> None:
+        """Клавиатура до ADR-0076 стоит у семьи, пока бот не пришлёт новую."""
+
         assert await _matches(start.router, "language_menu", texts_ru.BTN_LANGUAGE)
+
+    async def test_help_button(self) -> None:
+        assert await _matches(start.router, "help_command", texts_ru.BTN_HELP)
 
 
 @pytest.mark.asyncio
