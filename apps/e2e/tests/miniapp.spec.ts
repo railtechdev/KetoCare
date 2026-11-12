@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { loginAsDoctor, loginAsParent, patientId } from "../src/auth";
 import { clearMenu, ensureDish } from "../src/api";
@@ -81,12 +81,13 @@ test("семья из Telegram собирает вчерашний день и �
   await page.goto(launchUrl(signedInitData()));
 
   // Сессия открылась по подписи: ни почты, ни пароля семья не заводила.
+  // Первая вкладка — «Сегодня» (ADR-0075), меню дня открывается с неё.
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await page.getByRole("button", { name: "Меню" }).click();
-  await page.getByRole("button", { name: "Вчера" }).click();
+  await openYesterdayMenu(page);
 
   // --- сборка дня -----------------------------------------------------------
-  await page.getByRole("button", { name: "Составить меню" }).click();
+  // У каждого назначенного приёма своя кнопка, и приём приходит выбранным.
+  await page.getByRole("button", { name: "Добавить блюдо в приём 2" }).click();
   const search = page.getByLabel("Найти блюдо или рецепт");
   await expect(search).toBeVisible();
 
@@ -94,31 +95,32 @@ test("семья из Telegram собирает вчерашний день и �
   await expect(dish).toBeVisible();
   await dish.click();
 
-  await page.getByLabel("Приём пищи").selectOption({ label: "Приём 2" });
+  await expect(page.getByLabel("Приём пищи")).toHaveValue("2");
   await page.getByRole("button", { name: "Добавить в меню" }).click();
+
+  // Панель не закрывается после блюда: можно добавлять дальше, а «Готово»
+  // возвращает к меню.
+  await expect(page.getByText(/— в приёме 2/)).toBeVisible();
+  await page.getByRole("button", { name: "Готово" }).click();
 
   // --- что семья видит после сборки ----------------------------------------
   await expect(page.getByRole("heading", { name: "Приём 2" })).toBeVisible();
 
   // Цели назначения рядом с итогами: собирать суточный рацион ребёнка, не видя
   // их, — собирать вслепую. Числа считает ядро на сервере, клиент их не шлёт.
-  // Посещённые вкладки остаются смонтированными (скрытыми), и сводка главной
-  // говорит о сегодняшнем дне теми же словами — ищем внутри вкладки «Меню».
-  const menuTab = page.locator('[data-tab="menu"]');
+  const todayTab = page.locator('[data-tab="today"]');
   await expect(
-    menuTab
+    todayTab
       .getByText(new RegExp(`из ${targets.kcalPerDay.toLocaleString("ru")}`))
-      // На прошедшем дне цель названа и полосой, и строкой «Набрано … из …».
       .first(),
   ).toBeVisible();
   await expect(
-    menuTab.getByText(/Чтобы набрать суточную норму, добавьте ещё .* ккал/),
+    todayTab.getByText(/Чтобы набрать суточную норму, добавьте ещё .* ккал/),
   ).toBeVisible();
 
   // --- отметка «съедено» ----------------------------------------------------
   // `click`, а не `check`: у `check` своё короткое ожидание, а отметка живёт на
-  // сервере — состояние меняется после обращения и обновления запроса, и
-  // Playwright успевал объявить «нажатие не изменило состояние» раньше ответа.
+  // сервере — состояние меняется после обращения и обновления запроса.
   const eaten = page.getByRole("checkbox").first();
   await eaten.click();
   await expect(eaten).toBeChecked();
@@ -126,18 +128,47 @@ test("семья из Telegram собирает вчерашний день и �
   // Отметка живёт на сервере, а не в памяти вкладки: если после перезагрузки
   // пропало — это дефект (правило из AUDIT_UX).
   await page.reload();
-  await page.getByRole("button", { name: "Меню" }).click();
-  await page.getByRole("button", { name: "Вчера" }).click();
+  await openYesterdayMenu(page);
   await expect(page.getByRole("checkbox").first()).toBeChecked();
 
-  // Съеденное убрать нельзя — сначала снимается отметка: это уже не план, а
+  // Съеденное убрать нельзя — сначала снимается отметка: это уже не меню, а
   // запись о том, что ребёнок ел (ADR-0041).
   await expect(page.getByRole("button", { name: "Убрать" })).toHaveCount(0);
 
   // На завтра флажка «съедено» нет: съесть будущий день нельзя.
-  await page.getByRole("button", { name: "Завтра" }).click();
+  await pickDay(page, "Завтра");
   await expect(page.getByRole("checkbox")).toHaveCount(0);
 });
+
+/**
+ * «Сегодня» → меню дня → «Вчера».
+ *
+ * Кнопка на «Сегодня» называется по состоянию дня: «Открыть меню», если на
+ * сегодня что-то стоит (его пишет `journey.spec.ts`), и «Составить меню», если
+ * нет. Для этого сценария разницы нет — обе ведут в одно меню.
+ */
+/**
+ * Day switch is the kit `SegmentedControl`: the radio is visually hidden and its
+ * label takes the click, so the test presses the label, as a person does, and
+ * then checks the radio state.
+ */
+async function pickDay(page: Page, name: string): Promise<void> {
+  await page
+    .locator("label")
+    .filter({ hasText: new RegExp(`^${name}$`) })
+    .click();
+  await expect(page.getByRole("radio", { name })).toBeChecked();
+}
+
+async function openYesterdayMenu(page: Page): Promise<void> {
+  await page
+    .getByRole("button", { name: /^(Открыть меню|Составить меню)$/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Меню" }),
+  ).toBeVisible();
+  await pickDay(page, "Вчера");
+}
 
 test("семья добавляет замер кетонов прямо в дневнике", async ({ page }) => {
   // До 07.10.2026 записи заводил только бот, а пустой дневник отправлял туда
@@ -171,7 +202,7 @@ test("семья добавляет замер кетонов прямо в дн
   const before = await entry.count();
 
   await diary.getByRole("button", { name: "Добавить запись" }).first().click();
-  await page.getByRole("button", { name: "Кетоны" }).click();
+  await page.getByRole("button", { name: "Кетоны", exact: true }).click();
   await page.getByLabel("Кетоны, ммоль/л").fill("1.9");
   await page.getByRole("button", { name: "Сохранить" }).click();
 
@@ -211,4 +242,52 @@ test("подделанная подпись не пускает", async ({ page 
   await expect(
     page.getByText("Закройте приложение и откройте снова из чата"),
   ).toBeVisible();
+});
+
+test("кнопка «Кетоны» на «Сегодня» открывает форму сразу, без выбора вида", async ({
+  page,
+}) => {
+  // Быстрые записи (ADR-0075): прежде приступ стоил 7–9 нажатий, и курсор
+  // вставал на дату, а не на значение.
+  const parentPage = await page.context().newPage();
+  await loginAsParent(parentPage);
+  const patient = await patientId(parentPage.request);
+  await parentPage.close();
+
+  const doctorPage = await page.context().newPage();
+  await loginAsDoctor(doctorPage);
+  await ensureTelegramLink(doctorPage.request, patient);
+  await doctorPage.close();
+  await flushRateLimits();
+
+  await page.goto(launchUrl(signedInitData()));
+  await page
+    .getByRole("button", { name: /^Кетоны/ })
+    .first()
+    .click();
+
+  await expect(page.getByLabel("Кетоны, ммоль/л")).toBeFocused();
+  await expect(page.getByText("Что записать?")).toHaveCount(0);
+});
+
+test("параметр запуска open=diary-weight открывает форму веса", async ({
+  page,
+}) => {
+  // Договор с ботом (apps/miniapp/README.md): кнопка под напоминанием ведёт
+  // сразу к форме, а не на главную.
+  const parentPage = await page.context().newPage();
+  await loginAsParent(parentPage);
+  const patient = await patientId(parentPage.request);
+  await parentPage.close();
+
+  const doctorPage = await page.context().newPage();
+  await loginAsDoctor(doctorPage);
+  await ensureTelegramLink(doctorPage.request, patient);
+  await doctorPage.close();
+  await flushRateLimits();
+
+  const url = launchUrl(signedInitData()).replace("/#", "/?open=diary-weight#");
+  await page.goto(url);
+
+  await expect(page.getByLabel("Вес, кг")).toBeVisible();
 });

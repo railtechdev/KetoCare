@@ -1,0 +1,16 @@
+/*
+ * Цвета родных экранов Telegram (Bot API 7.0) поверх блоков кита.
+ *
+ * Переменные `--tg-*` и признаки на `<html>` ставит `lib/theme.ts` — и только
+ * когда цвет прошёл проверку контраста (разделитель — не текст, его не
+ * проверяют). Признака нет — правило не действует, и остаётся вид кита: вне
+ * Telegram и в старом клиенте ничего не меняется. Файлы кита не правятся,
+ * поэтому правило — здесь, по `data-slot`.
+ */
+:root[data-tg-section-header] [data-slot="card-title"] {
+  color: var(--tg-section-header);
+}
+
+:root[data-tg-separator] [data-slot="card"] {
+  border-color: var(--tg-separator);
+}

@@ -109,3 +109,51 @@ export function mealNumbers(mealsPerDay: number | null): number[] {
   if (mealsPerDay === null || mealsPerDay < 1) return [];
   return Array.from({ length: mealsPerDay }, (_, index) => index + 1);
 }
+
+/**
+ * Приёмы, которые показывает меню дня: ВСЕ назначенные, в том числе пустые.
+ *
+ * Прежде экран показывал только занятые приёмы, и пустой приём было не
+ * найти: добавить в него блюдо можно было лишь через общую панель, где приём
+ * сбрасывался на первый (аудит 12.11.2026). Теперь у каждого назначенного
+ * приёма своя строка с «+ блюдо».
+ *
+ * Приём, которого в назначении уже нет, но в котором стоит блюдо (врач
+ * уменьшил число приёмов после того, как день собрали), тоже остаётся: прятать
+ * еду, которую ребёнку дадут, нельзя.
+ */
+export function mealsOfDay(
+  prescribed: readonly number[],
+  items: readonly { meal_index: number }[],
+): number[] {
+  return [
+    ...new Set([...prescribed, ...items.map((item) => item.meal_index)]),
+  ].sort((a, b) => a - b);
+}
+
+/** Что показать на «Сегодня»: ближайший приём с несъеденным или «всё съедено». */
+export type NextMeal<T> =
+  { kind: "meal"; mealIndex: number; items: T[] } | { kind: "allEaten" };
+
+/**
+ * Ближайший приём — первый по порядку, где есть несъеденное.
+ *
+ * Часов у приёмов нет (ADR-0029: приём — номер), поэтому «текущий» узнаётся по
+ * отметкам: всё, что раньше, уже отмечено съеденным. `null` — в меню нет ни
+ * одного блюда.
+ */
+export function nextMeal<T extends { meal_index: number; eaten: boolean }>(
+  items: readonly T[],
+): NextMeal<T> | null {
+  if (items.length === 0) return null;
+  const open = [...items]
+    .filter((item) => !item.eaten)
+    .sort((a, b) => a.meal_index - b.meal_index)
+    .at(0);
+  if (open === undefined) return { kind: "allEaten" };
+  return {
+    kind: "meal",
+    mealIndex: open.meal_index,
+    items: items.filter((item) => item.meal_index === open.meal_index),
+  };
+}

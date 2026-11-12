@@ -54,11 +54,14 @@ export function SaveDish({
   patientId,
   rows,
   blockedBy,
+  onNew,
 }: {
   patientId: string;
   rows: DishRow[];
   /** Почему сохранить нельзя сейчас; `null` — состав проверен и готов. */
   blockedBy: string | null;
+  /** Начать новое блюдо с пустого состава — следующий шаг после «Добавлено». */
+  onNew?: () => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -82,7 +85,22 @@ export function SaveDish({
         <p role="status" className="m-0 text-sm text-success">
           {t("calculator.save.saved", { title: saved.dish.title })}
         </p>
-        <AddToPlan patientId={patientId} dishId={saved.dish.id} />
+        <AddToPlan
+          patientId={patientId}
+          dish={{ kind: "custom", id: saved.dish.id }}
+          afterAdded={
+            onNew !== undefined && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch w-full"
+                onClick={onNew}
+              >
+                {t("calculator.save.another")}
+              </Button>
+            )
+          }
+        />
       </Section>
     );
   }

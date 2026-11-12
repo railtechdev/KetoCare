@@ -1,4 +1,4 @@
-import { EmptyState, ErrorState } from "@ketocare/ui";
+import { Button, EmptyState, ErrorState } from "@ketocare/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   type ReactNode,
@@ -10,7 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { onSessionExpired } from "../../lib/api";
-import { launchDiagnosis } from "../../lib/telegram";
+import { canCloseApp, closeApp, launchDiagnosis } from "../../lib/telegram";
 import { LanguageSwitch } from "./LanguageSwitch";
 import type { Session, SessionProblem } from "./useSession";
 import { SessionUpdateContext, useOpenSession } from "./useSession";
@@ -128,10 +128,13 @@ function Problem({
   const { t } = useTranslation();
 
   if (problem === "not_linked") {
+    // Код вводят не здесь, а в чате с ботом: поля для кода в приложении нет, и
+    // «пришлите код сюда» было тупиком. Кнопка возвращает в чат.
     return (
       <EmptyState
         title={t("session.notLinked.title")}
         description={t("session.notLinked.description")}
+        action={<CloseAppButton />}
       />
     );
   }
@@ -143,6 +146,7 @@ function Problem({
       <EmptyState
         title={t("session.relaunch.title")}
         description={t("session.relaunch.description")}
+        action={<CloseAppButton />}
       />
     );
   }
@@ -191,5 +195,25 @@ function Problem({
       retryLabel={t("actions.retry")}
       onRetry={onRetry}
     />
+  );
+}
+
+/**
+ * «Закрыть и вернуться в чат» — выход из экрана, где дальше можно только
+ * из чата. Вне Telegram закрывать нечего, и кнопки нет.
+ */
+function CloseAppButton() {
+  const { t } = useTranslation();
+  if (!canCloseApp()) return null;
+  return (
+    <Button
+      type="button"
+      className="min-h-touch w-full"
+      onClick={() => {
+        closeApp();
+      }}
+    >
+      {t("session.close")}
+    </Button>
   );
 }

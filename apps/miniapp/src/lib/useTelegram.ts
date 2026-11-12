@@ -1,6 +1,14 @@
-import { createContext, useContext, useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
-import { guardUnsavedInput, showBackButton } from "./telegram";
+import {
+  type BottomButtonsSpec,
+  guardUnsavedInput,
+  nativeBottomButtons,
+  pushBottomButtons,
+  refreshBottomButtons,
+  showBackButton,
+  showSettingsButton,
+} from "./telegram";
 
 /**
  * Видна ли вкладка, на которой стоит компонент.
@@ -38,4 +46,54 @@ export function useTelegramBack(onBack: (() => void) | null): void {
 /** Подтверждение закрытия и запрет жеста вниз, пока ввод не сохранён. */
 export function useUnsavedGuard(dirty: boolean): void {
   useEffect(() => (dirty ? guardUnsavedInput() : undefined), [dirty]);
+}
+
+/**
+ * «Сохранить / Отмена» родными кнопками Telegram под формой (Bot API 7.10).
+ *
+ * Возвращает `true`, если кнопки стоят внизу Telegram — тогда экран своих не
+ * рисует. `false` — вне Telegram и в старом клиенте: экран рисует обе кнопки
+ * сам. `spec = null` — кнопки сейчас не нужны.
+ *
+ * Как у кнопки «Назад»: подписка не пересоздаётся на каждую отрисовку, а
+ * скрытая вкладка свои кнопки снимает — иначе «Сохранить» формы, оставленной
+ * на другой вкладке, стояла бы под чужим экраном.
+ */
+export function useBottomButtons(spec: BottomButtonsSpec | null): boolean {
+  const [native] = useState(nativeBottomButtons);
+  const latest = useRef(spec);
+  const visible = useContext(TabVisibleContext);
+  const active = native && spec !== null && visible;
+  const release = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    latest.current = spec;
+    // Подпись и доступность меняются на каждом шаге формы.
+    if (release.current !== null) refreshBottomButtons();
+  });
+  useEffect(() => {
+    if (!active) return undefined;
+    const stop = pushBottomButtons(() => latest.current);
+    release.current = stop;
+    return () => {
+      release.current = null;
+      stop();
+    };
+  }, [active]);
+  return native;
+}
+
+/** Пункт «Настройки» в меню Telegram (Bot API 7.0), пока экраны открыты. */
+export function useSettingsButton(onOpen: () => void): void {
+  const latest = useRef(onOpen);
+  useEffect(() => {
+    latest.current = onOpen;
+  });
+  useEffect(
+    () =>
+      showSettingsButton(() => {
+        latest.current();
+      }),
+    [],
+  );
 }

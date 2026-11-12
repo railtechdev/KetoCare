@@ -50,6 +50,12 @@ BODY_PATIENT_ROUTES: dict[tuple[str, str], str] = {
         "POST",
         "/api/v1/auth/invitations",
     ): "test_patient_access_in_body.py::test_invitation_never_carries_a_child",
+    # Поиск рецептов сверяет соотношение с назначением ребёнка (ADR-0075).
+    ("GET", "/api/v1/recipes"): "test_recipes.py::test_another_familys_child_is_refused",
+    (
+        "GET",
+        "/api/v1/recipes/{recipe_id}",
+    ): "test_recipes.py::test_recipe_card_refuses_another_familys_child",
     # Mini App: пациент в теле выбирает ребёнка внутри своих привязок чата —
     # отказ даёт привязка, а не связь учётной записи с ребёнком.
     (

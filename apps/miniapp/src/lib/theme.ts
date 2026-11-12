@@ -1,5 +1,5 @@
 import type { Inset, ThemeParams } from "./telegram";
-import { webApp } from "./telegram";
+import { applyChromeColors, refreshBottomButtons, webApp } from "./telegram";
 
 /**
  * Цвета Telegram → токены дизайн-системы (раздел 9 ТЗ).
@@ -16,11 +16,30 @@ import { webApp } from "./telegram";
  * клиента их не описывает.
  */
 
-/** Фон и карточка — подложки; их берём всегда, по ним проверяется текст. */
-const SURFACE_BY_PARAM = {
-  bg_color: "--color-background",
-  secondary_bg_color: "--color-card",
-} as const satisfies Partial<Record<keyof ThemeParams, string>>;
+/**
+ * Фон и карточка — подложки; их берём всегда, по ним проверяется текст.
+ *
+ * Клиент с цветами разделов (Bot API 7.0) рисует свои экраны настроек так:
+ * фон — `secondary_bg_color`, разделы на нём — `section_bg_color`. Приложение
+ * из таких же разделов и берёт ту же пару. Старый клиент разделов не знает:
+ * фон — `bg_color`, карточка — `secondary_bg_color`, как было.
+ */
+function surfacesOf(params: ThemeParams): {
+  background: string | null;
+  card: string | null;
+} {
+  const section = hexOf(params.section_bg_color);
+  if (section !== null) {
+    return {
+      background: hexOf(params.secondary_bg_color) ?? hexOf(params.bg_color),
+      card: section,
+    };
+  }
+  return {
+    background: hexOf(params.bg_color),
+    card: hexOf(params.secondary_bg_color),
+  };
+}
 
 /** Всё, что этот модуль может переопределить, — чтобы снимать прежнее. */
 const OVERRIDDEN_TOKENS = [
@@ -31,6 +50,11 @@ const OVERRIDDEN_TOKENS = [
   "--color-primary",
   "--color-primary-foreground",
   "--color-destructive",
+  // Свои переменные приложения: акцент (выбранная вкладка, ссылки), заголовки
+  // разделов и разделители — как у родных экранов Telegram (Bot API 7.0).
+  "--tg-accent",
+  "--tg-section-header",
+  "--tg-separator",
 ] as const;
 
 const MIN_CONTRAST = 4.5;
@@ -50,11 +74,16 @@ export function applyTelegramTheme(
   // новая тема не прислала (или который теперь не проходит по контрасту),
   // остался бы от старой — светлый текст на светлом фоне.
   for (const token of OVERRIDDEN_TOKENS) root.style.removeProperty(token);
+  delete root.dataset.tgSectionHeader;
+  delete root.dataset.tgSeparator;
 
   const params = app.themeParams;
-  for (const [param, token] of Object.entries(SURFACE_BY_PARAM)) {
-    const value = hexOf(params[param as keyof ThemeParams]);
-    if (value !== null) root.style.setProperty(token, value);
+  const surfaceColors = surfacesOf(params);
+  if (surfaceColors.background !== null) {
+    root.style.setProperty("--color-background", surfaceColors.background);
+  }
+  if (surfaceColors.card !== null) {
+    root.style.setProperty("--color-card", surfaceColors.card);
   }
 
   // Подложки, на которых будет стоять текст, — уже итоговые: клиентские или
@@ -76,8 +105,31 @@ export function applyTelegramTheme(
   const text = hexOf(params.text_color);
   if (readable(text)) root.style.setProperty("--color-foreground", text);
 
-  const hint = hexOf(params.hint_color);
-  if (readable(hint)) root.style.setProperty("--color-muted-foreground", hint);
+  // Подзаголовок (7.0) точнее подсказки: им Telegram пишет вторую строку
+  // пункта. Не читается — подсказка; не читается и она — наш токен.
+  const subtitle = [hexOf(params.subtitle_text_color), hexOf(params.hint_color)]
+    .filter(readable)
+    .at(0);
+  if (subtitle !== undefined) {
+    root.style.setProperty("--color-muted-foreground", subtitle);
+  }
+
+  const accent = hexOf(params.accent_text_color);
+  if (readable(accent)) root.style.setProperty("--tg-accent", accent);
+
+  const sectionHeader = hexOf(params.section_header_text_color);
+  if (readable(sectionHeader)) {
+    root.style.setProperty("--tg-section-header", sectionHeader);
+    root.dataset.tgSectionHeader = "";
+  }
+
+  // Разделитель — не текст: контраста 4.5:1 от него не требуется, он отделяет
+  // разделы друг от друга так же, как в самом Telegram.
+  const separator = hexOf(params.section_separator_color);
+  if (separator !== null) {
+    root.style.setProperty("--tg-separator", separator);
+    root.dataset.tgSeparator = "";
+  }
 
   // Фирменный цвет — и текст (выбранная вкладка, ссылки), и подложка кнопки.
   // Берётся, только если годится в обеих ролях: читается на фонах и под
@@ -107,6 +159,13 @@ export function applyTelegramTheme(
   }
 
   applySafeArea(root, app.safeAreaInset, app.contentSafeAreaInset);
+
+  // Шапка и фон Telegram — цвета фона страницы, нижняя полоса — цвета полосы
+  // вкладок (карточка): приложение не стоит чужой вставкой между ними.
+  applyChromeColors({
+    background: tokenValue(root, "--color-background"),
+    bar: tokenValue(root, "--color-card"),
+  });
 }
 
 /**
@@ -142,6 +201,8 @@ export function watchTelegramTheme(): () => void {
 
   const handler = () => {
     applyTelegramTheme();
+    // Главная кнопка Telegram — фирменного цвета страницы, и он сменился.
+    refreshBottomButtons();
   };
   const events = ["themeChanged", "safeAreaChanged", "contentSafeAreaChanged"];
   for (const event of events) app.onEvent(event, handler);

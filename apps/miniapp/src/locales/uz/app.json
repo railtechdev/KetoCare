@@ -7,12 +7,12 @@
     "label": "Til / Язык",
     "ru": "Русский",
     "uz": "O‘zbekcha",
-    "saveFailed": "Tilni saqlab bo‘lmadi — bot uni hozircha bilmaydi. Yana bir bor tanlab ko‘ring."
+    "saveFailed": "Tilni saqlab bo‘lmadi — bot uni hozircha bilmaydi. «Qaytarish» tugmasini bosing."
   },
   "session": {
     "notLinked": {
       "title": "Bu Telegram hali ulanmagan",
-      "description": "Kirish kodini qabulda shifokor yoki bolaga kirish huquqi allaqachon bor ota-ona beradi. Kodni bot bilan chatga yuboring va ilovani qayta oching. Agar kabinetingiz bo‘lsa, kod «Bola» → «Telegram» bo‘limida turadi."
+      "description": "Kirish kodini qabulda shifokor yoki bolaga kirish huquqi allaqachon bor ota-ona beradi. Kodni bot bilan chatga xabar qilib yuboring va ilovani qayta oching."
     },
     "outside": {
       "title": "Ilova Telegram ichida ochiladi",
@@ -31,7 +31,8 @@
     "relaunch": {
       "title": "Ilovani yoping va chatdan qayta oching",
       "description": "Telegram ilova ishga tushirilishini cheklangan vaqtga tasdiqlaydi va bu vaqt tugadi. Ilovani yoping va bot bilan chatdagi «Ilova» tugmasi orqali qayta oching — yozilganlarning hammasi saqlangan."
-    }
+    },
+    "close": "Yopish va chatga qaytish"
   },
   "errors": {
     "network": "Aloqa yo‘q. Internetni tekshiring.",
@@ -40,7 +41,9 @@
   "actions": {
     "retry": "Qaytarish",
     "retrying": "Qaytarilmoqda…",
-    "cancel": "Bekor qilish"
+    "cancel": "Bekor qilish",
+    "showMore": "Yana ko‘rsatish",
+    "loading": "Yuklanmoqda…"
   },
   "home": {
     "yesterdayShortfall": {
@@ -60,27 +63,15 @@
       "title": "Bugun",
       "noMenu": "Bugun uchun menyu tuzilmagan."
     },
-    "readings": {
-      "title": "Oxirgi o‘lchovlar",
-      "ketones": "Ketonlar",
-      "weight": "Vazn",
-      "weightValue": "{{value}} kg",
-      "none": "yozuvlar yo‘q",
-      "ketonesValue": "{{value}} mmol/l",
-      "ketonesBlood": "qon bo‘yicha",
-      "ketonesUrine": "siydik bo‘yicha"
-    },
     "therapyEnded": {
       "title": "Davolash yakunlandi",
       "text": "Ketogen parhez bilan davolash kursi yakunlandi: {{date}}. Kundalik yozuvlari saqlangan, eslatmalar endi kelmaydi. Bolaning keyingi ovqatlanishi haqida shifokoringiz aytib beradi."
     }
   },
   "tabs": {
-    "home": "Holat",
-    "menu": "Menyu",
+    "today": "Bugun",
     "diary": "Kundalik",
-    "calculator": "Hisob",
-    "recipes": "Retseptlar",
+    "dishes": "Taomlar",
     "assistant": "Yordamchi"
   },
   "menu": {
@@ -115,7 +106,7 @@
     },
     "compose": {
       "open": "Menyu tuzish",
-      "title": "Nima qo‘shamiz",
+      "title": "Menyuga qo‘shish: {{day}}",
       "search": "Taom yoki retsept toping",
       "nothingFound": "Hech narsa topilmadi. Boshqa so‘z bilan urinib ko‘ring.",
       "loadError": "Taomlarni yuklab bo‘lmadi",
@@ -137,7 +128,11 @@
       "removeTitle": "«{{title}}» menyudan olib tashlansinmi?",
       "removeBody": "Taom shu kun menyusidan olib tashlanadi.",
       "removeAria": "«{{title}}»ni olib tashlash",
-      "keep": "Qoldirish"
+      "keep": "Qoldirish",
+      "done": "Tayyor",
+      "addedTo": "«{{title}}» — {{index}}-ovqatlanishda. Yana qo‘shish mumkin.",
+      "portionInvalid": "Porsiyani 0 dan katta son bilan kiriting, masalan 1 yoki 0,5.",
+      "kcalPortion": "porsiyasiga {{value}} kkal"
     },
     "targets": {
       "kcalLabel": "Kaloriya",
@@ -149,7 +144,13 @@
       "carbsLeft": "{{value}} g qoldi",
       "carbsOver": "chegaradan {{value}} g ortiq"
     },
-    "tomorrowNoEaten": "«Yedi» belgisini bola ovqatlangan kuni qo‘yish mumkin."
+    "tomorrowNoEaten": "«Yedi» belgisini bola ovqatlangan kuni qo‘yish mumkin.",
+    "backToToday": "Bugun",
+    "mealEmpty": "Hozircha taom yo‘q.",
+    "addToMeal": "Taom qo‘shish",
+    "addToMealAria": "{{index}}-ovqatlanishga taom qo‘shish",
+    "howToCook": "Qanday tayyorlanadi",
+    "macroLine": "yog‘lar {{fat}} g · oqsillar {{protein}} g · uglevodlar {{carbs}} g"
   },
   "verdict": {
     "withinTolerance": "Kunning keto nisbati tayinlovga mos.",
@@ -167,7 +168,6 @@
     "otherDay": "Tayinlovga moslik faqat bugungi kun uchun ko‘rsatiladi."
   },
   "charts": {
-    "period": "Grafiklar — oxirgi {{days}} kun uchun",
     "loadError": "Yozuvlarni yuklab bo‘lmadi",
     "empty": "Bu davr uchun yozuvlar yo‘q.",
     "markersUnavailableTitle": "Tayinlov almashgan chiziqlar ko‘rsatilmagan",
@@ -175,24 +175,25 @@
     "ketones": {
       "title": "Ketonlar",
       "unit": "mmol/l",
-      "caption": "Oxirgi 30 kundagi ketonlar grafigi"
+      "caption": "Oxirgi {{days}} kundagi ketonlar grafigi"
     },
     "weight": {
       "title": "Vazn",
       "unit": "kg",
-      "caption": "Oxirgi 30 kundagi vazn grafigi"
+      "caption": "Oxirgi {{days}} kundagi vazn grafigi"
     },
     "seizures": {
       "title": "Xurujlar",
       "unit": "kuniga",
-      "caption": "Oxirgi 30 kunda kunlar bo‘yicha xurujlar soni",
-      "empty": "30 kun ichida xurujlar yozilmagan."
-    }
+      "caption": "Oxirgi {{days}} kunda kunlar bo‘yicha xurujlar soni",
+      "empty": "{{days}} kun ichida xurujlar yozilmagan."
+    },
+    "title": "{{days}} kunlik grafik",
+    "kind": "Grafikda nimani ko‘rsatish"
   },
   "diary": {
     "title": "Kundalik",
-    "entriesTitle": "Ikki haftalik yozuvlar",
-    "entriesHint": "Yangilari tepada. O‘z yozuvingizni tuzatish yoki o‘chirish mumkin.",
+    "entriesTitle": "{{days}} kunlik yozuvlar",
     "today": "Bugun",
     "yesterday": "Kecha",
     "emptyTitle": "Ikki hafta ichida yozuvlar yo‘q",
@@ -201,7 +202,7 @@
     "loadErrorHint": "Aloqani tekshirib, yana urinib ko‘ring.",
     "wroteBy": "Yozdi: {{name}}",
     "wroteByMe": "Siz yozdingiz",
-    "fromMenuHint": "«Yeyildi» belgisi — uni «Menyu» bo‘limida tuzatish mumkin.",
+    "fromMenuHint": "«Yeyildi» belgilari menyuda tuzatiladi.",
     "edit": "Tuzatish",
     "editAria": "«{{title}}» yozuvini tuzatish",
     "delete": "O‘chirish",
@@ -323,10 +324,7 @@
       "medications": "Dori beradigan vaqtingizda.",
       "weight": "Bir necha kunda bir marta yetarli — eslatma faqat kun uchun yozuv bo‘lmasa keladi.",
       "no_records": "Kechqurun, agar kun davomida birorta ham yozuv bo‘lmasa."
-    },
-    "statusOn": "Eslatmalar yoqilgan",
-    "statusOff": "Eslatmalar o‘chirilgan",
-    "edit": "O‘zgartirish"
+    }
   },
   "calculator": {
     "title": "Hisob",
@@ -388,7 +386,7 @@
       "saving": "Saqlanmoqda…",
       "saved": "«{{title}}» taomi saqlandi.",
       "failed": "Taomni saqlab bo‘lmadi",
-      "another": "Boshqa taom tuzish",
+      "another": "Yangi taom",
       "blocked": {
         "noTitle": "Taomga nom berilmagan — u ro‘yxatda shu nom bilan chiqadi.",
         "notChecked": "Hisobdan keyin saqlash mumkin.",
@@ -407,7 +405,8 @@
       "loadError": "Shu kunning menyusini yuklab bo‘lmadi.",
       "failed": "Menyuga qo‘shib bo‘lmadi",
       "noPrescription": "Hozircha tayinlov yo‘q, demak kundagi ovqatlanishlar ham yo‘q: ularni shifokor belgilaydi.",
-      "prescriptionUnknown": "Tayinlov yuklanmoqda — kunda nechta ovqatlanish bo‘lishi unga bog‘liq."
+      "prescriptionUnknown": "Tayinlov yuklanmoqda — kunda nechta ovqatlanish bo‘lishi unga bog‘liq.",
+      "openMenu": "Menyuni ochish"
     },
     "searchFailed": "Mahsulotlarni topib bo‘lmadi. Aloqani tekshiring va qaytaring."
   },
@@ -447,7 +446,9 @@
     "withdrawn": "arxivda",
     "uncounted": "ziravor, hisobga kirmaydi",
     "withdrawnTitle": "Tarkibda arxivdagi mahsulot bor",
-    "withdrawnBody": "Arxivda: {{list}}. Dietolog bilan aniqlashtiring."
+    "withdrawnBody": "Arxivda: {{list}}. Dietolog bilan aniqlashtiring.",
+    "ratioDiffers": "Keto nisbati tayinlovdagidek emas",
+    "toMenu": "Menyuga qo‘shish"
   },
   "assistant": {
     "title": "Yordamchi",
@@ -551,6 +552,44 @@
       "bot": "Bot",
       "miniapp": "Ilova",
       "ai_parsed": "Matndan ajratildi"
+    }
+  },
+  "today": {
+    "title": "Bugun",
+    "prescription": {
+      "ratio": "keto nisbati {{value}}"
+    },
+    "quick": {
+      "title": "Yozish",
+      "lastKetones": "Ketonlar oxirgi marta: {{value}} mmol/l {{method}}, {{when}}",
+      "lastWeight": "Vazn oxirgi marta: {{value}} kg, {{when}}"
+    },
+    "menu": {
+      "title": "Bugungi menyu",
+      "next": "Hozir — {{index}}-ovqatlanish",
+      "allEaten": "Bugungi menyudagi hammasi yeyildi deb belgilangan.",
+      "open": "Menyuni ochish"
+    }
+  },
+  "dishes": {
+    "title": "Taomlar",
+    "section": "Bo‘lim",
+    "sections": {
+      "recipes": "Retseptlar",
+      "dishes": "Bola taomlari",
+      "calculator": "Hisob"
+    },
+    "loadError": "Taomlarni yuklab bo‘lmadi",
+    "empty": "Bolaning taomlari hozircha yo‘q",
+    "openCalculator": "Taomni hisobda tuzish",
+    "toMenu": "Menyuga qo‘shish"
+  },
+  "settings": {
+    "title": "Sozlamalar",
+    "back": "Orqaga",
+    "homeScreen": {
+      "title": "Telefondagi yorliq",
+      "action": "Bosh ekranga qo‘shish"
     }
   }
 }

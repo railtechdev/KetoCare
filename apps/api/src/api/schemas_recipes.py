@@ -112,3 +112,9 @@ class RecipeRead(BaseModel):
     author_id: uuid.UUID
     ingredients: list[RecipeIngredientRead]
     created_at: datetime
+    #: Совпадает ли кетосоотношение рецепта с назначением ребёнка из запроса
+    #: (`?patient_id=`). Решает ядро своим допуском (`within_tolerance`), клиент
+    #: не сравнивает чисел сам. `null` — ребёнка не спрашивали, назначения нет,
+    #: соотношения у рецепта нет или оно посчитано прежним основным правилом.
+    #: Читает Mini App: пометка у рецепта, чьё соотношение не как у ребёнка.
+    ratio_fits_prescription: bool | None = None

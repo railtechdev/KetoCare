@@ -6,6 +6,7 @@ import {
   KETONE_MAX_MMOL,
   KETONE_MIN_MMOL,
   NativeSelect,
+  SegmentedControl,
   cn,
   OCCURRED_AT_FUTURE,
   SEIZURE_COUNT_MIN,
@@ -38,7 +39,11 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { useOnline } from "../../lib/connectivity";
-import { useTelegramBack, useUnsavedGuard } from "../../lib/useTelegram";
+import {
+  useBottomButtons,
+  useTelegramBack,
+  useUnsavedGuard,
+} from "../../lib/useTelegram";
 import type {
   CreatableKind,
   DiaryLog,
@@ -249,6 +254,25 @@ export function EntryEditSheet({
   };
   useTelegramBack(pending ? null : back);
 
+  const primaryLabel = !savingStep
+    ? t("diary.next")
+    : pending
+      ? t("diary.saving")
+      : t("diary.save");
+  const secondaryLabel = step === 2 ? t("diary.back") : t("actions.cancel");
+  // «Сохранить» и «Отмена» — родными кнопками Telegram внизу экрана (Bot API
+  // 7.10): над клавиатурой, на привычном месте. Вне Telegram и в старом
+  // клиенте — кнопками формы.
+  const native = useBottomButtons({
+    main: {
+      text: primaryLabel,
+      onClick: () => submit(),
+      disabled: blockedOffline,
+      progress: pending,
+    },
+    secondary: { text: secondaryLabel, onClick: back, disabled: pending },
+  });
+
   function submit() {
     const found = diaryFieldErrors(rules.schema, values);
     if (kind === "seizures" && step === 1) {
@@ -289,6 +313,9 @@ export function EntryEditSheet({
       title={t(creating ? "diary.add.formTitle" : "diary.editTitle")}
       description={title}
       closeLabel={t("diary.close")}
+      // Панель выезжает поверх страницы, вне её отступов: шапка Telegram в
+      // полноэкранном режиме и домашняя полоса закрывали бы её края.
+      className="pt-(--safe-top,0px) pb-(--safe-bottom,0px)"
     >
       <form
         noValidate
@@ -318,29 +345,27 @@ export function EntryEditSheet({
           </p>
         )}
 
-        <div className="flex flex-wrap gap-field">
-          <Button
-            type="submit"
-            className="min-h-touch"
-            disabled={pending || blockedOffline}
-            aria-busy={pending || undefined}
-          >
-            {!savingStep
-              ? t("diary.next")
-              : pending
-                ? t("diary.saving")
-                : t("diary.save")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-touch"
-            disabled={pending}
-            onClick={back}
-          >
-            {step === 2 ? t("diary.back") : t("actions.cancel")}
-          </Button>
-        </div>
+        {!native && (
+          <div className="flex flex-col gap-field">
+            <Button
+              type="submit"
+              className="min-h-touch w-full"
+              disabled={pending || blockedOffline}
+              aria-busy={pending || undefined}
+            >
+              {primaryLabel}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch w-full"
+              disabled={pending}
+              onClick={back}
+            >
+              {secondaryLabel}
+            </Button>
+          </div>
+        )}
       </form>
     </FormSheet>
   );
@@ -401,6 +426,7 @@ function EntryFields({
           {(creating || seizureTypes.length > 0) && (
             <SelectField
               label={t("diary.form.seizureType")}
+              autoFocus
               value={text("seizureTypeId")}
               onChange={set("seizureTypeId")}
               // Выведенный тип остаётся в списке только у записи, которая на
@@ -459,6 +485,7 @@ function EntryFields({
           {occurredAt}
           <TextField
             label={t("diary.form.ketoneValue")}
+            autoFocus
             type="number"
             inputMode="decimal"
             step="0.1"
@@ -489,6 +516,7 @@ function EntryFields({
           {occurredAt}
           <TextField
             label={t("diary.form.weightValue")}
+            autoFocus
             type="number"
             inputMode="decimal"
             step="0.1"
@@ -519,6 +547,7 @@ function EntryFields({
           {occurredAt}
           <SelectField
             label={t("diary.form.medication")}
+            autoFocus
             value={text("medicationId")}
             onChange={set("medicationId")}
             options={[
@@ -529,28 +558,19 @@ function EntryFields({
           />
           {/* Два слова, а не флажок «дали»: снятый флажок незаметен, и
               пропуск приёма читался бы как забытая галочка. */}
-          <fieldset className="m-0 flex flex-col gap-field border-0 p-0">
-            <legend className="mb-1 p-0">
-              {t("diary.form.takenQuestion")}
-            </legend>
-            <div className="flex flex-wrap gap-x-section">
-              {([true, false] as const).map((option) => (
-                <label
-                  key={String(option)}
-                  className="flex min-h-touch cursor-pointer items-center gap-field"
-                >
-                  <input
-                    type="radio"
-                    name="medication-taken"
-                    className="size-5 accent-primary"
-                    checked={values.taken === option}
-                    onChange={() => set("taken")(option)}
-                  />
-                  {t(option ? "diary.entry.taken" : "diary.entry.notTaken")}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <div className="flex flex-col gap-1">
+            <span>{t("diary.form.takenQuestion")}</span>
+            <SegmentedControl
+              label={t("diary.form.takenQuestion")}
+              value={values.taken === false ? "no" : "yes"}
+              onChange={(value) => set("taken")(value === "yes")}
+              items={[
+                { value: "yes", label: t("diary.entry.taken") },
+                { value: "no", label: t("diary.entry.notTaken") },
+              ]}
+              className="w-full [&>label]:flex-1"
+            />
+          </div>
         </>
       );
     case "meals":
@@ -571,6 +591,7 @@ function EntryFields({
           {occurredAt}
           <TextField
             label={t("diary.form.symptom")}
+            autoFocus
             value={text("symptom")}
             onChange={set("symptom")}
             error={errors.symptom && t("diary.form.symptomRequired")}
@@ -619,29 +640,18 @@ function DurationField({
   };
 
   return (
-    <fieldset className="m-0 flex flex-col gap-field border-0 p-0">
-      <legend className="mb-1 p-0">{t("diary.form.durationMode")}</legend>
-      <div className="flex flex-wrap gap-x-section">
-        {(["estimated", "measured"] as const).map((option) => (
-          <label
-            key={option}
-            className="flex min-h-touch cursor-pointer items-center gap-field"
-          >
-            <input
-              type="radio"
-              name="duration-mode"
-              className="size-5 accent-primary"
-              checked={mode === option}
-              onChange={() => choose(option)}
-            />
-            {t(
-              option === "measured"
-                ? "diary.form.durationMeasured"
-                : "diary.form.durationEstimated",
-            )}
-          </label>
-        ))}
-      </div>
+    <div className="flex flex-col gap-field">
+      <span>{t("diary.form.durationMode")}</span>
+      <SegmentedControl
+        label={t("diary.form.durationMode")}
+        value={mode}
+        onChange={choose}
+        items={[
+          { value: "estimated", label: t("diary.form.durationEstimated") },
+          { value: "measured", label: t("diary.form.durationMeasured") },
+        ]}
+        className="w-full [&>label]:flex-1 [&>label]:whitespace-normal"
+      />
       {mode === "measured" ? (
         <TextField
           label={t("diary.form.durationSec")}
@@ -666,7 +676,7 @@ function DurationField({
           error={errors.durationOptionId && t("diary.form.durationBoth")}
         />
       )}
-    </fieldset>
+    </div>
   );
 }
 
@@ -697,7 +707,10 @@ function TextField({
   inputMode,
   step,
   min,
+  autoFocus = false,
 }: {
+  /** Сюда встаёт фокус при открытии формы, а не на время (FormSheet кита). */
+  autoFocus?: boolean;
   label: string;
   optional?: boolean;
   hint?: string;
@@ -726,6 +739,7 @@ function TextField({
           step={step}
           min={min}
           className={cn("min-h-touch", isNumeric && "tabular-nums")}
+          data-autofocus={autoFocus ? "" : undefined}
           value={value}
           aria-invalid={invalid}
           aria-describedby={describedBy}
@@ -776,7 +790,9 @@ function SelectField({
   value,
   onChange,
   options,
+  autoFocus = false,
 }: {
+  autoFocus?: boolean;
   label: string;
   optional?: boolean;
   error?: string | false;
@@ -794,6 +810,7 @@ function SelectField({
       {({ describedBy, invalid }) => (
         <NativeSelect
           value={value}
+          data-autofocus={autoFocus ? "" : undefined}
           aria-invalid={invalid}
           aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}

@@ -1,17 +1,18 @@
 import {
   AsyncSection,
   Button,
+  SegmentedControl,
   Section,
-  StatusNote,
   TrendChart,
   WarningBanner,
   formatDayMonth,
 } from "@ketocare/ui";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import type { ScreenRequest } from "../../lib/tabs";
 import {
   TREND_DAYS,
   type TrendKind,
@@ -21,58 +22,108 @@ import {
 import type { Session } from "../session/useSession";
 import { AddEntry } from "./AddEntry";
 import { DiaryEntries } from "./DiaryEntries";
-import { useDiaryEntries } from "./useDiary";
+import type { CreatableKind } from "./useDiary";
 
 const KINDS: readonly TrendKind[] = ["ketones", "weight", "seizures"];
 
+/** Что открыть: выбор вида записи или сразу форму вида. */
+type Adding = { kind?: CreatableKind } | null;
+
 /**
- * «Дневник»: графики за месяц и записи за две недели (раздел 9 ТЗ, ADR-0044).
+ * «Дневник»: записи за две недели и график за месяц (раздел 9 ТЗ, ADR-0044,
+ * ADR-0075).
  *
- * Графики — те же, что в кабинете, и по той же причине с вертикальными чертами
- * смены назначения: без них скачок показателя читается как ухудшение состояния,
- * хотя это следствие изменённой терапии. Под ними — записи, которые семья
- * может исправить: прежде вкладка показывала только линии, и ошибочный замер,
- * видный на графике, было нечем убрать. Новую запись добавляет первичное
- * действие экрана (дополнение к ADR-0044 от 07.10.2026).
+ * **Записи — первыми.** Прежде над ними стояли три графика по 260 px, и до
+ * своей вчерашней записи человек листал два экрана. График теперь один, с
+ * переключателем «кетоны / вес / приступы», и стоит под записями: записывают и
+ * исправляют чаще, чем рассматривают линии.
+ *
+ * Вертикальные черты смены назначения на графике остаются: без них скачок
+ * показателя читается как ухудшение, хотя это следствие изменённой терапии.
  */
-export function DiaryScreen({ session }: { session: Session }) {
+export function DiaryScreen({
+  session,
+  request = null,
+}: {
+  session: Session;
+  /** Открыть форму записи — из «Сегодня» или кнопкой под напоминанием бота. */
+  request?: ScreenRequest<{ addKind?: CreatableKind }> | null;
+}) {
   const { t } = useTranslation();
-  const markers = usePrescriptionMarkers(session.patientId);
-  const [adding, setAdding] = useState(false);
-  const entries = useDiaryEntries(session.patientId);
-  // Оба запроса живут здесь, а не в блоках: без сети они встают на паузу
-  // одновременно, и блок сказал бы «нет связи» дважды подряд — одна и та же
-  // фраза в двух соседних строках (правило П27). Экран говорит это один раз.
-  const trends: Record<TrendKind, ReturnType<typeof useTrend>> = {
-    ketones: useTrend(session.patientId, "ketones"),
-    weight: useTrend(session.patientId, "weight"),
-    seizures: useTrend(session.patientId, "seizures"),
-  };
-  // Только пока показывать нечего: фоновое обновление тоже встаёт на паузу, а
-  // «нет связи» над нарисованными графиками — сообщение о том, что и так видно.
-  const waitingForNetwork =
-    entries.isWaiting ||
-    KINDS.some(
-      (kind) => trends[kind].fetchStatus === "paused" && trends[kind].isPending,
-    );
+  const [adding, setAdding] = useState<Adding>(
+    request?.target.addKind !== undefined
+      ? { kind: request.target.addKind }
+      : null,
+  );
+  const [chart, setChart] = useState<TrendKind>("ketones");
+  const [handled, setHandled] = useState(request?.id ?? null);
+
+  // Новый запрос к уже открытой вкладке (вторая кнопка под напоминанием).
+  useEffect(() => {
+    if (request === null || request.id === handled) return;
+    setHandled(request.id);
+    if (request.target.addKind !== undefined) {
+      setAdding({ kind: request.target.addKind });
+    }
+  }, [request, handled]);
 
   return (
     <main className="flex flex-col gap-section p-section">
       <h1 className="text-page-title">{t("diary.title")}</h1>
-      <p className="text-muted-foreground">
-        {t("charts.period", { days: TREND_DAYS })}
-      </p>
-      {/* Первичное действие экрана — над графиками: записывают чаще, чем
-          рассматривают линии, и кнопка внизу, под тридцатью днями графиков,
-          оставалась бы за сгибом. */}
+      {/* Первичное действие экрана — во всю ширину и первым. */}
       <Button
         type="button"
         className="min-h-touch w-full"
-        onClick={() => setAdding(true)}
+        onClick={() => setAdding({})}
       >
         <Plus aria-hidden="true" className="size-5" />
         {t("diary.add.action")}
       </Button>
+
+      <DiaryEntries session={session} onAdd={() => setAdding({})} />
+
+      <Trends patientId={session.patientId} kind={chart} onKind={setChart} />
+
+      {adding !== null && (
+        <AddEntry
+          // Другой вид — другая форма: значения прежней не переезжают.
+          key={adding.kind ?? "chooser"}
+          session={session}
+          initialKind={adding.kind}
+          onClose={() => setAdding(null)}
+        />
+      )}
+    </main>
+  );
+}
+
+/** Один график с переключателем вида, за {@link TREND_DAYS} дней. */
+function Trends({
+  patientId,
+  kind,
+  onKind,
+}: {
+  patientId: string;
+  kind: TrendKind;
+  onKind: (kind: TrendKind) => void;
+}) {
+  const { t } = useTranslation();
+  const markers = usePrescriptionMarkers(patientId);
+  // Запрашивается только показанный вид: два других ждут переключения.
+  const trend = useTrend(patientId, kind);
+
+  return (
+    <Section title={t("charts.title", { days: TREND_DAYS })} density="compact">
+      <SegmentedControl
+        label={t("charts.kind")}
+        value={kind}
+        onChange={onKind}
+        items={KINDS.map((value) => ({
+          value,
+          label: t(`charts.${value}.title`),
+        }))}
+        className="w-full [&>label]:flex-1"
+      />
 
       {markers.isError && (
         // Молча остаться без черт нельзя — см. `usePrescriptionMarkers`.
@@ -84,41 +135,8 @@ export function DiaryScreen({ session }: { session: Session }) {
         </WarningBanner>
       )}
 
-      {waitingForNetwork && (
-        <StatusNote>{t("errors.waitingForNetwork")}</StatusNote>
-      )}
-
-      {KINDS.map((kind) => (
-        <Trend
-          key={kind}
-          trend={trends[kind]}
-          kind={kind}
-          markers={markers.data ?? []}
-        />
-      ))}
-
-      <DiaryEntries session={session} onAdd={() => setAdding(true)} />
-
-      {adding && (
-        <AddEntry session={session} onClose={() => setAdding(false)} />
-      )}
-    </main>
-  );
-}
-
-function Trend({
-  trend,
-  kind,
-  markers,
-}: {
-  trend: ReturnType<typeof useTrend>;
-  kind: TrendKind;
-  markers: ReturnType<typeof usePrescriptionMarkers>["data"] & object;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <Section title={t(`charts.${kind}.title`)} density="compact">
+      {/* Без сети об этом один раз говорит лента записей выше: та же фраза
+          второй раз ниже — шум, а не объяснение (правило П27). */}
       <AsyncSection
         loading={trend.isPending}
         skeleton={null}
@@ -134,19 +152,19 @@ function Trend({
         retryLabel={t("actions.retry")}
         onRetry={() => void trend.refetch()}
         // Пока ответа нет, блок молчит: у графика своё «записей нет», и на
-        // паузе он утверждал бы, что записей за месяц не было, — при живых
-        // записях и рядом со строкой «нет связи». Пустой ответ от пустого
-        // ожидания отличает именно `undefined`.
+        // паузе он утверждал бы, что записей за месяц не было.
         isEmpty={trend.data === undefined}
         empty={null}
       >
         <TrendChart
           points={trend.data ?? []}
-          markers={markers}
+          markers={markers.data ?? []}
           unit={t(`charts.${kind}.unit`)}
-          caption={t(`charts.${kind}.caption`)}
+          caption={t(`charts.${kind}.caption`, { days: TREND_DAYS })}
           emptyState={
-            kind === "seizures" ? t("charts.seizures.empty") : t("charts.empty")
+            kind === "seizures"
+              ? t("charts.seizures.empty", { days: TREND_DAYS })
+              : t("charts.empty")
           }
           formatDate={formatDayMonth}
         />

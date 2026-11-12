@@ -2,7 +2,7 @@ import { Button, FormSheet } from "@ketocare/ui";
 import { useContext, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { OpenTabContext } from "../../lib/tabs";
+import { NavigateContext } from "../../lib/tabs";
 import { useTelegramBack } from "../../lib/useTelegram";
 import type { Session } from "../session/useSession";
 import { EntryEditSheet } from "./EntryEditSheet";
@@ -35,12 +35,23 @@ type Step =
 export function AddEntry({
   session,
   onClose,
+  initialKind,
 }: {
   session: Session;
   onClose: () => void;
+  /**
+   * Сразу форма этого вида, без выбора: быстрые кнопки «Сегодня» и кнопка под
+   * напоминанием бота (ADR-0075). «Назад» из такой формы закрывает её — выбора
+   * вида человек не видел, и возвращать его туда незачем.
+   */
+  initialKind?: CreatableKind;
 }) {
   const { t } = useTranslation();
-  const [step, setStep] = useState<Step>({ at: "chooser" });
+  const [step, setStep] = useState<Step>(() =>
+    initialKind === undefined
+      ? { at: "chooser" }
+      : { at: "form", kind: initialKind },
+  );
   const seizureTypes = useSeizureTypes();
   const durationOptions = useDurationOptions();
   const medications = useMedications(session.patientId);
@@ -68,7 +79,8 @@ export function AddEntry({
         onClose={onClose}
         onBack={() => {
           create.reset();
-          setStep({ at: "chooser" });
+          if (initialKind !== undefined) onClose();
+          else setStep({ at: "chooser" });
         }}
       />
     );
@@ -98,7 +110,7 @@ function KindChooser({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const openTab = useContext(OpenTabContext);
+  const navigate = useContext(NavigateContext);
   const medicationsReasonId = useId();
 
   const back = () => {
@@ -117,6 +129,9 @@ function KindChooser({
         step.at === "meals" ? "diary.add.mealsTitle" : "diary.add.title",
       )}
       closeLabel={t("diary.close")}
+      // Панель выезжает поверх страницы, вне её отступов: шапка Telegram в
+      // полноэкранном режиме и домашняя полоса закрывали бы её края.
+      className="pt-(--safe-top,0px) pb-(--safe-bottom,0px)"
     >
       {step.at === "meals" ? (
         // Еда — не форма. Свободный текст здесь вошёл бы в дневник наравне с
@@ -131,7 +146,7 @@ function KindChooser({
               className="min-h-touch"
               onClick={() => {
                 onClose();
-                openTab("menu");
+                navigate({ tab: "today", view: "menu" });
               }}
             >
               {t("diary.add.openMenu")}

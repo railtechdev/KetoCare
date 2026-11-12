@@ -53,6 +53,30 @@ describe("FormSheet", () => {
     expect(screen.getByRole("textbox", { name: "Название" })).toHaveFocus();
   });
 
+  it("поле с data-autofocus получает фокус раньше стоящих выше", () => {
+    // Срочная запись: время уже заполнено «сейчас», а набирать будут значение.
+    // Клавиатура открывалась для даты, и кетоны набирались в поле времени.
+    render(
+      <FormSheet
+        open
+        onOpenChange={vi.fn()}
+        title="Новая запись"
+        closeLabel="Закрыть"
+      >
+        <label>
+          Когда
+          <input />
+        </label>
+        <label>
+          Кетоны
+          <input data-autofocus="" />
+        </label>
+      </FormSheet>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Кетоны" })).toHaveFocus();
+  });
+
   it("значение поля правки выделено: набор заменяет его, а не дописывает", () => {
     render(
       <FormSheet

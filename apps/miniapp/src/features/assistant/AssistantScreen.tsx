@@ -7,12 +7,14 @@ import {
   Section,
   useFrozenAttempt,
 } from "@ketocare/ui";
-import { useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { currentLanguage } from "../../lib/i18n";
-import { useUnsavedGuard } from "../../lib/useTelegram";
+import { hideKeyboard } from "../../lib/telegram";
+import { TabVisibleContext, useUnsavedGuard } from "../../lib/useTelegram";
+import { today } from "../menu/useMenu";
 import type { Session } from "../session/useSession";
 import {
   useAskAssistant,
@@ -59,6 +61,38 @@ export function AssistantScreen({ session }: { session: Session }) {
   useUnsavedGuard(question.trim() !== "");
   const limited = errorCodeOf(ask.error) === "rate_limited";
 
+  // Предел вопросов — суточный: в полночь он снят, и поле должно включиться
+  // само. Прежде отказ «на сегодня вопросов больше нет» висел до перезапуска
+  // приложения, хоть бы и через три дня.
+  const { reset } = ask;
+  const [day, setDay] = useState(today);
+  useEffect(() => {
+    const now = new Date();
+    const midnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+    );
+    const timer = setTimeout(
+      () => {
+        reset();
+        setDay(today());
+      },
+      midnight.getTime() - now.getTime() + 1_000,
+    );
+    return () => clearTimeout(timer);
+  }, [day, reset]);
+
+  // К последнему сообщению — когда приходит новое и когда вкладку открывают:
+  // ответ появлялся под всей перепиской, ниже первого экрана.
+  const visible = useContext(TabVisibleContext);
+  const endRef = useRef<HTMLDivElement>(null);
+  const lastKey = `${messages.length}:${messages.at(-1)?.status ?? ""}`;
+  useEffect(() => {
+    if (!visible) return;
+    endRef.current?.scrollIntoView?.({ block: "end" });
+  }, [lastKey, visible]);
+
   // Разговор может быть ещё не прочитан: до отправки берётся свежайший, с
   // первой отправки — замороженный (`useFrozenAttempt`, ADR-0035).
   const attempt = useFrozenAttempt(
@@ -76,6 +110,8 @@ export function AssistantScreen({ session }: { session: Session }) {
         onSuccess: (accepted) => {
           setChosenId(accepted.conversation_id);
           setQuestion("");
+          // Клавиатура закрывала ответ, который сейчас появится (Bot API 9.1).
+          hideKeyboard();
         },
       },
     );
@@ -154,38 +190,43 @@ export function AssistantScreen({ session }: { session: Session }) {
                 {message.text}
               </ChatMessage>
             ))}
+            <div ref={endRef} />
           </div>
         </AsyncSection>
       </Section>
 
-      <Section title={t("assistant.ask")} density="compact">
-        <ChatComposer
-          value={question}
-          onChange={setQuestion}
-          onSubmit={send}
-          placeholder={t("assistant.placeholder")}
-          sendLabel={t("assistant.send")}
-          sendingLabel={t("assistant.sending")}
-          hint={t("assistant.hint")}
-          audience={
-            readers === null
-              ? t("assistant.audience.roles")
-              : t("assistant.audience.named", { list: readers })
-          }
-          pending={ask.isPending}
-          disabled={limited}
-        />
-        {limited && (
-          <p role="status" className="text-warning-strong">
-            {errorMessageOf(ask.error) ?? t("assistant.limited")}
-          </p>
-        )}
-        {ask.isError && !limited && (
-          <p role="alert" className="text-destructive">
-            {errorMessageOf(ask.error) ?? t("assistant.sendFailed")}
-          </p>
-        )}
-      </Section>
+      {/* Поле вопроса — прижато к низу экрана над полосой вкладок, а не под
+          всей перепиской: в длинном разговоре до него было не долистать. */}
+      <div className="sticky bottom-[calc(4rem+var(--safe-bottom,0px))] z-10 -mx-section bg-background px-section pt-field pb-field">
+        <Section title={t("assistant.ask")} titleHidden density="compact">
+          <ChatComposer
+            value={question}
+            onChange={setQuestion}
+            onSubmit={send}
+            placeholder={t("assistant.placeholder")}
+            sendLabel={t("assistant.send")}
+            sendingLabel={t("assistant.sending")}
+            hint={t("assistant.hint")}
+            audience={
+              readers === null
+                ? t("assistant.audience.roles")
+                : t("assistant.audience.named", { list: readers })
+            }
+            pending={ask.isPending}
+            disabled={limited}
+          />
+          {limited && (
+            <p role="status" className="text-warning-strong">
+              {errorMessageOf(ask.error) ?? t("assistant.limited")}
+            </p>
+          )}
+          {ask.isError && !limited && (
+            <p role="alert" className="text-destructive">
+              {errorMessageOf(ask.error) ?? t("assistant.sendFailed")}
+            </p>
+          )}
+        </Section>
+      </div>
     </main>
   );
 }

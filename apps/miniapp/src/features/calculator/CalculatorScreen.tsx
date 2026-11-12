@@ -25,7 +25,6 @@ import {
   mealTargetsFrom,
   useDebouncedValue,
 } from "@ketocare/ui";
-import { Trash2 } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -37,7 +36,9 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
+import { hideKeyboard } from "../../lib/telegram";
 import { useUnsavedGuard } from "../../lib/useTelegram";
+import { RemoveButton } from "../../components/RemoveButton";
 import type { Session } from "../session/useSession";
 import { usePatientOverview } from "../home/useOverview";
 import { SaveDish } from "./SaveDish";
@@ -395,8 +396,14 @@ export function CalculatorScreen({ session }: { session: Session }) {
     errorMessageOf(actionError) === errorMessageOf(verify.error);
 
   return (
-    <main className="flex flex-col gap-section p-section">
-      <h1 className="text-page-title">{t("calculator.title")}</h1>
+    <section
+      aria-labelledby="calculator-title"
+      className="flex flex-col gap-section"
+    >
+      {/* Раздел вкладки «Блюда» (ADR-0075): заголовок второго уровня. */}
+      <h2 id="calculator-title" className="text-section-title">
+        {t("calculator.title")}
+      </h2>
 
       <Section title={t("calculator.composition")} density="compact">
         <ProductPicker
@@ -454,19 +461,16 @@ export function CalculatorScreen({ session }: { session: Session }) {
                         dropStaleResults();
                       }}
                     />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t("calculator.remove", {
+                    <RemoveButton
+                      iconOnly
+                      label={t("calculator.remove", {
                         name: row.product.name,
                       })}
                       onClick={() => {
                         setRows(rows.filter((_, i) => i !== index));
                         dropStaleResults();
                       }}
-                    >
-                      <Trash2 aria-hidden className="size-4" />
-                    </Button>
+                    />
                   </div>
 
                   {tooHeavyRow && (
@@ -789,6 +793,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
           patientId={session.patientId}
           rows={rows}
           blockedBy={saveBlockedBy}
+          onNew={() => {
+            setRows([]);
+            dropStaleResults();
+            window.scrollTo(0, 0);
+          }}
         />
       )}
 
@@ -801,7 +810,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
             ? refusalMessage
             : ""}
       </p>
-    </main>
+    </section>
   );
 }
 
@@ -1065,6 +1074,9 @@ function ProductPicker({
                 onClick={() => {
                   onPick(product);
                   setQuery("");
+                  // Клавиатура закрывала строку только что выбранного
+                  // продукта — поле граммов под ней (Bot API 9.1).
+                  hideKeyboard();
                 }}
               >
                 {product.name}

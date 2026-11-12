@@ -348,6 +348,13 @@ describe("сохранённое блюдо — в план дня", () => {
     expect(
       screen.queryByRole("button", { name: "Добавить в меню" }),
     ).not.toBeInTheDocument();
+    // «Добавлено» — не тупик: дальше меню или новое блюдо (аудит 12.11.2026).
+    expect(screen.getByRole("button", { name: "Открыть меню" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Новое блюдо" }));
+    expect(screen.queryByLabelText(/Масло сливочное, граммы/)).toBeNull();
+    expect(
+      screen.getByText("Добавьте продукты — расчёт появится здесь."),
+    ).toBeInTheDocument();
   });
 
   it("на завтра — в завтрашний день", async () => {
@@ -356,7 +363,7 @@ describe("сохранённое блюдо — в план дня", () => {
     await saveDish(user);
 
     const days = await screen.findByRole("group", { name: "День" });
-    await user.click(within(days).getByRole("button", { name: "Завтра" }));
+    await user.click(within(days).getByRole("radio", { name: "Завтра" }));
     await user.click(
       await screen.findByRole("button", { name: "Добавить в меню" }),
     );
