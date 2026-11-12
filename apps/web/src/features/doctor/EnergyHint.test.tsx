@@ -62,6 +62,8 @@ describe("калорийность по весу и возрасту", () => {
     ).toBeInTheDocument();
     const apply = screen.getByRole("button", { name: /Макс\. 1\s?224/ });
     expect(screen.getByText(/1\s?170–1\s?224 ккал/)).toBeInTheDocument();
+    // Строка таблицы по возрасту видна рядом с итогом.
+    expect(screen.getByText(/65–68 ккал на кг/)).toBeInTheDocument();
     await userEvent.click(apply);
     expect(onApply).toHaveBeenCalledWith(1224, 18, 1400);
     expect((api.POST as Mock).mock.calls[0]![1].body.weight_kg).toBe(18);

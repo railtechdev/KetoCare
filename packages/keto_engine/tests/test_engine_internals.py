@@ -673,6 +673,10 @@ class TestEnergyRequirement:
             (10, 25.0, (1375.0, 1500.0)),
             (11, 40.0, (1200.0, 1600.0)),
             (17, 50.0, (1500.0, 2000.0)),
+            # The dietitian's two children of 2026-11-12, both 23 kg: the age row,
+            # not the weight, makes the difference.
+            (13, 23.0, (690.0, 920.0)),
+            (6, 23.0, (1495.0, 1564.0)),
         ],
     )
     def test_rows_by_full_years(self, age, weight, expected):
@@ -686,6 +690,32 @@ class TestEnergyRequirement:
 
         with pytest.raises(ValueError):
             energy_requirement(age, weight)
+
+
+class TestDietaryUnit:
+    """The clinic's Yonsei slide: one unit is R g fat + 1 g protein with carbs."""
+
+    @pytest.mark.parametrize(
+        ("ratio", "kcal"), [(4.0, 40.0), (3.0, 31.0), (2.5, 26.5), (1.0, 13.0)]
+    )
+    def test_unit_energy(self, ratio, kcal):
+        from keto_engine import dietary_unit_kcal
+
+        assert dietary_unit_kcal(ratio) == pytest.approx(kcal)
+
+    @pytest.mark.parametrize(("ratio", "units"), [(4.0, 25.0), (3.0, 1000.0 / 31.0)])
+    def test_unit_count_is_protein_with_carbs(self, ratio, units):
+        from keto_engine import dietary_unit_kcal, max_non_fat_grams
+
+        assert 1000.0 / dietary_unit_kcal(ratio) == pytest.approx(units)
+        assert max_non_fat_grams(ratio, 1000.0) == pytest.approx(units)
+
+    @pytest.mark.parametrize("ratio", [0.0, -1.0])
+    def test_rejects_non_positive_ratio(self, ratio):
+        from keto_engine import dietary_unit_kcal
+
+        with pytest.raises(ValueError):
+            dietary_unit_kcal(ratio)
 
 
 class TestProteinRequirement:

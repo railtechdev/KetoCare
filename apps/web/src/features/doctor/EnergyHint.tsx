@@ -13,7 +13,7 @@ import { usePatientOverview } from "../patients/overview";
 import { ageInMonths } from "./dates";
 
 /**
- * Суточная калорийность по весу и возрасту (вопрос 56, таблица Yonsei).
+ * Суточная калорийность по весу и возрасту (вопрос 56, таблица энергетической потребности по возрасту).
  *
  * Считает ядро через API: таблица — медицинская константа. Подсказка ничего не
  * подставляет сама: врач выбирает минимум, середину или максимум диапазона.
@@ -99,6 +99,11 @@ export function EnergyHint({
           // Дата взвешивания рядом: по устаревшему весу подставили бы не то.
           at: formatOccurredAt(new Date(weight.occurred_at)),
           age: t("age.years", { count: years }),
+          // Строка таблицы по возрасту рядом с итогом: без неё двое детей
+          // одного веса с разными суммами выглядели ошибкой расчёта
+          // (замечание диетолога 12.11.2026).
+          perKgMin: formatKcal(range.data.kcal_per_kg_min),
+          perKgMax: formatKcal(range.data.kcal_per_kg_max),
           min: formatKcal(range.data.kcal_min),
           max: formatKcal(range.data.kcal_max),
         })}

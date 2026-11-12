@@ -16,7 +16,8 @@ vi.mock("../../lib/api", async (importOriginal) => {
 const GOAL = {
   day: { fat_g: 120, protein_g: 24, net_carbs_g: 10.3, non_fat_g: 34.3 },
   meal: { fat_g: 30, protein_g: 6, net_carbs_g: 2.6, non_fat_g: 8.6 },
-  engine_version: "1.3.0",
+  dietary_unit_kcal: 35.5,
+  engine_version: "1.7.0",
 };
 
 beforeEach(() => {
@@ -82,6 +83,17 @@ describe("предпросмотр назначения в граммах", () =
       await screen.findByText(/Белка больше, чем позволяют/),
     ).toBeInTheDocument();
     expect(screen.queryByRole("row", { name: /^Белок \d/ })).toBeNull();
+  });
+
+  it("показывает арифметику диетической единицы", async () => {
+    renderForm();
+
+    expect(
+      await screen.findByText(
+        /Диетическая единица при 3\.5 : 1: 3,5 г жира и 1 г белка с углеводами, 35,5 ккал/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/= 34,3 единицы в сутки/)).toBeInTheDocument();
   });
 
   it("не спрашивает сервер, пока соотношение не выбрано", () => {
@@ -192,6 +204,42 @@ describe("углеводы считаются сами, как в KDC", () => {
     await user.type(kcal, "0");
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(valueControl(carbs)).toHaveValue(8);
+  });
+});
+
+describe("углеводы без числа приёмов (замечание диетолога 12.11.2026)", () => {
+  it("первое назначение получает углеводы, пока приёмы не введены", async () => {
+    (api.POST as Mock).mockResolvedValue({ data: { ...GOAL, meal: null } });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PrescriptionForm
+          defaultValues={{
+            ratio: 3,
+            kcalPerDay: 1564,
+            proteinG: 23,
+            carbsLimitG: Number.NaN,
+            mealsPerDay: Number.NaN,
+            effectiveFrom: "2026-11-12",
+          }}
+          pending={false}
+          error={null}
+          onSubmit={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    const carbs = screen.getByLabelText(/Углеводы/);
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
+    expect(api.POST).toHaveBeenCalledWith("/api/v1/calc/prescription-goal", {
+      body: {
+        ratio: 3,
+        kcal_per_day: 1564,
+        protein_g: 23,
+        meals_per_day: undefined,
+      },
+    });
+    // Без числа приёмов столбца «На приём» нет — только сутки.
+    expect(screen.queryByText("На приём")).toBeNull();
   });
 });
 

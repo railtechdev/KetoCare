@@ -47,6 +47,18 @@ export const childSchema = z.object({
   notes: z.string(),
 });
 
+/**
+ * Новая карта: рост и вес обязательны (замечание диетолога 12.11.2026). По весу
+ * и возрасту считаются подсказки калорийности, белка и жидкости в назначении,
+ * по росту — оценка роста по ВОЗ; карта без них открывала назначение пустым.
+ * При правке карты вес не вводится (дальше он идёт в дневник), а рост,
+ * пропущенный в старой карте, не мешает поправить остальное.
+ */
+export const newChildSchema = childSchema.extend({
+  heightCm: z.string().refine(isPlausibleHeight),
+  weightKg: z.string().refine(isPlausibleWeight),
+});
+
 export type ChildValues = z.infer<typeof childSchema>;
 
 function isPlausibleWeight(value: string): boolean {

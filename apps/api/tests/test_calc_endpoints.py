@@ -1238,6 +1238,25 @@ class TestPrescriptionGoal:
         assert body["meal"]["fat_g"] == pytest.approx(30)
         assert body["meal"]["protein_g"] == pytest.approx(6)
         assert body["meal"]["net_carbs_g"] == pytest.approx(1.5)
+        assert body["dietary_unit_kcal"] == pytest.approx(40)
+
+    async def test_day_without_meals(self, client, make_user, auth_headers):
+        """The carb limit is derived from the day; the doctor may not have typed
+        the number of meals yet (dietitian's report of 2026-11-12)."""
+
+        doctor = await make_user(role=UserRole.DOCTOR)
+        body = {"ratio": 3, "kcal_per_day": 1564, "protein_g": 23}
+
+        response = await client.post(
+            "/api/v1/calc/prescription-goal", json=body, headers=auth_headers(doctor)
+        )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["meal"] is None
+        assert data["dietary_unit_kcal"] == pytest.approx(31)
+        assert data["day"]["non_fat_g"] == pytest.approx(1564 / 31)
+        assert data["day"]["net_carbs_g"] == pytest.approx(1564 / 31 - 23)
 
     async def test_protein_that_does_not_fit_has_no_split(self, client, make_user, auth_headers):
         doctor = await make_user(role=UserRole.DOCTOR)

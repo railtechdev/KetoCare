@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   HEIGHT_MAX_CM,
   childSchema,
+  newChildSchema,
   parseAllergies,
   toChildBody,
   looksLikeProductId,
@@ -26,7 +27,18 @@ describe("форма ребёнка", () => {
     expect(childSchema.safeParse(VALID).success).toBe(true);
   });
 
-  it("пустой рост допустим: рост можно не знать", () => {
+  it("новая карта требует рост и вес (замечание диетолога 12.11.2026)", () => {
+    const filled = { ...VALID, weightKg: "23" };
+    expect(newChildSchema.safeParse(filled).success).toBe(true);
+    expect(newChildSchema.safeParse({ ...filled, weightKg: "" }).success).toBe(
+      false,
+    );
+    expect(newChildSchema.safeParse({ ...filled, heightCm: "" }).success).toBe(
+      false,
+    );
+  });
+
+  it("при правке карты пустой рост допустим: в старой карте его могли не записать", () => {
     expect(childSchema.safeParse({ ...VALID, heightCm: "" }).success).toBe(
       true,
     );

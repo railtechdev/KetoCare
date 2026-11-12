@@ -17,7 +17,6 @@ import { errorMessageOf } from "../../lib/api";
 import { queryState } from "../../lib/queryState";
 import { TableSkeleton } from "../admin/TableSkeleton";
 import { useSession } from "../auth/useSession";
-import { MenuTemplatesSheet } from "./MenuTemplatesSheet";
 import { StandardFormSheet, type StandardEditing } from "./StandardFormSheet";
 import {
   DEFAULT_FOOD_STANDARD_ID,
@@ -47,9 +46,6 @@ export function StandardsPanel({
   const { session } = useSession();
   const standards = useFoodStandards();
   const [editing, setEditing] = useState<StandardEditing | null>(null);
-  const [viewing, setViewing] = useState<FoodStandard | null>(null);
-  // Шаблоны меню — клиническое содержание: администратору сервер их не отдаёт.
-  const canViewTemplates = session?.role !== "admin";
   const canLock = session?.role === "admin";
 
   const rows = useMemo(() => standards.data ?? [], [standards.data]);
@@ -122,12 +118,11 @@ export function StandardsPanel({
             onOpen={onOpen}
             onMerge={onMerge}
             onEdit={setEditing}
-            onViewTemplates={canViewTemplates ? setViewing : undefined}
           />
         ),
       },
     ],
-    [t, canLock, canViewTemplates, onOpen, onMerge],
+    [t, canLock, onOpen, onMerge],
   );
 
   return (
@@ -180,13 +175,6 @@ export function StandardsPanel({
       {editing !== null && (
         <StandardFormSheet editing={editing} onClose={() => setEditing(null)} />
       )}
-
-      {viewing !== null && (
-        <MenuTemplatesSheet
-          standard={viewing}
-          onClose={() => setViewing(null)}
-        />
-      )}
     </Section>
   );
 }
@@ -197,14 +185,12 @@ function StandardActions({
   onOpen,
   onMerge,
   onEdit,
-  onViewTemplates,
 }: {
   standard: FoodStandard;
   canLock: boolean;
   onOpen: (standardId: string) => void;
   onMerge?: (standardId: string) => void;
   onEdit: (editing: StandardEditing) => void;
-  onViewTemplates?: (standard: FoodStandard) => void;
 }) {
   const { t } = useTranslation("products");
   const lock = useLockStandardMutation();
@@ -249,18 +235,6 @@ function StandardActions({
           onClick={() => onMerge(standard.id)}
         >
           {t("standards.actions.merge")}
-        </Button>
-      )}
-
-      {onViewTemplates !== undefined && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={forRow(t("standards.templates.open"))}
-          onClick={() => onViewTemplates(standard)}
-        >
-          {t("standards.templates.open")}
         </Button>
       )}
 

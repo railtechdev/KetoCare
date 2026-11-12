@@ -102,8 +102,7 @@
     "toCalculator": "В калькулятор",
     "more": "Ещё",
     "import": "Загрузить рецепты",
-    "addToChild": "Добавить ребёнку",
-    "ministryMenus": "Меню Минздрава"
+    "addToChild": "Добавить ребёнку"
   },
   "form": {
     "createTitle": "Новый рецепт",

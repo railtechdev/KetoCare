@@ -833,46 +833,53 @@ export function CalculatorView({
                   />
                 </div>
 
-                <div className="flex flex-col gap-field">
-                  <div className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0">
-                    <Field
-                      id="factor"
-                      width="tiny"
-                      label={t("factor")}
-                      hint={t("factorHint")}
-                      type="number"
-                      inputMode="decimal"
-                      min={0.1}
-                      step={0.1}
-                      value={factor}
-                      onChange={(event) => {
-                        setFactor(Number(event.target.value));
-                        scale.reset();
-                      }}
-                      className="tabular-nums"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-touch"
-                      disabled={scaleBlockedBy !== null || busy}
-                      aria-busy={scale.isPending}
-                      aria-describedby={
-                        scaleBlockedBy !== null
-                          ? reasonId
-                          : actionsWaitingDescription
-                      }
-                      onClick={() => {
-                        solve.reset();
-                        scale.mutate({ rows, factor });
-                      }}
-                    >
-                      {scale.isPending
-                        ? t("actions.scaling")
-                        : t("actions.scale")}
-                    </Button>
+                {/* Пересчёт порций — только в калькуляторе без ребёнка. В карте
+                    блюдо подгоняется под цель приёма ЭТОГО ребёнка, и удвоение
+                    уводит его от цели; диетолог спросила, зачем здесь «порция»
+                    (12.11.2026). Размер приёма меняют цель и «Подобрать
+                    граммовку». */}
+                {patientId === undefined && (
+                  <div className="flex flex-col gap-field">
+                    <div className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0">
+                      <Field
+                        id="factor"
+                        width="tiny"
+                        label={t("factor")}
+                        hint={t("factorHint")}
+                        type="number"
+                        inputMode="decimal"
+                        min={0.1}
+                        step={0.1}
+                        value={factor}
+                        onChange={(event) => {
+                          setFactor(Number(event.target.value));
+                          scale.reset();
+                        }}
+                        className="tabular-nums"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-touch"
+                        disabled={scaleBlockedBy !== null || busy}
+                        aria-busy={scale.isPending}
+                        aria-describedby={
+                          scaleBlockedBy !== null
+                            ? reasonId
+                            : actionsWaitingDescription
+                        }
+                        onClick={() => {
+                          solve.reset();
+                          scale.mutate({ rows, factor });
+                        }}
+                      >
+                        {scale.isPending
+                          ? t("actions.scaling")
+                          : t("actions.scale")}
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {dish !== null && (

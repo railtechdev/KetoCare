@@ -12,7 +12,12 @@ import {
 } from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
 import type { Patient } from "../patients/useChildren";
-import { childSchema, splitExclusions, type ChildValues } from "./childSchemas";
+import {
+  childSchema,
+  newChildSchema,
+  splitExclusions,
+  type ChildValues,
+} from "./childSchemas";
 import { ExcludedProductsField } from "./ExcludedProductsField";
 
 interface Props {
@@ -47,7 +52,7 @@ export function ChildForm({
     handleSubmit,
     formState: { errors, submitCount },
   } = useForm<ChildValues>({
-    resolver: zodResolver(childSchema),
+    resolver: zodResolver(isEdit ? childSchema : newChildSchema),
     defaultValues: {
       fullName: child?.full_name ?? "",
       birthDate: child?.birth_date ?? "",
@@ -122,7 +127,7 @@ export function ChildForm({
         type="number"
         inputMode="decimal"
         step="0.1"
-        optional
+        optional={isEdit}
         label={t("child.fields.heightCm")}
         error={heightError}
         {...register("heightCm")}
@@ -136,7 +141,6 @@ export function ChildForm({
           type="number"
           inputMode="decimal"
           step="0.1"
-          optional
           label={t("child.fields.weightKg")}
           error={weightError}
           {...register("weightKg")}

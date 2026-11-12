@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -95,5 +96,29 @@ describe("поля формы", () => {
     expect(input.current).toBeInstanceOf(HTMLInputElement);
     expect(select.current).toBeInstanceOf(HTMLSelectElement);
     expect(textarea.current).toBeInstanceOf(HTMLTextAreaElement);
+  });
+});
+
+describe("поле даты", () => {
+  it("уход из даты называет, куда ушёл фокус: иначе ловушка фокуса панели вернёт его в дату", async () => {
+    const user = userEvent.setup();
+    const seen: Array<EventTarget | null | undefined> = [];
+    render(
+      <>
+        <Field
+          id="d"
+          type="date"
+          label="Дата рождения"
+          onBlur={(event) => seen.push(event.relatedTarget)}
+        />
+        <Field id="h" label="Рост, см" />
+      </>,
+    );
+
+    await user.type(screen.getByLabelText("Дата рождения"), "12.04.2019");
+    await user.click(screen.getByLabelText("Рост, см"));
+
+    expect(screen.getByLabelText("Рост, см")).toHaveFocus();
+    expect(seen.at(-1)).toBe(screen.getByLabelText("Рост, см"));
   });
 });

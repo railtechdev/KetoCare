@@ -392,13 +392,20 @@ function DateInput({
             if (iso !== null) write(iso);
           }
         }}
-        onBlur={() => {
+        onBlur={(event) => {
           // Недонабранная или несуществующая дата не остаётся прежним
           // значением под новым текстом: поле пустеет, и проверка формы
           // говорит об ошибке у поля.
           if (text.trim() !== "" && textToIso(text) === null) write("");
+          // Событие несёт, куда ушёл фокус. Без `relatedTarget` ловушка фокуса
+          // панели (Radix FocusScope) считала, что фокус ушёл из панели, и
+          // возвращала его в дату: после набора даты в форме панели нельзя было
+          // перейти к соседнему полю (найдено сквозным тестом 12.11.2026).
           native.current?.dispatchEvent(
-            new Event("focusout", { bubbles: true }),
+            new FocusEvent("focusout", {
+              bubbles: true,
+              relatedTarget: event.relatedTarget,
+            }),
           );
         }}
       />

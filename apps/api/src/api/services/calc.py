@@ -16,6 +16,7 @@ from keto_engine import (
     Ingredient,
     MealMacroGoal,
     Targets,
+    dietary_unit_kcal,
     meal_macro_goal,
     verify,
 )
@@ -250,7 +251,8 @@ def to_prescription_goal(raw: PrescriptionGoalRequest) -> PrescriptionGoalRespon
 
     return PrescriptionGoalResponse(
         day=goal(raw.kcal_per_day),
-        meal=goal(raw.kcal_per_day / raw.meals_per_day),
+        meal=None if raw.meals_per_day is None else goal(raw.kcal_per_day / raw.meals_per_day),
+        dietary_unit_kcal=dietary_unit_kcal(raw.ratio),
         engine_version=ENGINE_VERSION,
     )
 

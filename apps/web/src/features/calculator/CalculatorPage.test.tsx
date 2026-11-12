@@ -861,7 +861,7 @@ describe("калькулятор", () => {
         : { data: SOLVED, error: undefined },
     );
     const user = userEvent.setup();
-    renderCalculator(PATIENT_ID);
+    renderCalculator();
     await addButter(user);
     expect(
       await screen.findByText(message, undefined, {
@@ -909,7 +909,7 @@ describe("калькулятор", () => {
           : { data: SOLVED, error: undefined },
     );
     const user = userEvent.setup();
-    renderCalculator(PATIENT_ID);
+    renderCalculator();
     await addButter(user);
     expect(
       await screen.findByText(
@@ -1067,7 +1067,7 @@ describe("калькулятор", () => {
       error: undefined,
     }));
     const user = userEvent.setup();
-    renderCalculator(PATIENT_ID);
+    renderCalculator();
     await addButter(user);
     await screen.findByText(/374 ккал/, undefined, {
       timeout: AUTO_CALC_TIMEOUT_MS,
@@ -1154,7 +1154,7 @@ describe("калькулятор", () => {
       error: undefined,
     }));
     const user = userEvent.setup();
-    renderCalculator(PATIENT_ID);
+    renderCalculator();
     await addButter(user);
     await screen.findByText(/374 ккал/, undefined, {
       timeout: AUTO_CALC_TIMEOUT_MS,
@@ -1230,7 +1230,7 @@ describe("калькулятор", () => {
         : Promise.resolve({ data: SOLVED, error: undefined }),
     );
     const user = userEvent.setup();
-    renderCalculator(PATIENT_ID);
+    renderCalculator();
     await addButter(user);
     const retry = await screen.findByRole(
       "button",
@@ -1442,7 +1442,7 @@ describe("калькулятор", () => {
     // Строка на блок действий одна: при пустом составе причина у обеих кнопок
     // одна и та же, и два одинаковых абзаца подряд — второе сообщение об одном
     // и том же (правило П27), да ещё и озвученное дважды.
-    renderCalculator(PATIENT_ID);
+    renderCalculator();
 
     const solve = await screen.findByRole("button", {
       name: /Подобрать граммовку/,
@@ -1479,14 +1479,9 @@ describe("калькулятор", () => {
     expect(grams).toHaveAttribute("aria-invalid", "true");
     expect(grams).toHaveAttribute("aria-describedby", fieldError.id);
 
-    const scale = screen.getByRole("button", { name: /Пересчитать порции/ });
-    expect(scale).toBeDisabled();
-    // Причина одна и та же у пересчёта и у сохранения — две строки, по одной
-    // на каждый блок действий.
     const reasons = screen
       .getAllByText("Масса продукта «Масло сливочное» больше 5 000 г.")
       .map((element) => element.id);
-    expect(reasons).toContain(scale.getAttribute("aria-describedby"));
     const save = screen.getByRole("button", { name: "Сохранить" });
     expect(save).toBeDisabled();
     expect(reasons).toContain(save.getAttribute("aria-describedby"));
@@ -2001,7 +1996,7 @@ describe("приправы в калькуляторе (ADR-0054)", () => {
 
   it("пересчёт порций переносит в состав и массу приправы", async () => {
     const user = userEvent.setup();
-    renderCalculator(PATIENT_ID);
+    renderCalculator();
     await addButter(user);
     await addPepper(user);
     await screen.findByText(/374 ккал/, undefined, {
@@ -2020,10 +2015,17 @@ describe("приправы в калькуляторе (ADR-0054)", () => {
     expect(
       valueControl(screen.getByLabelText(/Масса продукта «Масло сливочное»/)),
     ).toHaveValue(100);
-    // Цель осталась на один приём — и экран это говорит, иначе «не
-    // достигнута» после пересчёта читалась как ошибка.
+  });
+
+  it("в карте ребёнка пересчёта порций нет: блюдо подгоняется под цель приёма", async () => {
+    renderCalculator(PATIENT_ID);
+
     expect(
-      screen.getByText(/Цель — на один приём, а состав пересчитан на 2 порции/),
+      await screen.findByRole("button", { name: /Подобрать граммовку/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Пересчитать порции/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Порция/)).not.toBeInTheDocument();
   });
 });
