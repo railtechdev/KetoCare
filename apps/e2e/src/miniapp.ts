@@ -173,18 +173,31 @@ async function unlinkChat(
   }
 }
 
+/** Дата по часам клиники со сдвигом в днях: «YYYY-MM-DD». */
+function clinicDate(offsetDays: number): string {
+  const moment = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+  return moment.toLocaleDateString("sv-SE", { timeZone: "Asia/Tashkent" });
+}
+
 /**
  * Назначение, без которого день не собрать: приёмы пищи и цели задаёт врач.
  *
- * Пишется только если активного нет: `prescriptions` — append-only (правило 4),
- * и назначение на каждый прогон копило бы строки в карте ребёнка.
+ * Сценарий собирает ВЧЕРАШНИЙ день, а день судится назначением, действовавшим
+ * в этот день (ADR-0078): назначение «с сегодня» вчерашнему дню приёмов не
+ * даёт. Поэтому проверяется назначение на вчера, и новое пишется с датой
+ * начала неделю назад.
+ *
+ * Пишется только если на вчера его нет: `prescriptions` — append-only
+ * (правило 4), и назначение на каждый прогон копило бы строки в карте ребёнка.
  */
 export async function ensurePrescription(
   doctor: APIRequestContext,
   patientId: string,
 ): Promise<{ kcalPerDay: number; carbsLimitG: number; mealsPerDay: number }> {
-  const overview = await doctor.get(`/api/v1/patients/${patientId}/overview`);
-  const current = (await overview.json()) as {
+  const onYesterday = await doctor.get(
+    `/api/v1/patients/${patientId}/prescriptions/on?date=${clinicDate(-1)}`,
+  );
+  const current = (await onYesterday.json()) as {
     prescription: {
       kcal_per_day: number;
       carbs_limit_g: number;
@@ -209,14 +222,12 @@ export async function ensurePrescription(
         protein_g: 25,
         carbs_limit_g: 8.8,
         meals_per_day: 4,
-        effective_from: new Date().toLocaleDateString("sv-SE", {
-          timeZone: "Asia/Tashkent",
-        }),
+        effective_from: clinicDate(-7),
       },
     },
   );
   if (!created.ok()) {
     throw new Error(`Назначение не записалось: ${await created.text()}`);
   }
-  return { kcalPerDay: 1200, carbsLimitG: 12, mealsPerDay: 4 };
+  return { kcalPerDay: 1200, carbsLimitG: 8.8, mealsPerDay: 4 };
 }
