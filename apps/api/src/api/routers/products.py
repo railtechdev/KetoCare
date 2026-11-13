@@ -54,7 +54,7 @@ from ..schemas import (
     ProductRevisionRead,
     ProductUpdate,
 )
-from ..services import product_checks, spreadsheet, uploads
+from ..services import product_checks, product_recompute, spreadsheet, uploads
 from ..services.product_import import ValidRow, parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -642,6 +642,7 @@ async def update_product(
     except products_repo.UnknownValueInClinicError as error:
         raise _unknown_in_clinic(error.fields) from error
 
+    after = ProductRead.model_validate(updated).model_dump(mode="json")
     await audit_repo.write_audit_log(
         session,
         user_id=user.id,
@@ -649,8 +650,14 @@ async def update_product(
         entity="products",
         entity_id=product_id,
         before=before,
-        after=ProductRead.model_validate(updated).model_dump(mode="json"),
+        after=after,
     )
+    # Числа продукта или отметка «приправа» изменились — рецепты и блюда, где он
+    # стоит, пересчитываются сразу, а не при следующей их записи.
+    if changed or before.get("counts_in_calculation") != after.get("counts_in_calculation"):
+        await product_recompute.recompute_after_product_change(
+            session, product_id=product_id, user_id=user.id
+        )
     return await _labelled_read_for(session, user, updated)
 
 
