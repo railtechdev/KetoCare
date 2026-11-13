@@ -159,6 +159,10 @@
       "body": "Kunning keto nisbati tayinlangandan ruxsat etilganidan ko‘proq farq qiladi. Ovqatlanishlar tarkibini yoki porsiya hajmini o‘zgartiring."
     },
     "ratioUnknown": "Keto nisbatini hisoblab bo‘lmaydi: taomlarda oqsil va uglevod yo‘q.",
+    "carbsOver": {
+      "title": "Uglevodlar me’yordan ko‘p",
+      "body": "Kun davomidagi uglevodlar tayinlovda ruxsat etilganidan ko‘p. Uglevodli taomni almashtiring yoki porsiyani kamaytiring."
+    },
     "kcalBelowTarget": "To‘plandi: {{value}} kkal, me’yor — {{target}} kkal. Sutkalik me’yorni to‘ldirish uchun yana {{left}} kkal qo‘shing.",
     "kcalBelowTargetPlain": "Kunning kaloriyasi hozircha sutkalik me’yordan past. Uni to‘ldirish uchun qolgan ovqatlanishlarga taomlar qo‘shing.",
     "noPrescription": "Yakunlarni solishtiradigan narsa yo‘q: tayinlov yo‘q.",

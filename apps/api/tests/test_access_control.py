@@ -17,11 +17,12 @@ from core.repositories import patients as patients_repo
 
 pytestmark = pytest.mark.asyncio
 
+# 4:1 and 1200 kcal leave 1200 / 40 = 30 g for protein with net carbs: 25 + 5.
 VALID_PRESCRIPTION = {
     "ratio": 4.0,
     "kcal_per_day": 1200,
     "protein_g": 25.0,
-    "carbs_limit_g": 10.0,
+    "carbs_limit_g": 5.0,
     "meals_per_day": 3,
     "effective_from": "2026-01-01",
 }
@@ -466,3 +467,90 @@ class TestPatientSearch:
         )
 
         assert response.json()["items"] == []
+
+
+class TestPrescriptionCarbsLimitConsistency:
+    """Лимит углеводов выше остатка после белка отклоняется (аудит 13.11.2026).
+
+    Случай со стенда: 3:1, 920 ккал, белок 23 г — на углеводы остаётся
+    920 / 31 − 23 = 6,7 г, а в назначении стояло 27,7 г от прежней калорийности.
+    """
+
+    async def _post(self, client, session, make_user, make_patient, auth_headers, **fields):
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        return await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json={**VALID_PRESCRIPTION, **fields},
+            headers=auth_headers(doctor),
+        )
+
+    async def test_stale_limit_rejected_with_the_derived_value(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        response = await self._post(
+            client,
+            session,
+            make_user,
+            make_patient,
+            auth_headers,
+            ratio=3.0,
+            kcal_per_day=920,
+            protein_g=23.0,
+            carbs_limit_g=27.7,
+        )
+        assert response.status_code == 422
+        error = response.json()["error"]
+        assert error["code"] == "validation_error"
+        assert "6,7 г" in error["message"]
+        assert error["details"]["max_carbs_limit_g"] == 6.7
+
+    async def test_derived_limit_rounded_for_the_form_accepted(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        # 920 / 31 − 23 = 6.677…; the form shows and sends 6.7.
+        response = await self._post(
+            client,
+            session,
+            make_user,
+            make_patient,
+            auth_headers,
+            ratio=3.0,
+            kcal_per_day=920,
+            protein_g=23.0,
+            carbs_limit_g=6.7,
+        )
+        assert response.status_code == 201
+
+    async def test_stricter_limit_accepted(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        response = await self._post(
+            client,
+            session,
+            make_user,
+            make_patient,
+            auth_headers,
+            ratio=3.0,
+            kcal_per_day=920,
+            protein_g=23.0,
+            carbs_limit_g=4.0,
+        )
+        assert response.status_code == 201
+
+    async def test_kdc_cases_accepted(self, client, session, make_user, make_patient, auth_headers):
+        # Numbers from KDC screenshots of 13.11.2026.
+        for kcal, protein, carbs in [(1380, 23.0, 21.52), (952, 15.4, 15.31)]:
+            response = await self._post(
+                client,
+                session,
+                make_user,
+                make_patient,
+                auth_headers,
+                ratio=3.0,
+                kcal_per_day=kcal,
+                protein_g=protein,
+                carbs_limit_g=carbs,
+            )
+            assert response.status_code == 201, response.json()

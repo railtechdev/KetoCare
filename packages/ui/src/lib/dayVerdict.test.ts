@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   dayVerdict,
+  type DayTolerance,
   kcalToTarget,
   TOLERANCE_GAP_KEY,
   TOLERANCE_GAP_UNKNOWN_KEY,
@@ -13,6 +14,8 @@ describe("dayVerdict", () => {
     expect(dayVerdict(null)).toEqual({
       ratioOffTolerance: false,
       ratioUnknown: false,
+      carbsOverLimit: false,
+      carbsUnknown: false,
       kcalBelowTarget: false,
       unavailable: true,
       unavailableReason: null,
@@ -36,7 +39,11 @@ describe("dayVerdict", () => {
   it("при живом вердикте причины нет", () => {
     // Иначе экран однажды покажет и вердикт, и объяснение, почему его нет.
     const verdict = dayVerdict(
-      { ratio_within_tolerance: true, kcal_within_tolerance: true },
+      {
+        ratio_within_tolerance: true,
+        kcal_within_tolerance: true,
+        carbs_within_limit: true,
+      },
       "engine_changed",
     );
 
@@ -50,6 +57,7 @@ describe("dayVerdict", () => {
     const verdict = dayVerdict({
       ratio_within_tolerance: false,
       kcal_within_tolerance: true,
+      carbs_within_limit: true,
     });
 
     expect(verdict.ratioOffTolerance).toBe(true);
@@ -63,18 +71,48 @@ describe("dayVerdict", () => {
     const verdict = dayVerdict({
       ratio_within_tolerance: true,
       kcal_within_tolerance: false,
+      carbs_within_limit: true,
     });
 
     expect(verdict.ratioOffTolerance).toBe(false);
     expect(verdict.kcalBelowTarget).toBe(true);
   });
 
+  it("превышение лимита углеводов — предупреждение и при верном соотношении", () => {
+    // Аудит расчётов 13.11.2026: день сверялся только по соотношению и
+    // калорийности, и «в допуске» стояло при двойном превышении углеводов.
+    const verdict = dayVerdict({
+      ratio_within_tolerance: true,
+      kcal_within_tolerance: true,
+      carbs_within_limit: false,
+    });
+    expect(verdict.carbsOverLimit).toBe(true);
+    expect(verdict.carbsUnknown).toBe(false);
+  });
+
+  it("ответ без поля о лимите — лимит неизвестен, а не «в норме»", () => {
+    // Ответ из кеша, снятый до выката 13.11.2026.
+    const stale = {
+      ratio_within_tolerance: true,
+      kcal_within_tolerance: true,
+    } as unknown as DayTolerance;
+    const verdict = dayVerdict(stale);
+    expect(verdict.carbsOverLimit).toBe(false);
+    expect(verdict.carbsUnknown).toBe(true);
+  });
+
   it("день в допусках не даёт ни предупреждения, ни недобора", () => {
     expect(
-      dayVerdict({ ratio_within_tolerance: true, kcal_within_tolerance: true }),
+      dayVerdict({
+        ratio_within_tolerance: true,
+        kcal_within_tolerance: true,
+        carbs_within_limit: true,
+      }),
     ).toEqual({
       ratioOffTolerance: false,
       ratioUnknown: false,
+      carbsOverLimit: false,
+      carbsUnknown: false,
       kcalBelowTarget: false,
       unavailable: false,
       unavailableReason: null,
@@ -111,6 +149,7 @@ describe("причина отсутствия вердикта и неизвес
     const verdict = dayVerdict({
       ratio_within_tolerance: null,
       kcal_within_tolerance: true,
+      carbs_within_limit: true,
     });
 
     expect(verdict.ratioOffTolerance).toBe(false);
@@ -123,10 +162,12 @@ describe("причина отсутствия вердикта и неизвес
     const within = dayVerdict({
       ratio_within_tolerance: true,
       kcal_within_tolerance: true,
+      carbs_within_limit: true,
     });
     const off = dayVerdict({
       ratio_within_tolerance: false,
       kcal_within_tolerance: true,
+      carbs_within_limit: true,
     });
 
     expect(within.ratioUnknown).toBe(false);

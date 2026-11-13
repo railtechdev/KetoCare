@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import { cn } from "../lib/cn";
 import { formatRatio } from "../lib/format";
@@ -17,10 +17,15 @@ export interface RatioBadgeProps {
    * иначе. `undefined` — назначение неизвестно, показываем нейтрально.
    */
   withinTolerance?: boolean;
-  /** Целевое значение кетосоотношения из назначения (напр. 4.0) */
+  /**
+   * Целевое значение кетосоотношения из назначения (напр. 4.0) — только для
+   * подписи. Вердикта цель не даёт: без `withinTolerance` значок нейтральный.
+   * До 13.11.2026 значок при одной цели решал сам («|ratio − цель| ≤ 0.15»), и
+   * зелёная галочка стояла там, где сервер вердикта не давал: у устаревшего
+   * состава калькулятора, у дня, посчитанного прежней версией ядра, и в списке
+   * пациентов (аудит расчётов 13.11.2026).
+   */
   targetRatio?: number;
-  /** Допуск соответствия (по умолчанию 0.15) */
-  tolerance?: number;
   /**
    * Печатать цель внутри значка: «4.2 : 1 (Цель: 3.5 : 1)». В узкой колонке
    * таблицы цель ставят строкой под значком, и вдвое широкий значок выталкивал
@@ -47,7 +52,6 @@ export function RatioBadge({
   ratio,
   withinTolerance,
   targetRatio,
-  tolerance = 0.15,
   showTarget = true,
   className,
 }: RatioBadgeProps) {
@@ -70,38 +74,42 @@ export function RatioBadge({
     );
   }
 
-  // Расширенный режим: передан целевой ориентир кетосоотношения
+  // Расширенный режим: рядом с числом — цель из назначения. Вердикт — только
+  // от сервера; без него значок нейтральный, а цель остаётся подписью.
   if (targetRatio !== undefined) {
-    const diff = Math.abs(ratio - targetRatio);
-    const isOk =
-      withinTolerance !== undefined ? withinTolerance : diff <= tolerance;
-    const isCritical = !isOk && diff > tolerance * 2;
+    const state =
+      withinTolerance === undefined
+        ? "neutral"
+        : withinTolerance
+          ? "ok"
+          : "off";
+    const StatusIcon =
+      state === "ok" ? CheckCircle2 : state === "off" ? AlertTriangle : null;
 
-    const status = isOk ? "inRange" : isCritical ? "critical" : "deviation";
-    const state = isOk ? "ok" : "off";
+    const statusClasses =
+      state === "ok"
+        ? "bg-success-subtle text-success border-success/30"
+        : state === "off"
+          ? "bg-warning-subtle text-warning-strong border-warning/30"
+          : "bg-card text-muted-foreground border-border";
 
-    const StatusIcon = isOk
-      ? CheckCircle2
-      : isCritical
-        ? AlertCircle
-        : AlertTriangle;
-
-    const statusClasses = isOk
-      ? "bg-success-subtle text-success border-success/30"
-      : isCritical
-        ? "bg-destructive-subtle text-destructive border-destructive/30"
-        : "bg-warning-subtle text-warning-strong border-warning/30";
-
-    const label = `${isOk ? labels.within(formatRatio(ratio)) : labels.off(formatRatio(ratio))}. ${labels.target(formatRatio(targetRatio))}`;
+    const verdictLabel =
+      state === "ok"
+        ? labels.within(formatRatio(ratio))
+        : state === "off"
+          ? labels.off(formatRatio(ratio))
+          : labels.plain(formatRatio(ratio));
+    const label = `${verdictLabel}. ${labels.target(formatRatio(targetRatio))}`;
 
     return (
       <span
         className={cn(BASE, statusClasses, className)}
         data-state={state}
-        data-status={status}
         aria-label={label}
       >
-        <StatusIcon className="mr-1.5 size-3.5 shrink-0" aria-hidden="true" />
+        {StatusIcon && (
+          <StatusIcon className="mr-1.5 size-3.5 shrink-0" aria-hidden="true" />
+        )}
         <span>{formatRatio(ratio)}</span>
         {showTarget && (
           <span className="ml-1.5 font-normal opacity-85">

@@ -231,6 +231,34 @@ describe("углеводы из прежней версии (замечание 
   });
 });
 
+describe("подпись «рассчитано» говорит правду (аудит расчётов 13.11.2026)", () => {
+  it("без ответа расчёта подписи «рассчитано» нет", async () => {
+    (api.POST as Mock).mockRejectedValue(new Error("offline"));
+    renderForm();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/Рассчитано по калорийности/)).toBeNull();
+  });
+
+  it("калорийность изменили и вернули — поле продолжает следовать расчёту", async () => {
+    renderForm();
+    const user = userEvent.setup();
+    const kcal = screen.getByLabelText(/Калорийность/);
+    const carbs = screen.getByLabelText(/Углеводы/);
+    await user.clear(kcal);
+    await user.type(kcal, "1300");
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
+    await user.clear(kcal);
+    await user.type(kcal, "1200");
+    await vi.waitFor(() =>
+      expect(
+        screen.getByText(/Рассчитано по калорийности/),
+      ).toBeInTheDocument(),
+    );
+    expect(valueControl(carbs)).toHaveValue(10.3);
+    expect(screen.queryByText(/из прежнего назначения/)).toBeNull();
+  });
+});
+
 describe("углеводы без числа приёмов (замечание диетолога 12.11.2026)", () => {
   it("первое назначение получает углеводы, пока приёмы не введены", async () => {
     (api.POST as Mock).mockResolvedValue({ data: { ...GOAL, meal: null } });
