@@ -83,7 +83,8 @@ export function ReportSheet({ report }: { report: PatientReport }) {
         </h2>
         {(
           [
-            ["ketones", report.ketones, "unitKetones"],
+            ["ketonesBlood", report.ketones_blood, "unitKetones"],
+            ["ketonesUrine", report.ketones_urine, "unitKetones"],
             ["weight", report.weight, "unitWeight"],
           ] as const
         ).map(([key, series, unit]) => (

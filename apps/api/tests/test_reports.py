@@ -46,12 +46,14 @@ async def _seizure(session, patient, *, at: datetime, count: int):
     return log
 
 
-async def _ketone(session, patient, *, at: datetime, value: float):
+async def _ketone(
+    session, patient, *, at: datetime, value: float, method: KetoneMethod = KetoneMethod.BLOOD
+):
     log = KetoneLog(
         patient_id=patient.id,
         occurred_at=at,
         value=value,
-        method=KetoneMethod.BLOOD,
+        method=method,
         source=DiarySource.WEB,
     )
     session.add(log)
@@ -122,13 +124,29 @@ class TestReportContent:
             await _ketone(session, patient, at=datetime(2026, 8, day, 8, 0), value=value)
 
         ketones = (await client.get(_url(patient.id), headers=auth_headers(doctor))).json()[
-            "ketones"
+            "ketones_blood"
         ]
 
         assert len(ketones["points"]) == 3
         assert ketones["min"] == 1.0
         assert ketones["max"] == 4.0
         assert ketones["mean"] == 2.5
+
+    async def test_blood_and_urine_ketones_are_not_averaged_together(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Аудит 13.11.2026: кровь 2,8 и моча 8,0 печатались средним 5,4 ммоль/л."""
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        await _ketone(session, patient, at=datetime(2026, 8, 2, 8, 0), value=2.8)
+        await _ketone(
+            session, patient, at=datetime(2026, 8, 3, 8, 0), value=8.0, method=KetoneMethod.URINE
+        )
+
+        body = (await client.get(_url(patient.id), headers=auth_headers(doctor))).json()
+
+        assert body["ketones_blood"]["mean"] == 2.8
+        assert body["ketones_urine"]["mean"] == 8.0
+        assert "ketones" not in body
 
     async def test_empty_period_is_a_valid_report(
         self, client, session, make_user, make_patient, auth_headers

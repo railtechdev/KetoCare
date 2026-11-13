@@ -48,12 +48,13 @@ REPORT = {
         ],
         "by_day": {"2026-08-10": 6},
     },
-    "ketones": {
+    "ketones_blood": {
         "points": [{"at": "2026-08-02T08:00:00+00:00", "value": 3.2}],
         "min": 3.2,
         "max": 3.2,
         "mean": 3.2,
     },
+    "ketones_urine": {"points": [], "min": None, "max": None, "mean": None},
     "weight": {"points": [], "min": None, "max": None, "mean": None},
     "medications": [
         {

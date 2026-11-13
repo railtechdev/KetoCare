@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import Patient
+from core.models.enums import KetoneMethod
 from core.repositories import medications as medications_repo
 from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import reports as reports_repo
@@ -166,8 +167,19 @@ async def build_report(
             by_type=sorted(by_type.values(), key=lambda item: -item.count),
             by_day=dict(sorted(by_day.items())),
         ),
-        ketones=_series(
-            [MeasurementPoint(at=log.occurred_at, value=float(log.value)) for log in ketones]
+        ketones_blood=_series(
+            [
+                MeasurementPoint(at=log.occurred_at, value=float(log.value))
+                for log in ketones
+                if log.method == KetoneMethod.BLOOD
+            ]
+        ),
+        ketones_urine=_series(
+            [
+                MeasurementPoint(at=log.occurred_at, value=float(log.value))
+                for log in ketones
+                if log.method == KetoneMethod.URINE
+            ]
         ),
         weight=_series(
             [MeasurementPoint(at=log.occurred_at, value=float(log.weight_kg)) for log in weights]
@@ -246,8 +258,10 @@ def report_to_csv(report: PatientReport) -> str:
     for day, count in report.seizures.by_day.items():
         writer.writerow(["seizures_by_day", day, count, ""])
 
-    for point in report.ketones.points:
-        writer.writerow(["ketones", point.at.isoformat(), point.value, ""])
+    # Метод — в последней колонке: строка «ketones» без него смешивала кровь и мочу.
+    for method, series in (("blood", report.ketones_blood), ("urine", report.ketones_urine)):
+        for point in series.points:
+            writer.writerow(["ketones", point.at.isoformat(), point.value, method])
     for point in report.weight.points:
         writer.writerow(["weight", point.at.isoformat(), point.value, ""])
 

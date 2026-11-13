@@ -13,7 +13,8 @@
   },
   "measurements": {
     "title": "Кетоны и вес",
-    "ketones": "Кетоны",
+    "ketonesBlood": "Кетоны в крови",
+    "ketonesUrine": "Кетоны в моче",
     "weight": "Вес",
     "unitKetones": "ммоль/л",
     "unitWeight": "кг",

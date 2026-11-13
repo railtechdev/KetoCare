@@ -1,10 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Checkbox,
-  cn,
   EmptyState,
   formatMeasured,
-  formatNumber,
   formatWeight,
   FormFooter,
   KETONE_MAX_MMOL,
@@ -21,7 +19,6 @@ import {
   seizureSchema,
   sideEffectBody,
   sideEffectSchema,
-  StatusNote,
   toDateTimeLocalInput,
   type KetoneValues,
   type MealValues,
@@ -486,7 +483,6 @@ function KetoneForm({
   error,
 }: FormCallbacks & { editing: (DiaryLog & { kind: "ketones" }) | null }) {
   const { t } = useTranslation("diary");
-  const [glucose, setGlucose] = useState("");
 
   const defaults = (): KetoneValues => ({
     occurredAt: editing ? occurredInput(editing.occurred_at) : nowInput(),
@@ -498,47 +494,17 @@ function KetoneForm({
     register,
     handleSubmit,
     reset,
-    watch,
     formState: { errors, submitCount },
   } = useForm<KetoneValues>({
     resolver: zodResolver(ketoneSchema),
     defaultValues: defaults(),
   });
 
-  const ketoneValueStr = watch("value");
-  const kVal = parseFloat(String(ketoneValueStr).replace(",", "."));
-  const gVal = parseFloat(glucose.replace(",", "."));
-  const hasGki = !isNaN(kVal) && kVal > 0 && !isNaN(gVal) && gVal > 0;
-  const gki = hasGki ? gVal / kVal : null;
-
-  const gkiLevel =
-    gki === null
-      ? null
-      : gki < 1
-        ? {
-            level: t("ketones.gkiLevels.highest"),
-            tone: "text-success font-medium",
-          }
-        : gki <= 3
-          ? {
-              level: t("ketones.gkiLevels.high"),
-              tone: "text-success font-medium",
-            }
-          : gki <= 6
-            ? {
-                level: t("ketones.gkiLevels.moderate"),
-                tone: "text-foreground",
-              }
-            : gki <= 9
-              ? {
-                  level: t("ketones.gkiLevels.low"),
-                  tone: "text-warning-strong",
-                }
-              : {
-                  level: t("ketones.gkiLevels.none"),
-                  tone: "text-destructive",
-                };
-
+  // Глюкозо-кетоновый индекс убран 13.11.2026 (аудит расчётов): глюкоза не
+  // сохранялась, а индекс с порогами 1/3/6/9 и толкованием «высший
+  // терапевтический кетоз … кетоза нет» считался в браузере и клиникой не
+  // утверждён — правило 1 CLAUDE.md. Показывался он и для кетонов в моче, где
+  // смысла не имеет. Если клиника его назовёт, он появится на сервере.
   const occurredAtError =
     errors.occurredAt && t(occurredAtErrorKey(errors.occurredAt.message));
   const valueError =
@@ -553,7 +519,6 @@ function KetoneForm({
     if (body === null) return;
     onSubmit(body, () => {
       reset(defaults());
-      setGlucose("");
     });
   });
 
@@ -596,29 +561,6 @@ function KetoneForm({
         className="tabular-nums"
         {...register("value")}
       />
-      <Field
-        id="ketone-glucose"
-        width="narrow"
-        type="number"
-        inputMode="decimal"
-        pattern="[0-9]*[.,]?[0-9]*"
-        min={0}
-        step={0.1}
-        optional
-        label={t("ketones.glucose")}
-        hint={t("ketones.glucoseHint")}
-        value={glucose}
-        onChange={(event) => setGlucose(event.target.value)}
-        className="tabular-nums"
-      />
-      {hasGki && gki !== null && gkiLevel !== null && (
-        <StatusNote className={cn("tabular-nums text-sm", gkiLevel.tone)}>
-          {t("ketones.gki", {
-            value: formatNumber(gki, 1),
-            level: gkiLevel.level,
-          })}
-        </StatusNote>
-      )}
       <SelectField
         id="ketone-method"
         width="medium"

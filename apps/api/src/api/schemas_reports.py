@@ -125,7 +125,12 @@ class PatientReport(BaseModel):
     patient: ReportPatient
     prescriptions: list[ReportPrescription]
     seizures: SeizureSection
-    ketones: MeasurementSeries
+    #: Кетоны в крови и в моче — два ряда, а не один: шкалы несравнимы (полоски
+    #: мочи дают ступени 0,5 / 1,5 / 4 / 8 / 16), и общее среднее «кровь 2,8 и
+    #: моча 8,0 → 5,4 ммоль/л» не значит ничего (аудит расчётов 13.11.2026).
+    #: Сводка врача делит их так же.
+    ketones_blood: MeasurementSeries
+    ketones_urine: MeasurementSeries
     weight: MeasurementSeries
     medications: list[MedicationRow]
     side_effects: list[SideEffectRow]
