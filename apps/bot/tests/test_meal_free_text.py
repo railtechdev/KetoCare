@@ -281,3 +281,11 @@ class TestTimeoutMatchesTheEndpoint:
             "write": PARSE_TIMEOUT_S,
             "pool": PARSE_TIMEOUT_S,
         }
+
+
+def test_grams_are_written_with_a_comma() -> None:
+    """«12,5 г», как в эхе записи и в приложении, а не «12.5 г»."""
+
+    assert scenarios._grams(12.5) == "12,5"
+    assert scenarios._grams(30.0) == "30"
+    assert scenarios._grams(None) == "?"
