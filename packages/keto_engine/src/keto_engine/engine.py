@@ -616,8 +616,12 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
     rounding = constants.GRAM_ROUNDING
     rounded = [float(g) for g in np.round(grams / rounding) * rounding]
 
-    # Округление до грамма может вывести соотношение за допуск — тогда ищем
-    # ближайшую целочисленную комбинацию, которая в допуск укладывается.
+    # Округление до грамма может вывести за допуск не только соотношение, но и
+    # калорийность, минимум белка и лимит углеводов — тогда ищем ближайшую
+    # целочисленную комбинацию, которая укладывается во всё. До 1.8.0 починка
+    # запускалась только по соотношению, и подбор молча отдавал блюдо с белком
+    # ниже цели или углеводами выше лимита на 0,1–0,2 г: на реальных продуктах
+    # это 7 % подборов с такими ограничениями (аудит расчётов 13.11.2026).
     probe = [
         (ing, g)
         for ing, g in zip(ingredients, rounded, strict=True)
@@ -625,7 +629,7 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
     ]
     if probe:
         ratio_ok, _ = within_tolerance(verify(probe), targets)
-        if not ratio_ok:
+        if not ratio_ok or not _candidate_is_valid(rounded, ingredients, targets):
             rounded = _repair_rounding(rounded, ingredients, targets)
 
     items = [
@@ -646,6 +650,23 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
         raise InfeasibleError(
             "С выбранными продуктами кетосоотношение не определяется: считать "
             "его не от чего — белка нет, а углеводы целиком уходят в клетчатку."
+        )
+    # Белок и лимит углеводов — границы, а не допуски: флага для них у
+    # результата нет, и блюдо за границей выглядело бы подобранным верно. Если
+    # в целых граммах их не удержать, это отказ с причиной, а не результат.
+    if targets.protein_min_g is not None and dish.protein_g < targets.protein_min_g - 1e-9:
+        raise InfeasibleError(
+            f"В целых граммах не удаётся набрать белок {targets.protein_min_g:g} г при "
+            f"соотношении {_fmt_ratio(targets.ratio)} и калорийности {targets.kcal:g} ккал — "
+            f"ближайший состав даёт {dish.protein_g:.1f} г. Добавьте белковый продукт "
+            "или уменьшите цель по белку."
+        )
+    if targets.carbs_max_g is not None and dish.carbs_g > targets.carbs_max_g + 1e-9:
+        raise InfeasibleError(
+            f"В целых граммах не удаётся удержать углеводы в лимите {targets.carbs_max_g:g} г "
+            f"при соотношении {_fmt_ratio(targets.ratio)} и калорийности {targets.kcal:g} "
+            f"ккал — ближайший состав даёт {dish.carbs_g:.1f} г. Замените продукт с "
+            "углеводами или увеличьте лимит."
         )
     return SolveResult(
         dish=dish, ratio_within_tolerance=ratio_within, kcal_within_tolerance=kcal_within

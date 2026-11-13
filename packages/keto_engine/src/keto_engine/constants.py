@@ -92,7 +92,13 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # 1.7.0 — `dietary_unit_kcal()` gives the energy of one dietary unit at a ratio
 # (R g fat + 1 g protein with net carbs), the way the clinic's Yonsei slide
 # explains the calculation. Minor: a new function, nothing else changes.
-ENGINE_VERSION = "1.7.0"
+# 1.8.0 — solve() repairs whole-gram rounding when it breaks the calorie
+# corridor, the protein minimum or the carbs limit, not only the ratio; a dish
+# still below the protein minimum or above the carbs limit after repair is an
+# InfeasibleError with the reason instead of a silent result (calculation audit
+# of 2026-11-13). Minor, as 0.3.0: only results that broke their own targets
+# change; verify() and every stored number stay the same.
+ENGINE_VERSION = "1.8.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,
