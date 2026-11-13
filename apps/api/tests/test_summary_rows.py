@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -41,7 +41,14 @@ class TestRatioDeviationDoesNotCrossEngineMajors:
         return SimpleNamespace(days_planned=4, items_planned=16, items_eaten=12)
 
     def _rows(self, days):
-        history = [SimpleNamespace(effective_from=date(2026, 8, 1), ratio=3.0, kcal_per_day=1200)]
+        history = [
+            SimpleNamespace(
+                effective_from=date(2026, 8, 1),
+                created_at=datetime(2026, 8, 1, tzinfo=UTC),
+                ratio=3.0,
+                kcal_per_day=1200,
+            )
+        ]
         return summaries_service._menu(self._adherence(), days, history, days_in_period=31)
 
     def test_days_of_a_previous_major_are_left_out_and_counted(self) -> None:
