@@ -363,8 +363,11 @@ function Devices({
           key={link.id}
           className="flex flex-wrap items-center gap-field text-sm"
         >
-          <MessageCircle aria-hidden="true" className="size-4" />
-          <span>
+          {/* Подпись забирает свободное место, и «Отключить» встаёт у правого
+              края в каждой строке: следом за текстом разной длины кнопки
+              стояли лесенкой. */}
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <MessageCircle aria-hidden="true" className="size-4 shrink-0" />
             {t("family.devices.connected", {
               date: formatOccurredAt(new Date(link.linked_at)),
             })}

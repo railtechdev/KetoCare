@@ -22,12 +22,17 @@ import { flushRateLimits } from "../src/redis";
  * накрывала колонка действий. Тесты кабинета этого видеть не могут: в jsdom
  * нет раскладки.
  *
- * Строже телефонной проверки (`mobile.spec.ts`) в одном: прокрутка внутри
- * своего блока здесь тоже считается дефектом. На телефоне широкая таблица в
- * прокручиваемом блоке — правило П17, на ноутбуке врача она обязана
- * помещаться: спрятанная за краем колонка — та, которую врач не увидит.
+ * Две ширины. 1280 — ноутбук на весь экран, и здесь строже телефонной
+ * проверки (`mobile.spec.ts`): прокрутка внутри своего блока тоже дефект,
+ * спрятанная за краем колонка — та, которую врач не увидит. 1024 — окно
+ * браузера не во весь экран (снимки заказчика 13.11.2026 были около 1000 px):
+ * широкой таблице там разрешено прокручиваться в своём блоке (правило П17),
+ * но страница вбок не уезжает и заголовки не сжимаются в столбик.
  */
-test.use({ viewport: { width: 1280, height: 720 } });
+const WIDTHS = [
+  { width: 1280, height: 720, strict: true },
+  { width: 1024, height: 640, strict: false },
+] as const;
 
 test.beforeEach(flushRateLimits);
 
@@ -85,41 +90,47 @@ async function overflowOf(page: Page) {
         );
       }
     }
+    // Заголовок блока, сжатый соседями в столбик. Переполнения тут нет —
+    // текст честно переносится, — поэтому проверка выше его не видит: так
+    // «Кто ведёт ребёнка дома» рядом с двумя кнопками стояло по слогу в строке
+    // (снимок заказчика 13.11.2026).
+    for (const heading of Array.from(
+      document.querySelectorAll("main h2, main h3"),
+    ) as HTMLElement[]) {
+      if (heading.offsetParent === null || heading.closest(".sr-only"))
+        continue;
+      const box = heading.getBoundingClientRect();
+      const line = parseFloat(getComputedStyle(heading).lineHeight) || 24;
+      if (box.width > 0 && box.width < 192 && box.height > line * 2.5) {
+        offenders.push(
+          `сжатый заголовок ${Math.round(box.width)}px ` +
+            `«${(heading.textContent ?? "").trim().slice(0, 40)}»`,
+        );
+      }
+    }
     return {
       page: root.scrollWidth - root.clientWidth,
-      offenders: offenders.slice(0, 5),
+      offenders,
     };
   });
 }
 
-async function check(page: Page, path: string): Promise<void> {
+async function check(page: Page, path: string, strict: boolean): Promise<void> {
   await page.goto(path);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.waitForLoadState("networkidle");
   const overflow = await overflowOf(page);
+  if (!strict) {
+    overflow.offenders = overflow.offenders.filter(
+      (line) => !line.startsWith("прокрутка в блоке"),
+    );
+  }
   // Мягкие: список всех сломанных экранов за один прогон, а не первый.
   expect.soft(overflow.offenders, path).toEqual([]);
   expect
     .soft(overflow.page, `${path}: страница уезжает вбок`)
     .toBeLessThanOrEqual(1);
 }
-
-test("экраны специалиста помещаются в 1280 px", async ({ page }) => {
-  test.setTimeout(180_000);
-  // Ребёнок с назначением: без него сводка и меню рисуют пустые состояния, а
-  // на пустом экране не переполняется ничего.
-  const parentPage = await page.context().newPage();
-  await loginAsParent(parentPage);
-  const patient = await patientId(parentPage.request);
-  await parentPage.close();
-  await loginAsDoctor(page);
-  await ensurePrescription(page.request, patient);
-
-  for (const section of SECTIONS) await check(page, `/app/${section}`);
-  for (const view of PATIENT_VIEWS) {
-    await check(page, `/app/patients/${patient}/${view}`);
-  }
-});
 
 async function childOfParent(page: Page): Promise<string> {
   const parentPage = await page.context().newPage();
@@ -129,18 +140,43 @@ async function childOfParent(page: Page): Promise<string> {
   return patient;
 }
 
-test("экраны диетолога помещаются в 1280 px", async ({ page }) => {
-  test.setTimeout(180_000);
-  const patient = await childOfParent(page);
-  await loginAsDietitian(page);
-  for (const tab of PRODUCT_TABS) await check(page, `/app/products?tab=${tab}`);
-  for (const view of ["summary", "prescription", "dishes", "menu"]) {
-    await check(page, `/app/patients/${patient}/${view}`);
-  }
-});
+for (const { width, height, strict } of WIDTHS) {
+  test.describe(`${width} px`, () => {
+    test.use({ viewport: { width, height } });
 
-test("экраны администратора помещаются в 1280 px", async ({ page }) => {
-  test.setTimeout(180_000);
-  await loginAsAdmin(page);
-  for (const section of ADMIN_SECTIONS) await check(page, `/app/${section}`);
-});
+    test(`экраны врача помещаются в ${width} px`, async ({ page }) => {
+      test.setTimeout(180_000);
+      // Ребёнок с назначением: без него сводка и меню рисуют пустые
+      // состояния, а на пустом экране не переполняется ничего.
+      const patient = await childOfParent(page);
+      await loginAsDoctor(page);
+      await ensurePrescription(page.request, patient);
+      for (const section of SECTIONS) {
+        await check(page, `/app/${section}`, strict);
+      }
+      for (const view of PATIENT_VIEWS) {
+        await check(page, `/app/patients/${patient}/${view}`, strict);
+      }
+    });
+
+    test(`экраны диетолога помещаются в ${width} px`, async ({ page }) => {
+      test.setTimeout(180_000);
+      const patient = await childOfParent(page);
+      await loginAsDietitian(page);
+      for (const tab of PRODUCT_TABS) {
+        await check(page, `/app/products?tab=${tab}`, strict);
+      }
+      for (const view of ["summary", "prescription", "dishes", "menu"]) {
+        await check(page, `/app/patients/${patient}/${view}`, strict);
+      }
+    });
+
+    test(`экраны администратора помещаются в ${width} px`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await loginAsAdmin(page);
+      for (const section of ADMIN_SECTIONS) {
+        await check(page, `/app/${section}`, strict);
+      }
+    });
+  });
+}

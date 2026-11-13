@@ -236,6 +236,20 @@
 }
 
 @layer base {
+  /* Стрелки ▲▼ числового поля — браузерные, у каждого свои, и на маке они
+     стояли внутри каждого поля назначения. Число вводят с клавиатуры (стрелки
+     клавиатуры по-прежнему работают); шаг в 1 ккал мышью не нужен никому.
+     GOV.UK Design System по той же причине не советует type=number вовсе. */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   /* В Tailwind 4 класс `border` без явного цвета берёт `currentColor`
      (то есть цвет текста `#16213e` / `#e8edf7`). Задаём базовый цвет границы
      из токена `--color-border`, чтобы все карточки, поля и таблицы кита имели

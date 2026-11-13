@@ -4,7 +4,6 @@ import { cn } from "@ui/lib/cn";
 import { useDensity, type Density } from "@ui/lib/density";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -101,46 +100,50 @@ export function Section({
         className,
       )}
     >
-      {/* Узкий блок (уже 28rem — телефон, приставная колонка): действие уходит
-          ПОД заголовок. Рядом с двумя кнопками колонка заголовка сжималась до
-          нуля, и «Контрольные визиты» стояли по букве в строке (замер на 360
-          и 390 px). Запрос — к ширине блока (`@container` карточки), а не окна:
-          тот же блок бывает и во всю ширину, и в колонке 20rem. Кит
-          (`card.tsx`) не правится — раскладка задаётся отсюда классами. */}
+      {/* Шапка переносится по месту, а не по порогу ширины. Заголовок держит
+          не меньше 16rem, действия — сколько им нужно; не помещаются рядом —
+          уходят под заголовок. Прежде перенос включался запросом «блок уже
+          28rem», а ширина действий в него не входила: две кнопки в блоке 35rem
+          оставляли заголовку 60 px, и «Кто ведёт ребёнка дома» стояло по слогу
+          в строке (снимок заказчика 13.11.2026). Кит (`card.tsx`) не правится —
+          раскладка задаётся отсюда классами. */}
       <CardHeader
         className={cn(
+          "flex flex-wrap items-start gap-x-section gap-y-2",
           compact && "px-section",
           titleHidden && !description && !action && "sr-only",
-          action &&
-            "@max-md:has-data-[slot=card-action]:grid-cols-1 [&>[data-slot=card-action]]:@max-md:col-start-1 [&>[data-slot=card-action]]:@max-md:row-span-1 [&>[data-slot=card-action]]:@max-md:row-start-auto [&>[data-slot=card-action]]:@max-md:justify-self-start",
         )}
       >
-        {/* `min-w-0 break-words`: шапка карточки — сетка (`1fr auto` при
-            действии), и без `min-w-0` заголовок с именем без пробелов не
-            сжимался, а распирал блок. `hyphens-auto` — только рядом с
-            действием: там колонка бывает у́же обычного слова («Схема
-            лекарственной терапии» рядом с кнопкой на телефоне), и без переноса
-            по слогам оно рвалось посередине без дефиса. Без действия класс
-            ничего не спасает, а Chromium переносит по слогам везде, где
-            строка и так ломается, — «исклю- / чённый» при свободном месте. */}
-        <CardTitle
-          className={cn(
-            "min-w-0 break-words",
-            action && "hyphens-auto",
-            level === 2 ? "text-section-title" : "text-card-title",
-            titleHidden && "sr-only",
-          )}
-        >
-          <Heading className="m-0 font-semibold">{title}</Heading>
-        </CardTitle>
-        {description && (
-          <CardDescription
-            className={cn("min-w-0 break-words", titleHidden && "sr-only")}
+        {/* `min-w-0 break-words`: имя без пробелов не распирает блок. Переноса
+            по слогам нет: при основе 16rem колонка заголовка не бывает уже
+            обычного слова, а Chromium с `hyphens-auto` рвал слова и там, где
+            место было. */}
+        <div className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1.5">
+          <CardTitle
+            className={cn(
+              "min-w-0 break-words",
+              level === 2 ? "text-section-title" : "text-card-title",
+              titleHidden && "sr-only",
+            )}
           >
-            {description}
-          </CardDescription>
+            <Heading className="m-0 font-semibold">{title}</Heading>
+          </CardTitle>
+          {description && (
+            <CardDescription
+              className={cn("min-w-0 break-words", titleHidden && "sr-only")}
+            >
+              {description}
+            </CardDescription>
+          )}
+        </div>
+        {action && (
+          <div
+            data-slot="section-action"
+            className="flex flex-wrap items-center gap-2"
+          >
+            {action}
+          </div>
         )}
-        {action && <CardAction>{action}</CardAction>}
       </CardHeader>
 
       <CardContent

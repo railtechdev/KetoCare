@@ -120,7 +120,12 @@ export function DataTable<TData>({
       )}
     >
       {/* Широкая таблица прокручивается внутри себя, а не растягивает страницу */}
-      <div className="overflow-x-auto">
+      {/* `relative`: блок прокрутки — опора для абсолютно позиционированного
+          внутри. Скрытая подпись (`sr-only` — это `position: absolute`) в
+          ячейке за краем иначе позиционировалась от страницы, и вбок уезжала
+          вся страница, а не только таблица (справочник продуктов на 1024 px:
+          полное имя источника в колонке «Источник»). */}
+      <div className="relative overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
