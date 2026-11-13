@@ -11,9 +11,8 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { NavigateContext } from "../../lib/tabs";
-import { usePatientOverview } from "../home/useOverview";
 import { itemsOf, mealNumbers, withDish } from "./dayPlan";
-import { dayAt, useMenu } from "./useMenu";
+import { dayAt, useDayPrescription, useMenu } from "./useMenu";
 import { useSaveMenu } from "./useSaveMenu";
 
 /** Дни, в которые ставят блюдо отсюда: вчерашнее меню не собирают. */
@@ -53,12 +52,14 @@ export function AddToPlan({
   const { t } = useTranslation();
   const navigate = useContext(NavigateContext);
   const [dayOffset, setDayOffset] = useState<number>(0);
-  const overview = usePatientOverview(patientId);
-  const meals = mealNumbers(overview.data?.prescription?.meals_per_day ?? null);
+  const day = dayAt(dayOffset);
+  // Приёмы — по назначению выбранного дня: завтра может начаться новая версия
+  // с другим числом приёмов (ADR-0078).
+  const dayPrescription = useDayPrescription(patientId, day);
+  const meals = mealNumbers(dayPrescription.data?.meals_per_day ?? null);
   const [mealIndex, setMealIndex] = useState<number | null>(null);
   const chosenMeal = mealIndex ?? meals[0] ?? null;
 
-  const day = dayAt(dayOffset);
   const menu = useMenu(patientId, day);
   const save = useSaveMenu(patientId, day);
   // Какое добавление уже сделано: повторное нажатие поставило бы блюдо в тот же
@@ -66,7 +67,7 @@ export function AddToPlan({
   const [added, setAdded] = useState<string | null>(null);
   const choice = `${day}:${chosenMeal ?? ""}`;
 
-  if (!overview.isSuccess) {
+  if (!dayPrescription.isSuccess) {
     return <StatusNote>{t("calculator.plan.prescriptionUnknown")}</StatusNote>;
   }
   if (meals.length === 0 || chosenMeal === null) {

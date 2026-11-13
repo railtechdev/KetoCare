@@ -104,6 +104,24 @@ function overview(mealsPerDay: number | null = 4, day: unknown = null) {
   };
 }
 
+/**
+ * Назначение дня (`…/prescriptions/on`) и сводка — из одного описания: экран
+ * берёт приёмы и цели из назначения ЭТОГО дня (ADR-0078).
+ */
+function isPrescriptionPath(path: string): boolean {
+  return path.includes("/overview") || path.endsWith("/prescriptions/on");
+}
+
+function prescriptionOr(path: string, mealsPerDay: number | null = 4) {
+  const data = overview(mealsPerDay);
+  return path.endsWith("/prescriptions/on")
+    ? {
+        data: { date: dayAt(0), prescription: data.prescription },
+        response: { status: 200 },
+      }
+    : { data, response: { status: 200 } };
+}
+
 /** Ответы по адресу запроса: экран ходит уже в четыре разных места. */
 function respond(
   options: {
@@ -113,20 +131,15 @@ function respond(
     dishes?: unknown[];
     /** План по дате; дата, которой нет в словаре, — 404 «плана нет». */
     menus?: Record<string, unknown>;
-    /** Итоги дня в сводке — с вердиктом сервера. */
-    overviewDay?: unknown;
   } = {},
 ) {
   (api.GET as Mock).mockImplementation(
     async (path: string, init?: { params?: { query?: { date?: string } } }) => {
-      if (path.includes("/overview")) {
+      if (isPrescriptionPath(path)) {
         // `??` здесь был бы ошибкой: он считает null отсутствием значения, и
         // «нет назначения» превращалось бы в четыре приёма.
         const meals = "mealsPerDay" in options ? options.mealsPerDay : 4;
-        return {
-          data: overview(meals ?? null, options.overviewDay ?? null),
-          response: { status: 200 },
-        };
+        return prescriptionOr(path, meals ?? null);
       }
       if (options.menus !== undefined && path.endsWith("/menus")) {
         const planned = options.menus[init?.params?.query?.date ?? ""];
@@ -693,9 +706,7 @@ describe("сборка дня в Mini App", () => {
 describe("день не собирается вслепую", () => {
   it("пока план не загружен, собрать нечего — и кнопки нет", async () => {
     (api.GET as Mock).mockImplementation(async (path: string) => {
-      if (path.includes("/overview")) {
-        return { data: overview(4), response: { status: 200 } };
-      }
+      if (isPrescriptionPath(path)) return prescriptionOr(path);
       // План висит: ответа нет ни успехом, ни отказом.
       if (path.endsWith("/menus")) return new Promise(() => undefined);
       return { data: { items: [], total: 0 }, response: { status: 200 } };
@@ -711,9 +722,7 @@ describe("день не собирается вслепую", () => {
 
   it("отказ загрузки плана не даёт его переписать", async () => {
     (api.GET as Mock).mockImplementation(async (path: string) => {
-      if (path.includes("/overview")) {
-        return { data: overview(4), response: { status: 200 } };
-      }
+      if (isPrescriptionPath(path)) return prescriptionOr(path);
       if (path.endsWith("/menus")) {
         return { error: { detail: "упало" }, response: { status: 500 } };
       }
@@ -736,7 +745,7 @@ describe("день не собирается вслепую", () => {
   it("пока назначение не пришло, «назначения нет» не утверждается", async () => {
     const user = userEvent.setup();
     (api.GET as Mock).mockImplementation(async (path: string) => {
-      if (path.includes("/overview")) return new Promise(() => undefined);
+      if (isPrescriptionPath(path)) return new Promise(() => undefined);
       if (path.endsWith("/menus")) {
         return { data: menu(), response: { status: 200 } };
       }
@@ -898,16 +907,41 @@ describe("итоги дня рядом с целями назначения", ()
     expect(screen.getByText(/3\.5/)).toBeInTheDocument();
   });
 
-  it("на завтра цели те же — назначение действует и завтра", async () => {
+  it("на завтра — цели завтрашнего назначения (ADR-0078)", async () => {
+    respond();
+    const base = (api.GET as Mock).getMockImplementation()!;
+    (api.GET as Mock).mockImplementation(
+      async (
+        path: string,
+        init?: { params?: { query?: { date?: string } } },
+      ) => {
+        if (
+          path.endsWith("/prescriptions/on") &&
+          init?.params?.query?.date === dayAt(1)
+        ) {
+          return {
+            data: {
+              date: dayAt(1),
+              prescription: {
+                ...overview(4).prescription,
+                kcal_per_day: 1500,
+              },
+            },
+            response: { status: 200 },
+          };
+        }
+        return base(path, init);
+      },
+    );
     const user = userEvent.setup();
     renderScreen();
     await screen.findByText("1 200 из 1 200 ккал");
 
     await user.click(screen.getByRole("radio", { name: "Завтра" }));
 
-    // Сводка посчитана для сегодня, но цели берутся из активного назначения:
-    // брать их из сводки значило бы оставить завтрашний день без ориентира.
-    expect(await screen.findByText("1 200 из 1 200 ккал")).toBeInTheDocument();
+    // С завтрашнего дня действует новая версия — сверять завтра с сегодняшней
+    // значило бы собирать день не по той норме.
+    expect(await screen.findByText("1 200 из 1 500 ккал")).toBeInTheDocument();
   });
 
   it("без назначения показываются одни показатели, без выдуманных целей", async () => {
@@ -1052,9 +1086,7 @@ describe("«Как вчера»", () => {
 
   it("пока день не загружен, переноса нет", async () => {
     (api.GET as Mock).mockImplementation(async (path: string) => {
-      if (path.includes("/overview")) {
-        return { data: overview(4), response: { status: 200 } };
-      }
+      if (isPrescriptionPath(path)) return prescriptionOr(path);
       return new Promise(() => undefined);
     });
     renderScreen();
@@ -1105,8 +1137,9 @@ describe("«Как вчера»", () => {
 describe("соответствие дня назначению", () => {
   const totals = menu().totals;
 
+  // Вердикт приходит вместе с меню дня — по назначению этого дня.
   function withVerdict(day: Record<string, unknown>) {
-    respond({ overviewDay: { totals, engine_version: "1.0.0", ...day } });
+    respond({ menu: { ...menu(), totals, engine_version: "1.0.0", ...day } });
   }
 
   it("в допуске — так и сказано, а недобор калорий не тревога", async () => {
@@ -1171,9 +1204,25 @@ describe("соответствие дня назначению", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("для другого дня вердикт сегодняшнего не переносится", async () => {
-    withVerdict({
-      tolerance: { ratio_within_tolerance: true, kcal_within_tolerance: true },
+  it("у завтрашнего дня — свой вердикт от сервера", async () => {
+    respond({
+      menus: {
+        [dayAt(0)]: menu({
+          tolerance: {
+            ratio_within_tolerance: true,
+            kcal_within_tolerance: true,
+            carbs_within_limit: true,
+          },
+        }),
+        [dayAt(1)]: menu({
+          date: dayAt(1),
+          tolerance: {
+            ratio_within_tolerance: false,
+            kcal_within_tolerance: true,
+            carbs_within_limit: true,
+          },
+        }),
+      },
     });
     const user = userEvent.setup();
     renderScreen();
@@ -1182,11 +1231,8 @@ describe("соответствие дня назначению", () => {
     await user.click(screen.getByRole("radio", { name: "Завтра" }));
 
     expect(
-      await screen.findByText(/показывается только для сегодняшнего дня/),
+      await screen.findByText("Итоги дня расходятся с назначением"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Кетосоотношение дня соответствует назначению."),
-    ).not.toBeInTheDocument();
   });
 });
 

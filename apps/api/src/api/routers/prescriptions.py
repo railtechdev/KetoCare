@@ -7,10 +7,11 @@ Append-only: POST создаёт новую версию, ручек измен�
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
@@ -22,6 +23,7 @@ from ..deps.auth import PatientAccessDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page, PrescriptionCreate, PrescriptionRead
+from ..schemas_menus import DayPrescription
 from ..services.clock import local_today
 
 logger = structlog.get_logger(__name__)
@@ -40,6 +42,28 @@ async def list_prescriptions(
         session, patient_id=patient_id, limit=page.limit, offset=page.offset
     )
     return Page(items=[PrescriptionRead.model_validate(p) for p in items], total=total)
+
+
+@router.get("/on", response_model=DayPrescription, summary="Назначение на дату")
+async def prescription_on_day(
+    patient_id: Annotated[uuid.UUID, Path()],
+    session: SessionDep,
+    _: PatientAccessDep,
+    on: Annotated[date, Query(alias="date")],
+) -> DayPrescription:
+    """Назначение, действующее в этот день (правило — ADR-0078).
+
+    Нужна дню без меню: завтра может начаться новая версия с другим числом
+    приёмов, и раскладывать завтрашний день по сегодняшнему назначению нельзя
+    (аудит расчётов 13.11.2026). У дня с меню то же назначение приходит в
+    ответе меню.
+    """
+
+    prescription = await prescriptions_repo.get_active_on(session, patient_id=patient_id, day=on)
+    return DayPrescription(
+        date=on,
+        prescription=PrescriptionRead.model_validate(prescription) if prescription else None,
+    )
 
 
 @router.post(

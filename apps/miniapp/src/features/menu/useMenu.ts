@@ -66,6 +66,29 @@ export function useMenu(
 }
 
 /**
+ * Назначение, действующее в этот день (ADR-0078).
+ *
+ * Завтра может начаться новая версия с другим числом приёмов и другими
+ * целями: раскладывать и сверять завтрашний день по сегодняшней сводке нельзя
+ * (аудит расчётов 13.11.2026). Правило выбора — на сервере.
+ */
+export function useDayPrescription(patientId: string, day: string) {
+  return useQuery({
+    queryKey: ["prescription-on", patientId, day],
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/prescriptions/on",
+        { params: { path: { patient_id: patientId }, query: { date: day } } },
+      );
+      if (error || !data) {
+        throw error ?? new Error("Empty day prescription response");
+      }
+      return data.prescription ?? null;
+    },
+  });
+}
+
+/**
  * Отметка «съедено» — и снятие её тоже.
  *
  * Снятие нужно так же, как простановка: ошибочное нажатие иначе осталось бы в

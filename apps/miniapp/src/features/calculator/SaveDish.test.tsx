@@ -133,6 +133,12 @@ function serve(
           response: { status: 200 },
         });
       }
+      if (path.endsWith("/prescriptions/on")) {
+        return Promise.resolve({
+          data: { prescription: { meals_per_day: 4 } },
+          response: { status: 200 },
+        });
+      }
       if (path.endsWith("/menus")) {
         return menus(init?.params?.query?.date ?? "");
       }

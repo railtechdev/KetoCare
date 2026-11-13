@@ -99,6 +99,17 @@ function serve({
     if (path.endsWith("/overview")) {
       return { data: overview, response: { status: 200 } };
     }
+    // Назначение дня — то же, что в сводке (меню берёт его отсюда, ADR-0078).
+    if (path.endsWith("/prescriptions/on")) {
+      return {
+        data: {
+          prescription:
+            (overview as { prescription?: unknown } | null)?.prescription ??
+            null,
+        },
+        response: { status: 200 },
+      };
+    }
     if (path.endsWith("/menus")) {
       return menu === null
         ? {
