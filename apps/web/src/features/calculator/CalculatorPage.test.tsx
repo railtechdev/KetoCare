@@ -145,11 +145,10 @@ const SOLVED = {
  * `undefined`, то есть «калькулятор без ребёнка» молча превращался бы в
  * калькулятор с ребёнком, а тест — в проверку того же, что и соседний.
  */
-function renderCalculator(patientId?: string) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
+function renderCalculator(
+  patientId?: string,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
@@ -1706,6 +1705,66 @@ describe("калькулятор", () => {
     expect(
       screen.getByText("Из назначения: 1 200 ккал ÷ 3 приёма"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("цель следует назначению (аудит расчётов 13.11.2026)", () => {
+  function serveKcal(kcalPerDay: { value: number }) {
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path.includes("overview")
+        ? {
+            data: {
+              ...OVERVIEW,
+              prescription: {
+                ...OVERVIEW.prescription,
+                kcal_per_day: kcalPerDay.value,
+              },
+            },
+            error: undefined,
+          }
+        : { data: PRODUCTS, error: undefined },
+    );
+  }
+
+  it("новое назначение — новая цель, пока её не правили", async () => {
+    const kcalPerDay = { value: 1200 };
+    serveKcal(kcalPerDay);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderCalculator(PATIENT_ID, client);
+    const kcal = await screen.findByLabelText(/Калорийность/);
+    await waitFor(() => expect(valueControl(kcal)).toHaveValue(400));
+
+    kcalPerDay.value = 1500;
+    await act(() => client.invalidateQueries());
+
+    await waitFor(() =>
+      expect(valueControl(screen.getByLabelText(/Калорийность/))).toHaveValue(
+        500,
+      ),
+    );
+  });
+
+  it("правленую цель новое назначение не перезаписывает", async () => {
+    const kcalPerDay = { value: 1200 };
+    serveKcal(kcalPerDay);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID, client);
+    const kcal = await screen.findByLabelText(/Калорийность/);
+    await waitFor(() => expect(valueControl(kcal)).toHaveValue(400));
+    await user.clear(kcal);
+    await user.type(kcal, "350");
+
+    kcalPerDay.value = 1500;
+    await act(() => client.invalidateQueries());
+
+    expect(valueControl(screen.getByLabelText(/Калорийность/))).toHaveValue(
+      350,
+    );
   });
 });
 

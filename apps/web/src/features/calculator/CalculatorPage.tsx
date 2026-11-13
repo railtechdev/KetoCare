@@ -157,9 +157,18 @@ export function CalculatorView({
   const touched = useRef(false);
 
   useEffect(() => {
-    if (suggested === null || touched.current) return;
-    setRatio((current) => (current === null ? suggested.ratio : current));
-    setKcal((current) => (current === null ? suggested.kcal : current));
+    if (touched.current) return;
+    // Другой ребёнок без назначения — цели нет, а не цель прежнего ребёнка.
+    if (suggested === null) {
+      setRatio(null);
+      setKcal(null);
+      return;
+    }
+    // Пока человек цель не правил, она СЛЕДУЕТ назначению: новое назначение
+    // или другой ребёнок заменяют её, а не остаются под прежней (аудит
+    // расчётов 13.11.2026 — калькулятор продолжал считать по старой цели).
+    setRatio(suggested.ratio);
+    setKcal(suggested.kcal);
   }, [suggested]);
 
   /**
