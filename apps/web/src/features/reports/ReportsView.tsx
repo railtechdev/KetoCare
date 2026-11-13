@@ -361,9 +361,16 @@ export function ReportsView({ patientId }: { patientId: string }) {
                   во всю ширину экрана отчёта, и во вкладке карты пациента, и
                   вопрос о ширине ОКНА в обоих местах отвечал неверно. */}
                 <MetricRow min="wide" label={t("measurements.title")}>
+                  {/* Кровь и моча — разные шкалы, общего среднего нет
+                      (аудит расчётов 13.11.2026). */}
                   <Measurement
-                    label={t("measurements.ketones")}
-                    series={report.data.ketones}
+                    label={t("measurements.ketonesBlood")}
+                    series={report.data.ketones_blood}
+                    unit={t("measurements.unitKetones")}
+                  />
+                  <Measurement
+                    label={t("measurements.ketonesUrine")}
+                    series={report.data.ketones_urine}
                     unit={t("measurements.unitKetones")}
                   />
                   <Measurement

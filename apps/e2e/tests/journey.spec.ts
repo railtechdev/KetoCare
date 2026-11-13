@@ -175,7 +175,9 @@ test("врач назначает, семья ведёт день, отчёт с
 
   await expect(
     doctor.getByText(
-      new RegExp(`ммоль/л.*измерений: ${before.ketones.points.length + 1}`),
+      new RegExp(
+        `ммоль/л.*измерений: ${before.ketones_blood.points.length + 1}`,
+      ),
     ),
   ).toBeVisible();
   await expect(

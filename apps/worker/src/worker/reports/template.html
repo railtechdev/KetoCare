@@ -93,13 +93,16 @@
           <tr><th>Показатель</th><th class="num">Измерений</th><th class="num">Мин</th><th class="num">Макс</th><th class="num">Среднее</th></tr>
         </thead>
         <tbody>
+          {# Кровь и моча — разные шкалы, общего среднего нет (аудит 13.11.2026). #}
+          {% for label, series in [("Кетоны в крови, ммоль/л", ketones_blood), ("Кетоны в моче, ммоль/л", ketones_urine)] %}
           <tr>
-            <td>Кетоны, ммоль/л</td>
-            <td class="num">{{ ketones.points | length }}</td>
-            <td class="num">{{ ketones.min if ketones.min is not none else "—" }}</td>
-            <td class="num">{{ ketones.max if ketones.max is not none else "—" }}</td>
-            <td class="num">{{ ketones.mean if ketones.mean is not none else "—" }}</td>
+            <td>{{ label }}</td>
+            <td class="num">{{ series.points | length }}</td>
+            <td class="num">{{ series.min if series.min is not none else "—" }}</td>
+            <td class="num">{{ series.max if series.max is not none else "—" }}</td>
+            <td class="num">{{ series.mean if series.mean is not none else "—" }}</td>
           </tr>
+          {% endfor %}
           <tr>
             <td>Вес, кг</td>
             <td class="num">{{ weight.points | length }}</td>

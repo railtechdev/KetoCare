@@ -55,7 +55,8 @@ function emptyReport(): Record<string, unknown> {
     patient: {},
     prescriptions: [],
     seizures: { entries: 0, count: 0, by_type: [], by_day: {} },
-    ketones: { points: [], min: null, max: null, mean: null },
+    ketones_blood: { points: [], min: null, max: null, mean: null },
+    ketones_urine: { points: [], min: null, max: null, mean: null },
     weight: { points: [], min: null, max: null, mean: null },
     medications: [],
     side_effects: [],
@@ -272,6 +273,34 @@ describe("сводка пациента", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("кетоны крови и мочи — отдельными плитками, без общего диапазона", async () => {
+    // Аудит расчётов 13.11.2026: кровь 2,8 и моча 8,0 давали «2,8–8,0».
+    report = {
+      ...emptyReport(),
+      ketones_blood: {
+        points: [{ at: "2026-08-20T08:00:00Z", value: 2.8 }],
+        min: 2.8,
+        max: 2.8,
+        mean: 2.8,
+      },
+      ketones_urine: {
+        points: [{ at: "2026-08-21T08:00:00Z", value: 8 }],
+        min: 8,
+        max: 8,
+        mean: 8,
+      },
+    };
+    renderSummary();
+
+    expect(
+      await screen.findByText(doctorRu.summary.month.ketonesUrine),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(doctorRu.summary.month.ketonesBlood),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("2,8–8,0")).toBeNull();
+  });
+
   it("за 30 дней: приступы, кетоны и вес — крайние и последние, съеденное", async () => {
     report = {
       ...emptyReport(),
@@ -281,7 +310,7 @@ describe("сводка пациента", () => {
         by_type: [],
         by_day: { [new Date().toISOString().slice(0, 10)]: 5 },
       },
-      ketones: {
+      ketones_blood: {
         points: [
           { at: "2026-08-20T08:00:00Z", value: 1.4 },
           { at: "2026-08-30T08:00:00Z", value: 2.7 },

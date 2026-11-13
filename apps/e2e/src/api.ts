@@ -142,7 +142,7 @@ export async function ensureKetoneReading(
 }
 
 export interface Report {
-  ketones: { points: unknown[] };
+  ketones_blood: { points: unknown[] };
   weight: { points: unknown[] };
   menu: { days_planned: number; items_planned: number; items_eaten: number };
 }

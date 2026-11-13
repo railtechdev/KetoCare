@@ -462,26 +462,42 @@ function LastDaysSection({ patientId }: { patientId: string }) {
                 )
               }
             />
-            <Metric
-              label={t("summary.month.ketones")}
-              value={
-                data.ketones.min === null || data.ketones.max === null
-                  ? t("summary.month.noReadings")
-                  : t("summary.month.ketoneRange", {
-                      min: formatMeasured(data.ketones.min),
-                      max: formatMeasured(data.ketones.max),
-                    })
-              }
-              hint={(() => {
-                const ends = firstAndLast(data.ketones.points);
-                return ends === null
-                  ? undefined
-                  : t("summary.month.ketoneLast", {
-                      value: formatMeasured(ends.last.value),
-                      at: formatOccurredAt(new Date(ends.last.at)),
-                    });
-              })()}
-            />
+            {/* Кровь и моча — разные шкалы: один диапазон «от 0,5 до 8,0»
+                на оба метода не значил ничего (аудит расчётов 13.11.2026).
+                Моча — отдельной плиткой, только когда за месяц её мерили. */}
+            {(
+              [
+                ["ketonesBlood", data.ketones_blood],
+                ["ketonesUrine", data.ketones_urine],
+              ] as const
+            )
+              .filter(
+                ([key, series]) =>
+                  key === "ketonesBlood" || series.points.length > 0,
+              )
+              .map(([key, series]) => (
+                <Metric
+                  key={key}
+                  label={t(`summary.month.${key}`)}
+                  value={
+                    series.min === null || series.max === null
+                      ? t("summary.month.noReadings")
+                      : t("summary.month.ketoneRange", {
+                          min: formatMeasured(series.min),
+                          max: formatMeasured(series.max),
+                        })
+                  }
+                  hint={(() => {
+                    const ends = firstAndLast(series.points);
+                    return ends === null
+                      ? undefined
+                      : t("summary.month.ketoneLast", {
+                          value: formatMeasured(ends.last.value),
+                          at: formatOccurredAt(new Date(ends.last.at)),
+                        });
+                  })()}
+                />
+              ))}
             <Metric
               label={t("summary.month.weight")}
               value={(() => {
