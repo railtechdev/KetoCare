@@ -103,6 +103,7 @@ describe("почему у дня нет вердикта", () => {
           tolerance: {
             ratio_within_tolerance: null,
             kcal_within_tolerance: true,
+            carbs_within_limit: true,
           },
         })}
         targetKcal={1200}

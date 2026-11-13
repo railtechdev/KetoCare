@@ -115,6 +115,14 @@ export function DayTotalsPanel({
         </WarningBanner>
       )}
 
+      {/* Лимит углеводов — граница, а не допуск: превышение верно в любой
+          момент дня (аудит расчётов 13.11.2026). */}
+      {verdict.carbsOverLimit && (
+        <WarningBanner level="warning" title={t("offTolerance.carbsTitle")}>
+          {t("offTolerance.carbsBody")}
+        </WarningBanner>
+      )}
+
       {verdict.kcalBelowTarget && (
         <p className="m-0 text-sm text-muted-foreground">
           {t("offTolerance.kcalBelowTarget")}

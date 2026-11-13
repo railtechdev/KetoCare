@@ -368,7 +368,7 @@ async def _prescription(
         ratio=3.5,
         kcal_per_day=1200,
         protein_g=25.0,
-        carbs_limit_g=12.0,
+        carbs_limit_g=8.8,
         meals_per_day=4,
         author_id=author_id,
         effective_from=date.today() - timedelta(days=HISTORY_DAYS),

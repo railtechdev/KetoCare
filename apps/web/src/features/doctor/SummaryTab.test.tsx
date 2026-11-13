@@ -171,6 +171,7 @@ describe("сводка пациента", () => {
           tolerance: {
             ratio_within_tolerance: null,
             kcal_within_tolerance: true,
+            carbs_within_limit: true,
           },
           tolerance_gap: null,
           engine_version: "1.2.0",

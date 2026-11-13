@@ -114,7 +114,8 @@ export function PrescriptionForm({
   // Углеводы считаются сами, как в KDC: (белок + углеводы) из калорийности и
   // соотношения минус белок. Поле остаётся правимым: правка руками выключает
   // пересчёт до конца этой формы. В уже записанном назначении число не
-  // трогается, пока врач не поменял калорийность, соотношение или белок.
+  // трогается, пока врач не поменял калорийность, соотношение или белок либо
+  // не нажал «Поставить». Выше расчётного лимит не примет сервер.
   const goal = usePrescriptionGoal({
     ratio: watch("ratio"),
     kcalPerDay: watch("kcalPerDay"),
@@ -130,19 +131,32 @@ export function PrescriptionForm({
   const [fluidFromHint, setFluidFromHint] = useState<number | null>(null);
   const proteinValue = watch("proteinG");
   const fluidValue = watch("fluidMlPerDay");
-  const derivedCarbs = goal.data?.day.net_carbs_g ?? null;
+  // Расчёт — только для ТЕКУЩИХ полей. Пока ответ на новые числа не пришёл,
+  // запрос держит прежний (`keepPreviousData`), и его углеводы относятся к
+  // другим калорийности или белку: подставлять их в поле и подписывать
+  // «рассчитано» нельзя (аудит расчётов 13.11.2026).
+  const derivedCarbs = goal.isPlaceholderData
+    ? null
+    : (goal.data?.day.net_carbs_g ?? null);
+  const derivedCarbsShown =
+    derivedCarbs === null ? null : Math.round(derivedCarbs * 10) / 10;
   const inputsChanged =
     dirtyFields.kcalPerDay === true ||
     dirtyFields.ratio === true ||
     dirtyFields.proteinG === true;
   const carbsEmpty = Number.isNaN(defaultValues.carbsLimitG ?? Number.NaN);
+  // Следует ли поле расчёту. Включается один раз — пустым полем, первой
+  // правкой калорийности, соотношения или белка либо кнопкой «Поставить» — и
+  // дальше не выключается, кроме ручной правки. Пока условием было «поля
+  // изменены сейчас», врач, вернувший калорийность к прежней, оставался с
+  // промежуточным числом в поле.
+  const [carbsLatched, setCarbsLatched] = useState(carbsEmpty);
+  if (inputsChanged && !carbsLatched) setCarbsLatched(true);
+  const carbsFollow = carbsLatched || inputsChanged;
   useEffect(() => {
-    if (derivedCarbs === null || carbsByHand) return;
-    if (!inputsChanged && !carbsEmpty) return;
-    setValue("carbsLimitG", Math.round(derivedCarbs * 10) / 10, {
-      shouldValidate: true,
-    });
-  }, [derivedCarbs, carbsByHand, inputsChanged, carbsEmpty, setValue]);
+    if (derivedCarbsShown === null || carbsByHand || !carbsFollow) return;
+    setValue("carbsLimitG", derivedCarbsShown, { shouldValidate: true });
+  }, [derivedCarbsShown, carbsByHand, carbsFollow, setValue]);
 
   // Число, перенесённое из действующей версии, могло быть посчитано прежним
   // правилом или введено руками до автоматического расчёта. Молча его не
@@ -151,15 +165,16 @@ export function PrescriptionForm({
   // видела, как это исправить (замечание медиков 13.11.2026). Расхождение
   // называется, и расчётное число ставится одной кнопкой.
   const carbsValue = watch("carbsLimitG");
-  const derivedCarbsShown =
-    derivedCarbs === null ? null : Math.round(derivedCarbs * 10) / 10;
+  const carbsMatchDerived =
+    derivedCarbsShown !== null &&
+    Number.isFinite(carbsValue) &&
+    Math.abs(carbsValue - derivedCarbsShown) < 0.05;
   const staleCarbsFix =
     derivedCarbsShown !== null &&
     !carbsByHand &&
-    !inputsChanged &&
-    !carbsEmpty &&
+    !carbsFollow &&
     Number.isFinite(carbsValue) &&
-    Math.abs(carbsValue - derivedCarbsShown) >= 0.05
+    !carbsMatchDerived
       ? derivedCarbsShown
       : null;
 
@@ -267,21 +282,22 @@ export function PrescriptionForm({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() =>
+                  onClick={() => {
                     setValue("carbsLimitG", staleCarbsFix, {
                       shouldDirty: true,
                       shouldValidate: true,
-                    })
-                  }
+                    });
+                    setCarbsLatched(true);
+                  }}
                 >
                   {t("prescription.carbsApply", {
                     derived: formatMass(staleCarbsFix),
                   })}
                 </Button>
               </>
-            ) : (
+            ) : carbsMatchDerived ? (
               t("prescription.carbsDerived")
-            )
+            ) : undefined
           }
           {...register("carbsLimitG", {
             valueAsNumber: true,

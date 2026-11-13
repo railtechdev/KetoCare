@@ -100,7 +100,11 @@ const SILENT_OVERVIEW = {
   day: {
     totals: TOTALS,
     // Вердикт о допусках даёт сервер — экран его только показывает.
-    tolerance: { ratio_within_tolerance: false, kcal_within_tolerance: true },
+    tolerance: {
+      ratio_within_tolerance: false,
+      kcal_within_tolerance: true,
+      carbs_within_limit: true,
+    },
     engine_version: "1.0.0",
   },
   last_ketone: {
@@ -122,7 +126,11 @@ const FRESH_OVERVIEW = {
   prescription: { ...PRESCRIPTION, patient_id: FRESH_ID, ratio: 3 },
   day: {
     totals: TOTALS,
-    tolerance: { ratio_within_tolerance: true, kcal_within_tolerance: true },
+    tolerance: {
+      ratio_within_tolerance: true,
+      kcal_within_tolerance: true,
+      carbs_within_limit: true,
+    },
     engine_version: "1.0.0",
   },
   last_ketone: {

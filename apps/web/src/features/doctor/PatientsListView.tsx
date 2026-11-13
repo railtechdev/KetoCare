@@ -54,6 +54,8 @@ interface PatientRow {
   ageMonths: number | null;
   ratio: number | null;
   dayRatio: number | null;
+  /** Server verdict on today's ratio; null when there is none. */
+  dayRatioWithin: boolean | null;
   kcalPerDay: number | null;
   flags: PatientFlags | null;
   attention: number;
@@ -135,6 +137,8 @@ export function PatientsListView() {
           ageMonths: ageInMonths(patient.birth_date, now),
           ratio: overview?.prescription?.ratio ?? null,
           dayRatio: overview?.day?.totals?.ratio ?? null,
+          dayRatioWithin:
+            overview?.day?.tolerance?.ratio_within_tolerance ?? null,
           kcalPerDay: overview?.prescription?.kcal_per_day ?? null,
           flags,
           attention: attentionRank(flags),
@@ -217,6 +221,9 @@ export function PatientsListView() {
                 targetRatio={
                   dayRatio !== null && rxRatio !== null ? rxRatio : undefined
                 }
+                // Цвет — только вердикт сервера, тот же, что у пометки
+                // «Внимание» в этой строке (аудит расчётов 13.11.2026).
+                withinTolerance={row.original.dayRatioWithin ?? undefined}
                 showTarget={false}
               />
               {dayRatio !== null &&
