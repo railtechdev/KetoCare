@@ -197,7 +197,12 @@ class PatientOverview(BaseModel):
     patient_id: uuid.UUID
     # Дата, за которую посчитаны итоги и приступы, — местная (settings.tz), не UTC
     date: date
+    #: Действующее сегодня: из версий, начавшихся не позже сегодня, последняя
+    #: записанная (`prescriptions_repo`). По нему судят день.
     prescription: PrescriptionRead | None = None
+    #: Записанное, но ещё не начавшееся («Действует с» позже сегодня). День по
+    #: нему не судят; экраны говорят «с такого-то числа — новое назначение».
+    upcoming_prescription: PrescriptionRead | None = None
     # null, если меню на сегодня нет или итоги по нему ещё не сохранены
     day: DaySummary | None = None
     last_ketone: KetoneReading | None = None

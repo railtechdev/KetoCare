@@ -90,8 +90,13 @@ export function HomePage({ patientId }: { patientId: string }) {
             {/* Первым блоком и только в этот период: пока назначения нет,
                 остальная главная состоит из пустых карточек, и подсказка о
                 том, чего ждём и что уже можно делать, важнее их всех. */}
+            {/* Назначение записано с датой начала позже сегодня — врач его
+                уже задал, ждать нечего: оно стоит в карточке назначения с
+                датой. */}
             {prescription === null ? (
-              <WaitingForPrescription patientId={patientId} />
+              (data.upcoming_prescription ?? null) === null && (
+                <WaitingForPrescription patientId={patientId} />
+              )
             ) : (
               <NewPrescriptionNotice
                 patientId={patientId}
@@ -137,7 +142,10 @@ export function HomePage({ patientId }: { patientId: string }) {
               }
               aside={
                 <>
-                  <PrescriptionCard prescription={data.prescription ?? null} />
+                  <PrescriptionCard
+                    prescription={data.prescription ?? null}
+                    upcoming={data.upcoming_prescription ?? null}
+                  />
                   <SeizuresCard seizures={data.seizures_today} />
                 </>
               }

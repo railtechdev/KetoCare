@@ -152,6 +152,29 @@ describe("computePatientFlags", () => {
     expect(flags?.staleData).toBe(false);
   });
 
+  it("назначение, которое ещё не началось, — не «нет назначения»", () => {
+    const flags = computePatientFlags(
+      overview({
+        prescription: null,
+        upcoming_prescription: {
+          id: "rx-next",
+          patient_id: "p1",
+          ratio: 3,
+          kcal_per_day: 1200,
+          protein_g: 20,
+          carbs_limit_g: 10,
+          meals_per_day: 4,
+          restrictions: null,
+          author_id: "u1",
+          effective_from: "2099-01-01",
+          created_at: "2026-11-14T10:00:00Z",
+        },
+      }),
+    );
+
+    expect(flags?.noPrescription).toBe(false);
+  });
+
   it("ставит ожидание назначения выше молчания и отклонения вместе", () => {
     const waiting = computePatientFlags(overview({ prescription: null }));
     const worst = computePatientFlags(

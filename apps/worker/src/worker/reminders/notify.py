@@ -39,8 +39,30 @@ def _quiet(settings: Settings) -> bool:
     return buttons.quiet(datetime.now(ZoneInfo(settings.tz)))
 
 
-async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
-    """Сообщить семье о новом назначении. Возвращает число доставленных чатов."""
+def prescription_notice(language: str | None, starts_on: date | None) -> str:
+    """Текст о новом назначении: сразу или с какого числа.
+
+    Версия с датой начала позже сегодня сегодняшний день не меняет, и просьба
+    «пересоберите меню на сегодня» была бы неправдой. Дата — не параметр
+    назначения (раздел 7.5 ТЗ запрещает числа назначения, а не календарь).
+    """
+
+    if starts_on is None:
+        return texts.text(language, "prescription_changed")
+    when = texts.text(
+        language,
+        "visit_date",
+        day=starts_on.day,
+        month=texts.month(language, starts_on.month),
+    )
+    return texts.text(language, "prescription_starts", when=when)
+
+
+async def notify_family(ctx: dict[str, Any], patient_id: str, starts_on: str | None = None) -> int:
+    """Сообщить семье о новом назначении. Возвращает число доставленных чатов.
+
+    `starts_on` — дата начала, если она позже дня записи (ISO); иначе `None`.
+    """
 
     settings = Settings()  # type: ignore[call-arg]
     if not settings.bot_token:
@@ -68,7 +90,10 @@ async def notify_family(ctx: dict[str, Any], patient_id: str) -> int:
                     token=settings.bot_token,
                     chat_id=link.chat_id,
                     text=named(
-                        texts.text(language, "prescription_changed"),
+                        prescription_notice(
+                            language,
+                            date.fromisoformat(starts_on) if starts_on else None,
+                        ),
                         names.get(link.chat_id),
                     ),
                     # Новое назначение — значит, заново составить меню.

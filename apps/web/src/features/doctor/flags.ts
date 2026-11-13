@@ -206,7 +206,11 @@ export function computePatientFlags(
       : Math.max(0, calendarDaysBetween(lastReadingOn, today));
 
   const tolerance = overview.day?.tolerance ?? null;
-  const noPrescription = (overview.prescription ?? null) === null;
+  // Назначение, записанное с датой начала позже сегодня, — не «нет
+  // назначения»: врач его уже задал, оно просто ещё не началось.
+  const noPrescription =
+    (overview.prescription ?? null) === null &&
+    (overview.upcoming_prescription ?? null) === null;
   // Отсутствие поля (старый ответ API в секунды между выкатами) читается как
   // «семья есть»: так вело себя приложение до кодов доступа, и ложная пометка
   // хуже отсутствующей.

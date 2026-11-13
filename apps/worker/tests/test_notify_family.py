@@ -40,6 +40,33 @@ class TestNoticeText:
         assert "ребён" not in NOTICE.lower()
 
 
+class TestPrescriptionStartsLater:
+    """Версия с датой начала позже сегодня (правило действующего назначения)."""
+
+    def test_names_the_start_date_and_keeps_today(self) -> None:
+        from datetime import date
+
+        from worker.reminders.notify import prescription_notice
+
+        text = prescription_notice("ru", date(2026, 11, 20))
+        assert "20 ноября" in text
+        assert "по прежнему" in text
+        # Ни одного параметра назначения: единственные цифры — дата.
+        assert re.findall(r"\d+", text) == ["20"]
+
+    def test_immediate_version_keeps_the_old_text(self) -> None:
+        from worker.reminders.notify import prescription_notice
+
+        assert prescription_notice("ru", None) == NOTICE
+
+    def test_uzbek(self) -> None:
+        from datetime import date
+
+        from worker.reminders.notify import prescription_notice
+
+        assert "20-noyabrdan" in prescription_notice("uz", date(2026, 11, 20))
+
+
 class TestFamilyJoined:
     """Уведомление о новом близком (ADR-0043)."""
 

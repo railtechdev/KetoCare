@@ -251,6 +251,34 @@ describe("«Сегодня» в Mini App", () => {
     ).toBeInTheDocument();
   });
 
+  it("назначение с датой начала позже сегодня — строкой с датой", async () => {
+    serve({
+      overview: {
+        ...BASE,
+        upcoming_prescription: {
+          id: "rx-next",
+          patient_id: SESSION.patientId,
+          ratio: 4,
+          kcal_per_day: 1300,
+          protein_g: 23,
+          carbs_limit_g: 5,
+          meals_per_day: 4,
+          fluid_ml_per_day: null,
+          restrictions: null,
+          author_id: "u1",
+          effective_from: "2026-10-08",
+          created_at: "2026-10-05T10:00:00Z",
+        },
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/С 08\.10 — новое назначение/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Назначения пока нет/)).not.toBeInTheDocument();
+  });
+
   it("без вчерашнего недобора о вчера молчит", async () => {
     serve({ overview: { ...BASE, yesterday_shortfall: null } });
     renderScreen();

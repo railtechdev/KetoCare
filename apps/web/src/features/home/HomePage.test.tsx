@@ -104,6 +104,31 @@ describe("главная родителя", () => {
     ).toHaveAttribute("href", expect.stringContaining("tab=documents"));
   });
 
+  it("назначение с датой начала позже сегодня — с датой, без «ждём врача»", async () => {
+    // Правило действующего назначения (аудит расчётов 13.11.2026): день
+    // судится прежней версией, новая показывается как предстоящая.
+    (api.GET as Mock).mockResolvedValue({
+      data: {
+        ...overview(null),
+        upcoming_prescription: {
+          ...PRESCRIPTION,
+          ratio: 4,
+          effective_from: "2026-09-03",
+        },
+      },
+      error: undefined,
+    });
+
+    renderHome();
+
+    expect(
+      await screen.findByText("С 03.09 — новое назначение"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: homeRu.waiting.title }),
+    ).toBeNull();
+  });
+
   it("говорит о новом назначении и убирает сообщение по нажатию", async () => {
     // Блок — страховка для семьи без привязанного Telegram: иначе она узнала
     // бы о назначении, только заметив, что числа на главной изменились.

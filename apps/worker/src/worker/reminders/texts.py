@@ -48,6 +48,11 @@ RU: Final[dict[str, str]] = {
         "Врач обновил назначение. Откройте приложение — кнопка «Приложение» слева "
         "от поля ввода — и заново составьте меню на сегодня и завтра под новые цели."
     ),
+    "prescription_starts": (
+        "Врач записал новое назначение — оно начнёт действовать {when}. До этого "
+        "дня меню составляйте по прежнему. Новые цели видны в приложении — кнопка "
+        "«Приложение» слева от поля ввода."
+    ),
     # --- новый близкий (ADR-0043)
     "joined": (
         "К дневнику ребёнка подключился новый близкий: {newcomer}{by}.\n\n"
@@ -116,6 +121,11 @@ UZ: Final[dict[str, str]] = {
         "Shifokor tayinlovni yangiladi. Ilovani oching — yozish maydonining chap "
         "tomonidagi «Ilova» tugmasi — va bugungi hamda ertangi menyuni "
         "yangi maqsadlarga moslab qaytadan tuzing."
+    ),
+    "prescription_starts": (
+        "Shifokor yangi tayinlov yozdi — u {when}dan amal qila boshlaydi. Shu kungacha "
+        "menyuni avvalgidek tuzing. Yangi maqsadlar ilovada — yozish maydonining chap "
+        "tomonidagi «Ilova» tugmasi."
     ),
     "joined": (
         "Bola kundaligiga yangi yaqin qo‘shildi: {newcomer}{by}.\n\n"

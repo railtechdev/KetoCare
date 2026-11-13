@@ -10,6 +10,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import event
 
+from core.clock import local_today
 from core.models import Product, ProductCategory, WeightLog
 from core.models.clinical import AppendOnlyViolationError
 from core.models.enums import DiarySource, Sex, UserRole
@@ -103,6 +104,79 @@ class TestPrescriptionsAppendOnly:
         active = await prescriptions.get_active(session, patient_id=patient.id)
         assert active is not None
         assert float(active.ratio) == 3.0, "активное назначение — последнее созданное"
+
+    async def _version(self, session, patient, doctor, *, ratio: float, starts: date):
+        return await prescriptions.create(
+            session,
+            patient_id=patient.id,
+            ratio=ratio,
+            kcal_per_day=1200,
+            protein_g=25.0,
+            carbs_limit_g=10.0,
+            meals_per_day=3,
+            author_id=doctor.id,
+            effective_from=starts,
+        )
+
+    async def test_one_rule_for_every_day(self, session):
+        """Аудит расчётов 13.11.2026: сводка семьи брала последнее записанное,
+        сводка врача — последнее начавшееся, и один день судился по двум
+        назначениям. Правило одно: из начавшихся к этому дню — последнее
+        записанное."""
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        await self._version(session, patient, doctor, ratio=2.0, starts=date(2026, 1, 1))
+        await self._version(session, patient, doctor, ratio=3.0, starts=date(2026, 1, 10))
+        # Поправка задним числом: записана последней, начинается раньше второй.
+        await self._version(session, patient, doctor, ratio=4.0, starts=date(2026, 1, 5))
+        history, _ = await prescriptions.list_history(session, patient_id=patient.id)
+
+        expected = {
+            date(2025, 12, 31): None,
+            date(2026, 1, 3): 2.0,
+            date(2026, 1, 7): 4.0,
+            date(2026, 1, 12): 4.0,
+        }
+        for day, ratio in expected.items():
+            in_db = await prescriptions.get_active_on(session, patient_id=patient.id, day=day)
+            in_memory = prescriptions.active_on(history, day)
+            got = [None if item is None else float(item.ratio) for item in (in_db, in_memory)]
+            assert got == [ratio, ratio], day
+
+    async def test_later_start_is_upcoming_not_active(self, session):
+        """«Начинаем с двадцатого»: сегодня действует прежняя версия."""
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        today = local_today()
+        await self._version(session, patient, doctor, ratio=3.0, starts=today - timedelta(days=30))
+        await self._version(session, patient, doctor, ratio=4.0, starts=today + timedelta(days=5))
+
+        active = await prescriptions.get_active(session, patient_id=patient.id)
+        assert active is not None and float(active.ratio) == 3.0
+        upcoming = await prescriptions.get_upcoming(
+            session, patient_id=patient.id, today=today, active=active
+        )
+        assert upcoming is not None and float(upcoming.ratio) == 4.0
+
+    async def test_upcoming_overridden_by_a_later_correction_is_gone(self, session):
+        """Будущую версию перекрыла поправка, записанная после неё, — не начнётся."""
+
+        doctor = await _make_user(session, UserRole.DOCTOR)
+        patient = await _make_patient(session)
+        today = local_today()
+        await self._version(session, patient, doctor, ratio=4.0, starts=today + timedelta(days=5))
+        await self._version(session, patient, doctor, ratio=3.0, starts=today)
+
+        active = await prescriptions.get_active(session, patient_id=patient.id)
+        assert active is not None and float(active.ratio) == 3.0
+        assert (
+            await prescriptions.get_upcoming(
+                session, patient_id=patient.id, today=today, active=active
+            )
+            is None
+        )
 
     async def test_repository_exposes_no_update_or_delete(self):
         """Append-only обеспечивается отсутствием методов, а не дисциплиной вызывающего."""

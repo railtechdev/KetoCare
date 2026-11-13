@@ -7,11 +7,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from api.services import queue as queue_service
+from core.clock import local_today
 from core.models.enums import UserRole
 from core.repositories import patients as patients_repo
 
@@ -387,6 +388,25 @@ class TestPrescriptionNotice:
         # В задаче только ребёнок: параметры назначения боту запрещены
         # (раздел 7.5 ТЗ), и передавать их туда незачем.
         assert ("notify_family", (str(patient.id),)) in enqueued
+
+    async def test_later_start_goes_to_the_notice(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        """«Начинаем с двадцатого»: семье называется дата, а не «пересоберите сегодня»."""
+
+        doctor = await make_user(UserRole.DOCTOR)
+        patient = await make_patient()
+        await patients_repo.link_doctor(session, doctor_id=doctor.id, patient_id=patient.id)
+        starts = local_today() + timedelta(days=6)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/prescriptions",
+            json={**VALID_PRESCRIPTION, "effective_from": starts.isoformat()},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 201, response.text
+        assert ("notify_family", (str(patient.id), starts.isoformat())) in enqueued
 
     async def test_queue_failure_does_not_lose_the_prescription(
         self, client, session, make_user, make_patient, auth_headers, monkeypatch

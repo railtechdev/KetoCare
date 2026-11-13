@@ -22,6 +22,7 @@ from ..deps.auth import PatientAccessDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import Page, PrescriptionCreate, PrescriptionRead
+from ..services.clock import local_today
 
 logger = structlog.get_logger(__name__)
 
@@ -152,6 +153,17 @@ async def create_prescription(
     # семью открыть то, чего нет. Отказ очереди назначение не отменяет —
     # `run_deferred` это проглатывает и пишет в журнал. В задачу уходит только
     # ребёнок: сами цифры боту по разделу 7.5 ТЗ запрещены.
-    after_commit.defer(session, "notify_family", str(patient_id))
+    #
+    # Версия, начинающаяся позже сегодня, сегодняшний день не меняет: семье
+    # говорится, с какого числа, а не «пересоберите меню на сегодня» (правило
+    # действующего назначения — `prescriptions_repo`). Дата — не параметр
+    # назначения, раздел 7.5 её не запрещает.
+    starts_later = payload.effective_from > local_today()
+    after_commit.defer(
+        session,
+        "notify_family",
+        str(patient_id),
+        *([payload.effective_from.isoformat()] if starts_later else []),
+    )
 
     return PrescriptionRead.model_validate(prescription)
