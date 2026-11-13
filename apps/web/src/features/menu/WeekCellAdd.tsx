@@ -63,7 +63,10 @@ export function WeekCellAdd({ patientId, date, mealIndex, dayLabel }: Props) {
           type="button"
           variant="ghost"
           size="sm"
-          className="mt-1 w-full justify-start px-1 text-muted-foreground"
+          // `gap-1`, а не кнопочные 8 px: в дне недели шириной ~100 px
+          // «+ Добавить» на шрифтах CI вылезал за кнопку на 2–3 px, и проверка
+          // ноутбука падала каждую ночь с 13.11.2026.
+          className="mt-1 w-full justify-start gap-1 px-1 text-muted-foreground"
           aria-label={t("week.addTo", { day: dayLabel, number: mealIndex })}
         >
           <Plus aria-hidden="true" className="size-4" />
