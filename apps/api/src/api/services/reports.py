@@ -14,10 +14,11 @@ from __future__ import annotations
 import csv
 import io
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.clock import local_date, local_day_bounds
 from core.models import Patient
 from core.models.enums import KetoneMethod
 from core.repositories import medications as medications_repo
@@ -48,9 +49,9 @@ def period_bounds(period_from: date, period_to: date) -> tuple[datetime, datetim
     31 августа» терял бы всё, что записано 31-го после полуночи.
     """
 
-    start = datetime.combine(period_from, datetime.min.time())
-    end = datetime.combine(period_to, datetime.min.time()) + timedelta(days=1)
-    return start, end
+    # Сутки — местные (часы клиники), а не UTC: иначе записи первых пяти часов
+    # первого дня в отчёт не попадали, а последнего — попадали из следующего.
+    return local_day_bounds(period_from, period_to)
 
 
 def _series(points: list[MeasurementPoint]) -> MeasurementSeries:
@@ -132,7 +133,7 @@ async def build_report(
             by_type[row.seizure_type_id] = entry.model_copy(
                 update={"entries": entry.entries + 1, "count": entry.count + row.count}
             )
-        day = row.occurred_at.date().isoformat()
+        day = local_date(row.occurred_at).isoformat()
         by_day[day] = by_day.get(day, 0) + row.count
 
     return PatientReport(

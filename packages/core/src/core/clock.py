@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from .config import get_settings
@@ -25,6 +25,30 @@ def local_today() -> date:
     """Сегодняшняя дата в часовом поясе установки."""
 
     return datetime.now(ZoneInfo(get_settings().tz)).date()
+
+
+def local_date(moment: datetime) -> date:
+    """Календарная дата момента по часам клиники.
+
+    `occurred_at.date()` у значения из базы — дата в UTC: приступ в 02:00 по
+    Ташкенту попадал в предыдущие сутки отчёта и сводки врача (аудит расчётов
+    13.11.2026).
+    """
+
+    return moment.astimezone(ZoneInfo(get_settings().tz)).date()
+
+
+def local_day_bounds(first: date, last: date) -> tuple[datetime, datetime]:
+    """Начало первых и конец последних местных суток — моменты для `occurred_at`.
+
+    Конец — полночь следующей ДАТЫ, а не «плюс 24 часа»: при переводе часов
+    сутки короче или длиннее.
+    """
+
+    tz = ZoneInfo(get_settings().tz)
+    start = datetime.combine(first, time.min, tzinfo=tz)
+    end = datetime.combine(last + timedelta(days=1), time.min, tzinfo=tz)
+    return start, end
 
 
 def asyncpg_connect_args() -> dict[str, dict[str, str]]:

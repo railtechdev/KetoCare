@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func, select
 
+from core.config import get_settings
 from core.models import AuditLog, KetoneLog, SeizureLog, SeizureType
 from core.models.enums import DiarySource, KetoneMethod, UserRole
 from core.repositories import patients as patients_repo
@@ -32,11 +34,17 @@ async def _parent_with_child(session, make_user, make_patient):
     return parent, patient
 
 
+def _local(at: datetime) -> datetime:
+    """Время записи — по часам клиники: отчёт режет сутки по ним, а не по UTC."""
+
+    return at if at.tzinfo is not None else at.replace(tzinfo=ZoneInfo(get_settings().tz))
+
+
 async def _seizure(session, patient, *, at: datetime, count: int):
     seizure_type = await session.scalar(select(SeizureType).limit(1))
     log = SeizureLog(
         patient_id=patient.id,
-        occurred_at=at,
+        occurred_at=_local(at),
         seizure_type_id=seizure_type.id,
         count=count,
         source=DiarySource.WEB,
@@ -51,7 +59,7 @@ async def _ketone(
 ):
     log = KetoneLog(
         patient_id=patient.id,
-        occurred_at=at,
+        occurred_at=_local(at),
         value=value,
         method=method,
         source=DiarySource.WEB,
@@ -104,6 +112,24 @@ class TestReportContent:
         response = await client.get(_url(patient.id), headers=auth_headers(doctor))
 
         assert response.json()["seizures"]["count"] == 1
+
+    async def test_days_are_the_clinics_not_utc(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Аудит расчётов 13.11.2026: сутки резались по UTC. Приступ в 02:00 по
+        Ташкенту 1 августа (31 июля по UTC) выпадал из отчёта за август, а
+        приступ в 01:00 15-го уходил в 14-е."""
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        await _seizure(session, patient, at=datetime(2026, 8, 1, 2, 0), count=1)
+        await _seizure(session, patient, at=datetime(2026, 8, 15, 1, 0), count=2)
+
+        seizures = (await client.get(_url(patient.id), headers=auth_headers(doctor))).json()[
+            "seizures"
+        ]
+
+        assert seizures["count"] == 3
+        assert seizures["by_day"] == {"2026-08-01": 1, "2026-08-15": 2}
 
     async def test_records_outside_period_are_excluded(
         self, client, session, make_user, make_patient, auth_headers

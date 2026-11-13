@@ -33,6 +33,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.clock import local_date
 from core.models import Patient
 from core.models.enums import KetoneMethod
 from core.repositories import prescriptions as prescriptions_repo
@@ -226,7 +227,7 @@ def _seizures(rows: list[Any], period_from: date, period_to: date) -> dict[str, 
         )
         entry["entries"] += 1
         entry["count"] += row.count
-        day = row.occurred_at.date()
+        day = local_date(row.occurred_at)
         days.add(day)
         by_week[_week_start(day)] += row.count
 
@@ -260,11 +261,11 @@ def _ketones(rows: list[Any]) -> dict[str, Any]:
         values = [float(row.value) for row in selected]
         by_week: dict[date, list[float]] = defaultdict(list)
         for row in selected:
-            by_week[_week_start(row.occurred_at.date())].append(float(row.value))
+            by_week[_week_start(local_date(row.occurred_at))].append(float(row.value))
 
         result[method.value] = {
             **_series_stats(values),
-            "days_measured": len({row.occurred_at.date() for row in selected}),
+            "days_measured": len({local_date(row.occurred_at) for row in selected}),
             "by_week": [
                 {
                     "week_start": week.isoformat(),
@@ -288,10 +289,13 @@ def _weight(rows: list[Any]) -> dict[str, Any]:
     return {
         "measurements": len(rows),
         "first": {
-            "date": first.occurred_at.date().isoformat(),
+            "date": local_date(first.occurred_at).isoformat(),
             "kg": _round(float(first.weight_kg)),
         },
-        "last": {"date": last.occurred_at.date().isoformat(), "kg": _round(float(last.weight_kg))},
+        "last": {
+            "date": local_date(last.occurred_at).isoformat(),
+            "kg": _round(float(last.weight_kg)),
+        },
         "delta_kg": _round(float(last.weight_kg) - float(first.weight_kg)),
         "height_cm_first": _round(heights[0], 1) if heights else None,
         "height_cm_last": _round(heights[-1], 1) if heights else None,
