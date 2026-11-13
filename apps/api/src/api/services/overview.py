@@ -297,8 +297,8 @@ async def _yesterday_shortfall(
     ):
         return None
 
-    prescription = await prescriptions_repo.get_active_before(
-        session, patient_id=patient_id, before=today_start
+    prescription = await prescriptions_repo.get_active_on(
+        session, patient_id=patient_id, day=yesterday
     )
     if prescription is None:
         return None
@@ -331,7 +331,10 @@ async def build_overview(
     today = local_today()
     recent_window, previous_window = _trend_windows(today)
 
-    prescription = await prescriptions_repo.get_active(session, patient_id=patient_id)
+    prescription = await prescriptions_repo.get_active_on(session, patient_id=patient_id, day=today)
+    upcoming = await prescriptions_repo.get_upcoming(
+        session, patient_id=patient_id, today=today, active=prescription
+    )
     menu = await menus_repo.get_by_date(session, patient_id=patient_id, menu_date=today)
     ketone = await overview_repo.latest_log(session, KetoneLog, patient_id=patient_id)
     weight = await overview_repo.latest_log(session, WeightLog, patient_id=patient_id)
@@ -378,6 +381,7 @@ async def build_overview(
         patient_id=patient_id,
         date=today,
         prescription=PrescriptionRead.model_validate(prescription) if prescription else None,
+        upcoming_prescription=PrescriptionRead.model_validate(upcoming) if upcoming else None,
         day=_day_summary(menu, prescription),
         last_ketone=KetoneReading.model_validate(ketone) if ketone else None,
         last_weight=WeightReading.model_validate(weight) if weight else None,

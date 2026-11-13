@@ -3,6 +3,7 @@ import {
   Button,
   Section,
   WarningBanner,
+  formatDayMonth,
   formatGrams,
   formatKcal,
   formatLocale,
@@ -11,6 +12,7 @@ import {
   formatOccurredAt,
   formatRatio,
   formatWeight,
+  parseDateInput,
 } from "@ketocare/ui";
 import { Droplet, Scale, Zap, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -224,16 +226,12 @@ function Notices({ overview }: { overview: Overview }) {
   );
 }
 
-/** Назначение одной строкой — или одной строкой о том, что его нет. */
-function PrescriptionLine({ overview }: { overview: Overview }) {
+type PrescriptionData = NonNullable<Overview["prescription"]>;
+
+/** Показатели назначения через «·»: соотношение, калорийность, белок, углеводы. */
+function usePrescriptionParts() {
   const { t } = useTranslation();
-  const prescription = overview.prescription;
-  if (prescription == null) {
-    return (
-      <p className="m-0 text-muted-foreground">{t("home.prescription.none")}</p>
-    );
-  }
-  const parts = [
+  return (prescription: PrescriptionData) => [
     t("today.prescription.ratio", {
       value: formatRatio(Number(prescription.ratio)),
     }),
@@ -253,11 +251,49 @@ function PrescriptionLine({ overview }: { overview: Overview }) {
         ]
       : []),
   ];
+}
+
+/**
+ * Назначение одной строкой — или одной строкой о том, что его нет.
+ *
+ * Версия, у которой «Действует с» позже сегодня, — отдельной строкой с датой:
+ * день по ней ещё не судится, и семья должна видеть, с какого числа менять
+ * меню (правило действующего назначения, аудит расчётов 13.11.2026).
+ */
+function PrescriptionLine({ overview }: { overview: Overview }) {
+  const { t } = useTranslation();
+  const parts = usePrescriptionParts();
+  const prescription = overview.prescription;
+  const upcoming = overview.upcoming_prescription ?? null;
+  const startsOn =
+    upcoming === null ? null : parseDateInput(upcoming.effective_from);
+  const upcomingLine =
+    upcoming === null || startsOn === null ? null : (
+      <p className="m-0 text-sm tabular-nums">
+        <span className="font-semibold">
+          {t("home.prescription.upcoming", { date: formatDayMonth(startsOn) })}
+          :{" "}
+        </span>
+        {parts(upcoming).join(" · ")}
+      </p>
+    );
+  if (prescription == null) {
+    return (
+      upcomingLine ?? (
+        <p className="m-0 text-muted-foreground">
+          {t("home.prescription.none")}
+        </p>
+      )
+    );
+  }
   return (
-    <p className="m-0 text-sm tabular-nums">
-      <span className="font-semibold">{t("home.prescription.title")}: </span>
-      {parts.join(" · ")}
-    </p>
+    <>
+      <p className="m-0 text-sm tabular-nums">
+        <span className="font-semibold">{t("home.prescription.title")}: </span>
+        {parts(prescription).join(" · ")}
+      </p>
+      {upcomingLine}
+    </>
   );
 }
 

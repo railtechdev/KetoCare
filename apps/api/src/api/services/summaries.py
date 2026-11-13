@@ -215,13 +215,6 @@ def _prescriptions(history: list[Any], period_to: date) -> list[dict[str, Any]]:
     ]
 
 
-def _active_prescription(history: list[Any], day: date) -> Any | None:
-    """Назначение, действовавшее в этот день: последнее, начавшееся не позже."""
-
-    active = [item for item in history if item.effective_from <= day]
-    return max(active, key=lambda item: item.effective_from) if active else None
-
-
 def _seizures(rows: list[Any], period_from: date, period_to: date) -> dict[str, Any]:
     by_type: dict[uuid.UUID, dict[str, Any]] = {}
     by_week: dict[date, int] = defaultdict(int)
@@ -330,7 +323,7 @@ def _menu(
     days_other_engine = 0
 
     for day in menu_days:
-        prescription = _active_prescription(history, day.date)
+        prescription = prescriptions_repo.active_on(history, day.date)
         if prescription is None:
             continue
         if day.engine_version:

@@ -19,6 +19,8 @@ import {
   formatNumber,
   formatWeight,
   formatDayMonth,
+  formatRatio,
+  parseDateInput,
 } from "@ketocare/ui";
 import { CalendarOff, ClipboardList, KeyRound } from "lucide-react";
 import { useState } from "react";
@@ -98,6 +100,21 @@ function OverviewPanels({
   const { t } = useTranslation("doctor");
 
   const prescription = data.prescription ?? null;
+  // Версия с «Действует с» позже сегодня: день по ней ещё не судится
+  // (правило действующего назначения, аудит расчётов 13.11.2026).
+  const upcoming = data.upcoming_prescription ?? null;
+  const upcomingStarts =
+    upcoming === null ? null : parseDateInput(upcoming.effective_from);
+  const upcomingNote =
+    upcoming === null || upcomingStarts === null ? null : (
+      <p className="text-sm">
+        {t("summary.prescription.upcoming", {
+          date: formatDayMonth(upcomingStarts),
+          ratio: formatRatio(upcoming.ratio),
+          kcal: formatKcal(upcoming.kcal_per_day),
+        })}
+      </p>
+    );
   const day = data.day ?? null;
   const tolerance = day?.tolerance ?? null;
 
@@ -297,22 +314,24 @@ function OverviewPanels({
       aside={
         <Section title={t("summary.prescription.title")} tone="accent">
           {prescription === null ? (
-            <EmptyState
-              icon={ClipboardList}
-              title={t("summary.prescription.empty")}
-              action={
-                // Ссылкой, а не кнопкой: раздел живёт по адресу, и переход к
-                // назначению открывается в новой вкладке и пересылается коллеге
-                // (правило П1 канона). Кнопка со сменой вкладки ничего этого не
-                // умела. Назначение — первое, что от врача требуется у нового
-                // пациента, и путь к нему не должен быть длиннее одного клика.
-                <Button asChild>
-                  <PatientViewLink patientId={patientId} view="prescription">
-                    {t("summary.prescription.toTab")}
-                  </PatientViewLink>
-                </Button>
-              }
-            />
+            (upcomingNote ?? (
+              <EmptyState
+                icon={ClipboardList}
+                title={t("summary.prescription.empty")}
+                action={
+                  // Ссылкой, а не кнопкой: раздел живёт по адресу, и переход к
+                  // назначению открывается в новой вкладке и пересылается коллеге
+                  // (правило П1 канона). Кнопка со сменой вкладки ничего этого не
+                  // умела. Назначение — первое, что от врача требуется у нового
+                  // пациента, и путь к нему не должен быть длиннее одного клика.
+                  <Button asChild>
+                    <PatientViewLink patientId={patientId} view="prescription">
+                      {t("summary.prescription.toTab")}
+                    </PatientViewLink>
+                  </Button>
+                }
+              />
+            ))
           ) : (
             <FactList>
               <dt className="text-muted-foreground">{t("fields.ratio")}</dt>
@@ -377,6 +396,7 @@ function OverviewPanels({
               )}
             </FactList>
           )}
+          {prescription !== null && upcomingNote}
           {prescription !== null && (
             // The dietitian looked for a way to change the prescription here and
             // found none: the form lives in the «Диета» section. One link keeps

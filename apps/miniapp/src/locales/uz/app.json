@@ -57,7 +57,8 @@
       "none": "Hozircha tayinlov yo‘q — uni shifokor belgilaydi. Kundalikni hozirdan yuritish mumkin.",
       "kcal": "Sutkasiga {{kcal}} kkal",
       "macros": "oqsil {{protein}} g · uglevodlar ko‘pi bilan {{carbs}} g",
-      "fluid": "suyuqlik sutkasiga {{value}} ml"
+      "fluid": "suyuqlik sutkasiga {{value}} ml",
+      "upcoming": "{{date}} sanasidan — yangi tayinlov"
     },
     "today": {
       "title": "Bugun",

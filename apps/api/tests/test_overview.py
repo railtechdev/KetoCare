@@ -236,6 +236,51 @@ class TestOverview:
         )
         assert response.json()["prescription"]["ratio"] == 4.0
 
+    async def test_later_start_is_upcoming_and_today_keeps_the_old_one(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«Действует с» позже сегодня: день судится прежней версией, новая —
+        предстоящая (аудит расчётов 13.11.2026, правило одно с сводкой врача)."""
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await _prescription(session, patient=patient, author=doctor, ratio=3.0, kcal=1200)
+        starts = _local_today() + timedelta(days=3)
+        await prescriptions_repo.create(
+            session,
+            patient_id=patient.id,
+            ratio=4.0,
+            kcal_per_day=1300,
+            protein_g=30.0,
+            carbs_limit_g=5.0,
+            meals_per_day=4,
+            author_id=doctor.id,
+            effective_from=starts,
+        )
+
+        body = (
+            await client.get(
+                f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+            )
+        ).json()
+        assert body["prescription"]["ratio"] == 3.0
+        assert body["upcoming_prescription"]["ratio"] == 4.0
+        assert body["upcoming_prescription"]["effective_from"] == starts.isoformat()
+
+    async def test_no_upcoming_when_nothing_is_scheduled(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await _prescription(session, patient=patient, author=doctor)
+
+        body = (
+            await client.get(
+                f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+            )
+        ).json()
+        assert body["upcoming_prescription"] is None
+
     async def test_totals_within_tolerance_flags(
         self, client, session, make_user, make_patient, auth_headers
     ):

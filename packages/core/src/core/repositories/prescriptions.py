@@ -2,17 +2,24 @@
 
 Изменение назначения = новая строка. UPDATE/DELETE запрещены на уровне
 репозитория: методов, выполняющих их, здесь нет и быть не должно.
-Активное назначение = последнее по created_at.
+Какое назначение действует в день D — одно правило на весь продукт
+(`active_on` / `get_active_on`): из версий, начавшихся не позже D
+(`effective_from <= D`), — последняя записанная. На сегодня это и есть
+«последняя по created_at» раздела 4.2 ТЗ: будущую дату начала сервер не
+принимает. Разные правила у сводки семьи и у сводки врача судили один и тот же
+день по разным назначениям (аудит расчётов 13.11.2026).
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from collections.abc import Iterable
+from datetime import date
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..clock import local_today
 from ..models import Prescription
 
 
@@ -49,37 +56,64 @@ async def create(
     return prescription
 
 
-async def get_active(session: AsyncSession, *, patient_id: uuid.UUID) -> Prescription | None:
-    """Активное назначение — последнее по created_at (раздел 4.2 ТЗ)."""
+def active_on(history: Iterable[Prescription], day: date) -> Prescription | None:
+    """Назначение, действовавшее в день `day`, из уже прочитанной истории.
 
-    stmt = (
-        select(Prescription)
-        .where(Prescription.patient_id == patient_id)
-        .order_by(desc(Prescription.created_at))
-        .limit(1)
-    )
-    result: Prescription | None = await session.scalar(stmt)
-    return result
+    То же правило, что `get_active_on`, для мест, где история читается целиком
+    (сводка врача по дням периода). Последняя ЗАПИСАННАЯ из начавшихся, а не
+    начавшаяся последней: версия, записанная задним числом, — это поправка
+    врача, и она перекрывает прежнюю и в прошлых днях.
+    """
+
+    started = [item for item in history if item.effective_from <= day]
+    return max(started, key=lambda item: item.created_at) if started else None
 
 
-async def get_active_before(
-    session: AsyncSession, *, patient_id: uuid.UUID, before: datetime
+async def get_active_on(
+    session: AsyncSession, *, patient_id: uuid.UUID, day: date
 ) -> Prescription | None:
-    """Назначение, действовавшее на момент `before`, — последнее созданное раньше.
+    """Назначение, действовавшее в день `day` (правило — в шапке модуля).
 
-    Нужно там, где о прошедшем дне судят по ТОГДАШНЕЙ норме: врач, сменивший
-    назначение сегодня утром, не должен задним числом сделать вчерашний день
-    недобором или перебором.
+    О прошедшем дне судят по его норме: врач, сменивший назначение сегодня,
+    не делает вчерашний день недобором или перебором.
     """
 
     stmt = (
         select(Prescription)
-        .where(Prescription.patient_id == patient_id, Prescription.created_at < before)
+        .where(Prescription.patient_id == patient_id, Prescription.effective_from <= day)
         .order_by(desc(Prescription.created_at))
         .limit(1)
     )
     result: Prescription | None = await session.scalar(stmt)
     return result
+
+
+async def get_upcoming(
+    session: AsyncSession, *, patient_id: uuid.UUID, today: date, active: Prescription | None
+) -> Prescription | None:
+    """Записанная, но ещё не начавшаяся версия — «с 20.11 новое назначение».
+
+    Последняя записанная из тех, у кого дата начала позже `today`, и только если
+    она записана позже действующей: более ранняя будущая версия уже перекрыта
+    поправкой врача и не начнётся никогда.
+    """
+
+    stmt = (
+        select(Prescription)
+        .where(Prescription.patient_id == patient_id, Prescription.effective_from > today)
+        .order_by(desc(Prescription.created_at))
+        .limit(1)
+    )
+    upcoming: Prescription | None = await session.scalar(stmt)
+    if upcoming is None or (active is not None and upcoming.created_at <= active.created_at):
+        return None
+    return upcoming
+
+
+async def get_active(session: AsyncSession, *, patient_id: uuid.UUID) -> Prescription | None:
+    """Действующее сегодня назначение (местные сутки установки)."""
+
+    return await get_active_on(session, patient_id=patient_id, day=local_today())
 
 
 async def list_history(
