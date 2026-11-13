@@ -251,6 +251,7 @@ class TestOverview:
         assert body["day"]["tolerance"] == {
             "ratio_within_tolerance": True,
             "kcal_within_tolerance": True,
+            "carbs_within_limit": True,
         }
         # Причина и вердикт исключают друг друга: иначе экран однажды покажет и
         # вердикт, и объяснение, почему его нет.
@@ -270,7 +271,33 @@ class TestOverview:
         assert response.json()["day"]["tolerance"] == {
             "ratio_within_tolerance": False,
             "kcal_within_tolerance": False,
+            "carbs_within_limit": True,
         }
+
+    async def test_carbs_over_limit_is_a_verdict_of_its_own(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Соотношение и калорийность в допуске, а углеводов вдвое больше лимита.
+
+        До аудита 13.11.2026 такой день получал «в допуске»: лимит углеводов
+        сервер не сверял вовсе. Лимит — по общим углеводам (вопрос 3).
+        """
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        await _prescription(session, patient=patient, author=doctor)
+        await _menu(
+            session,
+            patient=patient,
+            day=_local_today(),
+            totals={**TOTALS_ON_TARGET, "carbs": 20.0, "fiber": 12.0},
+        )
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/overview", headers=auth_headers(parent)
+        )
+        tolerance = response.json()["day"]["tolerance"]
+        assert tolerance["ratio_within_tolerance"] is True
+        assert tolerance["carbs_within_limit"] is False
 
     async def test_day_without_ratio_has_no_verdict(
         self, client, session, make_user, make_patient, auth_headers

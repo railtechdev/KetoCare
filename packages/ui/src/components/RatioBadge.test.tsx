@@ -34,32 +34,30 @@ describe("RatioBadge", () => {
     ).toHaveTextContent(/^—$/);
   });
 
-  it("выводит целевой ориентир и статус попадания в коридор при targetRatio", () => {
-    render(<RatioBadge ratio={3.95} targetRatio={4.0} tolerance={0.15} />);
+  it("с целью показывает вердикт сервера: в допуске", () => {
+    render(<RatioBadge ratio={3.95} targetRatio={4.0} withinTolerance />);
     const badge = screen.getByLabelText(/Цель: 4.0 : 1/i);
-    expect(badge).toHaveAttribute("data-status", "inRange");
     expect(badge).toHaveAttribute("data-state", "ok");
     expect(badge.className).toContain("bg-success-subtle");
-    expect(badge.className).toContain("text-success");
-    expect(badge).toHaveTextContent("4.0 : 1");
     expect(badge).toHaveTextContent("(Цель: 4.0 : 1)");
   });
 
-  it("выводит умеренное отклонение с warning-subtle", () => {
-    render(<RatioBadge ratio={3.85} targetRatio={4.0} tolerance={0.1} />);
+  it("с целью показывает вердикт сервера: отклонение", () => {
+    render(
+      <RatioBadge ratio={3.85} targetRatio={4.0} withinTolerance={false} />,
+    );
     const badge = screen.getByLabelText(/Цель: 4.0 : 1/i);
-    expect(badge).toHaveAttribute("data-status", "deviation");
     expect(badge).toHaveAttribute("data-state", "off");
-    expect(badge.className).toContain("bg-warning-subtle");
     expect(badge.className).toContain("text-warning-strong");
   });
 
-  it("выводит критическое отклонение с destructive-subtle", () => {
-    render(<RatioBadge ratio={2.5} targetRatio={4.0} tolerance={0.15} />);
+  it("с целью, но без вердикта сервера — нейтральный, даже если число рядом с целью", () => {
+    // Аудит расчётов 13.11.2026: значок решал сам по копии допуска и ставил
+    // зелёную галочку у устаревшего состава и у дня без вердикта.
+    render(<RatioBadge ratio={4.0} targetRatio={4.0} />);
     const badge = screen.getByLabelText(/Цель: 4.0 : 1/i);
-    expect(badge).toHaveAttribute("data-status", "critical");
-    expect(badge).toHaveAttribute("data-state", "off");
-    expect(badge.className).toContain("bg-destructive-subtle");
-    expect(badge.className).toContain("text-destructive");
+    expect(badge).toHaveAttribute("data-state", "neutral");
+    expect(badge.className).not.toContain("success");
+    expect(badge).toHaveAccessibleName(/^Соотношение 4.0 : 1\./);
   });
 });

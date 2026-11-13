@@ -10,6 +10,12 @@
 export interface DayTolerance {
   ratio_within_tolerance: boolean | null;
   kcal_within_tolerance: boolean;
+  /**
+   * Общие углеводы дня не больше лимита назначения (с 13.11.2026). Сервер
+   * отдаёт поле всегда, но ответ из кеша, снятый до выката, приходит без него —
+   * тогда о лимите не говорится ничего, а не «в норме» (`carbsUnknown`).
+   */
+  carbs_within_limit: boolean;
 }
 
 /** Почему вердикта нет — словами сервера (`DaySummary.tolerance_gap`). */
@@ -21,6 +27,17 @@ export interface DayVerdict {
   ratioOffTolerance: boolean;
   /** Соотношения у дня нет — сказать о соответствии нечего. */
   ratioUnknown: boolean;
+  /**
+   * Углеводов за день больше лимита назначения. Предупреждение, как и
+   * соотношение: еда за день только добавляется, и превышение лимита верно в
+   * любой момент дня — в отличие от калорийности, которую добирают к вечеру.
+   */
+  carbsOverLimit: boolean;
+  /**
+   * Сервер не сказал, в лимите ли углеводы (ответ старой формы). Хвалить день
+   * «соответствует назначению» тогда нельзя.
+   */
+  carbsUnknown: boolean;
   /** Набранная калорийность не дотягивает до суточной нормы назначения. */
   kcalBelowTarget: boolean;
   /** Вердикта нет — сравнивать не с чем либо не с сегодняшним правилом. */
@@ -115,6 +132,8 @@ export function dayVerdict(
     return {
       ratioOffTolerance: false,
       ratioUnknown: false,
+      carbsOverLimit: false,
+      carbsUnknown: false,
       kcalBelowTarget: false,
       unavailable: true,
       unavailableReason: gap ?? null,
@@ -130,6 +149,8 @@ export function dayVerdict(
     // молчит: убрать ложную тревогу и поставить на её место ложное спокойствие
     // — обмен не в пользу ребёнка.
     ratioUnknown: tolerance.ratio_within_tolerance === null,
+    carbsOverLimit: tolerance.carbs_within_limit === false,
+    carbsUnknown: tolerance.carbs_within_limit === undefined,
     kcalBelowTarget: !tolerance.kcal_within_tolerance,
     unavailable: false,
     unavailableReason: null,

@@ -207,7 +207,7 @@ export async function ensurePrescription(
         ratio: 3.5,
         kcal_per_day: 1200,
         protein_g: 25,
-        carbs_limit_g: 12,
+        carbs_limit_g: 8.8,
         meals_per_day: 4,
         effective_from: new Date().toLocaleDateString("sv-SE", {
           timeZone: "Asia/Tashkent",

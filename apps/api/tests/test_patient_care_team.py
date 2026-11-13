@@ -220,7 +220,7 @@ class TestRevoke:
                 "ratio": 4.0,
                 "kcal_per_day": 1200,
                 "protein_g": 25.0,
-                "carbs_limit_g": 10.0,
+                "carbs_limit_g": 5.0,
                 "meals_per_day": 3,
                 "effective_from": "2026-01-01",
             },

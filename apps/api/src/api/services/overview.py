@@ -158,7 +158,17 @@ def _tolerance(
     )
     targets = Targets(ratio=float(prescription.ratio), kcal=float(prescription.kcal_per_day))
     ratio_ok, kcal_ok = within_tolerance(dish, targets)
-    return DayTolerance(ratio_within_tolerance=ratio_ok, kcal_within_tolerance=kcal_ok), None
+    # Лимит углеводов — по ОБЩИМ углеводам (ответ клиники на вопрос 3), так же,
+    # как его держит решатель ядра (`carbs_max_g`).
+    carbs_ok = totals.carbs <= float(prescription.carbs_limit_g) + 1e-9
+    return (
+        DayTolerance(
+            ratio_within_tolerance=ratio_ok,
+            kcal_within_tolerance=kcal_ok,
+            carbs_within_limit=carbs_ok,
+        ),
+        None,
+    )
 
 
 #: Окно сравнения, суток. Неделя против недели.

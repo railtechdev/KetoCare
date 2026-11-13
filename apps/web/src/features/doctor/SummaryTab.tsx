@@ -213,6 +213,18 @@ function OverviewPanels({
                   </p>
                 )}
 
+                {/* Лимит углеводов сервер сверяет с 13.11.2026 (аудит
+                    расчётов): до того день с двойным превышением получал
+                    «соответствует назначению». */}
+                {verdict.carbsOverLimit && (
+                  <WarningBanner
+                    level="warning"
+                    title={t("summary.day.carbsTitle")}
+                  >
+                    {t("summary.day.carbsBody")}
+                  </WarningBanner>
+                )}
+
                 {verdict.kcalBelowTarget && (
                   <p className="m-0 text-sm text-muted-foreground">
                     {t("summary.day.kcalBelowTarget", {
