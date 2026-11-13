@@ -57,19 +57,14 @@ describe("утилиты Tailwind не перекрыты токенами", () 
     },
   );
 
-  it("узкий блок ставит действие под заголовок — запросом к ширине блока", async () => {
-    // `Section`: в блоке уже 28rem рядом с двумя кнопками заголовок сжимался
-    // до нуля. Класс, которого Tailwind не понял, не выдаёт ничего — и раскладка
-    // молча осталась бы прежней, поэтому проверяется собранный CSS.
-    const css = await build([
-      "@max-md:has-data-[slot=card-action]:grid-cols-1",
-      "[&>[data-slot=card-action]]:@max-md:col-start-1",
-      "[&>[data-slot=card-action]]:@max-md:justify-self-start",
-    ]);
-    expect(css).toMatch(/@container\s*\(width < 28rem\)/);
-    expect(css).toMatch(/grid-template-columns:\s*repeat\(1/);
-    expect(css).toMatch(/grid-column-start:\s*1/);
-    expect(css).toMatch(/justify-self:\s*flex-start|justify-self:\s*start/);
+  it("шапка блока переносит действия под заголовок по месту", async () => {
+    // `Section`: заголовок держит основу 16rem, и действия, не поместившиеся
+    // рядом, уходят под него. Класс, которого Tailwind не понял, не выдаёт
+    // ничего — и раскладка молча осталась бы прежней, поэтому проверяется
+    // собранный CSS.
+    const css = await build(["flex-[1_1_16rem]", "flex-wrap"]);
+    expect(css).toMatch(/flex:\s*1 1 16rem/);
+    expect(css).toMatch(/flex-wrap:\s*wrap/);
   });
 
   it("отступы шкалы по-прежнему собираются", async () => {

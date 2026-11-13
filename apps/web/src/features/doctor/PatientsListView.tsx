@@ -8,6 +8,7 @@ import {
   FilterBar,
   FormSheet,
   RatioBadge,
+  formatRatio,
   SegmentedControl,
   useDebouncedValue,
   SEARCH_DELAY_MS,
@@ -208,17 +209,23 @@ export function PatientsListView() {
           }
           return (
             <div className="flex flex-col gap-0.5">
+              {/* Цель — строкой под значком, а не в нём: «4.2 : 1 (Цель:
+                  3.5 : 1)» и ещё раз «Цель: 3.5:1» под ним делали колонку
+                  вдвое шире, и на ноутбуке за край уходила колонка «Внимание». */}
               <RatioBadge
                 ratio={dayRatio ?? rxRatio ?? 0}
                 targetRatio={
                   dayRatio !== null && rxRatio !== null ? rxRatio : undefined
                 }
+                showTarget={false}
               />
               {dayRatio !== null &&
                 rxRatio !== null &&
                 dayRatio !== rxRatio && (
                   <span className="text-xs text-muted-foreground tabular-nums">
-                    {t("list.targetRatioLabel", { value: rxRatio })}
+                    {t("list.targetRatioLabel", {
+                      value: formatRatio(rxRatio),
+                    })}
                   </span>
                 )}
             </div>
@@ -271,8 +278,11 @@ export function PatientsListView() {
         // читается как «замечаний нет», и это разные утверждения.
         // У молчащей семьи рядом с пометкой — следующий шаг (ADR-0046):
         // прежде флаг заканчивался констатацией.
+        // Кнопка — всегда под пометками, а не следом за ними: в одной строке
+        // она вставала справа, в соседней (пометок больше) переносилась вниз,
+        // и колонка выглядела рваной.
         cell: ({ row }) => (
-          <div className="flex flex-wrap items-center gap-field">
+          <div className="flex flex-col items-start gap-2">
             <PatientFlagsView
               flags={row.original.flags}
               pending={overviews.pending}

@@ -21,11 +21,20 @@ export interface RatioBadgeProps {
   targetRatio?: number;
   /** Допуск соответствия (по умолчанию 0.15) */
   tolerance?: number;
+  /**
+   * Печатать цель внутри значка: «4.2 : 1 (Цель: 3.5 : 1)». В узкой колонке
+   * таблицы цель ставят строкой под значком, и вдвое широкий значок выталкивал
+   * соседние колонки за край. Для скринридера цель остаётся в подписи всегда.
+   */
+  showTarget?: boolean;
   className?: string;
 }
 
+// `w-fit`: значок — по своему тексту в любом родителе. В вертикальной
+// колонке (`flex-col`) элементы растягиваются на всю ширину, и в списке
+// пациентов «4.0 : 1» стояло в пустой рамке шириной с колонку — как поле ввода.
 const BASE =
-  "inline-flex items-center rounded-md border border-transparent px-2.5 py-0.5 " +
+  "inline-flex w-fit items-center rounded-md border border-transparent px-2.5 py-0.5 " +
   "font-semibold tabular-nums whitespace-nowrap";
 
 const BY_STATE = {
@@ -39,6 +48,7 @@ export function RatioBadge({
   withinTolerance,
   targetRatio,
   tolerance = 0.15,
+  showTarget = true,
   className,
 }: RatioBadgeProps) {
   const labels = useKitLabels().ratio;
@@ -93,9 +103,11 @@ export function RatioBadge({
       >
         <StatusIcon className="mr-1.5 size-3.5 shrink-0" aria-hidden="true" />
         <span>{formatRatio(ratio)}</span>
-        <span className="ml-1.5 font-normal opacity-85">
-          ({labels.target(formatRatio(targetRatio))})
-        </span>
+        {showTarget && (
+          <span className="ml-1.5 font-normal opacity-85">
+            ({labels.target(formatRatio(targetRatio))})
+          </span>
+        )}
       </span>
     );
   }

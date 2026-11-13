@@ -21,7 +21,7 @@
       "attention": "Требуют внимания",
       "family": "Семья подключена"
     },
-    "targetRatioLabel": "Цель: {{value}}:1",
+    "targetRatioLabel": "цель {{value}}",
     "columns": {
       "name": "Пациент",
       "age": "Возраст",

@@ -1,8 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AsyncSection,
-  Avatar,
-  AvatarFallback,
   FormFooter,
   Section,
   Skeleton,
@@ -25,7 +23,6 @@ import { TrustedDevicesSection } from "./TrustedDevicesSection";
 import { PasswordSection } from "./PasswordSection";
 import { errorMessageOf } from "../../lib/api";
 import { useMe } from "../auth/useMe";
-import { initialsOf } from "../../layouts/initials";
 import { useUpdateProfileMutation } from "./useProfile";
 import { queryState } from "../../lib/queryState";
 
@@ -74,15 +71,6 @@ export function ProfilePage() {
     <PageLayout
       title={t("title")}
       width="form"
-      actions={
-        profile === undefined ? undefined : (
-          <Avatar className="size-14">
-            <AvatarFallback className="text-base">
-              {initialsOf(profile.full_name)}
-            </AvatarFallback>
-          </Avatar>
-        )
-      }
       intro={
         profile === undefined
           ? undefined
