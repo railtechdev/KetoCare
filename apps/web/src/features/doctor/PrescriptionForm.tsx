@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
-import { FormFooter, formatRatio } from "@ketocare/ui";
+import { Button, FormFooter, formatMass, formatRatio } from "@ketocare/ui";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import {
@@ -144,6 +144,25 @@ export function PrescriptionForm({
     });
   }, [derivedCarbs, carbsByHand, inputsChanged, carbsEmpty, setValue]);
 
+  // Число, перенесённое из действующей версии, могло быть посчитано прежним
+  // правилом или введено руками до автоматического расчёта. Молча его не
+  // меняем — это выбор врача, — но и пояснение «рассчитано» под ним было бы
+  // неправдой: так у пациента стояло 27,7 г при расчётных 6,7 г, и врач не
+  // видела, как это исправить (замечание медиков 13.11.2026). Расхождение
+  // называется, и расчётное число ставится одной кнопкой.
+  const carbsValue = watch("carbsLimitG");
+  const derivedCarbsShown =
+    derivedCarbs === null ? null : Math.round(derivedCarbs * 10) / 10;
+  const staleCarbsFix =
+    derivedCarbsShown !== null &&
+    !carbsByHand &&
+    !inputsChanged &&
+    !carbsEmpty &&
+    Number.isFinite(carbsValue) &&
+    Math.abs(carbsValue - derivedCarbsShown) >= 0.05
+      ? derivedCarbsShown
+      : null;
+
   // Сводка появляется только после неудачной отправки и повторяет тексты из-под
   // полей (правило П8 канона). Без неё врач, отправивший форму с клавиатуры,
   // оставался у кнопки внизу: назначение из шести числовых полей, и какое из
@@ -238,7 +257,32 @@ export function PrescriptionForm({
           step={0.1}
           label={t("fields.carbsLimitInput")}
           error={errors.carbsLimitG && t("prescription.errors.carbsLimit")}
-          hint={carbsByHand ? undefined : t("prescription.carbsDerived")}
+          hint={
+            carbsByHand ? undefined : staleCarbsFix !== null ? (
+              <>
+                {t("prescription.carbsStale", {
+                  derived: formatMass(staleCarbsFix),
+                })}{" "}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setValue("carbsLimitG", staleCarbsFix, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                >
+                  {t("prescription.carbsApply", {
+                    derived: formatMass(staleCarbsFix),
+                  })}
+                </Button>
+              </>
+            ) : (
+              t("prescription.carbsDerived")
+            )
+          }
           {...register("carbsLimitG", {
             valueAsNumber: true,
             onChange: () => setCarbsByHand(true),
