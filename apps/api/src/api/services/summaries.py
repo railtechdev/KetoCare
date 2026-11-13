@@ -363,7 +363,16 @@ def _menu(
         # 14» выглядело бы пропажей записей, а не сменой правила расчёта.
         "days_other_engine": days_other_engine,
         "ratio_mean_deviation": _mean(ratio_deviations),
+        # Среднее со знаком показывает направление, но гасит само себя: дни
+        # +0,5 и −0,5 дают ноль — «в точности по назначению», хотя мимо был
+        # каждый день (аудит расчётов 13.11.2026). Рядом — среднее по модулю.
+        "ratio_mean_abs_deviation": _mean([abs(value) for value in ratio_deviations]),
         "kcal_mean_deviation_pct": _round(_mean(kcal_deviations) or 0.0, 1)
+        if kcal_deviations
+        else None,
+        "kcal_mean_abs_deviation_pct": _round(
+            _mean([abs(value) for value in kcal_deviations]) or 0.0, 1
+        )
         if kcal_deviations
         else None,
         "engine_versions": sorted(versions),
