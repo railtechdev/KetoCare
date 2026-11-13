@@ -16,7 +16,8 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 
 from core.models.enums import UserRole
 
-from .schemas import MAX_MEALS_PER_DAY, DishComputed
+from .schemas import MAX_MEALS_PER_DAY, DishComputed, PrescriptionRead
+from .schemas_overview import DayTolerance, ToleranceGap
 
 # Технические, а не медицинские границы. Сколько блюд бывает в дне и насколько
 # крупной бывает порция, ТЗ не задаёт (правило 1 CLAUDE.md), поэтому здесь только
@@ -193,6 +194,25 @@ class MenuRead(BaseModel):
     #: Роль сохранившего: экран подписывает специалиста ролью («диетолог»), а
     #: Mini App показывает строку только под планом специалиста.
     updated_by_role: UserRole | None = None
+    #: Назначение, действовавшее в ЭТОТ день (ADR-0078): у вчера и завтра оно
+    #: может быть другим, чем сегодня, и сверять их с сегодняшним нельзя.
+    prescription: PrescriptionRead | None = None
+    #: Вердикт дня по его назначению — тот же, что у `/overview` за сегодня.
+    #: `None` вместе с `tolerance_gap` — итогов нет (день пуст или не посчитан).
+    tolerance: DayTolerance | None = None
+    tolerance_gap: ToleranceGap | None = None
+
+
+class DayPrescription(BaseModel):
+    """Назначение на дату — для дня, у которого меню ещё нет.
+
+    Потребители: сборка дня в Mini App (`features/menu/MenuScreen.tsx`) и в
+    кабинете (`features/menu/useMenu.ts`) — число приёмов и цели завтрашнего
+    дня берутся отсюда, а не из сегодняшней сводки.
+    """
+
+    date: date
+    prescription: PrescriptionRead | None
 
 
 class MenuWeekDay(BaseModel):

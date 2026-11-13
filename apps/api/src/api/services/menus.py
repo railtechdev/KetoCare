@@ -23,6 +23,7 @@ from core.models.enums import RecipeStatus
 from core.repositories import audit as audit_repo
 from core.repositories import menus as menus_repo
 from core.repositories import patients as patients_repo
+from core.repositories import prescriptions as prescriptions_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
 from core.repositories.menus import MenuItemSpec
@@ -30,7 +31,7 @@ from keto_engine import ENGINE_VERSION, DishResult, Ingredient, scale, verify
 
 from .. import after_commit
 from ..errors import ApiError, ErrorCode
-from ..schemas import DishComputed
+from ..schemas import DishComputed, PrescriptionRead
 from ..schemas_menus import (
     MenuItemIngredient,
     MenuItemRead,
@@ -39,6 +40,7 @@ from ..schemas_menus import (
     WithdrawnProduct,
 )
 from . import composition as composition_service
+from .day_verdict import day_tolerance
 
 # Состав блюда: продукт и его масса в граммах.
 type Composition = list[tuple[uuid.UUID, float]]
@@ -109,13 +111,23 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
 
     live = await _live_compositions(session, menu=menu, items=items)
     composer = None if menu.updated_by is None else await users_repo.get(session, menu.updated_by)
+    prescription = await prescriptions_repo.get_active_on(
+        session, patient_id=menu.patient_id, day=menu.date
+    )
+    totals = DishComputed.model_validate(menu.totals) if menu.totals is not None else None
+    tolerance, gap = (
+        (None, None) if totals is None else day_tolerance(totals, prescription, menu.engine_version)
+    )
 
     return MenuRead(
         id=menu.id,
         patient_id=menu.patient_id,
         date=menu.date,
-        totals=DishComputed.model_validate(menu.totals) if menu.totals is not None else None,
+        totals=totals,
         engine_version=menu.engine_version,
+        prescription=PrescriptionRead.model_validate(prescription) if prescription else None,
+        tolerance=tolerance,
+        tolerance_gap=gap,
         items=[
             MenuItemRead(
                 **MenuItemRead.model_validate(item).model_dump(

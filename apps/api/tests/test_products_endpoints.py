@@ -1427,3 +1427,78 @@ class TestCheckProductValues:
 
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
+
+
+class TestProductEditRecomputesDishes:
+    """Правка чисел продукта пересчитывает рецепты и свои блюда сразу (аудит
+    расчётов 13.11.2026): прежде показатели оставались по прежнему составу до
+    следующей записи рецепта, без пометки."""
+
+    async def test_recipe_and_custom_dish_follow_the_product(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        from core.repositories import patients as patients_repo
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        parent = await make_user(UserRole.PARENT)
+        patient = await make_patient()
+        await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+        category = await _category(session)
+        body = _product_payload(category.id)
+        created = await client.post("/api/v1/products", json=body, headers=auth_headers(dietitian))
+        assert created.status_code == 201, created.text
+        product_id = created.json()["id"]
+
+        recipe = await client.post(
+            "/api/v1/recipes",
+            json={
+                "title": f"Масляный шарик {uuid.uuid4().hex[:6]}",
+                "category": "breakfast",
+                "yield_g": 20,
+                "servings": 1,
+                "ingredients": [{"product_id": product_id, "grams": 20}],
+            },
+            headers=auth_headers(dietitian),
+        )
+        assert recipe.status_code == 201, recipe.text
+        dish = await client.post(
+            f"/api/v1/patients/{patient.id}/custom-dishes",
+            json={"title": "Масло", "ingredients": [{"product_id": product_id, "grams": 10}]},
+            headers=auth_headers(parent),
+        )
+        assert dish.status_code == 201, dish.text
+        assert recipe.json()["computed"]["fat"] == pytest.approx(16.2, abs=0.1)
+
+        updated = await client.put(
+            f"/api/v1/products/{product_id}",
+            json={
+                **body,
+                "fat_100g": 50.0,
+                "kcal_100g": 455,
+                "source": "Лаборатория клиники",
+                "source_version": "измерение 2026-11",
+                "is_active": True,
+            },
+            headers=auth_headers(dietitian),
+        )
+        assert updated.status_code == 200, updated.text
+
+        recipe_after = await client.get(
+            f"/api/v1/recipes/{recipe.json()['id']}", headers=auth_headers(dietitian)
+        )
+        assert recipe_after.json()["computed"]["fat"] == pytest.approx(10.0, abs=0.1)
+        dishes = await client.get(
+            f"/api/v1/patients/{patient.id}/custom-dishes", headers=auth_headers(parent)
+        )
+        [after] = [item for item in dishes.json()["items"] if item["id"] == dish.json()["id"]]
+        assert after["computed"]["fat"] == pytest.approx(5.0, abs=0.1)
+
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "recompute_after_product_update",
+                AuditLog.entity_id == uuid.UUID(product_id),
+            )
+        )
+        assert entry is not None
+        assert entry.after["recipes"] == [recipe.json()["id"]]
+        assert entry.after["custom_dishes"] == [dish.json()["id"]]

@@ -1119,7 +1119,7 @@ class TestRecentProducts:
     async def test_someone_elses_child_is_forbidden(
         self, client, session, make_user, make_patient, auth_headers
     ):
-        _, patient = await _linked_parent(session, make_user, make_patient)
+        owner, patient = await _linked_parent(session, make_user, make_patient)
         stranger = await make_user(UserRole.PARENT)
 
         response = await client.get(
@@ -1978,3 +1978,126 @@ class TestWeek:
 
         assert week.status_code == 403
         assert copy.status_code == 403
+
+
+class TestDayIsJudgedByItsOwnPrescription:
+    """Вчера и завтра — по своему назначению (аудит расчётов 13.11.2026, ADR-0078).
+
+    Потребители: сборка дня в Mini App (`features/menu/MenuScreen.tsx`) и в
+    кабинете (`features/menu/useMenu.ts`) — цели, число приёмов и вердикт дня
+    берутся из ответа меню или `…/prescriptions/on`, а не из сегодняшней сводки.
+    """
+
+    async def _versions(self, session, make_user, patient):
+        from core.repositories import prescriptions as prescriptions_repo
+
+        doctor = await make_user(UserRole.DOCTOR)
+        today = local_today()
+        for ratio, kcal, meals, starts in (
+            (3.0, 1200, 4, today - timedelta(days=10)),
+            (4.0, 1300, 5, today + timedelta(days=1)),
+        ):
+            await prescriptions_repo.create(
+                session,
+                patient_id=patient.id,
+                ratio=ratio,
+                kcal_per_day=kcal,
+                protein_g=20.0,
+                carbs_limit_g=5.0,
+                meals_per_day=meals,
+                author_id=doctor.id,
+                effective_from=starts,
+            )
+        return today
+
+    async def test_menu_carries_the_days_prescription_and_verdict(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        today = await self._versions(session, make_user, patient)
+        tomorrow = today + timedelta(days=1)
+        for day in (today, tomorrow):
+            saved = await _save_day(client, auth_headers, parent, patient, session, day)
+            assert saved.status_code == 200, saved.text
+
+        bodies = {}
+        for day in (today, tomorrow):
+            response = await client.get(
+                _url(patient), params={"date": day.isoformat()}, headers=auth_headers(parent)
+            )
+            assert response.status_code == 200, response.text
+            bodies[day] = response.json()
+
+        assert bodies[today]["prescription"]["ratio"] == 3.0
+        assert bodies[tomorrow]["prescription"]["ratio"] == 4.0
+        assert bodies[tomorrow]["prescription"]["meals_per_day"] == 5
+        for body in bodies.values():
+            assert body["tolerance_gap"] is None
+            assert set(body["tolerance"]) == {
+                "ratio_within_tolerance",
+                "kcal_within_tolerance",
+                "carbs_within_limit",
+            }
+            # 40 г масла — далеко от 1200-1300 ккал.
+            assert body["tolerance"]["kcal_within_tolerance"] is False
+
+    async def test_day_before_any_prescription_says_why(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        today = await self._versions(session, make_user, patient)
+        early = today - timedelta(days=20)
+        await _save_day(client, auth_headers, parent, patient, session, early)
+
+        body = (
+            await client.get(
+                _url(patient), params={"date": early.isoformat()}, headers=auth_headers(parent)
+            )
+        ).json()
+
+        assert body["prescription"] is None
+        assert body["tolerance"] is None
+        assert body["tolerance_gap"] == "no_prescription"
+
+    async def test_prescription_on_a_day_without_a_menu(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        today = await self._versions(session, make_user, patient)
+        url = f"/api/v1/patients/{patient.id}/prescriptions/on"
+
+        tomorrow = await client.get(
+            url,
+            params={"date": (today + timedelta(days=1)).isoformat()},
+            headers=auth_headers(parent),
+        )
+        assert tomorrow.status_code == 200, tomorrow.text
+        assert tomorrow.json()["prescription"]["meals_per_day"] == 5
+
+        now = await client.get(
+            url, params={"date": today.isoformat()}, headers=auth_headers(parent)
+        )
+        assert now.json()["date"] == today.isoformat()
+        assert now.json()["prescription"]["ratio"] == 3.0
+
+        before = await client.get(
+            url,
+            params={"date": (today - timedelta(days=30)).isoformat()},
+            headers=auth_headers(parent),
+        )
+        assert before.json()["prescription"] is None
+
+    async def test_prescription_on_needs_access_and_a_date(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        owner, patient = await _linked_parent(session, make_user, make_patient)
+        stranger = await make_user(UserRole.PARENT)
+        url = f"/api/v1/patients/{patient.id}/prescriptions/on"
+
+        denied = await client.get(
+            url, params={"date": local_today().isoformat()}, headers=auth_headers(stranger)
+        )
+        assert denied.status_code == 403
+
+        missing = await client.get(url, headers=auth_headers(owner))
+        assert missing.status_code == 422

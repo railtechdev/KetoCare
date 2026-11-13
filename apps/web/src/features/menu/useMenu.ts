@@ -435,20 +435,20 @@ export function useEatenMutation(patientId: string | null, date: string) {
  * копия в TypeScript со временем разошлась бы с расчётом, и экран показывал бы
  * «в норме» там, где ядро считает иначе (правило 2 CLAUDE.md).
  *
- * Готовый вердикт отдаёт только `/patients/{id}/overview`, и только за
- * сегодняшний день в часовом поясе установки: `GET /menus` возвращает итоги без
- * него. Поэтому для прочих дат вердикта нет, и показатели выводятся нейтрально.
+ * Вердикт приходит вместе с меню дня (`GET /menus`) — за любую дату и по
+ * назначению, действовавшему В ЭТОТ день (ADR-0078). Раньше он был только в
+ * сводке и только за сегодня, и вчера с завтра оставались без вердикта.
  *
  * Отдаётся ответ сервера как есть: своя форма вердикта была бы четвёртой копией
  * одного и того же, а как его показывать — решает `dayVerdict` кита.
  *
  * Вместе с вердиктом отдаётся причина его отсутствия (`gap`) — тоже серверная.
- * Причин две, «назначения нет» и «день посчитан прежней версией ядра», и
+ * Причин несколько, «назначения нет» и «день посчитан прежней версией ядра», и
  * различить их на клиенте нечем: сегодняшнюю версию ядра знает только сервер.
  */
 export interface DayToleranceState {
   tolerance: DayTolerance | null;
-  /** `null` — причина неизвестна: другая дата или сводка ещё перезагружается. */
+  /** `null` — причина неизвестна: меню ещё перечитывается. */
   gap: ToleranceGap | null;
 }
 
@@ -456,18 +456,19 @@ export function useDayTolerance(
   patientId: string | null,
   date: string,
 ): DayToleranceState {
-  const overview = useQuery(patientOverviewQuery(patientId));
+  const menu = useMenuQuery(patientId, date);
 
-  const day = overview.data?.day;
-
-  // Пока сводка перезагружается после правки меню, вердикт относится к прежнему
+  // Пока меню перечитывается после правки, вердикт относится к прежнему
   // составу дня: лучше не показывать соответствие, чем показать чужое. Причина
   // молчит вместе с ним — она относится к тому же дню.
-  if (overview.isFetching || overview.data?.date !== date) {
+  if (menu.isFetching || !menu.data) {
     return { tolerance: null, gap: null };
   }
 
-  return { tolerance: day?.tolerance ?? null, gap: day?.tolerance_gap ?? null };
+  return {
+    tolerance: menu.data.tolerance ?? null,
+    gap: menu.data.tolerance_gap ?? null,
+  };
 }
 
 /** Нормы назначения на день: с ними итоги показывают, сколько осталось. */
@@ -485,12 +486,41 @@ export interface DayTargets {
 }
 
 /**
+ * Назначение, действующее в этот день (ADR-0078): завтра может начаться новая
+ * версия с другими целями и другим числом приёмов. Правило выбора — на
+ * сервере. Потребители — `DayComposer` (кабинет семьи и карта пациента).
+ */
+export function useDayPrescriptionQuery(
+  patientId: string | null,
+  date: string,
+) {
+  return useQuery({
+    queryKey: ["prescription-on", patientId, date],
+    enabled: patientId !== null,
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/prescriptions/on",
+        {
+          params: {
+            path: { patient_id: patientId ?? "" },
+            query: { date },
+          },
+        },
+      );
+      if (error || !data) {
+        throw error ?? new Error("Empty day prescription response");
+      }
+      return data.prescription ?? null;
+    },
+  });
+}
+
+/**
  * Сколько приёмов пищи назначено ребёнку сейчас.
  *
- * Без даты, в отличие от `useDayTargets`: норма дня относится к конкретному
- * дню, а число приёмов — это форма плана, и она нужна на любой дате. Иначе
- * вчерашний день пришлось бы рисовать четырьмя приёмами, а сегодняшний —
- * шестью, при одном и том же назначении.
+ * Для экранов без одного дня (неделя, «добавить в меню»): форма плана на
+ * сегодня. Экран одного дня берёт приёмы из `useDayTargets` — назначения
+ * ЭТОГО дня.
  */
 export function useMealsPerDay(patientId: string | null): number | null {
   const overview = useQuery(patientOverviewQuery(patientId));
@@ -498,23 +528,15 @@ export function useMealsPerDay(patientId: string | null): number | null {
 }
 
 /**
- * Нормы дня для показа остатка «осталось до цели» (правило П18 UI-канона).
- *
- * Источник тот же, что у вердикта, — сводка пациента, и ограничение то же:
- * сводка относится к сегодняшнему дню в часовом поясе установки. Для прочих
- * дат остаток не показывается: назначение append-only, и вычитать сегодняшнюю
- * норму из состава прошлой даты значило бы сравнивать день с нормой, которая
- * тогда могла быть другой.
+ * Нормы дня для показа остатка «осталось до цели» (правило П18 UI-канона) —
+ * по назначению этого дня (ADR-0078), а не по сегодняшнему.
  */
 export function useDayTargets(
   patientId: string | null,
   date: string,
 ): DayTargets | null {
-  const overview = useQuery(patientOverviewQuery(patientId));
-
-  const prescription = overview.data?.prescription;
-
-  if (overview.data?.date !== date || !prescription) return null;
+  const prescription = useDayPrescriptionQuery(patientId, date).data ?? null;
+  if (prescription === null) return null;
 
   return {
     kcalPerDay: prescription.kcal_per_day,

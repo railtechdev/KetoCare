@@ -85,6 +85,8 @@ class TestRatioDeviationDoesNotCrossEngineMajors:
         assert rows["days_compared"] == 2
         assert rows["days_other_engine"] == 0
         assert rows["ratio_mean_deviation"] == pytest.approx(0.0)
+        # Дни +0,2 и −0,2 со знаком гасят друг друга; по модулю — 0,2.
+        assert rows["ratio_mean_abs_deviation"] == pytest.approx(0.2)
 
     def test_day_without_a_version_is_not_averaged_in(self) -> None:
         """Версия не записана — по какому правилу посчитано, неизвестно."""

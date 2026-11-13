@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..models import (
     DoctorSummary,
     KetoneLog,
@@ -303,12 +304,12 @@ async def days_with_entries(
     days: set[date] = set()
     for model in _DIARY_TABLES:
         rows = await session.scalars(
-            # Сутки считаются в UTC явно. Голый `date(occurred_at)` над
-            # timestamptz режет по зоне сессии БД, а остальные ряды сводки
-            # получают дату питоновским `.date()` — то есть в UTC. Разойдясь,
-            # эти два способа дали бы «дней с записями» и «приступов по дням»,
+            # Сутки — местные, по часам клиники, явно. Голый `date(occurred_at)`
+            # над timestamptz режет по зоне сессии БД, а остальные ряды сводки
+            # получают дату через `core.clock.local_date`. Разойдясь, эти два
+            # способа дали бы «дней с записями» и «приступов по дням»,
             # посчитанные по разным суткам, в одном документе.
-            select(func.date(func.timezone("UTC", model.occurred_at)))
+            select(func.date(func.timezone(get_settings().tz, model.occurred_at)))
             .where(
                 model.patient_id == patient_id,
                 model.deleted_at.is_(None),

@@ -168,11 +168,19 @@ export function RecipeList({
                       конкретного ребёнка и считается сервером в меню. */}
                   <RatioBadge ratio={recipe.computed?.ratio ?? null} />
                   <span className="text-sm text-muted-foreground tabular-nums">
-                    {recipe.computed
-                      ? t("card.kcal", {
-                          value: formatKcal(recipe.computed.kcal),
+                    {/* На порцию, как в Mini App и как считается день: число
+                        всего выхода без подписи семья сравнивала с порцией в
+                        приложении и видела «другие» калории (аудит расчётов
+                        13.11.2026). */}
+                    {recipe.per_portion
+                      ? t("card.kcalPerPortion", {
+                          value: formatKcal(recipe.per_portion.kcal),
                         })
-                      : t("card.noComputed")}
+                      : recipe.computed
+                        ? t("card.kcalWhole", {
+                            value: formatKcal(recipe.computed.kcal),
+                          })
+                        : t("card.noComputed")}
                   </span>
                 </p>
               </div>

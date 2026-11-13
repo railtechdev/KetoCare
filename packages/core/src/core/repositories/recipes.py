@@ -299,3 +299,33 @@ async def titles_taken(session: AsyncSession, *, titles: list[str]) -> set[str]:
         )
     )
     return {title.casefold().strip() for title in rows}
+
+
+async def using_product(session: AsyncSession, *, product_id: uuid.UUID) -> list[Recipe]:
+    """Рецепты, в составе которых есть продукт, — для пересчёта после его правки."""
+
+    stmt = (
+        select(Recipe)
+        .where(
+            Recipe.id.in_(
+                select(RecipeIngredient.recipe_id).where(RecipeIngredient.product_id == product_id)
+            )
+        )
+        .order_by(Recipe.id)
+    )
+    return list(await session.scalars(stmt))
+
+
+async def set_computed(
+    session: AsyncSession,
+    *,
+    recipe: Recipe,
+    computed: dict[str, Any] | None,
+    engine_version: str | None,
+) -> Recipe:
+    """Только показатели и версия ядра: состав, статус и текст не трогаются."""
+
+    recipe.computed = computed
+    recipe.engine_version = engine_version
+    await session.flush()
+    return recipe

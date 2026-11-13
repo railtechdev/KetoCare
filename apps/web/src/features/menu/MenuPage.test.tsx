@@ -44,6 +44,13 @@ const MENU = {
   updated_at: "2026-08-28T06:00:00Z",
   updated_by_name: "Анна Петровна",
   updated_by_role: "dietitian",
+  // Вердикт приходит с меню дня — по назначению этого дня (ADR-0078).
+  tolerance: {
+    ratio_within_tolerance: false,
+    kcal_within_tolerance: true,
+    carbs_within_limit: true,
+  },
+  tolerance_gap: null,
   items: [
     {
       id: "item-1",
@@ -78,9 +85,9 @@ const MENU = {
   ],
 };
 
-/** Сводка пациента с другим числом назначенных приёмов пищи. */
-function withMealsPerDay(meals: number) {
-  const answer = respond("/api/v1/patients/{patient_id}/overview") as {
+/** Сводка или назначение дня с другим числом назначенных приёмов пищи. */
+function withMealsPerDay(meals: number, path: string) {
+  const answer = respond(path) as {
     data: { prescription: Record<string, unknown> };
   };
   return {
@@ -90,6 +97,11 @@ function withMealsPerDay(meals: number) {
     },
   };
 }
+
+const PRESCRIPTION_PATHS = new Set([
+  "/api/v1/patients/{patient_id}/overview",
+  "/api/v1/patients/{patient_id}/prescriptions/on",
+]);
 
 function respond(path: string) {
   if (path === "/api/v1/patients") {
@@ -122,6 +134,14 @@ function respond(path: string) {
         },
         seizures_today: { entries: 0, count: 0 },
       },
+    };
+  }
+  if (path === "/api/v1/patients/{patient_id}/prescriptions/on") {
+    const overview = respond("/api/v1/patients/{patient_id}/overview") as {
+      data: { prescription: unknown };
+    };
+    return {
+      data: { date: todayIso(), prescription: overview.data.prescription },
     };
   }
   if (path === "/api/v1/patients/{patient_id}/custom-dishes") {
@@ -361,9 +381,7 @@ describe("MenuPage", () => {
     // шести было нельзя (ADR-0029).
     (api.GET as unknown as Mock).mockImplementation((path: string) =>
       Promise.resolve(
-        path === "/api/v1/patients/{patient_id}/overview"
-          ? withMealsPerDay(6)
-          : respond(path),
+        PRESCRIPTION_PATHS.has(path) ? withMealsPerDay(6, path) : respond(path),
       ),
     );
     renderPage();
@@ -381,8 +399,8 @@ describe("MenuPage", () => {
     // блюдо пропало бы из плана молча, оставшись в итогах дня.
     (api.GET as unknown as Mock).mockImplementation((path: string) =>
       Promise.resolve(
-        path === "/api/v1/patients/{patient_id}/overview"
-          ? withMealsPerDay(2)
+        PRESCRIPTION_PATHS.has(path)
+          ? withMealsPerDay(2, path)
           : path === "/api/v1/patients/{patient_id}/menus"
             ? {
                 data: {

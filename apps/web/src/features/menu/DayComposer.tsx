@@ -116,7 +116,10 @@ export function DayComposer({
   const plannedMeals = new Set(items.map((item) => item.meal_index)).size;
   // Сколько приёмов показывать. До ADR-0029 их было ровно четыре, и назначение
   // на шесть приёмов в дне не раскладывалось вовсе.
-  const mealsPerDay = useMealsPerDay(patientId);
+  // Приёмы — по назначению ЭТОГО дня (ADR-0078); пока оно не пришло — по
+  // сегодняшнему, чтобы день не раскладывался заново на глазах.
+  const todayMeals = useMealsPerDay(patientId);
+  const mealsPerDay = targets?.mealsPerDay ?? todayMeals;
   const meals = mealIndexes(mealsPerDay, items);
 
   // Панель добавления закрывается только после ответа сервера: закрытая

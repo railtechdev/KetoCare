@@ -16,7 +16,6 @@ import { RemoveButton } from "../../components/RemoveButton";
 import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
 import { errorMessageOf } from "../../lib/api";
 import { useTelegramBack } from "../../lib/useTelegram";
-import { usePatientOverview } from "../home/useOverview";
 import { RecipeCard } from "../recipes/RecipesScreen";
 import type { Session } from "../session/useSession";
 import { ComposePanel, type ComposeChoice } from "./ComposePanel";
@@ -31,7 +30,13 @@ import {
 } from "./dayPlan";
 import { MealItem } from "./MealItem";
 import type { Menu, MenuItem } from "./useMenu";
-import { dayAt, isPlanChanged, useMarkEaten, useMenu } from "./useMenu";
+import {
+  dayAt,
+  isPlanChanged,
+  useDayPrescription,
+  useMarkEaten,
+  useMenu,
+} from "./useMenu";
 import { useSaveMenu } from "./useSaveMenu";
 
 /**
@@ -90,11 +95,11 @@ export function MenuScreen({
   // отказ добавления блюда — в панели сборки.
   const copy = useSaveMenu(session.patientId, day);
   // Число приёмов задаёт врач; без назначения раскладывать день не по чему.
-  const overview = usePatientOverview(session.patientId);
-  const prescription = overview.data?.prescription ?? null;
+  // Назначение — ЭТОГО дня: завтра может начаться новая версия (ADR-0078), и
+  // сегодняшняя сводка для вчера и завтра не годится.
+  const dayPrescription = useDayPrescription(session.patientId, day);
+  const prescription = dayPrescription.data ?? null;
   const meals = mealNumbers(prescription?.meals_per_day ?? null);
-  // Цели — из назначения, а не из сводки за день: сводка посчитана для
-  // сегодня, а назначение действует и завтра.
   const targets: DayTargets | null =
     prescription === null
       ? null
@@ -127,15 +132,15 @@ export function MenuScreen({
       ? copiedDay(previous.data ?? null, menu.data ?? null)
       : null;
 
-  // Вердикт о допуске сервер считает только за сегодня и отдаёт в сводке.
-  // Пока сводка перезагружается после правки меню, вердикт относится к
-  // прежнему составу: лучше промолчать, чем показать чужое.
+  // Вердикт о допуске считает сервер — за любой день и по назначению этого
+  // дня — и отдаёт вместе с меню. Пока состав сохраняется или перечитывается,
+  // вердикт относится к прежнему составу: лучше промолчать, чем показать чужое.
   const verdictFresh =
-    overview.isSuccess && !overview.isFetching && overview.data.date === day;
+    menu.isSuccess && !menu.isFetching && !save.isPending && !copy.isPending;
   const verdict: DayVerdictInput = {
-    otherDay: dayOffset !== 0,
-    tolerance: verdictFresh ? (overview.data.day?.tolerance ?? null) : null,
-    gap: verdictFresh ? (overview.data.day?.tolerance_gap ?? null) : null,
+    otherDay: false,
+    tolerance: verdictFresh ? (menu.data?.tolerance ?? null) : null,
+    gap: verdictFresh ? (menu.data?.tolerance_gap ?? null) : null,
   };
 
   const addDish = (
@@ -239,7 +244,7 @@ export function MenuScreen({
                 {/* Без назначения приёмов нет: их задаёт врач (ADR-0029).
                     «Назначения нет» — утверждение о клиническом факте, и
                     говорить его из незнания нельзя: сводка могла ещё не прийти. */}
-                {!overview.isSuccess ? (
+                {!dayPrescription.isSuccess ? (
                   <p className="m-0 text-muted-foreground">
                     {t("menu.compose.prescriptionUnknown")}
                   </p>

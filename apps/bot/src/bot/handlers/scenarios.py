@@ -1553,7 +1553,9 @@ def _grams(value: Any) -> str:
         number = float(value)
     except (TypeError, ValueError):
         return "?"
-    return str(int(number)) if number == int(number) else f"{number:.1f}"
+    # С запятой, как в эхе записи (`_format_value`) и в приложении: «12,5 г»,
+    # а не «12.5 г» (аудит расчётов 13.11.2026).
+    return str(int(number)) if number == int(number) else f"{number:.1f}".replace(".", ",")
 
 
 @router.callback_query(Meal.confirm, F.data == keyboards.CONFIRM_DATA)

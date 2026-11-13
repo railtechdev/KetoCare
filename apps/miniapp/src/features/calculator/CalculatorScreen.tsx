@@ -114,9 +114,11 @@ export function CalculatorScreen({ session }: { session: Session }) {
   const touched = useRef(false);
 
   useEffect(() => {
-    if (suggested === null || touched.current) return;
-    setRatio((current) => (current === "" ? String(suggested.ratio) : current));
-    setKcal((current) => (current === "" ? String(suggested.kcal) : current));
+    if (touched.current || suggested === null) return;
+    // Пока человек цель не правил, она СЛЕДУЕТ назначению: новое назначение
+    // заменяет её, а не остаётся под прежней (аудит расчётов 13.11.2026).
+    setRatio(String(suggested.ratio));
+    setKcal(String(suggested.kcal));
   }, [suggested]);
 
   /**

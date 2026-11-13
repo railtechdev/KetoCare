@@ -87,3 +87,28 @@ async def soft_delete(session: AsyncSession, *, dish: CustomDish) -> CustomDish:
     dish.deleted_at = datetime.now(UTC)
     await session.flush()
     return dish
+
+
+async def using_product(session: AsyncSession, *, product_id: uuid.UUID) -> list[CustomDish]:
+    """Живые блюда, в составе которых есть продукт, — для пересчёта после его правки."""
+
+    stmt = (
+        select(CustomDish)
+        .where(
+            CustomDish.deleted_at.is_(None),
+            CustomDish.ingredients.contains([{"product_id": str(product_id)}]),
+        )
+        .order_by(CustomDish.id)
+    )
+    return list(await session.scalars(stmt))
+
+
+async def set_computed(
+    session: AsyncSession, *, dish: CustomDish, computed: dict[str, Any], engine_version: str
+) -> CustomDish:
+    """Только показатели и версия ядра: название и состав не трогаются."""
+
+    dish.computed = computed
+    dish.engine_version = engine_version
+    await session.flush()
+    return dish

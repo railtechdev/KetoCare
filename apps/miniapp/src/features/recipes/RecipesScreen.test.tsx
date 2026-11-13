@@ -712,6 +712,12 @@ describe("рецепты ↔ меню и назначение (ADR-0075)", () =>
           response: { status: 200 },
         });
       }
+      if (path.endsWith("/prescriptions/on")) {
+        return Promise.resolve({
+          data: { prescription: { meals_per_day: 3 } },
+          response: { status: 200 },
+        });
+      }
       if (path.endsWith("/menus")) {
         return Promise.resolve({ response: { status: 404 } });
       }

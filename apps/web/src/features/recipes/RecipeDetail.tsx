@@ -372,6 +372,11 @@ export function RecipeDetail({
               {/* Без вердикта о допуске: соотношение рецепта — характеристика
                       блюда, а не соответствие назначению конкретного ребёнка. */}
               <RatioBadge ratio={computed.ratio} />
+              {/* Весь выход рецепта — подписан: рядом стоит порция, и число
+                  без подписи читали как порцию. */}
+              {data.servings > 1 && (
+                <span className="font-medium">{t("detail.whole")}</span>
+              )}
               <span className="tabular-nums">
                 {t("detail.kcal", { value: formatKcal(computed.kcal) })}
               </span>
