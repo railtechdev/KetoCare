@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Path
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import prescriptions as prescriptions_repo
-from keto_engine import max_non_fat_grams
+from keto_engine import max_non_fat_grams, meal_macro_goal
 
 from .. import after_commit
 from ..deps.auth import PatientAccessDep, SessionDep, require_roles
@@ -78,6 +78,39 @@ async def create_prescription(
             details={
                 "protein_g": payload.protein_g,
                 "max_protein_g": round(max_protein, 1),
+            },
+        )
+
+    # Лимит углеводов не может быть выше того, что остаётся после белка: при
+    # соотношении R и калорийности K на белок с чистыми углеводами приходится
+    # K/(9R+4) г, и всё сверх этого — число, которого рацион не наберёт, не
+    # нарушив соотношение или калорийность. Такой лимит ничего не ограничивает,
+    # а семья видит его как разрешение. Так у пациента стояло 27,7 г при
+    # расчётных 6,7 г — остаток прежней калорийности (замечание медиков и аудит
+    # расчётов 13.11.2026). Ниже расчётного — можно: это более строгий выбор
+    # врача, белка в рационе тогда будет больше цели.
+    #
+    # Сравнение — с числом, которое форма показывает врачу (до десятых), поэтому
+    # допуск на округление 0,05 г.
+    derived = meal_macro_goal(
+        payload.ratio,
+        float(payload.kcal_per_day),
+        day_protein_g=payload.protein_g,
+        day_kcal=float(payload.kcal_per_day),
+    ).net_carbs_g
+    if derived is not None and payload.carbs_limit_g > derived + 0.05 + 1e-9:
+        derived_text = f"{derived:.1f}".replace(".", ",")
+        limit_text = f"{payload.carbs_limit_g:g}".replace(".", ",")
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"При соотношении {payload.ratio:g}:1, {payload.kcal_per_day} ккал в сутки "
+            f"и белке {payload.protein_g:g} г на углеводы остаётся {derived_text} г, "
+            f"а лимит задан {limit_text} г. Лимит выше расчётного рацион не наберёт, "
+            "не нарушив соотношение или калорийность. Укажите не больше "
+            f"{derived_text} г.",
+            details={
+                "carbs_limit_g": payload.carbs_limit_g,
+                "max_carbs_limit_g": round(derived, 1),
             },
         )
 

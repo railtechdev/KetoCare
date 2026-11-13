@@ -161,6 +161,7 @@ describe("computePatientFlags", () => {
           tolerance: {
             ratio_within_tolerance: false,
             kcal_within_tolerance: false,
+            carbs_within_limit: true,
           },
           engine_version: "1.0.0",
         },
@@ -180,6 +181,7 @@ describe("computePatientFlags", () => {
           tolerance: {
             ratio_within_tolerance: false,
             kcal_within_tolerance: true,
+            carbs_within_limit: true,
           },
           engine_version: "1.0.0",
         },
@@ -192,6 +194,7 @@ describe("computePatientFlags", () => {
           tolerance: {
             ratio_within_tolerance: true,
             kcal_within_tolerance: true,
+            carbs_within_limit: true,
           },
           engine_version: "1.0.0",
         },
@@ -214,6 +217,7 @@ describe("computePatientFlags", () => {
           tolerance: {
             ratio_within_tolerance: true,
             kcal_within_tolerance: false,
+            carbs_within_limit: true,
           },
           engine_version: "1.0.0",
         },
@@ -235,6 +239,7 @@ describe("computePatientFlags", () => {
           tolerance: {
             ratio_within_tolerance: null,
             kcal_within_tolerance: true,
+            carbs_within_limit: true,
           },
           engine_version: "1.0.0",
         },

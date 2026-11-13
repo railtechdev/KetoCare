@@ -26,6 +26,7 @@ describe("словарь Mini App объясняет каждую причину
         tolerance={{
           ratio_within_tolerance: null,
           kcal_within_tolerance: true,
+          carbs_within_limit: true,
         }}
         gap={null}
         kcal={500}

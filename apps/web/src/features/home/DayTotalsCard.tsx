@@ -58,7 +58,10 @@ export function DayTotalsCard({
   const tolerance = day.tolerance ?? null;
 
   const verdict = dayVerdict(tolerance, day.tolerance_gap ?? null);
-  const issues = verdict.ratioOffTolerance ? [t("day.offTolerance.ratio")] : [];
+  const issues = [
+    ...(verdict.ratioOffTolerance ? [t("day.offTolerance.ratio")] : []),
+    ...(verdict.carbsOverLimit ? [t("day.offTolerance.carbs")] : []),
+  ];
 
   return (
     <Panel title={t("day.title")}>

@@ -78,6 +78,14 @@ export function DayVerdictNote({
         </p>
       )}
 
+      {/* Лимит углеводов — граница: превышение верно в любой момент дня
+          (аудит расчётов 13.11.2026). */}
+      {verdict.carbsOverLimit && (
+        <WarningBanner level="warning" title={t("verdict.carbsOver.title")}>
+          {t("verdict.carbsOver.body")}
+        </WarningBanner>
+      )}
+
       {verdict.kcalBelowTarget && kcalHint && (
         <p className="m-0 text-sm text-muted-foreground">
           {targetKcal === null
