@@ -160,7 +160,8 @@ class TestReportContent:
         assert response.status_code == 200
         body = response.json()
         assert body["seizures"]["count"] == 0
-        assert body["ketones"]["mean"] is None
+        assert body["ketones_blood"]["mean"] is None
+        assert body["ketones_urine"]["mean"] is None
 
     async def test_prescription_history_is_listed(
         self, client, session, make_user, make_patient, auth_headers
