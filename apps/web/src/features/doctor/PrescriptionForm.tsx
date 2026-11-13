@@ -171,12 +171,54 @@ export function PrescriptionForm({
     Math.abs(carbsValue - derivedCarbsShown) < 0.05;
   const staleCarbsFix =
     derivedCarbsShown !== null &&
-    !carbsByHand &&
     !carbsFollow &&
     Number.isFinite(carbsValue) &&
     !carbsMatchDerived
       ? derivedCarbsShown
       : null;
+  // Набранное руками тоже сверяется с расчётом: выше расчётного сервер
+  // назначение не примет, и врач должен видеть число до отправки.
+  const manualCarbsFix =
+    derivedCarbsShown !== null &&
+    carbsByHand &&
+    Number.isFinite(carbsValue) &&
+    !carbsMatchDerived
+      ? derivedCarbsShown
+      : null;
+  const carbsFix = carbsByHand ? manualCarbsFix : staleCarbsFix;
+  const applyDerivedCarbs = (derived: number) => {
+    setValue("carbsLimitG", derived, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setCarbsByHand(false);
+    setCarbsLatched(true);
+  };
+
+  // Пустое поле без расчёта молчало, и диетолог набирала лимит руками,
+  // сверяясь с KDC (замечание 14.11.2026): расчёт ждал кетосоотношения, а
+  // форма об этом не говорила. Теперь поле называет, чего не хватает.
+  const ratioValue = watch("ratio");
+  const kcalValue = watch("kcalPerDay");
+  const missingForCarbs = [
+    ...(Number.isFinite(ratioValue) && ratioValue >= 1
+      ? []
+      : [t("prescription.carbsNeeds.ratio")]),
+    ...(Number.isFinite(kcalValue) && kcalValue > 0
+      ? []
+      : [t("prescription.carbsNeeds.kcal")]),
+    ...(Number.isFinite(proteinValue) && proteinValue >= 0
+      ? []
+      : [t("prescription.carbsNeeds.protein")]),
+  ];
+  const carbsWaiting =
+    !Number.isFinite(carbsValue) && missingForCarbs.length > 0
+      ? t("prescription.carbsWaiting", { missing: missingForCarbs.join(", ") })
+      : null;
+  const messageFor = (field: (typeof VALIDATED_FIELDS)[number]) =>
+    field.name === "carbsLimitG" && carbsWaiting !== null
+      ? carbsWaiting
+      : t(`prescription.errors.${field.messageKey}`);
 
   // Сводка появляется только после неудачной отправки и повторяет тексты из-под
   // полей (правило П8 канона). Без неё врач, отправивший форму с клавиатуры,
@@ -189,7 +231,7 @@ export function PrescriptionForm({
           (field) => errors[field.name] !== undefined,
         ).map((field) => ({
           fieldId: `${ids}-${field.anchor}`,
-          message: t(`prescription.errors.${field.messageKey}`),
+          message: messageFor(field),
         }));
 
   return (
@@ -271,37 +313,48 @@ export function PrescriptionForm({
           min={0}
           step={0.1}
           label={t("fields.carbsLimitInput")}
-          error={errors.carbsLimitG && t("prescription.errors.carbsLimit")}
+          error={
+            errors.carbsLimitG &&
+            (carbsWaiting ?? t("prescription.errors.carbsLimit"))
+          }
           hint={
-            carbsByHand ? undefined : staleCarbsFix !== null ? (
+            carbsFix !== null ? (
               <>
-                {t("prescription.carbsStale", {
-                  derived: formatMass(staleCarbsFix),
-                })}{" "}
+                {t(
+                  !carbsByHand
+                    ? "prescription.carbsStale"
+                    : carbsValue > carbsFix
+                      ? "prescription.carbsManualOver"
+                      : "prescription.carbsManual",
+                  { derived: formatMass(carbsFix) },
+                )}{" "}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setValue("carbsLimitG", staleCarbsFix, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                    setCarbsLatched(true);
-                  }}
+                  onClick={() => applyDerivedCarbs(carbsFix)}
                 >
                   {t("prescription.carbsApply", {
-                    derived: formatMass(staleCarbsFix),
+                    derived: formatMass(carbsFix),
                   })}
                 </Button>
               </>
             ) : carbsMatchDerived ? (
               t("prescription.carbsDerived")
-            ) : undefined
+            ) : errors.carbsLimitG ? undefined : (
+              (carbsWaiting ?? undefined)
+            )
           }
           {...register("carbsLimitG", {
             valueAsNumber: true,
             onChange: () => setCarbsByHand(true),
+            // Очищенное поле возвращается к расчёту: пустой лимит — это не
+            // выбор врача, а «посчитай сам».
+            onBlur: (event: { target: { value: string } }) => {
+              if (event.target.value.trim() !== "") return;
+              setCarbsByHand(false);
+              setCarbsLatched(true);
+            },
           })}
         />
 
