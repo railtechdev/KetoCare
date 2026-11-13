@@ -168,6 +168,43 @@ class TestRoundingRepair:
         assert used.get("fat", 0.0) <= 23.0
 
 
+class TestRoundingKeepsHardBounds:
+    """Минимум белка и лимит углеводов держатся и после округления до грамма.
+
+    Аудит расчётов 13.11.2026: починка округления запускалась только по
+    соотношению, и подбор молча отдавал блюдо с белком ниже цели или
+    углеводами выше лимита на 0,1–0,2 г. Случаи найдены перебором на
+    продуктах USDA.
+    """
+
+    COTTAGE = Ingredient("cottage", kcal=0.0, fat=9.0, protein=16.0, carbs=2.0)
+    MAYO = Ingredient("mayo", kcal=0.0, fat=75.0, protein=1.0, carbs=0.6)
+    BROCCOLI = Ingredient("broccoli", kcal=0.0, fat=0.4, protein=2.8, carbs=6.6, fiber=2.6)
+    AVOCADO = Ingredient("avocado", kcal=0.0, fat=14.7, protein=2.0, carbs=8.5, fiber=6.7)
+    MACADAMIA = Ingredient("macadamia", kcal=0.0, fat=76.0, protein=7.8, carbs=13.4, fiber=8.0)
+    CUCUMBER = Ingredient("cucumber", kcal=0.0, fat=0.1, protein=0.7, carbs=3.6, fiber=0.5)
+    APPLE = Ingredient("apple", kcal=0.0, fat=0.2, protein=0.3, carbs=13.8, fiber=2.4)
+
+    def test_protein_minimum_repaired_after_rounding(self) -> None:
+        # Before 1.8.0: 31/22/7 g gave 5.38 g protein against a 5.4 g minimum.
+        targets = Targets(ratio=3.0, kcal=200.0, protein_min_g=5.4)
+        result = solve([self.COTTAGE, self.MAYO, self.BROCCOLI], targets)
+        assert result.dish.protein_g >= 5.4
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+
+    def test_carbs_limit_kept_or_refused(self) -> None:
+        # Repair finds no whole-gram dish within 4.8 g of carbs: a refusal with
+        # the reason, not 4.81 g handed back as a solution.
+        targets = Targets(ratio=3.0, kcal=300.0, carbs_max_g=4.8)
+        with pytest.raises(InfeasibleError, match="лимите 4.8 г"):
+            solve([self.AVOCADO, self.MACADAMIA, self.COTTAGE], targets)
+
+    def test_protein_minimum_kept_or_refused(self) -> None:
+        targets = Targets(ratio=2.0, kcal=100.0, protein_min_g=1.4)
+        with pytest.raises(InfeasibleError, match="белок 1.4 г"):
+            solve([self.CUCUMBER, self.MACADAMIA, self.APPLE], targets)
+
+
 class TestRepairInternals:
     """Ветки починки округления, недостижимые через обычный solve()."""
 
