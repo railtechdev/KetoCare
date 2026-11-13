@@ -207,6 +207,30 @@ describe("углеводы считаются сами", () => {
   });
 });
 
+describe("углеводы из прежней версии (замечание медиков 13.11.2026)", () => {
+  it("называет расхождение с расчётом и ставит расчётное число кнопкой", async () => {
+    renderForm();
+    const carbs = screen.getByLabelText(/Углеводы/);
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Поставить 10,3 г" }),
+    );
+    expect(valueControl(carbs)).toHaveValue(10.3);
+    expect(screen.getByText(/Рассчитано по калорийности/)).toBeInTheDocument();
+    expect(screen.queryByText(/из прежнего назначения/)).toBeNull();
+  });
+
+  it("молчит, когда записанное число совпадает с расчётом", async () => {
+    (api.POST as Mock).mockResolvedValue({
+      data: { ...GOAL, day: { ...GOAL.day, net_carbs_g: 10.04 } },
+    });
+    renderForm();
+    await screen.findByText(/120,0 г/);
+    expect(screen.queryByText(/из прежнего назначения/)).toBeNull();
+    expect(screen.getByText(/Рассчитано по калорийности/)).toBeInTheDocument();
+  });
+});
+
 describe("углеводы без числа приёмов (замечание диетолога 12.11.2026)", () => {
   it("первое назначение получает углеводы, пока приёмы не введены", async () => {
     (api.POST as Mock).mockResolvedValue({ data: { ...GOAL, meal: null } });
