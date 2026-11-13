@@ -88,6 +88,8 @@ describe("карточка рецепта в адресе", () => {
 
     expect(await screen.findByText("Омлет на сливках")).toBeInTheDocument();
     expect(screen.queryByText("Взбить и пожарить.")).not.toBeInTheDocument();
+    // Калорийность в карточке — на порцию и с подписью, как в Mini App.
+    expect(screen.getByText("400 ккал на порцию")).toBeInTheDocument();
   });
 });
 
