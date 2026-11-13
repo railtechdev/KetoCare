@@ -295,6 +295,115 @@ describe("углеводы без числа приёмов (замечание 
   });
 });
 
+describe("новый пациент: углеводы без ручного ввода (замечание диетолога 14.11.2026)", () => {
+  function renderNew(onSubmit = vi.fn()) {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PrescriptionForm
+          defaultValues={{
+            kcalPerDay: 1380,
+            proteinG: 23,
+            carbsLimitG: Number.NaN,
+            mealsPerDay: 5,
+            effectiveFrom: "2026-11-13",
+          }}
+          pending={false}
+          error={null}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    );
+    return onSubmit;
+  }
+
+  it("пустое поле называет, чего не хватает для расчёта", async () => {
+    const user = userEvent.setup();
+    const onSubmit = renderNew();
+
+    expect(
+      screen.getByText("Посчитается само. Не хватает: кетосоотношение."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Сохранить|Создать/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    // В сводке и под полем — что сделать, а не «число не меньше нуля».
+    expect(
+      screen.getAllByText("Посчитается само. Не хватает: кетосоотношение."),
+    ).toHaveLength(2);
+    expect(screen.queryByText(/число не меньше нуля/)).toBeNull();
+  });
+
+  it("выбрали соотношение — лимит встал сам", async () => {
+    const user = userEvent.setup();
+    renderNew();
+
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText(/Кетосоотношение/)),
+      "3",
+    );
+
+    const carbs = screen.getByLabelText(/Углеводы/);
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
+    expect(screen.getByText(/Рассчитано по калорийности/)).toBeInTheDocument();
+    expect(screen.queryByText(/Не хватает/)).toBeNull();
+  });
+
+  it("набранное руками выше расчёта названо, расчётное ставится кнопкой", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText(/Кетосоотношение/)),
+      "3",
+    );
+    const carbs = screen.getByLabelText(/Углеводы/);
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
+
+    await user.clear(carbs);
+    await user.type(carbs, "27.7");
+    expect(
+      screen.getByText(/такое назначение не сохранится/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Поставить 10,3 г" }));
+
+    expect(valueControl(carbs)).toHaveValue(10.3);
+    expect(screen.getByText(/Рассчитано по калорийности/)).toBeInTheDocument();
+  });
+
+  it("строже расчёта — можно, без предупреждения о сохранении", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText(/Кетосоотношение/)),
+      "3",
+    );
+    const carbs = screen.getByLabelText(/Углеводы/);
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
+
+    await user.clear(carbs);
+    await user.type(carbs, "8");
+    expect(screen.getByText(/выходит 10,3 г\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/не сохранится/)).toBeNull();
+  });
+
+  it("очищенное поле возвращается к расчёту", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await user.selectOptions(
+      nativeSelect(screen.getByLabelText(/Кетосоотношение/)),
+      "3",
+    );
+    const carbs = screen.getByLabelText(/Углеводы/);
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
+
+    await user.clear(carbs);
+    await user.type(carbs, "8");
+    await user.clear(carbs);
+    await user.tab();
+
+    await vi.waitFor(() => expect(valueControl(carbs)).toHaveValue(10.3));
+  });
+});
+
 describe("жидкость по весу (Холлидей — Сегар)", () => {
   function renderWithHint(
     onSubmit = vi.fn(),
