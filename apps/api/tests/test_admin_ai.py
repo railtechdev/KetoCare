@@ -21,6 +21,21 @@ async def admin(make_user):
     return await make_user(UserRole.ADMIN)
 
 
+@pytest.fixture(autouse=True)
+def ai_environment(monkeypatch):
+    """The environment fallback these tests rely on, stated rather than taken
+    from whatever `.env` the run has: CI leaves the key and models empty, a
+    developer's machine does not."""
+
+    from core.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-environment-key")
+    monkeypatch.setattr(settings, "ai_model_fast", "claude-haiku-4-5")
+    monkeypatch.setattr(settings, "ai_model_smart", "claude-opus-5")
+    monkeypatch.setattr(settings, "ai_provider_hosts", "")
+
+
 class TestAccess:
     @pytest.mark.parametrize("role", [UserRole.DOCTOR, UserRole.DIETITIAN, UserRole.PARENT])
     async def test_only_the_administrator(self, client, make_user, auth_headers, role) -> None:
@@ -351,7 +366,11 @@ class TestKeyCheck:
 
 
 class TestProviders:
-    """A provider is a row in the cabinet, not a client in the code (ADR-0082)."""
+    """A provider is a row in the cabinet, not a client in the code (ADR-0082).
+
+    The consumer of `/admin/ai` is the admin cabinet
+    (`apps/web/src/features/admin/useAiSettings.ts`): the shapes asserted here
+    are what it reads."""
 
     async def test_connect_add_a_model_and_choose_it(
         self, client, session, admin, auth_headers
@@ -461,6 +480,166 @@ class TestProviders:
         )
         response = await client.put(
             f"{URL}/providers/openai", json={"kind": "gemini", "name": "OpenAI"}, headers=headers
+        )
+        assert response.status_code == 422
+
+
+class TestReviewFindings:
+    """Found by the safety review of ADR-0082."""
+
+    async def _openai_with_key(self, client, headers) -> None:
+        await client.post(
+            f"{URL}/providers",
+            json={
+                "kind": "openai_compatible",
+                "name": "Шлюз",
+                "base_url": "https://a.example.org/v1",
+            },
+            headers=headers,
+        )
+        await client.put(
+            f"{URL}/providers/openai-compatible/key",
+            json={"api_key": "gw-key-0042-long"},
+            headers=headers,
+        )
+
+    async def test_a_new_address_drops_the_key(
+        self, client, session, admin, auth_headers, monkeypatch
+    ) -> None:
+        """Otherwise the stored key goes to whatever answers at the new address."""
+
+        headers = auth_headers(admin)
+        await self._openai_with_key(client, headers)
+        moved = await client.put(
+            f"{URL}/providers/openai-compatible",
+            json={
+                "kind": "openai_compatible",
+                "name": "Шлюз",
+                "base_url": "https://attacker.example.net/v1",
+            },
+            headers=headers,
+        )
+        assert moved.status_code == 200, moved.text
+        assert _provider(moved.json(), "openai-compatible")["key"]["configured"] is False
+
+        sent: list[str] = []
+
+        async def fake(provider, api_key: str) -> tuple[int, list[str]]:
+            sent.append(api_key)
+            return 200, []
+
+        monkeypatch.setattr(service, "fetch_model_ids", fake)
+        await client.post(f"{URL}/providers/openai-compatible/check", json={}, headers=headers)
+        assert sent == [""]
+
+        entry = (
+            await session.scalars(
+                select(AuditLog)
+                .where(AuditLog.entity == "app_settings", AuditLog.action == "update")
+                .order_by(AuditLog.created_at.desc())
+            )
+        ).first()
+        assert entry is not None and entry.after["key_dropped"] is True
+
+    async def test_in_use_connection_or_model_is_not_switched_off(
+        self, client, admin, auth_headers
+    ) -> None:
+        """Switched off, it would make the tasks refuse; nothing replaces it."""
+
+        headers = auth_headers(admin)
+        await self._openai_with_key(client, headers)
+        await client.put(
+            f"{URL}/models",
+            json={
+                "provider": "openai-compatible",
+                "model": "big-1",
+                "usd_per_mtok_in": "1",
+                "usd_per_mtok_out": "2",
+            },
+            headers=headers,
+        )
+        chosen = await client.put(
+            f"{URL}/groups/technical", json={"model": "openai-compatible/big-1"}, headers=headers
+        )
+        assert chosen.status_code == 200, chosen.text
+
+        off = await client.put(
+            f"{URL}/providers/openai-compatible",
+            json={
+                "kind": "openai_compatible",
+                "name": "Шлюз",
+                "base_url": "https://a.example.org/v1",
+                "enabled": False,
+            },
+            headers=headers,
+        )
+        assert off.status_code == 409
+        model_off = await client.put(
+            f"{URL}/models",
+            json={
+                "provider": "openai-compatible",
+                "model": "big-1",
+                "usd_per_mtok_in": "1",
+                "usd_per_mtok_out": "2",
+                "enabled": False,
+            },
+            headers=headers,
+        )
+        assert model_off.status_code == 409
+        no_key = await client.delete(f"{URL}/providers/openai-compatible/key", headers=headers)
+        assert no_key.status_code == 409
+
+    async def test_a_model_that_cannot_be_called_is_not_chosen(
+        self, client, admin, auth_headers
+    ) -> None:
+        headers = auth_headers(admin)
+        await client.post(
+            f"{URL}/providers", json={"kind": "openai", "name": "OpenAI"}, headers=headers
+        )
+        await client.put(
+            f"{URL}/models",
+            json={
+                "provider": "openai",
+                "model": "gpt-x",
+                "usd_per_mtok_in": "1",
+                "usd_per_mtok_out": "2",
+            },
+            headers=headers,
+        )
+        response = await client.put(
+            f"{URL}/groups/technical", json={"model": "openai/gpt-x"}, headers=headers
+        )
+        assert response.status_code == 422, "no key yet"
+
+    async def test_host_off_the_servers_list_is_refused(
+        self, client, admin, auth_headers, monkeypatch
+    ) -> None:
+        from core.config import get_settings
+
+        monkeypatch.setattr(get_settings(), "ai_provider_hosts", "api.openai.com, *.clinic.uz")
+        headers = auth_headers(admin)
+        refused = await client.post(
+            f"{URL}/providers",
+            json={"kind": "openai_compatible", "name": "x", "base_url": "http://10.0.0.5:8000"},
+            headers=headers,
+        )
+        assert refused.status_code == 422
+        allowed = await client.post(
+            f"{URL}/providers",
+            json={"kind": "ollama", "name": "x", "base_url": "http://llm.clinic.uz:11434"},
+            headers=headers,
+        )
+        assert allowed.status_code == 200, allowed.text
+
+    @pytest.mark.parametrize(
+        "base_url",
+        ["http://host/internal/path?x=", "http://host#x", "http://user:pw@host", "http://host:abc"],
+    )
+    async def test_address_tricks_are_refused(self, client, admin, auth_headers, base_url) -> None:
+        response = await client.post(
+            f"{URL}/providers",
+            json={"kind": "openai_compatible", "name": "x", "base_url": base_url},
+            headers=auth_headers(admin),
         )
         assert response.status_code == 422
 

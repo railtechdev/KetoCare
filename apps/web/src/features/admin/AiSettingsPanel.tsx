@@ -298,11 +298,18 @@ function ProvidersSection({
                     {!provider.enabled && (
                       <Badge variant="secondary">{t("ai.providers.off")}</Badge>
                     )}
-                    {provider.enabled && !provider.ready && (
+                    {!provider.host_allowed && (
                       <Badge variant="secondary">
-                        {t("ai.providers.notReady")}
+                        {t("ai.providers.hostNotAllowed")}
                       </Badge>
                     )}
+                    {provider.enabled &&
+                      provider.host_allowed &&
+                      !provider.ready && (
+                        <Badge variant="secondary">
+                          {t("ai.providers.notReady")}
+                        </Badge>
+                      )}
                   </span>
                   <span className="block text-muted-foreground">
                     {t(`ai.providerKinds.${provider.kind}.title`)}

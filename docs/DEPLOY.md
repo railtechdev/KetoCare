@@ -268,7 +268,8 @@ restrict,command="/srv/ketocare-deploy.sh" ssh-ed25519 …
 становятся запасными.
 Переменные (там же, вкладка Variables): `WEB_ORIGIN`, `MINIAPP_ORIGIN`,
 `MINIAPP_URL`, `AI_MODEL_FAST`, `AI_MODEL_SMART`, `AI_DAILY_BUDGET_USD`,
-`AI_USER_DAILY_LIMIT`, `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
+`AI_USER_DAILY_LIMIT`, `AI_PROVIDER_HOSTS` (куда подключения к моделям из кабинета могут
+отправлять запросы, ADR-0082; пусто — любой адрес, на бою стоит задать), `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,
 `PUBLIC_CONTACT_EMAIL`, `PUBLIC_TELEGRAM_URL`, `LANDING_INDEXABLE`, `TZ`,
 `SENTRY_ENVIRONMENT` (по умолчанию `production`).
 

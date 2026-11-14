@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import enum
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
@@ -38,6 +39,7 @@ from .ai_catalog import (
     Provider,
     ProviderKind,
     ProviderSettings,
+    host_allowed,
     is_provider_id,
     merge_models,
 )
@@ -302,11 +304,15 @@ def _stored_key(rows: dict[str, _Row], settings: Settings, provider_id: str) -> 
         # A malformed SETTINGS_ENCRYPTION_KEY must not take AI and the admin
         # screen down: the key reads as unreadable and the environment works on.
         value = None
+    # A connection's row also changes when its name or address does: the key
+    # carries its own author and time, so "who replaced the key" stays true.
+    key_at = row.value.get("key_at")
+    key_by = row.value.get("key_by")
     return StoredKey(
         value=value,
         hint=str(row.value.get("hint", "")),
-        updated_at=row.updated_at,
-        updated_by=row.updated_by,
+        updated_at=datetime.fromisoformat(key_at) if isinstance(key_at, str) else row.updated_at,
+        updated_by=uuid.UUID(key_by) if isinstance(key_by, str) else row.updated_by,
     )
 
 
@@ -350,6 +356,7 @@ def _providers(rows: dict[str, _Row], settings: Settings) -> dict[str, Provider]
             continue
         typed = _stored_key(rows, settings, provider_id)
         providers[provider_id] = Provider(
+            host_allowed=host_allowed(own.base_url, settings.ai_provider_hosts),
             id=provider_id,
             kind=own.kind,
             name=own.name,
@@ -396,44 +403,33 @@ async def overrides(
     return _project_overrides(rows), {group: _group_overrides(rows, group) for group in AiGroup}
 
 
-def task_model_candidates(
-    kind: AiJobKind, own: GroupOverrides, settings: Settings
-) -> list[tuple[str, Literal["task", "group", "env"]]]:
-    """Where a task's model may come from, the most specific first.
-
-    A fast task without its own model takes the environment's fast one before
-    the group's: it is waited for synchronously (`POST /ai/parse`, 15 s), and a
-    group moved to a large model must not move it there by accident.
-    """
-
-    found: list[tuple[str, Literal["task", "group", "env"]]] = []
-    if own.task_models.get(kind):
-        found.append((own.task_models[kind], "task"))
-    if AI_TASKS[kind].speed == "fast" and settings.ai_model_fast:
-        found.append((settings.ai_model_fast, "env"))
-    if own.model:
-        found.append((own.model, "group"))
-    if settings.ai_model_smart:
-        found.append((settings.ai_model_smart, "env"))
-    return found
-
-
 def effective_task_model(
-    kind: AiJobKind, own: GroupOverrides, settings: Settings, models: Catalog
+    kind: AiJobKind, own: GroupOverrides, settings: Settings
 ) -> tuple[str, Literal["task", "group", "env"] | None]:
     """The model a task runs on and where it came from.
 
-    The first candidate that can be called wins: a model whose provider lost
-    its key, or that left the catalogue, does not take the task down while a
-    less specific one works. If none can be called, the most specific is
-    returned so the refusal names what the administrator chose.
+    The administrator's choice is never replaced: a model chosen for a task or
+    a group that cannot be called (its connection is off, has no key, the entry
+    is switched off) makes the task refuse, it does not quietly go to another
+    provider. A task chosen to run on a local server must not send families'
+    questions to a cloud because someone switched the server off.
+
+    Only when nothing is chosen does the environment apply. A fast task takes
+    `AI_MODEL_FAST` before the group's model and never `AI_MODEL_SMART`: it is
+    waited for synchronously (`POST /ai/parse`, 15 s), and an empty or
+    misspelt variable must be a refusal naming it, not five times the price.
     """
 
-    candidates = task_model_candidates(kind, own, settings)
-    for ref, source in candidates:
-        if models.usable(ref):
-            return ref, source
-    return candidates[0] if candidates else ("", None)
+    if own.task_models.get(kind):
+        return own.task_models[kind], "task"
+    fast = AI_TASKS[kind].speed == "fast"
+    if fast and settings.ai_model_fast:
+        return settings.ai_model_fast, "env"
+    if own.model:
+        return own.model, "group"
+    if not fast and settings.ai_model_smart:
+        return settings.ai_model_smart, "env"
+    return "", None
 
 
 async def ai_config(session: AsyncSession, settings: Settings) -> AiConfig:
@@ -451,8 +447,7 @@ async def ai_config(session: AsyncSession, settings: Settings) -> AiConfig:
             group=group,
             enabled=own.enabled,
             task_models={
-                kind: effective_task_model(kind, own, settings, models)[0]
-                for kind in kinds_of(group)
+                kind: effective_task_model(kind, own, settings)[0] for kind in kinds_of(group)
             },
             daily_budget_usd=own.daily_budget_usd,
             monthly_budget_usd=own.monthly_budget_usd,
@@ -525,18 +520,28 @@ async def new_provider_id(session: AsyncSession, kind: ProviderKind) -> str:
         number += 1
 
 
+_KEY_FIELDS = ("ciphertext", "hint", "key_at", "key_by")
+
+
 async def save_provider(
     session: AsyncSession, provider_id: str, value: ProviderSettings, *, by: Any
-) -> None:
-    """Write a connection's settings, keeping the key it already has."""
+) -> bool:
+    """Write a connection's settings. Returns whether its key was dropped.
+
+    The key is kept only while the address stays the same. A key typed for one
+    server must never be sent to another: changing the address of a connection
+    would otherwise hand its stored key to whatever answers there.
+    """
 
     if provider_id == BUILTIN_PROVIDER or not is_provider_id(provider_id):
         raise ValueError(f"Not a provider that can be stored: {provider_id!r}")
     row = await session.get(AppSetting, provider_key(provider_id))
-    kept: dict[str, Any] = {
-        name: row.value[name] for name in ("ciphertext", "hint") if row and name in row.value
-    }
+    previous = dict(row.value) if row is not None else {}
+    same_address = previous.get("base_url") == value.base_url
+    kept = {name: previous[name] for name in _KEY_FIELDS if name in previous and same_address}
+    dropped = "ciphertext" in previous and not same_address
     await _put(session, provider_key(provider_id), {**value.model_dump(mode="json"), **kept}, by)
+    return dropped
 
 
 async def remove_provider(session: AsyncSession, provider_id: str) -> bool:
@@ -556,7 +561,12 @@ async def save_key(
     """Store a provider's key encrypted; return the hint the cabinet will show."""
 
     shown = secret_box.hint(api_key)
-    secret = {"ciphertext": secret_box.encrypt(settings, api_key.strip()), "hint": shown}
+    secret: dict[str, Any] = {
+        "ciphertext": secret_box.encrypt(settings, api_key.strip()),
+        "hint": shown,
+        "key_at": datetime.now(UTC).isoformat(),
+        "key_by": str(by) if by is not None else None,
+    }
     if provider_id == BUILTIN_PROVIDER:
         await _put(session, KEY_API, secret, by)
         return shown
@@ -567,14 +577,16 @@ async def save_key(
     return shown
 
 
-async def remove_key(session: AsyncSession, provider_id: str = BUILTIN_PROVIDER) -> bool:
+async def remove_key(
+    session: AsyncSession, provider_id: str = BUILTIN_PROVIDER, *, by: Any = None
+) -> bool:
     if provider_id == BUILTIN_PROVIDER:
         return await _drop(session, KEY_API)
     row = await session.get(AppSetting, provider_key(provider_id))
     if row is None or "ciphertext" not in row.value:
         return False
-    value = {name: item for name, item in row.value.items() if name not in ("ciphertext", "hint")}
-    await _put(session, provider_key(provider_id), value, row.updated_by)
+    value = {name: item for name, item in row.value.items() if name not in _KEY_FIELDS}
+    await _put(session, provider_key(provider_id), value, by)
     return True
 
 

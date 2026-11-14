@@ -92,10 +92,17 @@ def _completion_of(response: Any) -> Completion:
     content = getattr(message, "content", None)
     text = content.strip() if isinstance(content, str) and content.strip() else None
     usage = getattr(response, "usage", None)
+    tokens_in = getattr(usage, "prompt_tokens", None)
+    tokens_out = getattr(usage, "completion_tokens", None)
+    # The carrier fills a missing `usage` with zeros. A text from nothing is
+    # not a free call — it is an unknown one: counted as zero, a gateway that
+    # omits usage would never fill any budget.
+    if text is not None and not tokens_in and not tokens_out:
+        tokens_in = tokens_out = None
     return Completion(
         text=text,
-        tokens_in=getattr(usage, "prompt_tokens", None),
-        tokens_out=getattr(usage, "completion_tokens", None),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
         stop_reason=getattr(first, "finish_reason", None),
     )
 

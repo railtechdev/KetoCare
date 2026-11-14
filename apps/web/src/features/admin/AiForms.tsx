@@ -123,13 +123,14 @@ export function AiGroupForm({
     reValidateMode: "onBlur",
   });
 
-  // Выбрать можно только включённую модель; выбранная раньше и выключенная
-  // потом остаётся в списке, иначе форма молча сменила бы её при сохранении.
+  // Выбрать можно только модель, которую сейчас можно вызвать: сервер
+  // откажет в остальных. Выбранная раньше остаётся в списке, иначе форма
+  // молча сменила бы её при сохранении.
   const chosen = new Set(
     [group.model, ...group.tasks.map((task) => task.model)].filter(Boolean),
   );
   const options = models.filter(
-    (model) => model.enabled || chosen.has(model.ref),
+    (model) => model.usable || chosen.has(model.ref),
   );
   const modelOptions = (emptyLabel: string) => (
     <>

@@ -197,13 +197,16 @@ export function AiProviderForm({
           spellCheck={false}
           optional={!kind?.needs_base_url}
           label={t("ai.providerForm.baseUrl")}
-          hint={
+          hint={[
             kind?.default_base_url
               ? t("ai.providerForm.baseUrlDefault", {
                   url: kind.default_base_url,
                 })
-              : t("ai.providerForm.baseUrlRequired")
-          }
+              : t("ai.providerForm.baseUrlRequired"),
+            provider?.key.configured ? t("ai.providerForm.baseUrlChange") : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           error={errors.baseUrl && t("ai.errors.baseUrl")}
           {...register("baseUrl")}
         />

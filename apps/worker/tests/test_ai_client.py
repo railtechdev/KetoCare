@@ -544,6 +544,16 @@ class TestSingleDoor:
         assert offenders == []
         assert carrier.search((worker_src / "ai" / "transport.py").read_text())
 
+        # The wire itself is the client's: a task that called it directly
+        # would skip pseudonymisation, the limits and the journal.
+        wire = re.compile(r"^\s*(from|import)\s+(worker\.ai\.transport|\.transport)\b", re.M)
+        direct = [
+            path.relative_to(worker_src).as_posix()
+            for path in worker_src.rglob("*.py")
+            if wire.search(path.read_text()) and path.name != "client.py"
+        ]
+        assert direct == []
+
 
 async def _save(sessionmaker: async_sessionmaker, write: Any) -> None:
     async with sessionmaker() as session:
@@ -825,9 +835,12 @@ class TestProvidersAndCatalog:
         assert "gw-key-0042" not in (job.error or "")
         assert "[скрыто]" in (job.error or "")
 
-    async def test_switched_off_provider_falls_back_to_the_less_specific_model(
+    async def test_switched_off_provider_refuses_instead_of_switching(
         self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
     ) -> None:
+        """A task chosen to run on a given connection must not quietly go to
+        another provider: that would send texts where nobody decided to."""
+
         from core.ai_catalog import ProviderKind, ProviderSettings
 
         await self._connect_openai(sessionmaker, "gw-key-0042")
@@ -848,15 +861,51 @@ class TestProvidersAndCatalog:
         wire = FakeAnthropic(FakeMessages(answer()))
         client = AiClient(sessionmaker=sessionmaker, settings=settings_with(), transport=wire)
 
-        await client.ask(
-            kind=AiJobKind.RECIPE_IMPORT,
-            requested_by=user_id,
-            patient_id=None,
-            system="x",
-            payload={},
+        with pytest.raises(NotConfigured):
+            await client.ask(
+                kind=AiJobKind.RECIPE_IMPORT,
+                requested_by=user_id,
+                patient_id=None,
+                system="x",
+                payload={},
+            )
+        assert wire.requests == []
+        assert await jobs_of(sessionmaker) == []
+
+    async def test_host_off_the_servers_list_is_not_called(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        await self._connect_openai(sessionmaker, "gw-key-0042")
+        wire = FakeAnthropic(FakeMessages(answer()))
+        settings = settings_with(ai_provider_hosts="api.openai.com, *.clinic.uz")
+        client = AiClient(sessionmaker=sessionmaker, settings=settings, transport=wire)
+
+        with pytest.raises(NotConfigured):
+            await client.ask(
+                kind=AiJobKind.RECIPE_IMPORT,
+                requested_by=user_id,
+                patient_id=None,
+                system="x",
+                payload={},
+            )
+        assert wire.requests == []
+
+    async def test_answer_without_usage_keeps_the_reservation(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """A gateway that omits usage must not make calls free for the budget."""
+
+        no_usage = FakeResponse(content=[FakeBlock(type="text", text="ок")], usage=None)  # type: ignore[arg-type]
+        client = client_for(sessionmaker, FakeMessages(no_usage))
+
+        result = await client.ask(
+            kind=AiJobKind.ASSISTANT, requested_by=user_id, patient_id=None, system="x", payload={}
         )
 
-        assert wire.requests[0].route == "anthropic/claude-opus-5"
+        assert result.tokens_in is None
+        assert result.cost_usd is not None and result.cost_usd > 0
+        (job,) = await jobs_of(sessionmaker)
+        assert job.cost_usd is not None and job.cost_usd > 0
 
     async def test_money_limit_per_person_counts_every_task_of_the_group(
         self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
@@ -929,6 +978,13 @@ class TestWire:
         )
         done = _completion_of(refused)
         assert done.text is None and done.stop_reason == "refusal"
+
+        # The carrier fills a missing usage with zeros: that is unknown, not free.
+        zeros = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ок"), finish_reason="stop")],
+            usage=SimpleNamespace(prompt_tokens=0, completion_tokens=0),
+        )
+        assert _completion_of(zeros).tokens_in is None
         assert _completion_of(SimpleNamespace(choices=[], usage=None)).text is None
 
     async def test_keyless_server_gets_a_placeholder_key(self, monkeypatch) -> None:

@@ -231,9 +231,10 @@ class TestEffectiveConfig:
         assert config.api_key_source == "env"
         assert stored is not None and stored.value is None
 
-    async def test_stale_model_in_a_stored_group_falls_back(self, session) -> None:
-        """A model removed from the price list later falls back to the environment —
-        and takes neither the group's budgets nor its limit with it."""
+    async def test_stale_model_in_a_stored_group_keeps_the_budgets(self, session) -> None:
+        """A model that left the catalogue stays the group's choice — the task
+        refuses rather than going elsewhere (ADR-0082) — and it takes neither
+        the group's budgets nor its limit with it."""
 
         session.add(
             AppSetting(
@@ -252,7 +253,8 @@ class TestEffectiveConfig:
         config = await app_settings.ai_config(session, settings_with())
         specialists = config.groups[AiGroup.SPECIALISTS]
 
-        assert specialists.model_for(AiJobKind.DOCTOR_SUMMARY) == "claude-opus-5"
+        assert specialists.model_for(AiJobKind.DOCTOR_SUMMARY) == "claude-retired-1"
+        assert not config.catalog.usable("claude-retired-1")
         assert not specialists.enabled
         assert specialists.daily_budget_usd == Decimal(2)
         assert specialists.monthly_budget_usd == Decimal(40)
@@ -410,7 +412,7 @@ class TestProvidersAndCatalog:
         assert models.resolve("claude-sonnet-5") is None
         assert models.resolve("claude-next-1") is not None
 
-    async def test_task_model_wins_over_group_and_falls_back_when_unusable(self, session) -> None:
+    async def test_task_model_wins_and_a_choice_is_never_replaced(self, session) -> None:
         settings = settings_with()
         await app_settings.save_group(
             session,
@@ -430,11 +432,118 @@ class TestProvidersAndCatalog:
         # A fast task without its own model stays on the environment's fast one:
         # a group moved to a large model must not move the 15-second parser.
         assert families.model_for(AiJobKind.PARSE_MEAL) == "claude-haiku-4-5"
-        # A task model that cannot be called does not take the task down.
-        assert families.model_for(AiJobKind.PARSE_EVENT) == "claude-haiku-4-5"
+        # A chosen model that cannot be called is not replaced by another
+        # provider's: the task refuses, the administrator sees why.
+        assert families.model_for(AiJobKind.PARSE_EVENT) == "gone/model"
+
+    async def test_fast_task_never_falls_to_the_smart_model(self, session) -> None:
+        """An empty or misspelt AI_MODEL_FAST is a refusal naming it, not a
+        synchronous parser on a model five times the price."""
+
+        config = await app_settings.ai_config(session, settings_with(ai_model_fast=""))
+        families = config.groups[AiGroup.FAMILIES]
+
+        assert families.model_for(AiJobKind.PARSE_MEAL) == ""
+        assert families.model_for(AiJobKind.ASSISTANT) == "claude-opus-5"
 
     async def test_warning_share_from_the_project_settings(self, session) -> None:
         settings = settings_with()
         assert (await app_settings.ai_config(session, settings)).warn_share == Decimal("0.8")
         await app_settings.save_project(session, ProjectOverrides(warn_percent=60), by=None)
         assert (await app_settings.ai_config(session, settings)).warn_share == Decimal("0.6")
+
+
+class TestAddresses:
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "ftp://host",
+            "localhost:11434",
+            "http://host:abc",
+            "http://[::1",
+            "http://host:99999",
+            "http://host/internal/path?x=",
+            "http://host/internal#frag",
+            "http://user:pass@host",
+            "http://host /v1",
+        ],
+    )
+    def test_refused(self, url: str) -> None:
+        with pytest.raises(ValidationError):
+            ProviderSettings(kind=ProviderKind.OPENAI_COMPATIBLE, name="x", base_url=url)
+
+    @pytest.mark.parametrize(
+        "url", ["http://10.0.0.5:11434", "https://llm.example.org/v1/", "http://[::1]:8000"]
+    )
+    def test_accepted(self, url: str) -> None:
+        value = ProviderSettings(kind=ProviderKind.OPENAI_COMPATIBLE, name="x", base_url=url)
+        assert value.base_url == url.rstrip("/")
+
+    def test_host_list(self) -> None:
+        from core.ai_catalog import host_allowed
+
+        assert host_allowed("http://anything:1", "")
+        assert host_allowed(None, "api.openai.com")
+        assert host_allowed("https://api.openai.com/v1", "api.openai.com, *.clinic.uz")
+        assert host_allowed("http://llm.clinic.uz:8000", "*.clinic.uz")
+        assert not host_allowed("http://clinic.uz.evil.org", "*.clinic.uz")
+        assert not host_allowed("http://10.0.0.5", "api.openai.com")
+
+
+class TestModelReferences:
+    def test_builtin_model_id_has_no_slash(self) -> None:
+        """It would make the same reference as another connection's model."""
+
+        with pytest.raises(ValidationError):
+            ModelEntry(
+                provider="anthropic", model="openai/gpt-x", usd_per_mtok_in=1, usd_per_mtok_out=1
+            )
+        ModelEntry(
+            provider="openrouter", model="openai/gpt-x", usd_per_mtok_in=1, usd_per_mtok_out=1
+        )
+
+    def test_reference_fits_the_journal(self) -> None:
+        with pytest.raises(ValidationError):
+            ModelEntry(
+                provider="gateway-two-long", model="m" * 120, usd_per_mtok_in=1, usd_per_mtok_out=1
+            )
+
+
+class TestKeyFollowsTheAddress:
+    async def test_new_address_drops_the_key(self, session) -> None:
+        """A key typed for one server is never sent to another."""
+
+        settings = settings_with()
+        first = ProviderSettings(
+            kind=ProviderKind.OPENAI_COMPATIBLE, name="Шлюз", base_url="https://a.example.org/v1"
+        )
+        await app_settings.save_provider(session, "gateway", first, by=None)
+        await app_settings.save_key(
+            session, settings, "gw-key-0042-long", by=None, provider_id="gateway"
+        )
+
+        renamed = first.model_copy(update={"name": "Шлюз 2"})
+        assert not await app_settings.save_provider(session, "gateway", renamed, by=None)
+        assert (await app_settings.catalog(session, settings)).providers["gateway"].api_key
+
+        moved = renamed.model_copy(update={"base_url": "https://b.example.org/v1"})
+        assert await app_settings.save_provider(session, "gateway", moved, by=None)
+        assert (await app_settings.catalog(session, settings)).providers["gateway"].api_key == ""
+
+    async def test_key_author_is_the_keys_not_the_rows(self, session) -> None:
+        settings = settings_with()
+        value = ProviderSettings(kind=ProviderKind.OPENAI, name="OpenAI")
+        await app_settings.save_provider(session, "openai", value, by=None)
+        await app_settings.save_key(
+            session, settings, "sk-openai-0042-long", by=None, provider_id="openai"
+        )
+        stored = await app_settings.stored_key(session, settings, "openai")
+        assert stored is not None and stored.updated_by is None
+        first_at = stored.updated_at
+
+        # Renaming the connection is not replacing the key.
+        await app_settings.save_provider(
+            session, "openai", value.model_copy(update={"name": "OpenAI 2"}), by=None
+        )
+        again = await app_settings.stored_key(session, settings, "openai")
+        assert again is not None and again.updated_at == first_at

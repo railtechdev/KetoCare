@@ -90,7 +90,9 @@ async def update_group(
 async def create_provider(
     body: ProviderSettings, request: Request, user: CurrentUserDep, session: SessionDep
 ) -> AiSettingsView:
-    await service.create_provider(session, actor=user, value=body, ip=client_address(request))
+    await service.create_provider(
+        session, get_settings(), actor=user, value=body, ip=client_address(request)
+    )
     await session.commit()
     return await service.view(session, get_settings())
 

@@ -105,6 +105,7 @@ const SETTINGS: AiSettings = {
       enabled: true,
       builtin: true,
       ready: true,
+      host_allowed: true,
       key: KEY_STATE,
       models_count: 2,
     },
@@ -116,6 +117,7 @@ const SETTINGS: AiSettings = {
       enabled: true,
       builtin: false,
       ready: false,
+      host_allowed: true,
       key: {
         configured: false,
         source: null,
@@ -233,7 +235,7 @@ describe("раздел «Модели и расход»", () => {
     expect(within(families).getAllByText(/claude-haiku-4-5/)).toHaveLength(2);
   });
 
-  it("сохраняет группу: модель из любого подключения, своя модель у задачи", async () => {
+  it("сохраняет группу: своя модель у задачи, невызываемые не предлагаются", async () => {
     const user = userEvent.setup();
     (api.PUT as Mock).mockResolvedValue({ data: SETTINGS });
     renderPanel();
@@ -243,10 +245,15 @@ describe("раздел «Модели и расход»", () => {
         name: "Изменить группу «Технические работы»",
       }),
     );
-    await user.selectOptions(
-      nativeSelect(await screen.findByLabelText(/Модель группы/)),
-      "openai/gpt-x",
+    const groupModel = nativeSelect(
+      await screen.findByLabelText(/Модель группы/),
     );
+    // Подключение OpenAI без ключа: его модель сервер не примет, и форма её
+    // не предлагает — выбор не должен заканчиваться отказом.
+    expect(
+      Array.from(groupModel.options).map((option) => option.value),
+    ).not.toContain("openai/gpt-x");
+    await user.selectOptions(groupModel, "claude-opus-5");
     await user.selectOptions(
       nativeSelect(
         screen.getByLabelText(/Модель задачи «чтение файла рецептов»/),
@@ -261,7 +268,7 @@ describe("раздел «Модели и расход»", () => {
       params: { path: { group: "technical" } },
       body: {
         enabled: false,
-        model: "openai/gpt-x",
+        model: "claude-opus-5",
         // Пустой выбор у задачи — «как у группы»: в запрос он не идёт.
         task_models: { recipe_import: "claude-haiku-4-5" },
         daily_budget_usd: "3",

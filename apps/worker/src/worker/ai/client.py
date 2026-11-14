@@ -227,6 +227,11 @@ class AiClient:
 
         tokens_in, tokens_out = completion.tokens_in, completion.tokens_out
         cost = resolved.entry.cost(tokens_in=tokens_in, tokens_out=tokens_out)
+        if cost is None:
+            # The provider did not say what the call used. The reservation —
+            # an upper estimate — stays as the spend: an unknown cost counted
+            # as nothing would let the budget never fill.
+            cost = reserved
         text = completion.text
 
         if text is None:

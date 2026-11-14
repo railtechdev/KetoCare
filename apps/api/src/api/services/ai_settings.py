@@ -8,6 +8,8 @@ a request text or names a child — a person and a sum, never what they asked.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 import uuid
 from collections import defaultdict
@@ -19,7 +21,15 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core import ai_budget, app_settings, secret_box
-from core.ai_catalog import KINDS, Catalog, ModelEntry, Provider, ProviderSettings, model_ref
+from core.ai_catalog import (
+    KINDS,
+    Catalog,
+    ModelEntry,
+    Provider,
+    ProviderSettings,
+    host_allowed,
+    model_ref,
+)
 from core.ai_price_map import suggest_price
 from core.app_settings import AI_TASKS, AiGroup, GroupOverrides, ProjectOverrides
 from core.config import Settings
@@ -62,12 +72,18 @@ CHECK_MODELS_LIMIT = 500
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,119}$")
 
 
+#: The most of a provider's answer that is read: a list of models is tens of
+#: kilobytes; an address pointing elsewhere must not stream gigabytes in.
+CHECK_BODY_MAX = 2_000_000
+
+
 async def fetch_model_ids(provider: Provider, api_key: str) -> tuple[int, list[str]]:
     """HTTP status of the provider and the model ids the key may call.
 
     Replaced in tests: the suite never goes to the network. Only ids of a
     narrow alphabet come back — the address is the administrator's, and the
-    answer of an arbitrary server must not travel to the screen as is.
+    answer of an arbitrary server must not travel to the screen as is. The
+    whole exchange is bounded in time and size; redirects are not followed.
     """
 
     info = provider.info
@@ -80,13 +96,28 @@ async def fetch_model_ids(provider: Provider, api_key: str) -> tuple[int, list[s
     elif info.auth == "bearer" and api_key:
         headers = {"Authorization": f"Bearer {api_key}"}
     elif info.auth == "query":
-        params = {"key": api_key, "pageSize": 1000}
+        # A header, not `?key=`: a key in the address ends up in proxy logs
+        # and in error-report breadcrumbs.
+        headers = {"x-goog-api-key": api_key}
+        params = {"pageSize": 1000}
 
-    async with httpx.AsyncClient(timeout=CHECK_TIMEOUT_S) as client:
-        response = await client.get(base + info.models_path, params=params, headers=headers)
-    if response.status_code != 200:
-        return response.status_code, []
-    items = response.json().get(info.list_key, [])
+    async with (
+        asyncio.timeout(CHECK_TIMEOUT_S),
+        httpx.AsyncClient(timeout=CHECK_TIMEOUT_S, follow_redirects=False) as client,
+        client.stream("GET", base + info.models_path, params=params, headers=headers) as response,
+    ):
+        if response.status_code != 200:
+            return response.status_code, []
+        body = bytearray()
+        async for chunk in response.aiter_bytes():
+            body.extend(chunk)
+            if len(body) > CHECK_BODY_MAX:
+                return 200, []
+    try:
+        parsed = json.loads(bytes(body))
+    except ValueError:
+        return 200, []
+    items = parsed.get(info.list_key, []) if isinstance(parsed, dict) else []
     ids: list[str] = []
     for item in items if isinstance(items, list) else []:
         raw = item.get(info.id_key) if isinstance(item, dict) else None
@@ -115,9 +146,11 @@ async def check_key(
         return failed("not_configured")
     if not (provider.base_url or provider.info.default_base_url):
         return failed("no_address")
+    if not provider.host_allowed:
+        return failed("host_not_allowed")
     try:
         status, ids = await fetch_model_ids(provider, key)
-    except (httpx.HTTPError, ValueError):
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError, TimeoutError, OSError):
         return failed("unreachable")
     if status == 200:
         found = sorted(set(ids))[:CHECK_MODELS_LIMIT]
@@ -146,6 +179,14 @@ def _spend_of(totals: dict[AiJobKind, Decimal], kinds: list[AiJobKind] | None) -
     if kinds is None:
         return sum(totals.values(), Decimal(0))
     return sum((totals.get(kind, Decimal(0)) for kind in kinds), Decimal(0))
+
+
+def _in_use_of_provider(models: Catalog, used: set[str], provider_id: str) -> list[str]:
+    return sorted(
+        ref
+        for ref in used
+        if ref in models.models and models.models[ref].provider_id == provider_id
+    )
 
 
 def _refs_in_use(groups: dict[AiGroup, GroupOverrides]) -> set[str]:
@@ -191,6 +232,7 @@ async def view(session: AsyncSession, settings: Settings) -> AiSettingsView:
                 enabled=provider.enabled,
                 builtin=provider.builtin,
                 ready=provider.ready,
+                host_allowed=provider.host_allowed,
                 key=AiKeyState(
                     configured=bool(provider.api_key),
                     source=provider.key_source,
@@ -211,7 +253,7 @@ async def view(session: AsyncSession, settings: Settings) -> AiSettingsView:
         kinds = app_settings.kinds_of(group)
         tasks = []
         for kind in kinds:
-            ref, source = app_settings.effective_task_model(kind, own, settings, models)
+            ref, source = app_settings.effective_task_model(kind, own, settings)
             tasks.append(
                 AiTaskView(
                     kind=kind,
@@ -456,14 +498,15 @@ async def update_group(
     # A model that is not in the catalogue has no price: the budget would not
     # count it. Switched-off entries are refused too — choosing one would
     # silently run the group on the fallback.
+    # A chosen model is used as chosen, never replaced (ADR-0082): one that
+    # cannot be called now would make the tasks refuse.
     chosen = {ref for ref in (value.model, *value.task_models.values()) if ref}
-    unknown = sorted(
-        ref for ref in chosen if ref not in models.models or not models.models[ref].enabled
-    )
+    unknown = sorted(ref for ref in chosen if not models.usable(ref))
     if unknown:
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
-            "Модели нет в каталоге или она выключена: " + ", ".join(unknown) + ".",
+            "Эту модель сейчас вызвать нельзя: её нет в каталоге, она или её подключение "
+            "выключены, либо у подключения нет ключа: " + ", ".join(unknown) + ".",
             details={"models": unknown},
         )
 
@@ -503,20 +546,32 @@ def _provider_snapshot(provider_id: str, value: ProviderSettings) -> dict[str, A
     return {"key": app_settings.provider_key(provider_id), **value.model_dump(mode="json")}
 
 
-def _require_address(value: ProviderSettings) -> None:
+def _require_address(value: ProviderSettings, settings: Settings) -> None:
     if KINDS[value.kind].needs_base_url and not value.base_url:
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
             "Этому виду подключения нужен адрес сервера.",
             details={"field": "base_url"},
         )
+    if not host_allowed(value.base_url, settings.ai_provider_hosts):
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Этот адрес не входит в список разрешённых на сервере (AI_PROVIDER_HOSTS). "
+            "Список задаёт тот, кто обслуживает сервер.",
+            details={"field": "base_url"},
+        )
 
 
 async def create_provider(
-    session: AsyncSession, *, actor: CurrentUser, value: ProviderSettings, ip: str | None
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    actor: CurrentUser,
+    value: ProviderSettings,
+    ip: str | None,
 ) -> str:
     app_settings.clear_cache()
-    _require_address(value)
+    _require_address(value, settings)
     provider_id = await app_settings.new_provider_id(session, value.kind)
     await app_settings.save_provider(session, provider_id, value, by=actor.id)
     await _audit(
@@ -540,7 +595,8 @@ async def update_provider(
     ip: str | None,
 ) -> None:
     app_settings.clear_cache()
-    provider = _provider_or_404(await app_settings.catalog(session, settings), provider_id)
+    models = await app_settings.catalog(session, settings)
+    provider = _provider_or_404(models, provider_id)
     if provider.builtin:
         raise ApiError(
             ErrorCode.CONFLICT,
@@ -555,17 +611,31 @@ async def update_provider(
             "Вид подключения не меняется. Добавьте новое подключение нужного вида.",
             details={"field": "kind"},
         )
-    _require_address(value)
+    _require_address(value, settings)
+    if not value.enabled and provider.enabled:
+        _, groups = await app_settings.overrides(session)
+        used = _in_use_of_provider(models, _refs_in_use(groups), provider_id)
+        if used:
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Модели этого подключения выбраны в группах задач: "
+                + ", ".join(used)
+                + ". Выключенное подключение их не заменит другими — сначала выберите там "
+                "другие модели.",
+                details={"models": used},
+            )
     before = ProviderSettings(
         kind=provider.kind, name=provider.name, base_url=provider.base_url, enabled=provider.enabled
     )
-    await app_settings.save_provider(session, provider_id, value, by=actor.id)
+    dropped = await app_settings.save_provider(session, provider_id, value, by=actor.id)
     await _audit(
         session,
         actor=actor,
         action="update",
         before=_provider_snapshot(provider_id, before),
-        after=_provider_snapshot(provider_id, value),
+        # A key typed for one address is never sent to another: changing the
+        # address drops it, and the journal says so.
+        after={**_provider_snapshot(provider_id, value), "key_dropped": dropped},
         ip=ip,
     )
 
@@ -586,11 +656,7 @@ async def remove_provider(
     if provider.builtin:
         raise ApiError(ErrorCode.CONFLICT, "Встроенное подключение убрать нельзя.")
     _, groups = await app_settings.overrides(session)
-    used = sorted(
-        ref
-        for ref in _refs_in_use(groups)
-        if ref in models.models and models.models[ref].provider_id == provider_id
-    )
+    used = _in_use_of_provider(models, _refs_in_use(groups), provider_id)
     if used:
         raise ApiError(
             ErrorCode.CONFLICT,
@@ -664,9 +730,21 @@ async def remove_key(
     ip: str | None,
 ) -> bool:
     app_settings.clear_cache()
-    _provider_or_404(await app_settings.catalog(session, settings), provider_id)
+    models = await app_settings.catalog(session, settings)
+    provider = _provider_or_404(models, provider_id)
+    if not provider.builtin:
+        _, groups = await app_settings.overrides(session)
+        used = _in_use_of_provider(models, _refs_in_use(groups), provider_id)
+        if used:
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Модели этого подключения выбраны в группах задач: "
+                + ", ".join(used)
+                + ". Без ключа они перестанут отвечать — сначала выберите там другие.",
+                details={"models": used},
+            )
     previous = await app_settings.stored_key(session, settings, provider_id)
-    removed = await app_settings.remove_key(session, provider_id)
+    removed = await app_settings.remove_key(session, provider_id, by=actor.id)
     if removed:
         await _audit(
             session,
@@ -699,6 +777,14 @@ async def save_model(
     models = await app_settings.catalog(session, settings)
     _provider_or_404(models, value.provider)
     previous = models.models.get(value.ref)
+    if not value.enabled:
+        _, groups = await app_settings.overrides(session)
+        if value.ref in _refs_in_use(groups):
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Модель выбрана в группе задач. Выключенную её ничто не заменит — "
+                "сначала выберите там другую.",
+            )
     entries = [e for e in await app_settings.stored_models(session) if e.ref != value.ref]
     await app_settings.save_models(session, [*entries, value], by=actor.id)
     await _audit(
@@ -736,7 +822,8 @@ async def remove_model(
         )
     models = await app_settings.catalog(session, settings)
     _, groups = await app_settings.overrides(session)
-    if ref in _refs_in_use(groups) and not models.models[ref].builtin:
+    entry = models.models.get(ref)
+    if ref in _refs_in_use(groups) and (entry is None or not entry.builtin):
         raise ApiError(
             ErrorCode.CONFLICT,
             "Модель выбрана в группе задач. Сначала выберите там другую.",

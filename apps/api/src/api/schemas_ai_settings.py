@@ -44,8 +44,10 @@ class AiProviderView(BaseModel):
     #: Exists without a row and cannot be removed: the key typed before
     #: providers appeared, or `ANTHROPIC_API_KEY`.
     builtin: bool
-    #: Calls may go out: switched on, and has the key or address its kind needs.
+    #: Calls may go out: switched on, has the key or address its kind needs, and
+    #: the address is on the server's list of hosts.
     ready: bool
+    host_allowed: bool
     key: AiKeyState
     models_count: int
 
@@ -165,7 +167,13 @@ class AiKeyCheckInput(BaseModel):
 
 
 KeyProblem = Literal[
-    "not_configured", "no_address", "unauthorized", "forbidden", "unreachable", "unexpected"
+    "not_configured",
+    "no_address",
+    "host_not_allowed",
+    "unauthorized",
+    "forbidden",
+    "unreachable",
+    "unexpected",
 ]
 
 

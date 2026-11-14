@@ -27,7 +27,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+import httpx
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .ai_pricing import PRICES_USD_PER_MTOK, base_model
 
@@ -36,6 +37,9 @@ from .ai_pricing import PRICES_USD_PER_MTOK, base_model
 BUILTIN_PROVIDER = "anthropic"
 
 _MTOK = Decimal("1000000")
+
+#: Length of `ai_jobs.model`, where the reference is journaled.
+REF_MAX = 128
 
 #: Upper bound of a price per million tokens: a typo guard, not a market view.
 PRICE_MAX_USD = 10000
@@ -118,14 +122,55 @@ _PROVIDER_ID = re.compile(r"^[a-z][a-z0-9-]{1,23}$")
 
 
 def _http_url(value: str | None) -> str | None:
+    """A provider address: http(s), a host, a port that exists — and nothing
+    else. A query, a fragment or credentials in the address are refused: the
+    client appends its own path, and `?x=` or `#` would turn whatever follows
+    into an arbitrary path on the server."""
+
     if value is None:
         return None
     value = value.strip().rstrip("/")
     if not value:
         return None
-    if not re.match(r"^https?://[^\s/]+", value):
-        raise ValueError("Адрес начинается с http:// или https://.")
+    if any(char.isspace() for char in value):
+        raise ValueError("Адрес без пробелов.")
+    try:
+        url = httpx.URL(value)
+        port = url.port
+    except (httpx.InvalidURL, ValueError) as error:
+        raise ValueError("Адрес не разобрать.") from error
+    if url.scheme not in ("http", "https") or not url.host:
+        raise ValueError("Адрес начинается с http:// или https:// и называет сервер.")
+    if url.query or url.fragment or "?" in value or "#" in value:
+        raise ValueError("В адресе не должно быть «?» и «#».")
+    if url.userinfo:
+        raise ValueError("Логин и пароль в адресе не принимаются — для этого есть ключ.")
+    if port is not None and not 0 < port < 65536:
+        raise ValueError("Порт — число от 1 до 65535.")
     return value
+
+
+def host_allowed(url: str | None, allowed: str) -> bool:
+    """Is the host of `url` on the server's list (`AI_PROVIDER_HOSTS`)?
+
+    Empty list — any host. No custom address — the provider's public one,
+    always allowed.
+    """
+
+    patterns = [item.strip().lower() for item in allowed.split(",") if item.strip()]
+    if not patterns or not url:
+        return True
+    try:
+        host = httpx.URL(url).host.lower()
+    except (httpx.InvalidURL, ValueError):
+        return False
+    for pattern in patterns:
+        if pattern.startswith("*."):
+            if host.endswith(pattern[1:]):
+                return True
+        elif host == pattern:
+            return True
+    return False
 
 
 class ProviderSettings(BaseModel):
@@ -175,6 +220,17 @@ class ModelEntry(BaseModel):
         value = (value or "").strip()
         return value or None
 
+    @model_validator(mode="after")
+    def _ref_fits(self) -> ModelEntry:
+        # A bare id belongs to the built-in provider; a slash in it would make
+        # the same reference as another connection's model and take its place.
+        if self.provider == BUILTIN_PROVIDER and "/" in self.model:
+            raise ValueError("У модели встроенного подключения в идентификаторе нет «/».")
+        # The reference is written to `ai_jobs.model` (128 characters).
+        if len(self.ref) > REF_MAX:
+            raise ValueError("Слишком длинный идентификатор модели.")
+        return self
+
     @property
     def ref(self) -> str:
         return model_ref(self.provider, self.model)
@@ -204,6 +260,8 @@ class Provider:
     #: the built-in provider has one).
     key_source: Literal["admin", "env"] | None
     builtin: bool
+    #: The address is on the server's list of hosts (`AI_PROVIDER_HOSTS`).
+    host_allowed: bool = True
 
     @property
     def info(self) -> KindInfo:
@@ -213,7 +271,7 @@ class Provider:
     def ready(self) -> bool:
         """Can a call go out: switched on, and has what its kind needs."""
 
-        if not self.enabled:
+        if not self.enabled or not self.host_allowed:
             return False
         if self.info.needs_key and not self.api_key:
             return False
@@ -351,6 +409,7 @@ __all__ = [
     "ProviderSettings",
     "ResolvedModel",
     "builtin_models",
+    "host_allowed",
     "is_provider_id",
     "merge_models",
     "model_ref",
