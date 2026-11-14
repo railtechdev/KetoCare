@@ -246,7 +246,8 @@ class SpendRow:
     model: str
     status: AiJobStatus
     calls: int
-    #: Rows without a known cost (`cost_usd IS NULL`) — counted, never priced.
+    #: Rows without a known cost (`cost_usd IS NULL`): calls that broke off
+    #: before an answer. Counted, never priced.
     unpriced: int
     cost_usd: Decimal
     tokens_in: int

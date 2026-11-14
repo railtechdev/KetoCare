@@ -70,10 +70,15 @@ class BudgetUsage:
         return None
 
     def alert_id(self) -> uuid.UUID:
-        """One id per budget, period start and level — the journal key."""
+        """One id per budget amount, period start and level — the journal key.
+
+        The amount is part of it: a budget raised after its warning and reached
+        again in the same period is a new event, and the journal must show it.
+        """
 
         level = self.level.value if self.level is not None else "none"
-        name = f"{self.scope}:{self.period}:{self.period_start.isoformat()}:{level}"
+        amount = self.budget_usd.normalize()
+        name = f"{self.scope}:{self.period}:{self.period_start.isoformat()}:{amount}:{level}"
         return uuid.uuid5(_ALERT_NAMESPACE, name)
 
 

@@ -295,7 +295,8 @@ class TestSpendReport:
                 _job(parent, AiJobKind.PARSE_MEAL, 0.01, model="claude-haiku-4-5"),
                 _job(dietitian, AiJobKind.RECIPE_IMPORT, 2.0),
                 _job(dietitian, AiJobKind.RECIPE_IMPORT, 0.5, status=AiJobStatus.FAILED),
-                _job(dietitian, AiJobKind.CONTENT_DRAFT, None, model="claude-unpriced"),
+                # Broke off before an answer: the cost is unknown.
+                _job(dietitian, AiJobKind.CONTENT_DRAFT, None, status=AiJobStatus.FAILED),
             ]
         )
         await session.flush()
@@ -308,7 +309,7 @@ class TestSpendReport:
         assert body["people_limit"] == service.PEOPLE_LIMIT
         assert Decimal(body["totals"]["cost_usd"]) == Decimal("2.76")
         assert body["totals"]["calls"] == 5
-        assert body["totals"]["failed_calls"] == 1
+        assert body["totals"]["failed_calls"] == 2
         assert Decimal(body["totals"]["failed_cost_usd"]) == Decimal("0.5")
         assert body["totals"]["unpriced_calls"] == 1
 
@@ -325,13 +326,13 @@ class TestSpendReport:
 
         models = [line["model"] for line in body["by_model"]]
         assert models[0] == "claude-opus-5", "the most expensive model first"
-        assert set(models) == {"claude-opus-5", "claude-haiku-4-5", "claude-unpriced"}
+        assert set(models) == {"claude-opus-5", "claude-haiku-4-5"}
 
         people = body["people"]
         assert [person["user_id"] for person in people] == [str(dietitian.id), str(parent.id)]
         assert people[0]["role"] == "dietitian"
         assert people[0]["groups"] == ["technical"]
-        assert people[0]["failed_calls"] == 1
+        assert people[0]["failed_calls"] == 2
         assert people[0]["search"] == dietitian.email
         assert people[1]["groups"] == ["families"]
         assert body["people_total"] == 2

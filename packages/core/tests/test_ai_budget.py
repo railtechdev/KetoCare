@@ -56,3 +56,8 @@ def test_alerts_fullest_first_and_quiet_ones_dropped() -> None:
     found = alerts([usage("1"), usage("8.5", scope="families"), usage("11", scope="technical")])
 
     assert [item.scope for item in found] == ["technical", "families"]
+
+
+def test_a_raised_budget_warns_again() -> None:
+    assert usage("8").alert_id() != usage("16", budget="20").alert_id()
+    assert usage("8", budget="10").alert_id() == usage("8", budget="10.00").alert_id()

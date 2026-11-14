@@ -140,7 +140,8 @@ class AiSpendLine(BaseModel):
 
     calls: int
     failed_calls: int
-    #: Calls whose cost is unknown (a model without a price): not in `cost_usd`.
+    #: Calls whose cost is unknown — they broke off before an answer (network,
+    #: timeout); a model without a price is never called. Not in `cost_usd`.
     unpriced_calls: int
     cost_usd: Decimal
     failed_cost_usd: Decimal

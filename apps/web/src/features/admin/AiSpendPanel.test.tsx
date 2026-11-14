@@ -101,8 +101,8 @@ describe("расход на модели", () => {
     const technical = first?.closest("tr") as HTMLElement;
     expect(within(technical).getByText("1 · $0,50")).toBeInTheDocument();
     expect(within(technical).getByText("$2,50")).toBeInTheDocument();
-    // Модель без цены выпадает из суммы — это сказано вслух.
-    expect(screen.getByText(/без известной цены: 1/)).toBeInTheDocument();
+    // Оборвавшееся обращение выпадает из суммы — это сказано вслух.
+    expect(screen.getByText(/без известной стоимости: 1/)).toBeInTheDocument();
   });
 
   it("ведёт от человека к его учётной записи и говорит, что список урезан", async () => {

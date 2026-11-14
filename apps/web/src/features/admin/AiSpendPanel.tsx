@@ -120,7 +120,8 @@ function SpendReport({ report }: { report: AiSpendReport }) {
         />
       </MetricRow>
       {totals.unpriced_calls > 0 && (
-        // Модель без цены выпадает из бюджета молча (ADR-0080): об этом надо
+        // Стоимость неизвестна у обращений, оборвавшихся до ответа: модель
+        // без цены AiClient не вызывает вовсе (ADR-0080). Об этом надо
         // сказать вслух, иначе сумма выглядит полной.
         <p className="m-0 text-sm text-warning-strong">
           {t("ai.spend.unpriced", {
