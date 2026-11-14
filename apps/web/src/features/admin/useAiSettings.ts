@@ -9,10 +9,17 @@ export type AiGroupName = AiGroupView["group"];
 export type AiGroupBody = components["schemas"]["GroupOverrides"];
 export type AiProjectBody = components["schemas"]["ProjectOverrides"];
 export type AiKeyCheck = components["schemas"]["AiKeyCheck"];
+export type AiProviderView = components["schemas"]["AiProviderView"];
+export type AiProviderBody = components["schemas"]["ProviderSettings"];
+export type AiProviderKind = AiProviderView["kind"];
+export type AiModelView = components["schemas"]["AiModelView"];
+export type AiModelBody = components["schemas"]["ModelEntry"];
+export type AiTaskView = components["schemas"]["AiTaskView"];
+export type AiPriceSuggestion = components["schemas"]["AiPriceSuggestion"];
 
 const KEY = ["admin", "ai-settings"] as const;
 
-/** Раздел «ИИ» администратора (ADR-0080): ключ, модели, бюджеты и расход. */
+/** Раздел «Модели и расход»: подключения, каталог моделей, бюджеты (ADR-0080, ADR-0082). */
 export function useAiSettings() {
   return useQuery({
     queryKey: KEY,
@@ -56,19 +63,67 @@ export function useSaveAiProject() {
   });
 }
 
-export function useReplaceAiKey() {
-  return useSettingsMutation(async (apiKey: string) => {
-    const { data, error } = await api.PUT("/api/v1/admin/ai/key", {
-      body: { api_key: apiKey },
+// --- подключения и каталог моделей (ADR-0082) ---------------------------------
+
+export function useCreateAiProvider() {
+  return useSettingsMutation(async (body: AiProviderBody) => {
+    const { data, error } = await api.POST("/api/v1/admin/ai/providers", {
+      body,
     });
     if (error || !data) throw error ?? new Error("Empty AI settings");
     return data;
   });
 }
 
+export function useUpdateAiProvider() {
+  return useSettingsMutation(
+    async (input: { providerId: string; body: AiProviderBody }) => {
+      const { data, error } = await api.PUT(
+        "/api/v1/admin/ai/providers/{provider_id}",
+        {
+          params: { path: { provider_id: input.providerId } },
+          body: input.body,
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty AI settings");
+      return data;
+    },
+  );
+}
+
+export function useRemoveAiProvider() {
+  return useSettingsMutation(async (providerId: string) => {
+    const { data, error } = await api.DELETE(
+      "/api/v1/admin/ai/providers/{provider_id}",
+      { params: { path: { provider_id: providerId } } },
+    );
+    if (error || !data) throw error ?? new Error("Empty AI settings");
+    return data;
+  });
+}
+
+export function useReplaceAiKey() {
+  return useSettingsMutation(
+    async (input: { providerId: string; apiKey: string }) => {
+      const { data, error } = await api.PUT(
+        "/api/v1/admin/ai/providers/{provider_id}/key",
+        {
+          params: { path: { provider_id: input.providerId } },
+          body: { api_key: input.apiKey },
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty AI settings");
+      return data;
+    },
+  );
+}
+
 export function useRemoveAiKey() {
-  return useSettingsMutation(async () => {
-    const { data, error } = await api.DELETE("/api/v1/admin/ai/key");
+  return useSettingsMutation(async (providerId: string) => {
+    const { data, error } = await api.DELETE(
+      "/api/v1/admin/ai/providers/{provider_id}/key",
+      { params: { path: { provider_id: providerId } } },
+    );
     if (error || !data) throw error ?? new Error("Empty AI settings");
     return data;
   });
@@ -77,14 +132,63 @@ export function useRemoveAiKey() {
 /** Пустой ключ — проверить тот, что действует сейчас. */
 export function useCheckAiKey() {
   return useMutation({
-    mutationFn: async (apiKey: string | null): Promise<AiKeyCheck> => {
-      const { data, error } = await api.POST("/api/v1/admin/ai/key/check", {
-        body: { api_key: apiKey },
-      });
+    mutationFn: async (input: {
+      providerId: string;
+      apiKey: string | null;
+    }): Promise<AiKeyCheck> => {
+      const { data, error } = await api.POST(
+        "/api/v1/admin/ai/providers/{provider_id}/check",
+        {
+          params: { path: { provider_id: input.providerId } },
+          body: { api_key: input.apiKey },
+        },
+      );
       if (error || !data) throw error ?? new Error("Empty key check");
       return data;
     },
   });
+}
+
+export function useSaveAiModel() {
+  return useSettingsMutation(async (body: AiModelBody) => {
+    const { data, error } = await api.PUT("/api/v1/admin/ai/models", { body });
+    if (error || !data) throw error ?? new Error("Empty AI settings");
+    return data;
+  });
+}
+
+export function useRemoveAiModel() {
+  return useSettingsMutation(async (ref: string) => {
+    const { data, error } = await api.DELETE("/api/v1/admin/ai/models", {
+      params: { query: { ref } },
+    });
+    if (error || !data) throw error ?? new Error("Empty AI settings");
+    return data;
+  });
+}
+
+/**
+ * Известная публичная цена модели — подсказка для формы, а не то, что будет
+ * списано: считают по цене, сохранённой в каталоге.
+ */
+export function useAiPriceSuggestion() {
+  return useMutation({
+    mutationFn: async (input: {
+      provider: string;
+      model: string;
+    }): Promise<AiPriceSuggestion> => {
+      const { data, error } = await api.GET("/api/v1/admin/ai/models/price", {
+        params: { query: input },
+      });
+      if (error || !data) throw error ?? new Error("Empty price suggestion");
+      return data;
+    },
+  });
+}
+
+/** Как модель названа на экране: своё имя, иначе идентификатор у поставщика. */
+export function modelTitle(model: AiModelView): string {
+  return model.name ? `${model.name} (${model.ref})` : model.ref;
 }
 
 export type AiSpendReport = components["schemas"]["AiSpendReport"];

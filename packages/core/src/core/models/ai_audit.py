@@ -39,7 +39,9 @@ class AiJob(Base, UUIDPkMixin, CreatedAtMixin):
     model: Mapped[str | None] = mapped_column(String(128))
     tokens_in: Mapped[int | None] = mapped_column(Integer)
     tokens_out: Mapped[int | None] = mapped_column(Integer)
-    cost_usd: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    # Six decimals: with cheap or self-hosted models a call costs fractions of
+    # a cent, and four decimals rounded such calls to zero (ADR-0082).
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6))
     error: Mapped[str | None]
     finished_at: Mapped[datetime | None]
 

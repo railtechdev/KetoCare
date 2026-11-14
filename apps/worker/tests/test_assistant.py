@@ -49,7 +49,7 @@ def says(text: str) -> FakeMessages:
 def client_for(sessionmaker: async_sessionmaker, messages: FakeMessages, **overrides) -> AiClient:
     return AiClient(
         sessionmaker=sessionmaker,
-        anthropic=FakeAnthropic(messages),
+        transport=FakeAnthropic(messages),
         settings=settings_with(**overrides),
     )
 

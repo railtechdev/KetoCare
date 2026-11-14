@@ -1,4 +1,4 @@
-"""Schemas of `/admin/ai` — AI key, models, budgets and limits (ADR-0080)."""
+"""Schemas of `/admin/ai` — providers, models, budgets and limits (ADR-0080, ADR-0082)."""
 
 from __future__ import annotations
 
@@ -8,16 +8,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from core.ai_catalog import ProviderKind
 from core.app_settings import AiGroup
 from core.models.enums import AiJobKind
-
-
-class AiModelOption(BaseModel):
-    """A model the budget can be counted for: it has a price."""
-
-    id: str
-    usd_per_mtok_in: Decimal
-    usd_per_mtok_out: Decimal
 
 
 class AiKeyState(BaseModel):
@@ -31,8 +24,50 @@ class AiKeyState(BaseModel):
     unreadable: bool
     updated_at: datetime | None
     updated_by_name: str | None
-    #: Where the encryption key comes from: its own variable or SECRET_KEY.
-    encryption: Literal["dedicated", "derived"]
+
+
+class AiProviderKindOption(BaseModel):
+    """A kind of provider the administrator may connect (ADR-0082)."""
+
+    kind: ProviderKind
+    needs_key: bool
+    needs_base_url: bool
+    default_base_url: str | None
+
+
+class AiProviderView(BaseModel):
+    id: str
+    kind: ProviderKind
+    name: str
+    base_url: str | None
+    enabled: bool
+    #: Exists without a row and cannot be removed: the key typed before
+    #: providers appeared, or `ANTHROPIC_API_KEY`.
+    builtin: bool
+    #: Calls may go out: switched on, and has the key or address its kind needs.
+    ready: bool
+    key: AiKeyState
+    models_count: int
+
+
+class AiModelView(BaseModel):
+    """A catalogue entry: a model that has a price and so may be chosen."""
+
+    ref: str
+    provider: str
+    model: str
+    name: str | None
+    usd_per_mtok_in: Decimal
+    usd_per_mtok_out: Decimal
+    enabled: bool
+    #: From the price list in the code.
+    builtin: bool
+    #: A built-in entry whose price or switch was changed in the cabinet.
+    overridden: bool
+    #: May be called right now: the entry and its provider are on, the key is set.
+    usable: bool
+    #: Chosen by a group or a task: cannot be removed.
+    in_use: bool
 
 
 class AiSpend(BaseModel):
@@ -40,28 +75,31 @@ class AiSpend(BaseModel):
     month_usd: Decimal
 
 
-class AiGroupDefaults(BaseModel):
-    """What the group runs on when its field is empty — from the environment."""
-
-    model: str
-    model_fast: str | None
-    user_daily_limit: int
+class AiTaskView(BaseModel):
+    kind: AiJobKind
+    per_person: bool
+    #: The model chosen for this task in the cabinet; `None` — not chosen.
+    model: str | None
+    #: The model the task runs on and where it came from.
+    effective_model: str
+    source: Literal["task", "group", "env"] | None
+    usable: bool
 
 
 class AiGroupView(BaseModel):
     group: AiGroup
     kinds: list[AiJobKind]
-    #: Kinds counted against the per-person daily limit.
+    #: Kinds counted against the per-person daily limit of calls.
     per_person_kinds: list[AiJobKind]
-    has_fast: bool
     enabled: bool
-    #: Values set in the cabinet; `None` — the default below applies.
+    #: Values set in the cabinet; `None` — the default applies.
     model: str | None
-    model_fast: str | None
+    tasks: list[AiTaskView]
     daily_budget_usd: Decimal | None
     monthly_budget_usd: Decimal | None
     user_daily_limit: int | None
-    defaults: AiGroupDefaults
+    user_daily_budget_usd: Decimal | None
+    default_user_daily_limit: int
     spend: AiSpend
 
 
@@ -70,6 +108,8 @@ class AiProjectView(BaseModel):
     monthly_budget_usd: Decimal | None
     #: `AI_DAILY_BUDGET_USD` — the ceiling when no value is set in the cabinet.
     default_daily_budget_usd: Decimal
+    warn_percent: int | None
+    default_warn_percent: int
     spend: AiSpend
 
 
@@ -88,12 +128,15 @@ class AiBudgetAlert(BaseModel):
 
 
 class AiSettingsView(BaseModel):
-    key: AiKeyState
+    providers: list[AiProviderView]
+    provider_kinds: list[AiProviderKindOption]
+    models: list[AiModelView]
     project: AiProjectView
     groups: list[AiGroupView]
-    models: list[AiModelOption]
-    #: Budgets at 80 % or more — the fullest first.
+    #: Budgets at the warning share or more — the fullest first.
     alerts: list[AiBudgetAlert]
+    #: Where the encryption key of stored keys comes from.
+    encryption: Literal["dedicated", "derived"]
     #: How long the worker may still run on the previous values.
     applies_within_s: int
 
@@ -101,7 +144,8 @@ class AiSettingsView(BaseModel):
 class AiKeyInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    api_key: str = Field(min_length=20, max_length=400)
+    # Keys differ by provider: eight characters is "not a typo", not a format.
+    api_key: str = Field(min_length=8, max_length=400)
 
     @field_validator("api_key")
     @classmethod
@@ -120,14 +164,27 @@ class AiKeyCheckInput(BaseModel):
     api_key: str | None = Field(default=None, max_length=400)
 
 
-KeyProblem = Literal["not_configured", "unauthorized", "forbidden", "unreachable", "unexpected"]
+KeyProblem = Literal[
+    "not_configured", "no_address", "unauthorized", "forbidden", "unreachable", "unexpected"
+]
 
 
 class AiKeyCheck(BaseModel):
     ok: bool
     problem: KeyProblem | None
-    #: Priced models this key can call.
+    #: Model ids the provider lists for this key — what may be added to the
+    #: catalogue. Capped: a gateway may list thousands.
     models: list[str]
+    #: Of them, already in the catalogue.
+    in_catalog: list[str]
+
+
+class AiPriceSuggestion(BaseModel):
+    """A public price for a model being added — a hint for the form."""
+
+    known: bool
+    usd_per_mtok_in: Decimal | None
+    usd_per_mtok_out: Decimal | None
 
 
 # --- the spend report (ADR-0081) ------------------------------------------------

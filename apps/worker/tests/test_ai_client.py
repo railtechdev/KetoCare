@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -22,7 +23,8 @@ from core import app_settings
 from core.app_settings import AiGroup, GroupOverrides, ProjectOverrides
 from core.config import Settings
 from core.models import AiJob
-from core.models.enums import AiJobKind, AiJobStatus
+from core.models.enums import AiJobKind, AiJobStatus, UserRole
+from core.repositories import users as users_repo
 from worker.ai.client import (
     AiClient,
     AiDisabled,
@@ -31,6 +33,7 @@ from worker.ai.client import (
     NotConfigured,
 )
 from worker.ai.pricing import PRICES_USD_PER_MTOK, base_model, estimate_cost, is_priced
+from worker.ai.transport import Completion, ModelCall
 
 
 @dataclass
@@ -68,8 +71,37 @@ class FakeMessages:
 
 
 class FakeAnthropic:
+    """The wire in tests: the request as the provider would receive it.
+
+    The name and the shape of `messages.calls` stay from the time the client
+    spoke to one SDK: the tests assert on what leaves the process (model,
+    system, the user message), and that did not change with the carrier.
+    """
+
     def __init__(self, messages: FakeMessages) -> None:
         self.messages = messages
+        self.requests: list[ModelCall] = []
+
+    async def complete(self, call: ModelCall) -> Completion:
+        self.requests.append(call)
+        response = await self.messages.create(
+            model=call.route.split("/", 1)[1],
+            max_tokens=call.max_tokens,
+            system=call.system,
+            messages=[
+                {"role": "user", "content": [{"type": "text", "text": part} for part in call.parts]}
+            ],
+            timeout=call.timeout_s,
+        )
+        blocks = getattr(response, "content", None) or []
+        parts = [b.text for b in blocks if b.type == "text" and b.text]
+        usage = getattr(response, "usage", None)
+        return Completion(
+            text="\n".join(parts) if parts else None,
+            tokens_in=getattr(usage, "input_tokens", None),
+            tokens_out=getattr(usage, "output_tokens", None),
+            stop_reason=getattr(response, "stop_reason", None),
+        )
 
 
 def answer(text: str = "готово", tokens_in: int = 1000, tokens_out: int = 200) -> FakeResponse:
@@ -98,7 +130,7 @@ def client_for(
 ) -> AiClient:
     return AiClient(
         sessionmaker=sessionmaker,
-        anthropic=FakeAnthropic(messages),
+        transport=FakeAnthropic(messages),
         settings=settings_with(**overrides),
     )
 
@@ -403,7 +435,7 @@ class TestBudgetCannotBeSilentlyDisabled:
                 payload={},
             )
 
-        assert "прайс" in str(failure.value).lower()
+        assert "каталог" in str(failure.value).lower()
         assert messages.calls == []
 
     def test_env_example_models_are_priced(self) -> None:
@@ -501,12 +533,16 @@ class TestSingleDoor:
         слове. Импорт SDK мимо клиента — это обход псевдонимизации и журнала."""
 
         worker_src = Path(__file__).resolve().parents[1] / "src" / "worker"
+        # The wire is the one module that imports the carrier (ADR-0082); a
+        # provider SDK imported anywhere is the same bypass.
+        carrier = re.compile(r"^\s*(import|from)\s+(litellm|anthropic|openai)\b", re.M)
         offenders = [
             path.relative_to(worker_src).as_posix()
             for path in worker_src.rglob("*.py")
-            if "anthropic" in path.read_text() and path.name != "client.py"
+            if carrier.search(path.read_text()) and path.name != "transport.py"
         ]
         assert offenders == []
+        assert carrier.search((worker_src / "ai" / "transport.py").read_text())
 
 
 async def _save(sessionmaker: async_sessionmaker, write: Any) -> None:
@@ -526,14 +562,8 @@ class TestSettingsFromTheCabinet:
             sessionmaker,
             lambda s: app_settings.save_key(s, settings, "sk-ant-cabinet-0042", by=None),
         )
-        keys: list[str] = []
-        messages = FakeMessages(answer())
-
-        def for_key(key: str) -> FakeAnthropic:
-            keys.append(key)
-            return FakeAnthropic(messages)
-
-        client = AiClient(sessionmaker=sessionmaker, settings=settings, anthropic_for_key=for_key)
+        wire = FakeAnthropic(FakeMessages(answer()))
+        client = AiClient(sessionmaker=sessionmaker, settings=settings, transport=wire)
         await client.ask(
             kind=AiJobKind.ASSISTANT,
             requested_by=user_id,
@@ -542,7 +572,8 @@ class TestSettingsFromTheCabinet:
             payload={},
         )
 
-        assert keys == ["sk-ant-cabinet-0042"]
+        assert [call.api_key for call in wire.requests] == ["sk-ant-cabinet-0042"]
+        assert wire.requests[0].route == "anthropic/claude-opus-5"
 
     async def test_group_model_is_the_one_used(
         self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
@@ -689,3 +720,253 @@ class TestSettingsFromTheCabinet:
             system="x",
             payload={},
         )
+
+
+class TestProvidersAndCatalog:
+    """Any connected provider, any model of the catalogue (ADR-0082)."""
+
+    async def _connect_openai(self, sessionmaker: async_sessionmaker, key: str) -> None:
+        from core.ai_catalog import ModelEntry, ProviderKind, ProviderSettings
+
+        settings = settings_with()
+
+        async def write(session: Any) -> None:
+            await app_settings.save_provider(
+                session,
+                "gateway",
+                ProviderSettings(
+                    kind=ProviderKind.OPENAI_COMPATIBLE,
+                    name="Шлюз",
+                    base_url="https://llm.example.org/v1",
+                ),
+                by=None,
+            )
+            await app_settings.save_key(session, settings, key, by=None, provider_id="gateway")
+            await app_settings.save_models(
+                session,
+                [
+                    ModelEntry(
+                        provider="gateway",
+                        model="vendor/big-1",
+                        usd_per_mtok_in=Decimal(4),
+                        usd_per_mtok_out=Decimal(20),
+                    )
+                ],
+                by=None,
+            )
+            await app_settings.save_group(
+                session,
+                AiGroup.TECHNICAL,
+                GroupOverrides(task_models={AiJobKind.RECIPE_IMPORT: "gateway/vendor/big-1"}),
+                by=None,
+            )
+
+        await _save(sessionmaker, write)
+
+    async def test_task_runs_on_another_provider_at_the_catalogue_price(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        await self._connect_openai(sessionmaker, "gw-key-0042")
+        wire = FakeAnthropic(FakeMessages(answer(tokens_in=1000, tokens_out=200)))
+        client = AiClient(sessionmaker=sessionmaker, settings=settings_with(), transport=wire)
+
+        result = await client.ask(
+            kind=AiJobKind.RECIPE_IMPORT,
+            requested_by=user_id,
+            patient_id=None,
+            system="x",
+            payload={},
+        )
+        # The other task of the same group stays on the environment's model.
+        await client.ask(
+            kind=AiJobKind.CONTENT_DRAFT,
+            requested_by=user_id,
+            patient_id=None,
+            system="x",
+            payload={},
+        )
+
+        first, second = wire.requests
+        assert first.route == "openai/vendor/big-1"
+        assert first.api_key == "gw-key-0042"
+        assert first.base_url == "https://llm.example.org/v1"
+        assert second.route == "anthropic/claude-opus-5"
+        assert second.api_key == "sk-ant-test" and second.base_url is None
+        # 1000 × $4 + 200 × $20 per million.
+        assert result.cost_usd == Decimal("0.008")
+        assert result.model == "gateway/vendor/big-1"
+        jobs = await jobs_of(sessionmaker)
+        assert {job.model for job in jobs} == {"gateway/vendor/big-1", "claude-opus-5"}
+
+    async def test_provider_key_never_reaches_the_journal(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """Keys of other providers do not look like `sk-…`: the pattern alone
+        would let one through."""
+
+        await self._connect_openai(sessionmaker, "gw-key-0042")
+        error = RuntimeError("401 from upstream, Bearer gw-key-0042 rejected")
+        client = AiClient(
+            sessionmaker=sessionmaker,
+            settings=settings_with(),
+            transport=FakeAnthropic(FakeMessages(error=error)),
+        )
+
+        with pytest.raises(AiUnavailable):
+            await client.ask(
+                kind=AiJobKind.RECIPE_IMPORT,
+                requested_by=user_id,
+                patient_id=None,
+                system="x",
+                payload={},
+            )
+
+        (job,) = await jobs_of(sessionmaker)
+        assert "gw-key-0042" not in (job.error or "")
+        assert "[скрыто]" in (job.error or "")
+
+    async def test_switched_off_provider_falls_back_to_the_less_specific_model(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        from core.ai_catalog import ProviderKind, ProviderSettings
+
+        await self._connect_openai(sessionmaker, "gw-key-0042")
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_provider(
+                s,
+                "gateway",
+                ProviderSettings(
+                    kind=ProviderKind.OPENAI_COMPATIBLE,
+                    name="Шлюз",
+                    base_url="https://llm.example.org/v1",
+                    enabled=False,
+                ),
+                by=None,
+            ),
+        )
+        wire = FakeAnthropic(FakeMessages(answer()))
+        client = AiClient(sessionmaker=sessionmaker, settings=settings_with(), transport=wire)
+
+        await client.ask(
+            kind=AiJobKind.RECIPE_IMPORT,
+            requested_by=user_id,
+            patient_id=None,
+            system="x",
+            payload={},
+        )
+
+        assert wire.requests[0].route == "anthropic/claude-opus-5"
+
+    async def test_money_limit_per_person_counts_every_task_of_the_group(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """Reading a recipe file is outside the call limit — one collection is
+        dozens of calls — so the money limit is what stops one person."""
+
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_group(
+                s,
+                AiGroup.TECHNICAL,
+                GroupOverrides(user_daily_budget_usd=Decimal("0.01")),
+                by=None,
+            ),
+        )
+        async with sessionmaker() as session:
+            other = await users_repo.create(
+                session,
+                role=UserRole.DIETITIAN,
+                full_name="Другой Диетолог",
+                email=f"other-{uuid.uuid4()}@example.com",
+                password_hash="x",
+            )
+            other_id = other.id
+            await session.commit()
+        client = client_for(sessionmaker, FakeMessages(answer(tokens_in=1000, tokens_out=200)))
+
+        async def ask(who: uuid.UUID) -> None:
+            await client.ask(
+                kind=AiJobKind.RECIPE_IMPORT,
+                requested_by=who,
+                patient_id=None,
+                system="x",
+                payload={},
+            )
+
+        await ask(user_id)  # $0.01: 1000 × $5 + 200 × $25 per million
+        with pytest.raises(AiLimitExceeded):
+            await ask(user_id)
+        await ask(other_id)  # another person has their own money
+
+
+class TestWire:
+    def test_completion_is_read_from_the_carriers_answer(self) -> None:
+        from types import SimpleNamespace
+
+        from worker.ai.transport import _completion_of
+
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content=" Париж "), finish_reason="stop")
+            ],
+            usage=SimpleNamespace(prompt_tokens=29, completion_tokens=2),
+        )
+        assert _completion_of(response) == Completion(
+            text="Париж", tokens_in=29, tokens_out=2, stop_reason="stop"
+        )
+
+    def test_answer_without_text_is_not_an_empty_string(self) -> None:
+        from types import SimpleNamespace
+
+        from worker.ai.transport import _completion_of
+
+        refused = SimpleNamespace(
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content=None), finish_reason="refusal")
+            ],
+            usage=None,
+        )
+        done = _completion_of(refused)
+        assert done.text is None and done.stop_reason == "refusal"
+        assert _completion_of(SimpleNamespace(choices=[], usage=None)).text is None
+
+    async def test_keyless_server_gets_a_placeholder_key(self, monkeypatch) -> None:
+        """The carrier refuses an empty key before the request leaves; a
+        self-hosted server needs none. Found by a live call, not by a fake."""
+
+        from types import SimpleNamespace
+
+        from worker.ai import transport
+
+        seen: dict[str, Any] = {}
+
+        async def acompletion(**kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content="ок"), finish_reason="stop")
+                ],
+                usage=SimpleNamespace(prompt_tokens=3, completion_tokens=1),
+            )
+
+        monkeypatch.setattr(transport, "_litellm", lambda: SimpleNamespace(acompletion=acompletion))
+        done = await transport.LiteLLMTransport().complete(
+            ModelCall(
+                route="openai/local-model",
+                api_key="",
+                base_url="http://10.0.0.5:8000/v1",
+                system="s",
+                parts=("a", "b"),
+                max_tokens=10,
+                timeout_s=5,
+            )
+        )
+
+        assert done.text == "ок"
+        assert seen["api_key"] == transport.NO_KEY
+        assert seen["api_base"] == "http://10.0.0.5:8000/v1"
+        assert seen["model"] == "openai/local-model"
+        assert seen["num_retries"] == transport.MAX_RETRIES
+        assert [part["text"] for part in seen["messages"][1]["content"]] == ["a", "b"]
+        assert seen["messages"][0] == {"role": "system", "content": "s"}

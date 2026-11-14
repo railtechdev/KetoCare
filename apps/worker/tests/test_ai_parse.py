@@ -54,7 +54,7 @@ def says(*texts: str) -> FakeMessages:
 
 def client_for(sessionmaker: async_sessionmaker, messages: FakeMessages) -> AiClient:
     return AiClient(
-        sessionmaker=sessionmaker, anthropic=FakeAnthropic(messages), settings=settings_with()
+        sessionmaker=sessionmaker, transport=FakeAnthropic(messages), settings=settings_with()
     )
 
 
@@ -214,7 +214,7 @@ class TestLimitsPassThrough:
         # намеренно — родитель кормит ребёнка столько раз, сколько нужно.
         client = AiClient(
             sessionmaker=sessionmaker,
-            anthropic=FakeAnthropic(says(MEAL)),
+            transport=FakeAnthropic(says(MEAL)),
             settings=settings_with(ai_daily_budget_usd=0.0),
         )
 

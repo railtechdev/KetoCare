@@ -204,7 +204,11 @@ async def count_since(
 
 
 async def cost_since(
-    session: AsyncSession, *, since: datetime, kinds: Sequence[AiJobKind] | None = None
+    session: AsyncSession,
+    *,
+    since: datetime,
+    kinds: Sequence[AiJobKind] | None = None,
+    requested_by: uuid.UUID | None = None,
 ) -> Decimal:
     """Сколько проект потратил с момента `since`, в долларах.
 
@@ -223,6 +227,9 @@ async def cost_since(
     )
     if kinds is not None:
         query = query.where(AiJob.kind.in_(list(kinds)))
+    if requested_by is not None:
+        # One person's money — for the per-person budget of a group (ADR-0082).
+        query = query.where(AiJob.requested_by == requested_by)
     total = await session.scalar(query)
     return Decimal(str(total or 0))
 
