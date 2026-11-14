@@ -310,3 +310,61 @@ class CustomDish(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMi
     )  # [{product_id, grams}]
     computed: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     engine_version: Mapped[str | None] = mapped_column(String(32))
+
+
+class RecipeImportDraft(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
+    """A recipe file being reviewed before it becomes recipes (ADR-0079).
+
+    Working state, not clinical data: nothing here is read by a calculation or
+    shown to a family. The draft lives on the server because a large file is
+    reviewed in several sittings, and state kept in a browser tab is lost on
+    reload.
+
+    `source_lines` is the text of the file, one entry per line; a parsed
+    ingredient points at its line by number, so the reviewer sees the original
+    next to what was read from it. `payload` holds the recipes read so far and
+    the reviewer's decisions; its shape is owned by `api.services.recipe_drafts`.
+    """
+
+    __tablename__ = "recipe_import_drafts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('parsing', 'ready', 'failed')", name="recipe_import_drafts_status_known"
+        ),
+    )
+
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_lines: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    #: How many source lines the parser has consumed; equals the length of
+    #: `source_lines` when parsing is over.
+    lines_done: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    #: Why parsing stopped, in words for the reviewer.
+    failure: Mapped[str | None] = mapped_column(String(500))
+    #: Set when the reviewer removes the draft; closed drafts are not listed.
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProductAlias(Base, UUIDPkMixin, CreatedAtMixin):
+    """A name from somebody's file that a specialist matched to a product.
+
+    Remembered so the same spelling is not asked about again: "масло слив."
+    resolved once resolves in every later file. The alias is stored normalised
+    (`repositories.product_aliases.alias_key`) and is unique: one spelling means one product.
+    """
+
+    __tablename__ = "product_aliases"
+
+    alias: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )

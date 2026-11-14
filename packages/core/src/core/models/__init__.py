@@ -34,9 +34,11 @@ from .content import (
     MenuTemplate,
     MenuTemplateItem,
     Product,
+    ProductAlias,
     ProductCategory,
     ProductRevision,
     Recipe,
+    RecipeImportDraft,
     RecipeIngredient,
 )
 from .diary import (
@@ -93,6 +95,8 @@ __all__ = [
     "MenuTemplate",
     "MenuTemplateItem",
     "RecipeIngredient",
+    "RecipeImportDraft",
+    "ProductAlias",
     "CustomDish",
     # diary
     "SeizureType",

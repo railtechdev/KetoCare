@@ -71,6 +71,7 @@
       "menu_day_removed": "Убрано меню на день",
       "menu_composed_by_specialist": "Меню составлено специалистом",
       "recompute_after_product_update": "Пересчёт рецептов и блюд после правки продукта",
+      "alias": "Соответствие названия из файла продукту",
       "login": "Вход",
       "login_failed": "Неудачный вход",
       "login_failed_totp": "Неверный код входа",

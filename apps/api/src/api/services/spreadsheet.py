@@ -29,7 +29,7 @@ def is_xlsx(content: bytes) -> bool:
     return content.startswith(_ZIP_MAGIC)
 
 
-def _cell(value: object) -> str:
+def cell_text(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, datetime):
@@ -58,7 +58,7 @@ def xlsx_to_csv(content: bytes) -> bytes:
         for index, row in enumerate(sheet.iter_rows(values_only=True)):
             if index >= MAX_ROWS:
                 raise SpreadsheetError(f"В листе больше {MAX_ROWS} строк.")
-            cells = [_cell(value) for value in row]
+            cells = [cell_text(value) for value in row]
             while cells and cells[-1] == "":
                 cells.pop()
             if not cells:
