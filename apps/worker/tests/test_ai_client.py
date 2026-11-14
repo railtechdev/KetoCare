@@ -637,7 +637,11 @@ class TestSettingsFromTheCabinet:
         client = client_for(sessionmaker, messages, ai_daily_budget_usd=100.0)
 
         await client.ask(
-            kind=AiJobKind.PARSE_MEAL, requested_by=user_id, patient_id=None, system="x", payload={}
+            kind=AiJobKind.RECIPE_IMPORT,
+            requested_by=user_id,
+            patient_id=None,
+            system="x",
+            payload={},
         )
         # Вчерашний расход в месячный бюджет входит, в дневной — нет.
         async with sessionmaker() as session:

@@ -35,8 +35,6 @@ from ..schemas_ai_settings import (
     AiSpend,
 )
 
-AUDIT_ENTITY = "app_settings"
-
 #: The provider's list of models: free, needs only the key, and is the
 #: cheapest honest answer to "does this key work" (ADR-0080).
 ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models"
@@ -171,7 +169,7 @@ async def _audit(
         session,
         user_id=actor.id,
         action=action,
-        entity=AUDIT_ENTITY,
+        entity="app_settings",
         before=before,
         after=after,
         ip=ip,
