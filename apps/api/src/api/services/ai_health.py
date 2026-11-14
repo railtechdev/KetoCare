@@ -27,6 +27,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core import app_settings
+from core.app_settings import AI_TASKS
 from core.config import Settings
 from core.models.enums import AiJobStatus
 from core.repositories import ai_jobs as ai_jobs_repo
@@ -116,6 +117,9 @@ async def ai_health(session: AsyncSession, settings: Settings) -> AiHealth:
     # The key, models and budget the worker actually runs on: the cabinet
     # first, the environment as the fallback (ADR-0080).
     config = await app_settings.ai_config(session, settings)
+    usable = {
+        kind: config.catalog.usable(config.group_of(kind).model_for(kind)) for kind in AI_TASKS
+    }
 
     return AiHealth(
         window_hours=int(WINDOW.total_seconds() // 3600),
@@ -135,12 +139,11 @@ async def ai_health(session: AsyncSession, settings: Settings) -> AiHealth:
         ],
         daily_budget_exhausted=spent >= config.daily_budget_usd,
         configured=AiConfigured(
-            api_key=bool(config.api_key),
-            model_fast=all(
-                group.model_fast
-                for group in config.groups.values()
-                if app_settings.group_has_fast(group.group)
-            ),
-            model_smart=all(group.model for group in config.groups.values()),
+            # The three flags keep their names for the monitor; with providers
+            # and a catalogue (ADR-0082) they mean "can be called": a key that
+            # is absent matters only where a task's model needs it.
+            api_key=bool(config.api_key) or all(usable.values()),
+            model_fast=all(ok for kind, ok in usable.items() if AI_TASKS[kind].speed == "fast"),
+            model_smart=all(ok for kind, ok in usable.items() if AI_TASKS[kind].speed != "fast"),
         ),
     )

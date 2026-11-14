@@ -65,7 +65,9 @@ def decrypt(settings: Settings, token: str) -> str | None:
 
 
 def hint(secret: str) -> str:
-    """What the cabinet shows of a secret: its last four characters."""
+    """What the cabinet shows of a secret: its last four characters — two for a
+    short one, so the hint never gives away a large part of the key."""
 
-    tail = secret.strip()[-4:]
+    value = secret.strip()
+    tail = value[-4:] if len(value) >= 16 else value[-2:]
     return f"…{tail}" if tail else ""

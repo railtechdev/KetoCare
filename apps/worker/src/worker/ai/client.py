@@ -1,4 +1,4 @@
-"""Единственная дверь к Claude API (раздел 10.2 ТЗ, правило 6 `CLAUDE.md`).
+"""Единственная дверь к модели (раздел 10.2 ТЗ, правило 6 `CLAUDE.md`).
 
 Здесь сходится всё, что должно случаться при КАЖДОМ обращении к модели и о чём
 нельзя вспоминать в каждой задаче отдельно:
@@ -9,9 +9,11 @@
   предел человека в группе, выключатель группы (ADR-0080);
 - строка в `ai_jobs` — до вызова, чтобы след остался даже если процесс умрёт,
   и с токенами и стоимостью после, включая неудачу;
-- ключ и имя модели — из настроек администратора, запасным — из окружения
-  (`ANTHROPIC_API_KEY`, `AI_MODEL_FAST` / `AI_MODEL_SMART`), но не из кода;
-- ретраи и таймаут.
+- поставщик, ключ и модель — из настроек администратора (подключения и
+  каталог моделей, ADR-0082), запасным — из окружения (`ANTHROPIC_API_KEY`,
+  `AI_MODEL_FAST` / `AI_MODEL_SMART`), но не из кода;
+- ретраи и таймаут — у провода (`transport`), он же единственный импортирует
+  LiteLLM.
 
 Чего здесь нет намеренно: промптов и разбора ответа. Промпты живут файлами в
 `prompts/` и меняются отдельным PR (раздел 10.4 ТЗ), разбор — дело задачи,
@@ -23,21 +25,21 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Protocol, cast
+from typing import Any
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from core import app_settings
+from core.ai_catalog import ResolvedModel, model_ref
 from core.app_settings import AI_TASKS, AiConfig
 from core.config import Settings
 from core.models.enums import AiJobKind
 from core.repositories import ai_jobs as jobs_repo
 
-from .pricing import UnknownModelPrice, assert_priced, estimate_cost, reserve_cost
 from .pseudonymize import pseudonymize, scrub_free_text
+from .transport import LiteLLMTransport, ModelCall, Transport
 
 # Which tasks count against the per-person limit and which take the fast model
 # is declared once, in `core.app_settings.AI_TASKS`: the admin area shows the
@@ -50,9 +52,6 @@ DEFAULT_MAX_TOKENS = 4096
 #: Сколько ждём ответа. Раздел 10.1 ТЗ даёт разбору 15 секунд, потому что ручка
 #: `POST /ai/parse` ждёт его синхронно; остальным задачам спешить некуда.
 DEFAULT_TIMEOUT_S = 60.0
-#: Ретраи — три, экспоненциально (раздел 10.2 ТЗ). Их делает сам SDK: свой цикл
-#: поверх чужого дал бы девять попыток вместо трёх.
-MAX_RETRIES = 3
 
 
 class AiError(RuntimeError):
@@ -101,21 +100,6 @@ class AiAnswer:
     cost_usd: Decimal | None
 
 
-class MessagesApi(Protocol):
-    """То, чем клиент пользуется у SDK, — ровно один метод.
-
-    Протокол, а не импорт типа: тестам нужно подставить свою реализацию, не
-    поднимая настоящий SDK и не выходя в сеть.
-    """
-
-    async def create(self, **kwargs: Any) -> Any: ...
-
-
-class AnthropicLike(Protocol):
-    @property
-    def messages(self) -> MessagesApi: ...
-
-
 class AiClient:
     """Обращение к модели с журналом, предохранителями и псевдонимизацией."""
 
@@ -124,52 +108,42 @@ class AiClient:
         *,
         sessionmaker: async_sessionmaker[Any],
         settings: Settings,
-        anthropic: AnthropicLike | None = None,
-        anthropic_for_key: Callable[[str], AnthropicLike] | None = None,
+        transport: Transport | None = None,
     ) -> None:
-        """`anthropic` — готовый клиент (тесты); иначе он собирается под ключ,
-        который действует на момент вызова: администратор мог его заменить."""
+        """`transport` — провод к поставщику; в тестах свой, без сети."""
 
         self._sessionmaker = sessionmaker
         self._settings = settings
-        self._fixed = anthropic
-        self._for_key = anthropic_for_key or build_anthropic_for_key
-        self._built: tuple[str, AnthropicLike] | None = None
-
-    def _sdk(self, api_key: str) -> AnthropicLike:
-        if self._fixed is not None:
-            return self._fixed
-        if self._built is None or self._built[0] != api_key:
-            self._built = (api_key, self._for_key(api_key))
-        return self._built[1]
+        self._transport: Transport = transport or LiteLLMTransport()
 
     @staticmethod
-    def model_for(kind: AiJobKind, config: AiConfig) -> str:
-        """Имя модели группы задач. Пустое значение — отказ, а не подстановка.
+    def model_for(kind: AiJobKind, config: AiConfig) -> ResolvedModel:
+        """Модель задачи: подключение, запись каталога и идентификатор.
 
-        Подставить сюда имя по умолчанию значит зашить его в код: правило 6
-        `CLAUDE.md` запрещает именно это, а молчаливая подстановка ещё и уводит
-        расходы на модель, которую никто не выбирал.
+        Пустое значение — отказ, а не подстановка: подставить имя по умолчанию
+        значит зашить его в код (правило 6 `CLAUDE.md`), а молчаливая
+        подстановка ещё и уводит расходы на модель, которую никто не выбирал.
+
+        Модель без записи в каталоге — тоже отказ: у неё нет цены, сумма за
+        день считалась бы нулём, и бюджет не срабатывал бы никогда.
         """
 
         group = config.group_of(kind)
-        model = group.model_for(kind)
-        variable = "AI_MODEL_FAST" if AI_TASKS[kind].speed == "fast" else "AI_MODEL_SMART"
-        if not model:
+        ref = group.model_for(kind)
+        if not ref:
+            variable = "AI_MODEL_FAST" if AI_TASKS[kind].speed == "fast" else "AI_MODEL_SMART"
             raise NotConfigured(
-                f"Модель группы «{group.group.value}» не выбрана в разделе «ИИ» и не задана "
-                f"переменной {variable} — обращаться не к какой модели."
+                f"Модель группы «{group.group.value}» не выбрана в разделе «Модели и расход» "
+                f"и не задана переменной {variable} — обращаться не к какой модели."
             )
-
-        # Модель без цены — это выключенный бюджет: стоимость её вызовов
-        # неизвестна, сумма за день считается нулём, и предохранитель не
-        # срабатывает никогда. Поэтому отказ, а не молчаливое «посчитаем потом».
-        try:
-            assert_priced(model, variable=variable)
-        except UnknownModelPrice as error:
-            raise NotConfigured(str(error)) from error
-
-        return model
+        resolved = config.catalog.resolve(ref)
+        if resolved is None:
+            raise NotConfigured(
+                f"Модель «{ref}» вызвать нельзя: её нет в каталоге моделей (без цены бюджет "
+                "не считается), она или её подключение выключены, либо у подключения нет "
+                "ключа или адреса."
+            )
+        return resolved
 
     async def ask(
         self,
@@ -197,19 +171,18 @@ class AiClient:
 
         async with self._sessionmaker() as session:
             config = await app_settings.ai_config(session, self._settings)
-            if not config.api_key:
-                raise NotConfigured(
-                    "Ключ ИИ не задан ни в разделе «ИИ», ни в ANTHROPIC_API_KEY — "
-                    "обращаться к модели нечем."
-                )
             if not config.group_of(kind).enabled:
                 raise AiDisabled("Эта функция ИИ выключена администратором.")
-            model = self.model_for(kind, config)
+            resolved = self.model_for(kind, config)
+            # В журнал — ссылка каталога: по ней расход сводится по моделям,
+            # и по ней же видно, через какое подключение шёл вызов.
+            model = model_ref(resolved.provider.id, resolved.model)
 
-            reserved = reserve_cost(
-                model,
-                max_tokens=max_tokens,
-                prompt_tokens_guess=_prompt_tokens_guess(safe_payload),
+            # Бронь — верхняя оценка стоимости, списывается в бюджет ДО вызова:
+            # пока строка `RUNNING`, настоящей цены никто не знает, а без брони
+            # одновременные задачи проходили бы предохранитель все разом.
+            reserved = resolved.entry.cost(
+                tokens_in=_prompt_tokens_guess(safe_payload), tokens_out=max_tokens
             )
 
             # Проверка и запись — под одной блокировкой: иначе одновременные
@@ -230,28 +203,36 @@ class AiClient:
             job_id = job.id
             await session.commit()
 
-        sdk = self._sdk(config.api_key)
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": json.dumps(safe_payload, ensure_ascii=False, sort_keys=True)}
-        ]
+        parts = [json.dumps(safe_payload, ensure_ascii=False, sort_keys=True)]
         if safe_text:
-            content.append({"type": "text", "text": safe_text})
+            parts.append(safe_text)
 
         try:
-            response = await sdk.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": content}],
-                timeout=timeout_s,
+            completion = await self._transport.complete(
+                ModelCall(
+                    route=resolved.route,
+                    api_key=resolved.provider.api_key,
+                    base_url=resolved.provider.base_url,
+                    system=system,
+                    parts=tuple(parts),
+                    max_tokens=max_tokens,
+                    timeout_s=timeout_s,
+                )
             )
         except Exception as error:  # noqa: BLE001 — наружу идёт один понятный тип
-            await self._finish_failed(job_id, error=_describe_failure(error))
+            await self._finish_failed(
+                job_id, error=_describe_failure(error, secret=resolved.provider.api_key)
+            )
             raise AiUnavailable("Модель не ответила.") from error
 
-        tokens_in, tokens_out = _usage_of(response)
-        cost = estimate_cost(model, tokens_in=tokens_in, tokens_out=tokens_out)
-        text = _text_of(response)
+        tokens_in, tokens_out = completion.tokens_in, completion.tokens_out
+        cost = resolved.entry.cost(tokens_in=tokens_in, tokens_out=tokens_out)
+        if cost is None:
+            # The provider did not say what the call used. The reservation —
+            # an upper estimate — stays as the spend: an unknown cost counted
+            # as nothing would let the budget never fill.
+            cost = reserved
+        text = completion.text
 
         if text is None:
             # Ответ пришёл, но текста в нём нет — например, модель отказалась
@@ -259,7 +240,7 @@ class AiClient:
             # обязательно: иначе бюджет не увидит расхода.
             await self._finish_failed(
                 job_id,
-                error=f"Модель не вернула текст: stop_reason={getattr(response, 'stop_reason', None)}",
+                error=f"Модель не вернула текст: stop_reason={completion.stop_reason}",
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 cost=cost,
@@ -343,6 +324,21 @@ class AiClient:
                     "На сегодня вопросов к помощнику больше нет — они появятся снова завтра."
                 )
 
+        # Денежный предел человека считает ВСЕ задачи группы — и те, что мимо
+        # счётчика обращений (чтение файла рецептов: один сборник — десятки
+        # вызовов). Это ответ на «кто привёл к большому расходу» до того, как
+        # он случился (ADR-0082).
+        if group.user_daily_budget_usd is not None and (
+            await jobs_repo.cost_since(
+                session, since=day, kinds=group_kinds, requested_by=requested_by
+            )
+            >= group.user_daily_budget_usd
+        ):
+            raise AiLimitExceeded(
+                "Ваш дневной лимит на эту функцию исчерпан. Он обновится завтра — "
+                "остальные разделы работают как обычно."
+            )
+
     async def _finish_failed(
         self,
         job_id: uuid.UUID,
@@ -378,31 +374,6 @@ def _prompt_tokens_guess(payload: Any) -> int:
     return max(len(json.dumps(payload, ensure_ascii=False)) // _CHARS_PER_TOKEN, 1)
 
 
-def _usage_of(response: Any) -> tuple[int | None, int | None]:
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return None, None
-    tokens_in = getattr(usage, "input_tokens", None)
-    tokens_out = getattr(usage, "output_tokens", None)
-    return tokens_in, tokens_out
-
-
-def _text_of(response: Any) -> str | None:
-    """Текст ответа: блоки бывают разных типов, и `content[0]` — не текст.
-
-    У модели с включённым размышлением первым блоком идёт `thinking`, и слепое
-    обращение к первому блоку вернуло бы пустую строку (или упало).
-    """
-
-    blocks = getattr(response, "content", None) or []
-    parts = [
-        block.text
-        for block in blocks
-        if getattr(block, "type", None) == "text" and getattr(block, "text", None)
-    ]
-    return "\n".join(parts) if parts else None
-
-
 def build_ai_client(settings: Settings | None = None) -> AiClient:
     """Собранный клиент для задач воркера.
 
@@ -416,31 +387,11 @@ def build_ai_client(settings: Settings | None = None) -> AiClient:
     return AiClient(sessionmaker=get_sessionmaker(), settings=resolved)
 
 
-def build_anthropic_for_key(api_key: str) -> AnthropicLike:
-    """Настоящий SDK-клиент. Импорт внутри функции — по той же причине, что у
-    weasyprint в отчётах: пакет не нужен задачам, которые к модели не ходят."""
-
-    from anthropic import AsyncAnthropic
-
-    # `messages.create` у SDK — набор перегрузок с обязательными параметрами, и
-    # структурно он не совпадает с нашим протоколом, хотя вызывается ровно так.
-    # Приведение здесь, а не протокол «под SDK»: протокол существует ради тестов,
-    # которым нужно подставить свою реализацию, не выходя в сеть.
-    return cast(
-        AnthropicLike,
-        AsyncAnthropic(
-            api_key=api_key,
-            max_retries=MAX_RETRIES,
-            timeout=DEFAULT_TIMEOUT_S,
-        ),
-    )
-
-
 #: Сколько текста исключения сохранять в журнал.
 _ERROR_CHARS = 300
 
 
-def _describe_failure(error: BaseException) -> str:
+def _describe_failure(error: BaseException, *, secret: str = "") -> str:
     """Причина неудачи для `ai_jobs.error` — без содержимого запроса.
 
     `str(error)` у транспортных исключений иногда разворачивает объект запроса
@@ -449,8 +400,12 @@ def _describe_failure(error: BaseException) -> str:
     бэкап, в выгрузку, в разбор инцидента.
     """
 
-    text = f"{type(error).__name__}: {error}"[:_ERROR_CHARS]
-    return _SECRETS.sub("[скрыто]", text)
+    text = f"{type(error).__name__}: {error}"
+    # Ключ вызова вырезается дословно: у разных поставщиков он выглядит
+    # по-разному, и шаблон ниже узнаёт не каждый.
+    if secret:
+        text = text.replace(secret, "[скрыто]")
+    return _SECRETS.sub("[скрыто]", text[:_ERROR_CHARS])
 
 
 #: Что вырезается: значения заголовков с ключами и любые строки вида `sk-...`.

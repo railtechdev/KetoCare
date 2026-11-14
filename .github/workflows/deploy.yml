@@ -158,6 +158,11 @@ jobs:
           # модели (правило 6 CLAUDE.md).
           AI_MODEL_FAST: ${{ vars.AI_MODEL_FAST || secrets.AI_MODEL_FAST }}
           AI_MODEL_SMART: ${{ vars.AI_MODEL_SMART || secrets.AI_MODEL_SMART }}
+          # Куда подключения из кабинета могут отправлять запросы с данными
+          # детей (ADR-0082): список хостов через запятую, `*.домен` — поддомены.
+          # Пусто — любой адрес. Задаёт тот, кто обслуживает сервер, а не
+          # администратор кабинета.
+          AI_PROVIDER_HOSTS: ${{ vars.AI_PROVIDER_HOSTS }}
           # Предохранители расхода. Умолчания заданы в `core.config`, поэтому
           # пустое значение здесь не ломает ничего — оно означает «как в коде».
           AI_DAILY_BUDGET_USD: ${{ vars.AI_DAILY_BUDGET_USD }}
@@ -222,7 +227,7 @@ jobs:
           NAMES = [
               "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
               "BOT_USERNAME", "ANTHROPIC_API_KEY", "SETTINGS_ENCRYPTION_KEY", "MONITOR_TOKEN",
-              "AI_MODEL_FAST", "AI_MODEL_SMART",
+              "AI_MODEL_FAST", "AI_MODEL_SMART", "AI_PROVIDER_HOSTS",
               "AI_DAILY_BUDGET_USD", "AI_USER_DAILY_LIMIT",
               "SENTRY_DSN", "SENTRY_ENVIRONMENT",
               "ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME",

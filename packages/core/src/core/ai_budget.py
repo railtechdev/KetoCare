@@ -27,9 +27,10 @@ from .config import Settings
 from .models.enums import AiJobKind
 from .repositories import ai_jobs as ai_jobs_repo
 
-#: The share of a budget at which the administrator is warned. Four fifths
-#: leaves a working day's margin on a monthly budget and an hour or two on a
-#: daily one — enough to raise it before families hear "limit reached".
+#: The default share of a budget at which the administrator is warned; the
+#: project settings may move it (ADR-0082). Four fifths leaves a working day's
+#: margin on a monthly budget and an hour or two on a daily one — enough to
+#: raise it before families hear "limit reached".
 WARN_SHARE = Decimal("0.8")
 
 Period = Literal["day", "month"]
@@ -54,6 +55,8 @@ class BudgetUsage:
     period_start: datetime
     spent_usd: Decimal
     budget_usd: Decimal
+    #: The share at which this budget warns — the administrator's choice.
+    warn_share: Decimal = WARN_SHARE
 
     @property
     def percent(self) -> int:
@@ -65,7 +68,7 @@ class BudgetUsage:
     def level(self) -> BudgetLevel | None:
         if self.spent_usd >= self.budget_usd:
             return BudgetLevel.EXHAUSTED
-        if self.spent_usd >= self.budget_usd * WARN_SHARE:
+        if self.spent_usd >= self.budget_usd * self.warn_share:
             return BudgetLevel.WARNING
         return None
 
@@ -118,6 +121,7 @@ async def usages(
                 period_start=starts[period],
                 spent_usd=_sum(spent[period], kinds),
                 budget_usd=budget,
+                warn_share=config.warn_share,
             )
         )
 

@@ -130,6 +130,11 @@ export const AUDIT_ACTIONS = [
   // попадает, только последние четыре знака.
   "ai_key_replaced",
   "ai_key_removed",
+  // Подключения к поставщикам и каталог моделей (ADR-0082).
+  "ai_provider_added",
+  "ai_provider_removed",
+  "ai_model_saved",
+  "ai_model_removed",
   // Бюджет моделей заполнился на 80 % или исчерпан — пишет воркер, один раз
   // за период (ADR-0081).
   "ai_budget_warning",

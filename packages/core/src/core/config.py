@@ -38,6 +38,11 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     ai_model_fast: str = ""
+    #: Hosts an AI connection added in the cabinet may point to (ADR-0082),
+    #: comma-separated; `*.example.org` matches subdomains. Empty — any host.
+    #: Set by whoever runs the server, not by the administrator: where requests
+    #: with children's data may go must not hinge on one admin account.
+    ai_provider_hosts: str = ""
     ai_model_smart: str = ""
     ai_daily_budget_usd: float = 10.0
     ai_user_daily_limit: int = 30

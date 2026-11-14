@@ -86,7 +86,7 @@ class TestClientTakesTheLock:
 
         client = AiClient(
             sessionmaker=sessionmaker,
-            anthropic=FakeAnthropic(FakeMessages(answer())),
+            transport=FakeAnthropic(FakeMessages(answer())),
             settings=settings_with(),
         )
         await client.ask(
@@ -167,7 +167,7 @@ class TestNotConfigured:
 
         client = AiClient(
             sessionmaker=sessionmaker,
-            anthropic=FakeAnthropic(FakeMessages(answer())),
+            transport=FakeAnthropic(FakeMessages(answer())),
             settings=settings_with(anthropic_api_key=""),
         )
 

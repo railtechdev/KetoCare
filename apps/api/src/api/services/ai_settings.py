@@ -8,6 +8,9 @@ a request text or names a child — a person and a sum, never what they asked.
 
 from __future__ import annotations
 
+import asyncio
+import json
+import re
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -18,7 +21,16 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core import ai_budget, app_settings, secret_box
-from core.ai_pricing import PRICES_USD_PER_MTOK, is_priced
+from core.ai_catalog import (
+    KINDS,
+    Catalog,
+    ModelEntry,
+    Provider,
+    ProviderSettings,
+    host_allowed,
+    model_ref,
+)
+from core.ai_price_map import suggest_price
 from core.app_settings import AI_TASKS, AiGroup, GroupOverrides, ProjectOverrides
 from core.config import Settings
 from core.models.enums import AiJobKind, AiJobStatus
@@ -30,65 +42,137 @@ from ..deps.auth import CurrentUser
 from ..errors import ApiError, ErrorCode
 from ..schemas_ai_settings import (
     AiBudgetAlert,
-    AiGroupDefaults,
     AiGroupSpend,
     AiGroupView,
     AiKeyCheck,
     AiKeyState,
     AiKindSpend,
-    AiModelOption,
     AiModelSpend,
+    AiModelView,
     AiPersonSpend,
+    AiPriceSuggestion,
     AiProjectView,
+    AiProviderKindOption,
+    AiProviderView,
     AiSettingsView,
     AiSpend,
     AiSpendLine,
     AiSpendReport,
+    AiTaskView,
+    KeyProblem,
     SpendPeriod,
 )
 
-#: The provider's list of models: free, needs only the key, and is the
-#: cheapest honest answer to "does this key work" (ADR-0080).
-ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models"
+#: The list of models is asked of the provider: free, needs only the key, and is
+#: the cheapest honest answer to "does this key work" (ADR-0080).
 ANTHROPIC_VERSION = "2023-06-01"
 CHECK_TIMEOUT_S = 10.0
+#: A gateway may list thousands of models; the form needs a list to pick from.
+CHECK_MODELS_LIMIT = 500
+_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,119}$")
 
 
-async def fetch_model_ids(api_key: str) -> tuple[int, list[str]]:
+#: The most of a provider's answer that is read: a list of models is tens of
+#: kilobytes; an address pointing elsewhere must not stream gigabytes in.
+CHECK_BODY_MAX = 2_000_000
+
+
+async def fetch_model_ids(provider: Provider, api_key: str) -> tuple[int, list[str]]:
     """HTTP status of the provider and the model ids the key may call.
 
-    Replaced in tests: the suite never goes to the network.
+    Replaced in tests: the suite never goes to the network. Only ids of a
+    narrow alphabet come back — the address is the administrator's, and the
+    answer of an arbitrary server must not travel to the screen as is. The
+    whole exchange is bounded in time and size; redirects are not followed.
     """
 
-    async with httpx.AsyncClient(timeout=CHECK_TIMEOUT_S) as client:
-        response = await client.get(
-            ANTHROPIC_MODELS_URL,
-            params={"limit": 1000},
-            headers={"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION},
-        )
-    if response.status_code != 200:
-        return response.status_code, []
-    data = response.json().get("data", [])
-    return 200, [str(item["id"]) for item in data if isinstance(item, dict) and "id" in item]
+    info = provider.info
+    base = provider.base_url or info.default_base_url or ""
+    headers: dict[str, str] = {}
+    params: dict[str, str | int] = {}
+    if info.auth == "x-api-key":
+        headers = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION}
+        params = {"limit": 1000}
+    elif info.auth == "bearer" and api_key:
+        headers = {"Authorization": f"Bearer {api_key}"}
+    elif info.auth == "query":
+        # A header, not `?key=`: a key in the address ends up in proxy logs
+        # and in error-report breadcrumbs.
+        headers = {"x-goog-api-key": api_key}
+        params = {"pageSize": 1000}
 
-
-async def check_key(session: AsyncSession, settings: Settings, api_key: str | None) -> AiKeyCheck:
-    key = (api_key or "").strip()
-    if not key:
-        key = (await app_settings.ai_config(session, settings)).api_key
-    if not key:
-        return AiKeyCheck(ok=False, problem="not_configured", models=[])
+    async with (
+        asyncio.timeout(CHECK_TIMEOUT_S),
+        httpx.AsyncClient(timeout=CHECK_TIMEOUT_S, follow_redirects=False) as client,
+        client.stream("GET", base + info.models_path, params=params, headers=headers) as response,
+    ):
+        if response.status_code != 200:
+            return response.status_code, []
+        body = bytearray()
+        async for chunk in response.aiter_bytes():
+            body.extend(chunk)
+            if len(body) > CHECK_BODY_MAX:
+                return 200, []
     try:
-        status, ids = await fetch_model_ids(key)
-    except (httpx.HTTPError, ValueError):
-        return AiKeyCheck(ok=False, problem="unreachable", models=[])
+        parsed = json.loads(bytes(body))
+    except ValueError:
+        return 200, []
+    items = parsed.get(info.list_key, []) if isinstance(parsed, dict) else []
+    ids: list[str] = []
+    for item in items if isinstance(items, list) else []:
+        raw = item.get(info.id_key) if isinstance(item, dict) else None
+        if not isinstance(raw, str):
+            continue
+        # Gemini lists `models/gemini-…`; the id to call is what follows.
+        model = raw.removeprefix("models/")
+        if _MODEL_ID.match(model):
+            ids.append(model)
+    return 200, ids
+
+
+async def check_key(
+    session: AsyncSession, settings: Settings, provider_id: str, api_key: str | None
+) -> AiKeyCheck:
+    """Ask the provider for its models with the key given, or the stored one."""
+
+    models = await app_settings.catalog(session, settings)
+    provider = _provider_or_404(models, provider_id)
+
+    def failed(problem: KeyProblem) -> AiKeyCheck:
+        return AiKeyCheck(ok=False, problem=problem, models=[], in_catalog=[])
+
+    key = (api_key or "").strip() or provider.api_key
+    if provider.info.needs_key and not key:
+        return failed("not_configured")
+    if not (provider.base_url or provider.info.default_base_url):
+        return failed("no_address")
+    if not provider.host_allowed:
+        return failed("host_not_allowed")
+    try:
+        status, ids = await fetch_model_ids(provider, key)
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError, TimeoutError, OSError):
+        return failed("unreachable")
     if status == 200:
-        return AiKeyCheck(ok=True, problem=None, models=sorted({m for m in ids if is_priced(m)}))
-    if status == 401:
-        return AiKeyCheck(ok=False, problem="unauthorized", models=[])
+        found = sorted(set(ids))[:CHECK_MODELS_LIMIT]
+        return AiKeyCheck(
+            ok=True,
+            problem=None,
+            models=found,
+            in_catalog=[model for model in found if model_ref(provider.id, model) in models.models],
+        )
+    if status in (400, 401):
+        # Gemini answers a bad key with 400, the rest with 401.
+        return failed("unauthorized")
     if status == 403:
-        return AiKeyCheck(ok=False, problem="forbidden", models=[])
-    return AiKeyCheck(ok=False, problem="unexpected", models=[])
+        return failed("forbidden")
+    return failed("unexpected")
+
+
+def _provider_or_404(models: Catalog, provider_id: str) -> Provider:
+    provider = models.providers.get(provider_id)
+    if provider is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Такого подключения нет.")
+    return provider
 
 
 def _spend_of(totals: dict[AiJobKind, Decimal], kinds: list[AiJobKind] | None) -> Decimal:
@@ -97,13 +181,32 @@ def _spend_of(totals: dict[AiJobKind, Decimal], kinds: list[AiJobKind] | None) -
     return sum((totals.get(kind, Decimal(0)) for kind in kinds), Decimal(0))
 
 
+def _in_use_of_provider(models: Catalog, used: set[str], provider_id: str) -> list[str]:
+    return sorted(
+        ref
+        for ref in used
+        if ref in models.models and models.models[ref].provider_id == provider_id
+    )
+
+
+def _refs_in_use(groups: dict[AiGroup, GroupOverrides]) -> set[str]:
+    """Model references chosen by a group or a task."""
+
+    used: set[str] = set()
+    for own in groups.values():
+        if own.model:
+            used.add(own.model)
+        used.update(own.task_models.values())
+    return used
+
+
 async def view(session: AsyncSession, settings: Settings) -> AiSettingsView:
     # The administrator sees what is stored, not this process's copy: the API
     # may run in several processes, and another one may have just saved.
     app_settings.clear_cache()
     project, groups = await app_settings.overrides(session)
-    stored = await app_settings.stored_key(session, settings)
-    config = await app_settings.ai_config(session, settings)
+    models = await app_settings.catalog(session, settings)
+    used = _refs_in_use(groups)
 
     today = await ai_jobs_repo.cost_by_kind_since(
         session, since=app_settings.day_start(settings.tz)
@@ -112,59 +215,110 @@ async def view(session: AsyncSession, settings: Settings) -> AiSettingsView:
         session, since=app_settings.month_start(settings.tz)
     )
 
-    updated_by_name: str | None = None
-    if stored is not None and stored.updated_by is not None:
-        author = await users_repo.get(session, stored.updated_by)
-        updated_by_name = author.full_name if author is not None else None
+    provider_views = []
+    for provider in models.providers.values():
+        stored = await app_settings.stored_key(session, settings, provider.id)
+        author = (
+            await users_repo.get(session, stored.updated_by)
+            if stored is not None and stored.updated_by is not None
+            else None
+        )
+        provider_views.append(
+            AiProviderView(
+                id=provider.id,
+                kind=provider.kind,
+                name=provider.name,
+                base_url=provider.base_url,
+                enabled=provider.enabled,
+                builtin=provider.builtin,
+                ready=provider.ready,
+                host_allowed=provider.host_allowed,
+                key=AiKeyState(
+                    configured=bool(provider.api_key),
+                    source=provider.key_source,
+                    hint=stored.hint if stored is not None else None,
+                    unreadable=stored is not None and stored.value is None,
+                    updated_at=stored.updated_at if stored is not None else None,
+                    updated_by_name=author.full_name if author is not None else None,
+                ),
+                models_count=sum(
+                    1 for entry in models.models.values() if entry.provider_id == provider.id
+                ),
+            )
+        )
 
     group_views = []
     for group in AiGroup:
         own = groups[group]
         kinds = app_settings.kinds_of(group)
-        has_fast = app_settings.group_has_fast(group)
+        tasks = []
+        for kind in kinds:
+            ref, source = app_settings.effective_task_model(kind, own, settings)
+            tasks.append(
+                AiTaskView(
+                    kind=kind,
+                    per_person=AI_TASKS[kind].per_person,
+                    model=own.task_models.get(kind),
+                    effective_model=ref,
+                    source=source,
+                    usable=models.usable(ref),
+                )
+            )
         group_views.append(
             AiGroupView(
                 group=group,
                 kinds=kinds,
                 per_person_kinds=[kind for kind in kinds if AI_TASKS[kind].per_person],
-                has_fast=has_fast,
                 enabled=own.enabled,
                 model=own.model,
-                model_fast=own.model_fast if has_fast else None,
+                tasks=tasks,
                 daily_budget_usd=own.daily_budget_usd,
                 monthly_budget_usd=own.monthly_budget_usd,
                 user_daily_limit=own.user_daily_limit,
-                defaults=AiGroupDefaults(
-                    model=settings.ai_model_smart,
-                    model_fast=settings.ai_model_fast if has_fast else None,
-                    user_daily_limit=settings.ai_user_daily_limit,
-                ),
+                user_daily_budget_usd=own.user_daily_budget_usd,
+                default_user_daily_limit=settings.ai_user_daily_limit,
                 spend=AiSpend(today_usd=_spend_of(today, kinds), month_usd=_spend_of(month, kinds)),
             )
         )
 
     return AiSettingsView(
-        key=AiKeyState(
-            configured=bool(config.api_key),
-            source=config.api_key_source,
-            hint=stored.hint if stored is not None else None,
-            unreadable=stored is not None and stored.value is None,
-            updated_at=stored.updated_at if stored is not None else None,
-            updated_by_name=updated_by_name,
-            encryption=secret_box.key_source(settings),
-        ),
+        providers=provider_views,
+        provider_kinds=[
+            AiProviderKindOption(
+                kind=kind,
+                needs_key=info.needs_key,
+                needs_base_url=info.needs_base_url,
+                default_base_url=info.default_base_url,
+            )
+            for kind, info in KINDS.items()
+        ],
+        models=[
+            AiModelView(
+                ref=entry.ref,
+                provider=entry.provider_id,
+                model=entry.model,
+                name=entry.name,
+                usd_per_mtok_in=entry.usd_per_mtok_in,
+                usd_per_mtok_out=entry.usd_per_mtok_out,
+                enabled=entry.enabled,
+                builtin=entry.builtin,
+                overridden=entry.overridden,
+                usable=models.usable(entry.ref),
+                in_use=entry.ref in used,
+            )
+            for entry in models.models.values()
+        ],
         project=AiProjectView(
             daily_budget_usd=project.daily_budget_usd,
             monthly_budget_usd=project.monthly_budget_usd,
             default_daily_budget_usd=Decimal(str(settings.ai_daily_budget_usd)),
+            warn_percent=project.warn_percent,
+            default_warn_percent=app_settings.WARN_PERCENT_DEFAULT,
             spend=AiSpend(today_usd=_spend_of(today, None), month_usd=_spend_of(month, None)),
         ),
         groups=group_views,
-        models=[
-            AiModelOption(id=model, usd_per_mtok_in=price_in, usd_per_mtok_out=price_out)
-            for model, (price_in, price_out) in PRICES_USD_PER_MTOK.items()
-        ],
         alerts=await budget_alerts(session, settings),
+        encryption=secret_box.key_source(settings),
         applies_within_s=int(app_settings.CACHE_TTL_S),
     )
 
@@ -325,6 +479,7 @@ async def _audit(
 
 async def update_group(
     session: AsyncSession,
+    settings: Settings,
     *,
     actor: CurrentUser,
     group: AiGroup,
@@ -332,8 +487,29 @@ async def update_group(
     ip: str | None,
 ) -> None:
     app_settings.clear_cache()
-    if not app_settings.group_has_fast(group):
-        value = value.model_copy(update={"model_fast": None})
+    models = await app_settings.catalog(session, settings)
+    foreign = [kind.value for kind in value.task_models if AI_TASKS[kind].group is not group]
+    if foreign:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Задача относится к другой группе: её модель выбирается там.",
+            details={"kinds": foreign},
+        )
+    # A model that is not in the catalogue has no price: the budget would not
+    # count it. Switched-off entries are refused too — choosing one would
+    # silently run the group on the fallback.
+    # A chosen model is used as chosen, never replaced (ADR-0082): one that
+    # cannot be called now would make the tasks refuse.
+    chosen = {ref for ref in (value.model, *value.task_models.values()) if ref}
+    unknown = sorted(ref for ref in chosen if not models.usable(ref))
+    if unknown:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Эту модель сейчас вызвать нельзя: её нет в каталоге, она или её подключение "
+            "выключены, либо у подключения нет ключа: " + ", ".join(unknown) + ".",
+            details={"models": unknown},
+        )
+
     _, groups = await app_settings.overrides(session)
     key = app_settings.group_key(group)
     await app_settings.save_group(session, group, value, by=actor.id)
@@ -363,57 +539,330 @@ async def update_project(
     )
 
 
+# --- providers (ADR-0082) --------------------------------------------------------
+
+
+def _provider_snapshot(provider_id: str, value: ProviderSettings) -> dict[str, Any]:
+    return {"key": app_settings.provider_key(provider_id), **value.model_dump(mode="json")}
+
+
+def _require_address(value: ProviderSettings, settings: Settings) -> None:
+    if KINDS[value.kind].needs_base_url and not value.base_url:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Этому виду подключения нужен адрес сервера.",
+            details={"field": "base_url"},
+        )
+    if not host_allowed(value.base_url, settings.ai_provider_hosts):
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Этот адрес не входит в список разрешённых на сервере (AI_PROVIDER_HOSTS). "
+            "Список задаёт тот, кто обслуживает сервер.",
+            details={"field": "base_url"},
+        )
+
+
+async def create_provider(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    actor: CurrentUser,
+    value: ProviderSettings,
+    ip: str | None,
+) -> str:
+    app_settings.clear_cache()
+    _require_address(value, settings)
+    provider_id = await app_settings.new_provider_id(session, value.kind)
+    await app_settings.save_provider(session, provider_id, value, by=actor.id)
+    await _audit(
+        session,
+        actor=actor,
+        action="ai_provider_added",
+        before=None,
+        after=_provider_snapshot(provider_id, value),
+        ip=ip,
+    )
+    return provider_id
+
+
+async def update_provider(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    actor: CurrentUser,
+    provider_id: str,
+    value: ProviderSettings,
+    ip: str | None,
+) -> None:
+    app_settings.clear_cache()
+    models = await app_settings.catalog(session, settings)
+    provider = _provider_or_404(models, provider_id)
+    if provider.builtin:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Встроенное подключение не меняется — у него задаётся только ключ. "
+            "Для другого адреса или второго ключа добавьте ещё одно подключение.",
+        )
+    if value.kind is not provider.kind:
+        # The kind decides how catalogue entries are called: changing it under
+        # them would send a model id to a provider that does not know it.
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Вид подключения не меняется. Добавьте новое подключение нужного вида.",
+            details={"field": "kind"},
+        )
+    _require_address(value, settings)
+    if not value.enabled and provider.enabled:
+        _, groups = await app_settings.overrides(session)
+        used = _in_use_of_provider(models, _refs_in_use(groups), provider_id)
+        if used:
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Модели этого подключения выбраны в группах задач: "
+                + ", ".join(used)
+                + ". Выключенное подключение их не заменит другими — сначала выберите там "
+                "другие модели.",
+                details={"models": used},
+            )
+    before = ProviderSettings(
+        kind=provider.kind, name=provider.name, base_url=provider.base_url, enabled=provider.enabled
+    )
+    dropped = await app_settings.save_provider(session, provider_id, value, by=actor.id)
+    await _audit(
+        session,
+        actor=actor,
+        action="update",
+        before=_provider_snapshot(provider_id, before),
+        # A key typed for one address is never sent to another: changing the
+        # address drops it, and the journal says so.
+        after={**_provider_snapshot(provider_id, value), "key_dropped": dropped},
+        ip=ip,
+    )
+
+
+async def remove_provider(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    actor: CurrentUser,
+    provider_id: str,
+    ip: str | None,
+) -> None:
+    """Remove a connection together with its catalogue entries."""
+
+    app_settings.clear_cache()
+    models = await app_settings.catalog(session, settings)
+    provider = _provider_or_404(models, provider_id)
+    if provider.builtin:
+        raise ApiError(ErrorCode.CONFLICT, "Встроенное подключение убрать нельзя.")
+    _, groups = await app_settings.overrides(session)
+    used = _in_use_of_provider(models, _refs_in_use(groups), provider_id)
+    if used:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Модели этого подключения выбраны в группах задач: "
+            + ", ".join(used)
+            + ". Сначала выберите там другие.",
+            details={"models": used},
+        )
+    kept = [e for e in await app_settings.stored_models(session) if e.provider != provider_id]
+    await app_settings.save_models(session, kept, by=actor.id)
+    await app_settings.remove_provider(session, provider_id)
+    await _audit(
+        session,
+        actor=actor,
+        action="ai_provider_removed",
+        before=_provider_snapshot(
+            provider_id,
+            ProviderSettings(
+                kind=provider.kind,
+                name=provider.name,
+                base_url=provider.base_url,
+                enabled=provider.enabled,
+            ),
+        ),
+        after=None,
+        ip=ip,
+    )
+
+
 async def replace_key(
-    session: AsyncSession, settings: Settings, *, actor: CurrentUser, api_key: str, ip: str | None
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    actor: CurrentUser,
+    provider_id: str,
+    api_key: str,
+    ip: str | None,
 ) -> None:
     """The value never reaches the journal — only its last four characters."""
 
     app_settings.clear_cache()
-    previous = await app_settings.stored_key(session, settings)
+    _provider_or_404(await app_settings.catalog(session, settings), provider_id)
+    previous = await app_settings.stored_key(session, settings, provider_id)
     try:
-        shown = await app_settings.save_key(session, settings, api_key, by=actor.id)
+        shown = await app_settings.save_key(
+            session, settings, api_key, by=actor.id, provider_id=provider_id
+        )
     except secret_box.BadEncryptionKey as error:
         raise ApiError(
             ErrorCode.CONFLICT,
             "Ключ нельзя сохранить: ключ шифрования на сервере задан неверно. "
             "Его исправляет тот, кто обслуживает сервер.",
         ) from error
+    key = app_settings.provider_key(provider_id)
     await _audit(
         session,
         actor=actor,
         action="ai_key_replaced",
-        before={"key": app_settings.KEY_API, "hint": previous.hint} if previous else None,
-        after={"key": app_settings.KEY_API, "hint": shown},
+        before={"key": key, "hint": previous.hint} if previous else None,
+        after={"key": key, "hint": shown},
         ip=ip,
     )
 
 
 async def remove_key(
-    session: AsyncSession, settings: Settings, *, actor: CurrentUser, ip: str | None
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    actor: CurrentUser,
+    provider_id: str,
+    ip: str | None,
 ) -> bool:
     app_settings.clear_cache()
-    previous = await app_settings.stored_key(session, settings)
-    removed = await app_settings.remove_key(session)
+    models = await app_settings.catalog(session, settings)
+    provider = _provider_or_404(models, provider_id)
+    if not provider.builtin:
+        _, groups = await app_settings.overrides(session)
+        used = _in_use_of_provider(models, _refs_in_use(groups), provider_id)
+        if used:
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Модели этого подключения выбраны в группах задач: "
+                + ", ".join(used)
+                + ". Без ключа они перестанут отвечать — сначала выберите там другие.",
+                details={"models": used},
+            )
+    previous = await app_settings.stored_key(session, settings, provider_id)
+    removed = await app_settings.remove_key(session, provider_id, by=actor.id)
     if removed:
         await _audit(
             session,
             actor=actor,
             action="ai_key_removed",
-            before={"key": app_settings.KEY_API, "hint": previous.hint if previous else ""},
+            before={
+                "key": app_settings.provider_key(provider_id),
+                "hint": previous.hint if previous else "",
+            },
             after=None,
             ip=ip,
         )
     return removed
 
 
+# --- the catalogue of models (ADR-0082) ---------------------------------------------
+
+
+async def save_model(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    actor: CurrentUser,
+    value: ModelEntry,
+    ip: str | None,
+) -> None:
+    """Add a model to the catalogue or change its price, name or switch."""
+
+    app_settings.clear_cache()
+    models = await app_settings.catalog(session, settings)
+    _provider_or_404(models, value.provider)
+    previous = models.models.get(value.ref)
+    if not value.enabled:
+        _, groups = await app_settings.overrides(session)
+        if value.ref in _refs_in_use(groups):
+            raise ApiError(
+                ErrorCode.CONFLICT,
+                "Модель выбрана в группе задач. Выключенную её ничто не заменит — "
+                "сначала выберите там другую.",
+            )
+    entries = [e for e in await app_settings.stored_models(session) if e.ref != value.ref]
+    await app_settings.save_models(session, [*entries, value], by=actor.id)
+    await _audit(
+        session,
+        actor=actor,
+        action="ai_model_saved",
+        before=(
+            {
+                "key": value.ref,
+                "usd_per_mtok_in": str(previous.usd_per_mtok_in),
+                "usd_per_mtok_out": str(previous.usd_per_mtok_out),
+                "enabled": previous.enabled,
+            }
+            if previous is not None
+            else None
+        ),
+        after={"key": value.ref, **value.model_dump(mode="json")},
+        ip=ip,
+    )
+
+
+async def remove_model(
+    session: AsyncSession, settings: Settings, *, actor: CurrentUser, ref: str, ip: str | None
+) -> None:
+    """Remove the administrator's entry. A built-in model returns to its
+    built-in price; one added in the cabinet leaves the catalogue."""
+
+    app_settings.clear_cache()
+    entries = await app_settings.stored_models(session)
+    own = next((entry for entry in entries if entry.ref == ref), None)
+    if own is None:
+        raise ApiError(
+            ErrorCode.NOT_FOUND,
+            "Этой записи в кабинете нет. Встроенную модель убрать нельзя — её можно выключить.",
+        )
+    models = await app_settings.catalog(session, settings)
+    _, groups = await app_settings.overrides(session)
+    entry = models.models.get(ref)
+    if ref in _refs_in_use(groups) and (entry is None or not entry.builtin):
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Модель выбрана в группе задач. Сначала выберите там другую.",
+        )
+    await app_settings.save_models(session, [e for e in entries if e.ref != ref], by=actor.id)
+    await _audit(
+        session,
+        actor=actor,
+        action="ai_model_removed",
+        before={"key": ref, **own.model_dump(mode="json")},
+        after=None,
+        ip=ip,
+    )
+
+
+async def price_suggestion(
+    session: AsyncSession, settings: Settings, provider_id: str, model: str
+) -> AiPriceSuggestion:
+    provider = _provider_or_404(await app_settings.catalog(session, settings), provider_id)
+    found = suggest_price(provider.info.route, model.strip())
+    if found is None:
+        return AiPriceSuggestion(known=False, usd_per_mtok_in=None, usd_per_mtok_out=None)
+    return AiPriceSuggestion(known=True, usd_per_mtok_in=found[0], usd_per_mtok_out=found[1])
+
+
 __all__ = [
     "budget_alerts",
     "check_key",
+    "create_provider",
     "fetch_model_ids",
+    "price_suggestion",
     "remove_key",
+    "remove_model",
+    "remove_provider",
     "replace_key",
+    "save_model",
     "spend_report",
     "update_group",
+    "update_provider",
     "update_project",
     "view",
 ]

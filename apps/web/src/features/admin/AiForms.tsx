@@ -24,10 +24,15 @@ import {
   useReplaceAiKey,
   useSaveAiGroup,
   useSaveAiProject,
+  modelTitle,
   type AiGroupView,
   type AiKeyCheck,
+  type AiProviderView,
   type AiSettings,
 } from "./useAiSettings";
+
+/** Сколько моделей из ответа проверки называть в строке результата. */
+const CHECK_MODELS_SHOWN = 12;
 
 /** Верхняя граница бюджета — та же, что у сервера (`BUDGET_MAX_USD`). */
 const BUDGET_MAX = 10000;
@@ -65,17 +70,23 @@ function fromBudget(value: string | null | undefined): string {
 const groupSchema = z.object({
   enabled: z.boolean(),
   model: z.string(),
-  modelFast: z.string(),
+  // Модель каждой задачи группы: ключ — вид задачи, пусто — «как у группы».
+  taskModels: z.record(z.string(), z.string()),
   dailyBudget: budget,
   monthlyBudget: budget,
   userLimit: limit,
+  userBudget: budget,
 });
 
 type GroupValues = z.infer<typeof groupSchema>;
 
 /**
- * Настройки одной группы задач. Пустое поле — значение из окружения сервера:
- * оно подписано рядом, чтобы «по умолчанию» не было загадкой.
+ * Настройки одной группы задач (ADR-0080, ADR-0082).
+ *
+ * Модель выбирается из каталога — любого подключения. У группы своя модель, и
+ * каждой задаче можно назначить отдельную: чтение файла рецептов и черновик
+ * карточки — разная работа, и одна модель на двоих была ограничением экрана,
+ * а не решением. Пустое поле — значение по умолчанию: оно подписано рядом.
  */
 export function AiGroupForm({
   group,
@@ -99,30 +110,43 @@ export function AiGroupForm({
     defaultValues: {
       enabled: group.enabled,
       model: group.model ?? "",
-      modelFast: group.model_fast ?? "",
+      taskModels: Object.fromEntries(
+        group.tasks.map((task) => [task.kind, task.model ?? ""]),
+      ),
       dailyBudget: fromBudget(group.daily_budget_usd),
       monthlyBudget: fromBudget(group.monthly_budget_usd),
       userLimit:
         group.user_daily_limit === null ? "" : String(group.user_daily_limit),
+      userBudget: fromBudget(group.user_daily_budget_usd),
     },
     mode: "onBlur",
     reValidateMode: "onBlur",
   });
 
-  const modelOptions = (fallback: string | null | undefined) => (
+  // Выбрать можно только модель, которую сейчас можно вызвать: сервер
+  // откажет в остальных. Выбранная раньше остаётся в списке, иначе форма
+  // молча сменила бы её при сохранении.
+  const chosen = new Set(
+    [group.model, ...group.tasks.map((task) => task.model)].filter(Boolean),
+  );
+  const options = models.filter(
+    (model) => model.usable || chosen.has(model.ref),
+  );
+  const modelOptions = (emptyLabel: string) => (
     <>
-      <option value="">
-        {fallback
-          ? t("ai.groupForm.modelDefault", { model: fallback })
-          : t("ai.groupForm.modelMissing")}
-      </option>
-      {models.map((model) => (
-        <option key={model.id} value={model.id}>
-          {t("ai.groupForm.modelOption", {
-            model: model.id,
-            priceIn: formatUsd(model.usd_per_mtok_in),
-            priceOut: formatUsd(model.usd_per_mtok_out),
-          })}
+      <option value="">{emptyLabel}</option>
+      {options.map((model) => (
+        <option key={model.ref} value={model.ref}>
+          {t(
+            model.usable
+              ? "ai.groupForm.modelOption"
+              : "ai.groupForm.modelOptionUnusable",
+            {
+              model: modelTitle(model),
+              priceIn: formatUsd(model.usd_per_mtok_in),
+              priceOut: formatUsd(model.usd_per_mtok_out),
+            },
+          )}
         </option>
       ))}
     </>
@@ -143,11 +167,16 @@ export function AiGroupForm({
             body: {
               enabled: values.enabled,
               model: values.model || null,
-              model_fast: group.has_fast ? values.modelFast || null : null,
+              task_models: Object.fromEntries(
+                Object.entries(values.taskModels).filter(
+                  ([, model]) => model !== "",
+                ),
+              ),
               daily_budget_usd: toBudget(values.dailyBudget),
               monthly_budget_usd: toBudget(values.monthlyBudget),
               user_daily_limit:
                 values.userLimit === "" ? null : Number(values.userLimit),
+              user_daily_budget_usd: toBudget(values.userBudget),
             },
           },
           { onSuccess: onDone },
@@ -160,6 +189,7 @@ export function AiGroupForm({
           [`${ids}-daily`, errors.dailyBudget && t("ai.errors.budget")],
           [`${ids}-monthly`, errors.monthlyBudget && t("ai.errors.budget")],
           [`${ids}-limit`, errors.userLimit && t("ai.errors.limit")],
+          [`${ids}-user-budget`, errors.userBudget && t("ai.errors.budget")],
         ])}
         focusKey={submitCount}
       />
@@ -185,20 +215,31 @@ export function AiGroupForm({
           hint={t("ai.groupForm.modelHint")}
           {...register("model")}
         >
-          {modelOptions(group.defaults.model)}
+          {modelOptions(t("ai.groupForm.modelDefault"))}
         </SelectField>
 
-        {group.has_fast && (
+        {group.tasks.map((task) => (
           <SelectField
-            id={`${ids}-model-fast`}
-            label={t("ai.groupForm.modelFast")}
-            hint={t("ai.groupForm.modelFastHint")}
-            {...register("modelFast")}
+            key={task.kind}
+            id={`${ids}-task-${task.kind}`}
+            label={t("ai.groupForm.taskModel", {
+              task: t(`ai.kinds.${task.kind}`),
+            })}
+            hint={
+              task.effective_model
+                ? t("ai.groupForm.taskModelHint", {
+                    model: task.effective_model,
+                  })
+                : t("ai.groupForm.taskModelMissing")
+            }
+            {...register(`taskModels.${task.kind}`)}
           >
-            {modelOptions(group.defaults.model_fast)}
+            {modelOptions(t("ai.groupForm.taskModelDefault"))}
           </SelectField>
-        )}
+        ))}
+      </Section>
 
+      <Section title={t("ai.groupForm.limitsTitle")}>
         <Field
           id={`${ids}-daily`}
           width="narrow"
@@ -219,6 +260,16 @@ export function AiGroupForm({
           error={errors.monthlyBudget && t("ai.errors.budget")}
           {...register("monthlyBudget")}
         />
+        <Field
+          id={`${ids}-user-budget`}
+          width="narrow"
+          inputMode="decimal"
+          optional
+          label={t("ai.groupForm.userBudget")}
+          hint={t("ai.groupForm.userBudgetHint")}
+          error={errors.userBudget && t("ai.errors.budget")}
+          {...register("userBudget")}
+        />
         {group.per_person_kinds.length > 0 && (
           <Field
             id={`${ids}-limit`}
@@ -227,7 +278,7 @@ export function AiGroupForm({
             optional
             label={t("ai.groupForm.userLimit")}
             hint={t("ai.groupForm.userLimitHint", {
-              count: group.defaults.user_daily_limit,
+              count: group.default_user_daily_limit,
               kinds: counted,
             })}
             error={errors.userLimit && t("ai.errors.limit")}
@@ -249,7 +300,21 @@ export function AiGroupForm({
 
 // --- бюджет проекта ----------------------------------------------------------
 
-const projectSchema = z.object({ dailyBudget: budget, monthlyBudget: budget });
+/** Порог предупреждения: пусто — по умолчанию; иначе целое от 50 до 99. */
+const warnPercent = z
+  .string()
+  .trim()
+  .refine((value) => {
+    if (value === "") return true;
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 50 && number <= 99;
+  });
+
+const projectSchema = z.object({
+  dailyBudget: budget,
+  monthlyBudget: budget,
+  warnPercent,
+});
 type ProjectValues = z.infer<typeof projectSchema>;
 
 export function AiProjectForm({
@@ -271,6 +336,8 @@ export function AiProjectForm({
     defaultValues: {
       dailyBudget: fromBudget(project.daily_budget_usd),
       monthlyBudget: fromBudget(project.monthly_budget_usd),
+      warnPercent:
+        project.warn_percent === null ? "" : String(project.warn_percent),
     },
     mode: "onBlur",
     reValidateMode: "onBlur",
@@ -285,6 +352,8 @@ export function AiProjectForm({
           {
             daily_budget_usd: toBudget(values.dailyBudget),
             monthly_budget_usd: toBudget(values.monthlyBudget),
+            warn_percent:
+              values.warnPercent === "" ? null : Number(values.warnPercent),
           },
           { onSuccess: onDone },
         ),
@@ -295,6 +364,7 @@ export function AiProjectForm({
         items={errorSummaryItems(submitCount, [
           [`${ids}-daily`, errors.dailyBudget && t("ai.errors.budget")],
           [`${ids}-monthly`, errors.monthlyBudget && t("ai.errors.budget")],
+          [`${ids}-warn`, errors.warnPercent && t("ai.errors.warnPercent")],
         ])}
         focusKey={submitCount}
       />
@@ -327,6 +397,18 @@ export function AiProjectForm({
           error={errors.monthlyBudget && t("ai.errors.budget")}
           {...register("monthlyBudget")}
         />
+        <Field
+          id={`${ids}-warn`}
+          width="narrow"
+          inputMode="numeric"
+          optional
+          label={t("ai.project.warnPercent")}
+          hint={t("ai.project.warnPercentHint", {
+            percent: String(project.default_warn_percent),
+          })}
+          error={errors.warnPercent && t("ai.errors.warnPercent")}
+          {...register("warnPercent")}
+        />
         <FormFooter
           submitLabel={t("common:actions.save")}
           pendingLabel={t("common:actions.saving")}
@@ -342,7 +424,8 @@ export function AiProjectForm({
 // --- ключ --------------------------------------------------------------------
 
 const keySchema = z.object({
-  apiKey: z.string().trim().min(20).max(400).regex(/^\S+$/),
+  // Ключи поставщиков выглядят по-разному: проверяется «одна строка», не формат.
+  apiKey: z.string().trim().min(8).max(400).regex(/^\S+$/),
 });
 type KeyValues = z.infer<typeof keySchema>;
 
@@ -350,7 +433,13 @@ type KeyValues = z.infer<typeof keySchema>;
  * Новый ключ. Его можно проверить до сохранения: пробное обращение к списку
  * моделей поставщика бесплатно и отвечает, примет ли он ключ.
  */
-export function AiKeyForm({ onDone }: { onDone: () => void }) {
+export function AiKeyForm({
+  provider,
+  onDone,
+}: {
+  provider: AiProviderView;
+  onDone: () => void;
+}) {
   const { t } = useTranslation("admin");
   const ids = useId();
   const replace = useReplaceAiKey();
@@ -373,7 +462,10 @@ export function AiKeyForm({ onDone }: { onDone: () => void }) {
       noValidate
       className="flex flex-col gap-section"
       onSubmit={handleSubmit((values) =>
-        replace.mutate(values.apiKey.trim(), { onSuccess: onDone }),
+        replace.mutate(
+          { providerId: provider.id, apiKey: values.apiKey.trim() },
+          { onSuccess: onDone },
+        ),
       )}
     >
       <FormErrorSummary
@@ -384,7 +476,7 @@ export function AiKeyForm({ onDone }: { onDone: () => void }) {
         focusKey={submitCount}
       />
 
-      <Section title={t("ai.key.replaceTitle")}>
+      <Section title={t("ai.key.replaceTitle", { provider: provider.name })}>
         {replace.isError && (
           <FormError>
             {errorMessageOf(replace.error) ?? t("common:errors.unexpected")}
@@ -407,7 +499,10 @@ export function AiKeyForm({ onDone }: { onDone: () => void }) {
             disabled={check.isPending}
             onClick={async () => {
               if (await trigger("apiKey")) {
-                check.mutate(getValues("apiKey").trim());
+                check.mutate({
+                  providerId: provider.id,
+                  apiKey: getValues("apiKey").trim(),
+                });
               }
             }}
           >
@@ -450,7 +545,12 @@ export function KeyCheckResult({
     return (
       <StatusNote>
         {result.models.length > 0
-          ? t("ai.key.ok", { models: result.models.join(", ") })
+          ? t("ai.key.ok", {
+              count: result.models.length,
+              // Шлюз отдаёт сотни моделей: показываем начало списка, полный —
+              // в подсказках формы «Добавить модель».
+              models: result.models.slice(0, CHECK_MODELS_SHOWN).join(", "),
+            })
           : t("ai.key.okNoModels")}
       </StatusNote>
     );

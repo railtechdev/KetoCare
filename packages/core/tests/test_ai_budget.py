@@ -61,3 +61,16 @@ def test_alerts_fullest_first_and_quiet_ones_dropped() -> None:
 def test_a_raised_budget_warns_again() -> None:
     assert usage("8").alert_id() != usage("16", budget="20").alert_id()
     assert usage("8", budget="10").alert_id() == usage("8", budget="10.00").alert_id()
+
+
+def test_the_warning_share_is_the_administrators() -> None:
+    early = BudgetUsage(
+        scope="project",
+        period="day",
+        period_start=START,
+        spent_usd=Decimal("6"),
+        budget_usd=Decimal("10"),
+        warn_share=Decimal("0.6"),
+    )
+    assert early.level is BudgetLevel.WARNING
+    assert usage("6").level is None
