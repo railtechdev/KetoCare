@@ -24,6 +24,7 @@ from api.main import create_app
 from api.ratelimit import limiter
 from api.security import create_token, hash_password
 from api.services import queue as queue_service
+from core import app_settings
 from core.models.enums import Sex, UserRole
 from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
@@ -97,6 +98,16 @@ def enqueued(monkeypatch) -> list[tuple[str, tuple]]:
 
     monkeypatch.setattr(queue_service, "enqueue", record)
     return calls
+
+
+@pytest.fixture(autouse=True)
+def clear_app_settings_cache():
+    """Настройки из кабинета кэшируются процессом (ADR-0080): значение, записанное
+    тестом в откатываемой транзакции, не должно дожить до следующего теста."""
+
+    app_settings.clear_cache()
+    yield
+    app_settings.clear_cache()
 
 
 @pytest.fixture(autouse=True)

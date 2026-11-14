@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -201,21 +202,39 @@ async def count_since(
     return int(total or 0)
 
 
-async def cost_since(session: AsyncSession, *, since: datetime) -> Decimal:
+async def cost_since(
+    session: AsyncSession, *, since: datetime, kinds: Sequence[AiJobKind] | None = None
+) -> Decimal:
     """Сколько проект потратил с момента `since`, в долларах.
 
     Строки с неизвестной стоимостью (`cost_usd IS NULL`) в сумму не входят: у
     модели, которой нет в прайс-листе, цена не выдумывается. Дыра в учёте
     видна по журналу — сумма считается только по тому, что действительно
     известно.
+
+    `kinds` — расход одной группы задач (ADR-0080); без него — весь проект.
     """
 
-    total = await session.scalar(
+    query = (
         select(func.coalesce(func.sum(AiJob.cost_usd), 0))
         .select_from(AiJob)
         .where(AiJob.created_at >= since)
     )
+    if kinds is not None:
+        query = query.where(AiJob.kind.in_(list(kinds)))
+    total = await session.scalar(query)
     return Decimal(str(total or 0))
+
+
+async def cost_by_kind_since(session: AsyncSession, *, since: datetime) -> dict[AiJobKind, Decimal]:
+    """Расход с момента `since` по видам задач — для раздела «ИИ» администратора."""
+
+    rows = await session.execute(
+        select(AiJob.kind, func.coalesce(func.sum(AiJob.cost_usd), 0))
+        .where(AiJob.created_at >= since)
+        .group_by(AiJob.kind)
+    )
+    return {kind: Decimal(str(total or 0)) for kind, total in rows.all()}
 
 
 async def status_counts_since(
