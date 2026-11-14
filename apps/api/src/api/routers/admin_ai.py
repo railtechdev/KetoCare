@@ -7,7 +7,9 @@ no response carries it, only its last four characters.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Request
 
 from core.app_settings import AiGroup, GroupOverrides, ProjectOverrides
 from core.config import get_settings
@@ -17,7 +19,14 @@ from ..client_address import client_address
 from ..deps.auth import CurrentUserDep, SessionDep, require_roles
 from ..errors import ApiError, ErrorCode
 from ..ratelimit import limiter
-from ..schemas_ai_settings import AiKeyCheck, AiKeyCheckInput, AiKeyInput, AiSettingsView
+from ..schemas_ai_settings import (
+    AiKeyCheck,
+    AiKeyCheckInput,
+    AiKeyInput,
+    AiSettingsView,
+    AiSpendReport,
+    SpendPeriod,
+)
 from ..services import ai_settings as service
 
 router = APIRouter(
@@ -33,6 +42,16 @@ KEY_CHECK_RATE_LIMIT = "10/minute"
 @router.get("", response_model=AiSettingsView, summary="Настройки ИИ и расход")
 async def read_ai_settings(session: SessionDep) -> AiSettingsView:
     return await service.view(session, get_settings())
+
+
+@router.get("/spend", response_model=AiSpendReport, summary="Кто сколько потратил на ИИ")
+async def read_spend(
+    session: SessionDep, period: Annotated[SpendPeriod, Query()] = "month"
+) -> AiSpendReport:
+    """Spend by group, kind, model and person (ADR-0081): a person and a sum,
+    never what they asked."""
+
+    return await service.spend_report(session, get_settings(), period)
 
 
 @router.put("/project", response_model=AiSettingsView, summary="Бюджет проекта")

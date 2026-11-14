@@ -52,6 +52,10 @@ AUDIT_PAYLOAD_VISIBLE_ENTITIES = frozenset(
         "recipes",
         "seizure_types",
         "ketone_methods",
+        # AI settings and budget warnings (ADR-0080, ADR-0081): models, sums
+        # and the key's last four characters — never a patient, never the key.
+        "app_settings",
+        "ai_budget",
     }
 )
 

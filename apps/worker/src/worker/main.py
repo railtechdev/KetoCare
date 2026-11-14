@@ -20,6 +20,7 @@ from core.config import Settings
 from core.observability import init_sentry
 
 from .ai.assistant import assistant_reply
+from .ai.budget_watch import watch_ai_budgets
 from .ai.content import content_draft
 from .ai.parse import parse_free_text
 from .ai.recipe_import import parse_recipe_file
@@ -74,5 +75,8 @@ class WorkerSettingsARQ:
         # Каждые пять минут (раздел 10.1 ТЗ): напоминание в 07:30 должно уйти
         # в 07:30, а не в ближайший час.
         cron(reminders_cron, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+        # Every five minutes, offset from the reminders: a daily budget can go
+        # from 80 % to empty within an hour of a large recipe file (ADR-0081).
+        cron(watch_ai_budgets, minute={2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57}),
     ]
     redis_settings = RedisSettings.from_dsn(_settings.redis_url)

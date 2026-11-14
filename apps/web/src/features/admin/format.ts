@@ -16,3 +16,8 @@ export function shortId(value: string): string {
 export function formatUsd(value: string | number): string {
   return "$" + formatNumber(Number(value), 2);
 }
+
+/** Целое число с разделителем разрядов: обращения, токены, люди. */
+export function formatCount(value: number): string {
+  return formatNumber(value, 0);
+}

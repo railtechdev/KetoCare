@@ -30,6 +30,17 @@ const OVERVIEW = {
   stale_after_days: 365,
   invitations_pending: 2,
   invitations_expired: 1,
+  ai_spend: { today_usd: "1.7", month_usd: "21.4" },
+  ai_alerts: [
+    {
+      scope: "technical",
+      period: "day",
+      level: "warning",
+      percent: 85,
+      spent_usd: "1.7",
+      budget_usd: "2",
+    },
+  ],
 };
 
 const AUDIT = {
@@ -127,5 +138,20 @@ describe("главная администратора", () => {
 
     expect(await screen.findByText("Вход")).toBeInTheDocument();
     expect(screen.queryByText("login")).not.toBeInTheDocument();
+  });
+
+  it("предупреждает о бюджете моделей, заполненном на 80 %", async () => {
+    // Почты в продукте нет: администратор узнаёт о бюджете здесь, а не от
+    // семей с «лимит исчерпан» (ADR-0081).
+    renderHome();
+
+    expect(
+      await screen.findByText(
+        "Технические работы: дневной бюджет заполнен на 85 % — $1,70 из $2,00.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Сегодня \$1,70/)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Кто сколько потратил" });
+    expect(link).toHaveAttribute("href", expect.stringContaining("tab=spend"));
   });
 });

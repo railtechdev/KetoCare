@@ -13,8 +13,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
+from core import app_settings
+from core.config import get_settings
 from core.models import KetoneMethodDict, SeizureType
 from core.models.enums import UserRole
+from core.repositories import ai_jobs as ai_jobs_repo
 from core.repositories import audit as audit_repo
 from core.repositories import invitations as invitations_repo
 from core.repositories import patients as patients_repo
@@ -41,7 +44,9 @@ from ..schemas_admin import (
     SeizureTypeRead,
     SeizureTypeUpdate,
 )
+from ..schemas_ai_settings import AiSpend
 from ..services import admin as admin_service
+from ..services import ai_settings as ai_settings_service
 
 router = APIRouter(
     prefix="/admin",
@@ -81,6 +86,7 @@ async def admin_overview(session: SessionDep) -> AdminOverview:
     by_role = await users_repo.count_by_role(session)
     total, active, stale = await products_repo.count_by_state(session, verified_before=stale_before)
     pending, expired = await invitations_repo.count_pending(session, now=now)
+    settings = get_settings()
 
     return AdminOverview(
         users=[
@@ -97,6 +103,15 @@ async def admin_overview(session: SessionDep) -> AdminOverview:
         stale_after_days=STALE_VERIFICATION_DAYS,
         invitations_pending=pending,
         invitations_expired=expired,
+        ai_spend=AiSpend(
+            today_usd=await ai_jobs_repo.cost_since(
+                session, since=app_settings.day_start(settings.tz, now)
+            ),
+            month_usd=await ai_jobs_repo.cost_since(
+                session, since=app_settings.month_start(settings.tz, now)
+            ),
+        ),
+        ai_alerts=await ai_settings_service.budget_alerts(session, settings),
     )
 
 

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from core.models.enums import UserRole
 
 from .schemas import RequiredName, UserRead
+from .schemas_ai_settings import AiBudgetAlert, AiSpend
 
 # Поля учётной записи, которые не могут стать null: в БД они NOT NULL.
 _NOT_NULLABLE_USER_FIELDS = ("full_name", "role", "is_active")
@@ -56,6 +57,11 @@ class AdminOverview(BaseModel):
     #: Приглашения, по которым ещё не завели учётную запись.
     invitations_pending: int
     invitations_expired: int
+    #: AI money of the whole project, today and this month (ADR-0081).
+    ai_spend: AiSpend
+    #: AI budgets at 80 % or more: the home page is where the administrator
+    #: reads the warning — the product sends no e-mail.
+    ai_alerts: list[AiBudgetAlert]
 
 
 class AdminUserUpdate(BaseModel):

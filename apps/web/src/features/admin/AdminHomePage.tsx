@@ -17,7 +17,9 @@ import { SectionLink } from "../../components/SectionLink";
 import { api, errorMessageOf } from "../../lib/api";
 import { ROLES, type Role } from "../auth/roles";
 import { LinesSkeleton } from "../doctor/skeletons";
+import { AiBudgetAlerts } from "./AiBudgetAlerts";
 import { EMPTY_AUDIT_FILTERS } from "./auditFilters";
+import { formatUsd } from "./format";
 import { useAuditLog } from "./useAuditLog";
 import { queryState } from "../../lib/queryState";
 
@@ -262,6 +264,58 @@ export function AdminHomePage() {
                 )}
               </p>
             </div>
+          </AsyncSection>
+        </Section>
+
+        <Section
+          title={t("home.ai.title")}
+          description={t("home.ai.intro")}
+          action={
+            <Button asChild variant="outline">
+              <SectionLink section="ai" tab="spend">
+                {t("home.ai.toSpend")}
+              </SectionLink>
+            </Button>
+          }
+        >
+          <AsyncSection
+            {...queryState(overview)}
+            skeleton={<LinesSkeleton label={t("home.ai.loading")} lines={1} />}
+            error={
+              overview.isError
+                ? {
+                    title: t("home.ai.loadError"),
+                    description:
+                      errorMessageOf(overview.error) ??
+                      t("common:errors.unexpected"),
+                  }
+                : null
+            }
+            retryLabel={t("common:actions.retry")}
+            onRetry={() => void overview.refetch()}
+            isEmpty={false}
+            empty={null}
+          >
+            {overview.data && (
+              <div className="flex flex-col gap-field">
+                <div className="rounded-lg border border-border/70 bg-muted/25 px-3.5 py-2.5">
+                  <p className="m-0 text-base font-semibold text-foreground tabular-nums">
+                    {t("home.ai.today", {
+                      spent: formatUsd(overview.data.ai_spend.today_usd),
+                    })}
+                    {" · "}
+                    <span className="font-medium text-muted-foreground">
+                      {t("home.ai.month", {
+                        spent: formatUsd(overview.data.ai_spend.month_usd),
+                      })}
+                    </span>
+                  </p>
+                </div>
+                {/* Почты в продукте нет: предупреждение о бюджете
+                    администратор читает здесь (ADR-0081). */}
+                <AiBudgetAlerts alerts={overview.data.ai_alerts} />
+              </div>
+            )}
           </AsyncSection>
         </Section>
       </Tiles>

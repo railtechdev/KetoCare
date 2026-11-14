@@ -86,3 +86,21 @@ export function useCheckAiKey() {
     },
   });
 }
+
+export type AiSpendReport = components["schemas"]["AiSpendReport"];
+export type AiSpendPeriod = AiSpendReport["period"];
+export type AiBudgetAlert = components["schemas"]["AiBudgetAlert"];
+
+/** Кто сколько потратил (ADR-0081): человек и сумма, без содержания запросов. */
+export function useAiSpend(period: AiSpendPeriod) {
+  return useQuery({
+    queryKey: ["admin", "ai-spend", period],
+    queryFn: async (): Promise<AiSpendReport> => {
+      const { data, error } = await api.GET("/api/v1/admin/ai/spend", {
+        params: { query: { period } },
+      });
+      if (error || !data) throw error ?? new Error("Empty AI spend report");
+      return data;
+    },
+  });
+}

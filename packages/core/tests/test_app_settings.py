@@ -135,6 +135,12 @@ class TestPeriods:
             2026, 10, 31, 19, 0, tzinfo=UTC
         )
 
+    def test_week_is_the_last_seven_days_including_today(self) -> None:
+        now = datetime(2026, 11, 14, 20, 0, tzinfo=UTC)  # the 15th in Tashkent
+        assert app_settings.week_start("Asia/Tashkent", now) == datetime(
+            2026, 11, 8, 19, 0, tzinfo=UTC
+        )
+
 
 class TestEffectiveConfig:
     async def test_empty_table_is_the_environment(self, session) -> None:
