@@ -57,6 +57,9 @@ class ImportLine(BaseModel):
     key: str
     grams: float | None
     state: LineState
+    #: The reviewer left this very line out; a line may also be `left_out`
+    #: because of its name or because it is a seasoning without a mass.
+    left_out: bool
     product_name: str | None
 
 

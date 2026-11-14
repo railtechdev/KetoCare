@@ -318,6 +318,7 @@ async def view(session: AsyncSession, draft: RecipeImportDraft) -> RecipeImportV
                     key=key,
                     grams=line["grams"],
                     state=state,
+                    left_out=bool(line["left_out"]),
                     product_name=match[0].name_ru if match is not None else None,
                 )
             )

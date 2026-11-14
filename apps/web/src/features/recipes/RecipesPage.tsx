@@ -27,6 +27,7 @@ import { RecipeDetail } from "./RecipeDetail";
 import { RecipeFiltersPanel } from "./RecipeFiltersPanel";
 import { RecipeFormPanel } from "./RecipeFormPanel";
 import { RecipeImportPanel } from "./RecipeImportPanel";
+import { RecipeImportWorkbench } from "./RecipeImportWorkbench";
 import { RecipeList, RecipeListEmpty, RecipeListSkeleton } from "./RecipeList";
 import {
   canEditRecipes,
@@ -79,6 +80,11 @@ type Tab = (typeof TABS)[number];
 //: справочника продуктов: `/app/$section` не знает о вложенных путях, но что
 //: именно открыто, живёт в адресе (`?item=`), а не в состоянии экрана.
 const IMPORT_ITEM = "import";
+//: Открытая загрузка на проверке — `import:<id>` (ADR-0079): сборник разбирают
+//: в несколько подходов, и место не должно теряться при F5.
+const IMPORT_DRAFT_PREFIX = "import:";
+//: Прежний импорт таблицы по шаблону — запасной путь, работающий без разбора.
+const IMPORT_TEMPLATE_ITEM = "import-template";
 
 export function RecipesPage() {
   const { t } = useTranslation("recipes");
@@ -181,8 +187,29 @@ export function RecipesPage() {
     session !== null &&
     (session.role === "doctor" || session.role === "dietitian");
 
-  if (openId === IMPORT_ITEM && canEdit) {
-    return <RecipeImportPanel onDone={() => setOpenId(undefined)} />;
+  if (openId === IMPORT_TEMPLATE_ITEM && canEdit) {
+    return <RecipeImportPanel onDone={() => setOpenId(IMPORT_ITEM)} />;
+  }
+
+  if (
+    canEdit &&
+    (openId === IMPORT_ITEM || openId?.startsWith(IMPORT_DRAFT_PREFIX))
+  ) {
+    const draftId =
+      openId === IMPORT_ITEM ? null : openId.slice(IMPORT_DRAFT_PREFIX.length);
+    return (
+      <RecipeImportWorkbench
+        draftId={draftId === "" ? null : draftId}
+        onOpenDraft={(next) =>
+          setOpenId(
+            next === null ? IMPORT_ITEM : `${IMPORT_DRAFT_PREFIX}${next}`,
+          )
+        }
+        onOpenRecipe={(recipeId) => setOpenId(recipeId)}
+        onTemplate={() => setOpenId(IMPORT_TEMPLATE_ITEM)}
+        onDone={() => setOpenId(undefined)}
+      />
+    );
   }
 
   if (openId !== undefined) {
