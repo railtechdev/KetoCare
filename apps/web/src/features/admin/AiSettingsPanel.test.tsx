@@ -81,6 +81,7 @@ const SETTINGS: AiSettings = {
     { id: "claude-opus-5", usd_per_mtok_in: "5", usd_per_mtok_out: "25" },
     { id: "claude-haiku-4-5", usd_per_mtok_in: "1", usd_per_mtok_out: "5" },
   ],
+  alerts: [],
   applies_within_s: 30,
 };
 

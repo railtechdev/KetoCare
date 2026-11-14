@@ -73,11 +73,27 @@ class AiProjectView(BaseModel):
     spend: AiSpend
 
 
+BudgetScope = Literal["project", "technical", "specialists", "families"]
+
+
+class AiBudgetAlert(BaseModel):
+    """A budget at 80 % or more of its period (ADR-0081)."""
+
+    scope: BudgetScope
+    period: Literal["day", "month"]
+    level: Literal["warning", "exhausted"]
+    percent: int
+    spent_usd: Decimal
+    budget_usd: Decimal
+
+
 class AiSettingsView(BaseModel):
     key: AiKeyState
     project: AiProjectView
     groups: list[AiGroupView]
     models: list[AiModelOption]
+    #: Budgets at 80 % or more — the fullest first.
+    alerts: list[AiBudgetAlert]
     #: How long the worker may still run on the previous values.
     applies_within_s: int
 
@@ -112,3 +128,63 @@ class AiKeyCheck(BaseModel):
     problem: KeyProblem | None
     #: Priced models this key can call.
     models: list[str]
+
+
+# --- the spend report (ADR-0081) ------------------------------------------------
+
+SpendPeriod = Literal["day", "week", "month"]
+
+
+class AiSpendLine(BaseModel):
+    """Calls and money of one cut. Failed calls cost money too and are counted."""
+
+    calls: int
+    failed_calls: int
+    #: Calls whose cost is unknown (a model without a price): not in `cost_usd`.
+    unpriced_calls: int
+    cost_usd: Decimal
+    failed_cost_usd: Decimal
+    tokens_in: int
+    tokens_out: int
+
+
+class AiGroupSpend(AiSpendLine):
+    group: AiGroup
+
+
+class AiKindSpend(AiSpendLine):
+    kind: AiJobKind
+    group: AiGroup
+
+
+class AiModelSpend(AiSpendLine):
+    model: str
+
+
+class AiPersonSpend(BaseModel):
+    """A person and their money — never what they asked: the administrator has
+    no access to clinical data (section 5.1 of the TZ)."""
+
+    user_id: str
+    full_name: str
+    role: str
+    #: For the link to the account: the users list searches by e-mail or name.
+    search: str
+    is_active: bool
+    calls: int
+    failed_calls: int
+    cost_usd: Decimal
+    groups: list[AiGroup]
+
+
+class AiSpendReport(BaseModel):
+    period: SpendPeriod
+    since: datetime
+    totals: AiSpendLine
+    by_group: list[AiGroupSpend]
+    by_kind: list[AiKindSpend]
+    by_model: list[AiModelSpend]
+    #: The people who spent most, at most `people_limit` of them.
+    people: list[AiPersonSpend]
+    people_total: int
+    people_limit: int

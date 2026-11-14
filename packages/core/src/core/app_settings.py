@@ -20,7 +20,7 @@ from __future__ import annotations
 import enum
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from decimal import Decimal
 from typing import Any, Literal
@@ -371,4 +371,15 @@ def month_start(tz: str, now: datetime | None = None) -> datetime:
     zone = ZoneInfo(tz)
     local = (now or datetime.now(UTC)).astimezone(zone)
     first = local.date().replace(day=1)
+    return datetime.combine(first, dt_time.min, tzinfo=zone).astimezone(UTC)
+
+
+def week_start(tz: str, now: datetime | None = None) -> datetime:
+    """Local midnight six days ago: "this week" on the spend screen is the last
+    seven calendar days including today, not the week since Monday — on a
+    Monday morning the latter would show almost nothing."""
+
+    zone = ZoneInfo(tz)
+    local = (now or datetime.now(UTC)).astimezone(zone)
+    first = local.date() - timedelta(days=6)
     return datetime.combine(first, dt_time.min, tzinfo=zone).astimezone(UTC)

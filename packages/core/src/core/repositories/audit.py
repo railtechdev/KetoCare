@@ -44,6 +44,25 @@ async def write_audit_log(
     return entry
 
 
+async def exists(session: AsyncSession, *, action: str, entity: str, entity_id: uuid.UUID) -> bool:
+    """Is there already an entry with this action about this entity?
+
+    For events recorded once per occurrence by a periodic task — the AI budget
+    warning (ADR-0081) — where the entity id itself names the occurrence.
+    """
+
+    found = await session.scalar(
+        select(AuditLog.id)
+        .where(
+            AuditLog.action == action,
+            AuditLog.entity == entity,
+            AuditLog.entity_id == entity_id,
+        )
+        .limit(1)
+    )
+    return found is not None
+
+
 async def list_entries(
     session: AsyncSession,
     *,

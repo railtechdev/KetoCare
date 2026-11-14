@@ -10,6 +10,7 @@ import {
   Metric,
   MetricRow,
   Section,
+  SegmentedControl,
 } from "@ketocare/ui";
 import { useState } from "react";
 import type { TFunction } from "i18next";
@@ -17,12 +18,15 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { queryState } from "../../lib/queryState";
+import { useSectionTab } from "../../routes/useSectionTab";
+import { AiBudgetAlerts } from "./AiBudgetAlerts";
 import {
   AiGroupForm,
   AiKeyForm,
   AiProjectForm,
   KeyCheckResult,
 } from "./AiForms";
+import { AiSpendPanel } from "./AiSpendPanel";
 import { formatUsd } from "./format";
 import { TableSkeleton } from "./TableSkeleton";
 import {
@@ -37,14 +41,42 @@ import {
 type Sheet =
   { kind: "key" } | { kind: "project" } | { kind: "group"; group: AiGroupName };
 
+/** Виды раздела (`?tab=`): настройки и расход. */
+const AI_VIEWS = ["settings", "spend"] as const;
+type AiView = (typeof AI_VIEWS)[number];
+
 /**
- * Раздел «ИИ» администратора (ADR-0080).
+ * Раздел «Модели и расход» администратора.
  *
- * Ключ, модели, бюджеты и лимиты меняются здесь, без выката: прежде всё это
- * лежало в секретах репозитория. Расход показан суммами по группам — кто
- * именно потратил и на что, появится вторым этапом аудита; содержимого
- * запросов здесь нет и не будет: администратор к клиническим данным доступа не
- * имеет.
+ * Два вида: настройки (ADR-0080) и расход — кто сколько потратил (ADR-0081).
+ * Вид живёт в адресе: «расход за неделю» — это ссылка.
+ */
+export function AiSection() {
+  const { t } = useTranslation("admin");
+  const [view, setView] = useSectionTab<AiView>("tab", AI_VIEWS, "settings");
+
+  return (
+    <div className="flex flex-col gap-section">
+      <div>
+        <SegmentedControl<AiView>
+          label={t("ai.views.label")}
+          value={view}
+          onChange={setView}
+          items={[
+            { value: "settings", label: t("ai.views.settings") },
+            { value: "spend", label: t("ai.views.spend") },
+          ]}
+        />
+      </div>
+      {view === "settings" ? <AiSettingsPanel /> : <AiSpendPanel />}
+    </div>
+  );
+}
+
+/**
+ * Настройки (ADR-0080): ключ, модели, бюджеты и лимиты меняются здесь, без
+ * выката — прежде всё это лежало в секретах репозитория. Содержимого запросов
+ * здесь нет и не будет: администратор к клиническим данным доступа не имеет.
  */
 export function AiSettingsPanel() {
   const { t } = useTranslation("admin");
@@ -78,6 +110,7 @@ export function AiSettingsPanel() {
     >
       {data && (
         <div className="flex flex-col gap-section">
+          <AiBudgetAlerts alerts={data.alerts} />
           <KeySection
             settings={data}
             onReplace={() => setSheet({ kind: "key" })}

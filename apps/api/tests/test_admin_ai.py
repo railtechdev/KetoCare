@@ -254,3 +254,127 @@ class TestKeyCheck:
         await client.post(f"{URL}/key/check", json={}, headers=auth_headers(admin))
 
         assert seen == [KEY]
+
+
+# --- who spent what and the 80 % warning (ADR-0081) ------------------------------
+
+
+def _job(
+    user, kind: AiJobKind, cost: float | None, *, status=AiJobStatus.DONE, model="claude-opus-5"
+):
+    return AiJob(
+        kind=kind,
+        status=status,
+        requested_by=user.id,
+        input={"secret": "never shown"},
+        model=model,
+        cost_usd=cost,
+        tokens_in=1000,
+        tokens_out=200,
+    )
+
+
+class TestSpendReport:
+    async def test_only_the_administrator(self, client, make_user, auth_headers) -> None:
+        doctor = await make_user(UserRole.DOCTOR)
+        response = await client.get(f"{URL}/spend", headers=auth_headers(doctor))
+        assert response.status_code == 403
+
+    async def test_unknown_period_is_refused(self, client, admin, auth_headers) -> None:
+        response = await client.get(f"{URL}/spend?period=year", headers=auth_headers(admin))
+        assert response.status_code == 422
+
+    async def test_cuts_by_group_kind_model_and_person(
+        self, client, session, admin, make_user, auth_headers
+    ) -> None:
+        parent = await make_user(UserRole.PARENT)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        session.add_all(
+            [
+                _job(parent, AiJobKind.ASSISTANT, 0.25),
+                _job(parent, AiJobKind.PARSE_MEAL, 0.01, model="claude-haiku-4-5"),
+                _job(dietitian, AiJobKind.RECIPE_IMPORT, 2.0),
+                _job(dietitian, AiJobKind.RECIPE_IMPORT, 0.5, status=AiJobStatus.FAILED),
+                _job(dietitian, AiJobKind.CONTENT_DRAFT, None, model="claude-unpriced"),
+            ]
+        )
+        await session.flush()
+
+        response = await client.get(f"{URL}/spend?period=day", headers=auth_headers(admin))
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["period"] == "day"
+        assert body["people_limit"] == service.PEOPLE_LIMIT
+        assert Decimal(body["totals"]["cost_usd"]) == Decimal("2.76")
+        assert body["totals"]["calls"] == 5
+        assert body["totals"]["failed_calls"] == 1
+        assert Decimal(body["totals"]["failed_cost_usd"]) == Decimal("0.5")
+        assert body["totals"]["unpriced_calls"] == 1
+
+        groups = {line["group"]: line for line in body["by_group"]}
+        assert list(groups) == ["technical", "specialists", "families"]
+        assert Decimal(groups["technical"]["cost_usd"]) == Decimal("2.5")
+        assert groups["specialists"]["calls"] == 0, "a group without spend is still listed"
+        assert Decimal(groups["families"]["cost_usd"]) == Decimal("0.26")
+
+        kinds = {line["kind"]: line for line in body["by_kind"]}
+        assert kinds["recipe_import"]["group"] == "technical"
+        assert kinds["recipe_import"]["calls"] == 2
+        assert kinds["recipe_import"]["tokens_in"] == 2000
+
+        models = [line["model"] for line in body["by_model"]]
+        assert models[0] == "claude-opus-5", "the most expensive model first"
+        assert set(models) == {"claude-opus-5", "claude-haiku-4-5", "claude-unpriced"}
+
+        people = body["people"]
+        assert [person["user_id"] for person in people] == [str(dietitian.id), str(parent.id)]
+        assert people[0]["role"] == "dietitian"
+        assert people[0]["groups"] == ["technical"]
+        assert people[0]["failed_calls"] == 1
+        assert people[0]["search"] == dietitian.email
+        assert people[1]["groups"] == ["families"]
+        assert body["people_total"] == 2
+        # A person and a sum — never what was asked.
+        assert "never shown" not in response.text
+
+
+class TestBudgetAlerts:
+    async def test_group_at_80_percent_is_shown_in_the_section_and_on_the_home(
+        self, client, session, admin, make_user, auth_headers
+    ) -> None:
+        headers = auth_headers(admin)
+        await client.put(f"{URL}/groups/technical", json={"daily_budget_usd": "2"}, headers=headers)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        session.add(_job(dietitian, AiJobKind.RECIPE_IMPORT, 1.7))
+        await session.flush()
+
+        alerts = (await client.get(URL, headers=headers)).json()["alerts"]
+        technical = [alert for alert in alerts if alert["scope"] == "technical"]
+        assert technical == [
+            {
+                "scope": "technical",
+                "period": "day",
+                "level": "warning",
+                "percent": 85,
+                "spent_usd": "1.7",
+                "budget_usd": "2",
+            }
+        ]
+
+        overview = (await client.get("/api/v1/admin/overview", headers=headers)).json()
+        assert any(alert["scope"] == "technical" for alert in overview["ai_alerts"])
+        assert Decimal(overview["ai_spend"]["today_usd"]) >= Decimal("1.7")
+
+    async def test_settings_changes_are_readable_in_the_journal(
+        self, client, admin, auth_headers
+    ) -> None:
+        headers = auth_headers(admin)
+        await client.put(f"{URL}/groups/families", json={"enabled": False}, headers=headers)
+
+        page = (
+            await client.get("/api/v1/admin/audit-log?entity=app_settings", headers=headers)
+        ).json()
+        entry = page["items"][0]
+        assert entry["payload_hidden"] is False
+        assert entry["after"]["enabled"] is False

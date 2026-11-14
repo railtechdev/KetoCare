@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -235,6 +236,97 @@ async def cost_by_kind_since(session: AsyncSession, *, since: datetime) -> dict[
         .group_by(AiJob.kind)
     )
     return {kind: Decimal(str(total or 0)) for kind, total in rows.all()}
+
+
+@dataclass(frozen=True)
+class SpendRow:
+    """One cell of the spend breakdown: a kind, a model and an outcome."""
+
+    kind: AiJobKind
+    model: str
+    status: AiJobStatus
+    calls: int
+    #: Rows without a known cost (`cost_usd IS NULL`) — counted, never priced.
+    unpriced: int
+    cost_usd: Decimal
+    tokens_in: int
+    tokens_out: int
+
+
+async def spend_breakdown_since(session: AsyncSession, *, since: datetime) -> list[SpendRow]:
+    """Calls, cost and tokens since `since`, by kind, model and outcome.
+
+    One small grouped query: the spend screen folds it into groups, kinds,
+    models and the failed share itself, so the totals of every cut agree.
+    """
+
+    rows = await session.execute(
+        select(
+            AiJob.kind,
+            AiJob.model,
+            AiJob.status,
+            func.count(),
+            func.count().filter(AiJob.cost_usd.is_(None)),
+            func.coalesce(func.sum(AiJob.cost_usd), 0),
+            func.coalesce(func.sum(AiJob.tokens_in), 0),
+            func.coalesce(func.sum(AiJob.tokens_out), 0),
+        )
+        .where(AiJob.created_at >= since)
+        .group_by(AiJob.kind, AiJob.model, AiJob.status)
+    )
+    return [
+        SpendRow(
+            kind=AiJobKind(kind),
+            model=model or "",
+            status=AiJobStatus(status),
+            calls=int(calls),
+            unpriced=int(unpriced),
+            cost_usd=Decimal(str(cost or 0)),
+            tokens_in=int(tokens_in or 0),
+            tokens_out=int(tokens_out or 0),
+        )
+        for kind, model, status, calls, unpriced, cost, tokens_in, tokens_out in rows.all()
+    ]
+
+
+@dataclass(frozen=True)
+class PersonSpendRow:
+    requested_by: uuid.UUID
+    kind: AiJobKind
+    calls: int
+    failed: int
+    cost_usd: Decimal
+
+
+async def spend_by_person_since(session: AsyncSession, *, since: datetime) -> list[PersonSpendRow]:
+    """Calls and cost since `since` per person and kind.
+
+    Grouped by kind as well, so the screen can say which groups a person spent
+    in. A clinic has tens of staff and a few hundred families: the rows fit in
+    memory, and the top is cut by the caller.
+    """
+
+    rows = await session.execute(
+        select(
+            AiJob.requested_by,
+            AiJob.kind,
+            func.count(),
+            func.count().filter(AiJob.status == AiJobStatus.FAILED),
+            func.coalesce(func.sum(AiJob.cost_usd), 0),
+        )
+        .where(AiJob.created_at >= since)
+        .group_by(AiJob.requested_by, AiJob.kind)
+    )
+    return [
+        PersonSpendRow(
+            requested_by=requested_by,
+            kind=AiJobKind(kind),
+            calls=int(calls),
+            failed=int(failed),
+            cost_usd=Decimal(str(cost or 0)),
+        )
+        for requested_by, kind, calls, failed, cost in rows.all()
+    ]
 
 
 async def status_counts_since(

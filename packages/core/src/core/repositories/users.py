@@ -177,6 +177,17 @@ async def names_by_ids(
     return {row.id: row.full_name for row in rows}
 
 
+async def get_many(
+    session: AsyncSession, *, user_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, User]:
+    """Accounts by id in one query — for lists that name many people at once."""
+
+    if not user_ids:
+        return {}
+    rows = await session.scalars(select(User).where(User.id.in_(list(user_ids))))
+    return {user.id: user for user in rows}
+
+
 async def languages_by_ids(
     session: AsyncSession, *, user_ids: Collection[uuid.UUID]
 ) -> dict[uuid.UUID, str | None]:
