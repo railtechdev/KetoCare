@@ -91,6 +91,18 @@ async def _draft(session, user, *, recipes: list[dict[str, Any]] | None = None):
     return draft
 
 
+async def _accept(client, url: str, headers, *, signature: str | None = None):
+    """Accept every row the screen shows as ready — as the screen does it."""
+
+    view = (await client.get(url, headers=headers)).json()
+    rows = [
+        {"id": item["id"], "signature": signature or item["signature"]}
+        for item in view["items"]
+        if item["state"] == "ready" or signature is not None
+    ]
+    return await client.post(f"{url}/commit", json={"recipes": rows}, headers=headers)
+
+
 def _name(view: dict[str, Any], name: str) -> dict[str, Any]:
     return next(item for item in view["names"] if item["name"] == name)
 
@@ -302,6 +314,72 @@ class TestDecisions:
         assert name["state"] == "matched"
         assert name["source"] == "alias"
 
+    async def test_a_remembered_match_is_audited(self, client, session, make_user, auth_headers):
+        """It decides which product later recipes get without a question."""
+
+        from core.models import AuditLog
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        await self._settle(client, session, dietitian, auth_headers(dietitian))
+
+        entry = await session.scalar(select(AuditLog).where(AuditLog.action == "alias"))
+        assert entry is not None
+        assert entry.entity == "products"
+        assert entry.after["alias"] == "орехи макадамия (обжаренные)"
+
+    async def test_a_wrong_click_can_be_withdrawn(self, client, session, make_user, auth_headers):
+        """Otherwise the name would match again through the alias it just made."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        headers = auth_headers(dietitian)
+        _, url, _ = await self._settle(client, session, dietitian, headers)
+
+        response = await client.put(
+            f"{url}/names", json={"key": "Орехи макадамия (обжаренные)"}, headers=headers
+        )
+
+        assert _name(response.json(), "Орехи макадамия (обжаренные)")["state"] == "unresolved"
+        alias = await session.scalar(
+            select(ProductAlias).where(ProductAlias.alias == "орехи макадамия (обжаренные)")
+        )
+        assert alias is None
+
+    async def test_somebody_elses_match_is_not_withdrawn_with_mine(
+        self, client, session, make_user, auth_headers
+    ):
+        """Leaving a name out in my file must not undo a colleague's match for all."""
+
+        author = await make_user(UserRole.DIETITIAN)
+        await self._settle(client, session, author, auth_headers(author))
+        other = await make_user(UserRole.DOCTOR)
+        second = await _draft(session, other)
+
+        response = await client.put(
+            f"/api/v1/recipe-imports/{second.id}/names",
+            json={"key": "Орехи макадамия (обжаренные)", "left_out": True},
+            headers=auth_headers(other),
+        )
+
+        assert response.status_code == 200, response.text
+        alias = await session.scalar(
+            select(ProductAlias).where(ProductAlias.alias == "орехи макадамия (обжаренные)")
+        )
+        assert alias is not None
+
+    async def test_a_mass_that_rounds_to_nothing_is_refused(
+        self, client, session, make_user, auth_headers
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        draft = await _draft(session, dietitian)
+
+        response = await client.patch(
+            f"/api/v1/recipe-imports/{draft.id}/recipes/{draft.payload['recipes'][0]['id']}",
+            json={"lines": [{"index": 0, "grams": 0.04}]},
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 422
+
     async def test_an_archived_product_cannot_be_chosen(
         self, client, session, make_user, auth_headers
     ):
@@ -378,7 +456,7 @@ class TestCommit:
         headers = auth_headers(dietitian)
         _, url, _ = await TestDecisions()._settle(client, session, dietitian, headers)
 
-        response = await client.post(f"{url}/commit", json={}, headers=headers)
+        response = await _accept(client, url, headers)
 
         assert response.status_code == 200, response.text
         body = response.json()
@@ -403,9 +481,13 @@ class TestCommit:
         headers = auth_headers(dietitian)
         _, url, _ = await TestDecisions()._settle(client, session, dietitian, headers)
 
-        await client.post(f"{url}/commit", json={}, headers=headers)
-        again = await client.post(f"{url}/commit", json={}, headers=headers)
+        view = (await client.get(url, headers=headers)).json()
+        rows = [{"id": item["id"], "signature": item["signature"]} for item in view["items"]]
 
+        first = await client.post(f"{url}/commit", json={"recipes": rows}, headers=headers)
+        again = await client.post(f"{url}/commit", json={"recipes": rows}, headers=headers)
+
+        assert first.json()["imported"] == 1
         assert again.json()["imported"] == 0
 
     async def test_rows_that_are_not_ready_stay(self, client, session, make_user, auth_headers):
@@ -414,12 +496,59 @@ class TestCommit:
         dietitian = await make_user(UserRole.DIETITIAN)
         draft = await _draft(session, dietitian)
 
-        response = await client.post(
-            f"/api/v1/recipe-imports/{draft.id}/commit", json={}, headers=auth_headers(dietitian)
+        response = await _accept(
+            client,
+            f"/api/v1/recipe-imports/{draft.id}",
+            auth_headers(dietitian),
+            signature="whatever-the-client-says",
         )
 
         assert response.json()["imported"] == 0
         assert response.json()["draft"]["items"][0]["state"] == "needs_work"
+
+    async def test_a_row_that_changed_since_it_was_shown_is_not_written(
+        self, client, session, make_user, auth_headers
+    ):
+        """What she accepted is what her screen showed, not what is there by now."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        headers = auth_headers(dietitian)
+        draft, url, shown = await TestDecisions()._settle(client, session, dietitian, headers)
+        row = shown["items"][0]
+
+        # Somebody re-points the shared alias after the screen was drawn.
+        other_nut = await _product(session, "Макадамия в шоколаде", carbs_100g=40.0)
+        changed = await client.put(
+            f"{url}/names",
+            json={"key": "Орехи макадамия (обжаренные)", "product_id": str(other_nut.id)},
+            headers=headers,
+        )
+        assert changed.json()["items"][0]["signature"] != row["signature"]
+
+        response = await client.post(
+            f"{url}/commit",
+            json={"recipes": [{"id": row["id"], "signature": row["signature"]}]},
+            headers=headers,
+        )
+
+        assert response.json()["imported"] == 0
+        assert response.json()["draft"]["items"][0]["state"] == "ready"
+
+    async def test_accepting_nothing_is_a_validation_error(
+        self, client, session, make_user, auth_headers
+    ):
+        """There is no «everything that is ready»: it would include unseen rows."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        draft = await _draft(session, dietitian)
+
+        response = await client.post(
+            f"/api/v1/recipe-imports/{draft.id}/commit",
+            json={"recipes": []},
+            headers=auth_headers(dietitian),
+        )
+
+        assert response.status_code == 422
 
     async def test_an_existing_recipe_is_not_overwritten(
         self, client, session, make_user, auth_headers
@@ -460,7 +589,7 @@ class TestCommit:
         )
         assert skipped.json()["items"][0]["state"] == "skipped"
 
-        response = await client.post(f"{url}/commit", json={}, headers=headers)
+        response = await _accept(client, url, headers, signature="any")
         assert response.json()["imported"] == 0
 
     async def test_the_same_product_written_twice_is_one_ingredient(
@@ -480,9 +609,7 @@ class TestCommit:
         )
         draft = await _draft(session, dietitian, recipes=[recipe])
 
-        response = await client.post(
-            f"/api/v1/recipe-imports/{draft.id}/commit", json={}, headers=headers
-        )
+        response = await _accept(client, f"/api/v1/recipe-imports/{draft.id}", headers)
 
         assert response.json()["imported"] == 1
         created = await session.scalar(select(Recipe).where(Recipe.title == "Двойное яйцо"))
@@ -510,6 +637,47 @@ class TestResume:
         assert response.json()["failure"] is None
         assert enqueued == [("parse_recipe_file", (str(draft.id),))]
 
+    async def test_a_reading_in_progress_is_not_started_twice(
+        self, client, session, make_user, auth_headers, enqueued
+    ):
+        """Every extra run is a paid model call whose answer is thrown away."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        draft = await _draft(session, dietitian)
+        draft.status = drafts_repo.PARSING
+        draft.lines_done = 2
+        await session.flush()
+
+        response = await client.post(
+            f"/api/v1/recipe-imports/{draft.id}/resume", headers=auth_headers(dietitian)
+        )
+
+        assert response.status_code == 409
+        assert enqueued == []
+
+    async def test_a_reader_that_went_silent_may_be_restarted(
+        self, client, session, make_user, auth_headers, enqueued
+    ):
+        """Silent by its own clock: the reviewer's saves do not reset it."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        draft = await _draft(session, dietitian)
+        draft.status = drafts_repo.PARSING
+        draft.lines_done = 2
+        draft.payload["read_at"] = "2026-11-14T00:00:00+00:00"
+        drafts_repo.touch_payload(draft)
+        await session.flush()
+        url = f"/api/v1/recipe-imports/{draft.id}"
+
+        view = (await client.get(url, headers=auth_headers(dietitian))).json()
+        assert view["stalled"] is True
+
+        response = await client.post(f"{url}/resume", headers=auth_headers(dietitian))
+
+        assert response.status_code == 200, response.text
+        assert response.json()["stalled"] is False
+        assert enqueued == [("parse_recipe_file", (str(draft.id),))]
+
     async def test_a_file_read_to_the_end_has_nothing_to_continue(
         self, client, session, make_user, auth_headers
     ):
@@ -521,3 +689,80 @@ class TestResume:
         )
 
         assert response.status_code == 409
+
+
+class TestContractWithTheCabinet:
+    """The shape `apps/web` reads (`features/recipes/useRecipeImportDraft.ts`).
+
+    The cabinet's tests run against a hand-made copy of this answer; this test
+    is what keeps the copy honest.
+    """
+
+    async def test_the_view_has_the_fields_the_review_screen_reads(
+        self, client, session, make_user, auth_headers
+    ):
+        dietitian = await make_user(UserRole.DIETITIAN)
+        nut = await _product(session, "Макадамия")
+        draft = await _draft(session, dietitian)
+        draft.payload["candidates"]["орехи макадамия (обжаренные)"] = [str(nut.id)]
+        drafts_repo.touch_payload(draft)
+        await session.flush()
+
+        view = (
+            await client.get(f"/api/v1/recipe-imports/{draft.id}", headers=auth_headers(dietitian))
+        ).json()
+
+        assert set(view) == {
+            "id",
+            "file_name",
+            "status",
+            "created_at",
+            "lines_total",
+            "lines_done",
+            "recipes",
+            "imported",
+            "failure",
+            "stalled",
+            "notes",
+            "names",
+            "items",
+            "ready",
+        }
+        name = _name(view, "Орехи макадамия (обжаренные)")
+        assert set(name) == {
+            "key",
+            "name",
+            "hint",
+            "recipes",
+            "state",
+            "source",
+            "product",
+            "candidates",
+        }
+        assert set(name["candidates"][0]) == {"id", "name_ru", "counts_in_calculation"}
+        (recipe,) = view["items"]
+        assert set(recipe) == {
+            "id",
+            "title",
+            "category",
+            "servings",
+            "yield_g",
+            "instructions",
+            "state",
+            "problems",
+            "signature",
+            "recipe_id",
+            "kcal",
+            "ratio",
+            "lines",
+        }
+        assert set(recipe["lines"][0]) == {
+            "index",
+            "source",
+            "name",
+            "key",
+            "grams",
+            "state",
+            "left_out",
+            "product_name",
+        }

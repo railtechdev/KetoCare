@@ -183,7 +183,7 @@ def to_draft_recipes(
         ]
         instructions = draft_shape.instructions_from(
             source_lines, within(read.instructions_from), within(read.instructions_to)
-        ) or (read.instructions or "")
+        ) or draft_shape.quoted_from(source_lines, start, end, read.instructions)
         recipes.append(
             draft_shape.build_recipe(
                 title=read.title,
@@ -266,6 +266,21 @@ async def advance(
     except AiError:
         failure = "Разбор сейчас недоступен. Попробуйте продолжить позже."
 
+    # The catalogue is searched before the draft is locked: a search per new
+    # name under the lock would make the reviewer's own saves wait for it.
+    recipes: list[dict[str, Any]] = []
+    suggestions: dict[str, list[str]] = {}
+    if answer is not None:
+        recipes = to_draft_recipes(answer, source_lines=source_lines, start=start, end=end)
+        async with sessionmaker() as session:
+            for recipe in recipes:
+                for line in recipe["lines"]:
+                    key = aliases_repo.alias_key(line["name"])
+                    if key and key not in suggestions:
+                        suggestions[key] = await suggest(
+                            session, name=line["name"], hint=line["hint"]
+                        )
+
     async with sessionmaker() as session:
         draft = await drafts_repo.get(session, draft_id, for_update=True)
         # Another run got here first (the task was started twice), or the
@@ -289,20 +304,15 @@ async def advance(
                 payload["notes"].append(
                     f"Рецепт в строках {start + 1}–{end} слишком длинный и не прочитан."
                 )
-            recipes = to_draft_recipes(answer, source_lines=source_lines, start=start, end=end)
             payload["recipes"].extend(recipes)
-            for recipe in recipes:
-                for line in recipe["lines"]:
-                    key = aliases_repo.alias_key(line["name"])
-                    if key and key not in payload["candidates"]:
-                        payload["candidates"][key] = await suggest(
-                            session, name=line["name"], hint=line["hint"]
-                        )
+            for key, found in suggestions.items():
+                payload["candidates"].setdefault(key, found)
 
         draft.lines_done = position
         more = position < total
         if not more:
             draft.status = drafts_repo.READY
+        draft_shape.mark_read(payload)
         drafts_repo.touch_payload(draft)
         await session.commit()
         return more

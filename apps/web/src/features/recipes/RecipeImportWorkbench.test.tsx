@@ -72,6 +72,7 @@ const WAITING: ImportDraft = {
       state: "needs_work",
       problems: ["lines"],
       recipe_id: null,
+      signature: "sig-waiting",
       kcal: null,
       ratio: null,
       lines: [
@@ -111,6 +112,7 @@ const READY: ImportDraft = {
       ...WAITING.items[0]!,
       state: "ready",
       problems: [],
+      signature: "sig-ready",
       kcal: 215.4,
       ratio: 3.5,
       lines: [
@@ -403,6 +405,10 @@ describe("проверка разобранного файла", () => {
     );
 
     expect(await screen.findByText("Загружен")).toBeInTheDocument();
+    // Уходит то, что было на экране, с его подписью — не «всё готовое».
+    expect((api.POST as Mock).mock.calls[0]![1].body).toEqual({
+      recipes: [{ id: "r1", signature: "sig-ready" }],
+    });
     expect(
       screen.getByRole("button", { name: "Открыть рецепт" }),
     ).toBeInTheDocument();

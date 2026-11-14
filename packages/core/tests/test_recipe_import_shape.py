@@ -38,14 +38,68 @@ class TestGrams:
         assert shape.to_grams(6, "kg") is None
 
 
+def _line(source: str, name: str, quantity: float, unit: str) -> dict:
+    return shape.build_line(
+        source_lines=[source], line=1, name=name, hint=None, quantity=quantity, unit=unit
+    )
+
+
 class TestGrounding:
+    """A mass is confirmed by the file only when the line says exactly that mass."""
+
     def test_a_decimal_comma_is_the_same_number(self):
-        assert shape.is_grounded(8.5, "Сливочное масло — 8,5 г")
+        assert _line("Сливочное масло — 8,5 г", "Сливочное масло", 8.5, "g")["grounded"]
 
     def test_a_number_that_is_not_in_the_line_is_not_grounded(self):
         """«8,5» read as «85» is exactly the mistake this catches."""
 
-        assert not shape.is_grounded(85, "Сливочное масло — 8,5 г")
+        assert not _line("Сливочное масло — 8,5 г", "Сливочное масло", 85, "g")["grounded"]
+
+    @pytest.mark.parametrize(
+        ("source", "name", "quantity", "unit"),
+        [
+            # The number is in the line, but it is a fat percentage, not a mass.
+            ("Сливки 33% — 50 г", "Сливки 33%", 33, "g"),
+            # A volume must not become a mass by being called grams.
+            ("Масло MCT 15 мл", "Масло MCT", 15, "g"),
+            # Half a kilogram is not half a gram.
+            ("Мука миндальная 0,5 кг", "Мука миндальная", 0.5, "g"),
+            # "1 500" is one number.
+            ("Масло сливочное 1 500 г", "Масло сливочное", 1, "g"),
+            # A table row of several numbers without units proves nothing.
+            ("Яйцо | 28 | 3,5 | 3,2 | 0,2", "Яйцо", 3.5, "g"),
+            # Two ingredients in a line: which mass is whose cannot be told.
+            ("Масло 10 г, сливки 20 г", "Масло", 20, "g"),
+            # A range is not one quantity.
+            ("Орехи 10–15 г", "Орехи", 15, "g"),
+            # The name is not what the file says: the product would be looked
+            # up by the model's word.
+            ("Сливки 33% — 50 г", "Сметана", 50, "g"),
+        ],
+    )
+    def test_the_line_must_say_this_very_mass(self, source, name, quantity, unit):
+        line = _line(source, name, quantity, unit)
+
+        assert line["grounded"] is False
+        # The mass is kept for the reviewer to confirm or correct.
+        assert line["grams"] is not None
+
+    @pytest.mark.parametrize(
+        ("source", "name", "quantity", "unit", "grams"),
+        [
+            ("Сливки 33% — 50 г", "Сливки 33%", 50, "g", 50.0),
+            ("Мука миндальная 0,5 кг", "мука миндальная", 0.5, "kg", 500.0),
+            ("Масло сливочное 1 500 г", "Масло сливочное", 1500, "g", 1500.0),
+            ("Saryog' 30 gr", "Saryog'", 30, "g", 30.0),
+            ("Butter 2 oz", "Butter", 2, "oz", 56.7),
+            ("Яйцо — 28 г.", "Яйцо", 28, "g", 28.0),
+        ],
+    )
+    def test_one_mass_with_its_unit_is_grounded(self, source, name, quantity, unit, grams):
+        line = _line(source, name, quantity, unit)
+
+        assert line["grounded"] is True
+        assert line["grams"] == grams
 
     def test_a_line_without_a_source_is_never_grounded(self):
         line = shape.build_line(
@@ -54,13 +108,6 @@ class TestGrounding:
 
         assert line["grams"] == 30.0
         assert line["grounded"] is False
-
-    def test_a_grounded_line(self):
-        line = shape.build_line(
-            source_lines=["Масло — 30 г"], line=1, name="Масло", hint=None, quantity=30, unit="g"
-        )
-
-        assert line["grounded"] is True
 
     def test_a_line_number_outside_the_file_has_no_source(self):
         assert shape.source_line(["a", "b"], 3) == ""
@@ -72,6 +119,17 @@ class TestInstructions:
         lines = ["# Блюдо", "Приготовление:", "Смешать.", "", "Выпекать 12–15 минут."]
 
         assert shape.instructions_from(lines, 3, 5) == "Смешать.\nВыпекать 12–15 минут."
+
+    def test_text_from_the_model_is_kept_only_if_the_file_says_it(self):
+        """Where instructions share a table cell, they cannot be taken by range."""
+
+        lines = ["Омлет | Яйцо 55 г | Взбить и  жарить 4 минуты"]
+
+        assert shape.quoted_from(lines, 0, 1, "Взбить и жарить 4 минуты") == (
+            "Взбить и жарить 4 минуты"
+        )
+        assert shape.quoted_from(lines, 0, 1, "Взбить и жарить 14 минут") == ""
+        assert shape.quoted_from(lines, 0, 1, None) == ""
 
     def test_a_broken_range_gives_nothing(self):
         assert shape.instructions_from(["a"], 2, 1) == ""

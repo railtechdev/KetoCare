@@ -160,12 +160,26 @@ export function useCommitImport(draftId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (): Promise<{ imported: number; draft: ImportDraft }> => {
+    /**
+     * Принимаются строки, которые были на экране, — с подписью того, как они
+     * на нём читались. «Всё готовое на сервере» включало бы рецепт, дописанный
+     * чтением секунду назад, которого человек не видел.
+     */
+    mutationFn: async (
+      shown: readonly ImportRecipe[],
+    ): Promise<{ imported: number; draft: ImportDraft }> => {
       const { data, error } = await api.POST(
         "/api/v1/recipe-imports/{draft_id}/commit",
         {
           params: { path: { draft_id: draftId } },
-          body: { recipe_ids: [] },
+          body: {
+            recipes: shown
+              .filter((recipe) => recipe.state === "ready")
+              .map((recipe) => ({
+                id: recipe.id,
+                signature: recipe.signature,
+              })),
+          },
         },
       );
       if (error || !data) throw error ?? new Error("Empty commit response");

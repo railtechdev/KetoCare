@@ -57,3 +57,15 @@ async def remember(
             set_={"product_id": product_id, "created_by": created_by},
         )
     )
+
+
+async def get(session: AsyncSession, *, key: str) -> ProductAlias | None:
+    alias: ProductAlias | None = await session.scalar(
+        select(ProductAlias).where(ProductAlias.alias == key)
+    )
+    return alias
+
+
+async def forget(session: AsyncSession, *, alias: ProductAlias) -> None:
+    await session.delete(alias)
+    await session.flush()

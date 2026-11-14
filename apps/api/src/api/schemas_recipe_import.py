@@ -72,6 +72,9 @@ class ImportRecipe(BaseModel):
     instructions: str
     state: RecipeState
     problems: list[RecipeProblem]
+    #: What would be written for this row; sent back when the row is accepted,
+    #: so a row that changed since it was shown is not written.
+    signature: str
     #: The recipe created from this row, once it is imported.
     recipe_id: uuid.UUID | None
     #: Computed by the engine for the whole dish; absent until every line is settled.
@@ -134,11 +137,19 @@ class RecipeEdit(BaseModel):
     lines: list[LineEdit] = Field(default_factory=list, max_length=100)
 
 
+class AcceptedRecipe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=64)
+    signature: str = Field(min_length=1, max_length=64)
+
+
 class CommitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    #: Rows to import; empty means every ready row.
-    recipe_ids: list[str] = Field(default_factory=list, max_length=1000)
+    #: The rows the reviewer accepted, as her screen showed them. Never empty:
+    #: "everything that is ready" would include rows she has not seen.
+    recipes: list[AcceptedRecipe] = Field(min_length=1, max_length=1000)
 
 
 class CommitResult(BaseModel):

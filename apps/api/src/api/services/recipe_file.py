@@ -16,7 +16,6 @@ exists to remove.
 
 from __future__ import annotations
 
-import csv
 import io
 import zipfile
 from xml.etree import ElementTree
@@ -27,7 +26,7 @@ from . import spreadsheet
 #: the review table for three thousand lines is already several sittings.
 MAX_LINES = 3000
 MAX_CHARS = 250_000
-MAX_LINE_CHARS = 600
+MAX_LINE_CHARS = 2000
 
 #: `word/document.xml` unpacked. A recipe book is far below this; a larger part
 #: is either not a recipe book or an archive built to exhaust memory.
@@ -110,12 +109,36 @@ def _office_lines(content: bytes) -> list[str]:
 
 
 def _xlsx_lines(content: bytes) -> list[str]:
+    """Every sheet of the workbook, one line per row.
+
+    All sheets, not the first one: a collection is often kept as a sheet per
+    section ("Завтраки", "Десерты"), and the sheet's name says what the recipes
+    under it are — so it goes in as a heading.
+    """
+
+    from openpyxl import load_workbook
+
     try:
-        table = spreadsheet.xlsx_to_csv(content)
-    except spreadsheet.SpreadsheetError as error:
-        raise UnreadableFile(str(error)) from error
-    rows = csv.reader(io.StringIO(table.decode("utf-8-sig")))
-    return [" | ".join(cell.strip() for cell in row if cell.strip()) for row in rows]
+        book = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except (zipfile.BadZipFile, KeyError, OSError, ValueError) as error:
+        raise UnreadableFile("Файл Excel повреждён или это не .xlsx.") from error
+
+    lines: list[str] = []
+    try:
+        for sheet in book.worksheets:
+            rows: list[str] = []
+            for row in sheet.iter_rows(values_only=True):
+                cells = [spreadsheet.cell_text(value) for value in row]
+                text = " | ".join(cell for cell in cells if cell)
+                if text:
+                    rows.append(text)
+                if len(lines) + len(rows) > MAX_LINES:
+                    break
+            if rows:
+                lines.extend([f"# {sheet.title}", *rows, ""])
+    finally:
+        book.close()
+    return lines
 
 
 def _xml_part(archive: zipfile.ZipFile, name: str) -> ElementTree.Element:
@@ -125,7 +148,8 @@ def _xml_part(archive: zipfile.ZipFile, name: str) -> ElementTree.Element:
     raw = archive.read(info)
     # A Word document never carries a DTD. One that does is not a document but
     # an attempt to make the parser expand entities.
-    if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
+    # Word writes UTF-8; in another encoding the check below would see nothing.
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")) or b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
         raise UnreadableFile("Файл повреждён: его не удалось прочитать.")
     try:
         return ElementTree.fromstring(raw)
@@ -163,14 +187,17 @@ def _docx_lines(archive: zipfile.ZipFile) -> list[str]:
         if block.tag == f"{_W}p":
             lines.extend(_paragraph_lines(block, headings))
         elif block.tag == f"{_W}tbl":
-            for row in block.iter(f"{_W}tr"):
+            # Direct rows and cells only: `iter` would walk into a table nested
+            # in a cell and give its text twice — once with the cell, once as
+            # rows of its own — and a doubled ingredient is a doubled mass.
+            for row in block.findall(f"{_W}tr"):
                 cells = [
                     " ".join(
                         text
                         for paragraph in cell.iter(f"{_W}p")
                         for text in _paragraph_lines(paragraph, set())
                     )
-                    for cell in row.iter(f"{_W}tc")
+                    for cell in row.findall(f"{_W}tc")
                 ]
                 lines.append(" | ".join(cell for cell in cells if cell.strip()))
 
@@ -224,15 +251,20 @@ def _normalised(lines: list[str]) -> list[str]:
     """Trimmed lines with runs of blank ones collapsed to a single separator.
 
     One blank line is kept: it is often the only thing that separates two
-    recipes in a plain-text file.
+    recipes in a plain-text file. An over-long line (a whole recipe in one
+    table cell) is cut into pieces, not cut off: its tail holds masses too.
     """
 
     result: list[str] = []
     for line in lines:
-        text = " ".join(line.replace("\x00", "").split())[:MAX_LINE_CHARS]
-        if not text and (not result or not result[-1]):
+        text = " ".join(line.replace("\x00", "").split())
+        if not text:
+            if result and result[-1]:
+                result.append("")
             continue
-        result.append(text)
+        result.extend(
+            text[start : start + MAX_LINE_CHARS] for start in range(0, len(text), MAX_LINE_CHARS)
+        )
     while result and not result[-1]:
         result.pop()
     return result

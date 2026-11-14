@@ -103,7 +103,7 @@ export function ImportRecipes({
           aria-busy={commit.isPending}
           aria-describedby={`${ids}-accept-reason`}
           onClick={() =>
-            commit.mutate(undefined, {
+            commit.mutate(draft.items, {
               onSuccess: (result) => {
                 if (result.imported > 0) {
                   toast.success(
@@ -373,9 +373,37 @@ function LinesTable({
   onSave: (change: ImportRecipeEdit) => void;
 }) {
   const { t } = useTranslation("recipes");
+  const unconfirmed = recipe.lines.filter(
+    (line) => line.state === "unconfirmed",
+  );
 
   return (
-    <div className="overflow-x-auto">
+    <div className="flex flex-col gap-2 overflow-x-auto">
+      {/* Массы, которые не удалось сверить со строкой файла (таблица без
+          единиц, две массы в строке), подтверждаются разом — но только здесь,
+          под открытым составом, где они перед глазами. */}
+      {unconfirmed.length > 1 && (
+        <div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              onSave({
+                lines: unconfirmed.map((line) => ({
+                  index: line.index,
+                  confirmed: true,
+                })),
+              })
+            }
+          >
+            {t("importDraft.recipes.lines.confirmAll", {
+              count: unconfirmed.length,
+            })}
+          </Button>
+        </div>
+      )}
       <table className="w-full min-w-[36rem] border-collapse text-sm">
         <caption className="sr-only">
           {t("importDraft.recipes.lines.caption", { title: recipe.title })}
@@ -460,7 +488,10 @@ function LineRow({
             })}
             defaultValue={line.grams == null ? "" : formatMass(line.grams)}
             onBlur={(event) => {
-              const grams = Number(event.target.value.replace(",", "."));
+              // «1 500» с пробелом разрядов — то же число, что «1500».
+              const grams = Number(
+                event.target.value.replace(/\s/g, "").replace(",", "."),
+              );
               if (
                 Number.isFinite(grams) &&
                 grams > 0 &&

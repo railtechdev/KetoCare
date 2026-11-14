@@ -68,6 +68,14 @@ class TestWord:
         with pytest.raises(recipe_file.UnreadableFile, match="скан"):
             recipe_file.extract_lines(_docx(_paragraph(""), media=True))
 
+    def test_a_nested_table_is_not_read_twice(self):
+        """A doubled ingredient would be a doubled mass."""
+
+        inner = "<w:tbl><w:tr><w:tc>" + _paragraph("Масло 30 г") + "</w:tc></w:tr></w:tbl>"
+        outer = f"<w:tbl><w:tr><w:tc>{inner}</w:tc></w:tr></w:tbl>"
+
+        assert recipe_file.extract_lines(_docx(outer)) == ["Масло 30 г"]
+
     def test_a_document_with_a_dtd_is_refused(self):
         """Word never writes one; a file that has it is built to expand entities."""
 
@@ -83,7 +91,41 @@ class TestWord:
             recipe_file.extract_lines(buffer.getvalue())
 
 
+class TestExcel:
+    def test_every_sheet_is_read_under_its_name(self):
+        """A collection kept as a sheet per section must not lose all but the first."""
+
+        from openpyxl import Workbook
+
+        book = Workbook()
+        first = book.active
+        first.title = "Завтраки"
+        first.append(["Омлет", "Яйцо", 55])
+        second = book.create_sheet("Десерты")
+        second.append(["Мусс", "Сливки 33%", 80])
+        buffer = io.BytesIO()
+        book.save(buffer)
+
+        assert recipe_file.extract_lines(buffer.getvalue()) == [
+            "# Завтраки",
+            "Омлет | Яйцо | 55",
+            "",
+            "# Десерты",
+            "Мусс | Сливки 33% | 80",
+        ]
+
+
 class TestText:
+    def test_an_over_long_line_is_cut_into_pieces_not_cut_off(self):
+        """A whole recipe in one table cell: its tail holds masses too."""
+
+        text = "масло 30 г " * 400
+
+        lines = recipe_file.lines_of_text(text)
+
+        assert len(lines) > 1
+        assert "".join(lines).count("30 г") == 400
+
     def test_blank_runs_collapse_to_one_separator(self):
         text = "Омлет\n\n\n\nЯйцо 55 г\n\n"
 

@@ -12,6 +12,7 @@ The document (`recipe_import_drafts.payload`):
   "resolutions": {key: Resolution},   # the reviewer's decisions per name
   "candidates":  {key: [product_id]}, # catalogue suggestions per name
   "notes":       [str],               # parts of the file that were not read
+  "read_at":     ISO time the reader last moved, or was last started
 }
 Recipe = {
   "id", "title", "category" | None, "servings", "yield_g" | None,
@@ -29,14 +30,16 @@ Resolution = {"product_id": str} | {"left_out": True}
 **The model does no arithmetic.** It returns the quantity and the unit as they
 stand in the file; grams are derived here, and only for units of mass. A spoon,
 a cup, "to taste" give no grams: the reviewer types the mass or leaves the line
-out of the calculation. A quantity that is not found in the source line is kept
-but marked `grounded = False`, and such a line is not accepted in bulk.
+out of the calculation. A mass is `grounded` only when its source line holds
+exactly that quantity with that unit and names the ingredient in the same
+words; anything else is kept but waits for the reviewer's confirmation.
 """
 
 from __future__ import annotations
 
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from .repositories.product_aliases import alias_key
@@ -60,11 +63,27 @@ _GRAMS_DIGITS = 1
 #: The same ceiling as a hand-typed ingredient (`RecipeIngredientIn.grams`).
 GRAMS_MAX = 5000.0
 
-_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
-
 
 def new_payload() -> dict[str, Any]:
-    return {"recipes": [], "resolutions": {}, "candidates": {}, "notes": []}
+    payload: dict[str, Any] = {"recipes": [], "resolutions": {}, "candidates": {}, "notes": []}
+    mark_read(payload)
+    return payload
+
+
+def mark_read(payload: dict[str, Any]) -> None:
+    """Note that the reader has just moved (or has just been started).
+
+    Kept apart from the row's `updated_at`: that one also moves with every save
+    of the reviewer, and a reader that died would never look stalled while she
+    is working in the table.
+    """
+
+    payload["read_at"] = datetime.now(UTC).isoformat()
+
+
+def read_at(payload: dict[str, Any]) -> datetime | None:
+    raw = payload.get("read_at")
+    return datetime.fromisoformat(raw) if isinstance(raw, str) else None
 
 
 def to_grams(quantity: float | None, unit: str | None) -> float | None:
@@ -86,16 +105,67 @@ def to_grams(quantity: float | None, unit: str | None) -> float | None:
     return grams
 
 
-def numbers_in(text: str) -> set[float]:
-    """Numbers written in a line of the file; a decimal comma is a decimal point."""
+#: A number as people write it: "1 500", "8,5", "0.5".
+_QUANTITY = r"\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?"
 
-    return {float(found.replace(",", ".")) for found in _NUMBER.findall(text)}
+#: How units of mass are written in the files we have seen, by our unit.
+_UNIT_SPELLINGS: dict[str, str] = {
+    "g": r"г|гр|грамм\w*|g|gr|gram\w*",
+    "kg": r"кг|килограмм\w*|kg",
+    "mg": r"мг|миллиграмм\w*|mg",
+    "oz": r"oz|унц\w*|ounce\w*",
+    "lb": r"lb|lbs|фунт\w*|pound\w*",
+}
+
+_MASS = re.compile(
+    rf"(?<![\d.,])({_QUANTITY})\s*(?:"
+    + "|".join(f"(?P<{unit}>{spelling})" for unit, spelling in _UNIT_SPELLINGS.items())
+    + r")\.?(?![\w%])",
+    re.IGNORECASE,
+)
+
+#: "10–15 г": the second number of a range is not a quantity of its own.
+_RANGE_BEFORE = re.compile(r"\d\s*[-–—]\s*$")
 
 
-def is_grounded(quantity: float, source: str) -> bool:
-    """Whether the quantity the model returned is written in the source line."""
+def masses_in(text: str) -> list[tuple[float, str]]:
+    """Quantities of mass written in a line: the number together with its unit.
 
-    return any(abs(quantity - written) < 1e-9 for written in numbers_in(source))
+    A number alone proves nothing — in "Сливки 33% — 50 г" both 33 and 50 are
+    written, and only one of them is a mass. A range ("10–15 г") is not one
+    quantity and is left out.
+    """
+
+    found: list[tuple[float, str]] = []
+    for match in _MASS.finditer(text):
+        if _RANGE_BEFORE.search(text[: match.start()]):
+            continue
+        unit = next(name for name, value in match.groupdict().items() if value)
+        digits = re.sub(r"[ \u00a0\u202f]", "", match.group(1)).replace(",", ".")
+        found.append((float(digits), unit))
+    return found
+
+
+def is_grounded(quantity: float, unit: str, source: str) -> bool:
+    """Whether the line of the file says exactly this mass and no other.
+
+    The line must hold one quantity of mass, with this number and this unit.
+    Two masses in a line (two ingredients, or a table row of several weights)
+    cannot be told apart here, and the reviewer confirms such a line herself.
+    """
+
+    masses = masses_in(source)
+    if len(masses) != 1:
+        return False
+    written, written_unit = masses[0]
+    return written_unit == unit.strip().lower() and abs(written - quantity) < 1e-9
+
+
+def name_in(name: str, source: str) -> bool:
+    """Whether the ingredient is named in the line with these very words."""
+
+    folded = " ".join(source.casefold().split())
+    return bool(name.strip()) and " ".join(name.casefold().split()) in folded
 
 
 def source_line(source_lines: list[str], number: int | None) -> str:
@@ -116,10 +186,15 @@ def build_line(
     unit: str | None,
 ) -> dict[str, Any]:
     grams = to_grams(quantity, unit)
+    source = source_line(source_lines, line)
+    # Both halves are read by the model, so both are checked against the file:
+    # the mass, and the name the product is then looked up by.
     grounded = (
         grams is not None
         and quantity is not None
-        and is_grounded(quantity, source_line(source_lines, line))
+        and unit is not None
+        and is_grounded(quantity, unit, source)
+        and name_in(name, source)
     )
     return {
         "line": line,
@@ -164,6 +239,21 @@ def instructions_from(source_lines: list[str], start: int | None, end: int | Non
         return ""
     picked = [line for line in source_lines[start - 1 : end] if line.strip()]
     return "\n".join(picked)
+
+
+def quoted_from(source_lines: list[str], start: int, end: int, text: str | None) -> str:
+    """Instructions the model returned as text — kept only if the file says so.
+
+    Used where instructions share a line with other data and cannot be taken by
+    range. The text must stand in the given lines word for word; otherwise it
+    is the model's own writing and is dropped.
+    """
+
+    wanted = " ".join((text or "").split())
+    if not wanted:
+        return ""
+    haystack = " ".join(" ".join(source_lines[start:end]).split())
+    return (text or "").strip() if wanted in haystack else ""
 
 
 def name_keys(payload: dict[str, Any]) -> list[str]:

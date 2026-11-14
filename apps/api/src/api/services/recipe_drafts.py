@@ -15,8 +15,10 @@ difference between "сливки 10 %" and "сливки 33 %" is the ketogenic 
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
-from collections.abc import Iterable
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -59,6 +61,35 @@ STALL_AFTER = timedelta(minutes=8)
 LEFT_OUT_LABEL = "Без взвешивания"
 
 _PENDING: frozenset[LineState] = frozenset({"no_product", "no_grams", "unconfirmed"})
+
+
+def is_stalled(draft: RecipeImportDraft) -> bool:
+    """Whether the reader has stopped moving without saying why."""
+
+    moved = shape.read_at(draft.payload) or draft.updated_at
+    return draft.status == drafts_repo.PARSING and datetime.now(UTC) - moved > STALL_AFTER
+
+
+def signature(reading: _Reading) -> str:
+    """What exactly would be written for this row, as one short string.
+
+    The reviewer accepts what her screen showed. Between that screen and the
+    request the reading may change — another specialist re-points a shared
+    alias, the reader appends a recipe — so the request names the rows with
+    this value, and a row that reads differently by then is not written.
+    """
+
+    recipe = reading.recipe
+    seen = (
+        recipe["title"],
+        recipe["category"],
+        recipe["servings"],
+        recipe["yield_g"],
+        recipe["instructions"],
+        [(str(product_id), grams) for product_id, grams in reading.composition],
+        reading.states,
+    )
+    return hashlib.sha256(json.dumps(seen, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
 def usable(product: Product | None) -> bool:
@@ -340,6 +371,7 @@ async def view(session: AsyncSession, draft: RecipeImportDraft) -> RecipeImportV
                 ),
                 problems=reading.problems if state == shape.OPEN else [],
                 recipe_id=uuid.UUID(recipe["recipe_id"]) if recipe["recipe_id"] else None,
+                signature=signature(reading),
                 kcal=reading.computed.get("kcal") if reading.computed else None,
                 ratio=reading.computed.get("ratio") if reading.computed else None,
                 lines=lines,
@@ -347,9 +379,7 @@ async def view(session: AsyncSession, draft: RecipeImportDraft) -> RecipeImportV
         )
 
     base = summary(draft)
-    stalled = (
-        draft.status == drafts_repo.PARSING and datetime.now(UTC) - draft.updated_at > STALL_AFTER
-    )
+    stalled = is_stalled(draft)
     return RecipeImportView(
         **base.model_dump(),
         failure=draft.failure,
@@ -361,18 +391,33 @@ async def view(session: AsyncSession, draft: RecipeImportDraft) -> RecipeImportV
     )
 
 
+@dataclass(frozen=True, slots=True)
+class AliasChange:
+    """A change of a remembered match, for the audit log."""
+
+    alias: str
+    before: uuid.UUID | None
+    after: uuid.UUID | None
+
+
 async def decide_name(
     session: AsyncSession,
     *,
     draft: RecipeImportDraft,
     decision: NameDecision,
     user_id: uuid.UUID,
-) -> None:
+) -> AliasChange | None:
     """Save what the reviewer decided about a name; a product choice is remembered.
 
     The choice is stored twice on purpose. In the draft it wins over everything
     else for this file. As an alias it answers the same spelling in every later
     file — for every specialist, which is the point: the catalogue is shared.
+    For the same reason a change of an alias is returned to be audited: it
+    decides which product a recipe gets without a question.
+
+    Withdrawing a choice withdraws the alias it made, when the alias is still
+    this reviewer's and still points at that product. Otherwise a wrong click
+    could not be undone: the name would match again through the alias.
     """
 
     key = aliases_repo.alias_key(decision.key)
@@ -380,6 +425,10 @@ async def decide_name(
         raise ApiError(ErrorCode.NOT_FOUND, "Такого названия в файле нет.")
 
     resolutions: dict[str, Any] = draft.payload["resolutions"]
+    earlier = resolutions.get(key) or {}
+    stored = await aliases_repo.get(session, key=key)
+    change: AliasChange | None = None
+
     if decision.product_id is not None:
         product = await products_repo.get(session, decision.product_id)
         if not usable(product):
@@ -389,14 +438,26 @@ async def decide_name(
                 "справочнике, он выведен из него или в нём не хватает данных.",
             )
         resolutions[key] = {"product_id": str(decision.product_id)}
-        await aliases_repo.remember(
-            session, key=key, product_id=decision.product_id, created_by=user_id
-        )
-    elif decision.left_out:
-        resolutions[key] = {"left_out": True}
+        before = stored.product_id if stored is not None else None
+        if before != decision.product_id:
+            await aliases_repo.remember(
+                session, key=key, product_id=decision.product_id, created_by=user_id
+            )
+            change = AliasChange(alias=key, before=before, after=decision.product_id)
     else:
-        resolutions.pop(key, None)
+        if decision.left_out:
+            resolutions[key] = {"left_out": True}
+        else:
+            resolutions.pop(key, None)
+        if (
+            stored is not None
+            and stored.created_by == user_id
+            and earlier.get("product_id") == str(stored.product_id)
+        ):
+            change = AliasChange(alias=key, before=stored.product_id, after=None)
+            await aliases_repo.forget(session, alias=stored)
     drafts_repo.touch_payload(draft)
+    return change
 
 
 def edit_recipe(draft: RecipeImportDraft, recipe_id: str, edit: RecipeEdit) -> None:
@@ -434,7 +495,11 @@ def _edit_line(recipe: dict[str, Any], change: LineEdit) -> None:
     line = recipe["lines"][change.index]
     fields = change.model_fields_set
     if "grams" in fields and change.grams is not None:
-        line["grams"] = round(change.grams, 1)
+        grams = round(change.grams, 1)
+        if grams <= 0:
+            # 0.04 g is "more than zero" until it is stored with one decimal.
+            raise ApiError(ErrorCode.VALIDATION_ERROR, "Масса меньше 0,1 г в рецепт не входит.")
+        line["grams"] = grams
         line["confirmed"] = True
     if "confirmed" in fields and change.confirmed is not None:
         line["confirmed"] = change.confirmed
@@ -472,22 +537,23 @@ async def commit(
     session: AsyncSession,
     *,
     draft: RecipeImportDraft,
-    recipe_ids: Iterable[str],
+    accepted: Mapping[str, str],
     user_id: uuid.UUID,
 ) -> list[Created]:
-    """Create recipes from the ready rows. Returns what was created, for the audit.
+    """Create recipes from the rows the reviewer accepted.
 
-    Rows that are not ready are left as they are — the reviewer imports what is
-    done and comes back to the rest. A row is ready by the same reading the
-    table shows, so what she accepted is what gets written.
+    `accepted` maps a row to the signature her screen showed for it. A row is
+    written only if it is ready and still reads exactly that way; anything else
+    stays in the draft, and she sees it again as it now is. There is no "all
+    ready rows": a recipe the reader appended a second ago was never on her
+    screen.
     """
 
-    wanted = set(recipe_ids)
     catalogue = await _catalogue(session, draft.payload)
     created: list[Created] = []
     for reading in _read_all(draft.payload, catalogue):
         recipe = reading.recipe
-        if not reading.ready or (wanted and recipe["id"] not in wanted):
+        if not reading.ready or accepted.get(recipe["id"]) != signature(reading):
             continue
         assert reading.computed is not None
 

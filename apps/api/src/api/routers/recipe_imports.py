@@ -137,8 +137,13 @@ async def resume_import(
     draft = await _own_draft(session, draft_id, user, for_update=True)
     if draft.lines_done >= len(draft.source_lines):
         raise ApiError(ErrorCode.CONFLICT, "Файл уже разобран целиком.")
+    if draft.status == drafts_repo.PARSING and not recipe_drafts.is_stalled(draft):
+        # Every extra run is a paid model call whose answer is thrown away.
+        raise ApiError(ErrorCode.CONFLICT, "Файл ещё читается.")
     draft.status = drafts_repo.PARSING
     draft.failure = None
+    shape.mark_read(draft.payload)
+    drafts_repo.touch_payload(draft)
     after_commit.defer(session, "parse_recipe_file", str(draft.id))
     await session.commit()
     await session.refresh(draft)
@@ -151,6 +156,7 @@ async def resume_import(
     summary="Решение по названию продукта из файла",
 )
 async def decide_name(
+    request: Request,
     draft_id: uuid.UUID,
     decision: NameDecision,
     user: CurrentUserDep,
@@ -160,7 +166,26 @@ async def decide_name(
     the decision. One decision settles the name in every recipe of the file."""
 
     draft = await _own_draft(session, draft_id, user, for_update=True)
-    await recipe_drafts.decide_name(session, draft=draft, decision=decision, user_id=user.id)
+    change = await recipe_drafts.decide_name(
+        session, draft=draft, decision=decision, user_id=user.id
+    )
+    if change is not None:
+        # A remembered match decides which product later recipes get without a
+        # question — a change of the catalogue in effect, so it is audited.
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="alias",
+            entity="products",
+            entity_id=change.after or change.before,
+            before={"alias": change.alias, "product_id": str(change.before)}
+            if change.before
+            else None,
+            after={"alias": change.alias, "product_id": str(change.after)}
+            if change.after
+            else None,
+            ip=client_address(request),
+        )
     await session.commit()
     await session.refresh(draft)
     return await recipe_drafts.view(session, draft)
@@ -197,7 +222,10 @@ async def commit_import(
     user: CurrentUserDep,
     session: SessionDep,
 ) -> CommitResult:
-    """Create recipes from the ready rows; the rest stay in the draft.
+    """Create recipes from the rows the reviewer accepted; the rest stay.
+
+    Each row comes with the signature her screen showed. A row that reads
+    differently by now is left in the draft instead of being written.
 
     Recipes are created as drafts of the library: publishing is a separate
     decision (section 5.3). Existing recipes are never overwritten — a row
@@ -206,7 +234,10 @@ async def commit_import(
 
     draft = await _own_draft(session, draft_id, user, for_update=True)
     created = await recipe_drafts.commit(
-        session, draft=draft, recipe_ids=payload.recipe_ids, user_id=user.id
+        session,
+        draft=draft,
+        accepted={item.id: item.signature for item in payload.recipes},
+        user_id=user.id,
     )
     for item in created:
         await audit_repo.write_audit_log(
