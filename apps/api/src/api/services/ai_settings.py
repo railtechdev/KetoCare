@@ -23,6 +23,7 @@ from core.repositories import audit as audit_repo
 from core.repositories import users as users_repo
 
 from ..deps.auth import CurrentUser
+from ..errors import ApiError, ErrorCode
 from ..schemas_ai_settings import (
     AiGroupDefaults,
     AiGroupView,
@@ -224,7 +225,14 @@ async def replace_key(
 
     app_settings.clear_cache()
     previous = await app_settings.stored_key(session, settings)
-    shown = await app_settings.save_key(session, settings, api_key, by=actor.id)
+    try:
+        shown = await app_settings.save_key(session, settings, api_key, by=actor.id)
+    except secret_box.BadEncryptionKey as error:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Ключ нельзя сохранить: ключ шифрования на сервере задан неверно. "
+            "Его исправляет тот, кто обслуживает сервер.",
+        ) from error
     await _audit(
         session,
         actor=actor,

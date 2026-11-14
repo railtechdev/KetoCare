@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import enum
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from datetime import time as dt_time
 from decimal import Decimal
@@ -148,7 +148,8 @@ class GroupConfig:
 
 @dataclass(frozen=True)
 class AiConfig:
-    api_key: str
+    #: Out of `repr`: error reporters print local variables of a failing frame.
+    api_key: str = field(repr=False)
     api_key_source: ValueSource | None
     daily_budget_usd: Decimal
     monthly_budget_usd: Decimal | None
@@ -162,8 +163,9 @@ class AiConfig:
 class StoredKey:
     """The key typed in the cabinet, as the cabinet may show it."""
 
-    #: `None` — the row is there but cannot be read (encrypted under another key).
-    value: str | None
+    #: `None` — the row is there but cannot be read (encrypted under another key,
+    #: or the encryption key in the environment is malformed). Out of `repr`.
+    value: str | None = field(repr=False)
     hint: str
     updated_at: Any
     updated_by: Any
@@ -204,26 +206,40 @@ async def _rows(session: AsyncSession) -> dict[str, _Row]:
     return rows
 
 
+def _field_by_field[T: BaseModel](model: type[T], value: dict[str, Any]) -> T:
+    """A stored value that no longer validates as a whole, read field by field.
+
+    A model removed from the price list later must not drop the group's budgets
+    and limit with it — that would silently take the ceiling off. Only the
+    fields that fail fall back to their defaults (the environment).
+    """
+
+    try:
+        return model.model_validate(value)
+    except ValueError:
+        pass
+    kept: dict[str, Any] = {}
+    for name, field_value in value.items():
+        try:
+            model.model_validate({name: field_value})
+        except ValueError:
+            continue
+        kept[name] = field_value
+    return model.model_validate(kept)
+
+
 def _group_overrides(rows: dict[str, _Row], group: AiGroup) -> GroupOverrides:
     row = rows.get(group_key(group))
     if row is None:
         return GroupOverrides()
-    # A stored value that no longer validates (a model removed from the price
-    # list) must not take AI down: the group falls back to the environment.
-    try:
-        return GroupOverrides.model_validate(row.value)
-    except ValueError:
-        return GroupOverrides(enabled=bool(row.value.get("enabled", True)))
+    return _field_by_field(GroupOverrides, row.value)
 
 
 def _project_overrides(rows: dict[str, _Row]) -> ProjectOverrides:
     row = rows.get(KEY_PROJECT)
     if row is None:
         return ProjectOverrides()
-    try:
-        return ProjectOverrides.model_validate(row.value)
-    except ValueError:
-        return ProjectOverrides()
+    return _field_by_field(ProjectOverrides, row.value)
 
 
 def _stored_key(rows: dict[str, _Row], settings: Settings) -> StoredKey | None:
@@ -231,7 +247,12 @@ def _stored_key(rows: dict[str, _Row], settings: Settings) -> StoredKey | None:
     if row is None:
         return None
     token = row.value.get("ciphertext")
-    value = secret_box.decrypt(settings, token) if isinstance(token, str) else None
+    try:
+        value = secret_box.decrypt(settings, token) if isinstance(token, str) else None
+    except secret_box.BadEncryptionKey:
+        # A malformed SETTINGS_ENCRYPTION_KEY must not take AI and the admin
+        # screen down: the key reads as unreadable and the environment works on.
+        value = None
     return StoredKey(
         value=value,
         hint=str(row.value.get("hint", "")),

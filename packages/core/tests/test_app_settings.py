@@ -107,6 +107,24 @@ class TestSecretBox:
         assert secret_box.hint("sk-ant-abcdef1234") == "…1234"
 
 
+class TestKeyStaysOutOfRepr:
+    def test_config_and_stored_key_do_not_print_the_key(self) -> None:
+        """Error reporters print local variables; the key must not be among them."""
+
+        config = app_settings.AiConfig(
+            api_key="sk-ant-secret-value",
+            api_key_source="admin",
+            daily_budget_usd=Decimal(10),
+            monthly_budget_usd=None,
+            groups={},
+        )
+        stored = app_settings.StoredKey(
+            value="sk-ant-secret-value", hint="…alue", updated_at=None, updated_by=None
+        )
+        assert "sk-ant-secret-value" not in repr(config)
+        assert "sk-ant-secret-value" not in repr(stored)
+
+
 class TestPeriods:
     def test_day_and_month_start_at_local_midnight(self) -> None:
         now = datetime(2026, 11, 14, 20, 0, tzinfo=UTC)  # 01:00 on the 15th in Tashkent
@@ -187,12 +205,19 @@ class TestEffectiveConfig:
         assert stored is not None and stored.value is None
 
     async def test_stale_model_in_a_stored_group_falls_back(self, session) -> None:
-        """A model removed from the price list later must not break the group."""
+        """A model removed from the price list later falls back to the environment —
+        and takes neither the group's budgets nor its limit with it."""
 
         session.add(
             AppSetting(
                 key=app_settings.group_key(AiGroup.SPECIALISTS),
-                value={"enabled": False, "model": "claude-retired-1"},
+                value={
+                    "enabled": False,
+                    "model": "claude-retired-1",
+                    "daily_budget_usd": "2",
+                    "monthly_budget_usd": "40",
+                    "user_daily_limit": 5,
+                },
             )
         )
         await session.flush()
@@ -202,6 +227,22 @@ class TestEffectiveConfig:
 
         assert specialists.model == "claude-opus-5"
         assert not specialists.enabled
+        assert specialists.daily_budget_usd == Decimal(2)
+        assert specialists.monthly_budget_usd == Decimal(40)
+        assert specialists.user_daily_limit == 5
+
+    async def test_malformed_encryption_key_reads_as_unreadable(self, session) -> None:
+        """A broken SETTINGS_ENCRYPTION_KEY must not take AI and the admin screen down."""
+
+        await app_settings.save_key(session, settings_with(), "sk-ant-from-cabinet-0001", by=None)
+        app_settings.clear_cache()
+
+        broken = settings_with(settings_encryption_key="not-a-fernet-key")
+        config = await app_settings.ai_config(session, broken)
+        stored = await app_settings.stored_key(session, broken)
+
+        assert config.api_key == "sk-ant-from-env"
+        assert stored is not None and stored.value is None
 
     async def test_removed_key_returns_to_environment(self, session) -> None:
         settings = settings_with()
