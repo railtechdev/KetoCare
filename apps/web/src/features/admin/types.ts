@@ -27,6 +27,8 @@ export const ADMIN_SECTIONS = [
   "leads",
   "products",
   "dictionaries",
+  // Ключ, модели, бюджеты и лимиты ИИ (ADR-0080).
+  "ai",
   "audit",
 ] as const;
 

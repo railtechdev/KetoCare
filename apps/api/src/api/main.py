@@ -13,6 +13,7 @@ from .ratelimit import register_rate_limiting
 from .routers import (
     access_codes,
     admin,
+    admin_ai,
     ai,
     ai_conversations,
     attachments,
@@ -114,6 +115,7 @@ def create_app() -> FastAPI:
     v1.include_router(dictionaries.router)
     v1.include_router(staff.router)
     v1.include_router(admin.router)
+    v1.include_router(admin_ai.router)
     v1.include_router(telegram.router)
     v1.include_router(telegram.bot_router)
     v1.include_router(monitor_health_router)

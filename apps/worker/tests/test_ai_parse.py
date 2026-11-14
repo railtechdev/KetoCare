@@ -284,6 +284,6 @@ def test_prompt_forbids_advice() -> None:
 def test_parse_kind_is_the_fast_one() -> None:
     """Разбор идёт по AI_MODEL_FAST: он короткий и его делают часто."""
 
-    from worker.ai.client import FAST_KINDS
+    from core.app_settings import AI_TASKS
 
-    assert AiJobKind.PARSE_MEAL in FAST_KINDS
+    assert AI_TASKS[AiJobKind.PARSE_MEAL].speed == "fast"

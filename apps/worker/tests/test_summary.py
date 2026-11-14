@@ -109,7 +109,7 @@ class TestSummarize:
     async def test_the_call_uses_the_smart_model(
         self, sessionmaker: async_sessionmaker, user_id: uuid.UUID, patient_id: uuid.UUID
     ) -> None:
-        """Сводка — не разбор фразы: `DOCTOR_SUMMARY` не входит в `FAST_KINDS`."""
+        """Сводка — не разбор фразы: `DOCTOR_SUMMARY` не быстрая задача (`AI_TASKS`)."""
 
         messages = says(CLEAN)
         await summarize(

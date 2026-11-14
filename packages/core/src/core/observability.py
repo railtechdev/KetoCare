@@ -54,6 +54,9 @@ def init_sentry(component: str) -> bool:
         # Данные пользователя не собираются: см. модульный комментарий.
         send_default_pii=False,
         max_request_body_size="never",
+        # Local variables of a failing frame stay out of events: they may hold
+        # a provider key or a request about a child (ADR-0080).
+        include_local_variables=False,
         traces_sample_rate=0.0,
         before_send=_scrub_event,
     )

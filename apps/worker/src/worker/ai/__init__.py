@@ -12,6 +12,7 @@
 from .client import (
     AiAnswer,
     AiClient,
+    AiDisabled,
     AiError,
     AiLimitExceeded,
     AiUnavailable,
@@ -23,6 +24,7 @@ from .pseudonymize import patient_label, pseudonymize
 __all__ = [
     "AiAnswer",
     "AiClient",
+    "AiDisabled",
     "AiError",
     "AiLimitExceeded",
     "AiUnavailable",

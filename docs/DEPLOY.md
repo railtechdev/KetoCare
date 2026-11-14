@@ -260,7 +260,12 @@ restrict,command="/srv/ketocare-deploy.sh" ssh-ed25519 …
 `DEPLOY_KNOWN_HOSTS`, `POSTGRES_PASSWORD`, `SECRET_KEY`, `BOT_API_TOKEN`,
 `BOT_TOKEN`, `BOT_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`,
 при появлении — `ANTHROPIC_API_KEY`, `SENTRY_DSN`; `MONITOR_TOKEN` — токен
-проверки ИИ монитором доступности (см. «Монитор доступности»).
+проверки ИИ монитором доступности (см. «Монитор доступности»);
+`SETTINGS_ENCRYPTION_KEY` — ключ шифрования настроек, введённых в кабинете
+(ADR-0080): `python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())" | gh secret set SETTINGS_ENCRYPTION_KEY`.
+Без него ключ выводится из `SECRET_KEY`. Ключ ИИ, модели, бюджеты и пределы
+администратор может задать в разделе «Модели и расход» — тогда переменные ниже
+становятся запасными.
 Переменные (там же, вкладка Variables): `WEB_ORIGIN`, `MINIAPP_ORIGIN`,
 `MINIAPP_URL`, `AI_MODEL_FAST`, `AI_MODEL_SMART`, `AI_DAILY_BUDGET_USD`,
 `AI_USER_DAILY_LIMIT`, `TRUSTED_PROXY_IPS`, `LANDING_SITE_URL`, `PUBLIC_APP_URL`,

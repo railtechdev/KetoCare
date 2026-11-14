@@ -57,6 +57,8 @@ export const AUDIT_ENTITIES = [
   "access_codes",
   "attachments",
   "leads",
+  // Настройки из раздела «ИИ» (ADR-0080).
+  "app_settings",
   // Записи дневника: правка и удаление пишутся с именем таблицы вида
   // (`services/logs.py`, находка Н1).
   "seizure_logs",
@@ -122,6 +124,10 @@ export const AUDIT_ACTIONS = [
   // ADR-0054): какие именно — в записи.
   "recompute_after_product_update",
   "alias",
+  // Ключ ИИ введён или убран в разделе «ИИ» (ADR-0080): значение в журнал не
+  // попадает, только последние четыре знака.
+  "ai_key_replaced",
+  "ai_key_removed",
   // Учётная запись родителя, родившаяся в боте: почты и пароля у неё нет
   // (ADR-0040, этап Б), и `set_credentials` — момент, когда она их задаёт.
   "create_user",

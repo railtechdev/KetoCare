@@ -11,6 +11,7 @@ import {
   ScrollText,
   Baby,
   ShoppingBasket,
+  Sparkles,
   UserCog,
   UserRound,
   Users,
@@ -172,6 +173,7 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
   users: () => <AdminPage section="users" />,
   leads: () => <AdminPage section="leads" />,
   dictionaries: () => <AdminPage section="dictionaries" />,
+  ai: () => <AdminPage section="ai" />,
   audit: () => <AdminPage section="audit" />,
   child: () => <ChildPage />,
   profile: () => <ProfilePage />,
@@ -211,6 +213,7 @@ export const SECTION_ICONS: Record<string, LucideIcon> = {
   users: UserCog,
   leads: Inbox,
   dictionaries: ListTree,
+  ai: Sparkles,
   audit: ScrollText,
   profile: UserRound,
 };
@@ -233,6 +236,7 @@ export type SectionId =
   | "users"
   | "leads"
   | "dictionaries"
+  | "ai"
   | "audit"
   | "profile";
 
@@ -255,6 +259,7 @@ export const SECTION_GROUPS: Record<string, SectionGroup> = {
   users: "management",
   leads: "management",
   dictionaries: "management",
+  ai: "management",
   audit: "management",
   profile: "account",
 };

@@ -22,12 +22,11 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from datetime import UTC, datetime, time, timedelta
-from decimal import Decimal
-from zoneinfo import ZoneInfo
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core import app_settings
 from core.config import Settings
 from core.models.enums import AiJobStatus
 from core.repositories import ai_jobs as ai_jobs_repo
@@ -103,14 +102,6 @@ def error_class(error: str | None) -> str:
     return _SAFE.sub("", " ".join(parts))[:CLASS_MAX_CHARS]
 
 
-def _day_start(tz: str, now: datetime) -> datetime:
-    """Начало местных суток в UTC — как у дневного бюджета воркера."""
-
-    zone = ZoneInfo(tz)
-    local_midnight = datetime.combine(now.astimezone(zone).date(), time.min, tzinfo=zone)
-    return local_midnight.astimezone(UTC)
-
-
 async def ai_health(session: AsyncSession, settings: Settings) -> AiHealth:
     now = datetime.now(UTC)
     since = now - WINDOW
@@ -121,7 +112,10 @@ async def ai_health(session: AsyncSession, settings: Settings) -> AiHealth:
     errors = await ai_jobs_repo.failure_errors_since(session, since=since)
     classes = Counter(error_class(error) for error in errors)
     last_error = await ai_jobs_repo.last_failure_error(session)
-    spent = await ai_jobs_repo.cost_since(session, since=_day_start(settings.tz, now))
+    spent = await ai_jobs_repo.cost_since(session, since=app_settings.day_start(settings.tz, now))
+    # The key, models and budget the worker actually runs on: the cabinet
+    # first, the environment as the fallback (ADR-0080).
+    config = await app_settings.ai_config(session, settings)
 
     return AiHealth(
         window_hours=int(WINDOW.total_seconds() // 3600),
@@ -139,10 +133,14 @@ async def ai_health(session: AsyncSession, settings: Settings) -> AiHealth:
             AiFailureClass(error_class=name, count=count)
             for name, count in classes.most_common(TOP_CLASSES)
         ],
-        daily_budget_exhausted=spent >= Decimal(str(settings.ai_daily_budget_usd)),
+        daily_budget_exhausted=spent >= config.daily_budget_usd,
         configured=AiConfigured(
-            api_key=bool(settings.anthropic_api_key),
-            model_fast=bool(settings.ai_model_fast),
-            model_smart=bool(settings.ai_model_smart),
+            api_key=bool(config.api_key),
+            model_fast=all(
+                group.model_fast
+                for group in config.groups.values()
+                if app_settings.group_has_fast(group.group)
+            ),
+            model_smart=all(group.model for group in config.groups.values()),
         ),
     )

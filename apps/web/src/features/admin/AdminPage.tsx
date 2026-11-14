@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
 import { CatalogPage } from "../products/CatalogPage";
+import { AiSettingsPanel } from "./AiSettingsPanel";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { LeadsPanel } from "./LeadsPanel";
@@ -56,6 +57,7 @@ export function AdminPage({ section }: { section?: string }) {
         {current === "users" && <UsersPanel chrome="screen" />}
         {current === "leads" && <LeadsPanel chrome="screen" />}
         {current === "dictionaries" && <DictionariesPanel chrome="screen" />}
+        {current === "ai" && <AiSettingsPanel />}
         {current === "audit" && <AuditPanel chrome="screen" />}
       </div>
     </PageLayout>

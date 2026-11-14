@@ -5,10 +5,12 @@
 
 - псевдонимизация нагрузки (`pseudonymize`) — обойти её, не переписав этот
   модуль, нельзя;
-- предохранители: суточный предел пользователя и дневной бюджет проекта;
+- предохранители: бюджеты проекта и группы задач (день и месяц), суточный
+  предел человека в группе, выключатель группы (ADR-0080);
 - строка в `ai_jobs` — до вызова, чтобы след остался даже если процесс умрёт,
   и с токенами и стоимостью после, включая неудачу;
-- имя модели из окружения (`AI_MODEL_FAST` / `AI_MODEL_SMART`), а не из кода;
+- ключ и имя модели — из настроек администратора, запасным — из окружения
+  (`ANTHROPIC_API_KEY`, `AI_MODEL_FAST` / `AI_MODEL_SMART`), но не из кода;
 - ретраи и таймаут.
 
 Чего здесь нет намеренно: промптов и разбора ответа. Промпты живут файлами в
@@ -21,14 +23,15 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, time
 from decimal import Decimal
 from typing import Any, Protocol, cast
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from core import app_settings
+from core.app_settings import AI_TASKS, AiConfig
 from core.config import Settings
 from core.models.enums import AiJobKind
 from core.repositories import ai_jobs as jobs_repo
@@ -36,26 +39,9 @@ from core.repositories import ai_jobs as jobs_repo
 from .pricing import UnknownModelPrice, assert_priced, estimate_cost, reserve_cost
 from .pseudonymize import pseudonymize, scrub_free_text
 
-#: Задачи, к которым применяется суточный предел ПОЛЬЗОВАТЕЛЯ.
-#:
-#: Раздел 10.2 ТЗ говорит о пределе «N запросов ассистента в сутки» — именно
-#: ассистента: разбор еды родитель делает столько раз, сколько раз кормит
-#: ребёнка, и упереться в предел посреди дня означало бы остаться без функции,
-#: ради которой бот и нужен. Разбор ограничивает только дневной бюджет проекта.
-#:
-#: Сводка врачу и черновик рецепта добавлены сюда позже, по одному доводу.
-#: Обе идут по smart-модели, обе не идемпотентны (каждое нажатие — новый
-#: оплаченный вызов), а бюджет общий: врач, перебирающий периоды, или диетолог,
-#: пробующий по три черновика на карточку, выжигают его за утро — и первым
-#: замолкает помощник семей.
-USER_LIMITED_KINDS: tuple[AiJobKind, ...] = (
-    AiJobKind.ASSISTANT,
-    AiJobKind.DOCTOR_SUMMARY,
-    AiJobKind.CONTENT_DRAFT,
-)
-
-#: Задачи, которым положена быстрая модель (раздел 10.2 ТЗ).
-FAST_KINDS: frozenset[AiJobKind] = frozenset({AiJobKind.PARSE_MEAL, AiJobKind.PARSE_EVENT})
+# Which tasks count against the per-person limit and which take the fast model
+# is declared once, in `core.app_settings.AI_TASKS`: the admin area shows the
+# same table it is enforced by.
 
 #: Потолок ответа по умолчанию. Сводка врачу длиннее — она передаёт своё
 #: значение; разбор еды короче любого потолка.
@@ -92,7 +78,15 @@ class AiUnavailable(AiError):
 
 
 class NotConfigured(AiError):
-    """Ключа или имени модели в окружении нет — обращаться некуда."""
+    """Ключа или имени модели нет ни в настройках, ни в окружении — обращаться некуда."""
+
+
+class AiDisabled(NotConfigured):
+    """Администратор выключил группу задач (ADR-0080).
+
+    Подкласс `NotConfigured`: для человека это то же «сейчас недоступно», и
+    каждая задача уже умеет так отвечать.
+    """
 
 
 @dataclass(frozen=True)
@@ -129,29 +123,45 @@ class AiClient:
         self,
         *,
         sessionmaker: async_sessionmaker[Any],
-        anthropic: AnthropicLike,
         settings: Settings,
+        anthropic: AnthropicLike | None = None,
+        anthropic_for_key: Callable[[str], AnthropicLike] | None = None,
     ) -> None:
-        self._sessionmaker = sessionmaker
-        self._anthropic = anthropic
-        self._settings = settings
+        """`anthropic` — готовый клиент (тесты); иначе он собирается под ключ,
+        который действует на момент вызова: администратор мог его заменить."""
 
-    def model_for(self, kind: AiJobKind) -> str:
-        """Имя модели из окружения. Пустое значение — отказ, а не подстановка.
+        self._sessionmaker = sessionmaker
+        self._settings = settings
+        self._fixed = anthropic
+        self._for_key = anthropic_for_key or build_anthropic_for_key
+        self._built: tuple[str, AnthropicLike] | None = None
+
+    def _sdk(self, api_key: str) -> AnthropicLike:
+        if self._fixed is not None:
+            return self._fixed
+        if self._built is None or self._built[0] != api_key:
+            self._built = (api_key, self._for_key(api_key))
+        return self._built[1]
+
+    @staticmethod
+    def model_for(kind: AiJobKind, config: AiConfig) -> str:
+        """Имя модели группы задач. Пустое значение — отказ, а не подстановка.
 
         Подставить сюда имя по умолчанию значит зашить его в код: правило 6
         `CLAUDE.md` запрещает именно это, а молчаливая подстановка ещё и уводит
         расходы на модель, которую никто не выбирал.
         """
 
-        variable = "AI_MODEL_FAST" if kind in FAST_KINDS else "AI_MODEL_SMART"
-        model = (
-            self._settings.ai_model_fast if kind in FAST_KINDS else self._settings.ai_model_smart
-        )
+        group = config.group_of(kind)
+        model = group.model_for(kind)
+        variable = "AI_MODEL_FAST" if AI_TASKS[kind].speed == "fast" else "AI_MODEL_SMART"
         if not model:
-            raise NotConfigured(f"Не задана переменная {variable} — обращаться не к какой модели.")
+            raise NotConfigured(
+                f"Модель группы «{group.group.value}» не выбрана в разделе «ИИ» и не задана "
+                f"переменной {variable} — обращаться не к какой модели."
+            )
 
-        # Модель без цены — это выключенный дневной бюджет: стоимость её вызовов
+        # Модель без цены — это выключенный бюджет: стоимость её вызовов
         # неизвестна, сумма за день считается нулём, и предохранитель не
         # срабатывает никогда. Поэтому отказ, а не молчаливое «посчитаем потом».
         try:
@@ -180,24 +190,34 @@ class AiClient:
         набрал сам: его чистить нечем и не нужно, он и так о себе.
         """
 
-        if not self._settings.anthropic_api_key:
-            raise NotConfigured("Не задан ANTHROPIC_API_KEY — обращаться к модели нечем.")
-
-        model = self.model_for(kind)
         safe_payload = pseudonymize(payload)
         # Свободный текст пишет человек, и «это же его собственный ввод» —
         # не оговорка к запрету контактов в промптах (ADR-0019).
         safe_text = scrub_free_text(user_text)
 
-        reserved = reserve_cost(
-            model, max_tokens=max_tokens, prompt_tokens_guess=_prompt_tokens_guess(safe_payload)
-        )
-
         async with self._sessionmaker() as session:
+            config = await app_settings.ai_config(session, self._settings)
+            if not config.api_key:
+                raise NotConfigured(
+                    "Ключ ИИ не задан ни в разделе «ИИ», ни в ANTHROPIC_API_KEY — "
+                    "обращаться к модели нечем."
+                )
+            if not config.group_of(kind).enabled:
+                raise AiDisabled("Эта функция ИИ выключена администратором.")
+            model = self.model_for(kind, config)
+
+            reserved = reserve_cost(
+                model,
+                max_tokens=max_tokens,
+                prompt_tokens_guess=_prompt_tokens_guess(safe_payload),
+            )
+
             # Проверка и запись — под одной блокировкой: иначе одновременные
             # задачи читают одинаковый расход и проходят предохранитель разом.
             await jobs_repo.lock_budget(session)
-            await self._assert_within_limits(session, requested_by=requested_by, kind=kind)
+            await self._assert_within_limits(
+                session, config=config, requested_by=requested_by, kind=kind
+            )
             job = await jobs_repo.create(
                 session,
                 kind=kind,
@@ -210,6 +230,7 @@ class AiClient:
             job_id = job.id
             await session.commit()
 
+        sdk = self._sdk(config.api_key)
         content: list[dict[str, Any]] = [
             {"type": "text", "text": json.dumps(safe_payload, ensure_ascii=False, sort_keys=True)}
         ]
@@ -217,7 +238,7 @@ class AiClient:
             content.append({"type": "text", "text": safe_text})
 
         try:
-            response = await self._anthropic.messages.create(
+            response = await sdk.messages.create(
                 model=model,
                 max_tokens=max_tokens,
                 system=system,
@@ -268,37 +289,59 @@ class AiClient:
         )
 
     async def _assert_within_limits(
-        self, session: Any, *, requested_by: uuid.UUID, kind: AiJobKind
+        self,
+        session: Any,
+        *,
+        config: AiConfig,
+        requested_by: uuid.UUID,
+        kind: AiJobKind,
     ) -> None:
-        since = self._day_start()
+        """Бюджеты — по расходу, предел человека — по числу обращений.
 
-        spent = await jobs_repo.cost_since(session, since=since)
-        if spent >= Decimal(str(self._settings.ai_daily_budget_usd)):
-            raise AiLimitExceeded(
-                "Дневной лимит ИИ-помощника исчерпан. Он обновится завтра — "
-                "остальные разделы работают как обычно."
-            )
+        Порядок проверок — от общего к частному, и тексты разные: семье, чей
+        помощник упёрся в бюджет СВОЕЙ группы, незачем слышать про проект.
+        """
 
-        if kind in USER_LIMITED_KINDS:
+        day = app_settings.day_start(self._settings.tz)
+        month = app_settings.month_start(self._settings.tz)
+        group = config.group_of(kind)
+        group_kinds = app_settings.kinds_of(group.group)
+
+        exhausted_today = AiLimitExceeded(
+            "Дневной лимит ИИ-помощника исчерпан. Он обновится завтра — "
+            "остальные разделы работают как обычно."
+        )
+        exhausted_month = AiLimitExceeded(
+            "Месячный лимит ИИ исчерпан. Администратор может его поднять — "
+            "остальные разделы работают как обычно."
+        )
+
+        if await jobs_repo.cost_since(session, since=day) >= config.daily_budget_usd:
+            raise exhausted_today
+        if config.monthly_budget_usd is not None and (
+            await jobs_repo.cost_since(session, since=month) >= config.monthly_budget_usd
+        ):
+            raise exhausted_month
+        if group.daily_budget_usd is not None and (
+            await jobs_repo.cost_since(session, since=day, kinds=group_kinds)
+            >= group.daily_budget_usd
+        ):
+            raise exhausted_today
+        if group.monthly_budget_usd is not None and (
+            await jobs_repo.cost_since(session, since=month, kinds=group_kinds)
+            >= group.monthly_budget_usd
+        ):
+            raise exhausted_month
+
+        if AI_TASKS[kind].per_person:
+            limited = tuple(k for k in group_kinds if AI_TASKS[k].per_person)
             asked = await jobs_repo.count_since(
-                session, requested_by=requested_by, kinds=USER_LIMITED_KINDS, since=since
+                session, requested_by=requested_by, kinds=limited, since=day
             )
-            if asked >= self._settings.ai_user_daily_limit:
+            if asked >= group.user_daily_limit:
                 raise AiLimitExceeded(
                     "На сегодня вопросов к помощнику больше нет — они появятся снова завтра."
                 )
-
-    def _day_start(self) -> datetime:
-        """Начало суток по часовому поясу проекта, в UTC.
-
-        Не «последние 24 часа»: и бюджет, и предел пользователя человек понимает
-        как «на сегодня», а сутки у семьи начинаются в её полночь, а не в
-        полночь UTC — в Ташкенте это разные дни.
-        """
-
-        zone = ZoneInfo(self._settings.tz)
-        local_midnight = datetime.combine(datetime.now(zone).date(), time.min, tzinfo=zone)
-        return local_midnight.astimezone(UTC)
 
     async def _finish_failed(
         self,
@@ -370,14 +413,10 @@ def build_ai_client(settings: Settings | None = None) -> AiClient:
     from core.db import get_sessionmaker
 
     resolved = settings or Settings()  # type: ignore[call-arg]
-    return AiClient(
-        sessionmaker=get_sessionmaker(),
-        anthropic=build_anthropic(resolved),
-        settings=resolved,
-    )
+    return AiClient(sessionmaker=get_sessionmaker(), settings=resolved)
 
 
-def build_anthropic(settings: Settings) -> AnthropicLike:
+def build_anthropic_for_key(api_key: str) -> AnthropicLike:
     """Настоящий SDK-клиент. Импорт внутри функции — по той же причине, что у
     weasyprint в отчётах: пакет не нужен задачам, которые к модели не ходят."""
 
@@ -390,7 +429,7 @@ def build_anthropic(settings: Settings) -> AnthropicLike:
     return cast(
         AnthropicLike,
         AsyncAnthropic(
-            api_key=settings.anthropic_api_key,
+            api_key=api_key,
             max_retries=MAX_RETRIES,
             timeout=DEFAULT_TIMEOUT_S,
         ),
