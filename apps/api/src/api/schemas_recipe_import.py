@@ -44,6 +44,11 @@ class ImportName(BaseModel):
     hint: str | None
     recipes: int
     state: NameState
+    #: Lines of this name that have no mass are kept in the text, out of the
+    #: calculation. Lines with a mass are not touched by this.
+    left_out: bool
+    #: How many lines of this name have no mass ("to taste", "3 drops").
+    unweighed: int
     source: MatchSource | None
     product: ImportProduct | None
     candidates: list[ImportProduct]
@@ -105,7 +110,11 @@ class RecipeImportView(RecipeImportSummary):
 
 
 class NameDecision(BaseModel):
-    """The reviewer's decision about a name. Both empty — the decision is withdrawn."""
+    """The reviewer's decision about a name. Both empty — the decision is withdrawn.
+
+    The two parts are independent: `product_id` is for the lines that have a
+    mass, `left_out` for the lines that have none.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

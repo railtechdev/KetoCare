@@ -54,6 +54,8 @@ const WAITING: ImportDraft = {
       hint: null,
       recipes: 1,
       state: "unresolved",
+      left_out: false,
+      unweighed: 0,
       source: null,
       product: null,
       candidates: [
@@ -313,24 +315,56 @@ describe("проверка разобранного файла", () => {
     ).toBeEnabled();
   });
 
-  it("«не взвешивать» оставляет название вне расчёта", async () => {
+  it("«не взвешивать» есть только у названия со строками без массы", async () => {
     answerDraft(WAITING);
+    renderWorkbench(DRAFT_ID);
+
+    await screen.findByText("Нужно уточнить: 1");
+    // У макадамии масса написана: общим решением её не убрать.
+    expect(
+      screen.queryByRole("button", { name: "Не взвешивать" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("«не взвешивать» уходит на сервер и не трогает выбранный продукт", async () => {
+    const vanilla = {
+      ...WAITING.names[0]!,
+      key: "ванильный экстракт",
+      name: "Ванильный экстракт",
+      unweighed: 1,
+      candidates: [],
+    };
+    answerDraft({ ...WAITING, names: [vanilla] });
     (api.PUT as Mock).mockResolvedValue({ data: WAITING, error: undefined });
     const user = userEvent.setup();
     renderWorkbench(DRAFT_ID);
 
-    // Состав рецепта свёрнут, так что кнопка на экране одна — у названия.
     await user.click(
       await screen.findByRole("button", { name: "Не взвешивать" }),
     );
 
     await waitFor(() =>
       expect((api.PUT as Mock).mock.calls[0]![1].body).toEqual({
-        key: "орехи макадамия (обжаренные)",
+        key: "ванильный экстракт",
         product_id: null,
         left_out: true,
       }),
     );
+  });
+
+  it("продукт выбирается и из состава рецепта", async () => {
+    answerDraft(WAITING);
+    const user = userEvent.setup();
+    renderWorkbench(DRAFT_ID);
+
+    await user.click(await screen.findByRole("button", { name: "Состав" }));
+    await user.click(screen.getByRole("button", { name: "Выбрать продукт" }));
+
+    expect(
+      screen.getByText(
+        "Продукт для «Орехи макадамия (обжаренные)» — во всех рецептах файла",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("в составе исходная строка файла стоит рядом с разобранным", async () => {

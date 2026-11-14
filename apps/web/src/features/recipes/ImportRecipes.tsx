@@ -15,9 +15,11 @@ import { useTranslation } from "react-i18next";
 import { KitSelect } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import { ImportProductSearch } from "./ImportProductSearch";
 import { RECIPE_CATEGORIES } from "./types";
 import {
   useCommitImport,
+  useDecideName,
   useEditImportRecipe,
   type ImportDraft,
   type ImportLine,
@@ -57,6 +59,14 @@ export function ImportRecipes({
   const ids = useId();
   const edit = useEditImportRecipe(draft.id);
   const commit = useCommitImport(draft.id);
+  const decide = useDecideName(draft.id);
+
+  // Продукт выбирают и отсюда, из состава, — там, где заметили, что его нет.
+  // Решение то же, что в списке названий: по названию, для всех рецептов файла.
+  function choose(key: string, productId: string) {
+    const name = draft.names.find((item) => item.key === key);
+    decide.mutate({ key, productId, leftOut: name?.left_out ?? false });
+  }
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
   const pending = draft.items.filter(
@@ -130,9 +140,9 @@ export function ImportRecipes({
         </p>
       </div>
 
-      {(commit.isError || edit.isError) && (
+      {(commit.isError || edit.isError || decide.isError) && (
         <FormError>
-          {errorMessageOf(commit.error ?? edit.error) ??
+          {errorMessageOf(commit.error ?? edit.error ?? decide.error) ??
             t("common:errors.unexpected")}
         </FormError>
       )}
@@ -146,7 +156,8 @@ export function ImportRecipes({
             <RecipeRow
               recipe={recipe}
               open={expanded.has(recipe.id)}
-              busy={edit.isPending}
+              busy={edit.isPending || decide.isPending}
+              onChoose={choose}
               onToggle={() => toggle(recipe.id)}
               onSave={(change) => save(recipe.id, change)}
               onOpenRecipe={onOpenRecipe}
@@ -162,6 +173,7 @@ function RecipeRow({
   recipe,
   open,
   busy,
+  onChoose,
   onToggle,
   onSave,
   onOpenRecipe,
@@ -169,6 +181,7 @@ function RecipeRow({
   recipe: ImportRecipe;
   open: boolean;
   busy: boolean;
+  onChoose: (key: string, productId: string) => void;
   onToggle: () => void;
   onSave: (change: ImportRecipeEdit) => void;
   onOpenRecipe: (recipeId: string) => void;
@@ -314,7 +327,12 @@ function RecipeRow({
             </label>
           </div>
 
-          <LinesTable recipe={recipe} busy={busy} onSave={onSave} />
+          <LinesTable
+            recipe={recipe}
+            busy={busy}
+            onChoose={onChoose}
+            onSave={onSave}
+          />
         </div>
       )}
     </>
@@ -366,10 +384,12 @@ function CategorySelect({
 function LinesTable({
   recipe,
   busy,
+  onChoose,
   onSave,
 }: {
   recipe: ImportRecipe;
   busy: boolean;
+  onChoose: (key: string, productId: string) => void;
   onSave: (change: ImportRecipeEdit) => void;
 }) {
   const { t } = useTranslation("recipes");
@@ -430,6 +450,7 @@ function LinesTable({
               key={line.index}
               line={line}
               busy={busy}
+              onChoose={(productId) => onChoose(line.key, productId)}
               onSave={(change) =>
                 onSave({ lines: [{ index: line.index, ...change }] })
               }
@@ -446,13 +467,16 @@ type LineChange = Omit<NonNullable<ImportRecipeEdit["lines"]>[number], "index">;
 function LineRow({
   line,
   busy,
+  onChoose,
   onSave,
 }: {
   line: ImportLine;
   busy: boolean;
+  onChoose: (productId: string) => void;
   onSave: (change: LineChange) => void;
 }) {
   const { t } = useTranslation("recipes");
+  const [choosing, setChoosing] = useState(false);
   const waiting =
     line.state === "no_product" ||
     line.state === "no_grams" ||
@@ -472,7 +496,34 @@ function LineRow({
           line.source
         )}
       </td>
-      <td className="py-2 pr-3">{line.product_name ?? "—"}</td>
+      <td className="py-2 pr-3">
+        {line.state !== "no_product" ? (
+          (line.product_name ?? "—")
+        ) : choosing ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">
+              {t("importDraft.recipes.lines.chooseFor", { name: line.name })}
+            </span>
+            <ImportProductSearch
+              onPick={(productId) => {
+                setChoosing(false);
+                onChoose(productId);
+              }}
+              onCancel={() => setChoosing(false)}
+            />
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => setChoosing(true)}
+          >
+            {t("importDraft.recipes.lines.choose")}
+          </Button>
+        )}
+      </td>
       <td className="py-2 pr-3">
         {line.state === "left_out" ? (
           "—"

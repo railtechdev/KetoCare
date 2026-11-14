@@ -366,6 +366,73 @@ class TestDecisions:
         )
         assert alias is not None
 
+    async def test_leaving_a_name_unweighed_never_drops_a_written_mass(
+        self, client, session, make_user, auth_headers
+    ):
+        """«Vanilla — 3 drops» may go to the text; «vanilla — 0.5 g» is a mass."""
+
+        dietitian = await make_user(UserRole.DIETITIAN)
+        headers = auth_headers(dietitian)
+        lines = ["Ванильный экстракт — 3 капли", "Ванильный экстракт — 0,5 г"]
+        recipes = [
+            shape.build_recipe(
+                title=title,
+                category="dessert",
+                servings=None,
+                instructions="",
+                lines=[
+                    shape.build_line(
+                        source_lines=lines,
+                        line=number,
+                        name="Ванильный экстракт",
+                        hint=None,
+                        quantity=quantity,
+                        unit=unit,
+                    )
+                ],
+            )
+            for title, number, quantity, unit in (
+                ("С каплями", 1, 3, "other"),
+                ("С граммами", 2, 0.5, "g"),
+            )
+        ]
+        draft = await _draft(session, dietitian, recipes=recipes)
+        url = f"/api/v1/recipe-imports/{draft.id}"
+
+        before = (await client.get(url, headers=headers)).json()
+        assert _name(before, "Ванильный экстракт")["unweighed"] == 1
+
+        view = (
+            await client.put(
+                f"{url}/names",
+                json={"key": "Ванильный экстракт", "left_out": True},
+                headers=headers,
+            )
+        ).json()
+
+        drops, grams = view["items"]
+        assert drops["lines"][0]["state"] == "left_out"
+        # The written mass still waits for its product.
+        assert grams["lines"][0]["state"] == "no_product"
+        name = _name(view, "Ванильный экстракт")
+        assert name["state"] == "unresolved"
+        assert name["left_out"] is True
+
+        # Choosing a product for the weighed line keeps the other decision.
+        product = await _product(session, "Экстракт ванили")
+        view = (
+            await client.put(
+                f"{url}/names",
+                json={"key": "Ванильный экстракт", "product_id": str(product.id), "left_out": True},
+                headers=headers,
+            )
+        ).json()
+
+        drops, grams = view["items"]
+        assert drops["lines"][0]["state"] == "left_out"
+        assert grams["lines"][0]["state"] == "ok"
+        assert _name(view, "Ванильный экстракт")["state"] == "matched"
+
     async def test_a_mass_that_rounds_to_nothing_is_refused(
         self, client, session, make_user, auth_headers
     ):
@@ -735,6 +802,8 @@ class TestContractWithTheCabinet:
             "hint",
             "recipes",
             "state",
+            "left_out",
+            "unweighed",
             "source",
             "product",
             "candidates",

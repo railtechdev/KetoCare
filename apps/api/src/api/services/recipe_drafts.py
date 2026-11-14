@@ -145,9 +145,10 @@ async def _catalogue(session: AsyncSession, payload: dict[str, Any]) -> _Catalog
 
     for key, name in names.items():
         decision = resolutions.get(key)
+        # Leaving a name unweighed and matching it are separate decisions: the
+        # first is about lines without a mass, the second about lines with one.
         if decision is not None and decision.get("left_out"):
             catalogue.left_out.add(key)
-            continue
 
         chosen: tuple[Product | None, MatchSource] | None = None
         if decision is not None and decision.get("product_id"):
@@ -179,7 +180,13 @@ def _product(product: Product) -> ImportProduct:
 
 
 def _line_state(line: dict[str, Any], key: str, catalogue: _Catalogue) -> LineState:
-    if line["left_out"] or key in catalogue.left_out:
+    if line["left_out"]:
+        return "left_out"
+    # A decision about the name leaves out only lines that have no mass
+    # ("vanilla — 3 drops"). A mass the dietitian wrote is never dropped in
+    # bulk: "vanilla — 0.5 g" in another recipe still needs its product, and
+    # leaving that line out is a decision made on the line itself.
+    if line["grams"] is None and key in catalogue.left_out:
         return "left_out"
     match = catalogue.matched.get(key)
     if match is None:
@@ -295,6 +302,8 @@ async def view(session: AsyncSession, draft: RecipeImportDraft) -> RecipeImportV
     # The names table covers open recipes only: a skipped or imported recipe
     # asks nothing of the reviewer any more.
     counts: dict[str, int] = {}
+    weighed: dict[str, int] = {}
+    unweighed: dict[str, int] = {}
     first: dict[str, dict[str, Any]] = {}
     for recipe in payload["recipes"]:
         if recipe["state"] != shape.OPEN:
@@ -302,7 +311,12 @@ async def view(session: AsyncSession, draft: RecipeImportDraft) -> RecipeImportV
         for key in {aliases_repo.alias_key(line["name"]) for line in recipe["lines"]}:
             counts[key] = counts.get(key, 0) + 1
         for line in recipe["lines"]:
-            first.setdefault(aliases_repo.alias_key(line["name"]), line)
+            key = aliases_repo.alias_key(line["name"])
+            first.setdefault(key, line)
+            if line["left_out"]:
+                continue
+            tally = unweighed if line["grams"] is None else weighed
+            tally[key] = tally.get(key, 0) + 1
 
     names: list[ImportName] = []
     for key, line in first.items():
@@ -321,13 +335,18 @@ async def view(session: AsyncSession, draft: RecipeImportDraft) -> RecipeImportV
                 name=line["name"],
                 hint=line["hint"],
                 recipes=counts[key],
+                # Settled when nothing of this name waits: its weighed lines
+                # have a product, and its unweighed ones have one too or are
+                # left out. A seasoning settles both by being a seasoning.
                 state=(
-                    "left_out"
-                    if key in catalogue.left_out
-                    else "matched"
+                    "matched"
                     if match is not None
+                    else "left_out"
+                    if key in catalogue.left_out and not weighed.get(key)
                     else "unresolved"
                 ),
+                left_out=key in catalogue.left_out,
+                unweighed=unweighed.get(key, 0),
                 source=match[1] if match is not None else None,
                 product=_product(match[0]) if match is not None else None,
                 candidates=candidates,
@@ -438,6 +457,8 @@ async def decide_name(
                 "справочнике, он выведен из него или в нём не хватает данных.",
             )
         resolutions[key] = {"product_id": str(decision.product_id)}
+        if decision.left_out:
+            resolutions[key]["left_out"] = True
         before = stored.product_id if stored is not None else None
         if before != decision.product_id:
             await aliases_repo.remember(
