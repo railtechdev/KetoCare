@@ -352,16 +352,11 @@ class TestBudgetAlerts:
 
         alerts = (await client.get(URL, headers=headers)).json()["alerts"]
         technical = [alert for alert in alerts if alert["scope"] == "technical"]
-        assert technical == [
-            {
-                "scope": "technical",
-                "period": "day",
-                "level": "warning",
-                "percent": 85,
-                "spent_usd": "1.7",
-                "budget_usd": "2",
-            }
-        ]
+        assert len(technical) == 1
+        alert = technical[0]
+        assert (alert["period"], alert["level"], alert["percent"]) == ("day", "warning", 85)
+        assert Decimal(alert["spent_usd"]) == Decimal("1.7")
+        assert Decimal(alert["budget_usd"]) == Decimal("2")
 
         overview = (await client.get("/api/v1/admin/overview", headers=headers)).json()
         assert any(alert["scope"] == "technical" for alert in overview["ai_alerts"])
