@@ -1,11 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Button,
-  Checkbox,
-  FormFooter,
-  Section,
-  StatusNote,
-} from "@ketocare/ui";
+import { Button, Checkbox, FormFooter, Section } from "@ketocare/ui";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -152,11 +146,7 @@ export function AiProviderForm({
         focusKey={submitCount}
       />
 
-      <Section
-        title={
-          provider ? t("ai.providerForm.editTitle") : t("ai.providerForm.title")
-        }
-      >
+      <Section title={t("ai.providerForm.sectionTitle")}>
         {failure && (
           <FormError>
             {errorMessageOf(failure) ?? t("common:errors.unexpected")}
@@ -362,9 +352,7 @@ export function AiModelForm({
         focusKey={submitCount}
       />
 
-      <Section
-        title={model ? t("ai.modelForm.editTitle") : t("ai.modelForm.title")}
-      >
+      <Section title={t("ai.modelForm.sectionTitle")}>
         {save.isError && (
           <FormError>
             {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
@@ -459,7 +447,11 @@ export function AiModelForm({
           error={errors.priceOut && t("ai.errors.price")}
           {...register("priceOut")}
         />
-        {suggested && <StatusNote>{t("ai.modelForm.suggested")}</StatusNote>}
+        {suggested && (
+          <p className="m-0 text-sm text-muted-foreground" role="status">
+            {t("ai.modelForm.suggested")}
+          </p>
+        )}
 
         <label
           htmlFor={`${ids}-enabled`}

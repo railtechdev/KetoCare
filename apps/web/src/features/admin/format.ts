@@ -17,6 +17,20 @@ export function formatUsd(value: string | number): string {
   return "$" + formatNumber(Number(value), 2);
 }
 
+/**
+ * Цена модели за миллион: «$2,50 / $10,00», а ноль — словом. «$0,00 / $0,00»
+ * у своей установки читалось как незаполненная цена.
+ */
+export function formatModelPrice(
+  priceIn: string,
+  priceOut: string,
+  free: string,
+): string {
+  return Number(priceIn) === 0 && Number(priceOut) === 0
+    ? free
+    : `${formatUsd(priceIn)} / ${formatUsd(priceOut)}`;
+}
+
 /** Целое число с разделителем разрядов: обращения, токены, люди. */
 export function formatCount(value: number): string {
   return formatNumber(value, 0);
