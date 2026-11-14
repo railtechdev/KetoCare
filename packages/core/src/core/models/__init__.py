@@ -57,8 +57,10 @@ from .files import Attachment
 from .idempotency import IdempotencyKey
 from .knowledge import KbChunk
 from .marketing import Lead
+from .settings import AppSetting
 
 __all__ = [
+    "AppSetting",
     "Attachment",
     "Base",
     "IdempotencyKey",

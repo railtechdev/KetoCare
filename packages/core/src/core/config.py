@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     ai_model_smart: str = ""
     ai_daily_budget_usd: float = 10.0
     ai_user_daily_limit: int = 30
+    # The values above are fallbacks: the administrator may set the key, models,
+    # budgets and limits in the cabinet (`core.app_settings`, ADR-0080).
+
+    # Encrypts secrets typed in the cabinet (`core.secret_box`). Empty — the key
+    # is derived from SECRET_KEY, so rotating SECRET_KEY makes them unreadable
+    # (the environment fallback keeps working; the admin types the key again).
+    settings_encryption_key: str = ""
 
     # Токен монитора доступности (`GET /api/v1/health/ai`, docs/DEPLOY.md).
     # Пусто или короче 32 знаков — ручки нет вовсе (404, как у несуществующего

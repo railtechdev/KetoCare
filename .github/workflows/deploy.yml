@@ -142,6 +142,10 @@ jobs:
           BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Ключ шифрования настроек, которые администратор вводит в кабинете
+          # (ключ ИИ, ADR-0080). Пусто — ключ выводится из SECRET_KEY; задан —
+          # смена SECRET_KEY не делает введённые секреты нечитаемыми.
+          SETTINGS_ENCRYPTION_KEY: ${{ secrets.SETTINGS_ENCRYPTION_KEY }}
           # Токен монитора доступности: открывает GET /api/v1/health/ai. Тот же
           # секрет читает uptime.yml — значение одно на оба места. Пусто —
           # ручки на стенде нет (404), а монитор без секрета ИИ не проверяет.
@@ -217,7 +221,7 @@ jobs:
 
           NAMES = [
               "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
-              "BOT_USERNAME", "ANTHROPIC_API_KEY", "MONITOR_TOKEN",
+              "BOT_USERNAME", "ANTHROPIC_API_KEY", "SETTINGS_ENCRYPTION_KEY", "MONITOR_TOKEN",
               "AI_MODEL_FAST", "AI_MODEL_SMART",
               "AI_DAILY_BUDGET_USD", "AI_USER_DAILY_LIMIT",
               "SENTRY_DSN", "SENTRY_ENVIRONMENT",

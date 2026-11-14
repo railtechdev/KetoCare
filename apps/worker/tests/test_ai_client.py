@@ -18,11 +18,14 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from core import app_settings
+from core.app_settings import AiGroup, GroupOverrides, ProjectOverrides
 from core.config import Settings
 from core.models import AiJob
 from core.models.enums import AiJobKind, AiJobStatus
 from worker.ai.client import (
     AiClient,
+    AiDisabled,
     AiLimitExceeded,
     AiUnavailable,
     NotConfigured,
@@ -504,3 +507,181 @@ class TestSingleDoor:
             if "anthropic" in path.read_text() and path.name != "client.py"
         ]
         assert offenders == []
+
+
+async def _save(sessionmaker: async_sessionmaker, write: Any) -> None:
+    async with sessionmaker() as session:
+        await write(session)
+        await session.commit()
+
+
+class TestSettingsFromTheCabinet:
+    """Ключ, модели, бюджеты и выключатели из раздела «ИИ» (ADR-0080)."""
+
+    async def test_key_typed_in_the_cabinet_is_the_one_used(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        settings = settings_with()
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_key(s, settings, "sk-ant-cabinet-0042", by=None),
+        )
+        keys: list[str] = []
+        messages = FakeMessages(answer())
+
+        def for_key(key: str) -> FakeAnthropic:
+            keys.append(key)
+            return FakeAnthropic(messages)
+
+        client = AiClient(sessionmaker=sessionmaker, settings=settings, anthropic_for_key=for_key)
+        await client.ask(
+            kind=AiJobKind.ASSISTANT,
+            requested_by=user_id,
+            patient_id=None,
+            system="ты помощник",
+            payload={},
+        )
+
+        assert keys == ["sk-ant-cabinet-0042"]
+
+    async def test_group_model_is_the_one_used(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_group(
+                s, AiGroup.TECHNICAL, GroupOverrides(model="claude-sonnet-5"), by=None
+            ),
+        )
+        messages = FakeMessages(answer())
+        client = client_for(sessionmaker, messages)
+
+        for kind in (AiJobKind.RECIPE_IMPORT, AiJobKind.ASSISTANT):
+            await client.ask(
+                kind=kind, requested_by=user_id, patient_id=None, system="x", payload={}
+            )
+
+        assert [call["model"] for call in messages.calls] == ["claude-sonnet-5", "claude-opus-5"]
+
+    async def test_disabled_group_is_refused_before_the_journal(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_group(
+                s, AiGroup.SPECIALISTS, GroupOverrides(enabled=False), by=None
+            ),
+        )
+        messages = FakeMessages(answer())
+        client = client_for(sessionmaker, messages)
+
+        with pytest.raises(AiDisabled):
+            await client.ask(
+                kind=AiJobKind.DOCTOR_SUMMARY,
+                requested_by=user_id,
+                patient_id=None,
+                system="сводка",
+                payload={},
+            )
+        assert messages.calls == []
+        assert await jobs_of(sessionmaker) == []
+
+    async def test_group_budget_does_not_borrow_from_the_others(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        """Диетолог со сборником рецептов не оставляет семьи без помощника."""
+
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_group(
+                s, AiGroup.TECHNICAL, GroupOverrides(daily_budget_usd=Decimal(4)), by=None
+            ),
+        )
+        messages = FakeMessages(answer(tokens_in=1_000_000, tokens_out=0))  # $5
+        client = client_for(sessionmaker, messages, ai_daily_budget_usd=100.0)
+
+        await client.ask(
+            kind=AiJobKind.RECIPE_IMPORT,
+            requested_by=user_id,
+            patient_id=None,
+            system="x",
+            payload={},
+        )
+        with pytest.raises(AiLimitExceeded):
+            await client.ask(
+                kind=AiJobKind.RECIPE_IMPORT,
+                requested_by=user_id,
+                patient_id=None,
+                system="x",
+                payload={},
+            )
+        await client.ask(
+            kind=AiJobKind.ASSISTANT,
+            requested_by=user_id,
+            patient_id=None,
+            system="x",
+            payload={},
+        )
+        assert len(messages.calls) == 2
+
+    async def test_monthly_project_budget_stops_everything(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_project(
+                s, ProjectOverrides(monthly_budget_usd=Decimal(4)), by=None
+            ),
+        )
+        messages = FakeMessages(answer(tokens_in=1_000_000, tokens_out=0))  # $5
+        client = client_for(sessionmaker, messages, ai_daily_budget_usd=100.0)
+
+        await client.ask(
+            kind=AiJobKind.PARSE_MEAL, requested_by=user_id, patient_id=None, system="x", payload={}
+        )
+        # Вчерашний расход в месячный бюджет входит, в дневной — нет.
+        async with sessionmaker() as session:
+            job = (await session.scalars(select(AiJob))).one()
+            job.created_at = app_settings.month_start(settings_with().tz) + timedelta(minutes=1)
+            await session.commit()
+
+        with pytest.raises(AiLimitExceeded, match="Месячный"):
+            await client.ask(
+                kind=AiJobKind.ASSISTANT,
+                requested_by=user_id,
+                patient_id=None,
+                system="x",
+                payload={},
+            )
+
+    async def test_per_person_limit_is_the_group_one(
+        self, sessionmaker: async_sessionmaker, user_id: uuid.UUID
+    ) -> None:
+        await _save(
+            sessionmaker,
+            lambda s: app_settings.save_group(
+                s, AiGroup.FAMILIES, GroupOverrides(user_daily_limit=1), by=None
+            ),
+        )
+        messages = FakeMessages(answer())
+        client = client_for(sessionmaker, messages, ai_user_daily_limit=30)
+
+        await client.ask(
+            kind=AiJobKind.ASSISTANT, requested_by=user_id, patient_id=None, system="x", payload={}
+        )
+        with pytest.raises(AiLimitExceeded):
+            await client.ask(
+                kind=AiJobKind.ASSISTANT,
+                requested_by=user_id,
+                patient_id=None,
+                system="x",
+                payload={},
+            )
+        # Другая группа считает своё.
+        await client.ask(
+            kind=AiJobKind.CONTENT_DRAFT,
+            requested_by=user_id,
+            patient_id=None,
+            system="x",
+            payload={},
+        )

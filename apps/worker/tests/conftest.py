@@ -18,10 +18,12 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import date
 
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from core import app_settings
 from core.models.enums import Sex, UserRole
 from core.repositories import patients as patients_repo
 from core.repositories import users as users_repo
@@ -34,6 +36,16 @@ if not DATABASE_URL:
         "Не задан адрес тестовой БД: заполните DATABASE_URL в .env "
         "(см. .env.example) или задайте TEST_DATABASE_URL в окружении."
     )
+
+
+@pytest.fixture(autouse=True)
+def clear_app_settings_cache():
+    """Настройки из кабинета кэшируются процессом (ADR-0080): значение, записанное
+    тестом в откатываемой транзакции, не должно дожить до следующего теста."""
+
+    app_settings.clear_cache()
+    yield
+    app_settings.clear_cache()
 
 
 @pytest_asyncio.fixture
