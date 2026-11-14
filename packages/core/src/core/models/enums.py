@@ -81,6 +81,8 @@ class AiJobKind(enum.StrEnum):
     PARSE_EVENT = "parse_event"
     DOCTOR_SUMMARY = "doctor_summary"
     CONTENT_DRAFT = "content_draft"
+    # Reading a dietitian's recipe file into a draft for review (ADR-0079).
+    RECIPE_IMPORT = "recipe_import"
 
 
 class AiJobStatus(enum.StrEnum):

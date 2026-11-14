@@ -213,14 +213,14 @@ def _validated(raw: str, *, catalogue: dict[str, str]) -> ParseResult:
     """JSON модели → структура ТЗ, с проверкой того, что мы ей давали."""
 
     try:
-        data = json.loads(_without_fence(raw))
+        data = json.loads(without_fence(raw))
     except json.JSONDecodeError as error:
         raise ValueError(f"это не JSON ({error.msg})") from error
 
     try:
         result = ParseResult.model_validate(data)
     except ValidationError as error:
-        raise ValueError(_first_problem(error)) from error
+        raise ValueError(first_problem(error)) from error
 
     unknown = [
         item.product_id
@@ -240,7 +240,7 @@ def _validated(raw: str, *, catalogue: dict[str, str]) -> ParseResult:
     return result
 
 
-def _without_fence(raw: str) -> str:
+def without_fence(raw: str) -> str:
     """Снять ```json-ограду, если модель всё-таки её поставила.
 
     Промпт просит без неё, но повтор из-за одной обёртки стоил бы второго
@@ -254,7 +254,7 @@ def _without_fence(raw: str) -> str:
     return without_open.rsplit("```", 1)[0].strip()
 
 
-def _first_problem(error: ValidationError) -> str:
+def first_problem(error: ValidationError) -> str:
     problem = error.errors()[0]
     where = ".".join(str(part) for part in problem["loc"]) or "корень"
     return f"поле {where}: {problem['msg']}"

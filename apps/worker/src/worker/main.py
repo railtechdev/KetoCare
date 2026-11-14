@@ -22,6 +22,7 @@ from core.observability import init_sentry
 from .ai.assistant import assistant_reply
 from .ai.content import content_draft
 from .ai.parse import parse_free_text
+from .ai.recipe_import import parse_recipe_file
 from .ai.summary import doctor_summary
 from .maintenance import close_stuck_ai_jobs, purge_files, purge_idempotency_keys
 from .reminders.notify import (
@@ -56,6 +57,7 @@ class WorkerSettingsARQ:
         assistant_reply,
         doctor_summary,
         content_draft,
+        parse_recipe_file,
     ]
     # Уборка файлов — ночью и раз в сутки: работа дисковая, торопиться некуда,
     # а днём том занят выдачей отчётов и вложений.
