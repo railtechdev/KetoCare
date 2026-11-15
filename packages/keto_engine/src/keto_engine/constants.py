@@ -119,7 +119,19 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # fields holds the same hard constraints, but it is not the same answer: the
 # closest whole-gram dish replaces the first allowed one, and the vertex the
 # programme lands on may differ.
-ENGINE_VERSION = "1.9.0"
+# 1.10.0 — solve() finds the dish that exists and keeps the dish that is on
+# target (independent audit of 2026-11-15, docs/AUDIT_ENGINE_2026-11.md, A1, A2
+# and A7). The ratio falls back from an equality to a band inside its tolerance
+# when the equality cannot be met (pinned masses refused a dish that was within
+# both tolerances in one request out of ten); pinned products are no longer
+# moved by the whole-gram search; a gram-by-gram descent over every free product
+# ends the search, and `refine()` starts from the entered dish with the same
+# moves, so solving one's own answer changes nothing (it moved 54 % of the
+# time); products are sorted before solving, so the answer does not depend on
+# their order in the request. verify() refuses negative masses. `meal_kcal()`
+# is the one place the calories of a meal are rounded. Minor: verify() and
+# every stored number stay the same; solve() holds the same hard constraints.
+ENGINE_VERSION = "1.10.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,

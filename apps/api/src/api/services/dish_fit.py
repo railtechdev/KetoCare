@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from starlette.concurrency import run_in_threadpool
 
 from core.models import Prescription, Product
-from keto_engine import InfeasibleError, SolveResult, Targets, solve, verify
+from keto_engine import InfeasibleError, SolveResult, Targets, meal_kcal, solve, verify
 from keto_engine.constants import DEFAULT_MAX_INGREDIENT_GRAMS, MIN_INGREDIENT_GRAMS
 
 from . import composition as composition_service
@@ -40,7 +40,7 @@ def meal_targets(prescription: Prescription, *, within_share: bool = True) -> Ta
     """
 
     ratio = float(prescription.ratio)
-    kcal = round(float(prescription.kcal_per_day) / prescription.meals_per_day)
+    kcal = meal_kcal(float(prescription.kcal_per_day), prescription.meals_per_day)
     limit = (
         meal_carbs_ceiling(prescription, kcal)
         if within_share

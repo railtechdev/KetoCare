@@ -27,6 +27,7 @@ from keto_engine import (
     energy_requirement,
     fluid_requirement,
     protein_requirement,
+    refine,
     scale,
     solve,
     verify,
@@ -287,6 +288,37 @@ async def solve_dish(
         # The person chose these products: a dish that silently loses one of
         # them is not the dish that was asked for (ADR-0058).
         keeping_all = calc_service.keeping_every_product(goal, ingredients.keys())
+
+        # A dish that is already on target is polished gram by gram, not solved
+        # anew: solving starts from a corner of a linear programme and returned
+        # a different dish that was no better, so grams adjusted by hand moved
+        # on the next press (the dietitian's "сбивается", audit A2).
+        entered = calc_service.entered_items(ingredients, payload.current_grams)
+        if entered is not None:
+            polished = await run_in_threadpool(refine, entered, keeping_all)
+            if polished is not None:
+                return solved(polished, reshaped=False)
+
+        # Every answer leaves through the same polish the next press starts
+        # with. An answer found inside the corridor around the entered masses
+        # is a fixed point of the corridor only: on the next press the corridor
+        # is gone, and without this step the dish moved again (27 % of corridor
+        # answers in the review of this change).
+        free_bounds = keeping_all
+
+        async def finished(result: SolveResult, *, reshaped: bool) -> SolveResponse:
+            polished = await run_in_threadpool(
+                refine,
+                [(item.ingredient, item.grams) for item in result.dish.items],
+                free_bounds,
+            )
+            kept_all = polished is not None and not calc_service.missing_from_solution(
+                polished.dish, ingredients.keys()
+            )
+            return solved(
+                polished if polished is not None and kept_all else result, reshaped=reshaped
+            )
+
         near = calc_service.near_current(goal, keeping_all, ingredients, payload.current_grams)
         nearby: SolveResult | None = None
         if near is not None:
@@ -296,7 +328,7 @@ async def solve_dish(
                 pass
             else:
                 if calc_service.on_target(nearby, calc_service.split_fit(nearby.dish, planned)):
-                    return solved(nearby, reshaped=False)
+                    return await finished(nearby, reshaped=False)
             # Outside the corridor the dish still moves as little as it can.
             keeping_all = replace(keeping_all, near_grams=near.near_grams)
 
@@ -307,7 +339,7 @@ async def solve_dish(
             result = await run_in_threadpool(solve, list(ingredients.values()), keeping_all)
         except InfeasibleError as kept_all_failure:
             if nearby is not None:
-                return solved(nearby, reshaped=False)
+                return await finished(nearby, reshaped=False)
             # Whether the goal fails at all, or only with every product kept,
             # are different answers: the second one can name what to remove.
             try:
@@ -316,9 +348,10 @@ async def solve_dish(
                 raise ApiError(ErrorCode.INFEASIBLE_CALCULATION, exc.reason) from exc
             dropped = calc_service.missing_from_solution(relaxed.dish, ingredients.keys())
             if not dropped:
-                raise ApiError(
-                    ErrorCode.INFEASIBLE_CALCULATION, kept_all_failure.reason
-                ) from kept_all_failure
+                # Every product is in the dish after all: it is the answer.
+                # It used to be thrown away with a refusal about "bounds of
+                # masses" the person had never set (audit A3).
+                return await finished(relaxed, reshaped=near is not None)
             names = ", ".join(await _product_names(session, dropped))
             raise ApiError(
                 ErrorCode.INFEASIBLE_CALCULATION,
@@ -335,8 +368,8 @@ async def solve_dish(
             nearby,
             calc_service.split_fit(nearby.dish, planned),
         ):
-            return solved(nearby, reshaped=False)
-        return solved(result, reshaped=near is not None)
+            return await finished(nearby, reshaped=False)
+        return await finished(result, reshaped=near is not None)
 
     try:
         return await attempt(planned)
