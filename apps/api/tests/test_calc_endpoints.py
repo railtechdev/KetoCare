@@ -21,7 +21,7 @@ from core.models import FoodStandard, Product, ProductCategory
 from core.models.enums import CarbsConvention, FoodDietType, FoodStandardKind, UserRole
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
-from keto_engine import ENGINE_VERSION
+from keto_engine import ENGINE_VERSION, meal_kcal
 
 pytestmark = pytest.mark.asyncio
 
@@ -1083,33 +1083,49 @@ class TestSolveKeepsChosenProducts:
             category = ProductCategory(name_ru="Тестовая", sort=0)
             session.add(category)
             await session.flush()
-        name = f"Изолят {uuid.uuid4().hex[:8]}"
-        product = Product(
-            name_ru=name,
-            category_id=category.id,
-            kcal_100g=370,
-            fat_100g=1.0,
-            protein_100g=90.0,
-            carbs_100g=0.0,
-            fiber_100g=0.0,
-            source="USDA",
-            source_version="SR28",
-            verified_at=date(2026, 1, 1),
-        )
-        session.add(product)
-        await session.flush()
+        # Which of the two protein products the solver leaves out is its own
+        # business: both are catalogue products, and whichever it is must be
+        # named the way a person knows it.
+        names = {}
+        for label, macros in (
+            ("Изолят", {"kcal_100g": 370, "fat_100g": 1.0, "protein_100g": 90.0}),
+            ("Курица", {"kcal_100g": 165, "fat_100g": 3.6, "protein_100g": 31.0}),
+        ):
+            product = Product(
+                name_ru=f"{label} {uuid.uuid4().hex[:8]}",
+                category_id=category.id,
+                carbs_100g=0.0,
+                fiber_100g=0.0,
+                source="USDA",
+                source_version="SR28",
+                verified_at=date(2026, 1, 1),
+                **macros,
+            )
+            session.add(product)
+            await session.flush()
+            names[str(product.id)] = product.name_ru
+        isolate, chicken = names
 
         response = await client.post(
             "/api/v1/calc/solve",
             json={
-                "ingredients": [CHICKEN, BUTTER, {**self.WHEY, "product_id": str(product.id)}],
+                "ingredients": [
+                    {**CHICKEN, "product_id": chicken},
+                    BUTTER,
+                    {**self.WHEY, "product_id": isolate},
+                ],
                 "targets": {"ratio": 4.0, "kcal": 60},
             },
             headers=auth_headers(doctor),
         )
 
         assert response.status_code == 422, response.text
-        assert name in response.json()["error"]["message"]
+        error = response.json()["error"]
+        dropped = error["details"]["product_ids"]
+        assert dropped and set(dropped) <= set(names)
+        for product_id in dropped:
+            assert names[product_id] in error["message"]
+            assert product_id not in error["message"]
         assert str(product.id) not in response.json()["error"]["message"]
 
     async def test_goal_impossible_for_any_set_keeps_the_engine_reason(
@@ -1656,3 +1672,201 @@ class TestSolveReturnsTheDishThatIsOnTarget:
         body = response.json()
         assert body["ratio_within_tolerance"] is True
         assert body["kcal_within_tolerance"] is True
+
+
+class TestSolveKeepsADishThatIsOnTarget:
+    """Reader: «Подобрать граммовку» in the calculators of `apps/web` and
+    `apps/miniapp`, which send the entered masses as `current_grams`.
+
+    Audit of 2026-11-15, A2 and A3: pressing the button on one's own answer
+    moved the dish in every second case, and a dish that had been found was
+    thrown away with a refusal about bounds the person had never set.
+    """
+
+    BODY = {
+        "ingredients": [EGG, SOFT_BUTTER, CREAM, PEPPER],
+        "targets": {"ratio": 3.0, "kcal": 276},
+    }
+
+    async def _solve(self, client, headers, current):
+        response = await client.post(
+            "/api/v1/calc/solve", json={**self.BODY, "current_grams": current}, headers=headers
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        return body, {item["product_id"]: item["grams"] for item in body["dish"]["items"]}
+
+    async def test_pressing_again_changes_nothing(self, client, make_user, auth_headers):
+        headers = auth_headers(await make_user(role=UserRole.DIETITIAN))
+
+        _, first = await self._solve(
+            client, headers, {"egg": 61, "butter": 23, "cream": 6, "pepper": 5}
+        )
+        second_body, second = await self._solve(client, headers, first)
+        _, third = await self._solve(client, headers, second)
+
+        assert second == first
+        assert third == first
+        assert second_body["reshaped"] is False
+
+    async def test_a_gram_adjusted_by_hand_is_not_reshaped(self, client, make_user, auth_headers):
+        headers = auth_headers(await make_user(role=UserRole.DIETITIAN))
+        _, first = await self._solve(
+            client, headers, {"egg": 61, "butter": 23, "cream": 6, "pepper": 5}
+        )
+
+        adjusted = {**first, "pepper": first["pepper"] + 3}
+        body, after = await self._solve(client, headers, adjusted)
+
+        assert body["ratio_within_tolerance"] is True
+        assert body["kcal_within_tolerance"] is True
+        assert sum(abs(after[name] - adjusted[name]) for name in adjusted) <= 4
+
+    async def test_a_field_left_empty_is_filled_by_the_solver(
+        self, client, make_user, auth_headers
+    ):
+        """An unfinished dish is not "already on target": it is solved."""
+        headers = auth_headers(await make_user(role=UserRole.DIETITIAN))
+
+        body, grams = await self._solve(client, headers, {"egg": 61, "butter": 23, "cream": 6})
+
+        assert set(grams) == {"egg", "butter", "cream", "pepper"}
+        assert body["ratio_within_tolerance"] is True
+
+    async def test_found_dish_is_returned_not_refused(self, client, make_user, auth_headers):
+        """Butter and chicken skin at 2.5 : 1 and 460 kcal: a dish with both
+        products exists. The answer used to be «Заданные границы масс
+        ингредиентов слишком узкие», about bounds nobody had set."""
+        headers = auth_headers(await make_user(role=UserRole.DIETITIAN))
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [
+                    {
+                        "product_id": "butter",
+                        "kcal": 748,
+                        "fat": 82.5,
+                        "protein": 0.5,
+                        "carbs": 0.8,
+                    },
+                    {
+                        "product_id": "skin",
+                        "kcal": 349,
+                        "fat": 32.35,
+                        "protein": 13.33,
+                        "carbs": 0.0,
+                    },
+                ],
+                "targets": {"ratio": 2.5, "kcal": 460},
+                "current_grams": {"butter": 17, "skin": 55},
+            },
+            headers=headers,
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        grams = {item["product_id"]: item["grams"] for item in body["dish"]["items"]}
+        assert set(grams) == {"butter", "skin"}
+        assert body["ratio_within_tolerance"] is True
+        assert body["kcal_within_tolerance"] is True
+
+
+class TestMealCaloriesAreRoundedInOnePlace:
+    """Readers: the calculators of `apps/web` and `apps/miniapp` through
+    `mealTargetsFrom` of the kit, the recipe fit and the prescription preview.
+
+    Audit of 2026-11-15, A5: 1575 kcal in six meals was 263 on screen, 262 in
+    the recipe fit and 262.5 in the preview, and one child got different grams
+    for one dish depending on where it was fitted.
+    """
+
+    async def test_kit_rounds_the_way_the_engine_does(self):
+        source = (REPO / "packages/ui/src/lib/mealTargets.ts").read_text(encoding="utf-8")
+        assert "Math.round(prescription.kcal_per_day / prescription.meals_per_day)" in source, (
+            "кит считает калорийность приёма иначе, чем `keto_engine.meal_kcal`"
+        )
+        # Math.round sends a half up; so does the engine.
+        assert meal_kcal(1575, 6) == 263
+        assert meal_kcal(1050, 4) == 263
+        assert meal_kcal(1380, 5) == 276
+
+    async def test_preview_computes_the_meal_at_the_rounded_calories(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/prescription-goal",
+            json={"ratio": 3.0, "kcal_per_day": 1575, "protein_g": 23, "meals_per_day": 6},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        # 23 g × 263 / 1575, not 23 / 6.
+        assert response.json()["meal"]["protein_g"] == pytest.approx(23 * 263 / 1575)
+
+
+class TestReviewOfTheStepOneChange:
+    """Findings of the safety review of ADR-0084, each a test.
+
+    Readers: «Подобрать граммовку» of `apps/web` and `apps/miniapp`, and the
+    prescription preview of `apps/web`.
+    """
+
+    @staticmethod
+    def _product(name, fat, protein, carbs, fiber=0.0):
+        return {
+            "product_id": name,
+            "kcal": 9 * fat + 4 * protein + 4 * carbs,
+            "fat": fat,
+            "protein": protein,
+            "carbs": carbs,
+            "fiber": fiber,
+        }
+
+    async def test_answer_from_the_corridor_does_not_move_on_the_next_press(
+        self, client, make_user, auth_headers
+    ):
+        """2 : 1, 263 kcal, apple 22, chicken 10, mayo 6, egg 6. The first answer
+        was a fixed point of the corridor around the entered masses only; the
+        second press, with the corridor gone, moved apple 45 → 48 and egg 11 → 8."""
+        headers = auth_headers(await make_user(role=UserRole.DIETITIAN))
+        body = {
+            "ingredients": [
+                self._product("apple", 0.4, 0.4, 9.8, 1.8),
+                self._product("chicken", 1.9, 23.6, 0.4),
+                self._product("mayo", 67, 2.8, 3.7),
+                self._product("egg", 11.5, 12.7, 0.7),
+            ],
+            "targets": {"ratio": 2.0, "kcal": 263},
+        }
+
+        async def press(current):
+            response = await client.post(
+                "/api/v1/calc/solve", json={**body, "current_grams": current}, headers=headers
+            )
+            assert response.status_code == 200, response.text
+            return {item["product_id"]: item["grams"] for item in response.json()["dish"]["items"]}
+
+        first = await press({"apple": 22, "chicken": 10, "mayo": 6, "egg": 6})
+        second = await press(first)
+
+        assert second == first
+
+    async def test_preview_of_a_day_typed_half_way_has_no_meal_yet(
+        self, client, make_user, auth_headers
+    ):
+        """The doctor types «1500» and the request leaves after «1»: a sixth of
+        a kilocalorie rounds to a meal of nothing. That was a 500."""
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/prescription-goal",
+            json={"ratio": 4.0, "kcal_per_day": 1, "protein_g": 0, "meals_per_day": 6},
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["meal"] is None
+        assert response.json()["day"]["fat_g"] > 0

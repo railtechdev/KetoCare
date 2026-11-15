@@ -21,6 +21,7 @@ from keto_engine import (
     Targets,
     dietary_unit_kcal,
     macro_fit,
+    meal_kcal,
     meal_macro_goal,
     verify,
 )
@@ -200,6 +201,26 @@ def _pinned_items(
     ]
 
 
+def entered_items(
+    ingredients: Mapping[str, Ingredient], current_grams: Mapping[str, float] | None
+) -> list[tuple[Ingredient, float]] | None:
+    """The dish as the person entered it, or `None` if a product has no mass yet.
+
+    Only a complete dish can be judged "already on target": a product with an
+    empty field is not part of it, and the solver is asked precisely to fill it.
+    """
+
+    if not current_grams:
+        return None
+    items = [
+        (ingredient, current_grams.get(product_id, 0.0))
+        for product_id, ingredient in ingredients.items()
+    ]
+    if any(grams <= 0 for _, grams in items):
+        return None
+    return items
+
+
 def pins_too_small(targets: Targets, product_ids: Iterable[str]) -> list[str]:
     """Products whose upper bound keeps them under the solver's minimum mass.
 
@@ -377,9 +398,15 @@ def to_prescription_goal(raw: PrescriptionGoalRequest) -> PrescriptionGoalRespon
             meal_macro_goal(raw.ratio, kcal, day_protein_g=raw.protein_g, day_kcal=raw.kcal_per_day)
         )
 
+    per_meal = None if raw.meals_per_day is None else meal_kcal(raw.kcal_per_day, raw.meals_per_day)
     return PrescriptionGoalResponse(
         day=goal(raw.kcal_per_day),
-        meal=None if raw.meals_per_day is None else goal(raw.kcal_per_day / raw.meals_per_day),
+        # The calories of a meal are rounded where everyone else rounds them:
+        # the preview used the unrounded quotient and showed 3.833 g of protein
+        # where the calculator of the same child showed 3.841 g (audit A5).
+        # A day typed half-way ("1" of "1500") rounds to a meal of no calories:
+        # there is no meal to describe yet, and that is not an error.
+        meal=goal(per_meal) if per_meal else None,
         dietary_unit_kcal=dietary_unit_kcal(raw.ratio),
         engine_version=ENGINE_VERSION,
     )
