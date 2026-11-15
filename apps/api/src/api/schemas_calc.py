@@ -151,16 +151,38 @@ class DishOut(BaseModel):
 class MealGoalOut(BaseModel):
     """Grams one meal should contain, shown next to the dish's actual grams.
 
-    Read by the calculator in the web cabinet. A hint only: verdicts still come
-    from `ratio_within_tolerance` and `kcal_within_tolerance`. `protein_g` and
-    `net_carbs_g` are `null` without a patient's prescription or when its
-    protein does not fit the requested ratio and calories (ADR-0058).
+    Read by the calculators of the web cabinet and the Mini App. `protein_g`
+    and `net_carbs_g` are `null` without a patient's prescription or when its
+    protein does not fit the requested ratio and calories (ADR-0058). When they
+    are given, the solver aims at them and `macro_fit` says whether the dish
+    reached them (ADR-0083).
     """
 
     fat_g: float
     protein_g: float | None
     net_carbs_g: float | None
     non_fat_g: float
+
+
+class MacroFitOut(BaseModel):
+    """The dish against the protein and net carbs of the meal's goal.
+
+    Read by the calculators of the web cabinet and the Mini App: the verdict
+    line and the advice on what the composition lacks. Deltas are fact minus
+    goal in grams, positive is more than the goal. The ratio and the calories
+    do not pin this split: a dish can hold both with twice the protein and
+    almost no carbs (ADR-0083).
+    """
+
+    protein_delta_g: float | None
+    net_carbs_delta_g: float | None
+    #: Grams of the carbs goal that do not fit under the prescription's carbs
+    #: limit with this dish's fibre: the limit counts all carbs, the goal net
+    #: ones. The deltas above are already measured against what fits, so a dish
+    #: at the limit is not "short of carbs". Zero when the goal fits.
+    carbs_limited_by_g: float = 0.0
+    #: Both are within the engine's tolerance of the goal.
+    within_tolerance: bool
 
 
 class VerifyRequest(BaseModel):
@@ -197,6 +219,9 @@ class VerifyResponse(BaseModel):
     ratio_comparable: bool = False
     #: Goal of one meal; `null` when no targets were sent.
     meal_goal: MealGoalOut | None = None
+    #: Whether the dish reached the goal's protein and net carbs; `null` when
+    #: the goal has no such split (no targets, no patient, no prescription).
+    macro_fit: MacroFitOut | None = None
     #: Продукты состава, исключённые этому ребёнку.
     #:
     #: Состав задал человек, и подменять его молча нельзя — поэтому проверка
@@ -242,6 +267,11 @@ class SolveResponse(BaseModel):
     uncounted: list[UncountedProductOut] = []
     #: The goal was out of reach near the entered masses, so proportions changed.
     reshaped: bool = False
+    #: Whether the solved dish reached the protein and net carbs of the meal's
+    #: goal. `within_tolerance = false` here means the PRODUCTS cannot reach it:
+    #: the solver had the whole range of masses and this is the closest dish.
+    #: `null` without a patient's prescription.
+    macro_fit: MacroFitOut | None = None
 
 
 class PrescriptionGoalRequest(BaseModel):

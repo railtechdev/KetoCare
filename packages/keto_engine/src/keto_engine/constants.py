@@ -45,6 +45,14 @@ GRAM_ROUNDING = 1
 # считаются практически нулевыми (ингредиент исключается из результата).
 MIN_INGREDIENT_GRAMS = 2.0
 
+# How far the protein and the net carbs of a dish may each be from the meal's
+# goal and still count as matching it, grams. One gram of either is 4 kcal, and
+# "within 4 kcal of the goal" is the precision rule of KetoDietCalculator, the
+# tool the clinic's dietitians fit meals with today (docs/AUDIT_KDC_GAP_2026-11.md,
+# G16).
+# TODO(med): подтвердить у медицинской команды (вопрос 58)
+MEAL_MACRO_TOLERANCE_G = 1.0
+
 # Верхняя граница массы одного ингредиента по умолчанию для solve(), г.
 # Не медицинская константа — техническое ограничение LP-задачи (конечная область допустимых
 # решений для HiGHS); не требует TODO(med) и не публикуется в API как клинический параметр.
@@ -98,7 +106,20 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # InfeasibleError with the reason instead of a silent result (calculation audit
 # of 2026-11-13). Minor, as 0.3.0: only results that broke their own targets
 # change; verify() and every stored number stay the same.
-ENGINE_VERSION = "1.8.0"
+# 1.9.0 — solve() aims at the meal's protein and net carbs when `Targets` carries
+# them (`protein_g`, `net_carbs_g`), stays near the entered masses
+# (`near_grams`), and of the whole-gram compositions near the exact solution it
+# returns the closest one instead of the first inside the tolerances;
+# `macro_fit()` says how far a dish is from that split, and `meal_macro_goal()`
+# keeps the carbs goal under the day's limit. Before this the solver held only
+# the ratio and the calories and split protein against carbs wherever the
+# linear programme landed: a dietitian got 8.1 g of protein and 0.8 g of carbs
+# against a goal of 4.6 and 4.3 (complaint of 2026-11-15, ADR-0083). Minor:
+# verify() and every stored number stay the same. solve() without the new
+# fields holds the same hard constraints, but it is not the same answer: the
+# closest whole-gram dish replaces the first allowed one, and the vertex the
+# programme lands on may differ.
+ENGINE_VERSION = "1.9.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,

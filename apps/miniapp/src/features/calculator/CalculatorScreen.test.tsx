@@ -1833,4 +1833,105 @@ describe("калькулятор в Mini App", () => {
       ),
     );
   });
+
+  describe("белок и углеводы приёма (ADR-0083)", () => {
+    const MISSED = {
+      protein_delta_g: 3.5,
+      net_carbs_delta_g: -3.46,
+      within_tolerance: false,
+    };
+
+    it("не называет целью достигнутой блюдо с белком вместо углеводов", async () => {
+      // Жалоба диетолога от 15.11.2026: соотношение и калорийность сошлись,
+      // белка 8,1 г против 4,6, углеводов 0,8 против 4,3 — и «Цель достигнута».
+      respond({ "/calc/verify": verifyResponse({ macro_fit: MISSED }) });
+      const user = userEvent.setup();
+      renderScreen();
+      await addProduct(user);
+
+      expect(
+        await screen.findByText(
+          "Соотношение и калорийность сошлись, а белок и углеводы приёма нет: " +
+            "белка на 3,5 г больше цели, углеводов на 3,5 г меньше цели",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+    });
+
+    it("цель достигнута, когда раскладка сошлась", async () => {
+      respond({
+        "/calc/verify": verifyResponse({
+          macro_fit: {
+            protein_delta_g: 0.2,
+            net_carbs_delta_g: -0.3,
+            within_tolerance: true,
+          },
+        }),
+      });
+      const user = userEvent.setup();
+      renderScreen();
+      await addProduct(user);
+
+      expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+    });
+
+    it("объясняет, что углеводов меньше цели из-за лимита назначения", async () => {
+      // Лимит считает и клетчатку, цель — чистые углеводы. Блюдо у лимита
+      // цели достигло, и совета «добавьте углеводы» под ним нет.
+      respond({
+        "/calc/verify": verifyResponse({
+          macro_fit: {
+            protein_delta_g: 0.1,
+            net_carbs_delta_g: -0.1,
+            carbs_limited_by_g: 0.8,
+            within_tolerance: true,
+          },
+        }),
+      });
+      const user = userEvent.setup();
+      renderScreen();
+      await addProduct(user);
+
+      expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Цель по углеводам снижена на 0,8 г/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/не хватает углеводов/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("после подбора говорит, какого продукта не хватает", async () => {
+      respond({ "/calc/solve": solveResponse({ macro_fit: MISSED }) });
+      const user = userEvent.setup();
+      renderScreen();
+      await addProduct(user);
+
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+
+      expect(
+        await screen.findByText(/в составе не хватает углеводов/),
+      ).toBeInTheDocument();
+    });
+
+    it("подбор получает набранные массы и остаётся рядом с ними", async () => {
+      respond({ "/calc/solve": solveResponse() });
+      const user = userEvent.setup();
+      renderScreen();
+      await addProduct(user);
+
+      await user.click(
+        screen.getByRole("button", { name: "Подобрать граммовку" }),
+      );
+
+      await waitFor(() => {
+        const call = (api.POST as Mock).mock.calls.find(([path]) =>
+          String(path).endsWith("/calc/solve"),
+        );
+        expect(call?.[1].body.current_grams).toEqual({ p1: 30 });
+      });
+    });
+  });
 });

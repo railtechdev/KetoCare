@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import replace
 from decimal import ROUND_CEILING, Decimal
 
 from fastapi import APIRouter
@@ -21,6 +22,8 @@ from core.repositories import products as products_repo
 from keto_engine import (
     ENGINE_VERSION,
     InfeasibleError,
+    SolveResult,
+    Targets,
     energy_requirement,
     fluid_requirement,
     protein_requirement,
@@ -175,6 +178,18 @@ async def verify_dish(
             else await prescriptions_repo.get_active(session, patient_id=payload.patient_id)
         )
         response.meal_goal = calc_service.to_meal_goal(payload.targets, prescription)
+        # The same judgement the solver's answer gets: the goal's split, under
+        # the meal's share of the prescription's carbs limit (ADR-0083).
+        judged = calc_service.within_carbs_ceiling(
+            calc_service.aiming_at(
+                calc_service.to_targets(payload.targets),
+                calc_service.meal_goal(payload.targets.ratio, payload.targets.kcal, prescription),
+            ),
+            None
+            if prescription is None
+            else calc_service.meal_carbs_ceiling(prescription, payload.targets.kcal),
+        )
+        response.macro_fit = calc_service.to_macro_fit(calc_service.split_fit(dish, judged))
 
     return response
 
@@ -241,57 +256,99 @@ async def solve_dish(
             details={"product_ids": fractional},
         )
 
-    # The person chose these products: a dish that silently loses one of them
-    # is not the dish that was asked for (ADR-0058).
-    keeping_all = calc_service.keeping_every_product(targets, ingredients.keys())
-    near = calc_service.near_current(targets, keeping_all, ingredients, payload.current_grams)
-    if near is not None:
+    # The solver aims at the protein and net carbs the screen shows as the
+    # meal's goal: the ratio and the calories alone leave that split to chance
+    # (ADR-0083). Access to the patient was checked by `_excluded_for` above.
+    ceiling: float | None = None
+    if payload.patient_id is not None:
+        prescription = await prescriptions_repo.get_active(session, patient_id=payload.patient_id)
+        targets = calc_service.aiming_at(
+            targets, calc_service.meal_goal(targets.ratio, targets.kcal, prescription)
+        )
+        if prescription is not None:
+            ceiling = calc_service.meal_carbs_ceiling(prescription, targets.kcal)
+
+    # The meal is planned inside its share of the day's carbs limit, and every
+    # dish is judged against that share, whichever attempt produced it.
+    planned = calc_service.within_carbs_ceiling(targets, ceiling)
+
+    def solved(result: SolveResult, *, reshaped: bool) -> SolveResponse:
+        return SolveResponse(
+            dish=calc_service.to_dish_out(result.dish),
+            ratio_within_tolerance=result.ratio_within_tolerance,
+            kcal_within_tolerance=result.kcal_within_tolerance,
+            excluded=excluded,
+            uncounted=skipped,
+            reshaped=reshaped,
+            macro_fit=calc_service.to_macro_fit(calc_service.split_fit(result.dish, planned)),
+        )
+
+    async def attempt(goal: Targets) -> SolveResponse:
+        # The person chose these products: a dish that silently loses one of
+        # them is not the dish that was asked for (ADR-0058).
+        keeping_all = calc_service.keeping_every_product(goal, ingredients.keys())
+        near = calc_service.near_current(goal, keeping_all, ingredients, payload.current_grams)
+        nearby: SolveResult | None = None
+        if near is not None:
+            try:
+                nearby = await run_in_threadpool(solve, list(ingredients.values()), near)
+            except InfeasibleError:
+                pass
+            else:
+                if calc_service.on_target(nearby, calc_service.split_fit(nearby.dish, planned)):
+                    return solved(nearby, reshaped=False)
+            # Outside the corridor the dish still moves as little as it can.
+            keeping_all = replace(keeping_all, near_grams=near.near_grams)
+
         try:
-            nearby = await run_in_threadpool(solve, list(ingredients.values()), near)
-        except InfeasibleError:
-            pass
-        else:
-            return SolveResponse(
-                dish=calc_service.to_dish_out(nearby.dish),
-                ratio_within_tolerance=nearby.ratio_within_tolerance,
-                kcal_within_tolerance=nearby.kcal_within_tolerance,
-                excluded=excluded,
-                uncounted=skipped,
-            )
+            # solve() синхронный и вычислительно тяжёлый (LP через HiGHS, а при
+            # неразрешимости ещё несколько LP для диагностики). В event loop он
+            # заблокировал бы весь воркер, поэтому уходит в threadpool.
+            result = await run_in_threadpool(solve, list(ingredients.values()), keeping_all)
+        except InfeasibleError as kept_all_failure:
+            if nearby is not None:
+                return solved(nearby, reshaped=False)
+            # Whether the goal fails at all, or only with every product kept,
+            # are different answers: the second one can name what to remove.
+            try:
+                relaxed = await run_in_threadpool(solve, list(ingredients.values()), goal)
+            except InfeasibleError as exc:
+                raise ApiError(ErrorCode.INFEASIBLE_CALCULATION, exc.reason) from exc
+            dropped = calc_service.missing_from_solution(relaxed.dish, ingredients.keys())
+            if not dropped:
+                raise ApiError(
+                    ErrorCode.INFEASIBLE_CALCULATION, kept_all_failure.reason
+                ) from kept_all_failure
+            names = ", ".join(await _product_names(session, dropped))
+            raise ApiError(
+                ErrorCode.INFEASIBLE_CALCULATION,
+                f"С этими продуктами цель не достигается: {names}. "
+                "Уберите их из состава или измените цель.",
+                details={"product_ids": dropped},
+            ) from kept_all_failure
+
+        # The corridor did not put the dish on target. Leaving it is worth it
+        # only if the wider search actually got closer.
+        if nearby is not None and not calc_service.closer_to_target(
+            result,
+            calc_service.split_fit(result.dish, planned),
+            nearby,
+            calc_service.split_fit(nearby.dish, planned),
+        ):
+            return solved(nearby, reshaped=False)
+        return solved(result, reshaped=near is not None)
 
     try:
-        # solve() синхронный и вычислительно тяжёлый (LP через HiGHS, а при
-        # неразрешимости ещё несколько LP для диагностики). В event loop он
-        # заблокировал бы весь воркер, поэтому уходит в threadpool.
-        result = await run_in_threadpool(solve, list(ingredients.values()), keeping_all)
-    except InfeasibleError as kept_all_failure:
-        # Whether the goal fails at all, or only with every product kept, are
-        # different answers: the second one can name what to remove.
-        try:
-            relaxed = await run_in_threadpool(solve, list(ingredients.values()), targets)
-        except InfeasibleError as exc:
-            raise ApiError(ErrorCode.INFEASIBLE_CALCULATION, exc.reason) from exc
-        dropped = calc_service.missing_from_solution(relaxed.dish, ingredients.keys())
-        if not dropped:
-            raise ApiError(
-                ErrorCode.INFEASIBLE_CALCULATION, kept_all_failure.reason
-            ) from kept_all_failure
-        names = ", ".join(await _product_names(session, dropped))
-        raise ApiError(
-            ErrorCode.INFEASIBLE_CALCULATION,
-            f"С этими продуктами цель не достигается: {names}. "
-            "Уберите их из состава или измените цель.",
-            details={"product_ids": dropped},
-        ) from kept_all_failure
-
-    return SolveResponse(
-        dish=calc_service.to_dish_out(result.dish),
-        ratio_within_tolerance=result.ratio_within_tolerance,
-        kcal_within_tolerance=result.kcal_within_tolerance,
-        excluded=excluded,
-        uncounted=skipped,
-        reshaped=near is not None,
-    )
+        return await attempt(planned)
+    except ApiError as refusal:
+        if planned == targets or refusal.code is not ErrorCode.INFEASIBLE_CALCULATION:
+            raise
+        # The share of the limit is how a meal is planned, not a prohibition:
+        # the clinic counts the limit over the day and leaves its division
+        # between meals free (question 24). A dish that cannot be composed
+        # inside the share is still composed, and its verdict says by how much
+        # the carbs are over what fits.
+        return await attempt(targets)
 
 
 @router.post(

@@ -13,6 +13,7 @@ import {
   Skeleton,
   WarningBanner,
   exceedsCalcGrams,
+  macroSplitAdvice,
   mealTargetsFrom,
   useDebouncedValue,
   RATIO_CHOICES,
@@ -372,6 +373,7 @@ export function CalculatorView({
   // сказать об этом больше негде: своего блока у результата подбора нет —
   // массы уезжают прямо в состав.
   const solveExcluded = solve.data?.excluded ?? [];
+  const splitAdvice = macroSplitAdvice(solve.data?.macro_fit);
   const dish: DishView | null = verify.data?.dish ?? null;
 
   // Вклад каждой позиции — из того же ответа, что и итог блюда: сумма
@@ -771,6 +773,7 @@ export function CalculatorView({
                     ratioWithinTolerance={ratioWithin ?? undefined}
                     kcalWithinTolerance={kcalWithin ?? undefined}
                     mealGoal={verify.data?.meal_goal ?? null}
+                    macroFit={stale ? null : (verify.data?.macro_fit ?? null)}
                   />
                   {stale && (
                     <p
@@ -970,6 +973,19 @@ export function CalculatorView({
 
             {solve.data?.reshaped === true && (
               <p className="m-0 text-sm text-warning-strong">{t("reshaped")}</p>
+            )}
+
+            {/* Подбор перебрал весь диапазон масс и раскладку приёма не собрал:
+                дело в продуктах, и экран говорит, какого не хватает. Про состав,
+                набранный руками, этого совета нет — там достаточно подобрать. */}
+            {splitAdvice !== null && (
+              <p role="status" className="m-0 text-sm text-warning-strong">
+                {t(
+                  rows.some((row) => row.pinned === true)
+                    ? "splitAdvice.pinned"
+                    : `splitAdvice.${splitAdvice}`,
+                )}
+              </p>
             )}
 
             {infeasible && (

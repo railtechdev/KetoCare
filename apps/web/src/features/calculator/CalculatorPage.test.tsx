@@ -994,6 +994,98 @@ describe("калькулятор", () => {
     ).toBeInTheDocument();
   });
 
+  it("не называет целью достигнутой блюдо с белком вместо углеводов", async () => {
+    // Жалоба диетолога от 15.11.2026 (ADR-0083): соотношение и калорийность
+    // сошлись, белка 8,1 г против 4,6, углеводов 0,8 против 4,3 — а экран
+    // писал «Цель достигнута».
+    (api.POST as Mock).mockImplementation(async () => ({
+      data: {
+        ...VERIFIED,
+        ratio_within_tolerance: true,
+        kcal_within_tolerance: true,
+        macro_fit: {
+          protein_delta_g: 3.5,
+          net_carbs_delta_g: -3.46,
+          within_tolerance: false,
+        },
+      },
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    expect(
+      await screen.findByText(
+        "Соотношение и калорийность сошлись, а белок и углеводы приёма нет: " +
+          "белка на 3,5 г больше цели, углеводов на 3,5 г меньше цели",
+        undefined,
+        { timeout: AUTO_CALC_TIMEOUT_MS },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
+  });
+
+  it("объясняет, что углеводов меньше цели из-за лимита назначения", async () => {
+    // Лимит считает и клетчатку, цель — чистые углеводы: без этой строки
+    // таблица «Факт / Цель» под словами «Цель достигнута» читалась бы ошибкой.
+    (api.POST as Mock).mockImplementation(async () => ({
+      data: {
+        ...VERIFIED,
+        ratio_within_tolerance: true,
+        kcal_within_tolerance: true,
+        macro_fit: {
+          protein_delta_g: 0.1,
+          net_carbs_delta_g: -0.1,
+          carbs_limited_by_g: 0.8,
+          within_tolerance: true,
+        },
+      },
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    expect(
+      await screen.findByText("Цель достигнута", undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Цель по углеводам снижена на 0,8 г/),
+    ).toBeInTheDocument();
+  });
+
+  it("после подбора говорит, какого продукта не хватает составу", async () => {
+    // У подбора был весь диапазон масс: раз раскладка не сошлась, дело в
+    // продуктах, и экран называет, какой добавить.
+    (api.POST as Mock).mockImplementation(async (path: string) => ({
+      data: path.includes("solve")
+        ? {
+            ...SOLVED,
+            macro_fit: {
+              protein_delta_g: 3.3,
+              net_carbs_delta_g: -3.3,
+              within_tolerance: false,
+            },
+          }
+        : VERIFIED,
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Подобрать граммовку" }),
+    );
+
+    expect(
+      await screen.findByText(/в составе не хватает углеводов/),
+    ).toBeInTheDocument();
+  });
+
   it("подбирает граммовку кнопкой и переносит массы в состав", async () => {
     // Подбор — действие над составом, а не отдельный режим: он перезаписывает
     // граммовку, поэтому остаётся кнопкой, но живёт на том же экране.

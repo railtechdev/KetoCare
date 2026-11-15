@@ -46,6 +46,7 @@ async def _fit_one(
     products: dict[uuid.UUID, Product],
     excluded: set[uuid.UUID],
     targets: Targets,
+    relaxed: Targets,
 ) -> RecipeFit:
     names = [products[pid].name_ru for pid, _ in composition if pid in excluded]
     if names:
@@ -57,7 +58,9 @@ async def _fit_one(
         )
     withdrawn = [products[pid].name_ru for pid, _ in composition if not products[pid].is_active]
 
-    outcome, uncounted = await dish_fit.fit_composition(products, composition, targets)
+    outcome, uncounted = await dish_fit.fit_composition(
+        products, composition, targets, relaxed=relaxed
+    )
     if isinstance(outcome, dish_fit.FitFailure):
         return RecipeFit(
             recipe_id=recipe.id,
@@ -130,6 +133,7 @@ async def fit_recipes(
         raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
 
     targets = dish_fit.meal_targets(prescription)
+    relaxed = dish_fit.meal_targets(prescription, within_share=False)
     excluded = await products_repo.same_food_ids(
         session, product_ids=exclusions.excluded_ids(patient.allergies)
     )
@@ -166,7 +170,7 @@ async def fit_recipes(
                 )
             )
             continue
-        items.append(await _fit_one(recipe, composition, products, excluded, targets))
+        items.append(await _fit_one(recipe, composition, products, excluded, targets, relaxed))
 
     return RecipeFitsResponse(
         target_ratio=targets.ratio,

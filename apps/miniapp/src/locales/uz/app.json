@@ -363,6 +363,18 @@
     "below": "Maqsadgacha −{{value}} kkal",
     "goalMet": "Maqsadga erishildi",
     "goalMissed": "Maqsadga erishilmadi",
+    "goalSplit": "Nisbat va kaloriya mos keldi, lekin taomdagi oqsil va uglevodlar mos kelmadi: {{parts}}",
+    "carbsLimited": "Uglevodlar bo‘yicha maqsad {{value}} g ga kamaytirildi: ko‘prog‘i tayinlovdagi uglevodlar chegarasiga sig‘maydi, chegara kletchatka bilan birga hisoblanadi. Shu sababli oqsil shuncha ko‘p.",
+    "splitParts": {
+      "proteinMore": "oqsil maqsaddan {{value}} g ko‘p",
+      "proteinLess": "oqsil maqsaddan {{value}} g kam",
+      "carbsMore": "uglevodlar maqsaddan {{value}} g ko‘p",
+      "carbsLess": "uglevodlar maqsaddan {{value}} g kam"
+    },
+    "splitAdvice": {
+      "addCarbs": "Bu mahsulotlardan taomning oqsil va uglevodlarini yig‘ib bo‘lmaydi: tarkibda uglevodlar yetishmaydi. Uglevodli mahsulot, masalan, sabzavot yoki rezavor qo‘shing va grammlarni qayta tanlang.",
+      "addProtein": "Bu mahsulotlardan taomning oqsil va uglevodlarini yig‘ib bo‘lmaydi: tarkibda oqsil yetishmaydi. Oqsilli mahsulot, masalan, go‘sht, baliq yoki tuxum qo‘shing va grammlarni qayta tanlang."
+    },
     "recalculating": "Qayta hisoblanmoqda…",
     "waitingForNetwork": "Aloqa yo‘q — paydo bo‘lganda hisoblaymiz.",
     "excluded": "Tarkibda bolaga taqiqlangan mahsulotlar bor",

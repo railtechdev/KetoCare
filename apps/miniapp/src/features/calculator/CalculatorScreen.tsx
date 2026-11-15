@@ -21,10 +21,15 @@ import {
   canRetry,
   cn,
   exceedsCalcGrams,
+  formatGrams,
   formatKcal,
+  macroSplitAdvice,
+  macroSplitLimit,
+  macroSplitParts,
   mealTargetsFrom,
   useDebouncedValue,
 } from "@ketocare/ui";
+import type { MacroFit } from "@ketocare/ui";
 import {
   useEffect,
   useId,
@@ -219,6 +224,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
   // сказать об этом больше негде: своего блока у результата подбора нет —
   // массы уезжают прямо в состав.
   const solveExcluded = solve.data?.excluded ?? [];
+  const splitAdvice = macroSplitAdvice(solve.data?.macro_fit);
 
   // Вклад каждой позиции — из того же ответа, что и итог блюда: сумма вкладов
   // и есть итог, ядро считает их одной арифметикой.
@@ -625,7 +631,16 @@ export function CalculatorScreen({ session }: { session: Session }) {
               retrying={retryingShown}
               ratioOk={verdict?.ratio_within_tolerance ?? undefined}
               kcalOk={verdict?.kcal_within_tolerance}
+              macroFit={verdict?.macro_fit ?? null}
             />
+
+            {/* Подбор перебрал весь диапазон масс и раскладку приёма не собрал:
+                дело в продуктах, и экран говорит, какого не хватает. */}
+            {splitAdvice !== null && (
+              <p role="status" className="m-0 text-sm text-warning-strong">
+                {t(`calculator.splitAdvice.${splitAdvice}`)}
+              </p>
+            )}
 
             <MacroBar
               fatG={dish.fat_g}
@@ -957,6 +972,7 @@ function Verdict({
   retrying,
   ratioOk,
   kcalOk,
+  macroFit,
 }: {
   stale: boolean;
   waitingForNetwork: boolean;
@@ -965,6 +981,8 @@ function Verdict({
   retrying: boolean;
   ratioOk: boolean | null | undefined;
   kcalOk: boolean | null | undefined;
+  /** Сошлись ли белок и углеводы с целью приёма; `null` — такой цели нет. */
+  macroFit: MacroFit | null;
 }): ReactNode {
   const { t } = useTranslation();
 
@@ -994,17 +1012,44 @@ function Verdict({
     return null;
   }
 
-  const within = ratioOk && kcalOk;
+  // Соотношение и калорийность раскладку белка и углеводов не задают: блюдо
+  // держит обе при двойном белке и почти без углеводов. «Цель достигнута» под
+  // таким блюдом — ровно жалоба диетолога от 15.11.2026 (ADR-0083). Правило и
+  // слова те же, что в кабинете: одна семья видит калькулятор в двух местах.
+  const split =
+    ratioOk && kcalOk && macroFit !== null && !macroFit.within_tolerance;
+  const within = ratioOk && kcalOk && !split;
+  const limit = macroSplitLimit(macroFit);
   return (
-    <p
-      role="status"
-      className={cn(
-        "m-0 text-sm",
-        within ? "text-success" : "text-warning-strong",
+    <>
+      <p
+        role="status"
+        className={cn(
+          "m-0 text-sm",
+          within ? "text-success" : "text-warning-strong",
+        )}
+      >
+        {split
+          ? t("calculator.goalSplit", {
+              parts: macroSplitParts(macroFit)
+                .map((part) =>
+                  t(`calculator.splitParts.${part.key}`, {
+                    value: formatGrams(part.grams),
+                  }),
+                )
+                .join(", "),
+            })
+          : t(within ? "calculator.goalMet" : "calculator.goalMissed")}
+      </p>
+      {/* Лимит углеводов назначения считает и клетчатку, цель — чистые
+          углеводы: без этой строки «добавьте углеводов» напрашивалось бы само
+          и вывело бы день за лимит. */}
+      {limit !== null && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("calculator.carbsLimited", { value: formatGrams(limit) })}
+        </p>
       )}
-    >
-      {t(within ? "calculator.goalMet" : "calculator.goalMissed")}
-    </p>
+    </>
   );
 }
 

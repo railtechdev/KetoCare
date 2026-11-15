@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
@@ -14,9 +15,12 @@ from keto_engine import (
     ENGINE_VERSION,
     DishResult,
     Ingredient,
+    MacroFit,
     MealMacroGoal,
+    SolveResult,
     Targets,
     dietary_unit_kcal,
+    macro_fit,
     meal_macro_goal,
     verify,
 )
@@ -27,6 +31,7 @@ from ..schemas_calc import (
     IngredientIn,
     ItemIn,
     ItemOut,
+    MacroFitOut,
     MealGoalOut,
     PrescriptionGoalRequest,
     PrescriptionGoalResponse,
@@ -118,12 +123,21 @@ NEAR_UPPER = 1.5
 
 
 def near_grams(grams: float, factor: float) -> tuple[float, float | None]:
-    """Search corridor for one product at `grams`, after scaling by `factor`."""
+    """Search corridor for one product at `grams`, after scaling by `factor`.
+
+    The bounds are whole grams, widened outwards: the solver answers in whole
+    grams, and a corridor of 2.0–2.36 g holds no mass it could return. With a
+    fractional bound the rounded mass fell outside it, the whole-gram search
+    rejected every neighbour, and the dish came back with its ratio unrepaired.
+    """
 
     def clamped(value: float) -> float:
         return max(MIN_INGREDIENT_GRAMS, min(value, DEFAULT_MAX_INGREDIENT_GRAMS))
 
-    return clamped(grams * factor * NEAR_LOWER), clamped(grams * factor * NEAR_UPPER)
+    return (
+        clamped(math.floor(grams * factor * NEAR_LOWER)),
+        clamped(math.ceil(grams * factor * NEAR_UPPER)),
+    )
 
 
 def near_current(
@@ -134,7 +148,9 @@ def near_current(
 ) -> Targets | None:
     """Targets that keep the solver near the masses in the form, if any are known.
 
-    Products with a bound from the caller (pins) keep it and do not scale.
+    Products with a bound from the caller (pins) keep it and do not scale. The
+    scaled masses also go into `near_grams`: inside the corridor, and later
+    outside it, the solver moves as few grams as the goals allow.
     """
 
     if not current_grams:
@@ -166,7 +182,11 @@ def near_current(
     factor = remaining / free_kcal
     bounds = dict(keeping_all.per_ingredient_bounds or {})
     bounds.update({ingredient.product_id: near_grams(grams, factor) for ingredient, grams in free})
-    return replace(keeping_all, per_ingredient_bounds=bounds)
+    return replace(
+        keeping_all,
+        per_ingredient_bounds=bounds,
+        near_grams={ingredient.product_id: grams * factor for ingredient, grams in free},
+    )
 
 
 def _pinned_items(
@@ -226,15 +246,123 @@ def _goal_out(goal: MealMacroGoal) -> MealGoalOut:
     )
 
 
-def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
-    return _goal_out(
-        meal_macro_goal(
-            targets.ratio,
-            targets.kcal,
-            day_protein_g=None if prescription is None else float(prescription.protein_g),
-            day_kcal=None if prescription is None else float(prescription.kcal_per_day),
-        )
+def meal_goal(ratio: float, kcal: float, prescription: Prescription | None) -> MealMacroGoal:
+    """The goal of one meal at this ratio and these calories.
+
+    One function for what the screen shows as the goal, what the solver aims at
+    and what the verdict is measured against: three readers of one number. The
+    carbs of the goal stay under the meal's share of the prescription's limit.
+    """
+
+    if prescription is None:
+        return meal_macro_goal(ratio, kcal)
+    return meal_macro_goal(
+        ratio,
+        kcal,
+        day_protein_g=float(prescription.protein_g),
+        day_kcal=float(prescription.kcal_per_day),
+        day_carbs_limit_g=float(prescription.carbs_limit_g),
     )
+
+
+def meal_carbs_ceiling(prescription: Prescription, kcal: float) -> float:
+    """The meal's share of the day's carbohydrate limit, by its share of calories.
+
+    All carbs, fibre included, as the limit itself is counted (the clinic's
+    answer to question 3). The goal of a meal counts net carbs, so a meal "on
+    goal" with vegetables carries its fibre on top: five such meals came to
+    29 g under a limit of 21.5 g. The solver plans a meal inside this share.
+    The equal split is the assumption of questions 55 and 58.
+    """
+
+    return float(prescription.carbs_limit_g) * kcal / float(prescription.kcal_per_day)
+
+
+def within_carbs_ceiling(targets: Targets, ceiling: float | None) -> Targets:
+    """Targets whose carbs limit is the stricter of the caller's and the ceiling."""
+
+    if ceiling is None:
+        return targets
+    own = targets.carbs_max_g
+    return replace(targets, carbs_max_g=ceiling if own is None else min(own, ceiling))
+
+
+def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
+    return _goal_out(meal_goal(targets.ratio, targets.kcal, prescription))
+
+
+def aiming_at(targets: Targets, goal: MealMacroGoal) -> Targets:
+    """Targets that also aim at the goal's protein and net carbs (ADR-0083)."""
+
+    return replace(targets, protein_g=goal.protein_g, net_carbs_g=goal.net_carbs_g)
+
+
+def split_fit(dish: DishResult, targets: Targets) -> MacroFit | None:
+    """The dish against the split and the carbs limit these targets carry."""
+
+    return macro_fit(dish, targets.protein_g, targets.net_carbs_g, targets.carbs_max_g)
+
+
+def to_macro_fit(fit: MacroFit | None) -> MacroFitOut | None:
+    if fit is None:
+        return None
+    return MacroFitOut(
+        protein_delta_g=fit.protein_delta_g,
+        net_carbs_delta_g=fit.net_carbs_delta_g,
+        carbs_limited_by_g=fit.carbs_limited_by_g,
+        within_tolerance=fit.within_tolerance,
+    )
+
+
+def on_target(result: SolveResult, fit: MacroFit | None) -> bool:
+    """Ratio, calories and, where there is one, the split are all within tolerance."""
+
+    return (
+        result.ratio_within_tolerance
+        and result.kcal_within_tolerance
+        and (fit is None or fit.within_tolerance)
+    )
+
+
+def closer_to_target(
+    candidate: SolveResult,
+    candidate_fit: MacroFit | None,
+    current: SolveResult,
+    current_fit: MacroFit | None,
+) -> bool:
+    """`candidate` is a better dish than `current`.
+
+    Decides whether leaving the corridor around the entered masses was worth
+    it: a dish reshaped for no gain is only a dish the person did not ask for.
+    The ratio comes first, then the calories, then the split; among equals, the
+    one nearer the protein and carbs goal.
+    """
+
+    def miss(fit: MacroFit | None) -> float:
+        if fit is None:
+            return 0.0
+        return sum(
+            abs(delta)
+            for delta in (fit.protein_delta_g, fit.net_carbs_delta_g)
+            if delta is not None
+        )
+
+    def flags(result: SolveResult, fit: MacroFit | None) -> tuple[bool, bool, bool]:
+        return (
+            not result.ratio_within_tolerance,
+            not result.kcal_within_tolerance,
+            fit is not None and not fit.within_tolerance,
+        )
+
+    ahead, behind = flags(candidate, candidate_fit), flags(current, current_fit)
+    if ahead != behind:
+        return ahead < behind
+    return miss(candidate_fit) < miss(current_fit) - _SPLIT_GAIN_G
+
+
+#: Grams of protein and carbs a reshaped dish must win to be preferred. Below
+#: the precision the screen prints, so it only stops ties and rounding noise.
+_SPLIT_GAIN_G = 0.05
 
 
 def to_prescription_goal(raw: PrescriptionGoalRequest) -> PrescriptionGoalResponse:

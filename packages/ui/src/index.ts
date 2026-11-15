@@ -14,6 +14,17 @@ export { useFrozenAttempt } from "./lib/useFrozenAttempt";
 export type { FrozenAttempt } from "./lib/useFrozenAttempt";
 export { RETRYABLE_ERROR_CODES, canRetry } from "./lib/retryable";
 export { mealTargetsFrom } from "./lib/mealTargets";
+export {
+  macroSplitAdvice,
+  macroSplitLimit,
+  macroSplitParts,
+} from "./lib/macroSplit";
+export type {
+  MacroFit,
+  MacroSplitAdvice,
+  MacroSplitPart,
+  MacroSplitPartKey,
+} from "./lib/macroSplit";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
 export {
   dayVerdict,
