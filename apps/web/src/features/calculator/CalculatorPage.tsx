@@ -980,7 +980,11 @@ export function CalculatorView({
                 набранный руками, этого совета нет — там достаточно подобрать. */}
             {splitAdvice !== null && (
               <p role="status" className="m-0 text-sm text-warning-strong">
-                {t(`splitAdvice.${splitAdvice}`)}
+                {t(
+                  rows.some((row) => row.pinned === true)
+                    ? "splitAdvice.pinned"
+                    : `splitAdvice.${splitAdvice}`,
+                )}
               </p>
             )}
 

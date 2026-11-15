@@ -364,6 +364,7 @@
     "goalMet": "Maqsadga erishildi",
     "goalMissed": "Maqsadga erishilmadi",
     "goalSplit": "Nisbat va kaloriya mos keldi, lekin taomdagi oqsil va uglevodlar mos kelmadi: {{parts}}",
+    "carbsLimited": "Uglevodlar bo‘yicha maqsad {{value}} g ga kamaytirildi: ko‘prog‘i tayinlovdagi uglevodlar chegarasiga sig‘maydi, chegara kletchatka bilan birga hisoblanadi. Shu sababli oqsil shuncha ko‘p.",
     "splitParts": {
       "proteinMore": "oqsil maqsaddan {{value}} g ko‘p",
       "proteinLess": "oqsil maqsaddan {{value}} g kam",

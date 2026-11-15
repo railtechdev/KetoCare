@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { macroSplitAdvice, macroSplitParts } from "./macroSplit";
+import {
+  macroSplitAdvice,
+  macroSplitLimit,
+  macroSplitParts,
+} from "./macroSplit";
 
 describe("macroSplitParts", () => {
   it("молчит, когда раскладка сошлась или цели нет", () => {
@@ -116,5 +120,50 @@ describe("macroSplitAdvice", () => {
         within_tolerance: false,
       }),
     ).toBeNull();
+  });
+});
+
+describe("macroSplitLimit", () => {
+  it("молчит, когда лимит цели не мешает", () => {
+    expect(macroSplitLimit(null)).toBeNull();
+    expect(
+      macroSplitLimit({
+        protein_delta_g: 0.1,
+        net_carbs_delta_g: -0.1,
+        within_tolerance: true,
+      }),
+    ).toBeNull();
+    expect(
+      macroSplitLimit({
+        protein_delta_g: 0.1,
+        net_carbs_delta_g: -0.1,
+        carbs_limited_by_g: 0.02,
+        within_tolerance: true,
+      }),
+    ).toBeNull();
+  });
+
+  it("называет, на сколько лимит снизил цель по углеводам", () => {
+    expect(
+      macroSplitLimit({
+        protein_delta_g: 0,
+        net_carbs_delta_g: -0.1,
+        carbs_limited_by_g: 0.8,
+        within_tolerance: true,
+      }),
+    ).toBe(0.8);
+  });
+
+  it("блюду у лимита не советуют добавить углеводов", () => {
+    // Расхождения приходят уже от того, что помещается в лимит: у блюда,
+    // упёршегося в него, нехватки нет, и совета нет.
+    const fit = {
+      protein_delta_g: 0.1,
+      net_carbs_delta_g: -0.1,
+      carbs_limited_by_g: 0.8,
+      within_tolerance: true,
+    };
+    expect(macroSplitAdvice(fit)).toBeNull();
+    expect(macroSplitParts(fit)).toEqual([]);
   });
 });

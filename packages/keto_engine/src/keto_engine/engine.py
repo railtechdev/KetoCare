@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from dataclasses import replace
 from itertools import product
 
 import numpy as np
@@ -286,17 +287,21 @@ def meal_macro_goal(
     *,
     day_protein_g: float | None = None,
     day_kcal: float | None = None,
+    day_carbs_limit_g: float | None = None,
 ) -> MealMacroGoal:
     """Fat, protein and net carbs one meal should contain.
 
     Fat and the protein-plus-net-carbs sum follow from the ratio and calories.
     Protein is the daily target's share of this meal's calories, which for
     equal meals is the daily target divided by their number. Net carbs are what
-    remains of the sum.
+    remains of the sum, and no more than the meal's share of the day's carbs
+    limit when one is given: a doctor may set the limit below the remainder,
+    and then the rest of the sum is protein. Without that cap five meals "on
+    goal" came to twice the limit of their own prescription.
 
-    TODO(med): confirm the equal split of protein across meals (question 55 in
-    docs/medical/OPEN_QUESTIONS.md). The goal is a hint on screen and does not
-    take part in any verdict.
+    TODO(med): confirm the equal split of protein and of the carbs limit across
+    meals (questions 55 and 58 in docs/medical/OPEN_QUESTIONS.md). Since 1.9.0
+    the solver aims at this goal and `macro_fit()` judges a dish against it.
     """
 
     non_fat = max_non_fat_grams(ratio, kcal)
@@ -309,13 +314,19 @@ def meal_macro_goal(
     protein = day_protein_g * kcal / day_kcal
     if protein > non_fat:
         return MealMacroGoal(fat_g=fat, protein_g=None, net_carbs_g=None, non_fat_g=non_fat)
+    net_carbs = non_fat - protein
+    if day_carbs_limit_g is not None:
+        net_carbs = min(net_carbs, day_carbs_limit_g * kcal / day_kcal)
     return MealMacroGoal(
-        fat_g=fat, protein_g=protein, net_carbs_g=non_fat - protein, non_fat_g=non_fat
+        fat_g=fat, protein_g=non_fat - net_carbs, net_carbs_g=net_carbs, non_fat_g=non_fat
     )
 
 
 def macro_fit(
-    dish: DishResult, protein_g: float | None, net_carbs_g: float | None
+    dish: DishResult,
+    protein_g: float | None,
+    net_carbs_g: float | None,
+    carbs_max_g: float | None = None,
 ) -> MacroFit | None:
     """How a dish sits against the protein and net carbs goals of its meal.
 
@@ -323,19 +334,33 @@ def macro_fit(
     ratio and the calories do not pin the split: a dish can hold both exactly
     with all of its non-fat grams in protein, and the dietitian reads that as
     a meal that missed its goal (ADR-0083).
+
+    `carbs_max_g` is the limit on ALL carbs of the dish, the same number the
+    solver holds as a bound. The goal counts net carbs, so the fibre of the dish
+    eats into it: with 4.3 g allowed and 1.7 g of fibre no more than 2.6 g of
+    net carbs fit, whatever the goal says. A dish at that ceiling is not short
+    of carbs, and the protein that took their place is not an excess. Telling
+    the family to "add carbs" there would walk the day over its limit.
     """
 
     if protein_g is None and net_carbs_g is None:
         return None
-    protein_delta = None if protein_g is None else dish.protein_g - protein_g
-    net_carbs_delta = None if net_carbs_g is None else dish.net_carbs_g - net_carbs_g
+    limited_by = 0.0
+    if net_carbs_g is not None and carbs_max_g is not None:
+        room = max(carbs_max_g - (dish.carbs_g - dish.net_carbs_g), 0.0)
+        limited_by = max(net_carbs_g - room, 0.0)
+    protein_delta = None if protein_g is None else dish.protein_g - (protein_g + limited_by)
+    net_carbs_delta = None if net_carbs_g is None else dish.net_carbs_g - (net_carbs_g - limited_by)
     within = all(
         abs(delta) <= constants.MEAL_MACRO_TOLERANCE_G + 1e-9
         for delta in (protein_delta, net_carbs_delta)
         if delta is not None
     )
     return MacroFit(
-        protein_delta_g=protein_delta, net_carbs_delta_g=net_carbs_delta, within_tolerance=within
+        protein_delta_g=protein_delta,
+        net_carbs_delta_g=net_carbs_delta,
+        carbs_limited_by_g=limited_by,
+        within_tolerance=within,
     )
 
 
@@ -359,6 +384,8 @@ def _build_and_solve(
     include_kcal_corridor: bool,
     bounds_override: list[tuple[float, float | None]] | None = None,
     goal_budget: float | None = None,
+    hold_split: bool = False,
+    leave_rounding_room: bool = False,
 ) -> OptimizeResult:
     """One linear programme over the masses.
 
@@ -366,6 +393,17 @@ def _build_and_solve(
     distance to the goals is capped by the budget and the programme minimises
     how many grams the composition moves from `targets.near_grams`: the second
     pass of `solve()`.
+
+    `hold_split` turns the tolerance of the protein and net carbs goals into
+    bounds. The distance is a sum, and a sum trades a gram of carbs for exact
+    calories: without the bounds the programme returned a dish outside the
+    tolerance of the split where one inside it existed.
+
+    `leave_rounding_room` keeps the exact solution away from the protein
+    minimum and the carbs limit by as much as rounding every mass to a whole
+    gram can move them. A solution that sits on the limit breaks it on half of
+    the roundings, and the products that carry the carbs are rarely the ones
+    the whole-gram search moves.
     """
 
     n = len(ingredients)
@@ -453,17 +491,26 @@ def _build_and_solve(
         a_ub_rows.append(row(-kcal_coef))
         b_ub.append(-kcal_lo)
 
+    half_step = constants.GRAM_ROUNDING / 2 if leave_rounding_room else 0.0
+
     if include_protein and targets.protein_min_g is not None:
         a_ub_rows.append(row(-protein_coef))
-        b_ub.append(-targets.protein_min_g)
+        b_ub.append(-(targets.protein_min_g + half_step * float(protein_coef.sum())))
 
     if include_carbs and targets.carbs_max_g is not None:
         a_ub_rows.append(row(carbs_coef))
-        b_ub.append(targets.carbs_max_g)
+        b_ub.append(targets.carbs_max_g - half_step * float(carbs_coef.sum()))
 
     if goal_budget is not None:
         a_ub_rows.append(goal_cost)
         b_ub.append(goal_budget)
+
+    if hold_split:
+        for coef, goal, _ in deviations[1:goal_count]:
+            a_ub_rows.append(row(coef))
+            b_ub.append(goal + constants.MEAL_MACRO_TOLERANCE_G)
+            a_ub_rows.append(row(-coef))
+            b_ub.append(-(goal - constants.MEAL_MACRO_TOLERANCE_G))
 
     bounds = list(bounds_override or _default_bounds(ingredients, targets))
     bounds.extend([(0.0, None)] * extra)  # отклонения неотрицательны
@@ -598,7 +645,7 @@ def _distance(dish: DishResult, ratio: float, targets: Targets) -> float:
     distance += abs(dish.kcal - targets.kcal) / (
         targets.kcal * constants.KCAL_TOLERANCE_FRACTION or 1.0
     )
-    fit = macro_fit(dish, targets.protein_g, targets.net_carbs_g)
+    fit = macro_fit(dish, targets.protein_g, targets.net_carbs_g, targets.carbs_max_g)
     if fit is not None:
         distance += sum(
             abs(delta) / constants.MEAL_MACRO_TOLERANCE_G
@@ -610,13 +657,14 @@ def _distance(dish: DishResult, ratio: float, targets: Targets) -> float:
 
 def _candidate_rank(
     grams: Sequence[float], ingredients: Sequence[Ingredient], targets: Targets
-) -> tuple[bool, float] | None:
+) -> tuple[bool, bool, float] | None:
     """Rank of a whole-gram composition, lower is better; `None` if it is not allowed.
 
     Allowed means: masses inside their bounds, calories inside the corridor,
     protein not below its minimum, carbs not above their limit, and a ratio that
     exists. Among the allowed, a ratio inside its tolerance always wins over one
-    outside it, and then the closest to every target wins.
+    outside it, then a split of protein and carbs inside its tolerance over one
+    outside, and then the closest to every target wins.
     """
 
     bounds = _default_bounds(ingredients, targets)
@@ -645,7 +693,9 @@ def _candidate_rank(
         return None
 
     ratio_missed = abs(dish.ratio - targets.ratio) > constants.RATIO_TOLERANCE
-    return ratio_missed, _distance(dish, dish.ratio, targets)
+    fit = macro_fit(dish, targets.protein_g, targets.net_carbs_g, targets.carbs_max_g)
+    split_missed = fit is not None and not fit.within_tolerance
+    return ratio_missed, split_missed, _distance(dish, dish.ratio, targets)
 
 
 def _closest_whole_grams(
@@ -696,7 +746,7 @@ def _closest_whole_grams(
     deltas = [d * step for d in range(-_REPAIR_RADIUS, _REPAIR_RADIUS + 1)]
 
     best = base
-    best_rank: tuple[bool, float] | None = None
+    best_rank: tuple[bool, bool, float] | None = None
 
     for combo in product(deltas, repeat=len(movable)):
         candidate = list(base)
@@ -711,14 +761,70 @@ def _closest_whole_grams(
 
 
 def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
-    """Подбирает массы продуктов под цели. Бросает `InfeasibleError`, если задача неразрешима."""
+    """Подбирает массы продуктов под цели. Бросает `InfeasibleError`, если задача неразрешима.
+
+    Цели приёма и набранные массы (`protein_g`, `net_carbs_g`, `near_grams`) —
+    пожелания: если с ними подбор в целых граммах не сошёлся, он повторяется
+    без них. Отказывает только задача, неразрешимая и без пожеланий: иначе
+    «подойти ближе к цели» превращалось бы в отказ там, где блюдо есть.
+    """
 
     if not ingredients:
         raise InfeasibleError("Список продуктов пуст — добавьте хотя бы один продукт.")
 
-    result = _build_and_solve(
-        ingredients, targets, include_protein=True, include_carbs=True, include_kcal_corridor=True
+    # Попытки — от лучшей к запасной. Первая оставляет точному решению запас на
+    # округление у минимума белка и лимита углеводов; вторая — без запаса, если
+    # с ним задача не решается; третья — без пожеланий вовсе. Причину отказа
+    # называет последняя: она про задачу, а не про пожелания.
+    plain = replace(targets, protein_g=None, net_carbs_g=None, near_grams=None)
+    bounded = targets.protein_min_g is not None or targets.carbs_max_g is not None
+    attempts = [(targets, True)] if bounded else []
+    attempts.append((targets, False))
+    if plain != targets:
+        attempts.append((plain, False))
+
+    for attempt, leave_rounding_room in attempts[:-1]:
+        try:
+            return _judged(_solve(ingredients, attempt, leave_rounding_room), targets)
+        except InfeasibleError:
+            continue
+    last, leave_rounding_room = attempts[-1]
+    return _judged(_solve(ingredients, last, leave_rounding_room), targets)
+
+
+def _judged(result: SolveResult, targets: Targets) -> SolveResult:
+    """The result with its split judged against the goals that were asked for."""
+
+    return replace(
+        result,
+        macro_fit=macro_fit(
+            result.dish, targets.protein_g, targets.net_carbs_g, targets.carbs_max_g
+        ),
     )
+
+
+def _solve(
+    ingredients: Sequence[Ingredient], targets: Targets, leave_rounding_room: bool
+) -> SolveResult:
+    def programme(**extra: float | bool | None) -> OptimizeResult:
+        return _build_and_solve(
+            ingredients,
+            targets,
+            include_protein=True,
+            include_carbs=True,
+            include_kcal_corridor=True,
+            leave_rounding_room=leave_rounding_room,
+            **extra,  # type: ignore[arg-type]
+        )
+
+    # Сначала — с раскладкой белка и углеводов в границах её допуска: если
+    # такое блюдо есть, оно и ищется. Нет (продукты не дают или мешает лимит
+    # углеводов) — раскладка остаётся целью, к которой подходят как можно ближе.
+    has_split = targets.protein_g is not None or targets.net_carbs_g is not None
+    result = programme(hold_split=True) if has_split else programme()
+    hold_split = has_split and bool(result.success)
+    if has_split and not hold_split:
+        result = programme()
 
     if not result.success:
         raise InfeasibleError(_diagnose_infeasibility(ingredients, targets))
@@ -728,14 +834,7 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
     # сделать: вес близости, достаточный, чтобы удержать овощ, перевесил бы цель
     # по углеводам на приёме из тридцати граммов продуктов.
     if any(ing.product_id in (targets.near_grams or {}) for ing in ingredients):
-        nearest = _build_and_solve(
-            ingredients,
-            targets,
-            include_protein=True,
-            include_carbs=True,
-            include_kcal_corridor=True,
-            goal_budget=float(result.fun) + _GOAL_SLACK,
-        )
+        nearest = programme(goal_budget=float(result.fun) + _GOAL_SLACK, hold_split=hold_split)
         if nearest.success:
             result = nearest
 
@@ -791,5 +890,5 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
         dish=dish,
         ratio_within_tolerance=ratio_within,
         kcal_within_tolerance=kcal_within,
-        macro_fit=macro_fit(dish, targets.protein_g, targets.net_carbs_g),
+        macro_fit=macro_fit(dish, targets.protein_g, targets.net_carbs_g, targets.carbs_max_g),
     )

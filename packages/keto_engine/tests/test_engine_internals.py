@@ -205,9 +205,18 @@ class TestRoundingKeepsHardBounds:
             solve([self.AVOCADO, self.MACADAMIA, self.COTTAGE], targets)
 
     def test_protein_minimum_kept_or_refused(self) -> None:
+        targets = Targets(ratio=2.0, kcal=300.0, protein_min_g=4.4)
+        with pytest.raises(InfeasibleError, match="белок 4.4 г"):
+            solve([self.MACADAMIA, self.CUCUMBER], targets)
+
+    def test_room_for_rounding_finds_the_dish_that_used_to_be_refused(self) -> None:
+        """Until 1.9.0 this was a refusal: the exact solution sat on the protein
+        minimum and rounding fell under it. Kept half a gram away from the
+        minimum, the solution rounds to a dish that holds it."""
         targets = Targets(ratio=2.0, kcal=100.0, protein_min_g=1.4)
-        with pytest.raises(InfeasibleError, match="белок 1.4 г"):
-            solve([self.CUCUMBER, self.MACADAMIA, self.APPLE], targets)
+        result = solve([self.CUCUMBER, self.MACADAMIA, self.APPLE], targets)
+        assert result.dish.protein_g >= 1.4
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
 
 
 class TestRepairInternals:
@@ -858,6 +867,163 @@ class TestMacroFit:
         assert fit.protein_delta_g is None
         assert fit.net_carbs_delta_g == pytest.approx(0.2)
         assert fit.within_tolerance
+
+
+class TestCarbsLimitAgainstTheCarbsGoal:
+    """The limit counts all carbs, the goal counts net carbs (ADR-0083).
+
+    Five meals "on goal" with vegetables came to 29 g of carbs under a
+    prescription whose limit was 21.5 g: the fibre was on top of the goal.
+    """
+
+    PEPPER = Ingredient("pepper", kcal=31.0, fat=0.3, protein=1.0, carbs=6.0, fiber=2.0)
+    EGG = Ingredient("egg", kcal=139.0, fat=9.5, protein=12.6, carbs=0.7)
+
+    def test_goal_never_exceeds_the_meals_share_of_the_limit(self) -> None:
+        goal = meal_macro_goal(
+            3.0, 276.0, day_protein_g=23.0, day_kcal=1380.0, day_carbs_limit_g=10.0
+        )
+        assert goal.net_carbs_g == pytest.approx(2.0)
+        # The ratio and the calories fix the sum: what carbs give up is protein.
+        assert goal.protein_g == pytest.approx(goal.non_fat_g - 2.0)
+
+    def test_limit_above_the_remainder_changes_nothing(self) -> None:
+        free = meal_macro_goal(3.0, 276.0, day_protein_g=23.0, day_kcal=1380.0)
+        capped = meal_macro_goal(
+            3.0, 276.0, day_protein_g=23.0, day_kcal=1380.0, day_carbs_limit_g=40.0
+        )
+        assert capped == free
+
+    def test_dish_at_the_ceiling_is_not_short_of_carbs(self) -> None:
+        # 65 g of pepper: 3.9 g of carbs, 1.3 g of them fibre, 2.6 g net.
+        dish = verify([(self.PEPPER, 65.0), (self.EGG, 40.0)])
+        unlimited = macro_fit(dish, 4.6, 4.3)
+        limited = macro_fit(dish, 4.6, 4.3, carbs_max_g=4.3)
+        assert unlimited is not None and not unlimited.within_tolerance
+        assert limited is not None
+        assert limited.carbs_limited_by_g == pytest.approx(1.3)
+        assert limited.net_carbs_delta_g == pytest.approx(-0.12, abs=0.01)
+        assert limited.protein_delta_g == pytest.approx(-0.21, abs=0.01)
+        assert limited.within_tolerance
+
+    def test_dish_over_the_limit_is_a_miss(self) -> None:
+        dish = verify([(self.PEPPER, 110.0), (self.EGG, 30.0)])
+        fit = macro_fit(dish, 4.6, 4.3, carbs_max_g=4.3)
+        assert fit is not None and not fit.within_tolerance
+        assert fit.net_carbs_delta_g is not None and fit.net_carbs_delta_g > 1.0
+
+    def test_solver_keeps_the_limit_and_gets_as_close_as_it_allows(self) -> None:
+        products = list(TestSolveAimsAtTheMealSplit.PRODUCTS)
+        result = solve(
+            products,
+            Targets(
+                ratio=3.0,
+                kcal=276.0,
+                carbs_max_g=4.3,
+                per_ingredient_bounds=TestSolveAimsAtTheMealSplit.BOUNDS,
+                protein_g=4.6,
+                net_carbs_g=4.3,
+            ),
+        )
+        assert result.dish.carbs_g <= 4.3
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        fit = result.macro_fit
+        assert fit is not None and fit.within_tolerance
+        assert fit.carbs_limited_by_g > 0.5
+
+
+class TestSplitIsHeldWhenADishInsideItExists:
+    """Findings of the safety review of ADR-0083."""
+
+    @staticmethod
+    def _product(name: str, fat: float, protein: float, carbs: float, fiber: float = 0.0):
+        return Ingredient(
+            name,
+            kcal=9 * fat + 4 * protein + 4 * carbs,
+            fat=fat,
+            protein=protein,
+            carbs=carbs,
+            fiber=fiber,
+        )
+
+    def test_exact_calories_do_not_buy_a_split_outside_its_tolerance(self) -> None:
+        """Oil, cheese, avocado at 4:1 and 400 kcal: the sum of deviations
+        preferred exact calories and returned carbs 1.24 g short, while a dish
+        with every goal inside its tolerance existed."""
+        products = [
+            self._product("oil", 99.9, 0.0, 0.0),
+            self._product("cheese", 29.0, 23.0, 0.3),
+            self._product("avocado", 14.7, 2.0, 8.5, 6.7),
+        ]
+        result = solve(
+            products,
+            Targets(
+                ratio=4.0,
+                kcal=400.0,
+                per_ingredient_bounds={p.product_id: (2.0, 5000.0) for p in products},
+                protein_g=5.64,
+                net_carbs_g=4.36,
+            ),
+        )
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        assert result.macro_fit is not None and result.macro_fit.within_tolerance
+
+    def test_goals_next_to_a_hard_limit_do_not_turn_a_dish_into_a_refusal(self) -> None:
+        """With the carbs goal equal to the carbs limit the exact solution sat
+        on the limit, rounding broke it, and a request that solves without the
+        goals was refused."""
+        products = [
+            self._product("apple", 0.4, 0.4, 9.8, 1.8),
+            self._product("strawberry", 0.4, 0.8, 7.5, 2.2),
+            self._product("butter", 82.5, 0.5, 0.8),
+            self._product("mayo", 67.0, 2.8, 3.7),
+            self._product("salmon", 15.0, 20.0, 0.0),
+            self._product("oil", 99.9, 0.0, 0.0),
+            self._product("mct", 100.0, 0.0, 0.0),
+        ]
+        targets = Targets(
+            ratio=4.0,
+            kcal=400.0,
+            carbs_max_g=6.9,
+            per_ingredient_bounds={p.product_id: (2.0, 5000.0) for p in products},
+            protein_g=3.1,
+            net_carbs_g=6.9,
+        )
+        result = solve(products, targets)
+        assert result.dish.carbs_g <= 6.9
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        assert result.macro_fit is not None and result.macro_fit.within_tolerance
+
+    def test_a_dish_that_solves_without_the_wishes_is_never_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Whatever the goals and the entered masses do to the search, the
+        last attempt runs without them."""
+        real = engine_module._solve
+
+        def refuses_with_wishes(ingredients, targets, leave_rounding_room):
+            if targets.protein_g is not None:
+                raise InfeasibleError("с пожеланиями не сошлось")
+            return real(ingredients, targets, leave_rounding_room)
+
+        monkeypatch.setattr(engine_module, "_solve", refuses_with_wishes)
+        products = list(TestSolveAimsAtTheMealSplit.PRODUCTS)
+        result = solve(
+            products,
+            Targets(ratio=3.0, kcal=276.0, protein_g=4.6, net_carbs_g=4.3, carbs_max_g=10.0),
+        )
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        # Judged against the goals that were asked for, not silently dropped.
+        assert result.macro_fit is not None
+
+    def test_split_inside_tolerance_outranks_a_closer_sum(self) -> None:
+        products = list(TestSolveAimsAtTheMealSplit.PRODUCTS)
+        targets = Targets(ratio=3.0, kcal=276.0, protein_g=4.6, net_carbs_g=4.3)
+        inside = _candidate_rank([25.0, 23.0, 13.0, 87.0], products, targets)
+        outside = _candidate_rank([61.0, 23.0, 6.0, 5.0], products, targets)
+        assert inside is not None and outside is not None
+        assert not inside[1] and outside[1]
+        assert inside < outside
 
 
 class TestSolveAimsAtTheMealSplit:

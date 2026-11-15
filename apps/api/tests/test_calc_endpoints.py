@@ -1375,6 +1375,7 @@ PEPPER = {
     "fiber": 2.0,
 }
 SOFT_BUTTER = {"product_id": "butter", "kcal": 735, "fat": 81.3, "protein": 0.9, "carbs": 0.1}
+HONEY = {"product_id": "honey", "kcal": 329, "fat": 0.0, "protein": 0.8, "carbs": 81.5}
 
 
 class TestSolveAimsAtTheMealSplit:
@@ -1386,9 +1387,12 @@ class TestSolveAimsAtTheMealSplit:
     and 4.3, and the screen said «Цель достигнута».
     """
 
-    ENTERED = {"egg": 61, "butter": 23, "cream": 6, "pepper": 5}
+    ENTERED = {"egg": 61, "butter": 23, "cream": 6, "pepper": 5, "honey": 5}
+    FIT_KEYS = {"protein_delta_g", "net_carbs_delta_g", "carbs_limited_by_g", "within_tolerance"}
 
-    async def _patient(self, session, make_user, make_patient):
+    async def _patient(self, session, make_user, make_patient, carbs_limit=21.5):
+        # 21.5 g is the most the prescription form accepts here: what is left
+        # of the day's protein-plus-carbs after 23 g of protein.
         parent = await make_user(role=UserRole.PARENT)
         doctor = await make_user(role=UserRole.DOCTOR)
         patient = await make_patient()
@@ -1399,26 +1403,25 @@ class TestSolveAimsAtTheMealSplit:
             ratio=3.0,
             kcal_per_day=1380,
             protein_g=23.0,
-            carbs_limit_g=25.0,
+            carbs_limit_g=carbs_limit,
             meals_per_day=5,
             author_id=doctor.id,
             effective_from=date.today(),
         )
         return parent, patient
 
-    def _solve_body(self, patient_id=None, ingredients=None, entered=None):
+    def _solve_body(self, patient_id=None, ingredients=None):
         ingredients = ingredients or [EGG, SOFT_BUTTER, CREAM, PEPPER]
-        entered = entered or self.ENTERED
         return {
             "ingredients": ingredients,
             "targets": {"ratio": 3.0, "kcal": 276},
             "current_grams": {
-                item["product_id"]: entered[item["product_id"]] for item in ingredients
+                item["product_id"]: self.ENTERED[item["product_id"]] for item in ingredients
             },
             "patient_id": None if patient_id is None else str(patient_id),
         }
 
-    async def test_solver_reaches_the_protein_and_carbs_of_the_meal(
+    async def test_solver_brings_the_carbs_back_as_far_as_the_limit_allows(
         self, client, session, make_user, make_patient, auth_headers
     ):
         parent, patient = await self._patient(session, make_user, make_patient)
@@ -1431,19 +1434,50 @@ class TestSolveAimsAtTheMealSplit:
         body = response.json()
         assert body["ratio_within_tolerance"] is True
         assert body["kcal_within_tolerance"] is True
-        assert set(body["macro_fit"]) == {
-            "protein_delta_g",
-            "net_carbs_delta_g",
-            "within_tolerance",
-        }
+        assert set(body["macro_fit"]) == self.FIT_KEYS
         assert body["macro_fit"]["within_tolerance"] is True
-        assert body["dish"]["protein_g"] == pytest.approx(4.6, abs=0.5)
-        assert body["dish"]["net_carbs_g"] == pytest.approx(4.3, abs=0.5)
-        # Five grams of pepper cannot carry four grams of carbs: the proportions
-        # had to change, and the response says so.
+        # Was 8.1 g of protein and 0.8 g of carbs.
+        assert body["dish"]["protein_g"] < 6.5
+        assert body["dish"]["net_carbs_g"] > 2.3
+        # The meal's share of the day's limit, fibre included: 21.5 g ÷ 5.
+        assert body["dish"]["carbs_g"] <= 4.3 + 1e-6
+        # Pepper's fibre is why the net carbs stop short of the 4.3 g goal.
+        assert body["macro_fit"]["carbs_limited_by_g"] > 0.5
+        # Five grams of pepper cannot carry the carbs: the proportions had to
+        # change, and the response says so.
         assert body["reshaped"] is True
         grams = {item["product_id"]: item["grams"] for item in body["dish"]["items"]}
-        assert set(grams) == set(self.ENTERED)
+        assert set(grams) == {"egg", "butter", "cream", "pepper"}
+
+    async def test_five_solved_meals_stay_inside_the_days_carbs_limit(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Before the ceiling a meal "on goal" carried its fibre on top of the
+        goal, and five of them came to 29 g under a limit of 21.5 g."""
+        parent, patient = await self._patient(session, make_user, make_patient)
+
+        response = await client.post(
+            "/api/v1/calc/solve", json=self._solve_body(patient.id), headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["dish"]["carbs_g"] * 5 <= 21.5 + 1e-6
+
+    async def test_goal_shown_on_screen_respects_a_stricter_limit(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """The doctor set 10 g a day where 21.5 g would fit: the meal's goal is
+        2 g of carbs, and what the carbs gave up is protein."""
+        parent, patient = await self._patient(session, make_user, make_patient, carbs_limit=10.0)
+
+        response = await client.post(
+            "/api/v1/calc/verify", json=self._verify_body(patient.id), headers=auth_headers(parent)
+        )
+
+        assert response.status_code == 200, response.text
+        goal = response.json()["meal_goal"]
+        assert goal["net_carbs_g"] == pytest.approx(2.0)
+        assert goal["protein_g"] == pytest.approx(goal["non_fat_g"] - 2.0)
 
     async def test_products_that_cannot_reach_the_split_are_reported(
         self, client, session, make_user, make_patient, auth_headers
@@ -1466,7 +1500,30 @@ class TestSolveAimsAtTheMealSplit:
         assert fit["within_tolerance"] is False
         assert fit["protein_delta_g"] > 1.0
         assert fit["net_carbs_delta_g"] < -1.0
+        assert fit["carbs_limited_by_g"] == 0
         assert body["reshaped"] is False
+
+    async def test_dish_that_cannot_fit_the_share_is_still_composed_and_says_so(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Two grams of honey, the least the solver may give a chosen product,
+        already hold more carbs than this meal's share of a 2 g limit. The
+        share is how a meal is planned, not a reason to refuse."""
+        parent, patient = await self._patient(session, make_user, make_patient, carbs_limit=2.0)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json=self._solve_body(patient.id, ingredients=[EGG, SOFT_BUTTER, HONEY]),
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ratio_within_tolerance"] is True
+        assert body["dish"]["carbs_g"] > 0.4
+        fit = body["macro_fit"]
+        assert fit["within_tolerance"] is False
+        assert fit["net_carbs_delta_g"] > 1.0
 
     async def test_without_a_patient_there_is_no_split_to_reach(
         self, client, make_user, auth_headers
@@ -1492,10 +1549,11 @@ class TestSolveAimsAtTheMealSplit:
 
         assert response.status_code == 403, response.text
 
-    def _verify_body(self, patient_id=None):
+    def _verify_body(self, patient_id=None, grams=None):
+        grams = grams or {name: self.ENTERED[name] for name in ("egg", "butter", "cream", "pepper")}
         return {
             "ingredients": [EGG, SOFT_BUTTER, CREAM, PEPPER],
-            "items": [{"product_id": name, "grams": grams} for name, grams in self.ENTERED.items()],
+            "items": [{"product_id": name, "grams": mass} for name, mass in grams.items()],
             "targets": {"ratio": 3.0, "kcal": 276},
             "patient_id": None if patient_id is None else str(patient_id),
         }
@@ -1516,10 +1574,33 @@ class TestSolveAimsAtTheMealSplit:
         assert body["ratio_within_tolerance"] is True
         assert body["kcal_within_tolerance"] is True
         fit = body["macro_fit"]
-        assert set(fit) == {"protein_delta_g", "net_carbs_delta_g", "within_tolerance"}
+        assert set(fit) == self.FIT_KEYS
         assert fit["within_tolerance"] is False
         assert fit["protein_delta_g"] == pytest.approx(3.4, abs=0.3)
         assert fit["net_carbs_delta_g"] == pytest.approx(-3.5, abs=0.3)
+        assert fit["carbs_limited_by_g"] == pytest.approx(0.0, abs=0.2)
+
+    async def test_check_does_not_call_a_dish_at_the_limit_short_of_carbs(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """What the solver returns for these products: carbs at the meal's
+        share of the limit. "Add carbs" here would walk the day over it."""
+        parent, patient = await self._patient(session, make_user, make_patient)
+        solved = await client.post(
+            "/api/v1/calc/solve", json=self._solve_body(patient.id), headers=auth_headers(parent)
+        )
+        grams = {item["product_id"]: item["grams"] for item in solved.json()["dish"]["items"]}
+
+        response = await client.post(
+            "/api/v1/calc/verify",
+            json=self._verify_body(patient.id, grams),
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        fit = response.json()["macro_fit"]
+        assert fit["within_tolerance"] is True
+        assert fit["carbs_limited_by_g"] > 0.5
 
     async def test_check_without_a_patient_has_no_split(self, client, make_user, auth_headers):
         dietitian = await make_user(role=UserRole.DIETITIAN)
@@ -1530,3 +1611,48 @@ class TestSolveAimsAtTheMealSplit:
 
         assert response.status_code == 200, response.text
         assert response.json()["macro_fit"] is None
+
+
+class TestSolveReturnsTheDishThatIsOnTarget:
+    """Reader: «Подобрать граммовку» in the web cabinet's calculator.
+
+    Safety review of ADR-0083: the corridor around the entered masses returned
+    a dish with the ratio 3.09 against 4:1 while the wide search held 3.90.
+    """
+
+    @staticmethod
+    def _product(name, fat, protein, carbs, fiber=0.0):
+        return {
+            "product_id": name,
+            "kcal": 9 * fat + 4 * protein + 4 * carbs,
+            "fat": fat,
+            "protein": protein,
+            "carbs": carbs,
+            "fiber": fiber,
+        }
+
+    async def test_ratio_outside_tolerance_is_not_returned_when_a_dish_inside_exists(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [
+                    self._product("mct", 100, 0, 0),
+                    self._product("cucumber", 0.1, 0.8, 2.5, 1.0),
+                    self._product("cheese", 29, 23, 0.3),
+                    self._product("egg", 11.5, 12.7, 0.7),
+                    self._product("oil", 99.9, 0, 0),
+                ],
+                "targets": {"ratio": 4.0, "kcal": 100},
+                "current_grams": {"mct": 20, "cucumber": 30, "cheese": 80, "egg": 50, "oil": 10},
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ratio_within_tolerance"] is True
+        assert body["kcal_within_tolerance"] is True

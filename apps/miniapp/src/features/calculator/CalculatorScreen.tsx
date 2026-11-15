@@ -24,6 +24,7 @@ import {
   formatGrams,
   formatKcal,
   macroSplitAdvice,
+  macroSplitLimit,
   macroSplitParts,
   mealTargetsFrom,
   useDebouncedValue,
@@ -1018,26 +1019,37 @@ function Verdict({
   const split =
     ratioOk && kcalOk && macroFit !== null && !macroFit.within_tolerance;
   const within = ratioOk && kcalOk && !split;
+  const limit = macroSplitLimit(macroFit);
   return (
-    <p
-      role="status"
-      className={cn(
-        "m-0 text-sm",
-        within ? "text-success" : "text-warning-strong",
+    <>
+      <p
+        role="status"
+        className={cn(
+          "m-0 text-sm",
+          within ? "text-success" : "text-warning-strong",
+        )}
+      >
+        {split
+          ? t("calculator.goalSplit", {
+              parts: macroSplitParts(macroFit)
+                .map((part) =>
+                  t(`calculator.splitParts.${part.key}`, {
+                    value: formatGrams(part.grams),
+                  }),
+                )
+                .join(", "),
+            })
+          : t(within ? "calculator.goalMet" : "calculator.goalMissed")}
+      </p>
+      {/* Лимит углеводов назначения считает и клетчатку, цель — чистые
+          углеводы: без этой строки «добавьте углеводов» напрашивалось бы само
+          и вывело бы день за лимит. */}
+      {limit !== null && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("calculator.carbsLimited", { value: formatGrams(limit) })}
+        </p>
       )}
-    >
-      {split
-        ? t("calculator.goalSplit", {
-            parts: macroSplitParts(macroFit)
-              .map((part) =>
-                t(`calculator.splitParts.${part.key}`, {
-                  value: formatGrams(part.grams),
-                }),
-              )
-              .join(", "),
-          })
-        : t(within ? "calculator.goalMet" : "calculator.goalMissed")}
-    </p>
+    </>
   );
 }
 

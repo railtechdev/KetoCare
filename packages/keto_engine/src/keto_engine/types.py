@@ -31,9 +31,10 @@ class Targets:
     per_ingredient_bounds: dict[str, tuple[float, float | None]] | None = None
     #: Protein and net carbs the dish should come to: the meal's goal from
     #: `meal_macro_goal()`. Goals, not bounds: the solver gets as close as the
-    #: products allow and never refuses because of them. Without them the split
-    #: of protein against carbs is whatever satisfies the ratio, which is how a
-    #: meal came out with twice the protein and a fifth of the carbs (ADR-0083).
+    #: products and the hard limits above allow, and a dish that solves without
+    #: them is never refused because of them. Without them the split of protein
+    #: against carbs is whatever satisfies the ratio, which is how a meal came
+    #: out with twice the protein and a fifth of the carbs (ADR-0083).
     protein_g: float | None = None
     net_carbs_g: float | None = None
     #: Masses to stay close to, by product: the composition the person entered.
@@ -91,10 +92,19 @@ class MacroFit:
 
     The deltas are fact minus goal, in grams: positive is more than the goal.
     A delta is `None` when that goal was not given.
+
+    The goal a dish is measured against is the one that fits under the carbs
+    limit. The limit counts ALL carbs and the goal counts net carbs, so the
+    fibre of the dish takes room from the goal: `carbs_limited_by_g` is how
+    many grams of the carbs goal did not fit, and the protein goal is higher by
+    the same amount, because the ratio and the calories fix their sum.
     """
 
     protein_delta_g: float | None
     net_carbs_delta_g: float | None
+    #: Grams of the net carbs goal that the carbs limit leaves no room for with
+    #: this dish's fibre; zero when the goal fits or there is no limit.
+    carbs_limited_by_g: float
     #: Every given goal is met within `constants.MEAL_MACRO_TOLERANCE_G`.
     within_tolerance: bool
 

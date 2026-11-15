@@ -1026,6 +1026,37 @@ describe("калькулятор", () => {
     expect(screen.queryByText("Цель достигнута")).not.toBeInTheDocument();
   });
 
+  it("объясняет, что углеводов меньше цели из-за лимита назначения", async () => {
+    // Лимит считает и клетчатку, цель — чистые углеводы: без этой строки
+    // таблица «Факт / Цель» под словами «Цель достигнута» читалась бы ошибкой.
+    (api.POST as Mock).mockImplementation(async () => ({
+      data: {
+        ...VERIFIED,
+        ratio_within_tolerance: true,
+        kcal_within_tolerance: true,
+        macro_fit: {
+          protein_delta_g: 0.1,
+          net_carbs_delta_g: -0.1,
+          carbs_limited_by_g: 0.8,
+          within_tolerance: true,
+        },
+      },
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator(PATIENT_ID);
+    await addButter(user);
+
+    expect(
+      await screen.findByText("Цель достигнута", undefined, {
+        timeout: AUTO_CALC_TIMEOUT_MS,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Цель по углеводам снижена на 0,8 г/),
+    ).toBeInTheDocument();
+  });
+
   it("после подбора говорит, какого продукта не хватает составу", async () => {
     // У подбора был весь диапазон масс: раз раскладка не сошлась, дело в
     // продуктах, и экран называет, какой добавить.

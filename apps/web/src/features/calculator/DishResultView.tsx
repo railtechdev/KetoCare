@@ -4,6 +4,7 @@ import {
   cn,
   formatGrams,
   formatKcal,
+  macroSplitLimit,
   macroSplitParts,
 } from "@ketocare/ui";
 import type { MacroFit } from "@ketocare/ui";
@@ -94,6 +95,7 @@ export function DishResultView({
       t(`result.splitParts.${part.key}`, { value: formatGrams(part.grams) }),
     )
     .join(", ");
+  const splitLimit = macroSplitLimit(macroFit);
 
   return (
     <div className="flex flex-col gap-section">
@@ -141,6 +143,15 @@ export function DishResultView({
           {verdict === "split"
             ? t("result.split", { parts: splitParts })
             : t(verdict === "within" ? "result.within" : "result.off")}
+        </p>
+      )}
+
+      {/* Лимит углеводов назначения считает и клетчатку, цель — только чистые
+          углеводы. Без этой строки «углеводов меньше цели» в таблице ниже
+          читалось бы недобором, а добавить их значило бы выйти за лимит. */}
+      {verdict !== null && splitLimit !== null && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("result.carbsLimited", { value: formatGrams(splitLimit) })}
         </p>
       )}
 

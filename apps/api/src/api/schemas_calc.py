@@ -176,6 +176,11 @@ class MacroFitOut(BaseModel):
 
     protein_delta_g: float | None
     net_carbs_delta_g: float | None
+    #: Grams of the carbs goal that do not fit under the prescription's carbs
+    #: limit with this dish's fibre: the limit counts all carbs, the goal net
+    #: ones. The deltas above are already measured against what fits, so a dish
+    #: at the limit is not "short of carbs". Zero when the goal fits.
+    carbs_limited_by_g: float = 0.0
     #: Both are within the engine's tolerance of the goal.
     within_tolerance: bool
 

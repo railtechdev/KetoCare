@@ -18,6 +18,12 @@ export interface MacroFit {
   protein_delta_g: number | null;
   /** Факт минус цель, г; `null` — цели по чистым углеводам нет */
   net_carbs_delta_g: number | null;
+  /**
+   * Сколько граммов цели по углеводам не помещается в лимит углеводов
+   * назначения: лимит считается вместе с клетчаткой, цель — без неё. Оба
+   * расхождения выше уже посчитаны от того, что помещается.
+   */
+  carbs_limited_by_g?: number;
   within_tolerance: boolean;
 }
 
@@ -88,4 +94,22 @@ export function macroSplitAdvice(
     protein !== null && protein <= -PRINTABLE_G ? -protein : 0;
   if (carbsShort === 0 && proteinShort === 0) return null;
   return carbsShort >= proteinShort ? "addCarbs" : "addProtein";
+}
+
+/**
+ * На сколько граммов цель по углеводам снижена лимитом назначения — чтобы
+ * сказать об этом словами.
+ *
+ * Без этой строки таблица «Факт / Цель» выглядела бы противоречием: углеводов
+ * меньше цели, белка больше, а экран пишет «Цель достигнута». Лимит считает все
+ * углеводы, цель — чистые, и клетчатка блюда занимает место под лимитом. Совет
+ * «добавьте углеводы» здесь вывел бы день за лимит назначения.
+ *
+ * `null` — лимит цели не мешает или расхождение напечаталось бы нулём.
+ */
+export function macroSplitLimit(
+  fit: MacroFit | null | undefined,
+): number | null {
+  const grams = fit?.carbs_limited_by_g ?? 0;
+  return grams >= PRINTABLE_G ? grams : null;
 }

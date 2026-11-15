@@ -1875,6 +1875,32 @@ describe("калькулятор в Mini App", () => {
       expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
     });
 
+    it("объясняет, что углеводов меньше цели из-за лимита назначения", async () => {
+      // Лимит считает и клетчатку, цель — чистые углеводы. Блюдо у лимита
+      // цели достигло, и совета «добавьте углеводы» под ним нет.
+      respond({
+        "/calc/verify": verifyResponse({
+          macro_fit: {
+            protein_delta_g: 0.1,
+            net_carbs_delta_g: -0.1,
+            carbs_limited_by_g: 0.8,
+            within_tolerance: true,
+          },
+        }),
+      });
+      const user = userEvent.setup();
+      renderScreen();
+      await addProduct(user);
+
+      expect(await screen.findByText("Цель достигнута")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Цель по углеводам снижена на 0,8 г/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/не хватает углеводов/),
+      ).not.toBeInTheDocument();
+    });
+
     it("после подбора говорит, какого продукта не хватает", async () => {
       respond({ "/calc/solve": solveResponse({ macro_fit: MISSED }) });
       const user = userEvent.setup();
