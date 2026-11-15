@@ -42,6 +42,10 @@ def suggest_price(route: str, model: str) -> tuple[Decimal, Decimal] | None:
         entry = prices.get(name)
         if not isinstance(entry, dict):
             continue
+        # A bare name is someone's model: `gpt-4o` is OpenAI's price, and it
+        # must not be offered for a model typed under another connection.
+        if name == model and entry.get("litellm_provider") != route:
+            continue
         price_in = entry.get("input_cost_per_token")
         price_out = entry.get("output_cost_per_token")
         if isinstance(price_in, int | float) and isinstance(price_out, int | float):

@@ -186,6 +186,15 @@ export function useAiPriceSuggestion() {
   });
 }
 
+/**
+ * Имя модели по ссылке для строк, где рядом нет цены: своё имя из каталога,
+ * иначе сама ссылка. Ссылка вида `ollama/qwen2.5-coder:7b` — служебная запись,
+ * а администратор назвал модель словами.
+ */
+export function modelName(ref: string, models: AiModelView[]): string {
+  return models.find((model) => model.ref === ref)?.name ?? ref;
+}
+
 /** Как модель названа на экране: своё имя, иначе идентификатор у поставщика. */
 export function modelTitle(model: AiModelView): string {
   return model.name ? `${model.name} (${model.ref})` : model.ref;

@@ -74,3 +74,13 @@ def test_the_warning_share_is_the_administrators() -> None:
     )
     assert early.level is BudgetLevel.WARNING
     assert usage("6").level is None
+
+
+def test_price_suggestion_belongs_to_the_connection_kind() -> None:
+    """`gpt-4o` is OpenAI's price: typed under Anthropic it must not be offered."""
+
+    from core.ai_price_map import suggest_price
+
+    assert suggest_price("anthropic", "gpt-4o") is None
+    found = suggest_price("openai", "gpt-4o")
+    assert found is not None and all(price > 0 for price in found)

@@ -214,10 +214,12 @@ function SpendTable({
         <thead>
           <tr className="border-b border-border text-muted-foreground">
             <Th>{head}</Th>
+            {/* Деньги — сразу за названием: на телефоне таблица прокручивается
+                вбок, и первым должно быть видно то, ради чего экран открыт. */}
+            <Th end>{t("ai.spend.columns.cost")}</Th>
             <Th end>{t("ai.spend.columns.calls")}</Th>
             <Th end>{t("ai.spend.columns.failed")}</Th>
             {tokens && <Th end>{t("ai.spend.columns.tokens")}</Th>}
-            <Th end>{t("ai.spend.columns.cost")}</Th>
           </tr>
         </thead>
         <tbody>
@@ -229,6 +231,9 @@ function SpendTable({
               <th scope="row" className="py-2 pr-3 text-left font-normal">
                 {label}
               </th>
+              <Td end>
+                <span className="font-medium">{formatUsd(line.cost_usd)}</span>
+              </Td>
               <Td end>{formatCount(line.calls)}</Td>
               <Td end>
                 {line.failed_calls > 0
@@ -246,9 +251,6 @@ function SpendTable({
                   })}
                 </Td>
               )}
-              <Td end>
-                <span className="font-medium">{formatUsd(line.cost_usd)}</span>
-              </Td>
             </tr>
           ))}
         </tbody>
@@ -270,10 +272,10 @@ function PeopleSection({ report }: { report: AiSpendReport }) {
           <thead>
             <tr className="border-b border-border text-muted-foreground">
               <Th>{t("ai.spend.columns.person")}</Th>
-              <Th>{t("ai.spend.columns.groups")}</Th>
+              <Th end>{t("ai.spend.columns.cost")}</Th>
               <Th end>{t("ai.spend.columns.calls")}</Th>
               <Th end>{t("ai.spend.columns.failed")}</Th>
-              <Th end>{t("ai.spend.columns.cost")}</Th>
+              <Th>{t("ai.spend.columns.groups")}</Th>
             </tr>
           </thead>
           <tbody>
@@ -297,10 +299,10 @@ function PeopleSection({ report }: { report: AiSpendReport }) {
                     {!person.is_active && ` · ${t("ai.spend.inactive")}`}
                   </span>
                 </th>
-                <Td>
-                  {person.groups
-                    .map((group) => t(`ai.groups.${group}.title`))
-                    .join(", ")}
+                <Td end>
+                  <span className="font-medium">
+                    {formatUsd(person.cost_usd)}
+                  </span>
                 </Td>
                 <Td end>{formatCount(person.calls)}</Td>
                 <Td end>
@@ -308,10 +310,10 @@ function PeopleSection({ report }: { report: AiSpendReport }) {
                     ? formatCount(person.failed_calls)
                     : "—"}
                 </Td>
-                <Td end>
-                  <span className="font-medium">
-                    {formatUsd(person.cost_usd)}
-                  </span>
+                <Td>
+                  {person.groups
+                    .map((group) => t(`ai.groups.${group}.title`))
+                    .join(", ")}
                 </Td>
               </tr>
             ))}

@@ -26,7 +26,7 @@ import {
   KeyCheckResult,
 } from "./AiForms";
 import { AiSpendPanel } from "./AiSpendPanel";
-import { formatCount, formatUsd } from "./format";
+import { formatCount, formatModelPrice, formatUsd } from "./format";
 import { TableSkeleton } from "./TableSkeleton";
 import {
   useAiSettings,
@@ -34,6 +34,7 @@ import {
   useRemoveAiKey,
   useRemoveAiModel,
   useRemoveAiProvider,
+  modelName,
   type AiGroupName,
   type AiGroupView,
   type AiModelView,
@@ -313,8 +314,12 @@ function ProvidersSection({
                   </span>
                   <span className="block text-muted-foreground">
                     {t(`ai.providerKinds.${provider.kind}.title`)}
-                    {provider.base_url && ` · ${provider.base_url}`}
                   </span>
+                  {provider.base_url && (
+                    <span className="block break-all text-muted-foreground">
+                      {provider.base_url}
+                    </span>
+                  )}
                 </th>
                 <td className="py-2 pr-3">
                   <span className="block">{keyState(provider, t)}</span>
@@ -518,8 +523,8 @@ function ModelsSection({
           <thead>
             <tr className="border-b border-border text-muted-foreground">
               <Th>{t("ai.models.columns.model")}</Th>
-              <Th>{t("ai.models.columns.provider")}</Th>
               <Th>{t("ai.models.columns.price")}</Th>
+              <Th>{t("ai.models.columns.provider")}</Th>
               <Th>
                 <span className="sr-only">
                   {t("ai.groups.columns.actions")}
@@ -554,18 +559,19 @@ function ModelsSection({
                     </span>
                   )}
                 </th>
-                <td className="py-2 pr-3">{providerName(model.provider)}</td>
                 <td className="py-2 pr-3 tabular-nums">
-                  {t("ai.models.priceValue", {
-                    priceIn: formatUsd(model.usd_per_mtok_in),
-                    priceOut: formatUsd(model.usd_per_mtok_out),
-                  })}
+                  {formatModelPrice(
+                    model.usd_per_mtok_in,
+                    model.usd_per_mtok_out,
+                    t("ai.models.free"),
+                  )}
                   {model.overridden && (
                     <span className="block text-muted-foreground">
                       {t("ai.models.overridden")}
                     </span>
                   )}
                 </td>
+                <td className="py-2 pr-3">{providerName(model.provider)}</td>
                 <td className="py-2">
                   <div className="flex flex-wrap justify-end gap-1">
                     <Button
@@ -731,7 +737,12 @@ function GroupsSection({
           </thead>
           <tbody>
             {settings.groups.map((group) => (
-              <GroupRow key={group.group} group={group} onEdit={onEdit} />
+              <GroupRow
+                key={group.group}
+                group={group}
+                models={settings.models}
+                onEdit={onEdit}
+              />
             ))}
           </tbody>
         </table>
@@ -742,9 +753,11 @@ function GroupsSection({
 
 function GroupRow({
   group,
+  models,
   onEdit,
 }: {
   group: AiGroupView;
+  models: AiModelView[];
   onEdit: (group: AiGroupName) => void;
 }) {
   const { t } = useTranslation("admin");
@@ -768,7 +781,9 @@ function GroupRow({
             <span className="text-muted-foreground">
               {t("ai.groups.taskLabel", { task: t(`ai.kinds.${task.kind}`) })}
             </span>{" "}
-            {task.effective_model || t("ai.groups.noModel")}
+            {task.effective_model
+              ? modelName(task.effective_model, models)
+              : t("ai.groups.noModel")}
             {task.source === "env" && (
               <span className="text-muted-foreground">
                 {" "}

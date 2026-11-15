@@ -18,12 +18,13 @@ import {
   errorSummaryItems,
 } from "../../components/FormErrorSummary";
 import { errorMessageOf } from "../../lib/api";
-import { formatUsd } from "./format";
+import { formatModelPrice, formatUsd } from "./format";
 import {
   useCheckAiKey,
   useReplaceAiKey,
   useSaveAiGroup,
   useSaveAiProject,
+  modelName,
   modelTitle,
   type AiGroupView,
   type AiKeyCheck,
@@ -143,8 +144,11 @@ export function AiGroupForm({
               : "ai.groupForm.modelOptionUnusable",
             {
               model: modelTitle(model),
-              priceIn: formatUsd(model.usd_per_mtok_in),
-              priceOut: formatUsd(model.usd_per_mtok_out),
+              price: formatModelPrice(
+                model.usd_per_mtok_in,
+                model.usd_per_mtok_out,
+                t("ai.models.free"),
+              ),
             },
           )}
         </option>
@@ -228,7 +232,7 @@ export function AiGroupForm({
             hint={
               task.effective_model
                 ? t("ai.groupForm.taskModelHint", {
-                    model: task.effective_model,
+                    model: modelName(task.effective_model, models),
                   })
                 : t("ai.groupForm.taskModelMissing")
             }
@@ -369,7 +373,7 @@ export function AiProjectForm({
         focusKey={submitCount}
       />
 
-      <Section title={t("ai.project.title")}>
+      <Section title={t("ai.project.formTitle")}>
         {save.isError && (
           <FormError>
             {errorMessageOf(save.error) ?? t("common:errors.unexpected")}
@@ -476,7 +480,7 @@ export function AiKeyForm({
         focusKey={submitCount}
       />
 
-      <Section title={t("ai.key.replaceTitle", { provider: provider.name })}>
+      <Section title={t("ai.key.formTitle")}>
         {replace.isError && (
           <FormError>
             {errorMessageOf(replace.error) ?? t("common:errors.unexpected")}
